@@ -13,7 +13,7 @@ import { planFiles } from '../src/flows/multi.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
-const TASKS = join(import.meta.dir, '..', '..', 'models', 'evals', 'tasks');
+const TASKS = join(import.meta.dir, '..', '..', 'models', 'evals', 'bench', 'tasks');
 const copyTask = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-multi-')), 'project'); cpSync(join(TASKS, name, 'project'), d, { recursive: true }); return d; };
 const check = (name, cwd) => spawnSync('/bin/zsh', [join(TASKS, name, 'check.sh')], { cwd, encoding: 'utf8', timeout: 60_000 });
 

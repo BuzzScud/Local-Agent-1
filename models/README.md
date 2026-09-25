@@ -28,8 +28,8 @@ numbers live in the 27B's comparison pages.
    and the server options it needs.
 2. Import it in `registry.mjs` and add it to the list.
 3. `bonsai setup` fetches it; `/model` in the terminal lists it.
-4. Test it the way the 27B was: `node models/evals/run.mjs --model <id>` and
-   `node models/evals/words/real.mjs --model <id>`; results land in `models/<name>/results/`.
+4. Test it the way the 27B was: `node models/evals/bench/run.mjs --model <id>` and
+   `node models/evals/bench/words/real.mjs --model <id>`; results land in `models/<name>/results/`.
 
 ## The test bench (`evals/`)
 
@@ -39,11 +39,11 @@ questions get scripted answers (`answers.json` per task).
 
 | Script | What it measures |
 |---|---|
-| `run.mjs` | The 28 practice tasks (`tasks/`): questions, renames, fixes, features, writing, several files, vague requests, a real-sized project. `--think off\|on\|both`, `--effort`, `--reps`, `--only`, `--model`. |
+| `bench/run.mjs` | The 28 practice tasks (`bench/tasks/`): questions, renames, fixes, features, writing, several files, vague requests, a real-sized project. `--think off\|on\|both`, `--effort`, `--reps`, `--only`, `--model`. |
 | `tools/verify-tasks.sh` | Proves every task's check fails on the untouched project and passes with its reference answer. |
-| `words/real.mjs` | 28 real requests built around trigger words and blocked commands, in three kinds of folder. |
+| `bench/words/real.mjs` | 28 real requests built around trigger words and blocked commands, in three kinds of folder. |
 | `tools/speed.mjs`, `soak.mjs`, `reread.mjs` | Engine settings, long conversations and cold starts, what gets re-read each step. |
-| `night/start.sh` | All of the above overnight, with a morning report. |
+| `bench/night/start.sh` | All of the above overnight, with a morning report. |
 | `reports/` | The builders of the report pages; pages go to `~/Desktop/bonsai-code DOCS`, mirrored into the repo's `docs/`. |
 | `dev/` | Probes and experiments against a running server (see `dev/experiments/README.md`). |
 

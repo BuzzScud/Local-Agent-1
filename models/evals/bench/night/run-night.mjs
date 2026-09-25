@@ -1,16 +1,16 @@
 // The overnight check, report only: runs each check in turn (never two models
 // at once), writes results to models/bonsai-2-27b/results/night/<date>/, then builds the morning
-// report in the DOCS folder and opens it. Start it with models/evals/night/start.sh (keeps
+// report in the DOCS folder and opens it. Start it with models/evals/bench/night/start.sh (keeps
 // the Mac awake).
-//   node models/evals/night/run-night.mjs [--dir models/bonsai-2-27b/results/night/<date>] [--stop-at 06:30] [--only step,step]
+//   node models/evals/bench/night/run-night.mjs [--dir models/bonsai-2-27b/results/night/<date>] [--stop-at 06:30] [--only step,step]
 import { spawn, execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { DOCS_DIR } from '../../../docs/to-docs.mjs';
+import { DOCS_DIR } from '../../../../docs/to-docs.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const day = new Date(Date.now() + 6 * 3600e3).toISOString().slice(0, 10); // the morning's date
@@ -64,10 +64,10 @@ const STEPS = [
   ['soak', true, () => run('soak', 'node', ['models/evals/tools/soak.mjs', '--starts', '10', '--minutes', '35', '--out', join(dir, 'soak.json')], { minutes: 50 })],
   ['reread', true, () => run('reread', 'node', ['models/evals/tools/reread.mjs', '--minutes', '15', '--out', join(dir, 'reread.json')], { minutes: 25 })],
   ['speed', true, () => run('speed', 'node', ['models/evals/tools/speed.mjs', '--out', join(dir, 'speed.json')], { minutes: 80 })],
-  ['words-real', true, () => run('words-real', 'node', ['models/evals/words/real.mjs', '--out', join(dir, 'words-real.json')], { minutes: 100 })],
-  ['practice-off', true, () => run('practice-off', 'node', ['models/evals/run.mjs', '--think', 'off', '--reps', '2', '--out', join(dir, 'practice-off'), '--stop-at', stopAt], { minutes: 150 })],
-  ['practice-medium', true, () => run('practice-medium', 'node', ['models/evals/run.mjs', '--think', 'on', '--effort', 'medium', '--reps', '2', '--out', join(dir, 'practice-medium'), '--stop-at', stopAt], { minutes: 180 })],
-  ['practice-high', true, () => run('practice-high', 'node', ['models/evals/run.mjs', '--think', 'on', '--effort', 'high', '--reps', '1', '--out', join(dir, 'practice-high'), '--stop-at', stopAt], { minutes: 240 })],
+  ['words-real', true, () => run('words-real', 'node', ['models/evals/bench/words/real.mjs', '--out', join(dir, 'words-real.json')], { minutes: 100 })],
+  ['practice-off', true, () => run('practice-off', 'node', ['models/evals/bench/run.mjs', '--think', 'off', '--reps', '2', '--out', join(dir, 'practice-off'), '--stop-at', stopAt], { minutes: 150 })],
+  ['practice-medium', true, () => run('practice-medium', 'node', ['models/evals/bench/run.mjs', '--think', 'on', '--effort', 'medium', '--reps', '2', '--out', join(dir, 'practice-medium'), '--stop-at', stopAt], { minutes: 180 })],
+  ['practice-high', true, () => run('practice-high', 'node', ['models/evals/bench/run.mjs', '--think', 'on', '--effort', 'high', '--reps', '1', '--out', join(dir, 'practice-high'), '--stop-at', stopAt], { minutes: 240 })],
 ];
 
 log(`night check started; results in ${dir}; no new work after ${stopAt}`);
@@ -81,7 +81,7 @@ for (const [name, needsModel, go] of STEPS) {
 status.finished = new Date().toISOString();
 save();
 log('building the morning report');
-await run('report', 'node', ['models/evals/night/report-night.mjs', dir], { minutes: 5 });
+await run('report', 'node', ['models/evals/bench/night/report-night.mjs', dir], { minutes: 5 });
 const report = join(DOCS_DIR, `bonsai-night-${day}.html`);
 if (existsSync(report) && !args.includes('--no-open')) execFileSync('open', [report]);
 log(`all done: ${report}`);

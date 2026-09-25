@@ -39,7 +39,7 @@ bonsai-code/
 │  ├─ registry.mjs      the list of models and where their files live
 │  ├─ runtime/          llama-server, memory, warm-up, bonsai setup
 │  ├─ bonsai-2-27b/     the model: settings and README (results/ stays local)
-│  ├─ evals/            the test bench: run, tasks, words, night, reports, tools (speed, soak, reread, verify)
+│  ├─ evals/            the test bench: bench (run, tasks, words, night), reports, tools, dev
 │  └─ test/             unit tests of the models part
 └─ docs/                every diagram, preview and report page, the one home (mirrors ~/Desktop/bonsai-code DOCS)
 ```
@@ -51,7 +51,7 @@ bun run start              # run from source (bun terminal/src/cli.jsx)
 bun run test               # all 124 tests: terminal/test and models/test
 bun run test:terminal      # only the terminal's
 bun run test:models        # only the models part's
-bun run eval               # the 28 practice tasks against the real model (models/evals/run.mjs)
+bun run eval               # the 28 practice tasks against the real model (models/evals/bench/run.mjs)
 bun run eval:words         # the 28 real requests
 bun run eval:verify        # prove every practice task's check can fail and pass
 bun run install-cli        # build one file and put it at ~/.local/bin/bonsai

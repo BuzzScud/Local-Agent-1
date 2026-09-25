@@ -6,7 +6,7 @@ const { MODELS, DEFAULT_MODEL } = await import(`${R}/models/registry.mjs`);
 const { changeFlow } = await import(`${R}/terminal/src/flows/change.mjs`);
 const { Scratch } = await import(`${R}/terminal/src/flows/scratch.mjs`);
 const work = join(mkdtempSync(join(tmpdir(), 'dbgj-')), 'project');
-cpSync(`${R}/models/evals/tasks/1-json-flag/project`, work, { recursive: true });
+cpSync(`${R}/models/evals/bench/tasks/1-json-flag/project`, work, { recursive: true });
 let n = 0;
 const W = Scratch.prototype.run;
 Scratch.prototype.run = async function (cmd, o) { const r = await W.call(this, cmd, o); if (++n <= 40 && /✖/.test(r.out)) { const m = r.out.match(/✖ [^\n]+\n(?:[^\n]*\n){0,6}/g); if (m) console.log('RUN', n, m.slice(0, 2).join('').slice(0, 500)); } return r; };

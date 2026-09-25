@@ -1,12 +1,12 @@
 // Plays the practice tasks against the real model and checks each result.
-//   node models/evals/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM]
+//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM]
 import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../index.mjs';
-import { runHeadless } from '../../terminal/src/headless.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../index.mjs';
+import { runHeadless } from '../../../terminal/src/headless.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);

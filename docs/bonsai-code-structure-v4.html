@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai Code structure v4</title>
+<style>
+:root{
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--m:#eb6834;--t-soft:rgba(42,120,214,.07);--m-soft:rgba(235,104,52,.07);--m-door:rgba(235,104,52,.16);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+    --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.10);--m-soft:rgba(232,116,63,.09);--m-door:rgba(232,116,63,.22);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+  --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.10);--m-soft:rgba(232,116,63,.09);--m-door:rgba(232,116,63,.22);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1240px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:21px;letter-spacing:-.01em;margin:44px 0 6px}
+p{margin:0 0 10px}
+.lede{color:var(--mute);max-width:820px}
+.sub{color:var(--mute);font-size:14px;margin-bottom:14px;max-width:860px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:22px 0 8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.tile b{display:flex;align-items:center;gap:8px;font-size:16px}
+.tile span{display:block;color:var(--mute);font-size:13.5px;margin-top:4px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+figure{margin:14px 0 0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 12px}
+.scroll{overflow-x:auto}
+figure svg{display:block;width:100%;min-width:900px;height:auto;color:var(--faint)}
+figcaption{color:var(--mute);font-size:13.5px;margin-top:10px;max-width:960px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--mute);margin:10px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:22px;height:14px;border-radius:4px;display:inline-block;border:1.5px solid var(--line);background:var(--card)}
+.sw.t{background:var(--t-soft);border-color:var(--t)}
+.sw.m{background:var(--m-soft);border-color:var(--m)}
+.sw.door{background:var(--m-door);border:2px solid var(--m)}
+.sw.local{border-style:dashed;border-color:var(--faint);background:transparent}
+.ln{width:26px;height:0;border-top:2px solid var(--mute);display:inline-block}
+.ln.dash{border-top-style:dashed}
+.ln.acc{border-top:2.5px solid var(--m)}
+/* the drawings */
+svg .root{fill:var(--card);stroke:var(--faint);stroke-width:1.2}
+svg .tp{fill:var(--t-soft);stroke:var(--t);stroke-width:1.6}
+svg .mp{fill:var(--m-soft);stroke:var(--m);stroke-width:1.6}
+svg .box{fill:var(--card);stroke:var(--line);stroke-width:1.2}
+svg .in{fill:var(--inner);stroke:var(--line);stroke-width:1}
+svg .tb{fill:var(--t-soft);stroke:var(--t);stroke-width:1.3}
+svg .mb{fill:var(--m-soft);stroke:var(--m);stroke-width:1.3}
+svg .door{fill:var(--m-door);stroke:var(--m);stroke-width:2.2}
+svg .local{fill:none;stroke:var(--faint);stroke-width:1.3;stroke-dasharray:5 4}
+svg .localbox{fill:var(--card);stroke:var(--faint);stroke-width:1.2;stroke-dasharray:5 4}
+svg .edge{fill:none;stroke:var(--mute);stroke-width:1.6}
+svg .edge.dash{stroke-dasharray:6 5}
+svg .edge.acc{stroke:var(--m);stroke-width:2.4}
+svg .bound{stroke:var(--faint);stroke-width:1.2;stroke-dasharray:3 5}
+svg text{font-family:inherit}
+svg .h1{font-size:18px;font-weight:700;fill:var(--ink)}
+svg .h2{font-size:14px;font-weight:700;fill:var(--ink)}
+svg .n{font-size:13px;font-weight:650;fill:var(--ink)}
+svg .d{font-size:11.5px;fill:var(--mute)}
+svg .lab{font-size:12px;fill:var(--ink);font-weight:600}
+svg .labd{font-size:11px;fill:var(--mute)}
+svg .mk{fill:var(--mute)}
+svg .mk.acc{fill:var(--m)}
+.tree{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;margin-top:14px}
+.tree pre{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;font:12.5px/1.65 ui-monospace,Menlo,monospace;overflow-x:auto;color:var(--ink)}
+.tree .c{color:var(--mute)}
+@media (max-width:480px){.tree pre{font-size:10px;padding:14px 12px}}
+.tree .h{font-weight:700}
+.tree .t{color:var(--t)} .tree .m{color:var(--m)}
+code{font:12.5px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 5px;border-radius:4px}
+.foot{margin-top:36px;color:var(--mute);font-size:13px}
+.ver{display:inline-block;vertical-align:middle;margin-left:10px;font-size:12px;font-weight:600;color:var(--mute);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+.new{margin:14px 0 0;padding:12px 16px;background:var(--inner);border:1px solid var(--line);border-radius:10px;font-size:13.5px;color:var(--mute)} .new b{color:var(--ink)} .new ul{margin:6px 0 0 18px;padding:0} .new li{margin:3px 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Bonsai Code: how the folder is structured <span class="ver">version 4</span></h1>
+  <p class="lede">One repo, two parts. <b>terminal/</b> is the agent you talk to; <b>models/</b> holds the models it runs and the bench that tests them. They meet at one file, <code>models/index.mjs</code>. The model's weights and your conversations live on this Mac, outside the repo.</p>
+  <div class="new"><b>New in version 4</b> (25 Sep 2026): the test bench is grouped.<ul>
+<li>run.mjs, tasks/, words/ and night/ moved into <code>models/evals/bench/</code>, the tests themselves. evals/ now has four entries: bench, reports, tools and dev.</li>
+<li>Commands are unchanged: <code>bun run eval</code> and <code>bun run eval:words</code> point at the new paths. Speed is unchanged.</li>
+<li>Earlier versions sit beside this file: v1 (commit 047a8be), v2 (6c52902) and v3 (906e0c4, the compact tree).</li></ul></div>
+
+  <div class="tiles">
+    <div class="tile"><b><span class="dot" style="background:var(--t)"></span>terminal/ · part 1</b><span>93 files · 5,300 lines of code in src/ · the screen, the loop, the focused paths, the tools</span></div>
+    <div class="tile"><b><span class="dot" style="background:var(--m)"></span>models/ · part 2</b><span>302 files · 2,900 lines of code + 28 practice projects · one folder per model, the runtime, the test bench</span></div>
+    <div class="tile"><b><span class="dot" style="border:1.5px dashed var(--faint)"></span>On this Mac, not in git</b><span>~/.bonsai-code: the 7.2 GB model, 418 MB of saved warm-ups, llama-server, your sessions · the installed <code>bonsai</code></span></div>
+  </div>
+
+  <h2>The folder map</h2>
+  <p class="sub">Every folder of both parts, with its job and size. The arrows are the only places the parts touch: the terminal imports one file from models/, the test bench runs the terminal's agent, and the runtime starts the model on this Mac.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1190 742" role="img" aria-label="The bonsai-code repo holds two parts side by side: terminal/ (src, test, scripts, app, demo-project) and models/ (index.mjs, registry.mjs, test, runtime, bonsai-2-27b, evals). The terminal imports only models/index.mjs; the test bench in models/evals runs the terminal's agent headless; the runtime starts llama-server from ~/.bonsai-code on this Mac, outside the repo.">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk acc"/></marker>
+      </defs>
+
+      <!-- the repo -->
+      <rect class="root" x="20" y="16" width="1120" height="56" rx="10"/>
+      <text class="h2" x="38" y="40" style="font-size:15px">bonsai-code/</text>
+      <text class="d" x="38" y="59">the repo · private on GitHub as Local-Agent-1 · 426 files</text>
+      <text class="d" x="1122" y="40" text-anchor="end">README.md · AGENTS.md · LICENSE · package.json · bunfig.toml · .gitignore · docs/ (every page, 23 files)</text>
+      <text class="d" x="1122" y="59" text-anchor="end">bun run test · eval · docs · install-cli</text>
+
+      <!-- part 1 · terminal -->
+      <rect class="tp" x="20" y="92" width="520" height="472" rx="12"/>
+      <text class="h1" x="38" y="119">terminal/</text>
+      <text class="d" x="38" y="138">part 1 · the agent you talk to · 93 files</text>
+
+      <rect class="box" x="36" y="150" width="488" height="242" rx="9"/>
+      <text class="n" x="52" y="172">src/</text>
+      <text class="d" x="508" y="172" text-anchor="end">5,300 lines of code</text>
+      <rect class="in" x="52" y="184" width="144" height="42" rx="7"/>
+      <text class="n" x="64" y="202">cli.jsx</text><text class="d" x="64" y="218">starts bonsai</text>
+      <rect class="in" x="208" y="184" width="144" height="42" rx="7"/>
+      <text class="n" x="220" y="202">headless.mjs</text><text class="d" x="220" y="218">bonsai -p · the bench</text>
+      <text class="d" x="372" y="209" style="font-style:italic">← the two ways in</text>
+
+      <rect class="in" x="52" y="236" width="144" height="66" rx="7"/>
+      <text class="n" x="64" y="256">app/</text><text class="d" x="64" y="273">the screen, keys,</text><text class="d" x="64" y="288">prompts · 7 files</text>
+      <rect class="in" x="208" y="236" width="144" height="66" rx="7"/>
+      <text class="n" x="220" y="256">agent/</text><text class="d" x="220" y="273">the loop + 8 tools,</text><text class="d" x="220" y="288">permissions · 5 files</text>
+      <rect class="in" x="364" y="236" width="144" height="66" rx="7"/>
+      <text class="n" x="376" y="256">flows/</text><text class="d" x="376" y="273">fix · change · rename</text><text class="d" x="376" y="288">several files · ask</text>
+      <rect class="in" x="52" y="312" width="144" height="66" rx="7"/>
+      <text class="n" x="64" y="332">tools/</text><text class="d" x="64" y="349">read · edit · run</text><text class="d" x="64" y="364">sandbox · project map</text>
+      <rect class="in" x="208" y="312" width="144" height="66" rx="7"/>
+      <text class="n" x="220" y="332">ui/</text><text class="d" x="220" y="349">screen parts and</text><text class="d" x="220" y="364">layouts · 5 files</text>
+      <text class="d" x="372" y="334" style="font-style:italic">all 42 files here</text><text class="d" x="372" y="350" style="font-style:italic">ship in the one</text><text class="d" x="372" y="366" style="font-style:italic">compiled binary</text>
+
+      <rect class="box" x="36" y="406" width="238" height="62" rx="9"/>
+      <text class="n" x="50" y="426">test/</text><text class="d" x="50" y="443">the terminal's tests · 116 of the 124</text><text class="d" x="50" y="458">a pty drives the real app · 26 files</text>
+      <rect class="box" x="286" y="406" width="238" height="62" rx="9"/>
+      <text class="n" x="300" y="426">scripts/</text><text class="d" x="300" y="443">captures, report builders, UI walk</text><text class="d" x="300" y="458">+ demo/ previews, shims/ · 15 files</text>
+      <rect class="box" x="36" y="478" width="238" height="62" rx="9"/>
+      <text class="n" x="50" y="498">app/</text><text class="d" x="50" y="515">the Bonsai Code.app launcher</text><text class="d" x="50" y="530">and its icon · 6 files</text>
+      <rect class="box" x="286" y="478" width="238" height="62" rx="9"/>
+      <text class="n" x="300" y="498">demo-project/</text><text class="d" x="300" y="515">the sample project the tests</text><text class="d" x="300" y="530">and demos copy · 3 files</text>
+
+      <!-- part 2 · models -->
+      <rect class="mp" x="620" y="92" width="520" height="472" rx="12"/>
+      <text class="h1" x="638" y="119">models/</text>
+      <text class="d" x="638" y="138">part 2 · the models we use and test · 302 files</text>
+
+      <rect class="door" x="636" y="150" width="113" height="62" rx="9"/>
+      <text class="n" x="647" y="170">index.mjs</text><text class="d" x="647" y="187">the one door:</text><text class="d" x="647" y="202">re-exports all</text>
+      <rect class="box" x="761" y="150" width="113" height="62" rx="9"/>
+      <text class="n" x="772" y="170">registry.mjs</text><text class="d" x="772" y="187">the list of models</text><text class="d" x="772" y="202">+ where files live</text>
+      <rect class="box" x="886" y="150" width="113" height="62" rx="9"/>
+      <text class="n" x="897" y="170">test/</text><text class="d" x="897" y="187">this part's tests</text><text class="d" x="897" y="202">8 of the 124</text>
+      <rect class="box" x="1011" y="150" width="113" height="62" rx="9"/>
+      <text class="n" x="1022" y="170">runtime/</text><text class="d" x="1022" y="187">server · memory</text><text class="d" x="1022" y="202">warm-up · setup</text>
+
+      <path class="edge" d="M817,212 V236" marker-end="url(#a1)"/>
+      <text class="labd" x="826" y="229">lists one folder per model</text>
+
+      <rect class="box" x="636" y="240" width="488" height="126" rx="9"/>
+      <text class="n" x="652" y="262">bonsai-2-27b/</text>
+      <text class="d" x="652" y="279">Bonsai 2 27B · 7.2 GB · the model in use · grade B+</text>
+      <rect class="in" x="648" y="292" width="107" height="60" rx="7"/>
+      <text class="n" x="659" y="311">model.mjs</text><text class="d" x="659" y="327">its settings,</text><text class="d" x="659" y="341">memory layout</text>
+      <rect class="in" x="767" y="292" width="107" height="60" rx="7"/>
+      <text class="n" x="778" y="311">README.md</text><text class="d" x="778" y="327">model card,</text><text class="d" x="778" y="341">grade, page links</text>
+      <rect class="localbox" x="886" y="292" width="107" height="60" rx="7"/>
+      <text class="n" x="897" y="311">results/</text><text class="d" x="897" y="327">raw runs, 3.6 MB</text><text class="d" x="897" y="341">this Mac only</text>
+      <text class="d" x="1009" y="311" style="font-style:italic">add a model:</text><text class="d" x="1009" y="327" style="font-style:italic">a folder like this</text><text class="d" x="1009" y="341" style="font-style:italic">+ a registry line</text>
+
+      <rect class="box" x="636" y="380" width="488" height="170" rx="9"/>
+      <text class="n" x="652" y="402">evals/</text>
+      <text class="d" x="652" y="419">the test bench: bench/ runs the agent with a model and grades it</text>
+      <rect class="in" x="648" y="430" width="226" height="50" rx="7"/>
+      <text class="n" x="660" y="448">bench/</text><text class="d" x="660" y="464">run.mjs · tasks/ · words/ · night/</text>
+      <rect class="in" x="886" y="430" width="226" height="50" rx="7"/>
+      <text class="n" x="898" y="448">reports/</text><text class="d" x="898" y="464">page builders, write to DOCS · 3</text>
+      <rect class="in" x="648" y="488" width="226" height="50" rx="7"/>
+      <text class="n" x="660" y="506">tools/</text><text class="d" x="660" y="522">soak · speed · reread · verify · 4</text>
+      <rect class="in" x="886" y="488" width="226" height="50" rx="7"/>
+      <text class="n" x="898" y="506">dev/</text><text class="d" x="898" y="522">probes and experiments · 16</text>
+      
+      <!-- where the parts touch -->
+      <path class="edge acc" d="M524,181 H632" marker-end="url(#a2)"/>
+      <text class="lab" x="580" y="172" text-anchor="middle">imports</text>
+      <text class="labd" x="578" y="199" text-anchor="middle">one file only</text>
+
+      <path class="edge dash" d="M636,455 H600 V214 H528" marker-end="url(#a1)"/>
+      <text class="labd" x="569" y="326" text-anchor="middle">runs the</text>
+      <text class="labd" x="569" y="340" text-anchor="middle">agent via</text>
+      <text class="labd" x="569" y="354" text-anchor="middle">headless</text>
+
+      <path class="edge" d="M1124,181 H1165 V678 H1128" marker-end="url(#a1)"/>
+      <text class="labd" x="1136" y="597" text-anchor="end">runtime/ starts llama-server from bin/ and loads the model</text>
+
+      <!-- on this Mac, outside the repo -->
+      <rect class="local" x="20" y="610" width="1120" height="118" rx="12"/>
+      <text class="h2" x="580" y="634" text-anchor="middle">On this Mac, outside the repo · not in git</text>
+      <path class="edge" d="M113,564 V648" marker-end="url(#a1)"/>
+      <text class="labd" x="122" y="596">bun run install-cli builds it</text>
+
+      <rect class="localbox" x="36" y="652" width="154" height="52" rx="8"/>
+      <text class="n" x="50" y="672">~/.local/bin/bonsai</text><text class="d" x="50" y="688">the installed app</text>
+      <rect class="localbox" x="203" y="652" width="154" height="52" rx="8"/>
+      <text class="n" x="217" y="672">sessions/ · history</text><text class="d" x="217" y="688">your conversations</text>
+      <rect class="localbox" x="370" y="652" width="154" height="52" rx="8"/>
+      <text class="n" x="384" y="672">maps/ · settings</text><text class="d" x="384" y="688">project maps, your picks</text>
+      <rect class="localbox" x="636" y="652" width="113" height="52" rx="8"/>
+      <text class="n" x="647" y="672">logs/ · servers/</text><text class="d" x="647" y="688">who runs what</text>
+      <rect class="localbox" x="761" y="652" width="113" height="52" rx="8"/>
+      <text class="n" x="772" y="672">slots/</text><text class="d" x="772" y="688">saved warm-ups</text>
+      <rect class="localbox" x="886" y="652" width="113" height="52" rx="8"/>
+      <text class="n" x="897" y="672">models/</text><text class="d" x="897" y="688">the .gguf · 7.2 GB</text>
+      <rect class="localbox" x="1011" y="652" width="113" height="52" rx="8"/>
+      <text class="n" x="1022" y="672">bin/</text><text class="d" x="1022" y="688">llama-server</text>
+      <text class="labd" x="36" y="720">the terminal's state (under ~/.bonsai-code)</text>
+      <text class="labd" x="636" y="720">the models part's files (under ~/.bonsai-code)</text>
+    </svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw t"></i>part 1 · terminal/</span>
+      <span><i class="sw m"></i>part 2 · models/</span>
+      <span><i class="sw door"></i>the one file the terminal imports</span>
+      <span><i class="sw local"></i>only on this Mac, not in git</span>
+      <span><i class="ln acc"></i>import</span>
+      <span><i class="ln dash"></i>the bench runs the agent</span>
+    </div>
+    <figcaption>The terminal never reads a model's settings or starts a server itself: it asks <code>models/index.mjs</code>, which hands back the model list, the server, the memory check and the warm-up. Adding a model is a new folder beside <code>bonsai-2-27b/</code> and one line in <code>registry.mjs</code>; the terminal does not change.</figcaption>
+  </figure>
+
+  <h2>One request, through both parts</h2>
+  <p class="sub">What happens when you type into <code>bonsai</code>. The dotted line is where part 1 ends and part 2 begins.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1190 262" role="img" aria-label="A request flows from you to the screen (app), to the agent and flows, which send a chat request through models/index.mjs and runtime/server to llama-server on this Mac, which runs Bonsai 2 27B; the answer streams back to the agent, which also calls tools on your project.">
+      <defs>
+        <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+        <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk acc"/></marker>
+      </defs>
+      <text class="lab" x="385" y="28" text-anchor="middle">part 1 · terminal/</text>
+      <text class="lab" x="685" y="28" text-anchor="middle">part 2 · models/</text>
+      <text class="lab" x="970" y="28" text-anchor="middle">on this Mac</text>
+      <line class="bound" x1="580" y1="14" x2="580" y2="252"/>
+
+      <rect class="box" x="20" y="70" width="150" height="64" rx="9"/>
+      <text class="n" x="34" y="96">You</text><text class="d" x="34" y="114">type in the terminal</text>
+      <rect class="tb" x="210" y="70" width="150" height="64" rx="9"/>
+      <text class="n" x="224" y="96">cli.jsx · app/</text><text class="d" x="224" y="114">the screen</text>
+      <rect class="tb" x="400" y="70" width="150" height="64" rx="9"/>
+      <text class="n" x="414" y="96">agent/ · flows/</text><text class="d" x="414" y="114">plan, ask, try, check</text>
+      <rect class="door" x="610" y="70" width="150" height="64" rx="9"/>
+      <text class="n" x="624" y="96">index.mjs</text><text class="d" x="624" y="114">→ runtime/server.mjs</text>
+      <rect class="localbox" x="800" y="70" width="150" height="64" rx="9"/>
+      <text class="n" x="814" y="96">llama-server</text><text class="d" x="814" y="114">~/.bonsai-code/bin</text>
+      <rect class="localbox" x="990" y="70" width="150" height="64" rx="9"/>
+      <text class="n" x="1004" y="96">Bonsai 2 27B</text><text class="d" x="1004" y="114">the .gguf, 10 tok/s</text>
+
+      <path class="edge" d="M170,102 H206" marker-end="url(#b1)"/><text class="labd" x="190" y="60" text-anchor="middle">a request</text>
+      <path class="edge" d="M360,102 H396" marker-end="url(#b1)"/><text class="labd" x="380" y="60" text-anchor="middle">the message</text>
+      <path class="edge acc" d="M550,102 H606" marker-end="url(#b2)"/><text class="labd" x="580" y="60" text-anchor="middle">chat request</text>
+      <path class="edge" d="M760,102 H796" marker-end="url(#b1)"/><text class="labd" x="780" y="60" text-anchor="middle">HTTP :17600</text>
+      <path class="edge" d="M950,102 H986" marker-end="url(#b1)"/><text class="labd" x="970" y="60" text-anchor="middle">runs</text>
+
+      <path class="edge" d="M1065,134 V168 H512 V138" marker-end="url(#b1)"/>
+      <text class="labd" x="790" y="186" text-anchor="middle">the answer streams back, token by token (tool calls included)</text>
+
+      <path class="edge" d="M440,134 V198" marker-end="url(#b1)"/>
+      <text class="labd" x="432" y="176" text-anchor="end">tool calls</text>
+      <rect class="tb" x="330" y="202" width="220" height="46" rx="9"/>
+      <text class="n" x="344" y="221">tools/ → your project</text><text class="d" x="344" y="238">read · edit · run the tests</text>
+
+      <path class="edge dash" d="M420,134 V150 H95 V138" marker-end="url(#b1)"/>
+      <text class="labd" x="258" y="166" text-anchor="middle">Ask: a question for you</text>
+    </svg>
+    </div>
+    <figcaption>Everything left of the dotted line is the terminal's code; it only ever calls <code>models/index.mjs</code>. The model itself runs in llama-server, a separate program the runtime starts from <code>~/.bonsai-code/bin</code> and stops when you quit.</figcaption>
+  </figure>
+
+  <h2>One model test, through both parts</h2>
+  <p class="sub">What <code>bun run eval</code> does. The bench lives with the models, but the thing it grades is the terminal's agent working with that model.</p>
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1190 212" role="img" aria-label="bun run eval starts the model through the runtime, copies each practice project to a temporary folder, runs the terminal's agent headless on it, grades it with the task's check.sh, saves the result under results/runs on this Mac, and the report builders turn results into the HTML pages in the DOCS folder.">
+      <defs>
+        <marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="mk"/></marker>
+      </defs>
+      <rect class="mb" x="30" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="43" y="86">bun run eval</text><text class="d" x="43" y="104">evals/bench/run.mjs</text>
+      <rect class="mb" x="195" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="208" y="86">runtime/</text><text class="d" x="208" y="104">starts the model</text>
+      <rect class="mb" x="360" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="373" y="86">bench/tasks/NN</text><text class="d" x="373" y="104">copied to a temp dir</text>
+      <rect class="tb" x="525" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="538" y="86">headless.mjs</text><text class="d" x="538" y="104">the agent does it</text>
+      <rect class="mb" x="690" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="703" y="86">check.sh</text><text class="d" x="703" y="104">pass or fail</text>
+      <rect class="localbox" x="855" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="868" y="86">results/runs/</text><text class="d" x="868" y="104">this Mac only</text>
+      <rect class="mb" x="1020" y="60" width="140" height="64" rx="9"/>
+      <text class="n" x="1033" y="86">DOCS/*.html</text><text class="d" x="1033" y="104">the pages you read</text>
+
+      <path class="edge" d="M170,92 H191" marker-end="url(#c1)"/><text class="labd" x="182" y="50" text-anchor="middle">starts</text>
+      <path class="edge" d="M335,92 H356" marker-end="url(#c1)"/><text class="labd" x="347" y="50" text-anchor="middle">each task</text>
+      <path class="edge" d="M500,92 H521" marker-end="url(#c1)"/><text class="labd" x="512" y="50" text-anchor="middle">task + answers</text>
+      <path class="edge" d="M665,92 H686" marker-end="url(#c1)"/><text class="labd" x="677" y="50" text-anchor="middle">grades</text>
+      <path class="edge" d="M830,92 H851" marker-end="url(#c1)"/><text class="labd" x="842" y="50" text-anchor="middle">saves</text>
+      <path class="edge" d="M995,92 H1016" marker-end="url(#c1)"/><text class="labd" x="1007" y="50" text-anchor="middle">builds</text>
+
+      <path class="edge dash" d="M760,124 V156 H430 V128" marker-end="url(#c1)"/>
+      <text class="labd" x="595" y="174" text-anchor="middle">next task · 28 in all · --model picks which model</text>
+      <text class="labd" x="595" y="196" text-anchor="middle" style="fill:var(--faint)">blue = part 1 (terminal/) · orange = part 2 (models/) · dashed = only on this Mac</text>
+    </svg>
+    </div>
+    <figcaption>This is why the bench sits with the models: point <code>--model</code> at a new model folder and the same 28 tasks, 28 real requests and report pages come out for it, comparable with the 27B's.</figcaption>
+  </figure>
+
+  <h2>The tree</h2>
+  <p class="sub">The same thing as text, every folder with its job. Counts are files in git.</p>
+  <div class="tree">
+<pre><span class="h">bonsai-code/</span>
+├─ README.md            <span class="c">the two parts, commands</span>
+├─ AGENTS.md            <span class="c">rules for coding sessions</span>
+├─ LICENSE              <span class="c">GPL-3.0</span>
+├─ package.json         <span class="c">bun run test, eval, docs</span>
+├─ bunfig.toml          <span class="c">test root = terminal/test</span>
+├─ .gitignore           <span class="c">outputs + results/ stay local</span>
+├─ docs/                <span class="c">every page, the one home · 23</span>
+│
+├─ <span class="h t">terminal/</span>            <span class="c">part 1 · 93 files</span>
+│  ├─ README.md         <span class="c">screen, keys, how it works</span>
+│  ├─ src/              <span class="c">all ships in the binary · 42</span>
+│  │  ├─ cli.jsx        <span class="c">bonsai, bonsai -p, setup</span>
+│  │  ├─ headless.mjs   <span class="c">one prompt, no screen</span>
+│  │  ├─ app/           <span class="c">the screen (Ink) · 7</span>
+│  │  ├─ agent/         <span class="c">the loop, 8 tools · 5</span>
+│  │  ├─ flows/         <span class="c">fix, change, rename, ask · 16</span>
+│  │  ├─ tools/         <span class="c">read, edit, run, sandbox · 7</span>
+│  │  └─ ui/            <span class="c">screen parts, layouts · 5</span>
+│  ├─ test/             <span class="c">116 tests · 26 files</span>
+│  ├─ scripts/          <span class="c">captures, reports · 15</span>
+│  │  ├─ demo/          <span class="c">design previews · 6</span>
+│  │  └─ shims/         <span class="c">devtools stand-in · 2</span>
+│  ├─ app/              <span class="c">Bonsai Code.app launcher · 6</span>
+│  └─ demo-project/     <span class="c">sample project for tests · 3</span></pre>
+<pre><span class="h m">models/</span>                 <span class="c">part 2 · 302 files</span>
+├─ README.md            <span class="c">models, adding one, the bench</span>
+├─ index.mjs            <span class="c">what the terminal imports</span>
+├─ registry.mjs         <span class="c">models, paths, Effort levels</span>
+├─ runtime/             <span class="c">llama-server, memory · 4</span>
+│  ├─ server.mjs        <span class="c">start, share, stop the server</span>
+│  ├─ memory.mjs        <span class="c">32k or 16k: what fits the Mac</span>
+│  ├─ warmup.mjs        <span class="c">save + restore the warm-up</span>
+│  └─ setup.mjs         <span class="c">download runtime + model</span>
+├─ bonsai-2-27b/        <span class="c">the model in use · 2 in git</span>
+│  ├─ model.mjs         <span class="c">its settings</span>
+│  ├─ README.md         <span class="c">model card, grade B+, links</span>
+│  └─ results/          <span class="c">raw runs · this Mac only</span>
+├─ evals/               <span class="c">the test bench · 290</span>
+│  ├─ bench/            <span class="c">the tests themselves · 267</span>
+│  │  ├─ run.mjs        <span class="c">28 practice tasks · --model</span>
+│  │  ├─ tasks/         <span class="c">28 projects + check.sh each</span>
+│  │  ├─ words/         <span class="c">real.mjs · 28 real requests</span>
+│  │  └─ night/         <span class="c">overnight run + report · 3</span>
+│  ├─ reports/          <span class="c">page builders, to DOCS · 3</span>
+│  ├─ tools/            <span class="c">soak, speed, reread, verify</span>
+│  └─ dev/              <span class="c">probes, experiments · 16</span>
+└─ test/                <span class="c">8 tests of this part · 3</span></pre>
+  </div>
+
+  <p class="foot">Version 4 · drawn from ~/Desktop/bonsai-code after the bench move (25 Sep 2026), the same as main on GitHub (BuzzScud/Local-Agent-1, private). Versions 1 to 3 sit beside this file in the DOCS folder.</p>
+</main>
+</body>
+</html>

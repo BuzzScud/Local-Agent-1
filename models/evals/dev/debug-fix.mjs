@@ -6,7 +6,7 @@ const { MODELS, DEFAULT_MODEL } = await import(`${R}/models/registry.mjs`);
 const L = await import(`${R}/terminal/src/flows/llm.mjs`);
 const origComplete = L.complete;
 const work = join(mkdtempSync(join(tmpdir(), 'dbgfix-')), 'project');
-cpSync(`${R}/models/evals/tasks/2-fix-bug/project`, work, { recursive: true });
+cpSync(`${R}/models/evals/bench/tasks/2-fix-bug/project`, work, { recursive: true });
 const { Scratch } = await import(`${R}/terminal/src/flows/scratch.mjs`);
 const { readResults } = await import(`${R}/terminal/src/flows/results.mjs`);
 const sc = new Scratch(work);

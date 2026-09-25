@@ -37,7 +37,7 @@ const B = byTask(before);
 const A = byTask(after);
 const num = (t) => Number(t.split('-')[0]);
 const tasks = [...new Set([...Object.keys(B), ...Object.keys(A)])].sort((a, b) => num(a) - num(b));
-const practice = tasks.map((t) => ({ task: t, n: num(t), prompt: readFileSync(join(root, 'models/evals/tasks', t, 'task.txt'), 'utf8').trim(), route: A[t]?.route ?? B[t]?.route, before: B[t] ? { avg: B[t].avg, pass: B[t].pass } : null, after: A[t] ? { avg: A[t].avg, pass: A[t].pass, asked: A[t].asked, why: A[t].why, rerun: A[t].rerun } : null }));
+const practice = tasks.map((t) => ({ task: t, n: num(t), prompt: readFileSync(join(root, 'models/evals/bench/tasks', t, 'task.txt'), 'utf8').trim(), route: A[t]?.route ?? B[t]?.route, before: B[t] ? { avg: B[t].avg, pass: B[t].pass } : null, after: A[t] ? { avg: A[t].avg, pass: A[t].pass, asked: A[t].asked, why: A[t].why, rerun: A[t].rerun } : null }));
 const wb = load(join(baseRoot, 'models/bonsai-2-27b/results/night/2026-09-25-rerun/words-real.json')).rows;
 const wa = load(join(dir, 'words-real.json')).rows;
 const wr = existsSync(join(dir, 'words-real-rerun.json')) ? load(join(dir, 'words-real-rerun.json')).rows : [];
@@ -336,19 +336,19 @@ const short = (t) => t.replace(/^\\d+-/, '');
 const oldT = DATA.practice.filter((p) => p.n <= 18);
 const half = (list) => [list.slice(0, Math.ceil(list.length / 2)), list.slice(Math.ceil(list.length / 2))];
 const pRow = (p) => ({ label: short(p.task), b: p.before?.avg, a: p.after?.avg, mark: p.after && !p.after.pass ? '✗' : '', note: p.route });
-half(oldT).forEach((part, i) => bars('chart-practice', { from: 'models/evals/run.mjs, thinking off', title: 'Seconds per practice task' + (i ? ', continued' : ''), xLabel: 'seconds', series: S2, max: Math.max(...oldT.flatMap((p) => [p.before?.avg ?? 0, p.after?.avg ?? 0])),
+half(oldT).forEach((part, i) => bars('chart-practice', { from: 'models/evals/bench/run.mjs, thinking off', title: 'Seconds per practice task' + (i ? ', continued' : ''), xLabel: 'seconds', series: S2, max: Math.max(...oldT.flatMap((p) => [p.before?.avg ?? 0, p.after?.avg ?? 0])),
   cap: i ? 'Shorter is better. The fix tasks are unchanged; the questions vary by a few seconds run to run.' : 'Shorter is better. Rename tasks take 0 s (no model). The change tasks (json-flag, add-function, feature-currency) show the early stop: two tests and two drafts instead of three and four.', rows: part.map(pRow) }));
 const hardT = DATA.practice.filter((p) => p.n >= 19);
-bars('chart-hard', { from: 'models/evals/run.mjs, thinking off', title: 'Seconds per harder task', xLabel: 'seconds', series: [{ key: 'a', name: 'After', color: '--c-after' }], cap: 'One run each. ✗ marks the one that fails (28: the existing test\\'s expected value has to change). The longest are the multi-file jobs and the real-sized project.',
+bars('chart-hard', { from: 'models/evals/bench/run.mjs, thinking off', title: 'Seconds per harder task', xLabel: 'seconds', series: [{ key: 'a', name: 'After', color: '--c-after' }], cap: 'One run each. ✗ marks the one that fails (28: the existing test\\'s expected value has to change). The longest are the multi-file jobs and the real-sized project.',
   rows: hardT.map((p) => ({ label: short(p.task), a: p.after?.avg, mark: p.after && !p.after.pass ? '✗' : '', note: p.route })) });
 // Seconds by path: before covers the 18 old tasks, after all 28.
 const paths = ['question', 'rename', 'fix', 'change', 'other', 'step by step'];
 const avgBy = (side, list) => paths.map((r) => { const rows = list.filter((p) => p[side] && p.route === r); return rows.length ? Math.round(rows.reduce((s, p) => s + p[side].avg, 0) / rows.length) : null; });
 const bByPath = avgBy('before', oldT), aByPath = avgBy('after', oldT); // the same 18 tasks on both sides
-bars('chart-hard', { from: 'models/evals/run.mjs, the 18 old tasks', title: 'Average seconds by path', xLabel: 'seconds', series: S2, cap: 'How a request was handled, the same 18 tasks on both sides. The change path carries the early stop; questions and writing gained a few seconds from the check before "done".',
+bars('chart-hard', { from: 'models/evals/bench/run.mjs, the 18 old tasks', title: 'Average seconds by path', xLabel: 'seconds', series: S2, cap: 'How a request was handled, the same 18 tasks on both sides. The change path carries the early stop; questions and writing gained a few seconds from the check before "done".',
   rows: paths.map((r, i) => ({ label: r, b: bByPath[i], a: aByPath[i] })).filter((r) => r.b != null || r.a != null) });
 const wRow = (w) => ({ label: '#' + w.n + ' ' + (w.prompt.length > 22 ? w.prompt.slice(0, 20) + '…' : w.prompt).replace(/\\n.*/s, ''), b: w.before?.secs, a: w.after.secs, mark: !w.after.ok ? '✗' : '', note: w.after.route });
-half(DATA.words).forEach((part, i) => bars('chart-words', { from: 'models/evals/words/real.mjs, auto-approved', title: 'Seconds per real request' + (i ? ', continued' : ''), xLabel: 'seconds', series: S2, max: Math.max(...DATA.words.flatMap((w) => [w.before?.secs ?? 0, w.after.secs])),
+half(DATA.words).forEach((part, i) => bars('chart-words', { from: 'models/evals/bench/words/real.mjs, auto-approved', title: 'Seconds per real request' + (i ? ', continued' : ''), xLabel: 'seconds', series: S2, max: Math.max(...DATA.words.flatMap((w) => [w.before?.secs ?? 0, w.after.secs])),
   cap: i ? 'The two before-failures (#16 rename broke the tests, #24 a pasted log became a fix) are gone; #26 in the plain folder now stops after one question instead of inventing a file.' : 'Shorter is better. Greetings drop from 39 and 95 s to 4 s; "api" (#8) asks first and answers in 44 s instead of 360 s of wrong work.', rows: part.map(wRow) }));
 bars('chart-engine', { from: 'llama-batched-bench', title: 'Writing speed with several answers at once', xLabel: 'tokens per second, all answers together', unit: ' tok/s', series: [{ key: 'a', name: 'write tok/s', color: '--c-before' }], cap: DATA.probes.parallelDecode.verdict,
   rows: DATA.probes.parallelDecode.rows.map((r) => ({ label: r.answersAtOnce + ' at once', a: r.writeTpsTotal })) });
@@ -458,19 +458,19 @@ function curves(host, { from, title, series, cap, lead = 'after_off', x = 'Time 
   f.appendChild(d);
   document.getElementById(host).appendChild(f);
 }
-curves('chart-curves', { from: 'models/evals/run.mjs · the 18 practice tasks', title: 'Practice tasks done within a time budget', series: DATA.curves.practice,
+curves('chart-curves', { from: 'models/evals/bench/run.mjs · the 18 practice tasks', title: 'Practice tasks done within a time budget', series: DATA.curves.practice,
   cap: 'Each run counts once (the night run did each task twice per level). The blue, green and yellow lines are the night run at thinking off, medium and high: more thinking cost time and won nothing. The orange line is this round: it reaches every task sooner. The dashed orange line adds the ten harder tasks, which take longer because they do more.' });
-curves('chart-curves', { from: 'models/evals/words/real.mjs · the 28 real requests', title: 'Real requests done within a time budget', series: DATA.curves.words,
+curves('chart-curves', { from: 'models/evals/bench/words/real.mjs · the 28 real requests', title: 'Real requests done within a time budget', series: DATA.curves.words,
   cap: 'A request counts as done when its checks passed (nothing changed that should not, blocked commands refused, tests still pass). Before, two requests never passed and four ran into the six-minute limit; after, all 28 pass, 16 of them inside a minute.' });
 
-lines('chart-lines', { from: 'models/evals/run.mjs, thinking off', title: 'The 18 practice tasks', cap: 'One dot per task, in task order. The orange line sits under the blue one on the change tasks (1, 12, 14) and on top of it on the writing tasks (16-18), where the loop now checks its own work before saying done.',
+lines('chart-lines', { from: 'models/evals/bench/run.mjs, thinking off', title: 'The 18 practice tasks', cap: 'One dot per task, in task order. The orange line sits under the blue one on the change tasks (1, 12, 14) and on top of it on the writing tasks (16-18), where the loop now checks its own work before saying done.',
   rows: oldT.map((p) => ({ tick: String(p.n), label: p.task, b: p.before?.avg, a: p.after?.avg, note: p.route, axis: 'task number' })) });
-lines('chart-lines', { from: 'models/evals/words/real.mjs, auto-approved', title: 'The 28 real requests', cap: 'The blue peaks are the requests that used to wander: greetings (#1, #2), "api" (#8), "fix the test" (#15), the pasted log (#24) and the plain-folder "fix the bug" (#27). The orange line stays under them.',
+lines('chart-lines', { from: 'models/evals/bench/words/real.mjs, auto-approved', title: 'The 28 real requests', cap: 'The blue peaks are the requests that used to wander: greetings (#1, #2), "api" (#8), "fix the test" (#15), the pasted log (#24) and the plain-folder "fix the bug" (#27). The orange line stays under them.',
   rows: DATA.words.map((w) => ({ tick: String(w.n), label: '#' + w.n + ' ' + w.prompt.split('\\n')[0], b: w.before?.secs, a: w.after.secs, note: w.after.route, axis: 'request number' })) });
-slope('chart-lines', { from: 'models/evals/run.mjs, the 18 old tasks', title: 'Average seconds by path', cap: 'The same 18 tasks on both sides. The change path got faster (two tests and two drafts instead of three and four); the writing and question tasks pay a few seconds for the check before "done" and the project map.',
+slope('chart-lines', { from: 'models/evals/bench/run.mjs, the 18 old tasks', title: 'Average seconds by path', cap: 'The same 18 tasks on both sides. The change path got faster (two tests and two drafts instead of three and four); the writing and question tasks pay a few seconds for the check before "done" and the project map.',
   rows: paths.map((r, i) => ({ label: r, b: bByPath[i], a: aByPath[i] })).filter((r) => r.b != null && r.a != null) });
 const wins = DATA.words.filter((w) => w.before && w.before.secs >= 90).map((w) => ({ label: '#' + w.n + ' ' + (w.prompt.length > 20 ? w.prompt.slice(0, 18) + '…' : w.prompt).split('\\n')[0], b: w.before.secs, a: w.after.secs }));
-slope('chart-lines', { from: 'models/evals/words/real.mjs', title: 'The requests that took 90 s or more before', cap: 'Every request that used to take a minute and a half or more, before → after. The two that got slower (#9 notes, #22 commit) now ask a question or check their own work first.',
+slope('chart-lines', { from: 'models/evals/bench/words/real.mjs', title: 'The requests that took 90 s or more before', cap: 'Every request that used to take a minute and a half or more, before → after. The two that got slower (#9 notes, #22 commit) now ask a question or check their own work first.',
   rows: wins });
 
 </script></body></html>`;

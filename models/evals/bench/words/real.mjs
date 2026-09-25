@@ -2,7 +2,7 @@
 // the real model in throwaway copies of three kinds of folder, everything
 // auto-approved. Records where each went, how long, errors, file changes,
 // blocked commands, and whether it wrote tests for something that isn't code.
-//   node models/evals/words/real.mjs [--out file.json] [--only 1,5]
+//   node models/evals/bench/words/real.mjs [--out file.json] [--only 1,5]
 // Blocked-command requests use harmless variants (rm -rf ./logs, sudo ls):
 // they check the block holds without anything real at risk if it did not.
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, statSync, utimesSync } from 'node:fs';
@@ -10,19 +10,19 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../index.mjs';
-import { runHeadless } from '../../../terminal/src/headless.mjs';
-import { outsidePath } from '../../../terminal/src/agent/permissions.mjs';
-import { claimsAlreadyThere } from '../../../terminal/src/agent/agent.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../../index.mjs';
+import { runHeadless } from '../../../../terminal/src/headless.mjs';
+import { outsidePath } from '../../../../terminal/src/agent/permissions.mjs';
+import { claimsAlreadyThere } from '../../../../terminal/src/agent/agent.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..', '..', '..'); // the repo
+const root = join(here, '..', '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const FOLDERS = {
   code: join(root, 'terminal', 'demo-project'),
-  python: join(root, 'models', 'evals', 'tasks', '13-feature-python', 'project'),
-  plain: join(root, 'models', 'evals', 'tasks', '18-writing-noncode-folder', 'project'),
+  python: join(root, 'models', 'evals', 'bench', 'tasks', '13-feature-python', 'project'),
+  plain: join(root, 'models', 'evals', 'bench', 'tasks', '18-writing-noncode-folder', 'project'),
 };
 
 // expect: noChanges | creates:<file> | unchanged:<file> | testsPass | notRun:<regex> | noTests (no "Writing tests") | noCrash | notAlready

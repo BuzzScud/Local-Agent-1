@@ -128,7 +128,7 @@ if (failsOld.length) html += `<p class="bad">Now failing: ${failsOld.map((t) => 
 html += `<h2>The ten harder tasks</h2><table><tr><th>task</th><th>what it asks</th><th>path</th><th>result</th><th class="n">seconds</th><th>questions asked → answers</th><th>why (if failed)</th></tr>`;
 for (const t of hard) {
   const a = A.get(t);
-  const prompt = existsSync(join(root, 'models/evals/tasks', t, 'task.txt')) ? readFileSync(join(root, 'models/evals/tasks', t, 'task.txt'), 'utf8').trim() : '';
+  const prompt = existsSync(join(root, 'models/evals/bench/tasks', t, 'task.txt')) ? readFileSync(join(root, 'models/evals/bench/tasks', t, 'task.txt'), 'utf8').trim() : '';
   const asked = a?.rows.flatMap((r) => r.asked ?? []) ?? [];
   html += `<tr><td>${esc(t)}${a?.rerun ? ' <span class="dim">(rerun on the fixed code)</span>' : ''}</td><td class="dim">${esc(prompt.length > 140 ? `${prompt.slice(0, 137)}…` : prompt)}</td><td>${esc(a?.route ?? '')}</td><td>${a ? pf(a.pass) : '<span class="dim">running</span>'}</td><td class="n">${a?.avg ?? '–'}</td><td>${asked.map((q) => `<span class="q">${esc(q.question)}</span> → ${esc(q.answer)}`).join('<br>') || '<span class="dim">none</span>'}</td><td class="warn">${esc(a?.rows.find((r) => !r.pass)?.why ?? '')}</td></tr>`;
 }
