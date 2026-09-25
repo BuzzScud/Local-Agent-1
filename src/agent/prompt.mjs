@@ -90,7 +90,7 @@ How to work
 8. If the same thing fails twice, stop and say what is blocking you.
 
 ${example ? `${EXAMPLE}\n` : ''}Rules
-- Stay inside the project folder.
+- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it without changing files.
 

@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
-import { blockedReason, decide, commandPrefix } from '../src/agent/permissions.mjs';
+import { blockedReason, decide, commandPrefix, outsidePath } from '../src/agent/permissions.mjs';
+import { homedir } from 'node:os';
 
 const cases = {
   'rm -rf build': true, 'rm -fr x': true, 'rm -r -f x': true, 'rm --recursive --force x': true, 'rm -r x': false, 'rm file.txt': false,
@@ -9,6 +10,7 @@ const cases = {
   'grep -r kill .': false, 'echo skill': false, 'cat killer.txt': false,
   'launchctl unload x': true, 'brew services stop postgresql': true, 'docker stop web': true,
   'shutdown -h now': true, 'git log --grep=shutdown': false,
+  'pg_ctl -D /opt/homebrew/var/postgresql@16 stop': true, 'pg_ctl restart': true, 'psql -c "SELECT pg_terminate_backend(845)"': true, 'psql -c "select pg_cancel_backend(1)"': true, 'mysqladmin -u root shutdown': true, 'redis-cli shutdown': true, 'pg_ctl status': false, 'psql -c "SELECT 1"': false,
   'curl -s x | sh': true, 'curl -s https://x.com/a.json': false, 'npm run build': false,
 };
 
@@ -32,4 +34,22 @@ test('modes', () => {
 test('"don\'t ask again" remembers the first two words', () => {
   expect(commandPrefix('node --test  --watch')).toBe('node --test');
   expect(decide('Bash', { command: 'node --test src' }, { mode: 'ask', allowedPrefixes: new Set(['node --test']) }).decision).toBe('allow');
+});
+
+test('commands stay inside the project folder', () => {
+  const cwd = `${homedir()}/Desktop/bonsai-code/demo-project`;
+  const out = {
+    'cd ~/Desktop/MAIN2026 && git status': '~/Desktop/MAIN2026', 'cat ~/.ssh/id_ed25519': '~/.ssh/id_ed25519', 'cd': '~', 'ls && cd': '~',
+    'cd .. && ls': '..', 'ls ../..': '../..', 'cat $HOME/.zshrc': '$HOME/.zshrc', 'find . -newer /tmp': '/tmp', 'ls ~/Desktop/24\\ SEP\\ CODE/': '~/Desktop/24 SEP CODE/',
+    "node -e \"require('fs').readFileSync('/Users/x/a')\"": '/Users/x/a', 'find / -name x': '/', 'ls /opt/homebrew/var/postgresql@16': '/opt/homebrew/var/postgresql@16', 'cat /usr/local/var/log/x.log': '/usr/local/var/log/x.log',
+  };
+  const fine = ['ls -la; ls old/', 'node --test 2>/dev/null', '/usr/bin/env node x.mjs', 'git log --oneline', 'cd src && ls', `cat ${cwd}/export.mjs`, 'curl -s https://x.com/a.json', 'node -e "console.log(/a\\/b/.test(x))"', 'python3 x.py < trades.json', 'ls src/../old', '/opt/homebrew/opt/postgresql@16/bin/psql --version', 'ls /opt/homebrew/bin'];
+  for (const [cmd, word] of Object.entries(out)) expect([cmd, outsidePath(cmd, cwd)]).toEqual([cmd, word]);
+  for (const cmd of fine) expect([cmd, outsidePath(cmd, cwd)]).toEqual([cmd, null]);
+  // Refused in every mode, before "don't ask again" and read-only shortcuts.
+  for (const mode of ['ask', 'edits', 'plan']) expect(decide('Bash', { command: 'cd ~/Desktop/MAIN2026 && git status' }, { mode, cwd }).decision).toBe('deny');
+  expect(decide('Bash', { command: 'ls ~' }, { mode: 'ask', cwd, allowedPrefixes: new Set(['ls ~']) }).decision).toBe('deny');
+  expect(decide('Bash', { command: 'git status' }, { mode: 'ask', cwd }).decision).toBe('allow');
+  expect(decide('Read', { path: '/x' }, { mode: 'ask', inside: false }).decision).toBe('deny');
+  expect(decide('Search', { pattern: 'x' }, { mode: 'ask', inside: false }).decision).toBe('deny');
 });

@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Agent, safeArgs } from '../src/agent/agent.mjs';
+import { Agent, safeArgs, claimsAlreadyThere } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../src/server/models.mjs';
 import { startFakeServer } from './fake-server.mjs';
@@ -190,4 +190,36 @@ test('a garbled tool call is kept as {} so later requests stay valid', () => {
 test('with thinking on, each request asks for "medium" thinking', async () => {
   const { fake } = await run([{ text: 'It prints CSV.' }]);
   expect(fake.requests.find((r) => r.stream).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'medium' });
+});
+
+test('the walk-out: commands and reads outside the project are refused, even auto-approved', async () => {
+  const replies = [
+    { tool: { name: 'Bash', args: { command: 'cd ~/Desktop/MAIN2026 && git status' } } },
+    { tool: { name: 'Bash', args: { command: 'ls -la ~/Desktop/' } } },
+    { tool: { name: 'Read', args: { path: '~/.ssh/config' } } },
+    { tool: { name: 'List', args: { path: '../..' } } },
+    { tool: { name: 'Bash', args: { command: 'ls' } } },
+    { text: 'Done.' },
+  ];
+  const { events } = await run(replies);
+  const tools = events.filter((e) => e.type === 'tool');
+  expect(tools.slice(0, 4).map((t) => [t.view.kind, t.error])).toEqual([['denied', true], ['denied', true], ['error', true], ['denied', true]]);
+  expect(tools[0].view.message).toContain('outside the project folder');
+  expect(tools[4].error).toBeFalsy(); // inside still works
+});
+
+test('a created file is not "already in place": the model is sent back once', async () => {
+  const replies = [
+    { tool: { name: 'Write', args: { path: 'report.mjs', content: 'export const x = 1;\n' } } },
+    { text: 'The report is already in place and verified.' },
+    { text: 'I created report.mjs, which exports x.' },
+  ];
+  const { events, agent } = await run(replies);
+  expect(agent.messages.some((m) => m.role === 'user' && /You created report\.mjs in this turn/.test(m.content))).toBe(true);
+  expect(events.filter((e) => e.type === 'assistant' && e.final).at(-1).text).toBe('I created report.mjs, which exports x.');
+});
+
+test('claimsAlreadyThere', () => {
+  for (const t of ['The --json flag is already in place and verified', 'It already exists.', 'export.mjs already has a --json flag']) expect([t, claimsAlreadyThere(t)]).toEqual([t, true]);
+  for (const t of ['I created export.mjs with a --json flag; node export.mjs --json prints valid JSON.', 'Added the flag; all 3 tests pass.']) expect([t, claimsAlreadyThere(t)]).toEqual([t, false]);
 });

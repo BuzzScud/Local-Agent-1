@@ -1,0 +1,91 @@
+{
+ "at": "2026-09-25T13:57:06.844Z",
+ "cols": null,
+ "rows": null,
+ "shots": [
+  {
+   "name": "tour stopped here",
+   "cols": 80,
+   "rows": 24,
+   "html": "<div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div>",
+   "text": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "checks": [
+    {
+     "what": "nothing wider than the window",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "what": "one prompt box",
+     "ok": true,
+     "detail": "0 seen"
+    },
+    {
+     "what": "one footer",
+     "ok": true,
+     "detail": "0 seen"
+    },
+    {
+     "what": "one spinner",
+     "ok": true,
+     "detail": "0 seen"
+    },
+    {
+     "what": "box borders whole",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "what": "every box closed",
+     "ok": true,
+     "detail": "0 ╭ vs 0 ╰"
+    }
+   ],
+   "note": "timed out waiting for ? for shortcuts",
+   "clears": 0,
+   "resizes": 0
+  },
+  {
+   "name": "flows stopped here",
+   "cols": 80,
+   "rows": 24,
+   "html": "<div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div><div> </div>",
+   "text": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "checks": [
+    {
+     "what": "nothing wider than the window",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "what": "one prompt box",
+     "ok": true,
+     "detail": "0 seen"
+    },
+    {
+     "what": "one footer",
+     "ok": true,
+     "detail": "0 seen"
+    },
+    {
+     "what": "one spinner",
+     "ok": true,
+     "detail": "0 seen"
+    },
+    {
+     "what": "box borders whole",
+     "ok": true,
+     "detail": ""
+    },
+    {
+     "what": "every box closed",
+     "ok": true,
+     "detail": "0 ╭ vs 0 ╰"
+    }
+   ],
+   "note": "timed out waiting for ? for shortcuts",
+   "clears": 0,
+   "resizes": 0
+  }
+ ]
+}

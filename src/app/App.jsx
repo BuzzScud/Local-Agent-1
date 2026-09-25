@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions } from './screen.jsx';
+import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
@@ -48,10 +49,25 @@ function expandMentions(value, cwd, maxChars) {
   return { text: value + extra, attached };
 }
 
-export function App({ opts }) {
+export function App({ opts, win }) {
   const { exit } = useApp();
-  const { columns, rows } = useWindowSize();
-  const width = Math.max(40, columns ?? 100);
+  const inkSize = useWindowSize();
+  // With the resize-aware window (the terminal app), the size changes only
+  // when a resize has settled, together with the redraw.
+  const [winSize, setWinSize] = useState(() => (win ? { columns: win.columns, rows: win.rows } : null));
+  const { columns, rows } = winSize ?? inkSize;
+  const width = Math.max(MIN_COLS, columns ?? 100);
+  const tooSmall = (columns ?? 100) < MIN_COLS || (rows ?? 40) < MIN_ROWS;
+  // Bumped on every resize: the conversation is printed again at the new size.
+  const [redraw, setRedraw] = useState(0);
+  useEffect(() => {
+    if (!win) return;
+    const on = (size) => { setWinSize(size); setRedraw((n) => n + 1); };
+    win.on('redraw', on);
+    return () => win.off('redraw', on);
+  }, [win]);
+  // The text a menu was closed for with esc (typing again opens it).
+  const [menuClosedFor, setMenuClosedFor] = useState(null);
   const cwd = opts.cwd;
   const model = MODELS[opts.modelId ?? DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
   const settings = useRef(loadSettings()).current;
@@ -112,7 +128,7 @@ export function App({ opts }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, menuIndex, mode, layout, starting, live, queued };
+  S.current = { input, perm, picker, menuIndex, mode, layout, starting, live, queued, tooSmall };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
 
@@ -431,7 +447,7 @@ export function App({ opts }) {
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
   let menu = null;
-  if (!perm && !picker) {
+  if (!perm && !picker && input.value !== menuClosedFor) {
     const cmds = inputMode === 'prompt' ? matchCommands(input.value) : [];
     if (cmds.length) menu = { kind: 'slash', pad: 14, items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg })) };
     const at = mentionAt(input);
@@ -443,7 +459,7 @@ export function App({ opts }) {
     }
   }
   const menuIdx = menu ? Math.min(menuIndex, menu.items.length - 1) : 0;
-  useEffect(() => { setMenuIndex(0); }, [input.value]);
+  useEffect(() => { setMenuIndex(0); setMenuClosedFor((v) => (v === input.value ? v : null)); }, [input.value]);
 
   const completeMenu = (m, idx) => {
     const it = m.items[idx];
@@ -462,6 +478,9 @@ export function App({ opts }) {
 
   useInput((ch, key) => {
     const cur = S.current;
+    // A window too small to show the screen takes no keys (enter could answer
+    // a question you cannot see), except ctrl+c.
+    if (cur.tooSmall && !(key.ctrl && ch === 'c')) return;
     // Permission prompt
     if (cur.perm) {
       const p = cur.perm;
@@ -523,8 +542,10 @@ export function App({ opts }) {
     }
     if (key.ctrl && ch === 'd' && !cur.input.value) { quit(); return; }
     if (key.escape) {
-      if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
+      // An open menu or shortcut list closes first; the next esc stops Bonsai.
+      if (menu) { setMenuClosedFor(cur.input.value); return; }
       if (showShortcuts) { setShowShortcuts(false); return; }
+      if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
       if (cur.input.value) {
         if (Date.now() - escArmed.current < 1500) { setInput({ value: '', cursor: 0 }); return; }
         escArmed.current = Date.now();
@@ -537,6 +558,20 @@ export function App({ opts }) {
     if (key.ctrl && ch === 'o') {
       if (lastFold.current) push({ type: 'expand', title: lastFold.current.title, text: lastFold.current.text });
       else flash('Nothing to expand yet');
+      return;
+    }
+    // Keys typed while the app was busy can arrive together ("on\r"): the
+    // Enter in them still sends (a real paste comes through usePaste instead).
+    if (ch && ch.length > 1 && ch.includes('\r') && !key.ctrl && !key.meta) {
+      const parts = ch.split(/\r\n?/);
+      let st = cur.input;
+      parts.forEach((part, i) => {
+        st = insertText(st, part);
+        if (i === parts.length - 1) return;
+        if (st.value.endsWith('\\') && st.cursor === st.value.length) st = { value: `${st.value.slice(0, -1)}\n`, cursor: st.value.length };
+        else { submit(st.value); st = { value: '', cursor: 0 }; }
+      });
+      setInput(st);
       return;
     }
     // Menu navigation
@@ -588,7 +623,7 @@ export function App({ opts }) {
   });
 
   const app = {
-    items, live, perm, picker, input, mode, layout, width, rows: rows ?? 40, cwd, cwdShort: short(cwd),
+    items, live, perm, picker, input, mode, layout, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd),
     modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,

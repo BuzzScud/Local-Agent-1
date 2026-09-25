@@ -10,12 +10,21 @@ import { Box, Text, Static } from 'ink';
 import { C, spinGlyph, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
+import { MIN_COLS, MIN_ROWS } from './window.mjs';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
 
 // Long folder paths keep their end, which is the part that says where you are.
 const fitPath = (p, max) => (p.length <= max ? p : `…${p.slice(p.length - max + 1)}`);
+
+// A numbered tip whose second line lines up under the first.
+const Tip = ({ n, children }) => (
+  <Box paddingLeft={2}>
+    <Box width={3} flexShrink={0}><Text color={C.dim}>{n}.</Text></Box>
+    <Text color={C.dim}>{children}</Text>
+  </Box>
+);
 
 export function Welcome({ model, cwd, width }) {
   const boxW = Math.min(width, 70);
@@ -30,9 +39,9 @@ export function Welcome({ model, cwd, width }) {
       </Box>
       <Box flexDirection="column" marginTop={1}>
         <Text color={C.dim}> Tips for getting started:</Text>
-        <Text color={C.dim}>  1. Run /init to write an AGENTS.md with notes about this project</Text>
-        <Text color={C.dim}>  2. Ask for a change: Bonsai reads, edits and tests, and asks before it touches anything</Text>
-        <Text color={C.dim}>  3. Everything runs on this Mac; nothing is sent anywhere</Text>
+        <Tip n={1}>Run /init to write an AGENTS.md with notes about this project</Tip>
+        <Tip n={2}>Ask for a change: Bonsai reads, edits and tests, and asks before it touches anything</Tip>
+        <Tip n={3}>Everything runs on this Mac; nothing is sent anywhere</Tip>
       </Box>
     </Box>
   );
@@ -169,8 +178,8 @@ function Meters({ app }) {
   } else if (app.waitingForYou) speed = <Text color={C.ask}>waiting for you</Text>;
   const used = stats.ctxUsed ?? 0;
   return (
-    <Box paddingX={2}>
-      <Text color={C.dim}>
+    <Box paddingX={2} width={app.width}>
+      <Text color={C.dim} wrap="truncate-end">
         {modelName}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  thinking {app.thinkingLabel ?? (app.thinking ? 'on' : 'off')}
       </Text>
     </Box>
@@ -182,8 +191,8 @@ function Spinner({ app }) {
   const secs = Math.max(0, (now - live.turnStart) / 1000);
   const note = live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : live.thinking && !live.text && !live.writing ? ' · thinking' : '';
   return (
-    <Box marginBottom={1}>
-      <Text>
+    <Box marginBottom={1} width={app.width}>
+      <Text wrap="truncate-end">
         <Text color={C.accent}>{spinGlyph(secs)} {live.verb}…</Text>
         <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(live.tokens)} tokens{note} · esc to stop)</Text>
       </Text>
@@ -262,28 +271,36 @@ export function permissionOptions(req, prefix) {
 }
 
 function PermissionPrompt({ app }) {
-  const { perm, width, cwd } = app;
+  const { perm, width } = app;
   const req = perm.req;
   const title = req.name === 'Write' && !req.prepared?.created ? 'Overwrite file' : PERM_TITLE[req.name] ?? req.name;
   const hunk = req.prepared?.hunk ?? [];
-  const cap = Math.max(8, app.rows - 18);
+  // The whole prompt fits the window with a line to spare: a live area as
+  // tall as the window makes Ink clear and redraw the screen on every frame.
+  const fixed = 2 + 1 + 1 + perm.options.length + (app.layout === 'live' ? 1 : 0) + 1;
+  const room = Math.max(3, app.rows - fixed);
+  const cap = Math.max(2, room - 4); // the diff box: its border, file name and "more lines"
+  const files = req.prepared?.files ?? [];
+  const nFiles = Math.max(1, Math.min(6, files.length, Math.floor((room - 1) / 5)));
+  const perFile = Math.max(1, Math.floor((room - 1 - 3 * nFiles) / nFiles));
+  const cmdLines = String(req.args?.command ?? '').split('\n');
   return (
     <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
       <Text bold color={C.ask}>{title}</Text>
       {req.name === 'Bash' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
-          <Text>{req.args.command}</Text>
-          <Text color={C.dim}>{req.args.description ? `${req.args.description} · ` : ''}in {cwd}</Text>
+          <Text>{cmdLines.length > room - 3 ? `${cmdLines.slice(0, room - 4).join('\n')}\n… +${cmdLines.length - (room - 4)} lines` : req.args.command}</Text>
+          <Text color={C.dim} wrap="truncate-end">{req.args.description ? `${req.args.description} · ` : ''}in {fitPath(app.cwdShort, Math.max(20, width - 12 - (req.args.description ? req.args.description.length + 3 : 0)))}</Text>
         </Box>
       ) : req.name === 'Rename' ? (
         <Box flexDirection="column">
-          {req.prepared.files.slice(0, 6).map((f) => (
+          {files.slice(0, nFiles).map((f) => (
             <Box key={f.rel} borderStyle="round" borderColor={C.faint} flexDirection="column" paddingX={1}>
               <Text bold>{f.rel} <Text color={C.dim}>({f.count} use{f.count === 1 ? '' : 's'})</Text></Text>
-              <Diff hunk={f.hunk.filter((l) => !l.gap).slice(0, Math.max(4, Math.floor(cap / Math.min(6, req.prepared.files.length))))} width={diffW(width) - 4} />
+              <Diff hunk={f.hunk.filter((l) => !l.gap).slice(0, perFile)} width={diffW(width) - 4} />
             </Box>
           ))}
-          {req.prepared.files.length > 6 ? <Text color={C.dim}>… and {req.prepared.files.length - 6} more files</Text> : null}
+          {files.length > nFiles ? <Text color={C.dim}>… and {files.length - nFiles} more file{files.length - nFiles === 1 ? '' : 's'}</Text> : null}
         </Box>
       ) : (
         <Box borderStyle="round" borderColor={C.faint} flexDirection="column" paddingX={1}>
@@ -315,7 +332,7 @@ function Menu({ app }) {
         const on = start + i === menu.index;
         // The selected row is highlighted whole (name and description), as in Claude Code.
         return (
-          <Text key={m.key ?? m.label} color={on ? C.accent : undefined}>
+          <Text key={m.key ?? m.label} color={on ? C.accent : undefined} wrap="truncate-end">
             <Text bold={on}>{m.label.padEnd(menu.pad ?? 16)}</Text>
             <Text color={on ? C.accent : C.dim}>{m.desc ?? ''}</Text>
           </Text>
@@ -340,9 +357,9 @@ function Footer({ app }) {
   const layoutName = layout === 'live' ? 'Live thinking' : 'Classic';
   return (
     <Box flexDirection="column">
-      <Box width={width} justifyContent="space-between" paddingX={2}>
-        <Text color={notice ? C.warn : C.dim}>{notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts')}</Text>
-        <Text>
+      <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
+        <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts')}</Text>
+        <Text wrap="truncate-start">
           {modeLabel(mode)}{mode !== 'ask' ? <Text color={C.dim}>  ·  </Text> : null}<Text color={C.dim}>ctrl+l  layout: {layoutName}</Text>
         </Text>
       </Box>
@@ -428,12 +445,28 @@ function ModelPicker({ app }) {
   );
 }
 
+// Shown instead of the screen when the window is smaller than it is laid out for.
+function TooSmall({ app }) {
+  return (
+    <Box flexDirection="column">
+      <Text color={C.warn} wrap="wrap">Make the window at least {MIN_COLS}×{MIN_ROWS} to see Bonsai</Text>
+      <Text color={C.dim} wrap="wrap">It is {app.columns}×{app.rows} now. {app.perm ? 'Bonsai is waiting for your answer.' : app.live.phase === 'working' ? 'Bonsai keeps working meanwhile.' : ''}</Text>
+    </Box>
+  );
+}
+
 export function Screen({ app }) {
-  const { items, layout, width, modelName, cwd } = app;
+  const { layout, width, modelName, cwd } = app;
+  // An empty <Static> of its own resets what Ink keeps to print again on a
+  // full clear, so the old (wider) conversation is not printed into the small window.
+  if (app.tooSmall) return <Box flexDirection="column"><Static key={`small${app.redraw}`} items={[]}>{() => null}</Static><TooSmall app={app} /></Box>;
+  // After a resize the conversation is printed again from the top of a clear
+  // window, after enough blank lines that it ends at the bottom.
+  const items = app.redraw ? [{ key: `pad${app.redraw}`, type: 'pad', rows: app.rows }, ...app.items] : app.items;
   return (
     <Box flexDirection="column" width={width}>
-      <Static items={items}>
-        {(it) => (
+      <Static key={app.redraw} items={items}>
+        {(it) => it.type === 'pad' ? <Text key={it.key}>{'\n'.repeat(Math.max(0, it.rows - 2))}</Text> : (
           // Static lines are laid out on their own, so they need the width
           // too; without it long lines are wrapped by the terminal mid-word.
           <Box key={it.key} flexDirection="column" marginBottom={1} width={width}>

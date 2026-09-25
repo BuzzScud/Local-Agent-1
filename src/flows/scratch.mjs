@@ -4,7 +4,8 @@
 import { mkdtempSync, readdirSync, symlinkSync, readFileSync, writeFileSync, rmSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { spawnSync, spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import { runCommand } from '../tools/run.mjs';
 
 const LINK = new Set(['node_modules', '.venv', 'venv', 'env', 'vendor', 'target', '.next', '.turbo', '.cache', 'coverage', '__pycache__']);
 const SKIP = new Set(['.git', '.DS_Store']);
@@ -40,24 +41,11 @@ export class Scratch {
     else writeFileSync(join(this.dir, rel), orig);
   }
 
-  run(command, { timeoutMs = 120_000, signal } = {}) {
-    return new Promise((resolve) => {
-      const t0 = Date.now();
-      const child = spawn(command, { cwd: this.dir, shell: '/bin/zsh', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' } });
-      let out = '';
-      child.stdout.on('data', (d) => { out += d; });
-      child.stderr.on('data', (d) => { out += d; });
-      let timedOut = false;
-      const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, timeoutMs);
-      const stop = () => child.kill('SIGTERM');
-      signal?.addEventListener('abort', stop, { once: true });
-      child.on('close', (code) => {
-        clearTimeout(timer);
-        signal?.removeEventListener('abort', stop);
-        // Paths in the output point at the scratch copy; show the real project.
-        resolve({ code, timedOut, ms: Date.now() - t0, out: out.split(this.dir).join('.').replace(/\/private\./g, '.') });
-      });
-    });
+  // Same runner as the Bash tool: a stop or time-out ends everything the command started.
+  async run(command, { timeoutMs = 120_000, signal } = {}) {
+    const r = await runCommand(command, { cwd: this.dir, timeoutMs, maxLines: Infinity, signal });
+    // Paths in the output point at the scratch copy; show the real project.
+    return { code: r.code, timedOut: r.timedOut, ms: r.ms, out: r.lines.join('\n').split(this.dir).join('.').replace(/\/private\./g, '.') };
   }
 
   dispose() { try { rmSync(this.dir, { recursive: true, force: true }); } catch {} }

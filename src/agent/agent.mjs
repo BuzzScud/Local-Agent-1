@@ -37,6 +37,12 @@ export function announcesNextStep(text) {
   return /\b(I will|I'll|I am going to|I'm going to|Let me|Let's|I need to|I should|First,? I|Next,? I|Now,? I)\b/i.test(last);
 }
 
+// An answer saying the work was already there ("The --json flag is already in
+// place"), which is false when this turn created the file.
+export function claimsAlreadyThere(text) {
+  return /\b(?:already|was already|were already)\s+(?:in place|there|exists?|present|implemented|supported|set up|done|works?|working|has|had|in the (?:file|project|code))\b|\b(?:is|are|was|were)\s+already\b/i.test(text ?? '');
+}
+
 // A tool call written as text instead of a real call: <tool_call>{...}</tool_call>
 export function toolCallInText(text) {
   // The 27B's own format: <tool_call><function=Name><parameter=key>value</parameter>…</function></tool_call>
@@ -173,7 +179,8 @@ export class Agent extends EventEmitter {
     let errorsInRow = 0;
     let nudges = 0;
     let checks = 0;
-    this.turn = { changed: false, testedAfterChange: false };
+    this.turn = { changed: false, testedAfterChange: false, created: [] };
+    let correctedAlready = false;
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
@@ -212,6 +219,16 @@ export class Agent extends EventEmitter {
             nudges++;
             this.messages.push({ role: 'user', content: 'Go ahead and do that now, using the tools.' });
             continue;
+          }
+          // It created a file this turn, then says the work was already there.
+          if (this.turn.created.length && claimsAlreadyThere(text)) {
+            const files = this.turn.created.join(', ');
+            if (!correctedAlready) {
+              correctedAlready = true;
+              this.messages.push({ role: 'user', content: `You created ${files} in this turn; it did not exist before. Answer again in 1-3 sentences: say that you created it, what it does, and how you checked it. Do not say it was already there.` });
+              continue;
+            }
+            this.emit('note', { text: `Note: ${files} did not exist before; Bonsai created it just now.`, tone: 'warn' });
           }
           if (!text.trim() && turn.finish === 'length') {
             this.messages.push({ role: 'user', content: 'You ran out of room while thinking. Think less and take the next step.' });
@@ -362,7 +379,7 @@ export class Agent extends EventEmitter {
       return { text: msg, error: true };
     }
     const inside = args.path ? resolvePath(this.cwd, args.path).inside : true;
-    const d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside });
+    const d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd });
     if (d.decision === 'deny') {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: d.reason }, error: true });
       return { text: `Not allowed: ${d.reason}. Do something else.`, error: true };
@@ -387,6 +404,7 @@ export class Agent extends EventEmitter {
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs);
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) { this.turn.changed = true; this.turn.testedAfterChange = false; }
+    if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;

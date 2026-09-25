@@ -12,6 +12,12 @@ import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
 
 const ID = '[`\'"]?([A-Za-z_$][\\w$]*)[`\'"]?';
+// A whole request that is one file operation: "delete trades.json",
+// "rename export.mjs to exporter.mjs", "move old/ into archive", "remove the logs folder".
+const PATHISH = '["\'`]?(?:[\\w.~-]+\\/)*[\\w~-][\\w.~-]*(?:\\.\\w{1,6}|\\/)["\'`]?';
+const FILE_OP = new RegExp(`^\\W*(?:please\\s+)?(?:delete|remove|rm|trash|move|mv|rename|copy|cp|duplicate)\\s+(?:the\\s+)?(?:(?:file|folder|directory)\\s+)?(?:${PATHISH}|[\\w.-]+\\s+(?:file|folder|directory|dir))(?:\\s+(?:to|into|as|in|inside)\\s+(?:the\\s+)?\\S+(?:\\s+(?:file|folder|directory))?)?\\s*[.!]?\\s*$`, 'i');
+const CODE_FILE = /\b[\w-]+\.(m?[jt]sx?|cjs|py|rb|go|rs|java|kt|swift|c|cc|cpp|h)\b/i;
+const CODE_WORDS = /\b(function|method|class|helper|bug|crash(es)?|flag|field|option|parameter|argument|variable|property|endpoint|generator|parser|stdout|stderr|exception)\b/i;
 
 export function routeByRules(text) {
   const t = text.trim();
@@ -21,13 +27,27 @@ export function routeByRules(text) {
   // sort them cost a request, and with a big model a re-read of its instructions.
   if (/^(hi|hello|hey|yo|hiya|howdy|thanks|thank you|thx|ok|okay|cool|great|nice|good (morning|afternoon|evening)|who are you|what can you do)\b[\s!.?,]*(bonsai|there)?[\s!.?]*$/i.test(t)) return { kind: 'question' };
   if (/\b(don'?t|do not|without) (change|chang|edit|touch)/i.test(t)) return { kind: 'question' };
+  // Deleting, moving, renaming or copying a file is a file operation, not a
+  // code change: it goes step by step, where the command asks you first.
+  // ("delete trades.json" once became code that deleted the file on every run.)
+  if (FILE_OP.test(t) && !/^\W*\w+\s+console\.\w+/i.test(t)) return { kind: 'other' };
   // Writing (a story, notes, a letter, a text or Markdown file) and creating a
-  // new file are not code changes: no test can define "done", so work step by step.
-  if (/\.(md|markdown|txt|csv|docx?|pdf|rtf)\b|\b(txt|text file|markdown|readme)\b/i.test(t)) return { kind: 'other' };
-  if (/\b(story|stories|poem|essay|letter|e-?mail|blog|article|notes?|summary|recipe|journal|diary)\b/i.test(t) && !/\b(function|method|class|tests?|bug|flag)\b/i.test(t)) return { kind: 'other' }; // "notes about the API" is writing; "a function" is code
-  if (/\b(create|make|write|add)\b[^.]{0,40}\b(new )?file\b|\b(name|call) it\b/i.test(t)) return { kind: 'other' };
+  // new file are not code changes: no test can define "done", so work step by
+  // step. Asking for code (a function, a field, a bug) keeps a request on the
+  // code paths even when it mentions a writing word. A named Markdown or text
+  // file is what gets written ("a NOTES.md about the API in server.mjs"), but
+  // requirements.txt next to a code file is a dependency change.
+  const code = CODE_FILE.test(t) || CODE_WORDS.test(t);
+  const doc = /\.(md|markdown|txt|csv|docx?|pdf|rtf)\b|\b(txt|text file|markdown|readme|change ?log|release notes|licen[cs]e)\b/i.test(t);
+  if (doc && !CODE_WORDS.test(t) && !(CODE_FILE.test(t) && /\brequirements[\w-]*\.txt\b/i.test(t))) return { kind: 'other' };
+  if (!code && /\b(story|stories|poem|essay|letter|e-?mail|blog|article|notes?|summary|recipe|journal|diary)\b/i.test(t) && !/\btests?\b/i.test(t)) return { kind: 'other' }; // "notes about the API" is writing; "a notes field" is code
+  if (/\b(create|make|add|write)\s+(?:(?:a|an|the)\s+)?(?:new\s+)?(?:\w+\s+)?file\b|\bname it\b|\bcall it\s+["'\u201c]|\bcall it\s+[\w.-]+\s*[.!]?\s*$/i.test(t)) return { kind: 'other' };
   const asks = /\b(add|fix|change|make|implement|create|rename|remove|delete|update|refactor|write)\b/i.test(t);
   if (/\?\s*$/.test(t) && !(/\b(can|could|would|will) you\b/i.test(t) && asks)) return { kind: 'question' };
+  // A question on the first line with pasted output under it ("Here is a log,
+  // what went wrong?" + the log) is still a question, whatever the log says.
+  const first = t.split('\n')[0];
+  if (first !== t && /\?\s*$/.test(first) && !/\b(fix|change|add|update|make|solve|repair)\b/i.test(first)) return { kind: 'question' };
   if (/^(what|which|where|why|how|who|when|explain|describe|show me|list|tell me|does|is|are|summari[sz]e)\b/i.test(t) && !asks) return { kind: 'question' };
   if (/\b(fix|failing|fails|broken|bug|crash(es)?|doesn'?t work|does not work|wrong result)\b/i.test(t)) return { kind: 'fix' };
   if (/\b(add|implement|create|make|change|update|support|remove|delete|refactor|write|rename)\b/i.test(t)) return { kind: 'change' };

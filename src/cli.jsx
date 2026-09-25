@@ -3,6 +3,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { App } from './app/App.jsx';
+import { TerminalWindow } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL } from './server/models.mjs';
 import { ModelServer } from './server/server.mjs';
 import { chooseContext } from './server/memory.mjs';
@@ -103,7 +104,8 @@ if (opts.print) {
   // last lines of the window and the conversation grows upward above it.
   // Terminal's own scrolling and copying keep working.
   if (process.stdout.isTTY) process.stdout.write('\n'.repeat(process.stdout.rows || 24));
-  const instance = render(<App opts={opts} />, { exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
+  const win = new TerminalWindow(process.stdout);
+  const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
   const bye = () => { try { instance.unmount(); } catch {} };
   process.on('SIGTERM', bye);
   process.on('SIGHUP', bye);
