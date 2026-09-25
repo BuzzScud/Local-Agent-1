@@ -1,5 +1,8 @@
 [test]
 # Tests that spawn node --test several times can pass 5 s when the model server loads the Mac.
 timeout = 30000
-# Only our tests; demo-project/ and evals/ hold practice projects with their own tests.
-root = "./test"
+# Only our tests: terminal/test and models/test (bun run test passes both).
+# terminal/demo-project and models/evals/tasks hold practice projects with
+# their own tests, which must not run here, so the root is terminal/test and
+# models/test is passed as a path.
+root = "./terminal/test"

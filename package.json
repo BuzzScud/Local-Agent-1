@@ -3,25 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A Claude-style terminal coding agent for local Bonsai models (design previews first).",
+  "description": "Bonsai Code: a Claude Code-style coding agent for your terminal (terminal/) running local models (models/).",
   "scripts": {
-    "demo": "bun src/demo/live.jsx --design",
-    "record": "node src/demo/record.mjs",
-    "preview": "bun src/demo/build-preview.jsx",
-    "start": "bun src/cli.jsx",
-    "test": "bun test",
-    "eval": "node evals/run.mjs",
-    "build": "bun build --compile --minify src/cli.jsx --outfile dist/bonsai",
+    "demo": "bun terminal/src/demo/live.jsx --design",
+    "record": "node terminal/src/demo/record.mjs",
+    "preview": "bun terminal/src/demo/build-preview.jsx",
+    "start": "bun terminal/src/cli.jsx",
+    "test": "bun test ./terminal/test ./models/test",
+    "test:terminal": "bun test ./terminal/test",
+    "test:models": "bun test ./models/test",
+    "eval": "node models/evals/run.mjs",
+    "eval:words": "node models/evals/words/real.mjs",
+    "eval:verify": "zsh models/evals/verify-tasks.sh",
+    "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/bonsai",
     "install-cli": "bun run build && mkdir -p ~/.local/bin && cp dist/bonsai ~/.local/bin/bonsai && echo installed ~/.local/bin/bonsai",
-    "test:binary": "bun run build && BONSAI_BIN=$PWD/dist/bonsai bun test test/app.test.mjs"
+    "test:binary": "bun run build && BONSAI_BIN=$PWD/dist/bonsai bun test ./terminal/test/app.test.mjs"
   },
   "dependencies": {
     "ink": "^7.1.1",
     "react": "^19.3.0",
-    "react-devtools-core": "file:src/shims/react-devtools-core"
+    "react-devtools-core": "file:terminal/src/shims/react-devtools-core"
   },
   "bin": {
-    "bonsai": "src/cli.jsx"
+    "bonsai": "terminal/src/cli.jsx"
   },
   "devDependencies": {
     "@xterm/headless": "^5.5.0"

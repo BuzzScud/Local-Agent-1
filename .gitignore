@@ -1,14 +1,19 @@
 node_modules/
 dist/
-evals/results/
-evals/*.log
-scripts/capture-*-fake.json
-.DS_Store
 backups/
 Bonsai Code.app/
-scripts/dev/experiments/slots/
-scripts/dev/experiments/*.log
-evals/night/
-evals/words/real-*.json
-evals/soak-*.json
-evals/speed-*.json
+.DS_Store
+.env*
+*.pem
+*.key
+.split-map.json
+
+# Part 1 · terminal: captures from fake runs, UI-walk scratch output
+terminal/scripts/capture-*-fake.json
+terminal/scripts/ui-walk-*.json
+
+# Part 2 · models: raw test runs stay on this Mac (one results/ per model);
+# the report pages in models/<model>/reports/ are kept.
+models/*/results/
+models/evals/dev/experiments/slots/
+models/evals/dev/experiments/*.log

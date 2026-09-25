@@ -1,7 +1,7 @@
 # Bonsai Code
 
-A Claude Code–style coding agent for your terminal that runs **Bonsai 2 27B**
-(PrismML's ternary model, 7.2 GB) on this Mac. Nothing leaves the machine.
+A Claude Code–style coding agent for your terminal, running a local model on
+this Mac. Nothing leaves the machine.
 
 ```
 cd any/project
@@ -11,99 +11,55 @@ bonsai -c                  # continue the last conversation in this folder
 bonsai -p "what does x do" # answer once and exit
 ```
 
-## Screen
+## Two parts
 
-Two layouts, switched with **ctrl+l** or `/layout` (your choice is remembered):
+| Part | Folder | What it is |
+|---|---|---|
+| **1 · The terminal** | [`terminal/`](terminal/README.md) | The agent you talk to: the screen, keys, permissions, the tool loop, the focused paths (fix, change, several files, rename), the questions it asks you. It works with any model the models part offers. |
+| **2 · The models** | [`models/`](models/README.md) | The models we use and test, one folder each, plus what runs them (llama-server, memory, warm-up, setup) and the test bench that measures the agent with a model (practice tasks, real requests, speed and soak runs, reports). |
 
-- **Classic** — Claude Code as it is: thinking folded to one line, one spinner, a quiet footer.
-- **Live thinking** — you watch it work: thinking streams in a 4-line window, tool calls
-  show how much is written, and a meter line shows speed, context and memory.
+The model today is **Bonsai 2 27B** (Prism ML's ternary model, 7.2 GB):
+[`models/bonsai-2-27b/`](models/bonsai-2-27b/README.md) holds its settings, what was
+measured, and the report pages.
 
-## Keys
-
-| Key | Does |
-|---|---|
-| enter | send · `\` + enter for a new line |
-| esc | stop Bonsai · twice to clear the prompt |
-| shift+tab | ask first → accept edits → plan (read-only) |
-| ctrl+l | switch layout |
-| ctrl+o | show the last thinking or output in full |
-| ↑ ↓ | earlier prompts |
-| `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
-| ctrl+c twice | quit (the conversation is saved) |
-
-Commands: `/help /clear /compact /layout /think /mode /init /resume /model /stats /doctor /exit`.
-
-## Permissions
-
-It asks before every edit and command (Yes · Yes for this session · No and say what
-instead). Always blocked, in every mode: `rm -rf`, `sudo`, `git push`,
-`git reset --hard`, `git clean -f`, `kill`/`pkill`/`killall`, stopping services, and
-piping the internet into a shell. Files outside the project folder are never changed.
-
-## How it works
-
-- `~/.bonsai-code/bin` — Prism ML's llama.cpp build (`prism-b10735`), needed for the
-  ternary weights. `~/.bonsai-code/models` — `Ternary-Bonsai-2-27B-PQ2_0.gguf` (7.21 GB).
-  On the M4 it writes about 10 tokens a second and reads about 61.
-- The app starts `llama-server` on port 17600 (or the next free one) with a 32k memory
-  (8-bit cache; about 9.3 GB in all), dropping to 16k when the Mac is short on memory,
-  and stops it on exit. It uses the model file's own chat template. The server's saved
-  states are capped (4 checkpoints, no store of old prompts): its defaults grew to 9 GB
-  of extra memory within 13 prompts.
-- Thinking is off by default; `/think` (or `--think`) turns on PrismML's "medium" effort,
-  and the server ends any thinking after 2,048 tokens.
-- The agent loop (`src/agent`) sends the conversation, streams the reply, runs one tool
-  at a time and feeds the result back. Seven tools: Read, List, Search, Edit, Write,
-  Bash, TodoWrite. Built for small local models, from what the practice runs showed:
-  - Read returns plain text (numbered lines got copied into edits); small files come back whole.
-  - Edits match despite indentation slips and one-character typos (one clear place only,
-    and the lines meant to stay are put back exactly); `replace_all` for renames.
-  - An edit that would break a file that parsed before is refused (JS, JSON, Python).
-  - Write only creates files; existing files change through Edit.
-  - Wrong full paths, wrong folders and copied headers are mapped back or removed;
-    empty searches list the project's files; `*.js` also finds `.mjs`.
-  - Guards: repeated steps, looping output, a tool call written as text or inside the
-    thinking, and "announce then stop" (it is told to go ahead); a thinking budget; old
-    output trimmed and the conversation summarized when memory fills.
-- An unclear request gets a question first (`src/flows/clarify.mjs`): a bare "fix the bug"
-  when nothing fails, or a lone word such as "api". The model can also ask mid-task with its
-  Ask tool, as often as it needs; you answer by number or type a line. The answer travels
-  with the request.
-- Focused paths (`src/flows`) handle most requests before the loop: a request is sorted
-  (rules, or the model with a forced JSON reply) into question / rename / fix / change.
-  - Rename: every whole-word use in every file, one diff, one question; no model.
-  - Fix: run the tests, find the file, tries in a scratch copy, each told what the last one
-    got wrong; the first that passes is shown for your OK. When three tries on one function
-    fail, three wider tries follow as edit blocks over the whole file (a bug in two places).
-  - Change: a test first (cross-checked against drafts, then approved by you), then tries.
-    Two tests and two drafts are written; more only when they disagree. A change no try can
-    pass falls through to the step-by-step way (often an existing test needs updating).
-  - Several files (an option used in three places, an argument and its callers): the files
-    are planned from the project map, one test, then drafts and tries as edit blocks across
-    all of them (`src/flows/multi.mjs`). Whole files are never rewritten.
-  - Files over 80 lines: a try rewrites only the one function (the model still reads files
-    up to 300 lines whole). If that never passes, it works step by step instead.
-- A project map (`src/tools/repomap.mjs`: each code file with its names, cached under
-  `~/.bonsai-code/maps`) is what the model chooses files from, and the first thing the
-  step-by-step loop sees in a project with four or more code files.
-- When the loop changes files and says it is done, one forced-JSON check compares the diff
-  with the request; a missing part sends it back once.
-- The server runs n-gram speculative decoding (no draft model): when an answer copies its
-  input, as a rewritten function does, runs of tokens are accepted at once (~30% faster
-  writing, same output).
-  - `--no-flows` always works step by step.
-- The screen (`src/app`) is Ink (React for the terminal, the library Claude Code uses),
-  in 256 colours for Apple Terminal.
-
-## Develop
+The terminal talks to the models part through one file, `models/index.mjs`. The
+test bench goes the other way: it runs the terminal's agent with a model and grades
+the result, so a new model is tested the same way the 27B was.
 
 ```
-bun src/cli.jsx            # run from source
-bun test                   # 120 tests: tools, permissions, agent, focused paths, asking, several files, and the app driven by keys in a real terminal
-node evals/run.mjs         # the 28 practice tasks against the real model (thinking off and on); zsh evals/verify-tasks.sh proves the checks
-node scripts/dev/27b-realuse.mjs <port> <pid>   # speed, memory and 4 real checks against a running server
+bonsai-code/
+├─ terminal/            part 1 · the agent terminal
+│  ├─ src/              cli, app (the screen), agent (the loop), flows, tools
+│  ├─ test/             unit tests and the app driven by keys in a real terminal
+│  ├─ scripts/          screen captures and the terminal's report pages
+│  ├─ docs/             the terminal's design and report pages
+│  ├─ app/              the Bonsai Code.app launcher and its icon
+│  └─ demo-project/     a small project the tests and demos work on
+└─ models/              part 2 · the models we use and test
+   ├─ index.mjs         the one entry the terminal imports
+   ├─ registry.mjs      the list of models and where their files live
+   ├─ runtime/          llama-server, memory, warm-up, bonsai setup
+   ├─ bonsai-2-27b/     the model: settings, README, reports/ (results/ stays local)
+   ├─ evals/            the test bench: 28 practice tasks, 28 real requests, speed, soak, night runs
+   └─ test/             unit tests of the models part
+```
+
+## Commands
+
+```
+bun run start              # run from source (bun terminal/src/cli.jsx)
+bun run test               # all 124 tests: terminal/test and models/test
+bun run test:terminal      # only the terminal's
+bun run test:models        # only the models part's
+bun run eval               # the 28 practice tasks against the real model (models/evals/run.mjs)
+bun run eval:words         # the 28 real requests
+bun run eval:verify        # prove every practice task's check can fail and pass
 bun run install-cli        # build one file and put it at ~/.local/bin/bonsai
 ```
 
-`src/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`).
+Setup on a new Mac: `bun install`, then `bonsai setup` downloads Prism's
+llama.cpp build and the model into `~/.bonsai-code`.
+
+## License
+
+GPL-3.0, see [LICENSE](LICENSE).
