@@ -8,6 +8,8 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [bonsai-code-structure-v2.html](bonsai-code-structure-v2.html) | page | Bonsai Code structure v2 | 32 KB | 2026-09-25 |
+| [bonsai-2-27b-inside-2026-09-25.html](bonsai-2-27b-inside-2026-09-25.html) | page | Inside Bonsai 2 27B | 22 KB | 2026-09-25 |
 | [bonsai-smart-2026-09-25.html](bonsai-smart-2026-09-25.html) | page | Bonsai Code smarter and faster stats | 89 KB | 2026-09-25 |
 | [bonsai-code-structure.html](bonsai-code-structure.html) | page | Bonsai Code structure | 31 KB | 2026-09-25 |
 | [bonsai-open-items-report-2026-09-25.pdf.png](bonsai-open-items-report-2026-09-25.pdf.png) | image |  | 543 KB | 2026-09-25 |
