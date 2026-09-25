@@ -66,6 +66,12 @@ function changedFiles(dir, since) {
   return out;
 }
 
+// Auto-approve says yes to everything, but never to reaching the Mac's running
+// services: a question about a pasted Postgres log once led the model to find
+// the real local database and shut it down.
+const SERVICES = /\b(psql|pg_ctl|pg_isready|mysql|mysqladmin|mariadb|redis-cli|mongosh?|launchctl|brew\s+services|lsof\s+-i|nc|netcat|telnet|ssh|scp)\b|\b(127\.0\.0\.1|localhost|0\.0\.0\.0)\b|net\.connect|createConnection/i;
+const approve = (req) => !(req.name === 'Bash' && SERVICES.test(String(req.args?.command ?? '')));
+
 const only = opt('only', null)?.split(',').map(Number);
 const model = MODELS[DEFAULT_MODEL];
 const server = new ModelServer(model);
@@ -89,7 +95,7 @@ try {
     const t0 = Date.now();
     let run; let crash = null;
     try {
-      run = await runHeadless({ prompt, cwd, url: server.url, model, thinking: false, ctx: 32768, autoApprove: true, signal: ac.signal, slots, warm: !!slots,
+      run = await runHeadless({ prompt, cwd, url: server.url, model, thinking: false, ctx: 32768, autoApprove: true, approve, signal: ac.signal, slots, warm: !!slots,
         onEvent: (type, ev) => log.push({ type, ...ev }) });
     } catch (e) { crash = String(e.message ?? e); }
     clearTimeout(timer);

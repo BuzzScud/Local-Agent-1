@@ -23,15 +23,17 @@ export const BLOCKED = [
   { re: /\bbrew\s+services\s+(stop|restart|kill)\b/, why: 'stopping services could stop your running servers' },
   { re: /\bpm2\s+(stop|delete|kill|restart)\b/, why: 'stopping services could stop your running servers' },
   { re: /\bdocker\s+(stop|kill|rm|rmi|system\s+prune)\b/, why: 'stopping or deleting containers' },
+  { re: /\b(pg_ctl|pg_ctlcluster)\b[^;&|]*\b(stop|restart|kill)\b|\bpg_(terminate|cancel)_backend\b|\b(mysqladmin|mariadb-admin)\b[^;&|]*\bshutdown\b|\bredis-cli\b[^;&|]*\bshutdown\b|\bmongosh?\b[^;&|]*shutdownServer/i, why: 'stopping a database stops everything using it' },
   { re: at('shutdown|reboot|halt'), why: 'shuts the Mac down' },
   { re: /\bmkfs\b|\bdd\s+if=|\bdiskutil\s+(erase|partition)/, why: 'can wipe a disk' },
   { re: /\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z)?sh\b/, why: 'runs a script straight from the internet' },
 ];
 
 // Folders a command may name outside the project: the system's own (tools in
-// /usr/bin, /dev/null, …). Anything else outside the project folder, above
-// all your home folder with its other projects, is off limits.
-const SYSTEM_DIRS = ['/dev', '/usr', '/bin', '/sbin', '/opt', '/etc', '/private/etc', '/System', '/Library', '/Applications', '/nix'];
+// /usr/bin, /dev/null, …). Program folders only: Homebrew's data (databases
+// in /opt/homebrew/var) is off limits, like everything else outside the
+// project folder, above all your home folder with its other projects.
+const SYSTEM_DIRS = ['/dev', '/bin', '/sbin', '/usr/bin', '/usr/sbin', '/usr/lib', '/usr/libexec', '/usr/share', '/usr/include', '/usr/local/bin', '/usr/local/opt', '/usr/local/Cellar', '/opt/homebrew/bin', '/opt/homebrew/sbin', '/opt/homebrew/opt', '/opt/homebrew/Cellar', '/etc', '/private/etc', '/System', '/Library', '/Applications', '/nix'];
 
 // The first path a command names outside the project folder, or null.
 // Reads cd (a bare cd goes home), ~, $HOME, absolute paths and ../ escapes.

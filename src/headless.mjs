@@ -5,11 +5,12 @@ import { systemPrompt, projectNotes, gitSummary } from './agent/prompt.mjs';
 import { toolSchemas } from './agent/tools.mjs';
 import { warmUp } from './server/warmup.mjs';
 
-export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, signal, onEvent = () => {}, flows = true, slots, warm = false }) {
+export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, signal, onEvent = () => {}, flows = true, slots, warm = false }) {
   const system = systemPrompt({ cwd, notes: projectNotes(cwd).text, git: gitSummary(cwd) });
   const agent = new Agent({
     url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots,
-    ask: async () => ({ choice: autoApprove ? 'yes' : 'no' }),
+    // approve(req) → false says no to one request even when auto-approving.
+    ask: async (req) => ({ choice: autoApprove && (!approve || approve(req)) ? 'yes' : 'no' }),
   });
   // bonsai -p started the server itself: restore (or read) the instructions first.
   if (warm && slots) await warmUp({ url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
