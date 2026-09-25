@@ -363,8 +363,11 @@ export class Agent extends EventEmitter {
     try {
       await this.fitContext(signal);
       const turn = await this.generate(signal, { textOnly: true, maxTokens: 200 });
-      if (turn.aborted) reason = 'interrupted';
-      else {
+      if (turn.aborted) {
+        reason = 'interrupted';
+        // Keep what it had written so far on screen, as the loop does.
+        if (turn.reasoning || turn.text) this.emit('assistant', { text: turn.text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, partial: true });
+      } else {
         // It should not call a tool here; if it writes one out anyway, or
         // nothing at all, keep a plain greeting instead.
         let text = turn.text.trim();
