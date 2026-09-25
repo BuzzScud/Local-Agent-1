@@ -35,6 +35,18 @@ test('requests are sorted into paths', () => {
   expect(routeByRules('Thanks!').kind).toBe('question');
   expect(routeByRules('hello, can you fix the tests?').kind).toBe('fix');
   expect(routeByRules('tidy up')).toBe(null); // unclear: the model sorts it
+  // Code requests that mention a writing word stay on the code paths…
+  for (const c of ['Add a helper that formats prices and call it from main.mjs', 'Make the export write to a file instead of stdout', 'Add an option to export the trades to .csv in export.mjs', 'Add a notes field to each trade']) expect([c, routeByRules(c).kind]).toEqual([c, 'change']);
+  for (const c of ['Fix the crash when the summary is empty in report.mjs', 'Fix the bug in the README generator']) expect([c, routeByRules(c).kind]).toEqual([c, 'fix']);
+  // …writing stays writing, even next to a code file…
+  for (const c of ['add a CHANGELOG entry', 'Add a NOTES.md file with three bullet points explaining how the API in server.mjs works.', 'update the README with how to run the tests']) expect([c, routeByRules(c).kind]).toEqual([c, 'other']);
+  // …and file operations go step by step (the command asks first), never into code.
+  for (const c of ['delete trades.json', 'rename export.mjs to exporter.mjs', 'move utils.mjs into src/', 'remove the logs folder']) expect([c, routeByRules(c).kind]).toEqual([c, 'other']);
+  for (const c of ['remove console.log from export.mjs', 'delete the median function']) expect([c, routeByRules(c).kind]).toEqual([c, 'change']);
+  // A question over a pasted log stays a question; asking for a fix over one is a fix.
+  const log = '\nERROR connection refused at 127.0.0.1:5432'.repeat(5);
+  expect(routeByRules(`Here is a log, what went wrong?${log}`).kind).toBe('question');
+  expect(routeByRules(`Can you fix this?${log}`).kind).toBe('fix');
 });
 
 test('rename: every use in every file, one question, tests run', async () => {

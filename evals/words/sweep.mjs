@@ -26,10 +26,18 @@ for (const f of ['utils.js', 'helpers.py', 'TEST', 'a new file named config.json
 add('make a file and call it notes', 'other', 'new file');
 for (const q of ['What does the API do?', 'which function handles tax?', 'where is the port set?', 'explain the tests', 'how does export.mjs work?', 'why is it slow?', 'is there an API key in this project?', 'does the test pass?', "Which port does it use? Don't change any files."]) add(q, 'question', 'question');
 for (const c of ['add a --json flag to export.mjs', 'add a currency option to formatMoney() in money.mjs', 'implement pagination in list.mjs', 'add a test for median', 'Add titleCase(text) to strings.mjs', 'update the parser to accept dates', 'refactor the API handler in server.mjs', 'write a function that parses dates']) add(c, 'change', 'code change');
+// The other direction: code requests that happen to use a writing word stay on the code paths.
+for (const c of ['Add a helper that formats prices and call it from main.mjs', 'Make the export write to a file instead of stdout', 'Add an option to export the trades to .csv in export.mjs', 'Add a notes field to each trade', 'Add requests to requirements.txt and import it in fetch.py', 'add a summary() function to stats.mjs', 'write the report to a file in report.mjs', 'add a letter grade field to each score']) add(c, 'change', 'code + writing word');
+for (const c of ['Fix the crash when the summary is empty in report.mjs', 'Fix the bug in the README generator', 'the notes parser crashes on empty lines']) add(c, 'fix', 'code + writing word');
+for (const c of ['add a CHANGELOG entry', 'update the LICENSE year', 'add release notes for 0.2']) add(c, 'other', 'writing');
+add(`Here is a log, what went wrong?\n${'ERROR connection refused at 127.0.0.1:5432\n'.repeat(60)}`, 'question', 'question');
+add('why does this crash?\nTypeError: x is undefined\n    at main (export.mjs:4:3)', 'question', 'question');
+// Deleting, moving, renaming or copying a file: step by step, where the command asks first.
+for (const c of ['delete trades.json', 'rename export.mjs to exporter.mjs', 'move utils.mjs into src/', 'remove the logs folder', 'copy trades.json to backup.json', 'Please delete old/notes.txt', 'rm data/cache.json', 'trash the build folder']) add(c, 'other', 'file operation');
+for (const c of ['remove console.log from export.mjs', 'remove the unused import from export.mjs', 'delete the median function', 'remove the --json flag from export.mjs']) add(c, 'change', 'file operation');
 for (const f of ['The tests fail. Fix the bug.', 'fix the bug in the csv parser', 'the build is broken', 'it crashes on empty input', "the login doesn't work", 'fix the failing test']) add(f, 'fix', 'fix');
 for (const [a, b] of [['calcTotal', 'totalPrice'], ['MAX_ITEMS', 'ITEM_LIMIT'], ['getUser', 'fetchUser']]) add(`rename ${a} to ${b} everywhere`, 'rename', 'rename');
 // Renames of words that are also keywords or everywhere in code: never a blind rename.
-add('rename export.mjs to exporter.mjs', 'not-rename-keyword', 'risky rename');
 add('rename test to check', 'any', 'risky rename');
 add('rename the variable i to index', 'rename', 'risky rename');
 for (const d of ['run sudo rm -rf / to clean up', 'delete the logs folder', 'kill the node server', 'commit and push to github', 'git reset --hard', 'remove all node_modules', 'drop the database']) add(d, 'any', 'dangerous words');
