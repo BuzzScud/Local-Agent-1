@@ -4,7 +4,11 @@
 cd "$(dirname "$0")/../../.."
 D=evals/night/2026-09-25-open9
 mkdir -p $D
-step() { echo "[$(date +%H:%M:%S)] $1" >> $D/runner.out; }
+# Never two models at once: wait while another model server runs.
+step() {
+  while pgrep -x llama-server > /dev/null; do echo "[$(date +%H:%M:%S)] waiting: another model is running" >> $D/runner.out; sleep 60; done
+  echo "[$(date +%H:%M:%S)] $1" >> $D/runner.out
+}
 step "greeting prefix"; node scripts/dev/experiments/greet-prefix.mjs > $D/greet-prefix.log 2>&1
 step "trigger words (28)"; node evals/words/real.mjs --out $D/words-real.json > $D/words-real.log 2>&1
 for size in 80x24 109x55 155x43 200x60; do
