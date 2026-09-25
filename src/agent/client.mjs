@@ -2,7 +2,9 @@
 // SSE chunks into simple events: reasoning, text, tool-call pieces, done.
 import { thinkingKwargs } from '../server/models.mjs';
 
-export async function* streamChat({ url, messages, tools, thinking, effort, model, sampling, maxTokens, slot, signal, extra }) {
+// toolChoice 'none' keeps the tool list in the prompt (so the saved reading of
+// the instructions still matches) but lets the model only write text.
+export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, slot, signal, extra }) {
   const body = {
     model: 'bonsai',
     messages,
@@ -15,7 +17,7 @@ export async function* streamChat({ url, messages, tools, thinking, effort, mode
   };
   // Which of the server's slots keeps this conversation (see server.mjs).
   if (slot !== undefined) body.id_slot = slot;
-  if (tools?.length) { body.tools = tools; body.tool_choice = 'auto'; body.parallel_tool_calls = false; }
+  if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; body.parallel_tool_calls = false; }
   if (extra) Object.assign(body, extra);
   const res = await fetch(`${url}/v1/chat/completions`, {
     method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),

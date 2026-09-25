@@ -46,7 +46,16 @@ const check = (name, what, ok) => checks.push({ moment: name, what, ok: !!ok });
 for (const name of ['starting', 'hello']) { const l = lines(name); check(name, 'the prompt box is on the last lines', lastIdx(l, /╰─/) >= rows - 4); }
 { const l = lines('slash'); const menuRows = l.filter((x) => /^\s{2}\/[a-z]+\s{2,}\S/.test(x)).length; check('slash', `the menu shows ${Math.min(10, rows - 8)}+ commands (${menuRows})`, menuRows >= Math.min(10, rows - 8)); check('slash', 'the box stays in view with the menu open', l.some((x) => x.includes('> /'))); }
 { const l = lines('model'); check('model', 'the picker is complete (title to keys)', l.some((x) => x.includes('Pick the model and how much it thinks first')) && l.some((x) => x.includes('enter to save'))); check('model', 'the picker\'s bottom edge is on screen', lastIdx(l, /╰─/) > lastIdx(l, /enter to save/)); }
-{ const l = lines('hello'); check('hello', 'a reply arrived', l.some((x) => /^\s*[●⏺]/.test(x))); }
+// "hello" must get a written reply and nothing else: a tool line (⏺ Read(…))
+// or a permission box is not a reply (a "hello" once read the project and
+// asked to run the tests, and still got a ✓ here).
+{
+  const l = lines('hello');
+  const toolLine = /^\s*[●⏺]\s+(?:Read|List|Search|Update|Write|Bash|Update Todos|Rename|Plan|Outline)(?:\(|\s*$)/;
+  check('hello', 'a written reply arrived', l.some((x) => /^\s*[●⏺]\s+\S/.test(x) && !toolLine.test(x)));
+  check('hello', 'no tools were used for a greeting', !l.some((x) => toolLine.test(x)));
+  check('hello', 'no permission question', !l.some((x) => x.includes('Do you want to proceed?')));
+}
 const out = { capturedAt: new Date().toISOString(), cols, rows, secs, screens, checks };
 const file = process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : join(root, 'scripts', 'capture-ui.json');
 writeFileSync(file, JSON.stringify(out));

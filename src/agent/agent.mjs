@@ -3,16 +3,45 @@
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
 import { streamChat } from './client.mjs';
-import { toolSchemas, parseArgs, display, prepare, execute, resolvePath } from './tools.mjs';
+import { toolSchemas, parseArgs, display, prepare, execute, resolvePath, didYouMean } from './tools.mjs';
+import { existsSync, statSync, readFileSync } from 'node:fs';
+import { outlineText } from '../tools/outline.mjs';
 import { decide, commandPrefix } from './permissions.mjs';
 import { testCommand } from './prompt.mjs';
-import { runFlows } from '../flows/index.mjs';
+import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete } from '../flows/llm.mjs';
 import { diffLines } from '../tools/edit.mjs';
 
 const MAX_STEPS = 40;
+const TRIM_AT = 0.78; // share of the context that starts a trim
+const TRIM_TO = 0.45; // …and where it stops
+// A question that names files gets them read in one go (see prefetch).
+const PREFETCH_MAX_LINES = 1000;
+const PREFETCH_MAX_CHARS = 45000; // ~12,500 tokens, ~3½ minutes of reading
+// Asking about code even when the request was not sorted (plan mode, a folder that is not a project).
+const EXPLAIN = /\b(explain|describe|walk me through|summari[sz]e|what does|how does|what is in|tell me about)\b/i;
+
+// Files a request names ("explain src/app/App.jsx", "what does export.mjs do?"):
+// existing files inside the project, at most three.
+export function filesNamed(cwd, text) {
+  const out = [];
+  for (const m of text.matchAll(/(?:^|[\s`'"(])((?:\.{0,2}\/)?[\w@.-]+(?:\/[\w@.-]+)*\.[A-Za-z]\w{0,5})(?=$|[\s`'",:;!?)]|\.(?:\s|$))/g)) {
+    let rel = m[1];
+    let p = resolvePath(cwd, rel);
+    if (!existsSync(p.abs)) {
+      const alt = didYouMean(cwd, rel);
+      if (alt.length !== 1) continue;
+      rel = alt[0];
+      p = resolvePath(cwd, rel);
+    }
+    if (!p.inside || !statSync(p.abs).isFile() || out.some((f) => f.abs === p.abs)) continue;
+    out.push({ rel: p.rel, abs: p.abs });
+    if (out.length === 3) break;
+  }
+  return out;
+}
 const tokensOf = (s) => Math.ceil((s?.length ?? 0) / 3.6);
 
 // A reply that keeps repeating a short piece ("// // // //") is a known
@@ -81,9 +110,9 @@ export function safeArgs(args) {
 }
 
 export class Agent extends EventEmitter {
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, slots }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, slots, trimAt = TRIM_AT }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries });
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, trimAt });
     // When Bonsai Code started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
     this.slots = slots ?? null;
@@ -110,7 +139,9 @@ export class Agent extends EventEmitter {
     const tool = (label, arg, view, error) => this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
     return {
       url: this.url, model: this.model, slot: this.slots?.side, cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), signal, maxTries: this.maxTries,
-      emit: (name, ev) => this.emit(name, ev),
+      // Code and tests are written at the chat's thinking level (Off by default).
+      thinking: this.thinking, effort: this.effort,
+      emit: (name, ev) => { if (name === 'route') this.lastRoute = ev; this.emit(name, ev); },
       ask: (req) => this.ask(req),
       mode: () => this.mode,
       setMode: (m) => this.setMode(m),
@@ -148,6 +179,8 @@ export class Agent extends EventEmitter {
     const started = Date.now();
     this.messages.push({ role: 'user', content: text });
     this.emit('turn-start', { started });
+    if (isSmallTalk(text)) return this.chat(text, started, signal);
+    this.lastRoute = null;
     // First the focused paths (rename / fix / change); the loop handles the rest.
     if (this.flows && this.mode !== 'plan') {
       try {
@@ -173,6 +206,10 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `The focused path failed (${e.message}); working step by step instead.`, tone: 'warn' });
       }
     }
+    // A question about named files: read them now, in one go, instead of
+    // letting the model find, list and read them a piece at a time.
+    const kind = this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    if (kind === 'question' || (!kind && EXPLAIN.test(text))) this.prefetch(text);
     let reason = 'done';
     let repeatKey = null;
     let repeats = 0;
@@ -181,6 +218,7 @@ export class Agent extends EventEmitter {
     let checks = 0;
     this.turn = { changed: false, testedAfterChange: false, created: [] };
     let correctedAlready = false;
+    let blankRetry = false;
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
@@ -229,6 +267,13 @@ export class Agent extends EventEmitter {
               continue;
             }
             this.emit('note', { text: `Note: ${files} did not exist before; Bonsai created it just now.`, tone: 'warn' });
+          }
+          // A blank answer (seen once after "hello"): ask for one, once.
+          if (!text.trim() && turn.finish !== 'length' && !blankRetry) {
+            blankRetry = true;
+            this.emit('note', { text: 'The model gave an empty answer; asked it to reply.', tone: 'dim' });
+            this.messages.push({ role: 'user', content: 'Reply to the user now, in one to three sentences.' });
+            continue;
           }
           if (!text.trim() && turn.finish === 'length') {
             this.messages.push({ role: 'user', content: 'You ran out of room while thinking. Think less and take the next step.' });
@@ -283,10 +328,65 @@ export class Agent extends EventEmitter {
     return reason;
   }
 
+  // Puts the files a question names into the conversation as if the model
+  // had read them: whole when they fit, otherwise their outline.
+  prefetch(text) {
+    let budget = PREFETCH_MAX_CHARS;
+    for (const f of filesNamed(this.cwd, text)) {
+      if (this.readFiles.has(f.abs) || budget <= 0) continue;
+      let body;
+      let view;
+      try {
+        const full = readFileSync(f.abs, 'utf8');
+        if (full.includes('\u0000')) continue;
+        const lines = full.split('\n').length;
+        if (lines <= PREFETCH_MAX_LINES && full.length <= budget) {
+          body = `${f.rel} (${lines} lines):\n${full}`;
+          view = { kind: 'read', lines, total: lines, content: full };
+          this.readFiles.add(f.abs);
+        } else {
+          body = outlineText(full, f.rel);
+          view = { kind: 'read', outline: true, parts: body.split('\n').length - 2, lines: 0, total: lines, content: body };
+        }
+      } catch { continue; }
+      budget -= body.length;
+      const id = `read_${Date.now()}_${f.rel.length}`;
+      this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Read', arguments: JSON.stringify({ path: f.rel }) } }] });
+      this.messages.push({ role: 'tool', tool_call_id: id, content: body });
+      this.emit('tool', { id, name: 'Read', label: 'Read', arg: f.rel, view });
+    }
+  }
+
+  // A greeting or thanks: one short reply, no tools, no focused paths.
+  async chat(said, started, signal) {
+    let reason = 'done';
+    try {
+      await this.fitContext(signal);
+      const turn = await this.generate(signal, { textOnly: true, maxTokens: 200 });
+      if (turn.aborted) reason = 'interrupted';
+      else {
+        // It should not call a tool here; if it writes one out anyway, or
+        // nothing at all, keep a plain greeting instead.
+        let text = turn.text.trim();
+        if (turn.calls.length || toolCallInText(text) || !text) text = /\b(thanks|thank you|thx|ty)\b/i.test(said) ? 'You’re welcome.' : 'Hello! What would you like to work on in this project?';
+        this.messages.push({ role: 'assistant', content: text });
+        this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: true });
+      }
+    } catch (e) {
+      if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
+      else { reason = 'error'; this.emit('note', { text: e.message, tone: 'error' }); }
+    } finally {
+      this.busy = false;
+    }
+    if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
+    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
+    return reason;
+  }
+
   // One model reply, streamed.
-  async generate(signal, { retry = true } = {}) {
+  async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
     const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-    const maxTokens = this.thinking ? 4096 : 2048;
+    const maxTokens = cap ?? (this.thinking ? 4096 : 2048);
     const t0 = Date.now();
     let firstToken = null;
     let thinkEnd = null;
@@ -296,7 +396,7 @@ export class Agent extends EventEmitter {
     signal?.addEventListener('abort', onAbort, { once: true });
     this.emit('waiting');
     try {
-      const stream = streamChat({ url: this.url, messages: this.messages, tools: toolSchemas(), thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
+      const stream = streamChat({ url: this.url, messages: this.messages, tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -336,11 +436,11 @@ export class Agent extends EventEmitter {
       else if (retry && /fetch failed|ECONNREFUSED|socket|terminated/i.test(`${e.message} ${e.cause?.message ?? ''}`) && this.waitForServer) {
         this.emit('note', { text: 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
-        return this.generate(signal, { retry: false });
+        return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
       } else if (retry && /context|exceed/i.test(e.message)) {
         this.emit('note', { text: 'The conversation outgrew the model’s memory; summarizing it and trying again…', tone: 'warn' });
         await this.compact(signal);
-        return this.generate(signal, { retry: false });
+        return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
       } else throw e;
     } finally {
       signal?.removeEventListener('abort', onAbort);
@@ -412,17 +512,23 @@ export class Agent extends EventEmitter {
 
   // Keep the conversation inside the model's memory: first empty old tool
   // outputs, then (if still too big) replace the history with a summary.
+  // Emptying an old output makes the model re-read everything after it, so
+  // it happens rarely and deeply: past trimAt, the oldest outputs go until
+  // the conversation is under TRIM_TO. (Trimming just enough once emptied the
+  // file the model had just read, so it read it again, step after step.)
   async fitContext(signal) {
     const pending = this.messages.slice(-2).reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : ''), 0);
     let est = this.ctxUsed + pending;
-    if (est < this.ctx * 0.72) return;
+    if (est < this.ctx * this.trimAt) return;
+    const tools = this.messages.map((m, i) => (m.role === 'tool' ? i : -1)).filter((i) => i > 0);
+    const keep = new Set(tools.slice(-2)); // the two newest outputs stay
     let freed = 0;
-    for (let i = 1; i < this.messages.length - 6; i++) {
+    for (const i of tools) {
+      if (est - freed < this.ctx * TRIM_TO) break;
       const m = this.messages[i];
-      if (m.role === 'tool' && m.content.length > 300) {
-        freed += tokensOf(m.content);
-        m.content = `[older output removed to save space: ${m.content.slice(0, 120).replace(/\n/g, ' ')}…]`;
-      }
+      if (keep.has(i) || m.content.length <= 300) continue;
+      freed += tokensOf(m.content);
+      m.content = `[older output removed to save space: ${m.content.slice(0, 120).replace(/\n/g, ' ')}…]`;
     }
     est -= freed;
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);

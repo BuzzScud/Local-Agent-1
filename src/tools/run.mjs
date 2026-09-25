@@ -1,13 +1,21 @@
 // Run tool: one shell command in the project folder, output capped so it
-// cannot flood a small context window.
+// cannot flood a small context window. Commands run inside the macOS
+// sandbox (sandbox.mjs): they cannot read your home folder or write outside
+// `cwd`. Pass sandbox: false for a command you typed yourself (! in the app),
+// or sandbox: { readOnly: [...] } for more folders it may read.
 import { spawn } from 'node:child_process';
+import { sandboxAvailable, sandboxed, fenceHint } from './sandbox.mjs';
 
-export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal } = {}) {
+export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {} } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     // Its own process group, so stopping it stops everything it started
     // (npm → node → test workers), not just the shell.
-    const child = spawn(command, { cwd, shell: '/bin/zsh', detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1' } });
+    const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1' };
+    const fenced = sandbox !== false && sandboxAvailable();
+    const child = fenced
+      ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })
+      : spawn(command, { cwd, shell: '/bin/zsh', detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
     let timedOut = false;
     let done = false;
     let force = null;
@@ -34,11 +42,13 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
       signal?.removeEventListener('abort', onAbort);
       child.stdout.destroy();
       child.stderr.destroy();
+      if (fenced) out += fenceHint(out); // also when a pipe hid the error code
       const lines = out.replace(/\n$/, '').split('\n');
       const cut = lines.length > maxLines;
       resolve({
         code,
         timedOut,
+        fenced,
         ms: Date.now() - started,
         lines: cut ? [...lines.slice(0, maxLines / 2), `… ${lines.length - maxLines} lines cut …`, ...lines.slice(-maxLines / 2)] : lines,
       });

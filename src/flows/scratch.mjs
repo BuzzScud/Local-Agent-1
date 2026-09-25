@@ -43,7 +43,8 @@ export class Scratch {
 
   // Same runner as the Bash tool: a stop or time-out ends everything the command started.
   async run(command, { timeoutMs = 120_000, signal } = {}) {
-    const r = await runCommand(command, { cwd: this.dir, timeoutMs, maxLines: Infinity, signal });
+    // Linked folders (node_modules…) point into the real project, so it may be read.
+    const r = await runCommand(command, { cwd: this.dir, timeoutMs, maxLines: Infinity, signal, sandbox: { readOnly: [this.cwd] } });
     // Paths in the output point at the scratch copy; show the real project.
     return { code: r.code, timedOut: r.timedOut, ms: r.ms, out: r.lines.join('\n').split(this.dir).join('.').replace(/\/private\./g, '.') };
   }

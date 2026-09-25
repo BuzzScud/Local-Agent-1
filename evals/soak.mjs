@@ -4,7 +4,10 @@
 //  B. One long conversation (questions that make it read big files) that fills
 //     the 32k memory, sampling the server's memory, the Mac's free memory and
 //     swap every 30 s. Does it stay under the estimate; does the Mac swap?
-//   node evals/soak.mjs [--starts 10] [--minutes 40] [--out file.json]
+//     With --fill the conversation is not trimmed until it holds --fill-to
+//     tokens (default 30,000 of 32,768), then a side request (sorting, a
+//     try) runs next to it: does the full memory still answer both?
+//   node evals/soak.mjs [--starts 10] [--minutes 40] [--fill] [--fill-to 30000] [--out file.json]
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -49,6 +52,11 @@ for (let i = 1; i <= Number(opt('starts', 10)); i++) {
     const r = await runHeadless({ prompt: 'hello', cwd: join(project, 'demo'), url: srv.url, model, thinking: false, ctx: 32768, slots: st.slots > 1 ? { main: 0, side: 1 } : undefined });
     row.replySecs = (Date.now() - t2) / 1000;
     row.reply = r.finalText.slice(0, 80);
+    // What happened on the way, so a blank or slow reply can be explained.
+    row.blank = !r.finalText.trim();
+    row.steps = r.log.filter((e) => e.type === 'tool').map((e) => `${e.label}(${String(e.arg ?? '').slice(0, 60)})${e.error ? ' ✗' : ''}`);
+    row.notes = r.log.filter((e) => e.type === 'note').map((e) => e.text.slice(0, 120));
+    row.reason = r.reason;
     row.totalSecs = (Date.now() - t0) / 1000;
     row.footprintGb = gb(srv.footprintBytes());
   } catch (e) { row.error = String(e.message ?? e); }
@@ -65,7 +73,10 @@ const srv = new ModelServer(model);
 const st = await srv.start({ ctx: 32768, share: false });
 const system = systemPrompt({ cwd: src, notes: projectNotes(src).text, git: gitSummary(src) });
 await warmUp({ url: srv.url, model, system, tools: toolSchemas(), thinking: false, slot: 0 });
-const agent = new Agent({ url: srv.url, model, cwd: src, system, thinking: false, ctx: 32768, mode: 'plan', flows: true, slots: st.slots > 1 ? { main: 0, side: 1 } : undefined, ask: async () => ({ choice: 'no' }) });
+const fill = args.includes('--fill');
+const fillTo = Number(opt('fill-to', 30000));
+const agent = new Agent({ url: srv.url, model, cwd: src, system, thinking: false, ctx: 32768, mode: 'plan', flows: true, slots: st.slots > 1 ? { main: 0, side: 1 } : undefined, ask: async () => ({ choice: 'no' }), ...(fill ? { trimAt: 0.99 } : {}) });
+out.conversation.fill = fill ? { target: fillTo } : null;
 const events = [];
 for (const t of ['note', 'compacted', 'tool']) agent.on(t, (e) => events.push({ type: t, ...e, at: Date.now() }));
 const swap0 = swapUsed();
@@ -91,14 +102,39 @@ const QUESTIONS = [
 const deadline = Date.now() + Number(opt('minutes', 40)) * 60_000;
 const stop = new AbortController();
 const stopTimer = setTimeout(() => stop.abort(), deadline - Date.now());
+let peakCtx = 0;
 for (const q of QUESTIONS) {
   if (Date.now() > deadline) break;
+  if (fill && peakCtx >= fillTo) break;
   const t0 = Date.now();
   let error = null;
   try { await agent.send(q, { signal: stop.signal }); } catch (e) { error = String(e.message ?? e); }
   if (stop.signal.aborted) error = error ?? 'stopped at the time limit';
   out.conversation.turns.push({ q: q.slice(0, 70), secs: Math.round((Date.now() - t0) / 1000), ctxUsed: agent.ctxUsed, error, notes: events.filter((e) => e.type === 'note' && e.at >= t0).map((e) => e.text.slice(0, 120)), compacted: events.some((e) => e.type === 'compacted' && e.at >= t0) });
+  peakCtx = Math.max(peakCtx, agent.ctxUsed);
   console.log(`turn: ${q.slice(0, 50)}… ${Math.round((Date.now() - t0) / 1000)}s ctx ${agent.ctxUsed}${error ? ` ERROR ${error}` : ''}`);
+}
+out.conversation.peakCtx = peakCtx;
+// Full: does a side request (the kind sorting and tries make) still work next
+// to it, and does the conversation still answer?
+if (fill) {
+  const f = out.conversation.fill;
+  f.reached = peakCtx;
+  sample();
+  const { complete } = await import('../src/flows/llm.mjs');
+  const t1 = Date.now();
+  try {
+    const r = await complete({ url: srv.url, model, slot: st.slots > 1 ? 1 : undefined, system: 'You answer in one word.', user: 'Say ok.', maxTokens: 8 });
+    f.side = { ok: true, secs: (Date.now() - t1) / 1000, text: r.text.trim().slice(0, 40) };
+  } catch (e) { f.side = { ok: false, secs: (Date.now() - t1) / 1000, error: String(e.message ?? e).slice(0, 300) }; }
+  const t2 = Date.now();
+  const before = events.length;
+  try {
+    await agent.send('In one sentence: which file did you read first in this conversation?', { signal: AbortSignal.timeout(10 * 60_000) });
+    f.after = { ok: true, secs: (Date.now() - t2) / 1000, ctxUsed: agent.ctxUsed, notes: events.slice(before).filter((e) => e.type === 'note').map((e) => e.text.slice(0, 120)) };
+  } catch (e) { f.after = { ok: false, secs: (Date.now() - t2) / 1000, error: String(e.message ?? e).slice(0, 300) }; }
+  sample();
+  console.log(`fill: reached ${peakCtx} tokens · side request ${f.side.ok ? `ok ${f.side.secs}s` : `FAILED ${f.side.error}`} · next question ${f.after.ok ? `ok ${f.after.secs}s` : `FAILED ${f.after.error}`}`);
 }
 clearInterval(timer);
 clearTimeout(stopTimer);
