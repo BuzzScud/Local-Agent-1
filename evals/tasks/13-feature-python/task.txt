@@ -1,0 +1,1 @@
+Add a clamp(value, low, high) function to mathutil.py that limits value to the range low..high, and add a test for it.

@@ -1,0 +1,1 @@
+Create a text file called STORY.txt with a short story (at least five sentences) about a lighthouse keeper.

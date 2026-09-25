@@ -1,0 +1,1 @@
+Which function computes tax in this project, and what is its default rate? Don't change any files.

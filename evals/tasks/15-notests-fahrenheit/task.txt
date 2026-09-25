@@ -1,0 +1,1 @@
+toFahrenheit() in convert.mjs gives wrong answers (100 °C should be 212 °F). Fix it.

@@ -1,0 +1,1 @@
+Add a currency option to formatMoney() in money.mjs, so formatMoney(1234.5, { currency: 'EUR' }) returns '€1,234.50' (keep '$' as the default), and add a test for it.

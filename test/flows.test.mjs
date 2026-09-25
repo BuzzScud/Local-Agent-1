@@ -1,12 +1,13 @@
 // The focused paths (src/flows) against the scripted model.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../src/server/models.mjs';
-import { routeByRules } from '../src/flows/index.mjs';
+import { routeByRules, isCodeProject } from '../src/flows/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
@@ -169,4 +170,43 @@ test('with a server Bonsai Code did not start (no slots), requests name no slot'
   const cwd = copy('fixture-fix');
   const { fake } = await run(cwd, 'tidy up', [{ text: '{"kind": "question"}' }, { text: 'Done.' }]);
   expect(fake.requests.filter((r) => r.stream).every((r) => r.id_slot === undefined)).toBe(true);
+});
+
+test('writing requests and new files work step by step (no test can define "done" for a story)', () => {
+  // the request that wrote tests for a story for 2½ minutes on 24 Sep
+  expect(routeByRules('CREATE A TXT FILE AND NAME IT "TEST" . ADD A SHORT STORY INSIDE AND ADD IT TO MY DESKTOP WHEN YOU ARE DONE').kind).toBe('other');
+  expect(routeByRules('write a short poem in poem.md').kind).toBe('other');
+  expect(routeByRules('add notes about the API to NOTES.md').kind).toBe('other');
+  expect(routeByRules('update the README').kind).toBe('other');
+  expect(routeByRules('create a new file called utils.js with a slugify function').kind).toBe('other');
+  // code work still takes the focused paths
+  expect(routeByRules('add a --json flag to export.mjs').kind).toBe('change');
+  expect(routeByRules('fix the bug in the csv parser').kind).toBe('fix');
+  expect(routeByRules('add a currency option to formatMoney() in money.mjs').kind).toBe('change');
+});
+
+test('a folder that is not a code project (a Desktop, a home folder) works step by step', async () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'desk');
+  mkdirSync(cwd);
+  writeFileSync(join(cwd, 'notes.txt'), 'hello');
+  mkdirSync(join(cwd, 'some-app'));
+  writeFileSync(join(cwd, 'some-app', 'test.mjs'), 'export const x = 1;');
+  expect(isCodeProject(cwd)).toBe(false);
+  expect(isCodeProject(homedir())).toBe(false);
+  expect(isCodeProject(join(homedir(), 'Desktop'))).toBe(false);
+  expect(isCodeProject(join(import.meta.dir, '..', 'demo-project'))).toBe(true);
+  const { events } = await run(cwd, 'add a --json flag to export.mjs', [{ text: 'There is no export.mjs here.' }]);
+  expect(events.some((e) => e.type === 'route')).toBe(false);
+  expect(events.some((e) => e.type === 'tries-done')).toBe(false);
+});
+
+test('change: two tests that cannot even load the code stop the test step early', async () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project');
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  const brokenTest = "```js\nimport { thing } from './SEP';\ntest('x', () => assert.equal(thing(), 1));\n```";
+  const replies = [{ text: brokenTest }, { text: brokenTest }, { text: 'I added nothing yet.' }];
+  const { events } = await run(cwd, 'add a --json flag to export.mjs that prints the rows as JSON', replies);
+  const tries = events.find((e) => e.type === 'tries-done' && e.label === 'Writing tests');
+  expect(tries.marks).toEqual(['✗', '✗']); // not all 5
+  expect(events.some((e) => e.type === 'note' && /working step by step instead/.test(e.text))).toBe(true);
 });

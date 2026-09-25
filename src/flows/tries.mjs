@@ -4,7 +4,7 @@
 import { complete, extractCode } from './llm.mjs';
 import { syntaxError } from '../agent/tools.mjs';
 
-export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, apply, check, temperature = 0.7, maxTokens = 2500 }) {
+export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, apply, check, temperature = 0.7, maxTokens = 2500, stopEarly }) {
   let passes = 0;
   let first = null;
   let last = null; // the latest wrong try and why, shown to the next one
@@ -49,6 +49,9 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
     if (!best || (res.score ?? 0) > (best.score ?? -1)) best = { code, why: res.why, score: res.score, out: res.out };
     last = { code, why: res.why, detail: res.detail };
     applied.undo?.();
+    // Tries that cannot work (e.g. the test cannot even load the code) stop
+    // early instead of using every try.
+    if (!passes && stopEarly?.({ res, attempt: i })) break;
   }
   if (first) {
     ctx.emit('tries-done', { label, marks, summary: `${passes} good of ${marks.length}`, secs: (Date.now() - t0) / 1000 });

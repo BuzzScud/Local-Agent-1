@@ -1,0 +1,1 @@
+The default page size is 25, set as DEFAULT_PAGE_SIZE in src/paginate.mjs.

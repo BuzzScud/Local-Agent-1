@@ -8,3 +8,7 @@ backups/
 Bonsai Code.app/
 scripts/dev/experiments/slots/
 scripts/dev/experiments/*.log
+evals/night/
+evals/words/real-*.json
+evals/soak-*.json
+evals/speed-*.json

@@ -1,0 +1,1 @@
+Rename the constant MAX_ITEMS to ITEM_LIMIT everywhere in this project.

@@ -1,0 +1,1 @@
+Add a NOTES.md file with three bullet points explaining how the API in server.mjs works.

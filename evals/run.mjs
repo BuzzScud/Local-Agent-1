@@ -1,5 +1,5 @@
 // Plays the practice tasks against the real model and checks each result.
-//   node evals/run.mjs [--think on|off|both] [--only 1,3] [--ctx 32768]
+//   node evals/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM]
 import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -17,6 +17,10 @@ const only = opt('only', null)?.split(',');
 const ctx = Number(opt('ctx', 32768));
 const perTaskMs = Number(opt('timeout', 900)) * 1000; // the 27B writes ~10 tokens/s
 const reps = Number(opt('reps', 1));
+const effort = opt('effort', undefined); // with --think on: medium (default) or high
+// Stop starting new tasks after this time (HH:MM, local), for overnight runs.
+const stopAt = opt('stop-at', null);
+const pastStop = () => { if (!stopAt) return false; const [h, m] = stopAt.split(':').map(Number); const now = new Date(); const t = new Date(now); t.setHours(h, m, 0, 0); if (t < new Date(Date.now() - 12 * 3600e3)) t.setDate(t.getDate() + 1); return now >= t && now - t < 12 * 3600e3; };
 const base = MODELS[DEFAULT_MODEL];
 // --temp / --budget try other settings without touching the app's defaults.
 const temp = opt('temp', null);
@@ -33,11 +37,12 @@ const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
 console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}`);
 const results = [];
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-const tdir = join(here, 'results', stamp);
+const tdir = opt('out', join(here, 'results', stamp));
 mkdirSync(tdir, { recursive: true });
 try {
   for (const thinking of thinkModes) for (let rep = 1; rep <= reps; rep++) {
     for (const task of tasks) {
+      if (pastStop()) { console.log(`stop time ${stopAt} reached; not starting ${task}`); continue; }
       const dir = mkdtempSync(join(tmpdir(), `bonsai-eval-${task}-`));
       const work = join(dir, 'project');
       cpSync(join(here, 'tasks', task, 'project'), work, { recursive: true });
@@ -48,7 +53,7 @@ try {
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, ctx, autoApprove: true, signal: ac.signal, slots, warm: !!slots,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, signal: ac.signal, slots, warm: !!slots,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
       clearTimeout(timer);
@@ -56,7 +61,9 @@ try {
       writeFileSync(join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}.json`), JSON.stringify({ task, thinking, reason: run.reason, messages: run.messages ?? [], log: run.log ?? [] }, null, 1));
       const check = spawnSync('/bin/zsh', [join(here, 'tasks', task, 'check.sh')], { cwd: work, encoding: 'utf8', timeout: 60_000 });
       const pass = check.status === 0;
-      const row = { task, thinking, rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
+      const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? 'step by step';
+      const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
+      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
       results.push(row);
       console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps  ${row.toolErrors} errors  ${row.why}`);
       rmSync(dir, { recursive: true, force: true });
@@ -67,7 +74,7 @@ try {
 }
 mkdirSync(join(here, 'results'), { recursive: true });
 const file = join(tdir, 'summary.json');
-writeFileSync(file, JSON.stringify({ ctx, reps, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, results }, null, 2));
+writeFileSync(file, JSON.stringify({ ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total`);

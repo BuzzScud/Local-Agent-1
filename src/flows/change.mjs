@@ -90,6 +90,7 @@ export async function changeFlow(ctx, task) {
     const coverage = `${api}\n\nCheck each thing the task asks for with its own assert (for example, if it says "lowercase the rest", include capitals in the middle of a word). Test only what the task asks; do not add requirements it does not mention.`;
     // Candidate tests: each must fail on today's code for the right reason.
     const candidates = [];
+    let brokenTests = 0; // tests that could not even load the code
     const validateTest = async (text) => {
       scratch.write(tp.rel, text);
       const run = await scratch.run(tp.cmd, { signal: ctx.signal });
@@ -112,10 +113,13 @@ export async function changeFlow(ctx, task) {
       const moreTests = tp.throwaway || tp.created || missing || r.total === null || r.total > base.total;
       const oldStillPass = tp.throwaway || tp.created || missing || r.passed === null || r.passed >= base.passed;
       const firstError = (run.out.match(/(AssertionError|Error)[^\n]*/) ?? [''])[0].slice(0, 160);
+      if (crashed) brokenTests++;
       return { ok: fails && !crashed && moreTests && oldStillPass, why: !fails ? 'the test already passes on today\'s code, so it does not check the new behaviour' : crashed ? `the test fails for the wrong reason (${firstError})` : !moreTests ? 'no new test was added' : 'it broke existing tests', out: run.out };
     };
     const testTry = await tryUntilPass(ctx, {
       label: 'Writing tests', max: 5, want: 3, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200,
+      // Two tests that cannot even load the code: this is not a job for a test.
+      stopEarly: () => brokenTests >= 2 && !candidates.length,
       prompt: ({ best }) => `${testAsk}${coverage}${best?.why ? `\n\nAn earlier try was no good: ${best.why}` : ''}`,
       apply: (code) => {
         const text = tp.throwaway || tp.created ? code : mergeTest(testOriginal, code, lang);
