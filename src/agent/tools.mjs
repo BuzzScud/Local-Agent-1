@@ -3,18 +3,24 @@
 import { resolve, relative, isAbsolute, dirname, sep, extname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync, realpathSync } from 'node:fs';
 import { readFile } from '../tools/read.mjs';
+import { outlineText } from '../tools/outline.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
 
 const str = (description) => ({ type: 'string', description });
+// Read: files up to WHOLE_MAX lines come back whole; longer ones as an outline,
+// then PART_DEFAULT lines (at most PART_MAX) from the offset asked for.
+export const WHOLE_MAX = 150;
+const PART_DEFAULT = 150;
+const PART_MAX = 400;
 
 export const TOOL_DEFS = [
   {
     name: 'Read',
-    description: 'Read a text file. Returns its exact text, ready to copy into Edit. For long files pass offset (first line, from 1) and limit (number of lines).',
+    description: 'Read a text file. Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass offset (first line, from 1) and limit (number of lines) to read the part you need.',
     parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), offset: { type: 'integer' }, limit: { type: 'integer' } }, required: ['path'] },
   },
   {
@@ -151,7 +157,10 @@ export function resolvePath(cwd, p) {
     }
   }
   const rel = relative(cwd, abs);
-  const inside = rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  const within = (base, p) => { const r = relative(base, p); return r === '' || (!r.startsWith('..') && !isAbsolute(r)); };
+  // A link inside the project that points outside it is outside too.
+  let inside = within(cwd, abs);
+  if (inside && existsSync(abs)) { try { inside = within(realpathSync(cwd), realpathSync(abs)); } catch {} }
   return { abs, rel: rel || '.', inside };
 }
 
@@ -367,10 +376,18 @@ export async function execute(name, args, prepared, env) {
         args.path = alt[0];
       }
       if (statSync(p.abs).isDirectory()) return { text: `${args.path} is a folder. Use List to see what is in it.`, error: true, view: { kind: 'error', message: 'That is a folder' } };
-      // A small file comes back whole: small models otherwise read it 5 lines at a time.
-      const total = readFileSync(p.abs, 'utf8').split('\n').length;
-      const whole = total <= 300;
-      const limit = whole ? 300 : Math.min(Math.max(args.limit ?? 400, 60), 2000);
+      // A small file comes back whole: small models otherwise read it 5 lines
+      // at a time. A long one first comes back as an outline (its parts with
+      // line ranges), then the model reads only the part it needs: reading is
+      // the slow part (~60 tokens a second).
+      const full = readFileSync(p.abs, 'utf8');
+      const total = full.split('\n').length;
+      const whole = total <= WHOLE_MAX;
+      if (!whole && args.offset === undefined && args.limit === undefined && !full.includes('\u0000')) {
+        const o = outlineText(full, args.path);
+        return { text: `${note}${o}`, view: { kind: 'read', outline: true, parts: o.split('\n').length - 2, lines: 0, total, content: o } };
+      }
+      const limit = whole ? WHOLE_MAX : Math.min(Math.max(args.limit ?? PART_DEFAULT, 20), PART_MAX);
       const r = readFile(p.abs, { offset: whole ? 1 : args.offset ?? 1, limit });
       if (r.text.includes('\u0000')) return { text: `${args.path} is a binary file.`, error: true, view: { kind: 'error', message: 'Binary file' } };
       // The model gets the plain text (small models copy line numbers into

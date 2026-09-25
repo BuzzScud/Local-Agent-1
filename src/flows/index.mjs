@@ -7,7 +7,7 @@ import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { complete } from './llm.mjs';
-import { planRename, applyRename } from './rename.mjs';
+import { planRename, applyRename, leftAloneNote } from './rename.mjs';
 import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
 
@@ -19,13 +19,19 @@ const FILE_OP = new RegExp(`^\\W*(?:please\\s+)?(?:delete|remove|rm|trash|move|m
 const CODE_FILE = /\b[\w-]+\.(m?[jt]sx?|cjs|py|rb|go|rs|java|kt|swift|c|cc|cpp|h)\b/i;
 const CODE_WORDS = /\b(function|method|class|helper|bug|crash(es)?|flag|field|option|parameter|argument|variable|property|endpoint|generator|parser|stdout|stderr|exception)\b/i;
 
+// Greetings and thanks: answered in a sentence, with no tools (a "hello" once
+// read the project and asked to run the tests).
+export function isSmallTalk(text) {
+  return /^(hi|hello|hey|yo|hiya|howdy|thanks|thank you|thx|ty|ok|okay|cool|great|nice|good (morning|afternoon|evening)|who are you|what can you do)\b[\s!.?,]*(bonsai|there)?[\s!.?]*$/i.test(text.trim());
+}
+
 export function routeByRules(text) {
   const t = text.trim();
   const rn = new RegExp(`\\brename\\s+(?:the\\s+)?(?:function|method|variable|var|class|const(?:ant)?|symbol|field|property|type|name)?\\s*${ID}\\s+(?:to|as|into|→|->)\\s+${ID}`, 'i').exec(t);
   if (rn) return { kind: 'rename', from: rn[1], to: rn[2] };
   // Greetings and thanks go straight to the conversation: asking the model to
   // sort them cost a request, and with a big model a re-read of its instructions.
-  if (/^(hi|hello|hey|yo|hiya|howdy|thanks|thank you|thx|ok|okay|cool|great|nice|good (morning|afternoon|evening)|who are you|what can you do)\b[\s!.?,]*(bonsai|there)?[\s!.?]*$/i.test(t)) return { kind: 'question' };
+  if (isSmallTalk(t)) return { kind: 'question', chat: true };
   if (/\b(don'?t|do not|without) (change|chang|edit|touch)/i.test(t)) return { kind: 'question' };
   // Deleting, moving, renaming or copying a file is a file operation, not a
   // code change: it goes step by step, where the command asks you first.
@@ -68,7 +74,8 @@ export async function route(ctx, text) {
 
 export async function renameFlow(ctx, from, to) {
   const plan = planRename(ctx.cwd, from, to);
-  if (!plan.files.length) return { handled: false, why: `${from} is not used anywhere in the project` };
+  const left = leftAloneNote(plan);
+  if (!plan.files.length) return { handled: false, why: `${from} is not used in the project's code${left ? ` (${left.replace(/\.$/, '').replace(/^Left alone: /, 'only ')})` : ''}` };
   const p = ctx.plan([`Find every use of ${from}`, `Rename them to ${to}`, ...(ctx.testCmd ? ['Run the tests'] : [])]);
   p.step(0);
   ctx.tool('Search', from, { kind: 'search', count: plan.total, content: plan.files.map((f) => `${f.rel}: ${f.count}`).join('\n') });
@@ -86,7 +93,7 @@ export async function renameFlow(ctx, from, to) {
   let final = null;
   if (ctx.testCmd) { p.step(2); final = await ctx.runReal(ctx.testCmd); }
   p.done();
-  return { handled: true, done: final ? final.ok : true, summary: `Renamed ${from} to ${to}: ${plan.total} use${plan.total === 1 ? '' : 's'} in ${plan.files.length} file${plan.files.length === 1 ? '' : 's'}${final ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail, see above') : ''}.` };
+  return { handled: true, done: final ? final.ok : true, summary: `Renamed ${from} to ${to}: ${plan.total} use${plan.total === 1 ? '' : 's'} in ${plan.files.length} file${plan.files.length === 1 ? '' : 's'}${final ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail, see above') : ''}.${left ? ` ${left}` : ''}` };
 }
 
 // Folders with a project file, or code at the top: the focused paths make a

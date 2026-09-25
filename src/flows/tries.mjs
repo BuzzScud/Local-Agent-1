@@ -21,7 +21,7 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
     const temp = i === 1 ? Math.min(temperature, 0.3) : Math.min(1, temperature + 0.05 * (i - 2));
     let r;
     try {
-      r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, system, user: p, temperature: temp, maxTokens, signal: ctx.signal, onToken: (n) => show(n) });
+      r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, system, user: p, temperature: temp, maxTokens, signal: ctx.signal, onToken: (n) => show(n), thinking: ctx.thinking, effort: ctx.effort });
     } catch (e) {
       if (ctx.signal?.aborted) break;
       throw e;

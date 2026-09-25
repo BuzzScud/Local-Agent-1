@@ -324,7 +324,7 @@ export function App({ opts, win }) {
   const runShell = useCallback(async (command) => {
     if (!command) return;
     setLive({ phase: 'working', turnStart: Date.now(), verb: 'Running', tokens: 0, running: { label: 'Bash', arg: command } });
-    const r = await runCommand(command, { cwd, maxLines: 200 });
+    const r = await runCommand(command, { cwd, maxLines: 200, sandbox: false }); // you typed it: no fence
     setLive(IDLE);
     push({ type: 'bash', command, lines: r.lines, code: r.code });
     lastFold.current = { title: `! ${command}`, text: r.lines.join('\n') };

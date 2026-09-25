@@ -43,10 +43,11 @@ export function outsidePath(command, cwd) {
   const cmd = String(command ?? '');
   if (/(?:^|[;&|(]\s*)(?:cd|pushd)\s*(?:$|[;&|)])/.test(cmd)) return '~';
   // Words, split on spaces and shell operators; quotes dropped.
-  const words = cmd.replace(/\\ /g, '\u0000').split(/[\s;&|()<>=,`]+/).map((w) => w.replace(/\u0000/g, ' ').replace(/^["']+|["']+$/g, '')).filter(Boolean);
+  const words = cmd.replace(/\\ /g, '\u0000').split(/[\s;&|()<>=,`]+/).map((w) => w.replace(/\u0000/g, ' ').replace(/["']/g, '')).filter(Boolean);
   for (const w of words) {
     let p = null;
     if (w === '~' || w.startsWith('~/')) p = home + w.slice(1);
+    else if (/^~[\w.-]+/.test(w)) return w; // ~user: someone's home folder
     else if (/^\$\{?HOME\}?(\/|$)/.test(w)) p = w.replace(/^\$\{?HOME\}?/, home);
     else if (w.startsWith('/') && !/[\\^]/.test(w)) p = w; // not a regex such as /a\/b/
     else if (/(^|\/)\.\.(\/|$)/.test(w)) p = resolve(cwd, w);
