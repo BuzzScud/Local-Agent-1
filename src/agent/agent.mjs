@@ -370,7 +370,8 @@ export class Agent extends EventEmitter {
       } else {
         // It should not call a tool here; if it writes one out anyway, or
         // nothing at all, keep a plain greeting instead.
-        let text = turn.text.trim();
+        // (With tools off it once wrote "Hello!…" and then a Read call as text.)
+        let text = turn.text.split('<tool_call>')[0].trim();
         if (turn.calls.length || toolCallInText(text) || !text) text = /\b(thanks|thank you|thx|ty)\b/i.test(said) ? 'You’re welcome.' : 'Hello! What would you like to work on in this project?';
         this.messages.push({ role: 'assistant', content: text });
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: true });
@@ -399,7 +400,8 @@ export class Agent extends EventEmitter {
     signal?.addEventListener('abort', onAbort, { once: true });
     this.emit('waiting');
     try {
-      const stream = streamChat({ url: this.url, messages: this.messages, tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
+      // Text only: the model may still start writing a call out as text, so the server stops there.
+      const stream = streamChat({ url: this.url, messages: this.messages, tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {

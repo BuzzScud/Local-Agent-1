@@ -182,6 +182,18 @@ test('"hello" gets one reply with tools switched off', async () => {
   expect(fake.requests[0].tools.length).toBeGreaterThan(0); // same prompt as always, so the saved warm-up still matches
   expect(events.filter((e) => e.type === 'tool')).toEqual([]);
   expect(events.find((e) => e.type === 'assistant').text).toBe('Hello! What shall we work on?');
+  expect(fake.requests[0].stop).toEqual(['<tool_call>']);
+});
+
+test('a greeting followed by a call written as text keeps only the greeting', async () => {
+  const cwd = dir({});
+  const fake = await startFakeServer([{ text: 'Hello! How can I help you today?\n\n<tool_call>\n<function=Read>\n<parameter=path>\np' }]);
+  const agent = new Agent({ url: fake.url, model, cwd, system: 'sys', thinking: false, mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }) });
+  let final = null;
+  agent.on('assistant', (e) => { if (e.final) final = e.text; });
+  await agent.send('hello');
+  await fake.close();
+  expect(final).toBe('Hello! How can I help you today?');
 });
 
 test('a greeting that tries a tool anyway gets a plain answer and runs nothing', async () => {
