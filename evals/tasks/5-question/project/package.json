@@ -1,0 +1,1 @@
+{ "name": "desk-monitor", "type": "module", "scripts": { "start": "node src/server.mjs" } }

@@ -1,0 +1,1 @@
+Add a titleCase(text) function to strings.mjs that capitalizes the first letter of every word and lowercases the rest, export it, and add a test for it.

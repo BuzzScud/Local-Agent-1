@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Bonsai Code: a bonsai tree on a green disc, flat like the XMR Miner icon. -->
+  <circle cx="512" cy="512" r="456" fill="#2f8a4c"/>
+  <!-- trunk and branches -->
+  <g fill="none" stroke="#4f4f4f" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 700 C 500 640, 440 610, 452 548 C 462 496, 540 470, 548 410 C 553 372, 540 350, 530 330" stroke-width="58"/>
+    <path d="M458 560 C 420 540, 390 520, 360 500" stroke-width="34"/>
+    <path d="M536 450 C 590 470, 640 490, 690 520" stroke-width="34"/>
+  </g>
+  <!-- foliage pads -->
+  <g fill="#ffffff">
+    <ellipse cx="536" cy="300" rx="178" ry="74"/>
+    <circle cx="470" cy="276" r="70"/><circle cx="560" cy="250" r="78"/><circle cx="640" cy="290" r="60"/>
+    <ellipse cx="344" cy="484" rx="132" ry="54"/>
+    <circle cx="300" cy="470" r="52"/><circle cx="372" cy="452" r="58"/>
+    <ellipse cx="700" cy="516" rx="124" ry="52"/>
+    <circle cx="668" cy="492" r="54"/><circle cx="740" cy="504" r="46"/>
+  </g>
+  <!-- pot -->
+  <rect x="316" y="690" width="392" height="44" rx="14" fill="#4f4f4f"/>
+  <path d="M348 734 L 676 734 L 640 812 L 384 812 Z" fill="#4f4f4f"/>
+  <!-- a terminal prompt on the pot -->
+  <path d="M466 752 L 496 773 L 466 794" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="512" y="786" width="44" height="12" rx="4" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,71 @@
+{
+  "fileTokens": 2117,
+  "memAfterLoad": {
+    "now": 1.343,
+    "peak": 1.3960000000000001,
+    "raw": "====================================================================== | llama-server [3925]: 64-bit    Footprint: 1343 MB (16384 bytes per page) | ====================================================================== |  |   Dirty      Clean  Reclaimable    Regions    Category |     ---        ---          ---        ---    ---"
+  },
+  "job": {
+    "ms": 49458,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 2203,
+      "prompt_ms": 36232.153,
+      "prompt_per_token_ms": 16.446733091239217,
+      "prompt_per_second": 60.80234867632625,
+      "predicted_n": 138,
+      "predicted_ms": 13218.398,
+      "predicted_per_token_ms": 96.48465693430656,
+      "predicted_per_second": 10.36434218427982
+    },
+    "finish": "stop",
+    "text": "```js\nexport async function stopAll() {\n  mkdirSync(REG_DIR, { recursive: true });\n  for (const f of readdirSync(REG_DIR)) {\n    const p = join(REG_DIR, f);\n    let e;\n    try { e = JSON.parse(readFileSync(p, 'utf8')); } catch { rmSync(p, { force: true }); continue; }\n    if (!alive(e.pid)) { rmSync(p, { force: true }); continue; }\n    try { process.kill(e.pid, 'SIGTERM'); } catch {}\n    rmSync(p, { force: true });\n  }\n}\n```"
+  },
+  "memAfterJob": {
+    "now": 1.929,
+    "peak": 1.93,
+    "raw": "====================================================================== | llama-server [3925]: 64-bit    Footprint: 1929 MB (16384 bytes per page) | ====================================================================== |  |   Dirty      Clean  Reclaimable    Regions    Category |     ---        ---          ---        ---    ---"
+  },
+  "toolCall": {
+    "ms": 7841,
+    "status": 200,
+    "calls": [
+      {
+        "type": "function",
+        "function": {
+          "name": "Read",
+          "arguments": "{\"path\":\"export.mjs\"}"
+        },
+        "id": "GtCF22SqYcvbXYdcHqO9mocukkO0FZvj"
+      }
+    ],
+    "text": ""
+  },
+  "json": {
+    "ms": 2440,
+    "status": 200,
+    "text": "{\n  \"kind\": \"rename\"\n}"
+  },
+  "thinking": {
+    "ms": 34943,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 39,
+      "prompt_ms": 1483.572,
+      "prompt_per_token_ms": 38.04030769230769,
+      "prompt_per_second": 26.287905137061095,
+      "predicted_n": 319,
+      "predicted_ms": 33346.43,
+      "predicted_per_token_ms": 104.86298742138365,
+      "predicted_per_second": 9.536253206115317
+    },
+    "finish": "stop",
+    "reasoningChars": 731,
+    "text": "```javascript\nfunction median(nums) {\n  const sorted = [...nums].sort((a, b) => a - b);\n  const mid = Math.floor(sorted.length / 2);\n  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;\n}\n```"
+  },
+  "memEnd": {
+    "now": 3.068,
+    "peak": 3.068,
+    "raw": "====================================================================== | llama-server [3925]: 64-bit    Footprint: 3068 MB (16384 bytes per page) | ====================================================================== |  |   Dirty      Clean  Reclaimable    Regions    Category |     ---        ---          ---        ---    ---"
+  }
+}

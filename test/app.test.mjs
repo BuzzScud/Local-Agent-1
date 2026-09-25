@@ -1,0 +1,202 @@
+// End-to-end: the real app in a real pseudo-terminal, driven by keystrokes,
+// read back through a terminal emulator. The model is the scripted fake.
+import { test, expect } from 'bun:test';
+import { cpSync, mkdtempSync, readFileSync, existsSync, mkdirSync, symlinkSync, writeFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { startFakeServer } from './fake-server.mjs';
+import { demoReplies } from './demo-script.mjs';
+import { runInPty } from './pty.mjs';
+
+const T = 60_000;
+function setup() {
+  const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+  const cwd = join(base, 'demo-project');
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  return { base, cwd, env: { BONSAI_HOME: join(base, 'home') } };
+}
+const quit = [{ sleep: 300 }, { key: 'ctrlC' }, { sleep: 200 }, { key: 'ctrlC' }];
+
+test('classic: the whole task, answering each question by key', async () => {
+  const { cwd, env, base } = setup();
+  const fake = await startFakeServer(demoReplies);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'classic', '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: 'add a --json flag to export.mjs' }, { key: 'enter' },
+    { wait: 'Do you want to make this edit' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'export.test.mjs?' }, { sleep: 200 }, { type: '2' },
+    { wait: 'Do you want to proceed?' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'tests pass' }, ...quit,
+  ] });
+  await fake.close();
+  for (const s of ['> add a --json flag to export.mjs', '∴ Thought for', '⏺ Read(export.mjs)', 'Read 19 lines', '⏺ Update Todos', '⏺ Update(export.mjs)', 'Updated export.mjs with 1 addition',
+    "14 +   if (argv.includes('--json'))", '⏺ Bash(node --test)', '✔ --json prints the rows as JSON', 'accept edits on', 'layout: Classic', 'Saved. Continue this conversation with: bonsai -c']) expect(r.text).toContain(s);
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
+  expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
+}, T);
+
+test('ctrl+l switches to Live thinking and the choice is remembered', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const a = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [{ wait: 'layout: Classic' }, { key: 'ctrlL' }, { wait: 'layout: Live thinking' }, ...quit] });
+  expect(a.text).toContain('layout: Live thinking');
+  const b = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [{ wait: 'Welcome to Bonsai Code' }, { sleep: 300 }, ...quit] });
+  await fake.close();
+  expect(b.text).toContain('layout: Live thinking');
+  expect(b.text).toContain('idle  ctx');
+}, T);
+
+test('live: thinking streams in a 4-line window with the meter line', async () => {
+  const { cwd, env } = setup();
+  const slow = [{ reasoning: 'I should read export.mjs first to see how main builds its output, then decide where the flag goes. '.repeat(3), text: 'Done.' }];
+  const fake = await startFakeServer(slow, { delayMs: 60, chunk: 3 });
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'live', '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: 'hello' }, { key: 'enter' }, { wait: '∴ Thinking…' }, { sleep: 1500 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.thinking).toMatch(/┃ I should read export\.mjs/);
+  expect(r.snapshots.thinking).toMatch(/Bonsai 2 27B {2}↓ [\d.]+ tok\/s writing {2}ctx ▰/);
+  expect(r.snapshots.thinking).not.toMatch(/-\d+s/);
+  expect(r.text).toContain('∴ Thought for'); // what it had thought so far is kept, folded
+  expect(r.text).toContain('Interrupted · tell Bonsai what to do instead');
+}, T);
+
+test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([{ text: 'Hi there.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' },
+    { type: '/' }, { wait: 'Show commands and keys' }, { type: 'he' }, { key: 'enter' }, { wait: 'Commands' },
+    { type: '?' }, { wait: '\\ + enter for a new line' }, { key: 'esc' },
+    { type: '!echo shell-ok' }, { key: 'enter' }, { wait: 'shell-ok' },
+    { type: 'say hi' }, { key: 'enter' }, { wait: 'Hi there.' },
+    { key: 'up' }, { wait: '> say hi' },
+    { key: 'ctrlC' }, { sleep: 200 },
+    { key: 'shiftTab' }, { wait: 'accept edits on' }, { key: 'shiftTab' }, { wait: 'plan mode on' },
+    { type: 'look at @exp' }, { wait: '@export.test.mjs' }, { key: 'tab' }, { wait: 'look at @export' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.text).toContain('/help       Show commands and keys');
+  expect(r.text).toContain('! echo shell-ok');
+  expect(r.text).toContain('Hi there.');
+  expect(r.text).toContain('plan mode on');
+  // the shell output reached the model with the next prompt
+  expect(JSON.stringify(fake.requests.at(-1).messages)).toContain('The user ran `echo shell-ok`');
+}, T);
+
+test('long lines in finished steps wrap at the window edge, between words', async () => {
+  const { cwd, env } = setup();
+  const long = 'This is a long answer that goes on well past the edge of an eighty column window so that it has to wrap onto the next line at a space.';
+  const fake = await startFakeServer([{ text: long }]);
+  const r = await runInPty({ cwd, env, cols: 80, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: 'Welcome' }, { type: 'hi' }, { key: 'enter' }, { wait: 'at a space.' }, ...quit] });
+  await fake.close();
+  const lines = r.text.split('\n').filter((l) => l.includes('long answer') || l.includes('onto the next'));
+  expect(lines.length).toBeGreaterThan(0);
+  for (const l of r.text.split('\n')) expect(l.length).toBeLessThanOrEqual(80);
+  expect(r.text).not.toMatch(/eig\nhty|colu\nmn/);
+  expect(r.text).toMatch(/\n {2}\S/); // the second line is indented under the first
+}, T);
+
+test('focused paths on screen: the plan, the try counter, the rename prompt and the fix prompt', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+  const cwd = join(base, 'project');
+  cpSync(join(import.meta.dir, 'fixture-fix'), cwd, { recursive: true });
+  const env = { BONSAI_HOME: join(base, 'home') };
+  const src = readFileSync(join(cwd, 'stats.mjs'), 'utf8');
+  const wrong = '```js\n' + src.replace('  return sorted[mid];', '  return (sorted[mid] + sorted[mid + 1]) / 2;') + '```';
+  const right = '```js\n' + src.replace('  return sorted[mid];', '  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;') + '```';
+  const fake = await startFakeServer([{ text: wrong }, { text: right }, { text: 'Averages the two middle values for an even count.' }], { delayMs: 4 });
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [
+    { wait: 'Welcome' },
+    { type: 'The tests fail. Find the bug and fix it.' }, { key: 'enter' },
+    { wait: 'Do you want to make this edit to stats.mjs?' }, { snapshot: 'asking' }, { key: 'enter' },
+    { wait: 'Fixed stats.mjs' },
+    { type: 'Rename median to middleValue' }, { key: 'enter' },
+    { wait: 'files?' }, { snapshot: 'rename' }, { key: 'enter' },
+    { wait: 'Renamed median to middleValue' }, ...quit,
+  ] });
+  await fake.close();
+  for (const s of ['⏺ Plan', '☐ Run the tests', '⏺ Trying fixes', '✗ ✓', 'passes all 4 tests', '⏺ Update(stats.mjs)', 'Fixed stats.mjs; all 4 tests pass']) expect(r.text).toContain(s);
+  expect(r.snapshots.asking).toContain('Edit file');
+  expect(r.snapshots.rename).toMatch(/Rename median to middleValue: \d+ uses in 2 files\?/);
+  expect(r.text).toMatch(/Renamed median to middleValue: \d+ uses in 2 files; all 4 tests pass/);
+  expect(readFileSync(join(cwd, 'stats.test.mjs'), 'utf8')).toContain('middleValue(');
+}, T);
+
+test('/model: the model list and thinking in one picker; the choice is used and kept', async () => {
+  const { cwd, env, base } = setup();
+  const fake = await startFakeServer([{ text: 'Hi.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows', '--layout', 'live'], steps: [
+    { wait: 'Welcome' }, { type: '/model' }, { key: 'enter' },
+    { wait: 'Pick the model and how much it thinks first' }, { sleep: 200 }, { snapshot: 'picker' },
+    { key: 'right' }, { wait: 'Medium: thinks briefly first' },
+    { key: 'right' }, { wait: 'High: thinks carefully first' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'Bonsai 2 27B · thinking high.' }, { sleep: 300 }, { snapshot: 'after' },
+    { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
+    { type: '/think off' }, { key: 'enter' }, { wait: 'Thinking is off' },
+    ...quit,
+  ] });
+  await fake.close();
+  const picker = r.snapshots.picker;
+  expect(picker).toMatch(/❯ Bonsai 2 27B\s+7\.2 GB · on this Mac\s+✔ in use/);
+  expect(picker).toMatch(/Thinking\s+◀\s+Off\s+·\s+Medium\s+·\s+High\s+▶/);
+  expect(picker).toContain('Off: answers straight away (fastest)');
+  expect(picker).toContain('↑↓ model · ←→ thinking · enter to save · esc to cancel');
+  expect(r.snapshots.after).toMatch(/thinking high/); // the meter line
+  const sent = fake.requests.find((q) => q.stream && q.tools);
+  expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
+  const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+  expect(saved.thinking).toBe(false); // /think off came last
+  expect(saved.effort).toBe('high'); // …and /think on would bring back High
+}, T);
+
+test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab fills in', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Show commands and keys' }, { sleep: 200 }, { snapshot: 'all' },
+    { type: 'model' }, { wait: 'Pick the model and how much it thinks' }, { sleep: 200 }, { snapshot: 'mo' },
+    { key: 'tab' }, { sleep: 300 }, { snapshot: 'tab' },
+    ...quit,
+  ] });
+  await fake.close();
+  const rows = (s) => s.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
+  expect(rows(r.snapshots.all)).toHaveLength(10);
+  expect(r.snapshots.all).not.toContain('? for shortcuts');
+  expect(rows(r.snapshots.mo)[0]).toMatch(/\/model\s+Pick the model and how much it thinks/);
+  expect(r.snapshots.tab).toMatch(/> \/model/);
+}, T);
+
+test('chat style: the prompt box starts at the bottom of the window', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, rows: 43, args: ['--url', fake.url], steps: [{ wait: '? for shortcuts' }, { sleep: 400 }, { snapshot: 'start' }, ...quit] });
+  await fake.close();
+  const lines = r.snapshots.start.split('\n');
+  while (lines.length < 43) lines.push('');
+  const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
+  expect(footer).toBeGreaterThanOrEqual(43 - 3);
+  expect(lines.slice(0, 10).every((l) => !l.trim())).toBe(true); // the space is above, not below
+}, T);
+
+test('start-up says what it waits for; a message typed meanwhile is sent when ready; the next start restores', async () => {
+  const { cwd, env, base } = setup();
+  const home = join(base, 'home');
+  mkdirSync(join(home, 'bin'), { recursive: true });
+  mkdirSync(join(home, 'models'), { recursive: true });
+  symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'bin', 'llama-server'));
+  writeFileSync(join(home, 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
+  const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+    { wait: 'reading its instructions', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
+    { wait: 'sends as soon as the model is ready' }, { snapshot: 'queued' },
+    { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
+  ] });
+  expect(first.snapshots.queued).toMatch(/Starting Bonsai 2 27B… reading its instructions, about 30 s the first time/);
+  expect(first.snapshots.queued).toContain('⏵ Queued: hello');
+  expect(readdirSync(join(home, 'slots')).filter((f) => f.startsWith('warm-'))).toHaveLength(1);
+  const second = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+    { wait: 'restoring its instructions from last time', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
+  ] });
+  expect(second.text).toContain('Hello from the stand-in model.');
+}, 240_000);

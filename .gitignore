@@ -1,0 +1,10 @@
+node_modules/
+dist/
+evals/results/
+evals/*.log
+scripts/capture-*-fake.json
+.DS_Store
+backups/
+Bonsai Code.app/
+scripts/dev/experiments/slots/
+scripts/dev/experiments/*.log

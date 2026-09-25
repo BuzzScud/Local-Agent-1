@@ -1,0 +1,1 @@
+{ "name": "react-devtools-core", "version": "6.99.0", "type": "module", "main": "index.js", "description": "Stand-in so the single-file build needs no React DevTools; Ink only loads it when DEV=true." }

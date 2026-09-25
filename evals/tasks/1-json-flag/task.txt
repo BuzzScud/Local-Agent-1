@@ -1,0 +1,1 @@
+add a --json flag to export.mjs that prints the rows as JSON, and add a test for it

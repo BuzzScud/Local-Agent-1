@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai 8B vs 27B v2</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#77756f;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10); --chip:#f0efec;
+    --s1:#2a78d6; --s2:#eb6834; --good:#0ca30c; --bad:#d03b3b; --same:#898781;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#9a988f;
+      --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --chip:#262624;
+      --s1:#3987e5; --s2:#d95926;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#9a988f;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10); --chip:#262624;
+    --s1:#3987e5; --s2:#d95926;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--page); color:var(--ink); }
+  body { font:14.5px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:1040px; margin:0 auto; padding:28px 16px 56px; }
+  h1 { font-size:24px; line-height:1.25; margin:0 0 6px; letter-spacing:-.01em; }
+  h2 { font-size:17px; margin:0 0 4px; }
+  h3 { font-size:13px; font-weight:600; color:var(--ink2); margin:0 0 10px; }
+  p { margin:6px 0; }
+  .sub { color:var(--ink2); margin:0; }
+  .muted { color:var(--muted); }
+  .small { font-size:12.5px; }
+  section { margin-top:22px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; }
+  .card + .card { margin-top:12px; }
+  .lede { color:var(--ink2); margin:0 0 14px; max-width:760px; }
+  code { font:12.5px ui-monospace, "SF Mono", Menlo, monospace; background:var(--chip); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+  a { color:var(--ink); }
+
+  /* model keys */
+  .keys { display:flex; flex-wrap:wrap; gap:8px 18px; margin:14px 0 0; font-size:13.5px; }
+  .key { display:inline-flex; align-items:center; gap:7px; }
+  .sw { width:12px; height:12px; border-radius:3px; flex:none; }
+  .sw.a { background:var(--s1); } .sw.b { background:var(--s2); }
+  .key small { color:var(--muted); font-size:12.5px; }
+
+  /* tiles */
+  .tiles { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+  .tile { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .tile .lbl { font-size:12.5px; color:var(--ink2); }
+  .tile .val { font-size:26px; font-weight:600; line-height:1.2; margin:4px 0 4px; }
+  .tile .note { font-size:12.5px; color:var(--ink2); line-height:1.45; }
+
+  /* bar charts */
+  .grid2 { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; }
+  .bc { --lw:34px; --vw:84px; display:flex; flex-direction:column; gap:10px; }
+  .g { display:grid; grid-template-columns:var(--lw) minmax(0,1fr); align-items:center; column-gap:10px; }
+  .bc.scores .g { grid-template-columns:var(--lw) minmax(0,1fr) auto; }
+  .gl { font-size:13px; line-height:1.3; }
+  .gl span { display:block; color:var(--muted); font-size:12px; }
+  .gb { position:relative; display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .line { display:flex; align-items:center; min-width:0; }
+  .bar { height:16px; width:calc((100% - var(--vw)) * var(--p)); min-width:3px; border-radius:0 4px 4px 0; flex:none; cursor:default; outline-offset:2px; }
+  .bar.a { background:var(--s1); } .bar.b { background:var(--s2); }
+  .bar.stack { display:flex; gap:2px; background:none; border-radius:0; }
+  .seg { height:100%; flex:var(--f) 1 0; min-width:0; }
+  .seg:last-child { border-radius:0 4px 4px 0; }
+  .bar.a .seg { background:var(--s1); } .bar.b .seg { background:var(--s2); }
+  .seg.light { opacity:.45; }
+  .val { margin-left:7px; font-size:12.5px; color:var(--ink2); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .gr { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; min-width:44px; text-align:right; }
+  .grid2 > .card, .two > .card { margin-top:0; }
+
+  /* memory gauge: each bar is out of the Mac's 16 GB */
+  .meters { --ml:92px; position:relative; display:flex; flex-direction:column; gap:10px; }
+  .mrow { display:grid; grid-template-columns:var(--ml) minmax(0,1fr); column-gap:10px; align-items:center; }
+  .mrow .gl b { font-weight:600; }
+  .mt { height:16px; border-radius:4px; background:var(--chip); overflow:hidden; }
+  .mf { height:100%; border-radius:0 4px 4px 0; }
+  .mf.a { background:var(--s1); } .mf.b { background:var(--s2); }
+  .mlimit { position:absolute; top:-4px; bottom:18px; width:1px; background:var(--ink2); left:calc(var(--ml) + 10px + (100% - var(--ml) - 10px) * .7156); }
+  .maxis { position:relative; height:16px; margin-left:calc(var(--ml) + 10px); font-size:11.5px; color:var(--ink2); }
+  .maxis span { position:absolute; top:0; white-space:nowrap; }
+  .chart-foot { margin-top:10px; font-size:12.5px; color:var(--ink2); }
+
+  /* layer diagram */
+  .stack-row { margin:14px 0 4px; }
+  .stack-row .head { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; font-size:13.5px; margin-bottom:6px; }
+  .stack-row .head b { font-weight:600; }
+  .layers { display:grid; grid-template-columns:repeat(64, minmax(0,1fr)); gap:3px; }
+  .ly { aspect-ratio:1/2.2; border-radius:3px; }
+  .ly.a.full { background:var(--s1); }
+  .ly.b.full { background:var(--s2); }
+  .ly.b.lin { background:color-mix(in srgb, var(--s2) 18%, transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--s2) 70%, transparent); }
+  .lkeys { display:flex; flex-wrap:wrap; gap:6px 18px; font-size:12.5px; color:var(--ink2); margin-top:12px; }
+  .lkeys .k { display:inline-flex; align-items:center; gap:6px; }
+  .lkeys i { width:9px; height:18px; border-radius:2px; display:inline-block; }
+  .lkeys i.full { background:var(--ink2); }
+  .lkeys i.lin { background:color-mix(in srgb, var(--ink2) 15%, transparent); box-shadow:inset 0 0 0 1px var(--ink2); }
+  .two { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:12px; margin-top:12px; }
+  .steps { margin:8px 0 0; padding-left:20px; } .steps li { margin:5px 0; }
+  .weights { font:12.5px/1.7 ui-monospace, "SF Mono", Menlo, monospace; background:var(--chip); border-radius:8px; padding:10px 12px; margin:10px 0 6px; overflow-x:auto; }
+  .weights .r { white-space:nowrap; }
+  .weights .t { color:var(--muted); font-family:system-ui, -apple-system, sans-serif; font-size:12px; }
+
+  /* tables */
+  .tw { width:100%; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:9px 10px; border-top:1px solid var(--grid); vertical-align:top; }
+  thead th { border-top:0; font-size:12.5px; color:var(--ink2); font-weight:600; }
+  thead th .sw { display:inline-block; vertical-align:-1px; margin-right:6px; }
+  tbody th { font-weight:600; width:22%; }
+  td { width:39%; overflow-wrap:anywhere; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; width:auto; }
+  .est { color:var(--muted); font-size:12px; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-size:13.5px; font-weight:600; }
+  details table { margin-top:8px; }
+
+  /* verdicts */
+  .vd { display:inline-flex; align-items:center; gap:6px; font-weight:600; white-space:nowrap; }
+  .vd svg { flex:none; }
+  .vd.up svg, .vd.likely svg { color:var(--good); } .vd.down svg { color:var(--bad); } .vd.flat svg { color:var(--same); }
+  .bottom { font-size:15px; }
+
+  .ver { display:inline-block; font-size:12px; font-weight:600; color:var(--ink2); background:var(--chip); border-radius:10px; padding:2px 9px; vertical-align:4px; margin-left:6px; }
+  .outs { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+  .outs .card + .card { margin-top:0; }
+  .outs .wide { grid-column:1 / -1; }
+  pre.code { font:12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; background:var(--chip); border-radius:8px; padding:10px 12px; margin:8px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .ask { font-size:13px; color:var(--ink2); margin:0; }
+  .res { font-size:13px; margin:0; }
+  .res .vd { margin-right:4px; }
+  @media (max-width: 900px) { .outs { grid-template-columns:minmax(0,1fr); } }
+  #tip { position:fixed; z-index:10; pointer-events:none; max-width:280px; background:var(--ink); color:var(--surface); font-size:12.5px; line-height:1.4; padding:7px 9px; border-radius:7px; opacity:0; transition:opacity .08s; }
+  #tip.on { opacity:1; }
+
+  @media (max-width: 900px) {
+    .tiles { grid-template-columns:repeat(2, minmax(0,1fr)); }
+    .grid2 { grid-template-columns:minmax(0,1fr); }
+    .two { grid-template-columns:minmax(0,1fr); }
+  }
+  @media (max-width: 640px) {
+    .layers { grid-template-columns:repeat(32, minmax(0,1fr)); }
+    .bc.scores .g { grid-template-columns:minmax(0,1fr) auto; }
+    .bc.scores .gl { grid-column:1 / -1; margin-bottom:4px; }
+    .card { padding:16px 14px; }
+    th, td { padding:8px 6px; }
+  }
+  @media (max-width: 480px) {
+    .tiles { grid-template-columns:minmax(0,1fr); }
+    .weights .r { white-space:normal; }
+    body { font-size:14px; }
+    h1 { font-size:21px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Bonsai 8B vs Bonsai 2 27B <span class="ver">version 2 · measured</span></h1>
+    <p class="sub">The model Bonsai Code used until tonight, next to PrismML's newer and bigger one, now measured on your Mac (Apple M4, 16 GB). 24 Sep 2026, 20:46–21:00.</p>
+    <div class="keys">
+      <span class="key"><span class="sw a"></span>Ternary Bonsai 8B <small>deleted tonight; its numbers are from round 1</small></span>
+      <span class="key"><span class="sw b"></span>Bonsai 2 27B <small>downloaded and measured tonight</small></span>
+      <span class="key"><small><b>est.</b> = worked out, not run; everything else is measured or published</small></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="card">
+      <h2>New in version 2: measured on your Mac tonight</h2>
+      <ul class="steps">
+        <li><b>The 8B is deleted</b> (2.2 GB, your pick). Until Bonsai Code is switched over to the 27B, the installed <code>bonsai</code> command can't start. <code>bonsai setup</code> would download the 8B again.</li>
+        <li><b>The 27B is downloaded:</b> 7.21 GB in 2 minutes, and its fingerprint matches PrismML's exactly.</li>
+        <li><b>Speed, measured:</b> it writes 10.4 tokens a second and reads 61. I had estimated 7–9 and 64, so writing is a little faster than I expected.</li>
+        <li><b>Memory, measured:</b> 10.3 GB, more than my 9 GB estimate. While it was loaded, the Mac's free memory fell from 87% to 15%. That's the one real surprise.</li>
+        <li><b>4 real checks, all passed:</b> correct code on the first try, a proper tool call, a valid forced-JSON reply, and short thinking on "medium". Their real outputs are further down.</li>
+      </ul>
+      <p class="small muted">Version 1, with the estimates, is unchanged at <code>bonsai-8b-vs-27b.html</code>.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="card">
+      <h2>What Bonsai 2 27B is</h2>
+      <p>PrismML's newest model, released <b>17 Sep 2026</b>. It is a squeezed-down copy of <b>Qwen3.8-27B</b>, a model about 3× the size of the one the 8B came from. Like the 8B, it stores every weight as <b>−1, 0 or +1</b>. That shrinks it from 54 GB to 7.2 GB and keeps <b>98.2%</b> of the full-size model's test scores. It can also look at pictures and handle conversations 4× longer.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="tiles">
+      <div class="tile"><div class="lbl">Test scores (6 tests both took)</div><div class="val">+10.8 pts</div><div class="note">on average for the 27B. Biggest gain is writing code (+17.7); smallest is calling tools (+1.0).</div></div>
+      <div class="tile"><div class="lbl">Speed on your Mac, measured</div><div class="val">3.5–4× slower</div><div class="note">writes 10.4 tokens a second (8B: 31–38) and reads 61 (8B: 233). A token is a word piece.</div></div>
+      <div class="tile"><div class="lbl">Memory while running, measured</div><div class="val">10.3 GB</div><div class="note">of your 16 GB (the 8B used 4.8). Free memory fell from 87% to 15% while it ran.</div></div>
+      <div class="tile"><div class="lbl">Real checks tonight</div><div class="val">4 of 4</div><div class="note">correct code first try, a clean tool call, a valid JSON reply, and short thinking on "medium".</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How big</h2>
+    <p class="lede">The same three questions for each model. Every chart has its own scale.</p>
+    <div class="grid2">
+      <div class="card"><h3>Weights (billions)</h3><div class="bc" id="c-params"></div><div class="chart-foot">The 27B's count includes a small picture reader (0.46 B).</div></div>
+      <div class="card"><h3>Download (GB)</h3><div class="bc" id="c-file"></div><div class="chart-foot">Before squeezing: 16.4 GB and 53.8 GB.</div></div>
+      <div class="card"><h3>Memory while running, 32k-token conversation (out of 16 GB)</h3>
+        <div class="meters">
+          <div class="mrow"><div class="gl">8B<span><b>4.8 GB</b></span></div><div class="mt" tabindex="0" data-tip="Ternary Bonsai 8B: 4.8 GB measured at a 32k-token memory size, out of 16 GB"><div class="mf a" style="width:30%"></div></div></div>
+          <div class="mrow"><div class="gl">27B<span><b>10.3 GB</b></span></div><div class="mt" tabindex="0" data-tip="Bonsai 2 27B, measured: 7.21 GB file + 3.07 GB working memory (conversation memory, running summaries, scratch space), out of 16 GB"><div class="mf b" style="width:64.25%"></div></div></div>
+          <div class="mlimit"></div>
+          <div class="maxis"><span style="left:71.56%;transform:translateX(-50%)">limit 11.5 GB</span></div>
+        </div>
+        <div class="chart-foot">Both measured the same way: the model file plus the working memory the server took. Each full bar is your Mac's 16 GB. The line is the most macOS lets the graphics chip use: 11.5 GB.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Inside: why 3× bigger isn't 3× hungrier</h2>
+    <p class="lede">Each block below is one layer, a step the text passes through. More layers and more weights hold more knowledge but take longer. The difference is how the layers remember the conversation.</p>
+    <div class="card">
+      <div class="stack-row">
+        <div class="head"><span class="sw a"></span><b>Ternary Bonsai 8B</b><span class="muted small">36 layers; every one looks back over the whole conversation</span></div>
+        <div class="layers" id="ly-a"></div>
+      </div>
+      <div class="stack-row">
+        <div class="head"><span class="sw b"></span><b>Bonsai 2 27B</b><span class="muted small">64 layers; only 1 in 4 looks back over everything</span></div>
+        <div class="layers" id="ly-b"></div>
+      </div>
+      <div class="lkeys">
+        <span class="k"><i class="full"></i>Looks back over every earlier token, so it needs memory for each one ("full attention")</span>
+        <span class="k"><i class="lin"></i>Keeps a fixed-size running summary instead ("linear attention")</span>
+      </div>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h3>Memory to hold a 32,000-token conversation (GB)</h3>
+        <div class="bc" id="c-kv"></div>
+        <div class="chart-foot">Only 16 of the 27B's layers need room per token, and each needs less. The result: 35 KB per token against the 8B's 78 KB. So the bigger model holds a long conversation in <b>half</b> the memory. Its limit is 262,144 tokens against the 8B's 65,536. On your Mac, though, the graphics-memory limit stops it at about 60,000 (est. from tonight's measured memory).</div>
+      </div>
+      <div class="card">
+        <h3>How both squeeze their weights</h3>
+        <div class="weights">
+          <div class="r"><span class="t">Normal model, 16 bits each:</span></div>
+          <div class="r">0.0132 · −0.0207 · 0.0009 · 0.0188 · −0.0151 …</div>
+          <div class="r" style="margin-top:6px"><span class="t">Bonsai, about 2 bits each:</span></div>
+          <div class="r">+1 · −1 · 0 · +1 · −1 …  × 0.017</div>
+        </div>
+        <p class="small muted">Made-up numbers to show the idea. Each weight becomes −1, 0 or +1, and every 128 weights share one scale (the × 0.017). This is how 16.4 GB becomes 2.18 GB, and 53.8 GB becomes 7.21 GB.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Test scores</h2>
+    <p class="lede">The six tests PrismML reported for both models, out of 100. Sorted by how much the 27B gains.</p>
+    <div class="card">
+      <div class="bc scores" id="c-scores"></div>
+      <p class="chart-foot">PrismML tested each model separately. The 27B's scores were run with thinking on; the 8B's page doesn't say whether it thought. So treat the gaps as a direction, not an exact number. The tool-calling test is BFCL v3 for the 27B; the 8B's page just says BFCL.</p>
+      <details>
+        <summary>All 14 of the 27B's scores, against the full-size model it came from</summary>
+        <div class="tw"><table id="t-14"><thead><tr><th>Test</th><th class="num">Full size (54 GB)</th><th class="num">Bonsai 2 27B (7.2 GB)</th></tr></thead><tbody></tbody></table></div>
+      </details>
+    </div>
+  </section>
+
+  <section>
+    <h2>Speed on your Mac</h2>
+    <p class="lede">All measured on your Mac: the 8B in round 1, the 27B tonight. The one exception is the 8B's time for tonight's job, which is worked out from its measured speeds, because its file is now deleted.</p>
+    <div class="grid2">
+      <div class="card"><h3>Writing (tokens a second, in real use)</h3><div class="bc" id="c-write"></div></div>
+      <div class="card"><h3>Reading the prompt (tokens a second)</h3><div class="bc" id="c-read"></div></div>
+      <div class="card"><h3>Tonight's focused job (seconds)</h3><div class="bc" id="c-job"></div><div class="chart-foot">Read a real 7 KB file from Bonsai Code (2,203 tokens, lighter part), then write one new function (138 tokens, darker part). Hover for the split.</div></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="tw"><table>
+        <thead><tr><th>If a try needs…</th><th><span class="sw a"></span>8B <span class="est">worked out from its speeds</span></th><th><span class="sw b"></span>27B</th></tr></thead>
+        <tbody>
+          <tr><th>To write one function (tonight's job)</th><td>about 13 s</td><td>49 s, measured</td></tr>
+          <tr><th>To rewrite a whole 150-line file (round 2 does this for files up to 300 lines)</th><td>about 1 min 10 s</td><td>about 4 min <span class="est">est.</span></td></tr>
+          <tr><th>All 8 tries of that</th><td>about 9 min</td><td>about 32 min <span class="est">est.</span></td></tr>
+          <tr><th>Thinking on "medium", small task</th><td>has no "medium" (thinking is on or off)</td><td>35 s in all, about 200 tokens of thinking, measured</td></tr>
+          <tr><th>Each 1,000 tokens of thinking</th><td>about 30 s</td><td>about 1 min 45 s</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Real outputs from tonight's test</h2>
+    <p class="lede">Run through the engine with Bonsai Code's own settings: 32k memory, 8-bit cache, thinking off unless noted. Copied as the model wrote them.</p>
+    <div class="outs">
+      <div class="card wide">
+        <h3>1 · A focused job · 49 s</h3>
+        <p class="ask">Given Bonsai Code's <code>server.mjs</code> (7 KB): "Add an exported function stopAll() that stops each live server in the registry and deletes its registry file."</p>
+        <pre class="code">export async function stopAll() {
+  mkdirSync(REG_DIR, { recursive: true });
+  for (const f of readdirSync(REG_DIR)) {
+    const p = join(REG_DIR, f);
+    let e;
+    try { e = JSON.parse(readFileSync(p, &#x27;utf8&#x27;)); } catch { rmSync(p, { force: true }); continue; }
+    if (!alive(e.pid)) { rmSync(p, { force: true }); continue; }
+    try { process.kill(e.pid, &#x27;SIGTERM&#x27;); } catch {}
+    rmSync(p, { force: true });
+  }
+}</pre>
+        <p class="res"><span class="vd up"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10H1z" fill="currentColor"/></svg>Correct on the first try.</span> It reuses the file's own helpers (<code>REG_DIR</code>, <code>alive</code>, <code>rmSync</code>) and even skips broken registry files, the way the file already does.</p>
+      </div>
+      <div class="card">
+        <h3>2 · A tool call · 8 s</h3>
+        <p class="ask">"What does export.mjs print? Use the Read tool to look at it first."</p>
+        <pre class="code">Read({&quot;path&quot;:&quot;export.mjs&quot;})</pre>
+        <p class="res"><span class="vd up"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10H1z" fill="currentColor"/></svg>A proper tool call.</span> The engine understood the 27B's own tool-call format, so Bonsai Code gets a normal call it can run. PrismML's known problem (broken or repeating calls) didn't show up here.</p>
+      </div>
+      <div class="card">
+        <h3>3 · A forced-JSON reply · 2 s</h3>
+        <p class="ask">"Sort this request into one kind: rename getUser to fetchUser everywhere." The reply is forced into the shape Bonsai Code's request sorter uses.</p>
+        <pre class="code">{
+  &quot;kind&quot;: &quot;rename&quot;
+}</pre>
+        <p class="res"><span class="vd up"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10H1z" fill="currentColor"/></svg>Right answer, valid shape.</span></p>
+      </div>
+      <div class="card wide">
+        <h3>4 · Thinking on "medium" · 35 s</h3>
+        <p class="ask">"Write a JavaScript function median(nums)… average the two middle values for even lengths."</p>
+        <pre class="code">function median(nums) {
+  const sorted = [...nums].sort((a, b) =&gt; a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}</pre>
+        <p class="res"><span class="vd up"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10H1z" fill="currentColor"/></svg>Correct.</span> It thought for about 200 tokens and wrote 319 in all. That's short: PrismML warns its default "xhigh" setting can think far longer.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Side by side</h2>
+    <div class="card">
+      <div class="tw"><table>
+        <thead><tr><th></th><th><span class="sw a"></span>Ternary Bonsai 8B</th><th><span class="sw b"></span>Bonsai 2 27B</th></tr></thead>
+        <tbody>
+          <tr><th>On this Mac</th><td>Deleted 24 Sep at your request (<code>bonsai setup</code> can download it again)</td><td>Downloaded 24 Sep, fingerprint checked. Not used by Bonsai Code yet</td></tr>
+          <tr><th>Released</th><td>April 2026, PrismML</td><td>17 Sep 2026, PrismML</td></tr>
+          <tr><th>Made from</th><td>Qwen3-8B</td><td>Qwen3.8-27B</td></tr>
+          <tr><th>Weights</th><td>8.19 billion</td><td>27.36 billion (includes a 0.46 B picture reader)</td></tr>
+          <tr><th>Layers</th><td>36, all full attention</td><td>64: 48 running-summary + 16 full attention</td></tr>
+          <tr><th>Bits per weight</th><td>2.13 (−1, 0, +1 and a shared scale)</td><td>2.13 in the Mac file; 1.75 in the smaller file</td></tr>
+          <tr><th>File</th><td><code>Ternary-Bonsai-8B-PQ2_0.gguf</code> 2.18 GB</td><td><code>Ternary-Bonsai-2-27B-PQ2_0.gguf</code> 7.21 GB, PrismML's pick for Macs. A smaller 5.95 GB file (PTQ1_0) also exists; PrismML says it runs slower on Macs.</td></tr>
+          <tr><th>Size before squeezing</th><td>16.4 GB</td><td>53.8 GB</td></tr>
+          <tr><th>Memory while running (32k)</th><td>4.8 GB, measured</td><td>10.3 GB, measured. The Mac's free memory fell from 87% to 15%</td></tr>
+          <tr><th>Longest conversation</th><td>65,536 tokens (all of it fits here)</td><td>262,144 tokens; about 60,000 on your Mac <span class="est">est.</span></td></tr>
+          <tr><th>Pictures</th><td>No</td><td>Yes, with a 0.63 GB add-on file</td></tr>
+          <tr><th>Thinking</th><td>Optional. We keep it off: in testing it was no better and 3–4× slower</td><td>On by default at its strongest setting ("xhigh"); "medium" is shorter. It can be turned off, but every published score used it. Measured: about 200 tokens of thinking on "medium" for a small task</td></tr>
+          <tr><th>Writing speed here</th><td>31–38 tokens/s in real use (42 in the standard test), measured</td><td>10.4 tokens/s in a real job (10.8 in the standard test), measured</td></tr>
+          <tr><th>Reading speed here</th><td>233 tokens/s, measured</td><td>61 tokens/s in a real job (62.6 in the standard test), measured</td></tr>
+          <tr><th>Runs on Bonsai Code's engine</th><td>Yes (PrismML build 10735)</td><td>Yes, checked tonight: it ran fully on the graphics chip, and tool calls and forced-JSON replies work with the model's own template. It needs PrismML build 10709 or newer, and ours is 10735</td></tr>
+          <tr><th>Known problems</th><td>From round 1: gets lost in long step-by-step tool loops (0 of 9 multi-step edits)</td><td>From PrismML's own list: tool calls sometimes come out broken or repeat; thinking can run long or loop at the default setting; the "high" setting gives an error. None of these showed up in tonight's 4 checks</td></tr>
+          <tr><th>Licence</th><td>Apache 2.0 (free to use)</td><td>Apache 2.0 (free to use)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it would mean for Bonsai Code</h2>
+    <div class="card">
+      <div class="tw"><table>
+        <thead><tr><th>Part</th><th>With the 27B</th><th>Why</th></tr></thead>
+        <tbody id="t-mean"></tbody>
+      </table></div>
+      <p class="bottom" style="margin-top:14px"><b>Bottom line.</b> Measured, the 27B does what its scores promised: the right code on the first try, a clean tool call, and short thinking. It is 3.5–4× slower, which you've said is fine. Memory is the real cost, about 10 GB, so it works best with the desk servers stopped. Next is teaching Bonsai Code to use it. Until then the installed <code>bonsai</code> command can't start, because the 8B is gone.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Where the numbers come from</h2>
+    <div class="card small">
+      <ul class="steps" style="margin-top:0">
+        <li>27B model page (sizes, speeds, 14 scores, settings): <a href="https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf">huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf</a>. Also its known-issues list: <a href="https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/blob/main/KNOWN_ISSUES.md">KNOWN_ISSUES.md</a></li>
+        <li>PrismML's announcement, 17 Sep 2026: <a href="https://prismml.com/news/bonsai-2-27b">prismml.com/news/bonsai-2-27b</a>. It uses a wider set of tests (overall 83.9); this page uses the model page's 14 tests (84.78).</li>
+        <li>8B model page (scores, M4 Pro speeds): <a href="https://huggingface.co/prism-ml/Ternary-Bonsai-8B-gguf">huggingface.co/prism-ml/Ternary-Bonsai-8B-gguf</a></li>
+        <li>The 27B file's own header, read directly: 64 layers, 1 in 4 full attention, each with 4 memory heads of 256. Memory per token is worked out from that, with the same 8-bit memory setting Bonsai Code uses.</li>
+        <li>Your Mac: the 8B speeds and memory are from round 1 (<code>bonsai-code-built.html</code>). The 11.5 GB graphics-memory limit was read from macOS.</li>
+        <li>Tonight's measurements (24 Sep, 20:46–21:00): the engine's standard speed test (llama-bench, build 10735: reading 62.6, writing 10.8). Then a real-use test through its server with Bonsai Code's settings (32k memory, 8-bit cache, flash attention on).</li>
+        <li>Memory = the model file (7.21 GB) + the server's working memory as macOS reports it (3.07 GB). The 8B's 4.8 GB was measured the same way in round 1. The free-memory figures are macOS's own memory report, before, during and after.</li>
+        <li>Worked out, not run: the 8B's time for tonight's job (from its round 1 speeds, since its file is deleted), the whole-file and 8-try times, and the ~60,000-token limit here (the 11.5 GB limit minus the measured memory, at 35 KB per token).</li>
+      </ul>
+    </div>
+  </section>
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+(function () {
+  const N = { a: 'Ternary Bonsai 8B', b: 'Bonsai 2 27B' };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // groups: [{label, sub, right, bars:[{m, v, text, tip, segs?}]}]
+  function chart(id, { max, groups, lw, vw }) {
+    const el = document.getElementById(id);
+    if (lw) el.style.setProperty('--lw', lw);
+    if (vw) el.style.setProperty('--vw', vw);
+    let html = '';
+    for (const g of groups) {
+      html += '<div class="g"><div class="gl">' + esc(g.label) + (g.sub ? '<span>' + esc(g.sub) + '</span>' : '') + '</div><div class="gb">';
+      for (const b of g.bars) {
+        const p = Math.min(b.v / max, 1).toFixed(4);
+        const tip = b.tip || (N[b.m] + ': ' + b.text);
+        if (b.segs) {
+          html += '<div class="line"><div class="bar stack ' + b.m + '" style="--p:' + p + '" tabindex="0" data-tip="' + esc(tip) + '">' +
+            b.segs.map(s => '<div class="seg' + (s.light ? ' light' : '') + '" style="--f:' + s.v + '" data-tip="' + esc(s.tip) + '"></div>').join('') +
+            '</div><span class="val">' + esc(b.text) + '</span></div>';
+        } else {
+          html += '<div class="line"><div class="bar ' + b.m + '" style="--p:' + p + '" tabindex="0" data-tip="' + esc(tip) + '"></div><span class="val">' + esc(b.text) + '</span></div>';
+        }
+      }
+      html += '</div>' + (g.right ? '<div class="gr">' + esc(g.right) + '</div>' : '') + '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  const two = (a, b, o = {}) => [
+    { label: '8B', bars: [{ m: 'a', ...a }] },
+    { label: '27B', bars: [{ m: 'b', ...b }] },
+  ].map(g => ({ ...g, ...o }));
+
+  chart('c-params', { max: 30, groups: two(
+    { v: 8.19, text: '8.19 B' },
+    { v: 27.36, text: '27.36 B', tip: 'Bonsai 2 27B: 27.36 billion (24.35 B language + 2.54 B word table + 0.46 B picture reader)' }) });
+  chart('c-file', { max: 8, groups: two(
+    { v: 2.18, text: '2.18 GB', tip: 'Ternary Bonsai 8B: 2.18 GB file (16.4 GB before squeezing)' },
+    { v: 7.21, text: '7.21 GB', tip: 'Bonsai 2 27B: 7.21 GB Mac file (53.8 GB before squeezing; a 5.95 GB file also exists)' }) });
+  chart('c-kv', { max: 3, groups: two(
+    { v: 2.57, text: '2.57 GB', tip: 'Ternary Bonsai 8B: 78 KB per token × 32,768 tokens = 2.57 GB' },
+    { v: 1.30, text: '1.30 GB', tip: 'Bonsai 2 27B: 35 KB per token × 32,768 = 1.14 GB, plus 0.16 GB fixed for the running summaries' }) });
+  chart('c-write', { max: 40, groups: two(
+    { v: 35, text: '31–38', tip: 'Ternary Bonsai 8B: 31–38 tokens a second in use (42 in a benchmark), measured here' },
+    { v: 10.4, text: '10.4', tip: 'Bonsai 2 27B, measured tonight: 10.4 tokens a second in a real job (10.8 in the standard test)' }) });
+  chart('c-read', { max: 250, groups: two(
+    { v: 233, text: '233', tip: 'Ternary Bonsai 8B: 233 tokens a second, measured here' },
+    { v: 61, text: '61', tip: 'Bonsai 2 27B, measured tonight: 61 tokens a second in a real job (62.6 in the standard test)' }) });
+  chart('c-job', { max: 55, groups: [
+    { label: '8B', bars: [{ m: 'a', v: 13.4, text: '≈ 13 s est.', tip: '8B, worked out from its measured speeds: about 9.5 s reading + 4 s writing',
+      segs: [{ v: 9.5, light: true, tip: '8B reading 2,203 tokens: about 9.5 s (worked out)' }, { v: 3.9, tip: '8B writing 138 tokens: about 4 s (worked out)' }] }] },
+    { label: '27B', bars: [{ m: 'b', v: 49.5, text: '49 s', tip: '27B, measured: 36 s reading + 13 s writing',
+      segs: [{ v: 36.2, light: true, tip: '27B reading 2,203 tokens: 36 s, measured' }, { v: 13.3, tip: '27B writing 138 tokens: 13 s, measured' }] }] },
+  ] });
+
+  const scores = [
+    ['Writing code', 'HumanEval+', 77.4, 95.12],
+    ['General knowledge', 'MMLU-Redux', 72.6, 89.09],
+    ['Multi-step reasoning', 'MuSR', 56.2, 70.63],
+    ['Following instructions', 'IFEval', 81.8, 91.31],
+    ['School math', 'GSM8K', 91.0, 96.66],
+    ['Calling tools', 'BFCL', 73.9, 74.92],
+  ];
+  chart('c-scores', { max: 100, lw: '170px', vw: '48px', groups: scores.map(([l, t, a, b]) => ({
+    label: l, sub: t, right: '+' + (b - a).toFixed(1),
+    bars: [{ m: 'a', v: a, text: a.toFixed(1), tip: 'Ternary Bonsai 8B · ' + t + ': ' + a.toFixed(1) },
+           { m: 'b', v: b, text: b.toFixed(1), tip: 'Bonsai 2 27B · ' + t + ': ' + b.toFixed(2) }],
+  })) });
+
+  const t14 = [
+    ['MMLU-Redux · knowledge', 91.46, 89.09], ['MuSR · reasoning', 79.63, 70.63],
+    ['GSM8K · school math', 97.19, 96.66], ['MATH-500 · harder math', 99.80, 98.80],
+    ['AIME 2025 · contest math', 96.67, 95.00], ['AIME 2026 · contest math', 94.58, 95.83],
+    ['HumanEval+ · code', 93.29, 95.12], ['MBPP+ · code', 83.86, 83.07],
+    ['LiveCodeBench · code', 90.05, 90.07], ['IFEval · instructions', 91.50, 91.31],
+    ['IFBench · instructions', 71.00, 74.00], ['BFCL v3 · tool calling', 76.74, 74.92],
+    ['MMMU-Pro · pictures', 81.73, 75.49], ['OCR Bench v2 · reading text in pictures', 60.99, 56.88],
+  ];
+  document.querySelector('#t-14 tbody').innerHTML = t14.map(([n, f, b]) =>
+    '<tr><th>' + esc(n) + '</th><td class="num">' + f.toFixed(2) + '</td><td class="num">' + b.toFixed(2) + '</td></tr>').join('') +
+    '<tr><th>Average of 14</th><td class="num"><b>86.32</b></td><td class="num"><b>84.78</b> (98.2%)</td></tr>';
+
+  // Layer blocks
+  document.getElementById('ly-a').innerHTML = Array.from({ length: 36 }, () => '<div class="ly a full"></div>').join('');
+  document.getElementById('ly-b').innerHTML = Array.from({ length: 64 }, (_, i) =>
+    '<div class="ly b ' + ((i + 1) % 4 === 0 ? 'full' : 'lin') + '"></div>').join('');
+
+  // What it means
+  const ICON = {
+    up: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10H1z" fill="currentColor"/></svg>',
+    down: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 10.5 1 2h10z" fill="currentColor"/></svg>',
+    flat: '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="currentColor"/></svg>',
+  };
+  const WORD = { up: 'Better', likely: 'Likely better', down: 'Worse', flat: 'About the same' };
+  ICON.likely = ICON.up;
+  const mean = [
+    ['Writing the right code in a focused job (the fix and feature paths)', 'likely', 'Code tests +17.7 (HumanEval+ 95 vs 77), and tonight\'s job was right on the first try. This is what round 2 leans on.'],
+    ['Long step-by-step tool loops (questions, "anything else")', 'flat', 'Tool calling +1.0 only, and PrismML lists broken or repeating tool calls as a known problem. Tonight\'s one tool call came out clean.'],
+    ['Writing tests', 'likely', 'Following instructions +9.5 and reasoning +14.4 should help its weakest skill. Not measured yet.'],
+    ['Waiting', 'down', 'Measured 3.5–4× slower. A try that writes one function: 49 s (8B about 13 s). A try that rewrites a whole 150-line file: about 4 min (8B about 1 min). Letting tries rewrite only the one function would cut most of that.'],
+    ['Memory', 'down', '10.3 GB measured instead of 4.8, out of 16. Free memory fell from 87% to 15%. Best with the desk servers stopped; 16k memory would save about 0.6 GB.'],
+    ['Big projects', 'flat', 'About 60,000 tokens fit here (worked out from the measured memory), close to the 8B\'s 65,536.'],
+    ['Setup', 'up', 'Downloaded and checked. Tool calls and forced-JSON replies already work with the model\'s own template, so the switch is smaller than planned.'],
+  ];
+  document.getElementById('t-mean').innerHTML = mean.map(([p, v, w]) =>
+    '<tr><th>' + esc(p) + '</th><td><span class="vd ' + v + '">' + ICON[v] + WORD[v] + '</span></td><td>' + esc(w) + '</td></tr>').join('');
+
+  // Tooltip
+  const tip = document.getElementById('tip');
+  function show(t, x, y) {
+    tip.textContent = t; tip.classList.add('on');
+    const r = tip.getBoundingClientRect();
+    let left = x + 12, top = y + 14;
+    if (left + r.width > innerWidth - 8) left = Math.max(8, x - r.width - 12);
+    if (top + r.height > innerHeight - 8) top = y - r.height - 10;
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  document.addEventListener('mousemove', e => {
+    const t = e.target.closest('[data-tip]');
+    if (t) show(t.dataset.tip, e.clientX, e.clientY); else tip.classList.remove('on');
+  });
+  document.addEventListener('focusin', e => {
+    const t = e.target.closest('[data-tip]');
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    show(t.dataset.tip, r.left + r.width / 2, r.bottom);
+  });
+  document.addEventListener('focusout', () => tip.classList.remove('on'));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "writeTps": 42,
+  "writeTpsInUse": "31–38",
+  "readTps": 233,
+  "memoryGb": 4.8,
+  "startSecs": 1.3,
+  "verdict": "Thinking off passed 5 of 15 attempts: the question every time and the two-file rename 2 of 3, but none of the 9 attempts at the three edit-and-test tasks. Thinking on failed both tasks it tried, at about 5 minutes each; I stopped it after 2 of 5 because it could not change the decision. So Bonsai Code starts with thinking off; /think on turns it on. Measured after the final code; afterwards two things changed that make it safer, not smarter: Write now refuses every existing file, and long lines wrap cleanly.",
+  "limits": [
+    "The 8B is the weak link. On its own it finished 5 of 15 practice attempts: it is good at finding things and answering questions about code, shaky at renames, and it did not finish any multi-step edit task. Treat it as a fast local helper, not as a replacement for Claude on real work.",
+    "Its most common failure is misunderstanding what to change. The tools stop it from damaging files (an edit that breaks a file that worked is refused, and the file is left as it was), but they cannot make it understand the task. Keep 'ask first' on and read the diffs before saying yes.",
+    "Thinking mode is about 10× slower per task here and did not score better, so it is off by default.",
+    "Switching layout (ctrl+l) changes how new lines look; lines already printed stay as they are, because a terminal can't redraw its history.",
+    "Memory: about 4.8 GB while it runs at 32k; with less free it drops to 16k and says so. The disk is 92% full; the model and runtime use 2.3 GB of it."
+  ],
+  "checks": [
+    "51 automated tests pass: the tools (edit matching, copied line numbers, path mix-ups, the breaking-edit guard), the permission rules (30 blocked or allowed commands), input editing, the agent loop against a scripted model (loops, stuck, interrupt, saying no, automatic test runs, read-before-edit), and the app itself driven by keys in a real terminal in both layouts.",
+    "The single-file build passes the same keyboard test and is installed at ~/.local/bin/bonsai.",
+    "The model file matches its published SHA-256; bonsai setup re-downloads and re-checks it if anything goes missing.",
+    "The screens above are real captures from the installed app with the real model, read back through a terminal emulator."
+  ],
+  "runOff": "2026-09-24T21-51-16-857Z",
+  "runOn": "2026-09-24T21-58-21-699Z",
+  "captureNotes": {
+    "classic": "What really happened in this run: it first tried an edit without reading the file, read it, and summed it up correctly. It twice announced a step instead of doing it and was told to go ahead. Then three edits were refused because each would have broken export.mjs (an illegal return), so the file was never damaged. It ended by describing a fix rather than making one. It never reached a question for you, so there is no 'Asking you' screen for this run.",
+    "live": "What really happened in this run: it changed one line, and the change is wrong (it wraps the CSV text in JSON instead of adding a flag). The two old tests still passed, and it then said it had added a test, which it had not. Read its summary against the diff above it."
+  }
+}

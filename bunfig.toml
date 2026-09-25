@@ -1,0 +1,3 @@
+[test]
+# Only our tests; demo-project/ and evals/ hold practice projects with their own tests.
+root = "./test"
