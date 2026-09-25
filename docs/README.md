@@ -1,0 +1,22 @@
+# Bonsai Code docs
+
+Every diagram, preview, report and test page about Bonsai Code, newest first. This
+folder mirrors `~/Desktop/bonsai-code DOCS` on the Mac: pages are saved there, and
+`bun run docs` copies them here before a commit. The pages are single HTML files
+with nothing loaded from outside; download one and open it in a browser to see it
+(GitHub shows HTML as source).
+
+| File | Kind | Title | Size | Saved |
+|---|---|---|---|---|
+| [bonsai-smart-2026-09-25.html](bonsai-smart-2026-09-25.html) | page | Bonsai Code smarter and faster stats | 89 KB | 2026-09-25 |
+| [bonsai-code-structure.html](bonsai-code-structure.html) | page | Bonsai Code structure | 31 KB | 2026-09-25 |
+| [bonsai-open-items-report-2026-09-25.pdf.png](bonsai-open-items-report-2026-09-25.pdf.png) | image |  | 543 KB | 2026-09-25 |
+| [bonsai-open-items-report-2026-09-25.pdf](bonsai-open-items-report-2026-09-25.pdf) | PDF |  | 329 KB | 2026-09-25 |
+| [bonsai-terminal-ui-before-after.html](bonsai-terminal-ui-before-after.html) | page | Bonsai Terminal UI | 1.8 MB | 2026-09-25 |
+| [bonsai-night-double-check-2026-09-25.html](bonsai-night-double-check-2026-09-25.html) | page | Bonsai Night Double-Check | 23 KB | 2026-09-25 |
+| [bonsai-code-27b-report.html](bonsai-code-27b-report.html) | page | Bonsai Code · 27B | 63 KB | 2026-09-25 |
+| [bonsai-code-progress.html](bonsai-code-progress.html) | page | Bonsai Code · progress | 12 KB | 2026-09-25 |
+| [bonsai-8b-vs-27b-v2.html](bonsai-8b-vs-27b-v2.html) | page | Bonsai 8B vs 27B v2 | 37 KB | 2026-09-25 |
+| [bonsai-8b-vs-27b.html](bonsai-8b-vs-27b.html) | page | Bonsai 8B vs 27B | 30 KB | 2026-09-25 |
+| [bonsai-code-built.html](bonsai-code-built.html) | page | Bonsai Code · built | 46 KB | 2026-09-24 |
+| [opus-5-5-and-fable-5-1-stats.html](opus-5-5-and-fable-5-1-stats.html) | page | Opus 5.5 and Fable 5.1 Stats | 31 KB | 2026-09-24 |

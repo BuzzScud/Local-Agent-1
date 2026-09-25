@@ -1,13 +1,15 @@
 // The "smarter and faster" round as a stats page: every number before and
 // after, in the style of the Opus 5.5 / Fable 5.1 stats sheet (cards, tables
 // with the better cell marked and a delta column, inline SVG charts, notes).
-//   node models/evals/reports/report-smart-stats.mjs [--dir <results dir>] [--desktop]
+//   node models/evals/reports/report-smart-stats.mjs [--dir <results dir>]
+// Writes models/bonsai-2-27b/reports/ and copies the page into the DOCS folder.
 // Baselines = the night run of 2026-09-25 (main checkout); results = the
 // round's folder, both under models/bonsai-2-27b/results/night/ (not in git).
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { toDocs } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
@@ -291,7 +293,7 @@ ${probes.speculative.rows.map((r) => `<tr><td class="bench"><b>${esc(r.mode)}</b
 <section class="foot" id="sources"><h3 style="color:var(--ink)">Where the numbers come from</h3><ul>
 <li>Before: <code>models/bonsai-2-27b/results/night/2026-09-25/practice-off/summary.json</code> and <code>…/2026-09-25-rerun/words-real.json</code> (the night run and its morning rerun; results are kept on the Mac, not in git)</li>
 <li>After: <code>${esc(dir.replace(root + '/', ''))}</code> — <code>practice-off/</code>, <code>practice-rerun/</code>, <code>words-real.json</code>, <code>words-real-rerun.json</code>, <code>probes.json</code></li>
-<li>Checks: <code>zsh models/evals/verify-tasks.sh</code> · tests: <code>bun run test</code> · this page: <code>node models/evals/reports/report-smart-stats.mjs --desktop</code></li></ul>
+<li>Checks: <code>zsh models/evals/verify-tasks.sh</code> · tests: <code>bun run test</code> · this page: <code>node models/evals/reports/report-smart-stats.mjs</code></li></ul>
 <p>Nothing on this page loads from the internet. Point at a bar to see its exact numbers.</p></section>
 </main>
 <script>
@@ -477,4 +479,4 @@ const out = join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-smart-2026-0
 if (existsSync(out) && !existsSync(join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-smart-2026-09-25-v1.html')) && !readFileSync(out, 'utf8').includes('the full stats')) copyFileSync(out, join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-smart-2026-09-25-v1.html'));
 writeFileSync(out, html);
 console.log(`wrote ${out} (${(html.length / 1024).toFixed(0)} KB)`);
-if (args.includes('--desktop')) { const d = join(H, 'Desktop', 'bonsai-smart-2026-09-25.html'); copyFileSync(out, d); console.log(`copied to ${d}`); }
+toDocs(out);

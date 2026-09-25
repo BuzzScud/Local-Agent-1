@@ -15,6 +15,7 @@
     "eval": "node models/evals/run.mjs",
     "eval:words": "node models/evals/words/real.mjs",
     "eval:verify": "zsh models/evals/verify-tasks.sh",
+    "docs": "node docs/sync-docs.mjs",
     "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/bonsai",
     "install-cli": "bun run build && mkdir -p ~/.local/bin && cp dist/bonsai ~/.local/bin/bonsai && echo installed ~/.local/bin/bonsai",
     "test:binary": "bun run build && BONSAI_BIN=$PWD/dist/bonsai bun test ./terminal/test/app.test.mjs"

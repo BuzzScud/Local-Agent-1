@@ -1,11 +1,13 @@
 // Builds the report for the "smarter and faster" round of 2026-09-25:
 // what changed, the engine probes, every practice task before and after,
 // the ten harder tasks, the 28 real requests before and after.
-//   node models/evals/reports/report-smart.mjs [--dir models/bonsai-2-27b/results/night/2026-09-25-smart] [--desktop]
+//   node models/evals/reports/report-smart.mjs [--dir models/bonsai-2-27b/results/night/2026-09-25-smart]
+// (the first version of the round's page; report-smart-stats.mjs builds the current one)
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { toDocs } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
@@ -161,7 +163,7 @@ html += `<h2>Honest notes</h2><ul>
 <p class="dim">Results: <code>${esc(dir.replace(root + '/', ''))}</code> · practice checks: <code>zsh models/evals/verify-tasks.sh</code> · tests: <code>bun test</code></p>
 </main></body></html>`;
 
-const out = join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-smart-2026-09-25.html');
+const out = join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-smart-2026-09-25-v1.html');
 writeFileSync(out, html);
 console.log(`wrote ${out}`);
-if (args.includes('--desktop')) { const d = join(homedir(), 'Desktop', 'bonsai-smart-2026-09-25.html'); copyFileSync(out, d); console.log(`copied to ${d}`); }
+toDocs(out);

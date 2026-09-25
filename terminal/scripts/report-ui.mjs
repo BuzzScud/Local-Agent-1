@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+import { toDocs } from '../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -180,3 +181,4 @@ const html = `<!doctype html>
 const target = process.env.REPORT_OUT ?? join(root, 'docs', 'bonsai-code-report-2026-09-25.html');
 writeFileSync(target, html);
 console.log(`wrote ${target}`);
+if (!process.env.REPORT_OUT) toDocs(target);

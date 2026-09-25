@@ -5,9 +5,11 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { DOCS_DIR } from '../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const out = process.argv[2] ?? join(homedir(), 'Desktop', 'bonsai-terminal-ui-before-after.html');
+// Straight into the DOCS folder (the page is 1-2 MB of captured screens).
+const out = process.argv[2] ?? join(DOCS_DIR, 'bonsai-terminal-ui-before-after.html');
 const load = (p) => (existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : null);
 const SIZES = ['155x43', '80x24', '100x30'];
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

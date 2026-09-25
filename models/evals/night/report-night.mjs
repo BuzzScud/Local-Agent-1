@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { toDocs } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const dir = process.argv[2];
@@ -180,3 +181,4 @@ const html = `<!doctype html>
 const target = join(root, 'models', 'bonsai-2-27b', 'reports', `bonsai-night-${day}.html`);
 writeFileSync(target, html);
 console.log(`wrote ${target} (${problems.length} problems listed)`);
+toDocs(target);
