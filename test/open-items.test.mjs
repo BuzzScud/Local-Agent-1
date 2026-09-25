@@ -14,7 +14,9 @@ import { MODELS, DEFAULT_MODEL } from '../src/server/models.mjs';
 import { renameInCode, planRename } from '../src/flows/rename.mjs';
 import { outline, outlineText } from '../src/tools/outline.mjs';
 import { runCommand } from '../src/tools/run.mjs';
-import { sandboxAvailable } from '../src/tools/sandbox.mjs';
+import { sandboxAvailable, forgetPorts } from '../src/tools/sandbox.mjs';
+import { createServer } from 'node:net';
+import { spawn } from 'node:child_process';
 import { complete } from '../src/flows/llm.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
@@ -79,6 +81,25 @@ test.skipIf(!sandboxAvailable())('commands cannot read the home folder or write 
   // A command you type yourself (! in the app) is not fenced.
   expect((await runCommand('ls ~ >/dev/null && echo seen', { cwd, sandbox: false })).lines).toEqual(['seen']);
   rmSync(probe, { force: true });
+});
+
+test.skipIf(!sandboxAvailable())('commands cannot signal or connect to what already runs on this Mac', async () => {
+  const cwd = dir({});
+  // Stand-ins for a database and a desk server: a process and a listener started outside.
+  const other = spawn('/bin/sleep', ['60'], { stdio: 'ignore' });
+  const srv = createServer((c) => c.end('reached\n'));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  forgetPorts();
+  const port = srv.address().port;
+  const connect = `node -e "const s=require('net').connect(${port},'127.0.0.1');s.on('data',d=>{console.log(String(d).trim());s.end()});s.on('error',e=>console.log(e.code))"`;
+  expect((await runCommand(connect, { cwd })).lines[0]).toBe('EPERM');
+  expect((await runCommand(`/bin/kill -0 ${other.pid} && echo reached`, { cwd })).lines.join('\n')).toMatch(/not permitted/);
+  // Its own server and its own child processes work.
+  const own = `node -e "const n=require('net');const s=n.createServer(c=>c.end('own\\n')).listen(0,'127.0.0.1',()=>n.connect(s.address().port,'127.0.0.1').on('data',d=>{console.log(String(d).trim());process.exit(0)}))"`;
+  expect((await runCommand(own, { cwd })).lines).toEqual(['own']);
+  expect((await runCommand('sleep 30 & kill $! && echo stopped', { cwd })).lines).toEqual(['stopped']);
+  other.kill();
+  srv.close();
 });
 
 test('the word check also catches ~user and a quoted $HOME', () => {
