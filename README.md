@@ -66,14 +66,32 @@ piping the internet into a shell. Files outside the project folder are never cha
   - Guards: repeated steps, looping output, a tool call written as text or inside the
     thinking, and "announce then stop" (it is told to go ahead); a thinking budget; old
     output trimmed and the conversation summarized when memory fills.
+- An unclear request gets a question first (`src/flows/clarify.mjs`): a bare "fix the bug"
+  when nothing fails, or a lone word such as "api". The model can also ask mid-task with its
+  Ask tool, as often as it needs; you answer by number or type a line. The answer travels
+  with the request.
 - Focused paths (`src/flows`) handle most requests before the loop: a request is sorted
   (rules, or the model with a forced JSON reply) into question / rename / fix / change.
   - Rename: every whole-word use in every file, one diff, one question; no model.
-  - Fix: run the tests, find the file, up to 8 tries in a scratch copy, each told what the
-    last one got wrong; the first that passes is shown for your OK.
+  - Fix: run the tests, find the file, tries in a scratch copy, each told what the last one
+    got wrong; the first that passes is shown for your OK. When three tries on one function
+    fail, three wider tries follow as edit blocks over the whole file (a bug in two places).
   - Change: a test first (cross-checked against drafts, then approved by you), then tries.
+    Two tests and two drafts are written; more only when they disagree. A change no try can
+    pass falls through to the step-by-step way (often an existing test needs updating).
+  - Several files (an option used in three places, an argument and its callers): the files
+    are planned from the project map, one test, then drafts and tries as edit blocks across
+    all of them (`src/flows/multi.mjs`). Whole files are never rewritten.
   - Files over 80 lines: a try rewrites only the one function (the model still reads files
     up to 300 lines whole). If that never passes, it works step by step instead.
+- A project map (`src/tools/repomap.mjs`: each code file with its names, cached under
+  `~/.bonsai-code/maps`) is what the model chooses files from, and the first thing the
+  step-by-step loop sees in a project with four or more code files.
+- When the loop changes files and says it is done, one forced-JSON check compares the diff
+  with the request; a missing part sends it back once.
+- The server runs n-gram speculative decoding (no draft model): when an answer copies its
+  input, as a rewritten function does, runs of tokens are accepted at once (~30% faster
+  writing, same output).
   - `--no-flows` always works step by step.
 - The screen (`src/app`) is Ink (React for the terminal, the library Claude Code uses),
   in 256 colours for Apple Terminal.
@@ -82,8 +100,8 @@ piping the internet into a shell. Files outside the project folder are never cha
 
 ```
 bun src/cli.jsx            # run from source
-bun test                   # 70 tests: tools, permissions, agent, focused paths, and the app driven by keys in a real terminal
-node evals/run.mjs         # the practice coding tasks against the real model (thinking off and on)
+bun test                   # 120 tests: tools, permissions, agent, focused paths, asking, several files, and the app driven by keys in a real terminal
+node evals/run.mjs         # the 28 practice tasks against the real model (thinking off and on); zsh evals/verify-tasks.sh proves the checks
 node scripts/dev/27b-realuse.mjs <port> <pid>   # speed, memory and 4 real checks against a running server
 bun run install-cli        # build one file and put it at ~/.local/bin/bonsai
 ```

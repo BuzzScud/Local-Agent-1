@@ -1,0 +1,1 @@
+Add a symbol option (default '$') to the defaults in config.mjs, and use it in formatMoney in format.mjs and in the report header in report.mjs, so that buildReport(rows, { symbol: '€' }) starts with 'Total in €' and formats every amount with €. Add a test for it.

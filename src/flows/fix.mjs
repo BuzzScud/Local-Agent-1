@@ -9,6 +9,8 @@ import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, functionNames, functionAtLine, findFunc
 import { tryUntilPass } from './tries.mjs';
 import { fence, complete } from './llm.mjs';
 import { applyChange } from './apply.mjs';
+import { BLOCKS_FORMAT, parseBlocks, applyBlocks, guardChange } from './blocks.mjs';
+import { existsSync } from 'node:fs';
 
 const SYSTEM = 'You are an expert programmer fixing a bug. Reply with only the requested code in one fenced code block, nothing else.';
 
@@ -56,9 +58,17 @@ export async function fixFlow(ctx, task) {
     const want = unit ? `the complete corrected function ${unit.name}` : `the complete corrected ${target}`;
 
     plan.step(2);
-    const result = await tryUntilPass(ctx, {
+    const checkRun = async () => {
+      const run = await scratch.run(testCmd, { signal: ctx.signal });
+      const r = readResults(run.out, run.code);
+      const ok = r.ok && (baseRes.total === null || r.total === null || r.total >= baseRes.total);
+      return { ok, score: r.passed ?? 0, why: r.failing.length ? `still failing: ${r.failing.slice(0, 3).join('; ')}` : 'tests still fail', detail: assertionDetail(run.out), out: run.out, summary: `passes all ${r.total ?? ''} tests`.replace('  ', ' ') };
+    };
+    let result = await tryUntilPass(ctx, {
       label: 'Trying fixes',
       max: ctx.maxTries,
+      // Rewriting one function three times without success: the bug is probably wider (see below).
+      stopEarly: ({ attempt }) => Boolean(unit) && attempt >= 3,
       system: SYSTEM,
       prompt: ({ last }) => `The tests fail:\n${digest}\n\n${testText}\n\n${fence(showAll ? target : `${target} (function ${unit.name})`, shown)}${focus}\n\nTask: ${task}\nFix the bug in ${target} (do not change the tests). Reply with ${want}.${last ? `\n\nYour previous try was wrong. It was:\n\`\`\`\n${last.code.slice(0, 2500)}\n\`\`\`\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
       apply: (code) => {
@@ -66,17 +76,30 @@ export async function fixFlow(ctx, task) {
         scratch.write(target, text);
         return { files: [{ abs: join(scratch.dir, target), text }], undo: () => scratch.restore(target), text };
       },
-      check: async () => {
-        const run = await scratch.run(testCmd, { signal: ctx.signal });
-        const r = readResults(run.out, run.code);
-        const ok = r.ok && (baseRes.total === null || r.total === null || r.total >= baseRes.total);
-        return { ok, score: r.passed ?? 0, why: r.failing.length ? `still failing: ${r.failing.slice(0, 3).join('; ')}` : 'tests still fail', detail: assertionDetail(run.out), out: run.out, summary: `passes all ${r.total ?? ''} tests`.replace('  ', ' ') };
-      },
+      check: checkRun,
     });
-    if (!result.ok && unit) {
-      // Rewriting only one function was not enough: the fix probably needs
-      // more than one place, which the step-by-step way can do.
-      return { handled: false, why: `none of the ${result.marks.length} tries that changed only ${unit.name} made the tests pass${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
+    // Wider: the bug may sit in more than one place (two functions, or two
+    // files). Tries as edit blocks over the whole file, still in the scratch copy.
+    let texts = null;
+    if (!result.ok && lineCount <= SHOW_WHOLE_MAX && !ctx.signal?.aborted) {
+      const wider = await tryUntilPass(ctx, {
+        label: 'Trying wider fixes', max: 3, system: 'You are an expert programmer fixing a bug. Reply with edit blocks only, nothing else.', maxTokens: 3000, raw: true,
+        prompt: ({ last }) => `The tests fail:\n${digest}\n\n${testText}\n\n${fence(target, original)}\n\nTask: ${task}\nFix the bug in ${target} (do not change the tests). It may need changes in more than one place. ${BLOCKS_FORMAT}${last ? `\n\nYour previous try was wrong. It was:\n${last.code.slice(0, 2500)}\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
+        apply: (reply) => {
+          const r = applyBlocks(parseBlocks(reply), (rel) => scratch.read(rel));
+          if (r.error) return { error: r.error };
+          if ([...r.files.keys()].some((rel) => isTestFile(rel))) return { error: 'the tests may not be changed' };
+          for (const [rel, text] of r.files) { const g = guardChange(rel, scratch.read(rel), text, task); if (g) return { error: g }; }
+          for (const [rel, text] of r.files) scratch.write(rel, text);
+          return { files: [...r.files].map(([rel, text]) => ({ abs: scratch.path(rel), text })), texts: r.files, undo: () => { for (const rel of r.files.keys()) scratch.restore(rel); } };
+        },
+        check: checkRun,
+      });
+      if (wider.ok) { result = wider; texts = wider.applied.texts; }
+      else if (unit) {
+        // Neither one function nor edit blocks over the file: the step-by-step way may still do it.
+        return { handled: false, why: `none of the ${result.marks.length} tries that changed only ${unit.name}, nor ${wider.marks.length} wider tries, made the tests pass${wider.best?.why ? ` (the closest: ${wider.best.why})` : ''}` };
+      }
     }
     if (!result.ok) {
       ctx.note(`None of the ${result.marks.length} tries made the tests pass${result.best?.why ? ` (the closest: ${result.best.why})` : ''}. Nothing was changed. Try describing the bug in more detail.`, 'warn');
@@ -84,12 +107,15 @@ export async function fixFlow(ctx, task) {
     }
 
     plan.step(3);
-    const after = merge(result.code);
-    const applied = await applyChange(ctx, [{ rel: target, before: original, after }]);
+    const changes = texts
+      ? [...texts].map(([rel, after]) => ({ rel, before: existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null, after })).filter((c) => c.before !== c.after)
+      : [{ rel: target, before: original, after: merge(result.code) }];
+    const applied = await applyChange(ctx, changes);
     if (!applied.ok) return { handled: true, done: false, declined: true, summary: 'You said no to the fix; nothing was changed.' };
     const final = await ctx.runReal(testCmd);
     plan.done();
-    return { handled: true, done: final.ok, summary: `${ctx.describe ? await ctx.describe(target, original, after) : ''}Fixed ${target}${final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above'}.` };
+    const first = changes[0] ?? { rel: target, before: original, after: original };
+    return { handled: true, done: final.ok, summary: `${ctx.describe ? await ctx.describe(first.rel, first.before ?? '', first.after) : ''}Fixed ${changes.map((c) => c.rel).join(', ') || target}${final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above'}.` };
   } finally {
     scratch.dispose();
   }

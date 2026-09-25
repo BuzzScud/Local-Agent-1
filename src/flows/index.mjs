@@ -10,6 +10,8 @@ import { complete } from './llm.mjs';
 import { planRename, applyRename, leftAloneNote } from './rename.mjs';
 import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
+import { planFiles, multiFlow } from './multi.mjs';
+import { projectFiles } from './localize.mjs';
 
 const ID = '[`\'"]?([A-Za-z_$][\\w$]*)[`\'"]?';
 // A whole request that is one file operation: "delete trades.json",
@@ -32,7 +34,7 @@ export function routeByRules(text) {
   // Greetings and thanks go straight to the conversation: asking the model to
   // sort them cost a request, and with a big model a re-read of its instructions.
   if (isSmallTalk(t)) return { kind: 'question', chat: true };
-  if (/\b(don'?t|do not|without) (change|chang|edit|touch)/i.test(t)) return { kind: 'question' };
+  if (/\b(don'?t|do not|without|no)\s+(change|chang|edit|touch|modif)|\b(change|edit|touch|modify)\s+nothing\b|\bno (code )?changes?\b|\bjust (explain|tell|describe|show)\b/i.test(t)) return { kind: 'question' };
   // Deleting, moving, renaming or copying a file is a file operation, not a
   // code change: it goes step by step, where the command asks you first.
   // ("delete trades.json" once became code that deleted the file on every run.)
@@ -54,7 +56,7 @@ export function routeByRules(text) {
   // what went wrong?" + the log) is still a question, whatever the log says.
   const first = t.split('\n')[0];
   if (first !== t && /\?\s*$/.test(first) && !/\b(fix|change|add|update|make|solve|repair)\b/i.test(first)) return { kind: 'question' };
-  if (/^(what|which|where|why|how|who|when|explain|describe|show me|list|tell me|does|is|are|summari[sz]e)\b/i.test(t) && !asks) return { kind: 'question' };
+  if (/^(?:(?:just|please|can you|could you|hey|hi|ok)[,\s]+)?(what|which|where|why|how|who|when|explain|describe|show me|list|tell me|does|is|are|summari[sz]e)\b/i.test(t) && !asks) return { kind: 'question' };
   if (/\b(fix|failing|fails|broken|bug|crash(es)?|doesn'?t work|does not work|wrong result)\b/i.test(t)) return { kind: 'fix' };
   if (/\b(add|implement|create|make|change|update|support|remove|delete|refactor|write|rename)\b/i.test(t)) return { kind: 'change' };
   return null;
@@ -124,19 +126,30 @@ export async function runFlows(ctx, text) {
     if (out.handled) return out;
     if (out.next === 'change' || !ctx.testCmd) {
       ctx.note(ctx.testCmd ? 'The tests pass today, so first a test that shows the problem.' : 'This project has no tests, so first a small check that shows the problem.', 'dim');
-      const c = await changeFlow(ctx, text);
-      if (c.handled) return c;
-      ctx.note(`${c.why}; working step by step instead.`, 'dim');
-      return null;
+      return changeOrMulti(ctx, text);
     }
     ctx.note(`${out.why}; working step by step instead.`, 'dim');
     return null;
   }
-  if (r.kind === 'change') {
-    const out = await changeFlow(ctx, text);
-    if (out.handled) return out;
-    ctx.note(`${out.why}; working step by step instead.`, 'dim');
-    return null;
+  if (r.kind === 'change') return changeOrMulti(ctx, text);
+  return null;
+}
+
+// A change: the files it touches are planned first (named in the request,
+// or the model's pick from the project map). Two or more → the multi-file
+// path; one → the change path, which is told the file.
+async function changeOrMulti(ctx, text) {
+  let targets = [];
+  try { targets = await planFiles(ctx, text, projectFiles(ctx.cwd)); } catch (e) { if (ctx.signal?.aborted) throw e; }
+  if (targets.length >= 2) {
+    const m = await multiFlow(ctx, text, targets);
+    if (m.handled) return m;
+    // Tries that failed against the test would fail the same way in one file: straight to step by step.
+    if (m.tried) { ctx.note(`${m.why}; working step by step instead.`, 'dim'); return null; }
+    ctx.note(`${m.why}; trying the main file on its own.`, 'dim');
   }
+  const out = await changeFlow(ctx, text, { hint: targets[0] });
+  if (out.handled) return out;
+  ctx.note(`${out.why}; working step by step instead.`, 'dim');
   return null;
 }

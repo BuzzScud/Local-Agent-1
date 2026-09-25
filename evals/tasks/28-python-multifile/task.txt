@@ -1,0 +1,1 @@
+Add a fee field to Trade in models.py (default 0.0) and include fee in to_dict in serialize.py; value must be qty * price minus the fee. Add a test for it.

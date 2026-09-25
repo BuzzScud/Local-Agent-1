@@ -1,0 +1,1 @@
+applyDiscount in price.mjs should take a third argument, cap (default 50): a pct above the cap is limited to the cap. cartTotal in cart.mjs must pass a cap of 30 and invoiceLine in invoice.mjs a cap of 10. Add tests for the cap.

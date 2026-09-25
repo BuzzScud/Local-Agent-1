@@ -1,0 +1,1 @@
+The test command is decided by testCommand(cwd) in src/agent/prompt.mjs. For a Python project (test_*.py files, pytest.ini or pyproject.toml) it returns "pytest".

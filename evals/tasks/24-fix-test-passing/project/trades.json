@@ -1,0 +1,5 @@
+[
+  { "symbol": "NQ", "side": "buy", "qty": 1, "price": 24812.5 },
+  { "symbol": "ES", "side": "sell", "qty": 2, "price": 6690.25 },
+  { "symbol": "GC", "side": "buy", "qty": 1, "price": 3771.4 }
+]

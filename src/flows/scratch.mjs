@@ -26,6 +26,7 @@ export class Scratch {
   }
 
   read(rel) { const p = join(this.dir, rel); return existsSync(p) ? readFileSync(p, 'utf8') : null; }
+  path(rel) { return join(this.dir, rel); }
 
   write(rel, text) {
     if (!this.saved.has(rel)) this.saved.set(rel, this.read(rel));

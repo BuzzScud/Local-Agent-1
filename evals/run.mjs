@@ -1,6 +1,6 @@
 // Plays the practice tasks against the real model and checks each result.
 //   node evals/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM]
-import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,21 +49,25 @@ try {
       writeFileSync(join(dir, 'started'), '');
       spawnSync('sleep', ['1']);
       const prompt = readFileSync(join(here, 'tasks', task, 'task.txt'), 'utf8').trim();
+      // answers.json: [{ match: regex, reply }] — what "the user" says to Bonsai's questions.
+      const answerRows = existsSync(join(here, 'tasks', task, 'answers.json')) ? JSON.parse(readFileSync(join(here, 'tasks', task, 'answers.json'), 'utf8')) : [];
+      const answers = (q) => { const hit = answerRows.find((r) => new RegExp(r.match, 'i').test(q)); process.stdout.write(`    ? ${q}\n      → ${hit ? hit.reply : '(no answer given)'}\n`); return hit ? hit.reply : 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.'; };
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, signal: ac.signal, slots, warm: !!slots,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
       clearTimeout(timer);
       writeFileSync(join(dir, 'answer.txt'), run.finalText ?? '');
+      writeFileSync(join(dir, 'asked.txt'), (run.asked ?? []).map((a) => a.question).join('\n'));
       writeFileSync(join(tdir, `${task}-think-${thinking ? 'on' : 'off'}${reps > 1 ? `-rep${rep}` : ''}.json`), JSON.stringify({ task, thinking, reason: run.reason, messages: run.messages ?? [], log: run.log ?? [] }, null, 1));
       const check = spawnSync('/bin/zsh', [join(here, 'tasks', task, 'check.sh')], { cwd: work, encoding: 'utf8', timeout: 60_000 });
       const pass = check.status === 0;
       const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? 'step by step';
       const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
-      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
+      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
       results.push(row);
       console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps  ${row.toolErrors} errors  ${row.why}`);
       rmSync(dir, { recursive: true, force: true });

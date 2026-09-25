@@ -30,6 +30,7 @@ test('requests are sorted into paths', () => {
   expect(routeByRules('add a --json flag to export.mjs').kind).toBe('change');
   expect(routeByRules("Which port does it use? Don't change any files.").kind).toBe('question');
   expect(routeByRules('why is it slow?').kind).toBe('question');
+  for (const q of ['Just explain what the API in export.mjs does; change nothing.', 'explain the export, no code changes', 'tell me how main works, do not modify anything', 'Please describe the tests']) expect([q, routeByRules(q).kind]).toEqual([q, 'question']);
   // greetings skip the model (asking it to sort them cost a re-read of its instructions)
   expect(routeByRules('hello').kind).toBe('question');
   expect(routeByRules('Thanks!').kind).toBe('question');
@@ -101,15 +102,31 @@ test('change: tests first, drafts cross-checked, you approve the test, then the 
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
   const bad = '```js\n' + exportWith('') + '```';
-  const replies = [{ text: jsonTest }, { text: jsonTest }, { text: jsonTest }, { text: bad }, { text: good }, { text: bad }, { text: good }, { text: 'Adds a --json flag.' }];
-  const { reason, events } = await run(cwd, 'add a --json flag to export.mjs that prints the rows as JSON', replies);
+  // Round one: two tests, two drafts (one wrong): they disagree, so one more test and two more drafts.
+  const replies = [{ text: jsonTest }, { text: jsonTest }, { text: bad }, { text: good }, { text: jsonTest }, { text: bad }, { text: good }, { text: 'Adds a --json flag.' }];
+  const { reason, events, fake } = await run(cwd, 'add a --json flag to export.mjs that prints the rows as JSON', replies);
   expect(reason).toBe('done');
   expect(events.filter((e) => e.type === 'ask').map((e) => e.name)).toEqual(['Test', 'Edit']);
   expect(events.find((e) => e.type === 'ask' && e.name === 'Test').req.prepared.after).toContain("'--json prints the rows'");
   const checked = events.find((e) => e.type === 'tries-done' && e.label === 'Checked tests against drafts');
-  expect(checked.summary).toContain('passed by 2');
+  expect(checked.summary).toBe('3 tests, 4 drafts; the chosen test is passed by 2');
+  expect(fake.remaining()).toBe(0);
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
   expect(readFileSync(join(cwd, 'export.test.mjs'), 'utf8')).toContain('--json prints the rows');
+});
+
+test('change: when two tests and two drafts agree, nothing more is written', async () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project');
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
+  const replies = [{ text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }, { text: 'never used' }];
+  const { reason, events, fake } = await run(cwd, 'add a --json flag to export.mjs that prints the rows as JSON', replies);
+  expect(reason).toBe('done');
+  const dones = events.filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${e.marks.join('')}`);
+  expect(dones).toEqual(['Writing tests: ✓✓', 'Drafting versions: ✓✓', 'Checked tests against drafts: ✓✓']);
+  expect(events.find((e) => e.type === 'tries-done' && e.label === 'Checked tests against drafts').summary).toBe('2 tests, 2 drafts; the chosen test is passed by 2');
+  expect(fake.remaining()).toBe(2);
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
 });
 
 test('change: not approving the test stops before any change', async () => {
@@ -162,9 +179,10 @@ test('fix in a file over 80 lines: a whole-file reply is used as the whole file,
 
 test('fix in a file over 80 lines: when changing only the function never passes, it works step by step instead', async () => {
   const cwd = bigCopy();
-  const { events } = await run(cwd, 'The tests fail. Fix it.', [{ text: '{"function": "median"}' }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: 'I looked; it needs more than median.' }]);
-  expect(events.find((e) => e.type === 'tries-done').marks).toEqual(['✗', '✗', '✗', '✗']);
-  expect(events.some((e) => e.type === 'note' && /changed only median.*working step by step instead/.test(e.text))).toBe(true);
+  // Three function-only tries, then three wider tries (edit blocks; a plain function is not one), then step by step.
+  const { events } = await run(cwd, 'The tests fail. Fix it.', [{ text: '{"function": "median"}' }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: 'I looked; it needs more than median.' }]);
+  expect(events.filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${e.marks.join('')}`)).toEqual(['Trying fixes: ✗✗✗', 'Trying wider fixes: ✗✗✗']);
+  expect(events.some((e) => e.type === 'note' && /changed only median, nor 3 wider tries.*working step by step instead/.test(e.text))).toBe(true);
   expect(events.some((e) => e.type === 'ask')).toBe(false);
   expect(readFileSync(join(cwd, 'stats.mjs'), 'utf8')).toContain('return sorted[mid];');
 });

@@ -1,0 +1,1 @@
+formatMoney in money.mjs must put the minus sign before the currency symbol for negative amounts: formatMoney(-1234.5) is '-$1,234.50' and formatMoney(-0.5) is '-$0.50'. Positive amounts and zero stay as they are today. Add a test for negative amounts.

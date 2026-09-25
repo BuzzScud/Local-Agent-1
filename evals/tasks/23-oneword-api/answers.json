@@ -1,0 +1,6 @@
+[
+  {
+    "match": ".",
+    "reply": "Add a GET /health route to server.mjs that returns status 200 with the body { ok: true }, and add a test for it."
+  }
+]
