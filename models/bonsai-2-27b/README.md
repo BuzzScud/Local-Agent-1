@@ -1,18 +1,41 @@
 # Bonsai 2 27B
 
 Prism ML's ternary Bonsai 2 27B, `Ternary-Bonsai-2-27B-PQ2_0.gguf` (7.21 GB, sha256
-`3907dc16…62ec1`), run with Prism's llama.cpp build `prism-b10735`. The model Bonsai
-Code uses today. Settings: [`model.mjs`](model.mjs).
+`3907dc16…62ec1`), run with Prism's llama.cpp built from source with our Metal patch
+([`models/runtime/engine`](../runtime/engine/README.md)), and a 1.14 GB helper that guesses
+the next word. The model Bonsai Code uses today. Settings: [`model.mjs`](model.mjs).
 
 ## Measured on the M4 (16 GB)
 
 | | |
 |---|---|
-| Writing | 10.8 tokens/s (llama-bench); 10–11 on rewrites with n-gram speculation, 8.2 without under load |
+| Writing | 10.8 tokens/s one word at a time (llama-bench); with the helper 13.8 on code, 13.9 on a rewrite, 10.6 on prose (was 9.6, 10.0, 9.8 with n-gram guessing) |
 | Reading | 58–62 tokens/s |
-| Memory | 9.3–9.8 GB at 32k context with two slots (7.21 file + cache + checkpoints); drops to 16k when the Mac is short |
+| Memory | ~11.7 GB at 32k context with two slots and the helper (7.21 + 1.14 files, 3.4 working); 32k needs 11.9 GB free, else 16k. Without the helper (`BONSAI_HELPER=off`) 9.3–9.8 GB |
 | Start | first start ~90 s; later starts restore the saved warm-up in 0.1 s, a first reply in ~10 s |
 | Effort | off by default: medium and high passed the same tasks and only cost time |
+
+## Guessing ahead (25 Sep 2026)
+
+The helper is DFlash2 re-fitted to this model (`naklitechie/Qwen3.8-27B-DFlash2-ternary-bonsai2`,
+Q4_K_M, Apache 2.0). It reads the 27B's hidden states and guesses the next word; the 27B checks
+the guess in the same pass as its own next word and keeps it when it agrees, so the text is
+still the 27B's. One guess per check, measured at temperature 0.7 (tokens/s):
+
+| Setup | Code | Rewrite | Prose | Guesses kept (code) |
+|---|---|---|---|---|
+| No guessing | 9.6 | 9.6 | 9.5 | |
+| n-gram guessing (before) | 9.6 | 10.0 | 9.8 | 37% |
+| **Helper, 1 guess (now)** | **13.8** | **13.9** | **10.6** | 96% |
+| Helper, 3 guesses | 14.1 | 15.5 | 9.0 | 89% |
+| Helper, 7 guesses | 12.0 | 14.0 | 4.5 | 71% |
+
+It pays because of our engine patch: checking 2 words now costs 1.16× one word (2.48× in
+Prism's release). More guesses win on code and lose on prose, where wrong guesses make each
+check longer. The helper needs `-ub 128`: at the default 512 its working space (1.5 GB) ran
+the GPU out of memory. On the 28 practice tasks (one run each, same code): 2,277 → 1,974 s,
+27 → 28 passing; across the run the server wrote 10.6 → 13.7 tokens/s and read 52 either way.
+Details: `bonsai-faster-2026-09-25.html` in the DOCS folder.
 
 ## Effort levels
 

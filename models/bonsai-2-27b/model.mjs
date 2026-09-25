@@ -28,7 +28,28 @@ export default {
   // read-in instructions. Each slot has its own running state and checkpoints.
   slots: 2,
   // n-gram speculative decoding (see serverArgs): lookup 12 tokens, draft up to 48.
+  // Used only when the helper below is missing.
   spec: { type: 'ngram-simple', n: 12, m: 48 },
+  // The guessing helper: DFlash2 re-fitted to this ternary model (Apache 2.0). It
+  // guesses the next words from the model's own hidden states; the model checks
+  // them in one pass and keeps what it agrees with, so the output is the model's.
+  // Needs our engine build (registry ENGINE): Prism's release checks 2-8 words as
+  // slowly as writing them one by one on the M4. Measured 2026-09-25 on the M4,
+  // temperature 0.7 (words/s, plain → helper): code 9.6 → 13.8, rewrite 9.6 → 13.9,
+  // prose 9.5 → 10.6 with 1 guess per check (3 guesses: prose 9.0; 7: code 12.0,
+  // prose 4.5). computeBytes: its working space at -ub 128 (372 MiB; 1.5 GB at the
+  // default 512, which does not fit beside 32k) plus its own cache; with two slots at
+  // 32k the server's footprint went 2.38 → 3.39 GB and the helper file adds 1.14.
+  draft: {
+    file: 'Qwen3.8-27B-DFlash2-r3-Q4_K_M.gguf',
+    url: 'https://huggingface.co/naklitechie/Qwen3.8-27B-DFlash2-ternary-bonsai2/resolve/main/Qwen3.8-27B-DFlash2-r3-Q4_K_M.gguf',
+    sha256: '6c11956fde5f52867e3255991b30405ae931d205a35caf3fc87a2c3865aa6530',
+    bytes: 1_143_006_912,
+    type: 'draft-dflash',
+    nMax: 1,
+    ubatch: 128,
+    computeBytes: 0.7e9,
+  },
   // Measured 2026-09-24 on the M4: 10.4 tokens/s writing, 61 reading.
   // Thinking starts off; /think on turns on PrismML's "medium" effort (about
   // 200 tokens on a small task). "xhigh", the model's default, can think for

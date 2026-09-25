@@ -10,7 +10,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import { SLOT_DIR, thinkingKwargs } from '../registry.mjs';
+import { SLOT_DIR, ENGINE, thinkingKwargs } from '../registry.mjs';
+import { hasDraft } from './server.mjs';
 
 export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a line)
 
@@ -43,7 +44,10 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     const cut = (sessionMark ? upToUser.indexOf(sessionMark) : -1);
     if (prompt.indexOf(MARK) < 0 || cut < 0) throw new Error('prompt layout not recognised');
     const shared = upToUser.slice(0, cut);
-    const file = `warm-${createHash('sha256').update(`${model.file}\0${shared}`).digest('hex').slice(0, 16)}.bin`;
+    // A saved state belongs to one engine build and one helper setup: a state
+    // saved by another build is read again instead of restored.
+    const helper = hasDraft(model) ? model.draft.file : '';
+    const file = `warm-${createHash('sha256').update(`${model.file}\0${ENGINE.tag}\0${helper}\0${shared}`).digest('hex').slice(0, 16)}.bin`;
     let restored = false;
     if (existsSync(join(SLOT_DIR, file))) {
       onPhase('restoring');

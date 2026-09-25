@@ -1,16 +1,13 @@
-// `bonsai setup`: downloads what Bonsai Code needs into ~/.bonsai-code —
-// Prism ML's llama.cpp build (pinned) and the model — and checks the model's
-// SHA-256. Safe to run again: finished files are skipped.
-import { createWriteStream, existsSync, mkdirSync, renameSync, statSync, rmSync } from 'node:fs';
+// `bonsai setup`: gets what Bonsai Code needs into ~/.bonsai-code — the model
+// server (Prism ML's llama.cpp built from source with our Metal patch, see
+// models/runtime/engine), the model and its guessing helper — and checks the
+// files' SHA-256. Safe to run again: finished parts are skipped.
+import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
-import { HOME, MODELS, DEFAULT_MODEL, MODELS_DIR, SERVER_BIN, modelPath } from '../registry.mjs';
+import { HOME, ENGINE, MODELS, DEFAULT_MODEL, MODELS_DIR, SERVER_BIN, modelPath, draftPath } from '../registry.mjs';
+import { buildEngine } from './engine/build.mjs';
 
-export const RUNTIME = {
-  tag: 'prism-b10735-842b188',
-  url: 'https://github.com/PrismML-Eng/llama.cpp/releases/download/prism-b10735-842b188/llama-prism-b10735-842b188-bin-macos-arm64.tar.gz',
-};
+export const RUNTIME = ENGINE;
 
 async function download(url, file, say) {
   const res = await fetch(url);
@@ -37,29 +34,28 @@ async function sha256(file) {
   return h.digest('hex');
 }
 
-export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => process.stdout.write(sameLine ? `\r${s}   ` : `${s}\n`) } = {}) {
-  mkdirSync(join(HOME, 'bin'), { recursive: true });
-  mkdirSync(MODELS_DIR, { recursive: true });
-  if (existsSync(SERVER_BIN)) say(`✓ runtime already here (${SERVER_BIN})`);
+// Downloads a file unless it is already here, then checks its SHA-256.
+async function fetchChecked({ name, url, file, bytes, sha }, say) {
+  if (existsSync(file) && statSync(file).size === bytes) say(`✓ ${name} already here`);
   else {
-    say(`Downloading Prism's llama.cpp (${RUNTIME.tag})…`);
-    const tgz = join(HOME, 'runtime.tar.gz');
-    await download(RUNTIME.url, tgz, say);
-    const r = spawnSync('tar', ['-xzf', tgz, '-C', join(HOME, 'bin'), '--strip-components=1']);
-    rmSync(tgz, { force: true });
-    if (r.status !== 0) throw new Error('could not unpack the runtime');
-    spawnSync('xattr', ['-dr', 'com.apple.quarantine', join(HOME, 'bin')]);
-    say('✓ runtime ready');
+    say(`Downloading ${name} (${(bytes / 1e9).toFixed(2)} GB)…`);
+    await download(url, file, say);
+  }
+  say(`Checking ${name}…`);
+  const sum = await sha256(file);
+  if (sum !== sha) throw new Error(`${name} is damaged (SHA-256 ${sum.slice(0, 12)}…); delete ${file} and run bonsai setup again`);
+}
+
+export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => process.stdout.write(sameLine ? `\r${s}   ` : `${s}\n`) } = {}) {
+  mkdirSync(MODELS_DIR, { recursive: true });
+  if (existsSync(SERVER_BIN)) say(`✓ model server already built (${ENGINE.tag})`);
+  else {
+    say(`Building the model server (${ENGINE.tag}, a few minutes)…`);
+    await buildEngine({ ...ENGINE, home: HOME, say });
+    say('✓ model server built');
   }
   const m = MODELS[modelId];
-  const file = modelPath(m);
-  if (existsSync(file) && statSync(file).size === m.bytes) say(`✓ ${m.name} already here`);
-  else {
-    say(`Downloading ${m.name} (${(m.bytes / 1e9).toFixed(2)} GB)…`);
-    await download(m.url, file, say);
-  }
-  say('Checking the model file…');
-  const sum = await sha256(file);
-  if (sum !== m.sha256) throw new Error(`the model file is damaged (SHA-256 ${sum.slice(0, 12)}…); delete ${file} and run bonsai setup again`);
-  say('✓ model checked. Run: bonsai');
+  await fetchChecked({ name: m.name, url: m.url, file: modelPath(m), bytes: m.bytes, sha: m.sha256 }, say);
+  if (m.draft) await fetchChecked({ name: `${m.name}'s guessing helper`, url: m.draft.url, file: draftPath(m), bytes: m.draft.bytes, sha: m.draft.sha256 }, say);
+  say('✓ all checked. Run: bonsai');
 }

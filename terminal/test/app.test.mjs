@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { demoReplies } from './demo-script.mjs';
 import { runInPty } from './pty.mjs';
+import { ENGINE } from '../../models/index.mjs';
 
 const T = 60_000;
 function setup() {
@@ -215,9 +216,9 @@ test('chat style: the prompt box starts at the bottom of the window', async () =
 test('start-up says what it waits for; a message typed meanwhile is sent when ready; the next start restores', async () => {
   const { cwd, env, base } = setup();
   const home = join(base, 'home');
-  mkdirSync(join(home, 'bin'), { recursive: true });
+  mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
-  symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'bin', 'llama-server'));
+  symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
   writeFileSync(join(home, 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
   const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
     { wait: 'reading its instructions', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },

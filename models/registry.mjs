@@ -4,7 +4,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export const HOME = process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code');
-export const SERVER_BIN = join(HOME, 'bin', 'llama-server');
+// The model server: Prism ML's llama.cpp built from source with our Metal patch
+// (models/runtime/engine: it checks 2-8 guessed words in one pass). Each build
+// has its own folder, so a new one never replaces the one in use.
+export const ENGINE = { tag: 'prism-adfffbe-pq2mc1', commit: 'adfffbe41b2cabcd51fff326ab045662265062bb' };
+export const SERVER_BIN = join(HOME, 'engine', ENGINE.tag, 'llama-server');
 export const MODELS_DIR = join(HOME, 'models');
 export const LOG_DIR = join(HOME, 'logs');
 export const SLOT_DIR = join(HOME, 'slots'); // saved warm-ups (models/runtime/warmup.mjs)
@@ -36,6 +40,8 @@ export function thinkingKwargs(model, thinking, effort) {
 }
 
 export const modelPath = (m) => join(MODELS_DIR, m.file);
+// The model's guessing helper (speculative decoding), when it has one.
+export const draftPath = (m) => (m?.draft ? join(MODELS_DIR, m.draft.file) : null);
 
 // This model's folder in the repo: its README, reports/ and results/.
 export const modelFolder = (m) => new URL(`./${m.folder}/`, import.meta.url).pathname;

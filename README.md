@@ -37,7 +37,7 @@ bonsai-code/
 ├─ models/              part 2 · the models we use and test
 │  ├─ index.mjs         the one entry the terminal imports
 │  ├─ registry.mjs      the list of models and where their files live
-│  ├─ runtime/          llama-server, memory, warm-up, bonsai setup
+│  ├─ runtime/          llama-server, memory, warm-up, bonsai setup; engine/ = our build of it
 │  ├─ bonsai-2-27b/     the model: settings and README (results/ stays local)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), reports, tools, dev
 │  └─ test/             unit tests of the models part
@@ -60,8 +60,10 @@ bun run docs               # mirror ~/Desktop/bonsai-code DOCS into docs/ (run b
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 
-Setup on a new Mac: `bun install`, then `bonsai setup` downloads Prism's
-llama.cpp build and the model into `~/.bonsai-code`.
+Setup on a new Mac: `bun install`, then `bonsai setup` builds the model server (Prism's
+llama.cpp with our Metal patch, a few minutes; needs cmake and Apple's command line
+tools, see [`models/runtime/engine`](models/runtime/engine/README.md)) and downloads the model
+and its guessing helper into `~/.bonsai-code`. `BONSAI_HELPER=off` runs without the helper.
 
 ## License
 

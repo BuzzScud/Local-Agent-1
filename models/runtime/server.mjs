@@ -6,7 +6,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, 
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { SERVER_BIN, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath } from '../registry.mjs';
+import { SERVER_BIN, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath } from '../registry.mjs';
 
 // One small file per running server: which process owns it, on which port.
 const REG_DIR = join(HOME, 'servers');
@@ -40,7 +40,11 @@ export function scanServers() {
   return live;
 }
 
-export function serverArgs(model, { ctx, port }) {
+// Whether the model's guessing helper is used: it is on this Mac (bonsai setup
+// downloads it) and not switched off with BONSAI_HELPER=off.
+export const hasDraft = (model) => Boolean(model?.draft && process.env.BONSAI_HELPER !== 'off' && existsSync(draftPath(model)));
+
+export function serverArgs(model, { ctx, port, draft = false }) {
   return [
     '-m', modelPath(model),
     '--host', '127.0.0.1', '--port', String(port),
@@ -54,12 +58,18 @@ export function serverArgs(model, { ctx, port }) {
     // the thinking and the model has to act.
     '--reasoning-budget', String(model.thinkingBudget ?? 2048),
     '--reasoning-budget-message', ' I have thought enough. Now I act on it.',
-    // Speculative decoding from n-grams already in the prompt (no draft
-    // model): when the answer copies its input, as a rewritten function
-    // does, runs of tokens are accepted at once. Measured 2026-09-25 on a
-    // rewrite of export.mjs: 8.2 → 10–11 tokens/s written, same output;
-    // ngram-mod gave 9.2. The output is exact either way.
-    ...(model.spec ? ['--spec-type', model.spec.type, '--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
+    // Speculative decoding. With the helper (model.draft): it guesses the next
+    // words and the model checks them all in one pass (see draft in model.mjs).
+    // Its working space is sized by the micro-batch, so -ub is set with it.
+    ...(draft && model.draft ? [
+      '-md', draftPath(model), '--spec-type', model.draft.type, '--spec-draft-n-max', String(model.draft.nMax),
+      '-ngld', '99', '-ctkd', 'q8_0', '-ctvd', 'q8_0', '-ub', String(model.draft.ubatch),
+    ]
+    // Without it: n-grams already in the prompt. When the answer copies its
+    // input, as a rewritten function does, runs of tokens are accepted at
+    // once. Measured 2026-09-25 on a rewrite of export.mjs: 8.2 → 10–11
+    // tokens/s written, same output; ngram-mod gave 9.2.
+    : model.spec ? ['--spec-type', model.spec.type, '--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
     // Cap the saved states (see checkpoints in models.mjs).
     '--ctx-checkpoints', String(model.checkpoints ?? 3),
     '--cache-ram', '0',
@@ -90,8 +100,8 @@ export class ModelServer extends EventEmitter {
       try {
         const r = await fetch(`http://127.0.0.1:${same.port}/health`);
         if (r.ok) {
-          Object.assign(this, { port: same.port, ctx: same.ctx, shared: same, child: null });
-          return { port: same.port, ctx: same.ctx, shared: true, slots: same.slots ?? 1 };
+          Object.assign(this, { port: same.port, ctx: same.ctx, shared: same, child: null, draft: Boolean(same.draft) });
+          return { port: same.port, ctx: same.ctx, shared: true, slots: same.slots ?? 1, draft: Boolean(same.draft) };
         }
       } catch {}
     }
@@ -105,9 +115,11 @@ export class ModelServer extends EventEmitter {
     mkdirSync(SLOT_DIR, { recursive: true });
     const log = createWriteStream(join(LOG_DIR, 'server.log'), { flags: 'a' });
     log.write(`\n=== ${new Date().toISOString()} start ${this.model.file} ctx=${ctx} port=${port}\n`);
-    const child = spawn(SERVER_BIN, serverArgs(this.model, { ctx, port }), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const draft = hasDraft(this.model);
+    this.draft = draft;
+    const child = spawn(SERVER_BIN, serverArgs(this.model, { ctx, port, draft }), { stdio: ['ignore', 'pipe', 'pipe'] });
     this.child = child;
-    writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, model: this.model.file, started: new Date().toISOString() }));
+    writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString() }));
     child.stdout.pipe(log, { end: false });
     child.stderr.pipe(log, { end: false });
     child.on('exit', (code, signal) => {
@@ -117,7 +129,7 @@ export class ModelServer extends EventEmitter {
       if (!this.stopping) this.emit('crash', { code, signal });
     });
     await this.waitHealthy(child);
-    return { port, ctx, slots: this.model.slots ?? 1 };
+    return { port, ctx, slots: this.model.slots ?? 1, draft };
   }
 
   async waitHealthy(child, timeoutMs = 180_000) {

@@ -17,8 +17,14 @@ export const kvBytesPerToken = (m) => m.attnLayers * m.kvHeads * m.headDim * 2 *
 // checkpoints + ~0.15; 1.53 GB at 16k.
 export const OVERHEAD = 0.15e9;
 
+// The guessing helper (model.draft): its file, its working space, and per slot
+// nMax extra copies of the running state so a wrong guess can be taken back.
+export const draftBytes = (m) => (m.draft ? m.draft.bytes + m.draft.computeBytes + (m.slots ?? 1) * m.draft.nMax * (m.fixedStateBytes ?? 0) : 0);
+
 // Each slot has its own running state and checkpoints; the cache is shared.
-export const needBytes = (m, ctx) => m.bytes + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + OVERHEAD;
+// The helper is counted whenever the model has one (bonsai setup fetches it)
+// unless it is switched off with BONSAI_HELPER=off.
+export const needBytes = (m, ctx, { draft = Boolean(m.draft) && process.env.BONSAI_HELPER !== 'off' } = {}) => m.bytes + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
 
 export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes() } = {}) {
   if (available >= needBytes(m, want)) return { ctx: want, available, reason: null };
