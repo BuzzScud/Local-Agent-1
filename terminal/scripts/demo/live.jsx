@@ -5,9 +5,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { render, useApp, useInput, useStdout, Box, Text } from 'ink';
 import { readFileSync } from 'node:fs';
-import { stateAt } from '../ui/state.mjs';
-import { DESIGNS } from '../ui/designs.jsx';
-import { C } from '../ui/theme.mjs';
+import { stateAt } from '../../src/ui/state.mjs';
+import { DESIGNS } from '../../src/ui/designs.jsx';
+import { C } from '../../src/ui/theme.mjs';
 
 const args = process.argv.slice(2);
 const opt = (name, dflt) => { const i = args.indexOf(`--${name}`); return i >= 0 && args[i + 1] ? args[i + 1] : dflt; };

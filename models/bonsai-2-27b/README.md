@@ -55,10 +55,10 @@ read whole; slow and still unproven on big projects.
 
 | Page | What it shows |
 |---|---|
-| [`reports/bonsai-smart-2026-09-25.html`](reports/bonsai-smart-2026-09-25.html) | The "smarter and faster" round: grade, launch table, before/after charts, every task |
-| [`reports/bonsai-night-2026-09-25.html`](reports/bonsai-night-2026-09-25.html) | The overnight check: practice at three thinking levels, screens, soak, speed, trigger words |
-| [`reports/bonsai-code-27b-report.html`](reports/bonsai-code-27b-report.html) | The switch from the 8B to the 27B |
-| [`reports/bonsai-8b-vs-27b-v2.html`](reports/bonsai-8b-vs-27b-v2.html) | 8B vs 27B, measured, with real outputs |
+| [`docs/bonsai-smart-2026-09-25.html`](../../docs/bonsai-smart-2026-09-25.html) | The "smarter and faster" round: grade, launch table, before/after charts, every task |
+| [`docs/bonsai-night-2026-09-25.html`](../../docs/bonsai-night-2026-09-25.html) | The overnight check: practice at three thinking levels, screens, soak, speed, trigger words |
+| [`docs/bonsai-code-27b-report.html`](../../docs/bonsai-code-27b-report.html) | The switch from the 8B to the 27B |
+| [`docs/bonsai-8b-vs-27b-v2.html`](../../docs/bonsai-8b-vs-27b-v2.html) | 8B vs 27B, measured, with real outputs |
 
 Raw results stay on the Mac in `results/` (not in git): `runs/` per practice run,
 `night/` per night check, `words/` per real-request run.

@@ -7,17 +7,17 @@
 //     Smaller batches: less re-reading, maybe slower reading.
 //  3. The smaller model file (PTQ1_0, 5.95 GB): only when there is disk room;
 //     downloaded, checked, measured, deleted.
-//   node models/evals/speed.mjs [--skip-ptq1] [--quick] [--out file.json]   (--quick: one setting of each, for a trial)
+//   node models/evals/tools/speed.mjs [--skip-ptq1] [--quick] [--out file.json]   (--quick: one setting of each, for a trial)
 import { spawnSync, spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, statfsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HOME, MODELS, DEFAULT_MODEL, MODELS_DIR, modelPath, SERVER_BIN, modelFolder } from '../index.mjs';
-import { serverArgs } from '../index.mjs';
+import { HOME, MODELS, DEFAULT_MODEL, MODELS_DIR, modelPath, SERVER_BIN, modelFolder } from '../../index.mjs';
+import { serverArgs } from '../../index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..', '..'); // the repo
+const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[DEFAULT_MODEL];

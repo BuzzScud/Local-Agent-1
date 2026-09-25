@@ -8,12 +8,15 @@ Bonsai Code.app/
 *.key
 .split-map.json
 
-# Part 1 · terminal: captures from fake runs, UI-walk scratch output
-terminal/scripts/capture-*-fake.json
+# Part 1 · terminal: capture and UI-walk outputs are scratch (one script rebuilds them)
+terminal/scripts/capture-*.json
+terminal/scripts/*.log
+terminal/scripts/.captures-done
 terminal/scripts/ui-walk-*.json
+terminal/ui-walk/
 
 # Part 2 · models: raw test runs stay on this Mac (one results/ per model);
-# the report pages in models/<model>/reports/ are kept.
+# the report pages live in docs/ (mirror of ~/Desktop/bonsai-code DOCS).
 models/*/results/
 models/evals/dev/experiments/slots/
 models/evals/dev/experiments/*.log

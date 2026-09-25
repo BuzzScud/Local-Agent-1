@@ -1,6 +1,6 @@
 // The overnight check, report only: runs each check in turn (never two models
 // at once), writes results to models/bonsai-2-27b/results/night/<date>/, then builds the morning
-// report in models/bonsai-2-27b/reports/ and opens it. Start it with models/evals/night/start.sh (keeps
+// report in the DOCS folder and opens it. Start it with models/evals/night/start.sh (keeps
 // the Mac awake).
 //   node models/evals/night/run-night.mjs [--dir models/bonsai-2-27b/results/night/<date>] [--stop-at 06:30] [--only step,step]
 import { spawn, execFileSync } from 'node:child_process';
@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, mkdirSync, writeFileSync, readFileSync } fr
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { DOCS_DIR } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
@@ -60,9 +61,9 @@ function run(name, cmd, cmdArgs, { env = {}, minutes }) {
 const STEPS = [
   ['words-quick', false, () => run('words-quick', 'node', ['terminal/test/sweep.mjs', '--json', join(dir, 'words-quick.json')], { minutes: 5 })],
   ['screens', true, async () => { for (const [c, r] of [[80, 24], [109, 55], [155, 43], [200, 60]]) await run(`screens-${c}x${r}`, 'node', ['terminal/scripts/capture-ui.mjs', '--out', join(dir, `screens-${c}x${r}.json`)], { env: { BONSAI_BIN: BIN, COLS: String(c), ROWS: String(r) }, minutes: 8 }); }],
-  ['soak', true, () => run('soak', 'node', ['models/evals/soak.mjs', '--starts', '10', '--minutes', '35', '--out', join(dir, 'soak.json')], { minutes: 50 })],
-  ['reread', true, () => run('reread', 'node', ['models/evals/reread.mjs', '--minutes', '15', '--out', join(dir, 'reread.json')], { minutes: 25 })],
-  ['speed', true, () => run('speed', 'node', ['models/evals/speed.mjs', '--out', join(dir, 'speed.json')], { minutes: 80 })],
+  ['soak', true, () => run('soak', 'node', ['models/evals/tools/soak.mjs', '--starts', '10', '--minutes', '35', '--out', join(dir, 'soak.json')], { minutes: 50 })],
+  ['reread', true, () => run('reread', 'node', ['models/evals/tools/reread.mjs', '--minutes', '15', '--out', join(dir, 'reread.json')], { minutes: 25 })],
+  ['speed', true, () => run('speed', 'node', ['models/evals/tools/speed.mjs', '--out', join(dir, 'speed.json')], { minutes: 80 })],
   ['words-real', true, () => run('words-real', 'node', ['models/evals/words/real.mjs', '--out', join(dir, 'words-real.json')], { minutes: 100 })],
   ['practice-off', true, () => run('practice-off', 'node', ['models/evals/run.mjs', '--think', 'off', '--reps', '2', '--out', join(dir, 'practice-off'), '--stop-at', stopAt], { minutes: 150 })],
   ['practice-medium', true, () => run('practice-medium', 'node', ['models/evals/run.mjs', '--think', 'on', '--effort', 'medium', '--reps', '2', '--out', join(dir, 'practice-medium'), '--stop-at', stopAt], { minutes: 180 })],
@@ -81,6 +82,6 @@ status.finished = new Date().toISOString();
 save();
 log('building the morning report');
 await run('report', 'node', ['models/evals/night/report-night.mjs', dir], { minutes: 5 });
-const report = join(root, 'models', 'bonsai-2-27b', 'reports', `bonsai-night-${day}.html`);
+const report = join(DOCS_DIR, `bonsai-night-${day}.html`);
 if (existsSync(report) && !args.includes('--no-open')) execFileSync('open', [report]);
 log(`all done: ${report}`);

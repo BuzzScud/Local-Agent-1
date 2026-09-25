@@ -1,6 +1,6 @@
 // Renders all three designs at every half second of the recorded session with
 // the real Ink components (256 colours, 155 columns = your Terminal window) and
-// writes one self-contained page to the Desktop. Run: FORCE_COLOR=2 bun terminal/src/demo/build-preview.jsx
+// writes one self-contained page to the Desktop. Run: FORCE_COLOR=2 bun terminal/scripts/demo/build-preview.jsx
 import React from 'react';
 import { renderToString } from 'ink';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -8,8 +8,8 @@ import { gzipSync } from 'node:zlib';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stateAt, markers } from '../ui/state.mjs';
-import { DESIGNS } from '../ui/designs.jsx';
+import { stateAt, markers } from '../../src/ui/state.mjs';
+import { DESIGNS } from '../../src/ui/designs.jsx';
 
 if (process.env.FORCE_COLOR !== '2') throw new Error('run with FORCE_COLOR=2 (Apple Terminal = 256 colours)');
 const here = dirname(fileURLToPath(import.meta.url));

@@ -29,20 +29,19 @@ the result, so a new model is tested the same way the 27B was.
 ```
 bonsai-code/
 ├─ terminal/            part 1 · the agent terminal
-│  ├─ src/              cli, app (the screen), agent (the loop), flows, tools
+│  ├─ src/              cli, app (the screen), agent (the loop), flows, tools, ui
 │  ├─ test/             unit tests and the app driven by keys in a real terminal
-│  ├─ scripts/          screen captures and the terminal's report pages
-│  ├─ docs/             the terminal's design and report pages
+│  ├─ scripts/          captures, report builders, design previews (demo/), the devtools shim
 │  ├─ app/              the Bonsai Code.app launcher and its icon
 │  └─ demo-project/     a small project the tests and demos work on
 ├─ models/              part 2 · the models we use and test
 │  ├─ index.mjs         the one entry the terminal imports
 │  ├─ registry.mjs      the list of models and where their files live
 │  ├─ runtime/          llama-server, memory, warm-up, bonsai setup
-│  ├─ bonsai-2-27b/     the model: settings, README, reports/ (results/ stays local)
-│  ├─ evals/            the test bench: 28 practice tasks, 28 real requests, speed, soak, night runs
+│  ├─ bonsai-2-27b/     the model: settings and README (results/ stays local)
+│  ├─ evals/            the test bench: run, tasks, words, night, reports, tools (speed, soak, reread, verify)
 │  └─ test/             unit tests of the models part
-└─ docs/                every diagram, preview and report page (mirrors ~/Desktop/bonsai-code DOCS)
+└─ docs/                every diagram, preview and report page, the one home (mirrors ~/Desktop/bonsai-code DOCS)
 ```
 
 ## Commands

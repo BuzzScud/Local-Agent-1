@@ -4,20 +4,20 @@
 // and finds where step N+1 stops matching step N. When a step only adds to the
 // previous one, the server can continue; when an earlier part changed, it has
 // to re-read from a checkpoint before that point.
-//   node models/evals/reread.mjs [--minutes 12] [--out file.json]
+//   node models/evals/tools/reread.mjs [--minutes 12] [--out file.json]
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MODELS, DEFAULT_MODEL, thinkingKwargs, modelFolder } from '../index.mjs';
-import { ModelServer } from '../index.mjs';
-import { warmUp } from '../index.mjs';
-import { Agent } from '../../terminal/src/agent/agent.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../terminal/src/agent/prompt.mjs';
-import { toolSchemas } from '../../terminal/src/agent/tools.mjs';
+import { MODELS, DEFAULT_MODEL, thinkingKwargs, modelFolder } from '../../index.mjs';
+import { ModelServer } from '../../index.mjs';
+import { warmUp } from '../../index.mjs';
+import { Agent } from '../../../terminal/src/agent/agent.mjs';
+import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../../terminal/src/agent/prompt.mjs';
+import { toolSchemas } from '../../../terminal/src/agent/tools.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..', '..'); // the repo
+const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[DEFAULT_MODEL];

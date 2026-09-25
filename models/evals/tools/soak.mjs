@@ -7,23 +7,23 @@
 //     With --fill the conversation is not trimmed until it holds --fill-to
 //     tokens (default 30,000 of 32,768), then a side request (sorting, a
 //     try) runs next to it: does the full memory still answer both?
-//   node models/evals/soak.mjs [--starts 10] [--minutes 40] [--fill] [--fill-to 30000] [--out file.json]
+//   node models/evals/tools/soak.mjs [--starts 10] [--minutes 40] [--fill] [--fill-to 30000] [--out file.json]
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, modelFolder } from '../index.mjs';
-import { ModelServer } from '../index.mjs';
-import { needBytes, availableBytes } from '../index.mjs';
-import { warmUp } from '../index.mjs';
-import { runHeadless } from '../../terminal/src/headless.mjs';
-import { Agent } from '../../terminal/src/agent/agent.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../terminal/src/agent/prompt.mjs';
-import { toolSchemas } from '../../terminal/src/agent/tools.mjs';
+import { MODELS, DEFAULT_MODEL, modelFolder } from '../../index.mjs';
+import { ModelServer } from '../../index.mjs';
+import { needBytes, availableBytes } from '../../index.mjs';
+import { warmUp } from '../../index.mjs';
+import { runHeadless } from '../../../terminal/src/headless.mjs';
+import { Agent } from '../../../terminal/src/agent/agent.mjs';
+import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../../terminal/src/agent/prompt.mjs';
+import { toolSchemas } from '../../../terminal/src/agent/tools.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..', '..'); // the repo
+const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[DEFAULT_MODEL];
@@ -121,7 +121,7 @@ if (fill) {
   const f = out.conversation.fill;
   f.reached = peakCtx;
   sample();
-  const { complete } = await import('../../terminal/src/flows/llm.mjs');
+  const { complete } = await import('../../../terminal/src/flows/llm.mjs');
   const t1 = Date.now();
   try {
     const r = await complete({ url: srv.url, model, slot: st.slots > 1 ? 1 : undefined, system: 'You answer in one word.', user: 'Say ok.', maxTokens: 8 });

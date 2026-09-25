@@ -80,5 +80,5 @@ node terminal/scripts/ui-walk.mjs       # every screen at one window size, with 
 node terminal/scripts/capture-ui.mjs    # the real app with the real model, screens saved as HTML
 ```
 
-`src/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`).
+`scripts/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`); `scripts/shims` is the react-devtools stand-in the single-file build needs. Report pages are written to `~/Desktop/bonsai-code DOCS` and mirrored into the repo's `docs/`.
 `app/make-app.sh` builds `Bonsai Code.app` beside the repo's README.

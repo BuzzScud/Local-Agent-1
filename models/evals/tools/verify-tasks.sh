@@ -4,7 +4,7 @@
 # reference may hold answer.txt (the final answer) and asked.txt (the questions
 # asked), which the runner writes beside the project, and files in subfolders.
 here=${0:A:h}
-for t in "$here"/tasks/*(/); do
+for t in "$here"/../tasks/*(/); do
   name=${t:t}
   [ -n "$1" ] && [[ "$name" != $1* ]] && continue
   d=$(mktemp -d) && cp -R "$t/project" "$d/project" && : > "$d/answer.txt" && : > "$d/asked.txt" && touch "$d/started" && sleep 1

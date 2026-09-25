@@ -5,9 +5,9 @@ import { cpSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFile } from '../tools/read.mjs';
-import { planEdit, applyEdit } from '../tools/edit.mjs';
-import { runCommand } from '../tools/run.mjs';
+import { readFile } from '../../src/tools/read.mjs';
+import { planEdit, applyEdit } from '../../src/tools/edit.mjs';
+import { runCommand } from '../../src/tools/run.mjs';
 import * as S from './script.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));

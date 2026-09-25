@@ -8,7 +8,7 @@ the agent with each one.
 | `index.mjs` | The one file the terminal imports: the registry, the runtime and setup. |
 | `registry.mjs` | The list of models (one folder each), where their files live on this Mac (`~/.bonsai-code`), and how to ask a model to think. |
 | `runtime/` | `server.mjs` starts, shares and stops llama-server; `memory.mjs` picks a context that fits the Mac; `warmup.mjs` saves and restores the read-in instructions; `setup.mjs` downloads the runtime and a model. |
-| `bonsai-2-27b/` | The model in use: `model.mjs` (its settings), `README.md` (what was measured), `reports/` (the pages), `results/` (raw runs, kept on this Mac, not in git). |
+| `bonsai-2-27b/` | The model in use: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
 | `evals/` | The test bench (below). |
 | `test/` | Unit tests of this part: the registry, memory math, server flags, warm-up, sharing a server. |
 
@@ -40,11 +40,11 @@ questions get scripted answers (`answers.json` per task).
 | Script | What it measures |
 |---|---|
 | `run.mjs` | The 28 practice tasks (`tasks/`): questions, renames, fixes, features, writing, several files, vague requests, a real-sized project. `--think off\|on\|both`, `--effort`, `--reps`, `--only`, `--model`. |
-| `verify-tasks.sh` | Proves every task's check fails on the untouched project and passes with its reference answer. |
+| `tools/verify-tasks.sh` | Proves every task's check fails on the untouched project and passes with its reference answer. |
 | `words/real.mjs` | 28 real requests built around trigger words and blocked commands, in three kinds of folder. |
-| `speed.mjs`, `soak.mjs`, `reread.mjs` | Engine settings, long conversations and cold starts, what gets re-read each step. |
+| `tools/speed.mjs`, `soak.mjs`, `reread.mjs` | Engine settings, long conversations and cold starts, what gets re-read each step. |
 | `night/start.sh` | All of the above overnight, with a morning report. |
-| `reports/` | The builders of the report pages in each model's `reports/`. |
+| `reports/` | The builders of the report pages; pages go to `~/Desktop/bonsai-code DOCS`, mirrored into the repo's `docs/`. |
 | `dev/` | Probes and experiments against a running server (see `dev/experiments/README.md`). |
 
 Only one model fits in memory at a time on a 16 GB Mac, so bench runs wait for each other.

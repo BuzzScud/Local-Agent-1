@@ -8,6 +8,11 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [bonsai-code-structure-v3.html](bonsai-code-structure-v3.html) | page | Bonsai Code structure v3 | 32 KB | 2026-09-25 |
+| [bonsai-smart-2026-09-25-v1.html](bonsai-smart-2026-09-25-v1.html) | page | Bonsai smarter and faster | 26 KB | 2026-09-25 |
+| [bonsai-night-2026-09-25.html](bonsai-night-2026-09-25.html) | page | Bonsai night check 2026-09-25 | 111 KB | 2026-09-25 |
+| [bonsai-terminal-3-designs.html](bonsai-terminal-3-designs.html) | page | Bonsai Code · 3 terminal designs | 63 KB | 2026-09-25 |
+| [bonsai-code-report-2026-09-25.html](bonsai-code-report-2026-09-25.html) | page | Bonsai Code · 25 Sep | 146 KB | 2026-09-25 |
 | [bonsai-code-structure-v2.html](bonsai-code-structure-v2.html) | page | Bonsai Code structure v2 | 32 KB | 2026-09-25 |
 | [bonsai-2-27b-inside-2026-09-25.html](bonsai-2-27b-inside-2026-09-25.html) | page | Inside Bonsai 2 27B | 22 KB | 2026-09-25 |
 | [bonsai-smart-2026-09-25.html](bonsai-smart-2026-09-25.html) | page | Bonsai Code smarter and faster stats | 89 KB | 2026-09-25 |

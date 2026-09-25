@@ -1,9 +1,9 @@
-// Builds models/bonsai-2-27b/reports/bonsai-night-<date>.html from an overnight results folder.
+// Builds bonsai-night-<date>.html in the DOCS folder from an overnight results folder.
 //   node models/evals/night/report-night.mjs models/bonsai-2-27b/results/night/<date>
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { toDocs } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const dir = process.argv[2];
@@ -178,7 +178,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = join(root, 'models', 'bonsai-2-27b', 'reports', `bonsai-night-${day}.html`);
+const target = docsPath(`bonsai-night-${day}.html`);
 writeFileSync(target, html);
 console.log(`wrote ${target} (${problems.length} problems listed)`);
-toDocs(target);

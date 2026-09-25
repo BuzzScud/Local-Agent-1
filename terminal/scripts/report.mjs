@@ -1,4 +1,4 @@
-// Builds terminal/docs/bonsai-code-built.html: the real app's screens (captured
+// Builds bonsai-code-built.html in the DOCS folder: the real app's screens (captured
 // from real runs), measured numbers, the practice scorecard, keys and limits.
 //   node terminal/scripts/report.mjs
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
-import { toDocs } from '../../docs/to-docs.mjs';
+import { docsPath } from '../../docs/to-docs.mjs';
 const MODEL_NAME = MODELS[DEFAULT_MODEL].name;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -183,7 +183,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = process.env.REPORT_OUT ?? join(root, 'docs', 'bonsai-code-built.html');
+const target = process.env.REPORT_OUT ?? docsPath('bonsai-code-built.html');
 writeFileSync(target, html);
 console.log(`wrote ${target} (${(html.length / 1024).toFixed(0)} KB)`);
-if (!process.env.REPORT_OUT) toDocs(target);

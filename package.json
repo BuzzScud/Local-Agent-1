@@ -5,16 +5,16 @@
   "type": "module",
   "description": "Bonsai Code: a Claude Code-style coding agent for your terminal (terminal/) running local models (models/).",
   "scripts": {
-    "demo": "bun terminal/src/demo/live.jsx --design",
-    "record": "node terminal/src/demo/record.mjs",
-    "preview": "bun terminal/src/demo/build-preview.jsx",
+    "demo": "bun terminal/scripts/demo/live.jsx --design",
+    "record": "node terminal/scripts/demo/record.mjs",
+    "preview": "bun terminal/scripts/demo/build-preview.jsx",
     "start": "bun terminal/src/cli.jsx",
     "test": "bun test ./terminal/test ./models/test",
     "test:terminal": "bun test ./terminal/test",
     "test:models": "bun test ./models/test",
     "eval": "node models/evals/run.mjs",
     "eval:words": "node models/evals/words/real.mjs",
-    "eval:verify": "zsh models/evals/verify-tasks.sh",
+    "eval:verify": "zsh models/evals/tools/verify-tasks.sh",
     "docs": "node docs/sync-docs.mjs",
     "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/bonsai",
     "install-cli": "bun run build && mkdir -p ~/.local/bin && cp dist/bonsai ~/.local/bin/bonsai && echo installed ~/.local/bin/bonsai",
@@ -23,7 +23,7 @@
   "dependencies": {
     "ink": "^7.1.1",
     "react": "^19.3.0",
-    "react-devtools-core": "file:terminal/src/shims/react-devtools-core"
+    "react-devtools-core": "file:terminal/scripts/shims/react-devtools-core"
   },
   "bin": {
     "bonsai": "terminal/src/cli.jsx"

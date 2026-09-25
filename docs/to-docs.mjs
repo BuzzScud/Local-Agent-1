@@ -7,6 +7,16 @@ import { homedir } from 'node:os';
 
 export const DOCS_DIR = process.env.BONSAI_DOCS ?? join(homedir(), 'Desktop', 'bonsai-code DOCS');
 
+// Where a builder writes its page: straight into the DOCS folder (the pages'
+// one home). A missing folder stops with a clear message rather than recreating it.
+export function docsPath(name) {
+  if (!existsSync(DOCS_DIR)) {
+    console.error(`${DOCS_DIR.replace(homedir(), '~')} is not there (moved? set BONSAI_DOCS). Nothing written.`);
+    process.exit(1);
+  }
+  return join(DOCS_DIR, name);
+}
+
 // Copies a finished file into the DOCS folder; returns where it went, or null.
 // A missing folder is not recreated (it may have been moved): it says so instead.
 export function toDocs(file, name = basename(file)) {

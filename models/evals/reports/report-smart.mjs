@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { toDocs } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
@@ -160,10 +160,9 @@ html += `<h2>Honest notes</h2><ul>
 <li>Task 28 (Python, add a field) is the one that still fails. Adding <code>fee</code> to <code>to_dict</code> breaks the existing test's expected dict, and the focused paths never edit existing tests, so every draft failed (362 s). The step-by-step fallback then did two of the three parts in 70 s (the field, the value minus the fee) but left <code>fee</code> out of the dict, and its own check missed that. On the rerun it also repeated the single-file tries first (230 s); since then a failed set of tries goes straight to step by step.</li>
 <li>Task 25 (a question about a real-sized project) answered correctly but spent two minutes building scratch experiments; the prompt now says to answer a question from the code read, without experiments. The fence held: every attempt outside the folder or with rm -rf was refused.</li>
 </ul>
-<p class="dim">Results: <code>${esc(dir.replace(root + '/', ''))}</code> · practice checks: <code>zsh models/evals/verify-tasks.sh</code> · tests: <code>bun test</code></p>
+<p class="dim">Results: <code>${esc(dir.replace(root + '/', ''))}</code> · practice checks: <code>zsh models/evals/tools/verify-tasks.sh</code> · tests: <code>bun test</code></p>
 </main></body></html>`;
 
-const out = join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-smart-2026-09-25-v1.html');
+const out = docsPath('bonsai-smart-2026-09-25-v1.html');
 writeFileSync(out, html);
 console.log(`wrote ${out}`);
-toDocs(out);

@@ -1,4 +1,4 @@
-// Builds models/bonsai-2-27b/reports/bonsai-code-27b-report.html: the switch to Bonsai 2 27B
+// Builds bonsai-code-27b-report.html in the DOCS folder: the switch to Bonsai 2 27B
 // (step 2) with the real app's screens, captured from real runs.
 //   node models/evals/reports/report-27b.mjs
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../index.mjs';
-import { toDocs } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -184,7 +184,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = process.env.REPORT_OUT ?? join(root, 'models', 'bonsai-2-27b', 'reports', 'bonsai-code-27b-report.html');
+const target = process.env.REPORT_OUT ?? docsPath('bonsai-code-27b-report.html');
 writeFileSync(target, html);
 console.log(`wrote ${target}`);
-if (!process.env.REPORT_OUT) toDocs(target);
