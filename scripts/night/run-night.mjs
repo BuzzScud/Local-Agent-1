@@ -25,7 +25,8 @@ const status = existsSync(statusFile) ? JSON.parse(readFileSync(statusFile, 'utf
 const save = () => writeFileSync(statusFile, JSON.stringify(status, null, 1));
 
 // Another model server (your own bonsai window) → wait, then skip.
-const otherModel = () => { try { return execFileSync('pgrep', ['-f', 'llama-server'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length > 0; } catch { return false; } };
+// By process name only: a shell or editor whose text mentions the name must not count.
+const otherModel = () => { try { return execFileSync('pgrep', ['-x', 'llama-server'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length > 0; } catch { return false; } };
 async function modelFree(name) {
   const t0 = Date.now();
   while (otherModel()) {
