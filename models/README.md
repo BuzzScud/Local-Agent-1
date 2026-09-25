@@ -24,7 +24,7 @@ numbers live in the 27B's comparison pages.
 ## Adding a model
 
 1. Make `models/<name>/model.mjs`, starting from `bonsai-2-27b/model.mjs`: the file, its
-   download URL and checksum, its layout (for the memory estimate), sampling, thinking levels,
+   download URL and checksum, its layout (for the memory estimate), sampling, effort levels,
    and the server options it needs.
 2. Import it in `registry.mjs` and add it to the list.
 3. `bonsai setup` fetches it; `/model` in the terminal lists it.

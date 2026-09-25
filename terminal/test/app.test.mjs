@@ -145,31 +145,42 @@ test('focused paths on screen: the plan, the try counter, the rename prompt and 
   expect(readFileSync(join(cwd, 'stats.test.mjs'), 'utf8')).toContain('middleValue(');
 }, T);
 
-test('/model: the model list and thinking in one picker; the choice is used and kept', async () => {
+test('/model: the model list and the effort in one picker; the choice is used and kept; /effort and --effort', async () => {
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows', '--layout', 'live'], steps: [
     { wait: 'Welcome' }, { type: '/model' }, { key: 'enter' },
-    { wait: 'Pick the model and how much it thinks first' }, { sleep: 200 }, { snapshot: 'picker' },
+    { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'picker' },
     { key: 'right' }, { wait: 'Medium: thinks briefly first' },
     { key: 'right' }, { wait: 'High: thinks carefully first' }, { sleep: 200 }, { key: 'enter' },
-    { wait: 'Bonsai 2 27B · thinking high.' }, { sleep: 300 }, { snapshot: 'after' },
+    { wait: 'Bonsai 2 27B · effort high.' }, { sleep: 300 }, { snapshot: 'after' },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
-    { type: '/think off' }, { key: 'enter' }, { wait: 'Thinking is off' },
+    // the old name still works
+    { type: '/think medium' }, { key: 'enter' }, { wait: 'Effort is medium' },
+    { type: '/effort off' }, { key: 'enter' }, { wait: 'Effort is off' },
     ...quit,
   ] });
   await fake.close();
   const picker = r.snapshots.picker;
   expect(picker).toMatch(/❯ Bonsai 2 27B\s+7\.2 GB · on this Mac\s+✔ in use/);
-  expect(picker).toMatch(/Thinking\s+◀\s+Off\s+·\s+Medium\s+·\s+High\s+▶/);
+  expect(picker).toMatch(/Effort\s+◀\s+Off\s+·\s+Medium\s+·\s+High\s+▶/);
+  expect(picker).not.toMatch(/Thinking\s+◀/);
   expect(picker).toContain('Off: answers straight away (fastest)');
-  expect(picker).toContain('↑↓ model · ←→ thinking · enter to save · esc to cancel');
-  expect(r.snapshots.after).toMatch(/thinking high/); // the meter line
+  expect(picker).toContain('↑↓ model · ←→ effort · enter to save · esc to cancel');
+  expect(r.snapshots.after).toMatch(/effort high/); // the meter line
   const sent = fake.requests.find((q) => q.stream && q.tools);
   expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
-  expect(saved.thinking).toBe(false); // /think off came last
-  expect(saved.effort).toBe('high'); // …and /think on would bring back High
+  expect(saved.thinking).toBe(false); // /effort off came last
+  expect(saved.effort).toBe('medium'); // …and /effort on would bring back Medium
+  // --effort on the command line sets the level for this run
+  const fake2 = await startFakeServer([{ text: 'Hello.' }]);
+  const r2 = await runInPty({ cwd, env, args: ['--url', fake2.url, '--no-flows', '--layout', 'live', '--effort', 'high'], steps: [
+    { wait: 'effort high' }, { type: 'hi' }, { key: 'enter' }, { wait: 'Hello.' }, ...quit,
+  ] });
+  await fake2.close();
+  expect(r2.text).toContain('effort high');
+  expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
 }, T);
 
 test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab fills in', async () => {
@@ -177,7 +188,7 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Show commands and keys' }, { sleep: 200 }, { snapshot: 'all' },
-    { type: 'model' }, { wait: 'Pick the model and how much it thinks' }, { sleep: 200 }, { snapshot: 'mo' },
+    { type: 'model' }, { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'mo' },
     { key: 'tab' }, { sleep: 300 }, { snapshot: 'tab' },
     ...quit,
   ] });
@@ -185,7 +196,7 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   const rows = (s) => s.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
   expect(rows(r.snapshots.all)).toHaveLength(10);
   expect(r.snapshots.all).not.toContain('? for shortcuts');
-  expect(rows(r.snapshots.mo)[0]).toMatch(/\/model\s+Pick the model and how much it thinks/);
+  expect(rows(r.snapshots.mo)[0]).toMatch(/\/model\s+Pick the model and its effort/);
   expect(r.snapshots.tab).toMatch(/> \/model/);
 }, T);
 

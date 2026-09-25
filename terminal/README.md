@@ -24,7 +24,10 @@ Two layouts, switched with **ctrl+l** or `/layout` (your choice is remembered):
 | `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
 | ctrl+c twice | quit (the conversation is saved) |
 
-Commands: `/help /clear /compact /layout /think /mode /init /resume /model /stats /doctor /exit`.
+Commands: `/help /clear /compact /layout /effort /mode /init /resume /model /stats /doctor /exit`.
+
+**Effort** is how much the model thinks before it acts: Off (the default), Medium or High,
+set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` still work.
 
 ## Permissions
 

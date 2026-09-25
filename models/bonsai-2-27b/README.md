@@ -12,7 +12,25 @@ Code uses today. Settings: [`model.mjs`](model.mjs).
 | Reading | 58–62 tokens/s |
 | Memory | 9.3–9.8 GB at 32k context with two slots (7.21 file + cache + checkpoints); drops to 16k when the Mac is short |
 | Start | first start ~90 s; later starts restore the saved warm-up in 0.1 s, a first reply in ~10 s |
-| Thinking | off by default: medium and high passed the same tasks and only cost time |
+| Effort | off by default: medium and high passed the same tasks and only cost time |
+
+## Effort levels
+
+The model's chat template has thinking off, or on at one of three efforts: `low`, `medium`
+or `xhigh` (its default when thinking is on). Any other value, `high` included, is an
+error in the template itself. Bonsai Code offers three:
+
+| In Bonsai | Sent to the model | Code job (isPalindrome) | Arithmetic job | Right |
+|---|---|---|---|---|
+| Off | thinking off | 7 s | 3 s | 1 of 2 |
+| Medium | `medium` | 184 thinking tokens, 19 s | 80 tokens, 15 s | 2 of 2 |
+| High | `xhigh` | 517 tokens, 61 s | 86 tokens, 15 s | 2 of 2 |
+| (not offered) | `low` | 466 tokens, 63 s | 50 tokens, 9 s | 2 of 2 |
+
+One run each, 25 Sep 2026 (`results/effort-probe-2026-09-25.json`). Low thought about as
+long as xhigh on the code job, so it adds nothing over Medium. The server stops any
+thinking at 2,048 tokens. On the 18 practice tasks, Medium and High passed everything Off
+did and only took longer, so Off stays the default.
 
 Engine settings that were tried and made no difference: batch sizes 128–2048, flash
 attention off, an f16 cache. PTQ1_0 was ~10% slower. Writing several answers at once is

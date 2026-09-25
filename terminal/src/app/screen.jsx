@@ -181,7 +181,7 @@ function Meters({ app }) {
   return (
     <Box paddingX={2} width={app.width}>
       <Text color={C.dim} wrap="truncate-end">
-        {modelName}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  thinking {app.thinkingLabel ?? (app.thinking ? 'on' : 'off')}
+        {modelName}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'off')}
       </Text>
     </Box>
   );
@@ -413,7 +413,7 @@ const START_PHASE = {
   restoring: 'restoring its instructions from last time ',
 };
 
-// /model: the model list and the thinking level in one picker.
+// /model: the model list and the effort level in one picker.
 function ModelPicker({ app }) {
   const pk = app.picker;
   const levels = app.thinkingLevels;
@@ -421,7 +421,7 @@ function ModelPicker({ app }) {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Text bold>Model</Text>
-      <Text color={C.dim}>Pick the model and how much it thinks first. Kept for next time.</Text>
+      <Text color={C.dim}>Pick the model and its effort: how much it thinks before it acts. Kept for next time.</Text>
       <Text> </Text>
       {pk.models.map((m, i) => {
         const on = i === pk.index;
@@ -435,7 +435,7 @@ function ModelPicker({ app }) {
       })}
       <Text> </Text>
       <Text>
-        <Text bold>{'Thinking   '}</Text>
+        <Text bold>{'Effort     '}</Text>
         <Text color={pk.level > 0 ? C.accent : C.faint}>◀  </Text>
         {levels.map((l, i) => (
           <Text key={l.id}>
@@ -447,7 +447,7 @@ function ModelPicker({ app }) {
       </Text>
       <Text color={C.dim}>{'           '}{lv ? `${lv.label}: ${lv.note}` : ''}</Text>
       <Text> </Text>
-      <Text color={C.dim}>↑↓ model · ←→ thinking · enter to save · esc to cancel</Text>
+      <Text color={C.dim}>↑↓ model · ←→ effort · enter to save · esc to cancel</Text>
     </Box>
   );
 }

@@ -78,7 +78,7 @@ export function App({ opts, win }) {
   const [mode, setModeState] = useState(opts.mode ?? 'ask');
   const [layout, setLayout] = useState(opts.layout ?? settings.layout ?? 'classic');
   const [thinking, setThinkingState] = useState(opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true);
-  const [effort, setEffortState] = useState(settings.effort ?? model.thinkingEffort);
+  const [effort, setEffortState] = useState(opts.effort ?? settings.effort ?? model.thinkingEffort);
   const [startPhase, setStartPhase] = useState('loading');
   const [stats, setStats] = useState({});
   const [ctx, setCtx] = useState(opts.ctx ?? 32768);
@@ -374,15 +374,16 @@ export function App({ opts, win }) {
       case 'layout':
         toggleLayout(arg.startsWith('l') ? 'live' : arg.startsWith('c') ? 'classic' : undefined);
         break;
-      case 'think': {
-        // /think, /think on|off, or a level: /think medium|high
+      case 'effort':
+      case 'think': { // /think is the old name, still accepted
+        // /effort, /effort on|off, or a level: /effort medium|high
         const a = arg.toLowerCase();
         const lvIds = (model.thinkingLevels ?? []).map((l) => l.id);
         const on = lvIds.includes(a) ? a !== 'off' : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
         const eff = on && lvIds.includes(a) ? a : undefined;
         setThinking(on, eff);
         const lv = thinkingLevel(model, on, eff ?? agent.effort);
-        push({ type: 'note', text: on ? `Thinking is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.` : 'Thinking is off: it answers straight away (fastest).', tone: 'dim' });
+        push({ type: 'note', text: on ? `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.` : 'Effort is off: it answers straight away (fastest).', tone: 'dim' });
         break;
       }
       case 'mode': {
@@ -532,7 +533,7 @@ export function App({ opts, win }) {
         setThinking(on, on ? lv.id : undefined);
         setPicker(null);
         const picked = pk.models[pk.index];
-        push({ type: 'note', text: `${picked.name} · thinking ${lv?.label.toLowerCase() ?? 'off'}${picked.id !== model.id ? ' (restart Bonsai Code to switch models)' : ''}.`, tone: 'dim' });
+        push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'off'}${picked.id !== model.id ? ' (restart Bonsai Code to switch models)' : ''}.`, tone: 'dim' });
         if (picked.id !== model.id) saveSettings({ model: picked.id });
       }
       return;

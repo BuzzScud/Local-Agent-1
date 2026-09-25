@@ -33,7 +33,8 @@ Usage
 
 Options
   --layout classic|live     screen layout (ctrl+l switches while running)
-  --think / --no-think      let the model think briefly ("medium") before it acts; off by default
+  --effort off|medium|high  how much the model thinks before it acts (default: off, or your last /effort)
+  --think / --no-think      the old names: --effort medium / --effort off
   --ctx 16k|32k|64k         memory size (default: 32k, or 16k when memory is short)
   --mode ask|edits|plan     start in this permission mode
   --yes                     with -p: allow edits and commands without asking
@@ -55,6 +56,7 @@ function parse(argv) {
     else if (a === '-c' || a === '--continue') o.continueLast = true;
     else if (a === '--resume') o.resumeId = val();
     else if (a === '--layout') o.layout = val() === 'live' ? 'live' : 'classic';
+    else if (a === '--effort') { const v = String(val() ?? '').toLowerCase(); o.thinking = v !== 'off'; if (v === 'medium' || v === 'high') o.effort = v; }
     else if (a === '--think') o.thinking = true;
     else if (a === '--no-think') o.thinking = false;
     else if (a === '--ctx') { const v = val(); o.ctx = /^\d+k$/i.test(v) ? Number.parseInt(v, 10) * 1024 : Number(v); }
@@ -96,7 +98,7 @@ if (opts.print) {
   try {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
-      thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots,
+      thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots,
       // Bonsai's questions: asked on the terminal when there is one; otherwise unanswered.
       answers: process.stdin.isTTY ? askOnTerminal : null,
       onEvent: (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
