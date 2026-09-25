@@ -1,0 +1,1 @@
+Make List and Search skip a folder called tmp as well (the same way they skip node_modules), and add a test for it.

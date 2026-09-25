@@ -34,6 +34,28 @@ test('classic: the whole task, answering each question by key', async () => {
   expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
 }, T);
 
+test('Bonsai asks: answer by number, or type an answer on the prompt line', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([
+    { tool: { name: 'Ask', args: { question: 'Which file should change?', options: ['export.mjs', 'trades.json'] } } },
+    { text: 'OK, export.mjs it is.' },
+    { tool: { name: 'Ask', args: { question: 'What should the flag be called?' } } },
+    { text: 'Named it --json.' },
+  ]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'classic', '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: 'do the thing' }, { key: 'enter' },
+    { wait: 'Which file should change?' }, { sleep: 200 }, { snapshot: 'asking' }, { type: '1' },
+    { wait: 'OK, export.mjs it is.' }, { type: 'add the flag' }, { key: 'enter' },
+    { wait: 'What should the flag be called?' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'Type your answer to Bonsai' }, { type: '--json' }, { key: 'enter' },
+    { wait: 'Named it --json.' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.asking).toContain('Bonsai asks');
+  expect(r.snapshots.asking).toMatch(/1\. export\.mjs[\s│]+2\. trades\.json[\s│]+3\. Type an answer[\s│]+4\. Stop here/);
+  for (const s of ['⏺ Ask(Which file should change?)', 'You: export.mjs', '> --json', 'You: --json', 'Named it --json.']) expect(r.text).toContain(s);
+}, T);
+
 test('ctrl+l switches to Live thinking and the choice is remembered', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);

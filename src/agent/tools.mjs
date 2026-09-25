@@ -57,6 +57,11 @@ export const TOOL_DEFS = [
       required: ['todos'],
     },
   },
+  {
+    name: 'Ask',
+    description: 'Ask the user one question when the request is unclear and your tools cannot settle it: what a vague request wants, which behaviour they mean, what to do when there is nothing to fix. Not for what List, Search or Read can find. Returns their answer. Ask as often as needed, one question at a time.',
+    parameters: { type: 'object', properties: { question: str('One short, specific question'), options: { type: 'array', items: { type: 'string' }, description: 'Optional: 2 to 4 short choices' } }, required: ['question'] },
+  },
 ];
 
 export const toolSchemas = () => TOOL_DEFS.map((d) => ({ type: 'function', function: d }));
@@ -70,6 +75,8 @@ const ALIASES = {
   command: ['command', 'cmd', 'script'],
   pattern: ['pattern', 'query', 'regex', 'glob_pattern'],
   todos: ['todos', 'items', 'plan', 'steps'],
+  question: ['question', 'prompt', 'text', 'message', 'query'],
+  options: ['options', 'choices', 'answers'],
 };
 
 export function normalizeArgs(name, raw) {
@@ -120,6 +127,7 @@ export function display(name, args = {}) {
     case 'Write': return { label: 'Write', arg: args.path ?? '' };
     case 'Bash': return { label: 'Bash', arg: args.command ?? '' };
     case 'TodoWrite': return { label: 'Update Todos', arg: '' };
+    case 'Ask': return { label: 'Ask', arg: args.question ?? '' };
     default: return { label: name, arg: '' };
   }
 }

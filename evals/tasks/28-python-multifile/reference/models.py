@@ -1,0 +1,10 @@
+"""Data classes for trades."""
+from dataclasses import dataclass
+
+
+@dataclass
+class Trade:
+    symbol: str
+    qty: int
+    price: float
+    fee: float = 0.0

@@ -6,6 +6,7 @@ import { join, dirname, basename, normalize } from 'node:path';
 import { walk } from '../tools/fs.mjs';
 import { resolvePath, didYouMean } from '../agent/tools.mjs';
 import { complete } from './llm.mjs';
+import { repoMap } from '../tools/repomap.mjs';
 
 export const isTestFile = (rel) => /(^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[mc]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/.test(rel);
 export const CODE = /\.(m?[jt]sx?|cjs|py)$/;
@@ -65,19 +66,33 @@ export function sourcesFromFailure(cwd, out, files) {
   return { sources: [...new Set(hits)], tests };
 }
 
+// The code files a task could be about, each with its size, its top-level
+// names (from the project map) and how many words of the task it mentions;
+// the likeliest first. What the model chooses from.
+export function fileHints(cwd, task, files, { max = 150, named = 60 } = {}) {
+  const code = files.filter((f) => CODE.test(f) && !isTestFile(f)).slice(0, max);
+  const words = [...new Set((task.match(/[A-Za-z_]\w{3,}/g) ?? []).map((w) => w.toLowerCase()))].slice(0, 8);
+  let byRel = new Map();
+  try { byRel = new Map(repoMap(cwd).entries.map((e) => [e.rel, e])); } catch {}
+  const scored = code.map((f) => {
+    let text = '';
+    try { text = readFileSync(join(cwd, f), 'utf8').slice(0, 20000).toLowerCase(); } catch {}
+    return { f, n: words.filter((w) => text.includes(w)).length };
+  }).sort((a, b) => b.n - a.n);
+  const lines = scored.map(({ f, n }, i) => {
+    const e = byRel.get(f);
+    const names = e && i < named && e.names.length ? `: ${e.names.slice(0, 8).join(', ')}${e.names.length > 8 ? ', …' : ''}` : '';
+    return `${f}${e ? ` (${e.lines} lines)` : ''}${names}${n ? `  · mentions ${n} word${n === 1 ? '' : 's'} from the task` : ''}`;
+  });
+  return { code: scored.map((s) => s.f), text: lines.join('\n') };
+}
+
 // The model chooses the file from the project's list (forced JSON, so the
 // answer is always one of the real files).
 export async function pickFile({ url, model, slot, cwd, task, files, signal }) {
-  const code = files.filter((f) => CODE.test(f) && !isTestFile(f)).slice(0, 150);
+  const { code, text: hints } = fileHints(cwd, task, files);
   if (!code.length) return null;
   if (code.length === 1) return code[0];
-  const words = [...new Set((task.match(/[A-Za-z_]\w{3,}/g) ?? []).map((w) => w.toLowerCase()))].slice(0, 8);
-  const hints = code.map((f) => {
-    let text = '';
-    try { text = readFileSync(join(cwd, f), 'utf8').slice(0, 20000).toLowerCase(); } catch {}
-    const n = words.filter((w) => text.includes(w)).length;
-    return `${f}${n ? `  (mentions ${n} word${n === 1 ? '' : 's'} from the task)` : ''}`;
-  }).join('\n');
   const r = await complete({
     url, model, slot, signal, temperature: 0, maxTokens: 120,
     system: 'You choose which file in a project a task is about.',

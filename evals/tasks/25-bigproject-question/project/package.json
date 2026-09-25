@@ -1,0 +1,7 @@
+{
+  "name": "bonsai-copy",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

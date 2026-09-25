@@ -1,0 +1,6 @@
+[
+  {
+    "match": ".",
+    "reply": "slugify gives several dashes in a row when the text has several spaces in a row: slugify('Hello   World') is 'hello---world' but it should be 'hello-world'."
+  }
+]

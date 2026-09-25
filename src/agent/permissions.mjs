@@ -73,7 +73,7 @@ export function blockedReason(command) {
 export const commandPrefix = (command) => command.trim().split(/\s+/).slice(0, 2).join(' ');
 
 export function decide(name, args, { mode, allowedPrefixes, inside = true, cwd }) {
-  if (name === 'TodoWrite') return { decision: 'allow' };
+  if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow' };
   if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
   if (name === 'Edit' || name === 'Write') {
     if (!inside) return { decision: 'deny', reason: 'that file is outside the project folder' };

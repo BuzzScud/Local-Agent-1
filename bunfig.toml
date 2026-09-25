@@ -1,3 +1,5 @@
 [test]
+# Tests that spawn node --test several times can pass 5 s when the model server loads the Mac.
+timeout = 30000
 # Only our tests; demo-project/ and evals/ hold practice projects with their own tests.
 root = "./test"

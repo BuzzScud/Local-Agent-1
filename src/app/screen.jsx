@@ -74,6 +74,7 @@ function ToolView({ it, width }) {
     case 'todos': return <Todos title={it.label === 'Plan' ? 'Plan' : 'Update Todos'} items={v.items.map((t) => ({ text: t.text, done: t.status === 'done', active: t.status === 'in_progress' }))} />;
     case 'denied': body = <Text color={C.warn}>Not allowed: {v.message}</Text>; break;
     case 'declined': body = <Text color={C.dim}>You said no{v.feedback ? `: ${v.feedback}` : ''}</Text>; break;
+    case 'answer': body = <Text><Text color={C.dim}>You: </Text>{v.text}</Text>; break;
     case 'error': body = <Text color={C.bad}>Error: {v.message}</Text>; break;
     default: body = null;
   }
@@ -251,10 +252,11 @@ function LiveArea({ app }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Bonsai asks' };
 
 export function permissionOptions(req, prefix) {
   const no = { label: 'No, and tell Bonsai what to do differently (esc)', choice: 'no' };
+  if (req.name === 'Ask') return [...(req.args.options ?? []).map((o) => ({ label: o, choice: 'answer', text: o })), { label: 'Type an answer', choice: 'type' }, { label: 'Stop here (esc)', choice: 'no' }];
   if (req.name === 'Bash') return [{ label: 'Yes', choice: 'yes' }, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, no];
   if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Bonsai what the test should check (esc)', choice: 'no' }];
   if (req.name === 'Rename') return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
@@ -270,7 +272,11 @@ function PermissionPrompt({ app }) {
   return (
     <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
       <Text bold color={C.ask}>{title}</Text>
-      {req.name === 'Bash' ? (
+      {req.name === 'Ask' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text>{req.args.question}</Text>
+        </Box>
+      ) : req.name === 'Bash' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
           <Text>{req.args.command}</Text>
           <Text color={C.dim}>{req.args.description ? `${req.args.description} · ` : ''}in {cwd}</Text>
@@ -292,7 +298,8 @@ function PermissionPrompt({ app }) {
           {hunk.length > cap ? <Text color={C.dim}>… +{hunk.length - cap} more lines</Text> : null}
         </Box>
       )}
-      {req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
+      {req.name === 'Ask' ? null
+        : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}

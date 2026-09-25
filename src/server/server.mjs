@@ -54,6 +54,12 @@ export function serverArgs(model, { ctx, port }) {
     // the thinking and the model has to act.
     '--reasoning-budget', String(model.thinkingBudget ?? 2048),
     '--reasoning-budget-message', ' I have thought enough. Now I act on it.',
+    // Speculative decoding from n-grams already in the prompt (no draft
+    // model): when the answer copies its input, as a rewritten function
+    // does, runs of tokens are accepted at once. Measured 2026-09-25 on a
+    // rewrite of export.mjs: 8.2 → 10–11 tokens/s written, same output;
+    // ngram-mod gave 9.2. The output is exact either way.
+    ...(model.spec ? ['--spec-type', model.spec.type, '--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
     // Cap the saved states (see checkpoints in models.mjs).
     '--ctx-checkpoints', String(model.checkpoints ?? 3),
     '--cache-ram', '0',

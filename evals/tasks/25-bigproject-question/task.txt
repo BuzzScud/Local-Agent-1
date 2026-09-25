@@ -1,0 +1,1 @@
+Where is the test command for a project decided, and what command does it return for a Python project? Don't change any files.

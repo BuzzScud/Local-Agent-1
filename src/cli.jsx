@@ -7,6 +7,18 @@ import { MODELS, DEFAULT_MODEL } from './server/models.mjs';
 import { ModelServer } from './server/server.mjs';
 import { chooseContext } from './server/memory.mjs';
 import { runHeadless } from './headless.mjs';
+import { createInterface } from 'node:readline';
+
+// bonsai -p: a question from Bonsai is printed and answered on the same terminal.
+async function askOnTerminal(question, req) {
+  const options = req?.args?.options ?? [];
+  process.stderr.write(`\n? ${question}\n${options.map((o, i) => `  ${i + 1}. ${o}\n`).join('')}`);
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const line = await new Promise((resolve) => rl.question('> ', resolve));
+  rl.close();
+  const n = Number(line.trim());
+  return options[n - 1] ?? (line.trim() || null);
+}
 import { loadSettings } from './app/store.mjs';
 import { setup } from './setup.mjs';
 
@@ -87,6 +99,8 @@ if (opts.print) {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots,
+      // Bonsai's questions: asked on the terminal when there is one; otherwise unanswered.
+      answers: process.stdin.isTTY ? askOnTerminal : null,
       onEvent: (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });
     process.stdout.write(`${r.finalText.trim()}\n`);

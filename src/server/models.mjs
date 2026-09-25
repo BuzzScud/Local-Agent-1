@@ -33,6 +33,8 @@ export const MODELS = {
     // request, the tries) use slot 1, so they never wipe the conversation's
     // read-in instructions. Each slot has its own running state and checkpoints.
     slots: 2,
+    // n-gram speculative decoding (see serverArgs): lookup 12 tokens, draft up to 48.
+    spec: { type: 'ngram-simple', n: 12, m: 48 },
     // Measured 2026-09-24 on the M4: 10.4 tokens/s writing, 61 reading.
     // Thinking starts off; /think on turns on PrismML's "medium" effort (about
     // 200 tokens on a small task). "xhigh", the model's default, can think for

@@ -92,6 +92,7 @@ export function App({ opts }) {
   const sessionRef = useRef({ id: newSessionId(), title: null, items: [] });
   const filesRef = useRef(null);
   const queuedRef = useRef(null);
+  const answerRef = useRef(null); // resolves Bonsai's question with what you type next
 
   // The agent lives for the whole session.
   const agentRef = useRef(null);
@@ -214,6 +215,7 @@ export function App({ opts }) {
       on('turn-end', ({ reason }) => {
         setLive(IDLE);
         setPerm(null);
+        answerRef.current = null;
         if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · tell Bonsai what to do instead', tone: 'warn' }); setPlaceholder('Tell Bonsai what to do instead'); }
         if (reason === 'declined') setPlaceholder('Tell Bonsai what to do instead');
         saveNow();
@@ -303,6 +305,7 @@ export function App({ opts }) {
     abortRef.current?.abort();
     const p = S.current.perm;
     if (p) { p.resolve({ choice: 'no' }); setPerm(null); }
+    if (answerRef.current) { answerRef.current({ choice: 'no' }); answerRef.current = null; }
   }, []);
 
   const runShell = useCallback(async (command) => {
@@ -420,13 +423,24 @@ export function App({ opts }) {
     setShowShortcuts(false);
     histIdx.current = null;
     if (!value.trim()) return;
+    if (answerRef.current) {
+      // The answer to Bonsai's question, shown like a message of yours.
+      const resolve = answerRef.current;
+      answerRef.current = null;
+      push({ type: 'user', text: value });
+      addHistory(cwd, value);
+      historyRef.current.push(value);
+      setPlaceholder(pick(PLACEHOLDERS));
+      resolve({ choice: 'answer', text: value });
+      return;
+    }
     if (value.startsWith('/')) { runSlash(value); return; }
     if (value.startsWith('!')) { runShell(value.slice(1).trim()); return; }
     addHistory(cwd, value);
     historyRef.current.push(value);
     if (agent.busy || S.current.starting) { queuedRef.current = value; setQueued(value); return; }
     sendPrompt(value);
-  }, [agent, cwd, runShell, runSlash, sendPrompt]);
+  }, [agent, cwd, push, runShell, runSlash, sendPrompt]);
 
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
@@ -467,8 +481,12 @@ export function App({ opts }) {
       const p = cur.perm;
       const n = p.options.length;
       const choose = (i) => {
-        const choice = p.options[i].choice;
+        const o = p.options[i];
+        const choice = o.choice;
         setPerm(null);
+        // Bonsai's question: a listed choice answers it; "type" takes the next line you enter.
+        if (choice === 'type') { answerRef.current = p.resolve; setPlaceholder('Type your answer to Bonsai, then enter'); return; }
+        if (choice === 'answer') { p.resolve({ choice, text: o.text }); return; }
         p.resolve({ choice });
         if (choice === 'no') setPlaceholder('Tell Bonsai what to do instead');
       };

@@ -11,19 +11,17 @@ import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, findFunction, functionNames, isWholeFil
 import { tryUntilPass } from './tries.mjs';
 import { complete, fence } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
+import { testWriter, CODE_SYSTEM, stem } from './testfirst.mjs';
 import { applyChange } from './apply.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { syntaxError } from '../agent/tools.mjs';
 
-const CODE_SYSTEM = 'You are an expert programmer. Reply with only the requested code in one fenced code block, nothing else.';
 // For source files: no tests or example calls inside them (they run on import).
 const SOURCE_ONLY = ' Source code only: no tests, asserts or example calls in the file.';
 
-function stem(rel) { return basename(rel).replace(/\.[^.]+$/, ''); }
-
 // Where the new test goes: the source's own test file, a new one beside it,
 // or (no tests in the project) a throwaway check in the scratch copy only.
-function testPlan(cwd, target, files, testCmd) {
+export function testPlan(cwd, target, files, testCmd) {
   const lang = langFor(target);
   const existing = testsFor(cwd, target, files)[0];
   if (testCmd && existing) return { rel: existing, lang, throwaway: false, cmd: testCmd };
@@ -37,13 +35,14 @@ function testPlan(cwd, target, files, testCmd) {
   return { rel: check, lang, throwaway: true, created: true, cmd: js ? `node --test ${check}` : `python3 ${check}` };
 }
 
-export async function changeFlow(ctx, task) {
+// hint: the file the planner (src/flows/multi.mjs) already chose, if any.
+export async function changeFlow(ctx, task, { hint } = {}) {
   const { cwd, testCmd } = ctx;
   const plan = ctx.plan(['Find the code', 'Write a test that defines "done"', 'Your OK on the test', `Try changes (up to ${ctx.maxTries})`, 'Apply the change']);
   plan.step(0);
   const files = projectFiles(cwd);
   const named = filesInText(cwd, task).filter((f) => !isTestFile(f) && langFor(f));
-  const target = named[0] ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal });
+  const target = named[0] ?? hint ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal });
   if (!target || !langFor(target)) return { handled: false, why: 'could not tell which file to change' };
   const lang = langFor(target);
   const original = readFileSync(join(cwd, target), 'utf8');
@@ -64,12 +63,15 @@ export async function changeFlow(ctx, task) {
   }
 
   const tp = testPlan(cwd, target, files, testCmd);
+  // Side slots of the model server: one is the usual; two let tests and
+  // drafts be written at the same time (see parallel below).
+  const [slotA, slotB] = ctx.sideSlots?.length > 1 ? ctx.sideSlots : [ctx.slot, undefined];
+  const parallel = slotB !== undefined;
   const scratch = new Scratch(cwd);
   try {
     const baseRun = testCmd && !tp.throwaway ? await scratch.run(testCmd, { signal: ctx.signal }) : null;
     const base = baseRun ? readResults(baseRun.out, baseRun.code) : { ok: true, passed: 0, failed: 0, total: 0, failing: [] };
     const testOriginal = tp.created ? '' : readFileSync(join(cwd, tp.rel), 'utf8');
-    const relImport = `./${basename(target)}`.replace(/\.ts$/, '.js');
 
     // 1. The test that defines "done".
     plan.step(1);
@@ -81,57 +83,10 @@ export async function changeFlow(ctx, task) {
     const focus = !unit ? '' : unit.isNew ? `\nThe new function(s) will be added at the end of ${target}.` : `\nOnly the function ${unit.name} (lines ${unit.start + 1}-${unit.end + 1}) needs to change.`;
     const data = relatedData(cwd, [original, testOriginal]).map((d) => fence(d.rel, d.text)).join('\n\n');
     const dataBlock = data ? `\n\nData files it uses:\n${data}` : '';
-    const testAsk = tp.throwaway || tp.created
-      ? `${fence(target, shownSource)}${dataBlock}\n\nTask: ${task}\n\nWrite a small test file for this task${lang === 'js' ? ` using node:test and node:assert/strict, importing from '${relImport}'` : `, a plain Python script that imports from ${stem(target)} and uses assert (it is run with python3)`}. It must check what the task asks for. Reply with the complete test file.`
-      : `${fence(target, shownSource)}\n\n${fence(tp.rel, testOriginal)}${dataBlock}\n\nTask: ${task}\n\nWrite ONE new test for this task, in the style of the existing tests. Reply with only the new test (plus any import lines it needs); it is added to the end of ${tp.rel}.`;
-    const api = lang === 'python'
-      ? '\n\nUse plain Python assert statements only.'
-      : '\n\nUse only these node:assert/strict functions: assert.equal, assert.deepEqual, assert.ok, assert.match, assert.throws, assert.rejects (there is no assert.include or assert.contains). To check JSON text, parse it with JSON.parse and compare with assert.deepEqual.';
-    const coverage = `${api}\n\nCheck each thing the task asks for with its own assert (for example, if it says "lowercase the rest", include capitals in the middle of a word). Test only what the task asks; do not add requirements it does not mention.`;
     // Candidate tests: each must fail on today's code for the right reason.
-    const candidates = [];
-    let brokenTests = 0; // tests that could not even load the code
-    const validateTest = async (text) => {
-      scratch.write(tp.rel, text);
-      const run = await scratch.run(tp.cmd, { signal: ctx.signal });
-      scratch.restore(tp.rel);
-      const r = readResults(run.out, run.code);
-      // "Fails because the new thing does not exist yet" is the right kind of
-      // failure too (the whole file fails to import).
-      // It must fail because the behaviour is not there yet — not because
-      // the test itself is broken (assert.include(...), a name nobody
-      // imported, a module that does not exist).
-      const taskNames = new Set(task.match(/[A-Za-z_$][\w$]*/g) ?? []);
-      const missing = lang === 'python'
-        ? /cannot import name|has no attribute/.test(run.out)
-        : /does not provide an export named/.test(run.out);
-      const misuse = /\b(assert|expect|test|it|describe|t)\.[\w$]+ is not a function/.test(run.out);
-      const undef = (lang === 'python' ? /NameError: name '([\w]+)' is not defined/ : /ReferenceError: ([\w$]+) is not defined/).exec(run.out);
-      const broken = misuse || (undef && !taskNames.has(undef[1])) || (!missing && /Cannot find module|ERR_MODULE_NOT_FOUND|ModuleNotFoundError/.test(run.out));
-      const crashed = broken;
-      const fails = !r.ok;
-      const moreTests = tp.throwaway || tp.created || missing || r.total === null || r.total > base.total;
-      const oldStillPass = tp.throwaway || tp.created || missing || r.passed === null || r.passed >= base.passed;
-      const firstError = (run.out.match(/(AssertionError|Error)[^\n]*/) ?? [''])[0].slice(0, 160);
-      if (crashed) brokenTests++;
-      return { ok: fails && !crashed && moreTests && oldStillPass, why: !fails ? 'the test already passes on today\'s code, so it does not check the new behaviour' : crashed ? `the test fails for the wrong reason (${firstError})` : !moreTests ? 'no new test was added' : 'it broke existing tests', out: run.out };
-    };
-    const testTry = await tryUntilPass(ctx, {
-      label: 'Writing tests', max: 5, want: 3, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200,
-      // Two tests that cannot even load the code: this is not a job for a test.
-      stopEarly: () => brokenTests >= 2 && !candidates.length,
-      prompt: ({ best }) => `${testAsk}${coverage}${best?.why ? `\n\nAn earlier try was no good: ${best.why}` : ''}`,
-      apply: (code) => {
-        const text = tp.throwaway || tp.created ? code : mergeTest(testOriginal, code, lang);
-        return { files: [{ abs: join(scratch.dir, tp.rel), text }], text, undo: () => {} };
-      },
-      check: async (applied) => {
-        const v = await validateTest(applied.text);
-        if (v.ok) candidates.push({ text: applied.text, out: v.out });
-        return { ...v, summary: 'fails on today\'s code, as it should' };
-      },
-    });
-    if (!candidates.length) return { handled: false, why: `could not write a good test for this task (${testTry.best?.why ?? 'no usable test'})` };
+    const tw = testWriter({ ctx, scratch, tp, task, lang, sources: [{ rel: target, label: shownLabel, text: shownSource }], dataBlock, base, slot: slotA });
+    const { candidates } = tw;
+    const writeTests = (want, max, label, extra) => tw.writeTests(want, max, label, extra, (fileText, code) => mergeTest(fileText, code, lang));
 
     // Versions of the code written from the task alone (no test shown); a
     // test that none of them passes probably asks for more than the task.
@@ -141,12 +96,18 @@ export async function changeFlow(ctx, task) {
       return unit.isNew ? `${original.replace(/\n*$/, '\n')}\n${code.replace(/\n*$/, '\n')}` : splice(original, unit, code);
     };
     const versions = [];
-    const drafts = await tryUntilPass(ctx, {
-      label: 'Drafting versions', max: 4, want: 4, system: CODE_SYSTEM, temperature: 0.7,
+    const draftVersions = (n, slot) => tryUntilPass(ctx, {
+      label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1,
       prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}\n\nReply with ${want}.${SOURCE_ONLY}`,
       apply: (code) => { const text = build(code); return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },
       check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },
     });
+    // Round one: two tests and two drafts. Writing is the slow part (about 10
+    // tokens a second), so more are written only when these disagree. With a
+    // second side slot the tests and the drafts are written at the same time.
+    const testTry = parallel ? (await Promise.all([writeTests(2, 3), draftVersions(2, slotB)]))[0] : await writeTests(2, 3);
+    if (!candidates.length) return { handled: false, why: `could not write a good test for this task (${testTry.best?.why ?? 'no usable test'})` };
+    if (!parallel) await draftVersions(2, slotA);
     // Score each test: how many drafts pass it (together with the old tests).
     const runAll = async () => {
       const runs = [await scratch.run(tp.cmd, { signal: ctx.signal })];
@@ -172,16 +133,20 @@ export async function changeFlow(ctx, task) {
     }
     };
     await score(candidates);
+    // They agree when every draft passes the chosen test and every test is
+    // passed by some draft. Otherwise one more test and two more drafts.
+    const agree = () => chosen && chosen.passing.length === versions.length && candidates.every((c) => c.passing.length);
+    if (!agree() && !ctx.signal?.aborted) {
+      if (parallel) await Promise.all([writeTests(1, 2), draftVersions(2, slotB)]);
+      else { await writeTests(1, 2); await draftVersions(2, slotA); }
+      chosen = null;
+      await score(candidates);
+    }
     // No draft passes any test: the tests probably ask for more than the
     // task. One more round of tests, told so.
     if (!chosen.passing.length && versions.length) {
       const before = candidates.length;
-      await tryUntilPass(ctx, {
-        label: 'Writing simpler tests', max: 4, want: 2, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200,
-        prompt: `${testAsk}${coverage}\n\nEarlier tests were too strict: they checked things the task does not ask for. Keep to exactly what the task says.`,
-        apply: (code) => { const text = tp.throwaway || tp.created ? code : mergeTest(testOriginal, code, lang); return { files: [{ abs: join(scratch.dir, tp.rel), text }], text, undo: () => {} }; },
-        check: async (applied) => { const v = await validateTest(applied.text); if (v.ok) candidates.push({ text: applied.text, out: v.out }); return { ...v, summary: 'fails on today\'s code, as it should' }; },
-      });
+      await writeTests(2, 4, 'Writing simpler tests', '\n\nEarlier tests were too strict: they checked things the task does not ask for. Keep to exactly what the task says.');
       await score(candidates.slice(before));
     }
     ctx.emit('tries-done', { label: 'Checked tests against drafts', marks: candidates.map((c) => (c.passing.length ? '✓' : '✗')), summary: `${candidates.length} test${candidates.length === 1 ? '' : 's'}, ${versions.length} draft${versions.length === 1 ? '' : 's'}; the chosen test is passed by ${chosen.passing.length}`, secs: 0 });
@@ -224,8 +189,9 @@ export async function changeFlow(ctx, task) {
       return { handled: false, why: `none of the ${result.marks.length} tries that ${unit.isNew ? 'only added a new function' : `changed only ${unit.name}`} passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
     }
     if (!result.ok) {
-      ctx.note(`None of the ${result.marks.length} tries passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}. Nothing was changed.`, 'warn');
-      return { handled: true, done: false, summary: 'I could not find a version that passes the test; nothing was changed.' };
+      // Often the existing tests are what fail (a new field changes an expected
+      // value); the step-by-step way may update them, with your OK on each edit.
+      return { handled: false, why: `none of the ${result.marks.length} tries passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
     }
 
     // 4. Apply: the source change (asks, as usual) and the approved test.

@@ -6,9 +6,11 @@ import { streamChat } from './client.mjs';
 import { toolSchemas, parseArgs, display, prepare, execute, resolvePath, didYouMean } from './tools.mjs';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
+import { repoMap } from '../tools/repomap.mjs';
 import { decide, commandPrefix } from './permissions.mjs';
 import { testCommand } from './prompt.mjs';
 import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
+import { clarify } from '../flows/clarify.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete } from '../flows/llm.mjs';
@@ -20,6 +22,7 @@ const TRIM_TO = 0.45; // …and where it stops
 // A question that names files gets them read in one go (see prefetch).
 const PREFETCH_MAX_LINES = 1000;
 const PREFETCH_MAX_CHARS = 45000; // ~12,500 tokens, ~3½ minutes of reading
+const MAP_MIN_FILES = 4; // fewer code files than this: no project map, the model just reads them
 // Asking about code even when the request was not sorted (plan mode, a folder that is not a project).
 const EXPLAIN = /\b(explain|describe|walk me through|summari[sz]e|what does|how does|what is in|tell me about)\b/i;
 
@@ -129,7 +132,7 @@ export class Agent extends EventEmitter {
 
   setSystem(system) { this.messages[0] = { role: 'system', content: system }; }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
-  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
 
   get maxResultChars() { return Math.max(4000, Math.floor(this.ctx * 0.15 * 3.6)); }
 
@@ -138,7 +141,7 @@ export class Agent extends EventEmitter {
     let seq = 0;
     const tool = (label, arg, view, error) => this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
     return {
-      url: this.url, model: this.model, slot: this.slots?.side, cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), signal, maxTries: this.maxTries,
+      url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), signal, maxTries: this.maxTries,
       // Code and tests are written at the chat's thinking level (Off by default).
       thinking: this.thinking, effort: this.effort,
       emit: (name, ev) => { if (name === 'route') this.lastRoute = ev; this.emit(name, ev); },
@@ -181,6 +184,30 @@ export class Agent extends EventEmitter {
     this.emit('turn-start', { started });
     if (isSmallTalk(text)) return this.chat(text, started, signal);
     this.lastRoute = null;
+    const stopNow = (reason) => {
+      this.busy = false;
+      this.emit('flow-step', null);
+      if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
+      this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
+      return reason;
+    };
+    // An unclear request gets one question first (src/flows/clarify.mjs); the
+    // answer joins the conversation and travels with the request.
+    if (this.flows && this.mode !== 'plan') {
+      try {
+        const c = await clarify(this.flowContext(signal), text);
+        if (c?.stop) return stopNow(c.stop);
+        if (c) {
+          this.messages.push({ role: 'assistant', content: c.question });
+          this.messages.push({ role: 'user', content: c.answer });
+          // The answer is the real request: it goes first, so the paths sort on it.
+          text = `${c.answer}\n\n(This answers the question "${c.question}" about the request: ${text})`;
+        }
+      } catch (e) {
+        if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted');
+        this.emit('note', { text: `Could not check the request first (${e.message}); starting anyway.`, tone: 'dim' });
+      }
+    }
     // First the focused paths (rename / fix / change); the loop handles the rest.
     if (this.flows && this.mode !== 'plan') {
       try {
@@ -209,6 +236,7 @@ export class Agent extends EventEmitter {
     // A question about named files: read them now, in one go, instead of
     // letting the model find, list and read them a piece at a time.
     const kind = this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    this.prefetchMap();
     if (kind === 'question' || (!kind && EXPLAIN.test(text))) this.prefetch(text);
     let reason = 'done';
     let repeatKey = null;
@@ -216,7 +244,8 @@ export class Agent extends EventEmitter {
     let errorsInRow = 0;
     let nudges = 0;
     let checks = 0;
-    this.turn = { changed: false, testedAfterChange: false, created: [] };
+    this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '' };
+    let verified = false;
     let correctedAlready = false;
     let blankRetry = false;
     try {
@@ -296,6 +325,17 @@ export class Agent extends EventEmitter {
               continue;
             }
           }
+          // It changed files and says it is done: does the work cover every
+          // part of the request? Once per message; a miss sends it back.
+          if (this.turn.changed && this.verify && !verified && !signal?.aborted) {
+            verified = true;
+            const miss = await this.verifyDone(text, signal);
+            if (miss) {
+              this.emit('note', { text: `Not finished: ${miss}`, tone: 'warn' });
+              this.messages.push({ role: 'user', content: `Not done yet: ${miss}. Do that now with the tools, run the tests again if there are any, then report.` });
+              continue;
+            }
+          }
           break;
         }
         // One call at a time (the prompt asks for it; extra calls are ignored).
@@ -326,6 +366,21 @@ export class Agent extends EventEmitter {
     }
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
     return reason;
+  }
+
+  // In a project with several code files, the loop starts from the project
+  // map (each file with its names) as if it had listed the project itself:
+  // one read instead of a List → Read → List round at ~60 tokens a second.
+  prefetchMap() {
+    if (this.mapGiven) return;
+    this.mapGiven = true;
+    let map;
+    try { map = repoMap(this.cwd, { maxChars: 4500 }); } catch { return; }
+    if (map.entries.length < MAP_MIN_FILES) return;
+    const id = `map_${Date.now()}`;
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: '.', pattern: '**/*' }) } }] });
+    this.messages.push({ role: 'tool', tool_call_id: id, content: `Code files in the project (lines: top-level names):\n${map.text}` });
+    this.emit('tool', { id, name: 'List', label: 'List', arg: 'the project map', view: { kind: 'list', count: map.entries.length, content: map.text } });
   }
 
   // Puts the files a question names into the conversation as if the model
@@ -469,6 +524,7 @@ export class Agent extends EventEmitter {
       return { text: parsed.error, error: true };
     }
     const args = parsed.args;
+    if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
     const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
@@ -508,11 +564,49 @@ export class Agent extends EventEmitter {
     try { out = await execute(call.name, args, prepared, env); } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs);
-    if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) { this.turn.changed = true; this.turn.testedAfterChange = false; }
+    if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
+      this.turn.changed = true;
+      this.turn.testedAfterChange = false;
+      // What changed this turn, for the check at the end (verifyDone).
+      const hunk = (out.view?.hunk ?? []).filter((l) => l.type !== ' ').map((l) => `${l.type}${l.text}`).join('\n');
+      if (this.turn.diffs.length < 6000) this.turn.diffs += `${prepared.rel}:\n${hunk.slice(0, 1500)}\n`;
+    }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
+  }
+
+  // A forced-JSON check of the finished work against the request: null when
+  // covered, otherwise what is missing (one short sentence). Best effort.
+  async verifyDone(answer, signal) {
+    const request = [...this.messages].reverse().find((m) => m.role === 'user' && !/^\[|^Not done yet|^Go ahead|^The tests fail|^You created|^Reply to the user|^You ran out/.test(m.content))?.content ?? '';
+    if (!request.trim() || !this.turn.diffs.trim()) return null;
+    try {
+      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 120,
+        system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
+        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed):\n${this.turn.diffs.slice(0, 5000)}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nIs every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
+        schema: { type: 'object', properties: { done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['done', 'missing'] } });
+      if (!r.json || r.json.done || !r.json.missing?.trim()) return null;
+      return r.json.missing.trim().slice(0, 200);
+    } catch { return null; }
+  }
+
+  // The model's Ask tool: the question goes through the same prompt as a
+  // permission (or the answers hook when there is no screen).
+  async askUser(id, args, shown, signal) {
+    const options = Array.isArray(args.options) ? args.options.map((o) => String(o).trim()).filter(Boolean).slice(0, 4) : [];
+    this.emit('tool-ask', { id, name: 'Ask', ...shown });
+    const answer = await this.ask({ id, name: 'Ask', args: { question: args.question, options }, prepared: {}, ...shown });
+    if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+    if (answer.choice === 'no' || !answer.text?.trim()) {
+      this.emit('tool', { id, name: 'Ask', ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
+      return { text: `The user did not answer${answer.feedback ? ` and wrote: ${answer.feedback}` : '. Wait for their next message.'}`, error: true, stop: answer.feedback ? null : 'declined' };
+    }
+    const text = answer.text.trim();
+    this.turn?.asked?.push(args.question);
+    this.emit('tool', { id, name: 'Ask', ...shown, view: { kind: 'answer', question: args.question, text } });
+    return { text: `The user answered: ${text}` };
   }
 
   // Keep the conversation inside the model's memory: first empty old tool
@@ -558,6 +652,7 @@ export class Agent extends EventEmitter {
       if (ev.type === 'text') summary += ev.text;
     }
     this.messages = [this.messages[0], { role: 'user', content: `Summary of the work so far:\n${summary.trim()}` }, { role: 'assistant', content: 'Understood. I will continue from here.' }];
+    this.mapGiven = false;
     this.ctxUsed = tokensOf(this.messages[0].content) + tokensOf(summary) + 1300;
     this.emit('compacted', { summary: summary.trim() });
   }

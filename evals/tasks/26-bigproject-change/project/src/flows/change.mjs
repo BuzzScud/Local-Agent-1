@@ -1,0 +1,249 @@
+// Add or change code, test first: find the file, have the model write a test
+// that defines "done" (it must fail on today's code), let you approve it,
+// then try versions in the scratch copy until every test passes.
+// A project without tests gets a throwaway check instead, kept out of your project.
+import { readFileSync, existsSync } from 'node:fs';
+import { join, dirname, basename } from 'node:path';
+import { Scratch } from './scratch.mjs';
+import { readResults, failureDigest, assertionDetail } from './results.mjs';
+import { projectFiles, filesInText, pickFile, isTestFile, testsFor, relatedData } from './localize.mjs';
+import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, findFunction, functionNames, isWholeFile, splice, langFor } from './units.mjs';
+import { tryUntilPass } from './tries.mjs';
+import { complete, fence } from './llm.mjs';
+import { mergeTest } from './testfile.mjs';
+import { applyChange } from './apply.mjs';
+import { diffLines } from '../tools/edit.mjs';
+import { syntaxError } from '../agent/tools.mjs';
+
+const CODE_SYSTEM = 'You are an expert programmer. Reply with only the requested code in one fenced code block, nothing else.';
+// For source files: no tests or example calls inside them (they run on import).
+const SOURCE_ONLY = ' Source code only: no tests, asserts or example calls in the file.';
+
+function stem(rel) { return basename(rel).replace(/\.[^.]+$/, ''); }
+
+// Where the new test goes: the source's own test file, a new one beside it,
+// or (no tests in the project) a throwaway check in the scratch copy only.
+function testPlan(cwd, target, files, testCmd) {
+  const lang = langFor(target);
+  const existing = testsFor(cwd, target, files)[0];
+  if (testCmd && existing) return { rel: existing, lang, throwaway: false, cmd: testCmd };
+  const js = lang === 'js';
+  const ext = target.split('.').pop();
+  const name = js ? `${stem(target)}.test.${ext === 'ts' || ext === 'tsx' ? ext : 'mjs'}` : `test_${stem(target)}.py`;
+  const rel = join(dirname(target), name);
+  if (testCmd) return { rel, lang, throwaway: false, cmd: testCmd, created: true };
+  // No test setup: a scratch-only check run directly.
+  const check = js ? join(dirname(target), 'bonsai-check.test.mjs') : join(dirname(target), 'bonsai_check.py');
+  return { rel: check, lang, throwaway: true, created: true, cmd: js ? `node --test ${check}` : `python3 ${check}` };
+}
+
+export async function changeFlow(ctx, task) {
+  const { cwd, testCmd } = ctx;
+  const plan = ctx.plan(['Find the code', 'Write a test that defines "done"', 'Your OK on the test', `Try changes (up to ${ctx.maxTries})`, 'Apply the change']);
+  plan.step(0);
+  const files = projectFiles(cwd);
+  const named = filesInText(cwd, task).filter((f) => !isTestFile(f) && langFor(f));
+  const target = named[0] ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal });
+  if (!target || !langFor(target)) return { handled: false, why: 'could not tell which file to change' };
+  const lang = langFor(target);
+  const original = readFileSync(join(cwd, target), 'utf8');
+  ctx.tool('Read', target, { kind: 'read', lines: original.split('\n').length, total: original.split('\n').length, content: original });
+
+  // Big file: the model picks the function to change, or NEW for a new one.
+  let unit = null;
+  if (original.split('\n').length > WHOLE_FILE_MAX) {
+    const names = functionNames(original, lang);
+    const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 60,
+      system: 'You choose which function a task changes.',
+      user: `Task: ${task}\nFunctions in ${target}: ${names.join(', ')}\nWhich function must change? Answer NEW if the task needs a new function.`,
+      schema: { type: 'object', properties: { function: { type: 'string', enum: [...names, 'NEW'] } }, required: ['function'] } });
+    const f = r.json?.function;
+    if (!f) return { handled: false, why: 'could not tell which function to change' };
+    unit = f === 'NEW' ? { name: null, start: original.split('\n').length, end: original.split('\n').length - 1, isNew: true } : { name: f, ...findFunction(original, f, lang) };
+    if (!unit.isNew && unit.start === undefined) return { handled: false, why: `could not find ${f} in ${target}` };
+  }
+
+  const tp = testPlan(cwd, target, files, testCmd);
+  const scratch = new Scratch(cwd);
+  try {
+    const baseRun = testCmd && !tp.throwaway ? await scratch.run(testCmd, { signal: ctx.signal }) : null;
+    const base = baseRun ? readResults(baseRun.out, baseRun.code) : { ok: true, passed: 0, failed: 0, total: 0, failing: [] };
+    const testOriginal = tp.created ? '' : readFileSync(join(cwd, tp.rel), 'utf8');
+    const relImport = `./${basename(target)}`.replace(/\.ts$/, '.js');
+
+    // 1. The test that defines "done".
+    plan.step(1);
+    // The model reads the whole file up to SHOW_WHOLE_MAX lines, even when it
+    // only writes one function; past that, just the function (or the top).
+    const showAll = original.split('\n').length <= SHOW_WHOLE_MAX;
+    const shownSource = showAll ? original : unit && !unit.isNew ? original.split('\n').slice(unit.start, unit.end + 1).join('\n') : `${original.split('\n').slice(0, 60).join('\n')}\n…`;
+    const shownLabel = !showAll && unit && !unit.isNew ? `${target} (function ${unit.name})` : target;
+    const focus = !unit ? '' : unit.isNew ? `\nThe new function(s) will be added at the end of ${target}.` : `\nOnly the function ${unit.name} (lines ${unit.start + 1}-${unit.end + 1}) needs to change.`;
+    const data = relatedData(cwd, [original, testOriginal]).map((d) => fence(d.rel, d.text)).join('\n\n');
+    const dataBlock = data ? `\n\nData files it uses:\n${data}` : '';
+    const testAsk = tp.throwaway || tp.created
+      ? `${fence(target, shownSource)}${dataBlock}\n\nTask: ${task}\n\nWrite a small test file for this task${lang === 'js' ? ` using node:test and node:assert/strict, importing from '${relImport}'` : `, a plain Python script that imports from ${stem(target)} and uses assert (it is run with python3)`}. It must check what the task asks for. Reply with the complete test file.`
+      : `${fence(target, shownSource)}\n\n${fence(tp.rel, testOriginal)}${dataBlock}\n\nTask: ${task}\n\nWrite ONE new test for this task, in the style of the existing tests. Reply with only the new test (plus any import lines it needs); it is added to the end of ${tp.rel}.`;
+    const api = lang === 'python'
+      ? '\n\nUse plain Python assert statements only.'
+      : '\n\nUse only these node:assert/strict functions: assert.equal, assert.deepEqual, assert.ok, assert.match, assert.throws, assert.rejects (there is no assert.include or assert.contains). To check JSON text, parse it with JSON.parse and compare with assert.deepEqual.';
+    const coverage = `${api}\n\nCheck each thing the task asks for with its own assert (for example, if it says "lowercase the rest", include capitals in the middle of a word). Test only what the task asks; do not add requirements it does not mention.`;
+    // Candidate tests: each must fail on today's code for the right reason.
+    const candidates = [];
+    let brokenTests = 0; // tests that could not even load the code
+    const validateTest = async (text) => {
+      scratch.write(tp.rel, text);
+      const run = await scratch.run(tp.cmd, { signal: ctx.signal });
+      scratch.restore(tp.rel);
+      const r = readResults(run.out, run.code);
+      // "Fails because the new thing does not exist yet" is the right kind of
+      // failure too (the whole file fails to import).
+      // It must fail because the behaviour is not there yet — not because
+      // the test itself is broken (assert.include(...), a name nobody
+      // imported, a module that does not exist).
+      const taskNames = new Set(task.match(/[A-Za-z_$][\w$]*/g) ?? []);
+      const missing = lang === 'python'
+        ? /cannot import name|has no attribute/.test(run.out)
+        : /does not provide an export named/.test(run.out);
+      const misuse = /\b(assert|expect|test|it|describe|t)\.[\w$]+ is not a function/.test(run.out);
+      const undef = (lang === 'python' ? /NameError: name '([\w]+)' is not defined/ : /ReferenceError: ([\w$]+) is not defined/).exec(run.out);
+      const broken = misuse || (undef && !taskNames.has(undef[1])) || (!missing && /Cannot find module|ERR_MODULE_NOT_FOUND|ModuleNotFoundError/.test(run.out));
+      const crashed = broken;
+      const fails = !r.ok;
+      const moreTests = tp.throwaway || tp.created || missing || r.total === null || r.total > base.total;
+      const oldStillPass = tp.throwaway || tp.created || missing || r.passed === null || r.passed >= base.passed;
+      const firstError = (run.out.match(/(AssertionError|Error)[^\n]*/) ?? [''])[0].slice(0, 160);
+      if (crashed) brokenTests++;
+      return { ok: fails && !crashed && moreTests && oldStillPass, why: !fails ? 'the test already passes on today\'s code, so it does not check the new behaviour' : crashed ? `the test fails for the wrong reason (${firstError})` : !moreTests ? 'no new test was added' : 'it broke existing tests', out: run.out };
+    };
+    const testTry = await tryUntilPass(ctx, {
+      label: 'Writing tests', max: 5, want: 3, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200,
+      // Two tests that cannot even load the code: this is not a job for a test.
+      stopEarly: () => brokenTests >= 2 && !candidates.length,
+      prompt: ({ best }) => `${testAsk}${coverage}${best?.why ? `\n\nAn earlier try was no good: ${best.why}` : ''}`,
+      apply: (code) => {
+        const text = tp.throwaway || tp.created ? code : mergeTest(testOriginal, code, lang);
+        return { files: [{ abs: join(scratch.dir, tp.rel), text }], text, undo: () => {} };
+      },
+      check: async (applied) => {
+        const v = await validateTest(applied.text);
+        if (v.ok) candidates.push({ text: applied.text, out: v.out });
+        return { ...v, summary: 'fails on today\'s code, as it should' };
+      },
+    });
+    if (!candidates.length) return { handled: false, why: `could not write a good test for this task (${testTry.best?.why ?? 'no usable test'})` };
+
+    // Versions of the code written from the task alone (no test shown); a
+    // test that none of them passes probably asks for more than the task.
+    const want = unit ? (unit.isNew ? 'only the new function(s), complete' : `the complete new version of the function ${unit.name}`) : `the complete new ${target}`;
+    const build = (code) => {
+      if (!unit || isWholeFile(code, original, unit.isNew ? null : unit.name, lang)) return code;
+      return unit.isNew ? `${original.replace(/\n*$/, '\n')}\n${code.replace(/\n*$/, '\n')}` : splice(original, unit, code);
+    };
+    const versions = [];
+    const drafts = await tryUntilPass(ctx, {
+      label: 'Drafting versions', max: 4, want: 4, system: CODE_SYSTEM, temperature: 0.7,
+      prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}\n\nReply with ${want}.${SOURCE_ONLY}`,
+      apply: (code) => { const text = build(code); return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },
+      check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },
+    });
+    // Score each test: how many drafts pass it (together with the old tests).
+    const runAll = async () => {
+      const runs = [await scratch.run(tp.cmd, { signal: ctx.signal })];
+      if (!tp.throwaway && tp.cmd !== testCmd && testCmd) runs.push(await scratch.run(testCmd, { signal: ctx.signal }));
+      if (tp.throwaway && testCmd) runs.push(await scratch.run(testCmd, { signal: ctx.signal }));
+      return runs.map((r) => readResults(r.out, r.code));
+    };
+    let chosen = null;
+    const score = async (list) => {
+    for (const c of list) {
+      const passing = [];
+      for (const v of versions) {
+        scratch.write(tp.rel, c.text);
+        scratch.write(target, v.text);
+        const rs = await runAll();
+        const kept = tp.throwaway || tp.created || rs[0].total === null || rs[0].total > base.total;
+        if (rs.every((r) => r.ok) && kept) passing.push(v);
+        scratch.restore(target);
+        scratch.restore(tp.rel);
+      }
+      c.passing = passing;
+      if (!chosen || passing.length > chosen.passing.length) chosen = c;
+    }
+    };
+    await score(candidates);
+    // No draft passes any test: the tests probably ask for more than the
+    // task. One more round of tests, told so.
+    if (!chosen.passing.length && versions.length) {
+      const before = candidates.length;
+      await tryUntilPass(ctx, {
+        label: 'Writing simpler tests', max: 4, want: 2, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200,
+        prompt: `${testAsk}${coverage}\n\nEarlier tests were too strict: they checked things the task does not ask for. Keep to exactly what the task says.`,
+        apply: (code) => { const text = tp.throwaway || tp.created ? code : mergeTest(testOriginal, code, lang); return { files: [{ abs: join(scratch.dir, tp.rel), text }], text, undo: () => {} }; },
+        check: async (applied) => { const v = await validateTest(applied.text); if (v.ok) candidates.push({ text: applied.text, out: v.out }); return { ...v, summary: 'fails on today\'s code, as it should' }; },
+      });
+      await score(candidates.slice(before));
+    }
+    ctx.emit('tries-done', { label: 'Checked tests against drafts', marks: candidates.map((c) => (c.passing.length ? '✓' : '✗')), summary: `${candidates.length} test${candidates.length === 1 ? '' : 's'}, ${versions.length} draft${versions.length === 1 ? '' : 's'}; the chosen test is passed by ${chosen.passing.length}`, secs: 0 });
+    const testText = chosen.text;
+
+    // 2. Your OK on the test.
+    plan.step(2);
+    const d = diffLines(testOriginal, testText);
+    const answer = await ctx.ask({ id: `test_${Date.now()}`, name: 'Test', args: { path: tp.rel }, prepared: { rel: tp.throwaway ? `${tp.rel} (a throwaway check, not added to your project)` : tp.rel, before: testOriginal, after: testText, ...d, created: tp.created }, label: 'Test', arg: tp.rel });
+    if (answer.choice === 'no') {
+      ctx.tool('Test', tp.rel, { kind: 'declined', feedback: answer.feedback }, true);
+      return { handled: true, done: false, declined: true, summary: 'You did not approve the test, so nothing was changed. Say what the test should check instead.' };
+    }
+    ctx.tool('Test', tp.rel, { kind: 'diff', path: tp.throwaway ? `${tp.rel} (throwaway)` : tp.rel, created: tp.created, hunk: d.hunk, additions: d.additions, removals: d.removals, lines: testText.split('\n').length });
+
+    // 3. A draft that already passes is the answer; otherwise tries against the test.
+    plan.step(3);
+    scratch.write(tp.rel, testText);
+    const failRun = await scratch.run(tp.cmd, { signal: ctx.signal });
+    const digest = failureDigest(failRun.out);
+    const result = chosen.passing.length ? { ok: true, code: chosen.passing[0].code, marks: ['✓'] } : await tryUntilPass(ctx, {
+      label: 'Trying changes', max: ctx.maxTries, system: CODE_SYSTEM,
+      prompt: ({ last }) => `Task: ${task}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nChange ${target} so that every test passes (do not change the tests). Reply with ${want}.${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n\`\`\`\n${last.code.slice(0, 2500)}\n\`\`\`\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
+      apply: (code) => {
+        const text = build(code);
+        scratch.write(target, text);
+        return { files: [{ abs: join(scratch.dir, target), text }], undo: () => scratch.restore(target), text };
+      },
+      check: async () => {
+        const rs = await runAll();
+        const kept = tp.throwaway || tp.created || rs[0].total === null || rs[0].total > base.total;
+        const ok = rs.every((r) => r.ok) && kept;
+        const failing = rs.flatMap((r) => r.failing);
+        return { ok, score: rs.reduce((s, r) => s + (r.passed ?? 0), 0), why: failing.length ? `still failing: ${failing.slice(0, 3).join('; ')}` : 'the tests still fail', detail: '', summary: `passes ${tp.throwaway ? 'the check' : 'every test'}` };
+      },
+    });
+    if (!result.ok && unit) {
+      // Writing only one function was not enough: the change probably needs
+      // more than one place, which the step-by-step way can do.
+      return { handled: false, why: `none of the ${result.marks.length} tries that ${unit.isNew ? 'only added a new function' : `changed only ${unit.name}`} passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
+    }
+    if (!result.ok) {
+      ctx.note(`None of the ${result.marks.length} tries passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}. Nothing was changed.`, 'warn');
+      return { handled: true, done: false, summary: 'I could not find a version that passes the test; nothing was changed.' };
+    }
+
+    // 4. Apply: the source change (asks, as usual) and the approved test.
+    plan.step(4);
+    const after = build(result.code);
+    const changes = [{ rel: target, before: original, after }];
+    const applied = await applyChange(ctx, changes);
+    if (!applied.ok) return { handled: true, done: false, declined: true, summary: 'You said no to the change; nothing was changed.' };
+    if (!tp.throwaway) {
+      // Already approved as the test; written without asking again.
+      const { writeFileSync, mkdirSync } = await import('node:fs');
+      mkdirSync(dirname(join(cwd, tp.rel)), { recursive: true });
+      writeFileSync(join(cwd, tp.rel), testText);
+    }
+    const final = testCmd ? await ctx.runReal(testCmd) : { ok: true };
+    plan.done();
+    return { handled: true, done: final.ok, summary: `${ctx.describe ? await ctx.describe(target, original, after) : ''}Changed ${target}${tp.throwaway ? ' (checked with a throwaway test, not added to your project)' : ` and added a test to ${tp.rel}`}${testCmd ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above') : ''}.` };
+  } finally {
+    scratch.dispose();
+  }
+}
