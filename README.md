@@ -1,6 +1,6 @@
 # Bonsai Code
 
-A Claude Code–style coding agent for your terminal, running a local model on
+*Local-Agent-1.* A Claude Code–style coding agent for your terminal, running a local model on
 this Mac. Nothing leaves the machine.
 
 ```
