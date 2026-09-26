@@ -98,6 +98,7 @@ export function App({ opts, win }) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   const [ramGb, setRamGb] = useState(null);
+  const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
 
   // Each new item is measured before it is shown (see primeRows), so the
   // space above the prompt box is right on the first frame; measured just
@@ -450,6 +451,13 @@ export function App({ opts, win }) {
       case 'doctor':
         doctor();
         break;
+      case 'meters': {
+        const on = arg ? /^(on|show|yes)$/i.test(arg) : !meters;
+        setMeters(on);
+        saveSettings({ meters: on });
+        push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
+        break;
+      }
       case 'exit':
       case 'quit':
         await quit();
@@ -457,7 +465,7 @@ export function App({ opts, win }) {
       default:
         push({ type: 'note', text: `Unknown command /${cmd}. Type /help for the list.`, tone: 'warn' });
     }
-  }, [agent, cwd, doctor, flash, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, toggleLayout]);
+  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, toggleLayout]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');
@@ -680,7 +688,7 @@ export function App({ opts, win }) {
   itemsRef.current = items;
   const app = {
     items, live, perm, picker, input, mode, layout, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd),
-    modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
   };

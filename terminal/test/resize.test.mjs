@@ -129,3 +129,10 @@ test('a long reply being written never spills into the scrollback (it once print
     expect(all.split('FIRST-LINE-MARKER').length - 1).toBe(1);
   } finally { await t.close(); await fake.close(); }
 }, T);
+
+test('memoryWarning: silent under 70%, then says what happens next', async () => {
+  const { memoryWarning } = await import('../src/app/screen.jsx');
+  expect(memoryWarning(10_000, 32_768)).toBeNull();
+  expect(memoryWarning(23_500, 32_768)).toMatch(/^Memory 72% full: old tool output is trimmed soon/);
+  expect(memoryWarning(28_500, 32_768)).toMatch(/^Memory 87% full: the conversation is summarized/);
+});

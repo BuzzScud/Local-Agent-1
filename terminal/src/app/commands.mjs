@@ -10,6 +10,7 @@ export const COMMANDS = [
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'stats', desc: 'Speed, memory and context used' },
+  { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]' },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
   { name: 'exit', desc: 'Quit Bonsai Code' },
 ];
