@@ -26,9 +26,21 @@ export const draftBytes = (m) => (m.draft ? m.draft.bytes + m.draft.computeBytes
 // unless it is switched off with BONSAI_HELPER=off.
 export const needBytes = (m, ctx, { draft = Boolean(m.draft) && process.env.BONSAI_HELPER !== 'off' } = {}) => m.bytes + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
 
-export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes() } = {}) {
-  if (available >= needBytes(m, want)) return { ctx: want, available, reason: null };
+// effort 'high': the model mostly thinks, which the guessing helper barely
+// speeds up, so when memory is short the helper (1.84 GB) goes before the
+// memory does — dropping 32k to 16k would only save ~0.6 GB (the per-token
+// cache is small; the model file and running state are not). Measured on the
+// chart bug 25 Sep: High at 16k lost its trail; the helper was idle.
+export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes(), effort } = {}) {
   const gb = (b) => (b / 1e9).toFixed(1);
+  const kb = (c) => `${Math.round(c / 1024)}k`;
+  if (available >= needBytes(m, want)) return { ctx: want, available, reason: null };
+  if (effort === 'high' && m.draft && process.env.BONSAI_HELPER !== 'off') {
+    if (available >= needBytes(m, want, { draft: false })) {
+      return { ctx: want, helper: false, available, reason: `${gb(available)} GB free: High effort keeps ${kb(want)} of memory and leaves the speed helper off (with it, ${kb(want)} needs ${gb(needBytes(m, want))} GB)` };
+    }
+    return { ctx: floor, helper: false, available, reason: `${gb(available)} GB free, so using ${kb(floor)} without the speed helper (${gb(needBytes(m, floor, { draft: false }))} GB); close other apps, such as the desk servers, to give it more room` };
+  }
   return {
     ctx: floor,
     available,

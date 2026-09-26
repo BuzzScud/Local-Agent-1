@@ -92,7 +92,9 @@ test('old tool output is trimmed when memory fills', async () => {
   const { agent, events } = await run(replies, { ctx: 1500 });
   expect(events.some((e) => e.type === 'note' && /Trimmed|Summariz/.test(e.text))).toBe(true);
   expect(agent.messages.some((m) => m.role === 'tool' && m.content.startsWith('[older output removed'))
-    || agent.messages.some((m) => m.content?.startsWith?.('Summary of the work so far'))).toBe(true);
+    || agent.messages.some((m) => m.content?.includes?.('My memory filled up'))).toBe(true);
+  // The request itself is never summarized away.
+  expect(agent.messages.some((m) => m.role === 'user' && m.content === 'add a --json flag to export.mjs')).toBe(true);
 });
 
 test('blocked commands never run, even in auto mode', async () => {
@@ -357,4 +359,132 @@ test('a reply that asks you a question does not run the command that came with i
   expect(reason).toBe('done');
   expect(events.filter((e) => e.type === 'tool').map((e) => e.name)).toEqual(['Read']); // the tail|od never ran
   expect(fake.remaining()).toBe(1);
+});
+
+// ————— The chart-bug lessons (26 Sep): thinking kept, cause kept, act on it —————
+import { keyLines, namesAFix } from '../src/agent/agent.mjs';
+
+test('keyLines keeps cause and fix sentences, skips hedges and chatter', () => {
+  const thought = `Let me check the context of the symbol box. Hmm, maybe the menu is fixed.
+So the problem: .hud has z-index:4 and the legend .tv-lg has z-index:4 too, and the legend comes later in the DOM.
+The fix is to raise .hud to z-index:5 so its menu paints above the legend.
+Now I will read the file again.`;
+  const lines = keyLines(thought);
+  expect(lines.length).toBe(2);
+  expect(lines[0]).toContain('So the problem');
+  expect(lines[1]).toContain('The fix is to raise .hud');
+  expect(lines.some(namesAFix)).toBe(true);
+  expect(keyLines('Maybe the fix is z-index. Let me look around a bit more first.')).toEqual([]);
+});
+
+test('its thinking goes back to the model on the next step', async () => {
+  const replies = [
+    { reasoning: 'The legend and the box are both z-index 4; that is why the list is covered by the legend.', tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { text: 'Done looking.' },
+  ];
+  const { fake } = await run(replies);
+  const assistant = fake.requests.at(-1).messages.find((m) => m.role === 'assistant' && m.tool_calls);
+  expect(assistant.reasoning_content).toContain('both z-index 4');
+});
+
+test('reading the same unchanged part twice points back instead of re-reading', async () => {
+  const read = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
+  const replies = [read, read, { text: 'ok' }];
+  const { events, fake } = await run(replies);
+  const reads = events.filter((e) => e.type === 'tool' && e.name === 'Read');
+  expect(reads.length).toBe(2);
+  expect(reads[1].view.kind).toBe('same');
+  expect(lastToolResult(fake.requests.at(-1))).toContain('already read this part');
+});
+const lastToolResult = (req) => [...req.messages].reverse().find((m) => m.role === 'tool')?.content ?? '';
+
+test('fixing a bug, it names the fix and keeps looking: one note says make the change now', async () => {
+  const cause = 'So the problem: .hud has z-index:4 and the legend has z-index:4 as well. The fix is to raise .hud to z-index:5 in the stylesheet.';
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Read', args: { path: 'export.test.mjs' } } },
+    { reasoning: cause, tool: { name: 'Read', args: { path: 'trades.json' } } },
+    { text: 'I checked everything.' },
+  ];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: true, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  const reason = await agent.send('fix the bug: the symbol list is hidden behind the legend');
+  await fake.close();
+  expect(reason).toBe('done');
+  const note = agent.messages.find((m) => m.role === 'user' && m.content.includes('make the smallest change'));
+  expect(note.content).toStartWith(AUTO);
+  expect(note.content).toContain('raise .hud to z-index:5');
+});
+
+test('summarizing keeps the request word for word and continues, not restarts', async () => {
+  const request = 'fix the bug: the symbol list is hidden behind the legend rows "EMA 13 · 21" and "Vol"';
+  const replies = [
+    { reasoning: 'The cause is that both are z-index 4, so the later one wins.', tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { text: 'Looked at the file.' },
+    { text: 'It read export.mjs and worked out the layering.' }, // the summary
+  ];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: true, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  await agent.send(request);
+  await agent.compact();
+  await fake.close();
+  expect(agent.messages[1].content).toBe(request); // word for word, not summarized
+  const notes = agent.messages.find((m) => m.role === 'assistant' && m.content.includes('My memory filled up'));
+  expect(notes.content).toContain('It read export.mjs');
+  expect(notes.content).toContain('The cause is that both are z-index 4'); // the finding, kept word for word
+  expect(agent.messages.at(-1).content).toStartWith(AUTO);
+  expect(agent.messages.at(-1).content).toContain('Do not start the investigation over');
+});
+
+test('when memory fills, old thinking shrinks to its key lines; the newest steps keep theirs', async () => {
+  const chatter = 'Let me look at the imports first and see how the file is put together before anything else. ';
+  const cause = 'The cause is that toCsv drops the header row when the list is empty.';
+  const looksWithThought = Array.from({ length: 5 }, (_, i) => ({ reasoning: chatter.repeat(8) + (i === 1 ? cause : ''), tool: { name: 'Read', args: { path: i % 2 ? 'export.test.mjs' : 'export.mjs' } } }));
+  const { agent } = await run([...looksWithThought, { text: 'ok' }], { fakeOpts: { delayMs: 0, chunk: 256 } });
+  agent.ctxUsed = agent.ctx * 0.9; // pretend the server reported a nearly full memory
+  agent.compact = async () => {}; // only the trim is under test (the fake server is closed)
+  await agent.fitContext();
+  const thoughts = agent.messages.filter((m) => m.role === 'assistant' && 'reasoning_content' in m);
+  expect(thoughts.length).toBeGreaterThan(3);
+  for (const m of thoughts.slice(0, -3)) expect(m.reasoning_content ?? '').not.toContain(chatter); // shrunk
+  expect(thoughts.some((m) => m.reasoning_content === cause)).toBe(true); // the cause line survived the shrink
+  for (const m of thoughts.slice(-3)) expect(m.reasoning_content).toContain(chatter); // the newest keep theirs
+});
+
+// ————— Step 7 of the bug steps, enforced by the loop (26 Sep) —————
+test('a fix with a named check runs that check after the change, not the whole suite', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: "  if (argv.includes('--json')) return JSON.stringify(rows);\n  return toCsv(rows);" } } },
+    { text: 'Fixed it.' },
+    { text: '{"done": true, "missing": ""}' },
+  ];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('tool', (e) => events.push(e));
+  await agent.send('fix the crash in export.mjs. This check fails now and must pass: `node export.mjs`');
+  await fake.close();
+  const bash = events.filter((e) => e.name === 'Bash').map((e) => e.arg);
+  expect(bash).toEqual(['node export.mjs']); // the named check, not npm test
+});
+
+test('a layout-kind fix with no named check never auto-runs the test suite', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows); // layer' } } },
+    { text: 'Raised the layer.' },
+    { text: '{"done": true, "missing": ""}' },
+  ];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('tool', (e) => events.push(e));
+  await agent.send('fix it: the symbol list is hidden behind the legend, covered by it');
+  await fake.close();
+  expect(events.filter((e) => e.name === 'Bash').length).toBe(0); // a browser check is the model's job; the suite would only mislead
 });

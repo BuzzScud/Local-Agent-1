@@ -15,6 +15,7 @@ import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { clarify } from '../flows/clarify.mjs';
+import { checkInText } from '../flows/fix.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete } from '../flows/llm.mjs';
@@ -23,6 +24,17 @@ import { diffLines } from '../tools/edit.mjs';
 const MAX_STEPS = 40;
 const TRIM_AT = 0.78; // share of the context that starts a trim
 const TRIM_TO = 0.45; // …and where it stops
+const FULL = 0.85; // past this share (with the reply room counted) trimming was not enough: summarize
+// Room kept free for one reply: thinking (up to the server's reasoning budget)
+// plus the answer. At 16k, a trim at 78% left too little, and a High reply
+// ran into the end of the memory (chart bug, 25 Sep).
+const replyRoom = (thinking) => (thinking ? 4096 : 2048);
+// Its own thinking goes back with each step: the model's chat template shows
+// every earlier step's thinking, and without it each step looked as if it had
+// thought nothing, so it worked the cause out again (or lost it). The newest
+// KEEP_THOUGHTS steps keep all of it; older ones keep only their key lines
+// once memory runs short.
+const KEEP_THOUGHTS = 3;
 // A question that names files gets them read in one go (see prefetch).
 const PREFETCH_MAX_LINES = 1000;
 const PREFETCH_MAX_CHARS = 45000; // ~12,500 tokens, ~3½ minutes of reading
@@ -106,6 +118,25 @@ export function announcesNextStep(text) {
 export function claimsAlreadyThere(text) {
   return /\b(?:already|was already|were already)\s+(?:in place|there|exists?|present|implemented|supported|set up|done|works?|working|has|had|in the (?:file|project|code))\b|\b(?:is|are|was|were)\s+already\b/i.test(text ?? '');
 }
+
+// Sentences where it names a cause or a fix ("The .hud creates a stacking
+// context…", "So the problem: .hud has z-index:4."): they survive trims and
+// summaries word for word, and one that names a fix before anything changed
+// gets a "make the change now" note (see actNow).
+const CAUSE = /\b(?:root cause|the cause|caused by|so the (?:problem|issue|bug)|the (?:real |actual |whole )?(?:problem|issue|bug|reason) (?:is|was|here)\b|that(?:'s| is) (?:why|the (?:bug|problem|cause))|which is why|this is why|that explains|explains (?:why|the)|stacking context|(?:is|are|gets?) (?:covered|hidden|overridden|shadowed) by)/i;
+const FIX = /\b(?:the fix(?: is|:| would be| should be| here)|so the fix|to fix (?:this|it)[,:]|fix it by|the (?:simplest|smallest|one-line|real|right) (?:fix|change)|the solution is|(?:I|we) (?:need|have|should|must) to (?:change|raise|increase|lower|set|move|add|remove|replace|swap)|(?:raising|increasing|lowering|changing|setting) \S+(?: \S+){0,6} (?:to|from) \S+(?: \S+){0,3} (?:fixes|would fix|should fix|solves))/i;
+const HEDGE = /^(?:wait|hmm|maybe|perhaps|if\b|unless|or\b|let me|let's|actually,? let me|i wonder)/i;
+export function keyLines(text, max = 4) {
+  const prose = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
+  const out = [];
+  for (const s of prose.split(/(?<=[.!?])\s+|\n+/)) {
+    const t = s.trim().replace(/^[-*•]\s+/, '');
+    if (t.length < 25 || t.length > 400 || HEDGE.test(t) || !(CAUSE.test(t) || FIX.test(t))) continue;
+    if (!out.includes(t)) out.push(t);
+  }
+  return out.slice(-max);
+}
+export const namesAFix = (line) => FIX.test(line) || /^so the (?:problem|issue|bug)|^the (?:root )?cause|^that(?:'s| is) the (?:bug|problem|cause)/i.test(line);
 
 // A tool call written as text instead of a real call: <tool_call>{...}</tool_call>
 export function toolCallInText(text) {
@@ -272,6 +303,7 @@ export class Agent extends EventEmitter {
   async send(text, { signal } = {}) {
     this.busy = true;
     const started = Date.now();
+    const turnStart = this.messages.length;
     this.messages.push({ role: 'user', content: text });
     this.emit('turn-start', { started });
     if (isSmallTalk(text)) return this.chat(text, started, signal);
@@ -345,8 +377,17 @@ export class Agent extends EventEmitter {
     let nudges = 0;
     let checks = 0;
     let toolsUsed = 0; // tool calls run for this message: a nudge is only for work already under way
-    this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false };
-    if (bug && request?.role === 'user' && typeof request.content === 'string') this.turn.bug = { request, steps: kindText(bug) };
+    this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false,
+      // The request (and a question and answer before it): kept word for word when the conversation is summarized.
+      opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
+      fixing: kind === 'fix', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
+    if (bug && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.bug = { request, steps: kindText(bug), kind: bug };
+      // A check the request names scores the change instead of the whole suite
+      // (the bug steps, step 7); for a kind the suite cannot see, with no
+      // check named, the suite is not run at all — it would only mislead.
+      this.turn.check = checkInText(text);
+    }
     let verified = false;
     let correctedAlready = false;
     let blankRetry = false;
@@ -381,8 +422,13 @@ export class Agent extends EventEmitter {
         // call in it: the call is dropped and Bonsai waits for your answer.
         if (calls.length && text.trim() && asksTheUserDirectly(text)) calls = [];
         const assistant = { role: 'assistant', content: text };
+        const thought = turn.reasoning.split('<tool_call>')[0].trim();
+        if (thought) assistant.reasoning_content = thought;
         if (calls.length) assistant.tool_calls = calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: safeArgs(c.args) } }));
         this.messages.push(assistant);
+        const lines = keyLines(`${thought}\n${text}`);
+        for (const l of lines) if (!this.turn.findings.includes(l)) this.turn.findings.push(l);
+        this.turn.findings = this.turn.findings.slice(-6);
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: !calls.length });
         if (!calls.length) {
           // A reply that asks you something ends the turn: it waits for you.
@@ -413,6 +459,12 @@ export class Agent extends EventEmitter {
             continue;
           }
           if (!text.trim() && turn.finish === 'length') {
+            // Cut off after a few words: the memory was full, not the thinking too long.
+            if (turn.tokens < 200) {
+              this.messages.pop();
+              await this.compact(signal);
+              continue;
+            }
             this.messages.push({ role: 'user', content: auto('You ran out of room while thinking. Think less and take the next step.') });
             this.emit('note', { text: 'The model ran out of room while thinking; asked it to act.', tone: 'warn' });
             continue;
@@ -420,16 +472,17 @@ export class Agent extends EventEmitter {
           // It says it is done after changing files but never ran the tests:
           // run them (through the normal permission prompt); if they fail, send
           // it back to fix them. At most twice per message.
-          if (this.testCmd && this.turn.changed && !this.turn.testedAfterChange && checks < 2) {
+          const checkCmd = this.turn.check ?? (this.turn.bug?.kind && !this.turn.bug.kind.testsSeeIt ? null : this.testCmd);
+          if (checkCmd && this.turn.changed && !this.turn.testedAfterChange && checks < 2) {
             checks++;
-            const call = { id: `check_${Date.now()}`, name: 'Bash', args: JSON.stringify({ command: this.testCmd, description: 'Check the change with the project’s tests' }) };
+            const call = { id: `check_${Date.now()}`, name: 'Bash', args: JSON.stringify({ command: checkCmd, description: this.turn.check ? 'Run the check the request names' : 'Check the change with the project’s tests' }) };
             assistant.tool_calls = [{ id: call.id, type: 'function', function: { name: 'Bash', arguments: call.args } }];
-            this.emit('note', { text: `Checking the change: ${this.testCmd}`, tone: 'dim' });
+            this.emit('note', { text: `Checking the change: ${checkCmd}`, tone: 'dim' });
             const out = await this.runTool(call, signal);
             this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text });
             if (out.stop) { reason = out.stop; break; }
             if (out.error) {
-              this.messages.push({ role: 'user', content: auto('The tests fail (output above). Find what is wrong in your change, fix it with Edit, then run the tests again.') });
+              this.messages.push({ role: 'user', content: auto(`${this.turn.check ? 'The named check fails' : 'The tests fail'} (output above). Find what is wrong in your change, fix it with Edit, then run ${this.turn.check ? 'the check' : 'the tests'} again.`) });
               continue;
             }
           }
@@ -450,11 +503,20 @@ export class Agent extends EventEmitter {
         const call = calls[0];
         toolsUsed++;
         const out = await this.runTool(call, signal);
-        this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text });
+        const result = { role: 'tool', tool_call_id: call.id, content: out.text };
+        this.messages.push(result);
+        if (out.readKey) this.turn.reads.set(out.readKey, { msg: result, mtime: out.mtime });
         if (out.stop) { reason = out.stop; break; }
         const steer = await this.checkIn(call, signal);
         if (steer?.stop) { reason = steer.stop; break; }
         if (steer?.text) this.messages.push({ role: 'user', content: steer.text });
+        else {
+          const go = this.actNow(call, lines);
+          if (go) {
+            this.messages.push({ role: 'user', content: auto(go) });
+            this.emit('note', { text: 'It named the cause; asked it to make the change now.', tone: 'dim' });
+          }
+        }
         const key = `${call.name}:${call.args}`;
         repeats = key === repeatKey ? repeats + 1 : 0;
         repeatKey = key;
@@ -560,7 +622,10 @@ export class Agent extends EventEmitter {
   // One model reply, streamed.
   async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
     const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-    const maxTokens = cap ?? (this.thinking ? 4096 : 2048);
+    const maxTokens = cap ?? replyRoom(this.thinking); // fitContext keeps this much free
+    // High effort is for working the problem out. Once this turn has changed a
+    // file, the steps left (run the tests, report) think briefly instead.
+    const effort = this.effort === 'high' && this.turn?.changed ? 'medium' : this.effort;
     const t0 = Date.now();
     let firstToken = null;
     let thinkEnd = null;
@@ -571,7 +636,7 @@ export class Agent extends EventEmitter {
     this.emit('waiting');
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withBugSteps(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
+      const stream = streamChat({ url: this.url, messages: this.withBugSteps(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -685,10 +750,26 @@ export class Agent extends EventEmitter {
       // You saw this change and said yes: that was the plan question.
       if ((call.name === 'Edit' || call.name === 'Write') && this.turn) this.turn.planOk = true;
     }
+    // The same part of a file read again while the first read is still in the
+    // conversation and the file has not changed: it points back instead of
+    // adding the same text twice.
+    let readKey = null;
+    let mtime = null;
+    if (call.name === 'Read' && this.turn?.reads) {
+      const abs = resolvePath(this.cwd, args.path).abs;
+      readKey = `${abs}|${args.offset ?? ''}|${args.limit ?? ''}`;
+      try { mtime = statSync(abs).mtimeMs; } catch {}
+      const seen = this.turn.reads.get(readKey);
+      if (seen && seen.mtime === mtime && this.messages.includes(seen.msg) && !String(seen.msg.content).startsWith('[older output removed')) {
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'same' } });
+        return { text: `You already read this part of ${shown.arg ?? args.path} and it has not changed since; it is above. Use it, or read a different part.` };
+      }
+    }
     const t0 = Date.now();
     this.emit('tool-running', { id, name: call.name, ...shown });
     let out;
     try { out = await execute(call.name, args, prepared, env); } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
+    if (readKey && !out.error) Object.assign(out, { readKey, mtime });
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs);
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
@@ -703,7 +784,7 @@ export class Agent extends EventEmitter {
       if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
-    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
+    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
   }
@@ -721,6 +802,22 @@ export class Agent extends EventEmitter {
       if (!r.json || r.json.done || !r.json.missing?.trim()) return null;
       return r.json.missing.trim().slice(0, 200);
     } catch { return null; }
+  }
+
+  // Fixing a bug, it named the cause or the fix, then went on looking: a note
+  // says to make the change now (once; again only after 4 more looks with no
+  // change). In the chart bug's High run the cause was in its thinking at
+  // 8 minutes and it never changed a line.
+  actNow(call, lines) {
+    const t = this.turn;
+    if (!t?.fixing || t.changed || !LOOKS.has(call.name)) return null;
+    t.looks = (t.looks ?? 0) + 1;
+    if (t.nudged >= 2 || t.looks < 3 || (t.nudged && t.looks - t.looksAtNudge < 4)) return null;
+    const line = lines.filter(namesAFix).at(-1);
+    if (!line) return null;
+    t.nudged++;
+    t.looksAtNudge = t.looks;
+    return `You wrote: "${line}" If that is the cause, stop looking and make the smallest change that fixes it now (Read the exact lines first if they are not above). If one thing is still unclear, check only that.`;
   }
 
   // A check-in while it explores: after CHECK_INS.steps looks (Read, Search,
@@ -796,11 +893,25 @@ export class Agent extends EventEmitter {
   // file the model had just read, so it read it again, step after step.)
   async fitContext(signal) {
     const pending = this.messages.slice(-2).reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : ''), 0);
+    // The next reply needs its room too: at 16k, trimming without counting it
+    // let a High reply run into the end of the memory mid-thought.
+    const room = replyRoom(this.thinking);
     let est = this.ctxUsed + pending;
-    if (est < this.ctx * this.trimAt) return;
+    if (est + room < this.ctx * this.trimAt) return;
+    let freed = 0;
+    // Old thinking first: every step before the newest KEEP_THOUGHTS keeps
+    // only its cause/fix lines (keyLines); the rest served its step already.
+    const thoughts = this.messages.filter((m) => m.role === 'assistant' && m.reasoning_content);
+    for (const m of thoughts.slice(0, -KEEP_THOUGHTS)) {
+      const kept = keyLines(m.reasoning_content, 3).join(' ');
+      if (kept === m.reasoning_content) continue;
+      freed += Math.max(0, tokensOf(m.reasoning_content) - tokensOf(kept));
+      if (kept) m.reasoning_content = kept;
+      else delete m.reasoning_content;
+    }
+    // Then old tool outputs, oldest first, down to TRIM_TO.
     const tools = this.messages.map((m, i) => (m.role === 'tool' ? i : -1)).filter((i) => i > 0);
     const keep = new Set(tools.slice(-2)); // the two newest outputs stay
-    let freed = 0;
     for (const i of tools) {
       if (est - freed < this.ctx * TRIM_TO) break;
       const m = this.messages[i];
@@ -811,7 +922,7 @@ export class Agent extends EventEmitter {
     est -= freed;
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);
     if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens).`, tone: 'dim' });
-    if (est >= this.ctx * 0.8) await this.compact(signal);
+    if (est + room >= this.ctx * FULL) await this.compact(signal);
   }
 
   async compact(signal, { instructions } = {}) {
@@ -819,20 +930,34 @@ export class Agent extends EventEmitter {
     this.emit('note', { text: 'Summarizing the conversation to free memory…', tone: 'dim' });
     const history = this.messages.slice(1).map((m) => {
       if (m.role === 'tool') return `TOOL RESULT: ${String(m.content).slice(0, 600)}`;
-      if (m.role === 'assistant') return `YOU: ${m.content}${m.tool_calls ? ` [called ${m.tool_calls.map((c) => `${c.function.name} ${c.function.arguments.slice(0, 200)}`).join('; ')}]` : ''}`;
+      if (m.role === 'assistant') return `YOU: ${m.reasoning_content ? `(thought: ${keyLines(m.reasoning_content, 2).join(' ').slice(0, 400)}) ` : ''}${m.content}${m.tool_calls ? ` [called ${m.tool_calls.map((c) => `${c.function.name} ${c.function.arguments.slice(0, 200)}`).join('; ')}]` : ''}`;
       return `USER: ${m.content}`;
     }).join('\n').slice(-40000);
     const ask = [
       { role: 'system', content: 'You summarize a coding session so it can continue with less memory.' },
-      { role: 'user', content: `${history}\n\nWrite a summary under 200 words: the user's task, what has been done, files changed, and what is left.${instructions ? ` ${instructions}` : ''}` },
+      { role: 'user', content: `${history}\n\nWrite a summary under 200 words: what has been done, the files and line numbers that matter, any cause already worked out (word for word), and the single next step.${instructions ? ` ${instructions}` : ''}` },
     ];
     let summary = '';
     for await (const ev of streamChat({ url: this.url, messages: ask, thinking: false, sampling: this.model.sampling, maxTokens: 600, slot: this.slots?.side, signal })) {
       if (ev.type === 'text') summary += ev.text;
     }
-    this.messages = [this.messages[0], { role: 'user', content: `Summary of the work so far:\n${summary.trim()}` }, { role: 'assistant', content: 'Understood. I will continue from here.' }];
+    // The request stays word for word (the summary once became "the task" and
+    // the model started the investigation over, in a folder it made up). The
+    // notes are Bonsai's own, in its own mouth, not a message from the user.
+    const capped = (s) => (s.length > 6000 ? `${s.slice(0, 6000)}\n${CUT_MARK}` : s);
+    const opening = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).map((m) => ({ role: m.role, content: capped(String(m.content)) }));
+    if (!opening.some((m) => m.role === 'user')) {
+      const req = [...this.messages].reverse().find((m) => m.role === 'user' && typeof m.content === 'string' && !m.content.startsWith('[') && !m.content.startsWith(AUTO));
+      if (req) opening.push({ role: 'user', content: capped(req.content) });
+      else return; // nothing to anchor on: leave the conversation as it is
+    }
+    const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
+    this.messages = [this.messages[0], ...opening,
+      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes:\n${summary.trim()}${facts}` },
+      { role: 'user', content: auto('Those are your own notes, and they may be imperfect. Pick up from them: take the single next step now with the tools. Do not start the investigation over and do not re-read what the notes already answer.') },
+    ];
     this.mapGiven = false;
-    this.ctxUsed = tokensOf(this.messages[0].content) + tokensOf(summary) + 1300;
+    this.ctxUsed = this.messages.reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : '') + tokensOf(m.reasoning_content ?? ''), 0) + 1300;
     this.emit('compacted', { summary: summary.trim() });
   }
 }

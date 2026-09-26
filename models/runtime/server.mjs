@@ -122,7 +122,9 @@ export class ModelServer extends EventEmitter {
 
   // lingerSecs > 0: the server stays loaded that long after the last window
   // using it is gone (see LINGER_SECS); 0 stops it with this process.
-  async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0 }) {
+  // helper: false starts without the guessing helper even when its file is
+  // there (chooseContext turns it off at High effort when memory is short).
+  async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0, helper } = {}) {
     this.lingerSecs = lingerSecs;
     if (!existsSync(SERVER_BIN)) throw new Error(`Prism's llama-server is missing at ${SERVER_BIN}. Run: bonsai setup`);
     if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: bonsai setup`);
@@ -150,7 +152,7 @@ export class ModelServer extends EventEmitter {
     mkdirSync(SLOT_DIR, { recursive: true });
     const logPath = join(LOG_DIR, 'server.log');
     appendFileSync(logPath, `\n=== ${new Date().toISOString()} start ${this.model.file} ctx=${ctx} port=${port}${lingerSecs ? ` stays ${lingerSecs}s after the last window` : ''}\n`);
-    const draft = hasDraft(this.model);
+    const draft = helper === false ? false : hasDraft(this.model);
     this.draft = draft;
     // The log is the server's own output file (not a pipe through this
     // process), so a server that stays loaded keeps writing after we exit.

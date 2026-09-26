@@ -92,6 +92,7 @@ function ToolView({ it, width }) {
     case 'declined': body = <Text color={C.dim}>You said no{v.feedback ? `: ${v.feedback}` : ''}</Text>; break;
     case 'answer': body = <Text><Text color={C.dim}>You: </Text>{v.text}</Text>; break;
     case 'error': body = <Text color={C.bad}>Error: {v.message}</Text>; break;
+    case 'same': body = <Text color={C.dim}>Already read above, unchanged; not read again</Text>; break;
     default: body = null;
   }
   return <Box flexDirection="column">{head}{body ? <Result>{body}</Result> : null}</Box>;

@@ -97,9 +97,11 @@ if (opts.print) {
   let ctx = opts.ctx;
   let slots;
   if (!url) {
-    ctx ??= chooseContext(model).ctx;
+    const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
+    const c = chooseContext(model, { effort: thinkOn ? opts.effort ?? settings.effort : undefined });
+    ctx ??= c.ctx;
     server = new ModelServer(model);
-    const st = await server.start({ ctx });
+    const st = await server.start({ ctx, helper: ctx === c.ctx ? c.helper : undefined });
     if (st.slots > 1) slots = { main: 0, side: 1 };
     url = server.url;
   }

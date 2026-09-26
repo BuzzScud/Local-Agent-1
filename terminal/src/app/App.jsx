@@ -268,9 +268,11 @@ export function App({ opts, win }) {
       // as it is; otherwise the memory size is chosen from what is free now.
       const running = runningServer(model);
       if (!size && running) size = running.ctx;
+      let helper;
       if (!size) {
-        const c = chooseContext(model);
+        const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined });
         size = c.ctx;
+        helper = c.helper; // false: High keeps its memory, the speed helper stays off
         memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
       }
       agent.ctx = size;
@@ -284,7 +286,7 @@ export function App({ opts, win }) {
       });
       let st;
       try {
-        st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS });
+        st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
@@ -303,7 +305,7 @@ export function App({ opts, win }) {
       // A model kept loaded from an earlier start is ours now: warm it for
       // this folder too (instant when nothing changed). Another window's is left alone.
       if (!st.shared || st.idle) try {
-        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: (p) => { if (alive) setStartPhase(p); } });
+        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (alive) setStartPhase(p); } });
       } catch {}
       if (!alive) return;
       setStarting(false);
