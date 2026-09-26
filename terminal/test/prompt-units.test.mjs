@@ -2,7 +2,10 @@
 // shared start (so the models part can save the warm-up), and how much of a
 // file a try rewrites.
 import { test, expect } from 'bun:test';
-import { systemPrompt, SESSION_MARK } from '../src/agent/prompt.mjs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { systemPrompt, SESSION_MARK, projectNotes } from '../src/agent/prompt.mjs';
 import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, isWholeFile } from '../src/flows/units.mjs';
 
 test('the instructions start the same in every project and on every day (so the warm-up can be saved)', () => {
@@ -13,6 +16,18 @@ test('the instructions start the same in every project and on every day (so the 
   expect(shared(a)).toBe(shared(b));
   expect(a.slice(a.indexOf(SESSION_MARK))).toContain('Today: 2026-09-25');
   expect(b.slice(b.indexOf(SESSION_MARK))).toContain('Use tabs.');
+});
+
+test('a private .bonsai/notes.md is read alongside AGENTS.md', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bonsai-notes-'));
+  writeFileSync(join(dir, 'AGENTS.md'), 'Run the tests with npm test.');
+  mkdirSync(join(dir, '.bonsai'), { recursive: true });
+  writeFileSync(join(dir, '.bonsai', 'notes.md'), 'The deploy password lives in 1Password.');
+  const n = projectNotes(dir);
+  expect(n.files.some((p) => p.endsWith('AGENTS.md'))).toBe(true);
+  expect(n.files.some((p) => p.endsWith('.bonsai/notes.md'))).toBe(true);
+  expect(n.text).toContain('npm test');
+  expect(n.text).toContain('1Password');
 });
 
 test('tries rewrite one function past 80 lines; the model reads whole files up to 300', () => {

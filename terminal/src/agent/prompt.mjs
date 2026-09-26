@@ -4,6 +4,7 @@ import { join, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { RULES } from './rules.mjs';
+import { mathMap } from './expertise.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Bonsai answers from what it knows there, and goes into a
@@ -12,9 +13,10 @@ export function isHomeFolder(cwd, home = homedir()) {
   return [home, join(home, 'Desktop'), join(home, 'Documents'), join(home, 'Downloads')].includes(cwd);
 }
 
-const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools: a few sentences and a small example, then one short line offering more detail. Search, Read or List files only when the user asks about their own files, code or notes, or names a file. When the user asks you to make, change or look at a file or folder ("make a file on my Desktop"), do it straight away with the tools; Desktop, Documents and Downloads are folders here.`;
+const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools — except a topic from the user's own mathematics, which follows that section instead: a few sentences and a small example, then one short line offering more detail. Search, Read or List files only when the user asks about their own files, code or notes, or names a file. When the user asks you to make, change or look at a file or folder ("make a file on my Desktop"), do it straight away with the tools; Desktop, Documents and Downloads are folders here.`;
 
-// AGENTS.md (or CLAUDE.md) from the project folder up to the home folder.
+// AGENTS.md (or CLAUDE.md), and private .bonsai/notes.md files (kept out of
+// git), from the project folder up to the home folder.
 export function projectNotes(cwd, maxChars = 6000) {
   const found = [];
   let dir = cwd;
@@ -28,6 +30,11 @@ export function projectNotes(cwd, maxChars = 6000) {
         if (text && !/^@AGENTS\.md\s*$/.test(text) && !found.some((f) => f.text === text)) found.push({ path: p, text });
         break;
       }
+    }
+    const own = join(dir, '.bonsai', 'notes.md');
+    if (existsSync(own)) {
+      const text = readFileSync(own, 'utf8').trim();
+      if (text && !found.some((f) => f.text === text)) found.push({ path: own, text });
     }
     if (dir === home || dir === dirname(dir)) break;
     dir = dirname(dir);
@@ -83,7 +90,7 @@ You: Renamed getUser to fetchUser in both files; the tests pass.
 // of it to disk and restore it in a fraction of a second (models/runtime/warmup.mjs).
 export const SESSION_MARK = 'This session\n';
 
-export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.BONSAI_EXAMPLE === '1' }) {
+export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.BONSAI_EXAMPLE === '1', math = mathMap() }) {
   const today = date.toISOString().slice(0, 10);
   return `You are Bonsai, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.
 
@@ -105,6 +112,6 @@ ${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 
-${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}${isHomeFolder(cwd) ? `\n${HOME_NOTE}` : ''}
+${math ? `${math}\n\n` : ''}${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}${isHomeFolder(cwd) ? `\n${HOME_NOTE}` : ''}
 ${notes ? `\nProject notes\n${notes}\n` : ''}`;
 }

@@ -2,15 +2,42 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
+import { isTrusted } from './trust.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
 const DEFAULTS = { layout: 'classic', thinking: null, model: '27b' };
 
-export function loadSettings() {
-  try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; }
+// A trusted folder may set these in <folder>/.bonsai/settings.json; they
+// win over the global file, and what you type on the command line wins
+// over both. Anything else in the file is ignored.
+const FOLDER_KEYS = ['mode', 'effort', 'layout'];
+
+function folderSettings(cwd) {
+  if (!cwd || !isTrusted(cwd)) return {};
+  let raw;
+  try { raw = JSON.parse(readFileSync(join(cwd, '.bonsai', 'settings.json'), 'utf8')); } catch { return {}; }
+  const out = {};
+  for (const k of FOLDER_KEYS) if (raw[k] !== undefined) out[k] = raw[k];
+  if (typeof out.effort === 'string') {
+    // The level names: low answers straight away (no thinking).
+    out.effort = out.effort.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
+    out.thinking = out.effort !== 'low';
+    if (out.effort === 'low') delete out.effort;
+  }
+  if (out.mode && !['ask', 'edits', 'plan'].includes(out.mode)) delete out.mode;
+  if (out.layout && !['classic', 'live'].includes(out.layout)) delete out.layout;
+  if (Object.keys(out).length) out.fromFolder = Object.keys(out).filter((k) => k !== 'fromFolder');
+  return out;
+}
+
+export function loadSettings(cwd) {
+  let global;
+  try { global = { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { global = { ...DEFAULTS }; }
+  return { ...global, ...folderSettings(cwd) };
 }
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
+  delete next.fromFolder;
   mkdirSync(HOME, { recursive: true });
   writeFileSync(SETTINGS, `${JSON.stringify(next, null, 2)}\n`);
   return next;
