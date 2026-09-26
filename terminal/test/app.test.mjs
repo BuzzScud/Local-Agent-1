@@ -14,7 +14,14 @@ function setup() {
   const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  seedTrust(base, cwd);
   return { base, cwd, env: { BONSAI_HOME: join(base, 'home') } };
+}
+// The folder is pre-trusted, so tests land straight on the welcome
+// (the safety check itself has its own test below).
+function seedTrust(base, cwd) {
+  mkdirSync(join(base, 'home'), { recursive: true });
+  writeFileSync(join(base, 'home', 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString() }));
 }
 const quit = [{ sleep: 300 }, { key: 'ctrlC' }, { sleep: 200 }, { key: 'ctrlC' }];
 
@@ -123,6 +130,7 @@ test('focused paths on screen: the plan, the try counter, the rename prompt and 
   const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
   const cwd = join(base, 'project');
   cpSync(join(import.meta.dir, 'fixture-fix'), cwd, { recursive: true });
+  seedTrust(base, cwd);
   const env = { BONSAI_HOME: join(base, 'home') };
   const src = readFileSync(join(cwd, 'stats.mjs'), 'utf8');
   const wrong = '```js\n' + src.replace('  return sorted[mid];', '  return (sorted[mid] + sorted[mid + 1]) / 2;') + '```';
@@ -155,23 +163,23 @@ test('/model: the model list and the effort in one picker; the choice is used an
     { key: 'right' }, { wait: 'High: thinks carefully first' }, { sleep: 200 }, { key: 'enter' },
     { wait: 'Bonsai 2 27B · effort high.' }, { sleep: 300 }, { snapshot: 'after' },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
-    // the old name still works
+    // the old names still work: /think, and "off" for low
     { type: '/think medium' }, { key: 'enter' }, { wait: 'Effort is medium' },
-    { type: '/effort off' }, { key: 'enter' }, { wait: 'Effort is off' },
+    { type: '/effort off' }, { key: 'enter' }, { wait: 'Effort is low' },
     ...quit,
   ] });
   await fake.close();
   const picker = r.snapshots.picker;
   expect(picker).toMatch(/❯ Bonsai 2 27B\s+7\.2 GB · on this Mac\s+✔ in use/);
-  expect(picker).toMatch(/Effort\s+◀\s+Off\s+·\s+Medium\s+·\s+High\s+▶/);
+  expect(picker).toMatch(/Effort\s+◀\s+Low\s+·\s+Medium\s+·\s+High\s+▶/);
   expect(picker).not.toMatch(/Thinking\s+◀/);
-  expect(picker).toContain('Off: answers straight away (fastest)');
+  expect(picker).toContain('Low: answers straight away (fastest)');
   expect(picker).toContain('↑↓ model · ←→ effort · enter to save · esc to cancel');
   expect(r.snapshots.after).toMatch(/Bonsai 2 27B · effort high\./); // the note; no status bar by default
   const sent = fake.requests.find((q) => q.stream && q.tools);
   expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
-  expect(saved.thinking).toBe(false); // /effort off came last
+  expect(saved.thinking).toBe(false); // /effort off (the old name for low) came last
   expect(saved.effort).toBe('medium'); // …and /effort on would bring back Medium
   // --effort on the command line sets the level for this run
   const fake2 = await startFakeServer([{ text: 'Hello.' }]);
@@ -238,6 +246,24 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   expect(second.text).toContain('Hello from the stand-in model.');
 }, 240_000);
 
+test('a folder not yet trusted gets the safety check first; yes is remembered', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+  const cwd = join(base, 'demo-project');
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  const env = { BONSAI_HOME: join(base, 'home') }; // no trust seeded
+  const fake = await startFakeServer([{ text: 'Hello.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Quick safety check' }, { type: '1' }, { key: 'enter' },
+    { wait: 'Welcome to Bonsai Code' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.text).toContain('Is this a folder you created or one you trust?');
+  expect(r.text).toContain('loaded:'); // the welcome says what was read
+  // The key is the real path (tmpdir is a link on macOS).
+  const keys = Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')));
+  expect(keys.some((k) => k.endsWith('/demo-project'))).toBe(true);
+}, T);
+
 test('typing "exit" as a plain message quits, like /exit', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
@@ -259,7 +285,7 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
     { type: 'exit' }, { key: 'enter' }, { sleep: 300 },
   ] });
   await fake.close();
-  expect(r.snapshots.off).not.toMatch(/effort (off|medium|high)/);
+  expect(r.snapshots.off).not.toMatch(/effort (low|medium|high)/);
   expect(r.snapshots.on).toMatch(/Bonsai 2 27B\s+idle\s+ctx .* of 32k\s+effort/);
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);

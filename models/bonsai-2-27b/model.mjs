@@ -56,10 +56,12 @@ export default {
   // minutes and "high" errors in this build.
   thinkingDefault: false,
   thinkingEffort: 'medium', // the level /think on (and --think) uses
-  // The levels /model offers. effort is the chat template's reasoning_effort
-  // ("low" acts like "xhigh" in this build, and "high" errors).
+  // The levels /model offers: Low answers straight away (no thinking), the
+  // fastest and the default. effort is the chat template's reasoning_effort
+  // (the template's own "low" acts like "xhigh" in this build, and "high"
+  // errors, so Low sends no thinking at all and High sends "xhigh").
   thinkingLevels: [
-    { id: 'off', label: 'Off', effort: null, note: 'answers straight away (fastest)' },
+    { id: 'low', label: 'Low', effort: null, note: 'answers straight away (fastest)' },
     { id: 'medium', label: 'Medium', effort: 'medium', note: 'thinks briefly first (about 200 tokens on a small task)' },
     { id: 'high', label: 'High', effort: 'xhigh', note: 'thinks carefully first; can take minutes (stopped at 2,048 tokens)' },
   ],

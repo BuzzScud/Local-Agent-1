@@ -24,9 +24,10 @@ export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 export const DEFAULT_MODEL = '27b';
 
 // The thinking level for on/off plus an effort id ('medium' | 'high').
+// Thinking off is the level without an effort (Low: answers straight away).
 export function thinkingLevel(model, thinking, effort) {
   const levels = model?.thinkingLevels ?? [];
-  if (!thinking) return levels.find((l) => l.id === 'off') ?? { id: 'off', label: 'Off', effort: null };
+  if (!thinking) return levels.find((l) => !l.effort) ?? { id: 'low', label: 'Low', effort: null };
   return levels.find((l) => l.id === (effort ?? model?.thinkingEffort) && l.effort)
     ?? levels.find((l) => l.id === model?.thinkingEffort)
     ?? { id: 'on', label: 'On', effort: null };

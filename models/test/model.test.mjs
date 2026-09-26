@@ -15,15 +15,16 @@ test('Bonsai 2 27B is the only model', () => {
   expect(modelFolder(m)).toMatch(/models\/bonsai-2-27b\/$/);
 });
 
-test('thinking switch: off, medium or high', () => {
+test('effort levels: low (no thinking, the default), medium or high', () => {
   expect(thinkingKwargs(m, false)).toEqual({ enable_thinking: false });
   expect(thinkingKwargs(m, true)).toEqual({ enable_thinking: true, reasoning_effort: 'medium' });
   expect(thinkingKwargs(m, true, 'medium')).toEqual({ enable_thinking: true, reasoning_effort: 'medium' });
   // "High" is the template's "xhigh" ("high" errors in this build)
   expect(thinkingKwargs(m, true, 'high')).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
   expect(thinkingKwargs(m, false, 'high')).toEqual({ enable_thinking: false });
-  expect(m.thinkingLevels.map((l) => l.label)).toEqual(['Off', 'Medium', 'High']);
-  expect(thinkingLevel(m, false, 'high').id).toBe('off');
+  expect(m.thinkingLevels.map((l) => l.label)).toEqual(['Low', 'Medium', 'High']);
+  // Low is thinking off: it sends no thinking at all, never the template's own "low"
+  expect(thinkingLevel(m, false, 'high').id).toBe('low');
   expect(thinkingLevel(m, true, 'nonsense').id).toBe('medium');
 });
 

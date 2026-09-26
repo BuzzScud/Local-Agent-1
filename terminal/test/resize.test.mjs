@@ -2,7 +2,7 @@
 // read back by a terminal emulator that re-wraps lines as Terminal does).
 // Every resize must end in one clean screen at the new size.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
@@ -15,6 +15,9 @@ function setup() {
   const base = mkdtempSync(join(tmpdir(), 'bonsai-resize-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  // Pre-trusted, so the run starts on the welcome, not the safety check.
+  mkdirSync(join(base, 'home'), { recursive: true });
+  writeFileSync(join(base, 'home', 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString() }));
   return { cwd, env: { BONSAI_HOME: join(base, 'home') } };
 }
 const LONG = 'The project is a small Node.js script that reads trades.json and prints it as CSV, with two tests in export.test.mjs and no dependencies beyond Node itself.';

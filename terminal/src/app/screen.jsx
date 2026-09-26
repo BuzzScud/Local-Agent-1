@@ -32,8 +32,8 @@ const TIPS = [
 ];
 
 // Like Claude Code: a welcome box as wide as its words, then the tips.
-export function Welcome({ model, cwd, width }) {
-  const lines = [`  /help for help · /stats for your current setup`, `  ${model}, on this Mac`, `  cwd: ${cwd}`];
+export function Welcome({ model, cwd, width, loaded }) {
+  const lines = [`  /help for help · /stats for your current setup`, `  ${model}, on this Mac`, `  cwd: ${cwd}`, ...(loaded ? [`  loaded: ${loaded}`] : [])];
   const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Bonsai Code!'.length + 6));
   return (
     <Box flexDirection="column">
@@ -44,6 +44,7 @@ export function Welcome({ model, cwd, width }) {
         <Text> </Text>
         <Text color={C.dim}>  {model}, on this Mac</Text>
         <Text color={C.dim}>  cwd: {fitPath(cwd, boxW - 11)}</Text>
+        {loaded ? <Text color={C.dim} wrap="truncate-end">  loaded: {loaded}</Text> : null}
       </Box>
       <Box flexDirection="column" marginTop={1}>
         <Text color={C.dim}> Tips for getting started:</Text>
@@ -100,9 +101,9 @@ function ToolView({ it, width }) {
 // The clock time a turn ended, as Claude Code writes it: "12:58 PM".
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-export function Item({ it, width, model, cwd }) {
+export function Item({ it, width, model, cwd, loaded }) {
   switch (it.type) {
-    case 'welcome': return <Welcome model={model} cwd={cwd} width={width} />;
+    case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} />;
     case 'user': return (
       <Box flexDirection="column">
         <Row mark=">" markColor={C.dim}><Text color={C.dim}>{it.text}</Text></Row>
@@ -205,7 +206,7 @@ function Meters({ app }) {
   return (
     <Box paddingX={2} width={app.width}>
       <Text color={C.dim} wrap="truncate-end">
-        {modelName}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'off')}
+        {modelName}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
       </Text>
     </Box>
   );
@@ -510,7 +511,7 @@ export function primeRows(items, ctx) {
     if (itemHeights.size > 5000) itemHeights.clear();
     const out = renderToString(
       <Box flexDirection="column" marginBottom={1} width={ctx.width}>
-        <Item it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} />
+        <Item it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} loaded={ctx.loaded} />
       </Box>, { columns: ctx.width });
     itemHeights.set(k, out.split('\n').length); // the margin under it is the last line
     added = true;
@@ -566,7 +567,7 @@ export function Screen({ app }) {
           // Static lines are laid out on their own, so they need the width
           // too; without it long lines are wrapped by the terminal mid-word.
           <Box key={it.key} flexDirection="column" marginBottom={1} width={width}>
-            <Item it={it} width={width} model={modelName} cwd={app.cwdShort} />
+            <Item it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} />
           </Box>
         )}
       </Static>

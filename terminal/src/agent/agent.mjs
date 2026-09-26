@@ -10,6 +10,7 @@ import { repoMap } from '../tools/repomap.mjs';
 import { decide, commandPrefix } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
+import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename } from 'node:path';
@@ -260,10 +261,13 @@ export class Agent extends EventEmitter {
     return { moved: pick };
   }
 
-  // This turn's request with the steps for its kind of bug added (see send()).
-  withBugSteps(messages) {
-    const bug = this.turn?.bug;
-    return bug ? messages.map((m) => (m === bug.request ? { ...m, content: `${m.content}\n\n(${bug.steps})` } : m)) : messages;
+  // This turn's request with what goes along with it (see send()): the steps
+  // for its kind of bug, and the user's own math notes when the topic came up.
+  withTurnNotes(messages) {
+    const t = this.turn;
+    const extras = [t?.bug, t?.math].filter(Boolean);
+    if (!extras.length) return messages;
+    return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
   reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
@@ -377,6 +381,14 @@ export class Agent extends EventEmitter {
     // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
     // go with this turn's requests to the model, not into the conversation.
     const bug = kind === 'fix' ? sortBug(text) : null;
+    // A request that uses the words of the user's own math notes brings the
+    // matching notes the same way (src/agent/expertise.mjs). /math forces it.
+    let math = null;
+    try {
+      math = sortMath(text, this.mathForce ? { min: 1 } : {});
+      if (!math && this.mathForce) { const index = mathIndex(); math = index?.areas?.length ? { browse: true, index } : null; }
+    } catch {}
+    this.mathForce = false;
     const request = this.messages.at(-1);
     // A question about named files: read them now, in one go, instead of
     // letting the model find, list and read them a piece at a time.
@@ -400,6 +412,12 @@ export class Agent extends EventEmitter {
       // (the bug steps, step 7); for a kind the suite cannot see, with no
       // check named, the suite is not run at all — it would only mislead.
       this.turn.check = checkInText(text);
+    }
+    if (math && request?.role === 'user' && typeof request.content === 'string') {
+      try {
+        this.turn.math = { request, notes: mathNotes(math, text) };
+        this.emit('note', { text: math.browse ? 'Using the math notes (~/Desktop/MATH).' : `Using the math notes: ${math.area.name} (~/Desktop/MATH).`, tone: 'dim' });
+      } catch {}
     }
     let verified = false;
     let correctedAlready = false;
@@ -668,7 +686,7 @@ export class Agent extends EventEmitter {
     this.emit('waiting');
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withBugSteps(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
+      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {

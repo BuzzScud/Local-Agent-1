@@ -18,7 +18,9 @@ import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, mentionAt } from './edit-input.mjs';
 import { COMMANDS, matchCommands } from './commands.mjs';
+import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
+import { saveTrust } from './trust.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("✳ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -73,7 +75,7 @@ export function App({ opts, win }) {
   // Where Bonsai works; it can move into a project named from the home folder.
   const [cwd, setCwd] = useState(opts.cwd);
   const model = MODELS[opts.modelId ?? DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
-  const settings = useRef(loadSettings()).current;
+  const settings = useRef(loadSettings(opts.cwd)).current;
   const memoryNote = useRef(null);
   const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
   const itemsRef = useRef([]);
@@ -85,7 +87,7 @@ export function App({ opts, win }) {
   const [picker, setPicker] = useState(null);
   const [input, setInput] = useState({ value: '', cursor: 0 });
   const [menuIndex, setMenuIndex] = useState(0);
-  const [mode, setModeState] = useState(opts.mode ?? 'ask');
+  const [mode, setModeState] = useState(MODES.includes(opts.mode ?? settings.mode) ? (opts.mode ?? settings.mode) : 'ask');
   const [thinking, setThinkingState] = useState(opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true);
   const [effort, setEffortState] = useState(opts.effort ?? settings.effort ?? model.thinkingEffort);
   const [startPhase, setStartPhase] = useState('loading');
@@ -229,7 +231,8 @@ export function App({ opts, win }) {
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
       on('note', ({ text, tone }) => push({ type: 'note', text, tone })),
-      on('cwd', ({ cwd: dir }) => setCwd(dir)),
+      // Saying yes to "Work in <project>?" counts as trusting that folder.
+      on('cwd', ({ cwd: dir }) => { setCwd(dir); try { saveTrust(dir); } catch {} }),
       // Focused paths: the live try counter, its finished line, the current step.
       on('tries', (t) => setLive((l) => ({ ...l, tries: t, waiting: false }))),
       on('tries-done', (t) => { push({ type: 'tries', ...t }); setLive((l) => ({ ...l, tries: null })); }),
@@ -396,14 +399,16 @@ export function App({ opts, win }) {
         break;
       case 'effort':
       case 'think': { // /think is the old name, still accepted
-        // /effort, /effort on|off, or a level: /effort medium|high
-        const a = arg.toLowerCase();
-        const lvIds = (model.thinkingLevels ?? []).map((l) => l.id);
-        const on = lvIds.includes(a) ? a !== 'off' : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
-        const eff = on && lvIds.includes(a) ? a : undefined;
+        // /effort, /effort on|off, or a level: /effort low|medium|high
+        // ("off" and "xhigh" are the old names for low and high).
+        const a = arg.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
+        const levels = model.thinkingLevels ?? [];
+        const picked = levels.find((l) => l.id === a);
+        const on = picked ? !!picked.effort : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
+        const eff = on && picked?.effort ? picked.id : undefined;
         setThinking(on, eff);
         const lv = thinkingLevel(model, on, eff ?? agent.effort);
-        push({ type: 'note', text: on ? `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.` : 'Effort is off: it answers straight away (fastest).', tone: 'dim' });
+        push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.`, tone: 'dim' });
         break;
       }
       case 'mode': {
@@ -415,6 +420,17 @@ export function App({ opts, win }) {
         if (busy) { flash('Wait for Bonsai to finish first'); break; }
         sendPrompt(INIT_PROMPT, '/init');
         break;
+      case 'math': {
+        // Alone: the topics of ~/Desktop/MATH. With a question: ask it with
+        // the notes attached even when no topic word matches.
+        const topics = mathTopics();
+        if (!topics.length) { push({ type: 'note', text: 'No math notes found (~/Desktop/MATH is missing or has no .md files).', tone: 'warn' }); break; }
+        if (!arg) { push({ type: 'panel', title: 'Math topics (~/Desktop/MATH)', pad: 28, rows: topics }); break; }
+        if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
+        agent.mathForce = true;
+        sendPrompt(arg, `/math ${arg}`);
+        break;
+      }
       case 'resume': {
         const list = listSessions(cwd);
         if (!list.length) { push({ type: 'note', text: 'No earlier conversations in this folder.', tone: 'dim' }); break; }
@@ -563,7 +579,7 @@ export function App({ opts, win }) {
         setThinking(on, on ? lv.id : undefined);
         setPicker(null);
         const picked = pk.models[pk.index];
-        push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'off'}${picked.id !== model.id ? ' (restart Bonsai Code to switch models)' : ''}.`, tone: 'dim' });
+        push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}${picked.id !== model.id ? ' (restart Bonsai Code to switch models)' : ''}.`, tone: 'dim' });
         if (picked.id !== model.id) saveSettings({ model: picked.id });
       }
       return;
@@ -675,10 +691,10 @@ export function App({ opts, win }) {
     return () => { on = false; };
   }, [items, width]);
   // What primeRows needs to measure items as they are printed.
-  measure.current = { width, modelName: model.name, cwdShort: short(cwd) };
+  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '' };
   itemsRef.current = items;
   const app = {
-    items, live, perm, picker, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd),
+    items, live, perm, picker, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
     modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,

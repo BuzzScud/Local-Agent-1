@@ -20,8 +20,44 @@ async function askOnTerminal(question, req) {
   return options[n - 1] ?? (line.trim() || null);
 }
 import { loadSettings } from './app/store.mjs';
+import { isTrusted, saveTrust } from './app/trust.mjs';
 
 export const VERSION = '0.1.0';
+
+// Claude Code's quick safety check: the first visit to a folder asks once
+// whether you trust it, before anything there is read into the model or
+// run. A yes covers the folder and everything inside it (app/trust.mjs).
+async function ensureTrusted(cwd) {
+  if (isTrusted(cwd)) return true;
+  if (!process.stdin.isTTY) {
+    process.stderr.write(`bonsai: ${cwd} is not a trusted folder yet. Start bonsai there once and say yes to the safety check.\n`);
+    return false;
+  }
+  const b = (s) => `\x1b[1m${s}\x1b[0m`;
+  process.stderr.write([
+    '',
+    `\x1b[33m${b('Quick safety check')}\x1b[0m`,
+    '',
+    'Bonsai is about to work in:',
+    `  ${b(cwd)}`,
+    '',
+    'Is this a folder you created or one you trust? Bonsai reads its notes',
+    '(AGENTS.md) into the model, and can read, edit and run things here once',
+    'you allow them. A yes covers this folder and everything inside it, and',
+    'is remembered.',
+    '',
+    '  1. Yes, I trust this folder',
+    '  2. No, exit',
+    '',
+    '',
+  ].join('\n'));
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const line = await new Promise((resolve) => rl.question('> ', resolve));
+  rl.close();
+  if (/^(1|y|yes|trust)/i.test(line.trim())) { saveTrust(cwd); return true; }
+  process.stderr.write('\x1b[2mNothing was read here. Start bonsai in a folder you trust.\x1b[0m\n');
+  return false;
+}
 
 const HELP = `bonsai ${VERSION} — a coding agent in your terminal, running ${MODELS[DEFAULT_MODEL].name} on this Mac
 
@@ -34,8 +70,8 @@ Usage
   bonsai stop               free the model's memory now (it stays loaded ${LINGER_SECS / 60} min after you quit)
 
 Options
-  --effort off|medium|high  how much the model thinks before it acts (default: off, or your last /effort)
-  --think / --no-think      the old names: --effort medium / --effort off
+  --effort low|medium|high  how much the model thinks before it acts (default: low = answers straight away)
+  --think / --no-think      the old names: --effort medium / --effort low
   --ctx 16k|32k|64k         memory size (default: 32k, or 16k when memory is short)
   --mode ask|edits|plan     start in this permission mode
   --yes                     with -p: allow edits and commands without asking
@@ -57,7 +93,7 @@ function parse(argv) {
     else if (a === '-c' || a === '--continue') o.continueLast = true;
     else if (a === '--resume') o.resumeId = val();
     else if (a === '--layout') val(); // one layout now (like Claude Code); still accepted so older scripts run
-    else if (a === '--effort') { const v = String(val() ?? '').toLowerCase(); o.thinking = v !== 'off'; if (v === 'medium' || v === 'high') o.effort = v; }
+    else if (a === '--effort') { const v = String(val() ?? '').toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high'); o.thinking = v !== 'low'; if (v === 'medium' || v === 'high') o.effort = v; }
     else if (a === '--think') o.thinking = true;
     else if (a === '--no-think') o.thinking = false;
     else if (a === '--ctx') { const v = val(); o.ctx = /^\d+k$/i.test(v) ? Number.parseInt(v, 10) * 1024 : Number(v); }
@@ -89,8 +125,9 @@ if (opts.version) { process.stdout.write(`${VERSION}\n`); process.exit(0); }
 
 if (opts.print) {
   if (!opts.prompt) { process.stderr.write('bonsai -p needs a prompt\n'); process.exit(2); }
+  if (!(await ensureTrusted(opts.cwd))) process.exit(2);
   const model = MODELS[opts.modelId];
-  const settings = loadSettings();
+  const settings = loadSettings(opts.cwd);
   let server = null;
   let url = opts.url;
   let ctx = opts.ctx;
@@ -124,6 +161,21 @@ if (opts.print) {
   }
 } else {
   if (!process.stdin.isTTY) { process.stderr.write('bonsai needs a terminal. For scripts use: bonsai -p "…"\n'); process.exit(2); }
+  // Step 1, before anything in the folder is read: the safety check.
+  if (!(await ensureTrusted(opts.cwd))) process.exit(0);
+  // What the start loaded, for the welcome box: the notes read into the
+  // model, settings a folder file set, and the git state.
+  try {
+    const { projectNotes, gitSummary } = await import('./agent/prompt.mjs');
+    const names = [...new Set(projectNotes(opts.cwd).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.split('/').pop())))];
+    const st = loadSettings(opts.cwd);
+    const git = gitSummary(opts.cwd);
+    opts.loaded = [
+      names.join(' + ') || 'no AGENTS.md',
+      ...(st.fromFolder?.length ? [`folder settings (${st.fromFolder.filter((k) => k !== 'thinking').join(', ')})`] : []),
+      git === 'not a git repository' ? 'no git' : `git: ${git}`,
+    ].join(' · ');
+  } catch {}
   // A clear window, as `clear` leaves it (what was on screen moves up into
   // the scrollback): the welcome starts on the top line, the prompt box sits
   // on the last lines, with space in between.
@@ -133,7 +185,7 @@ if (opts.print) {
   try {
     const { homedir } = await import('node:os');
     const cwdShort = opts.cwd.startsWith(homedir()) ? `~${opts.cwd.slice(homedir().length)}` : opts.cwd;
-    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: MODELS[opts.modelId ?? DEFAULT_MODEL].name, cwdShort });
+    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: MODELS[opts.modelId ?? DEFAULT_MODEL].name, cwdShort, loaded: opts.loaded ?? '' });
   } catch {}
   const win = new TerminalWindow(process.stdout);
   const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });

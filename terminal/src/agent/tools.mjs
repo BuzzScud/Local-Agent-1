@@ -9,6 +9,7 @@ import { outlineText } from '../tools/outline.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
+import { mathPathFor, mathDir } from './expertise.mjs';
 
 const str = (description) => ({ type: 'string', description });
 // Read: files up to WHOLE_MAX lines come back whole; longer ones as an outline,
@@ -147,6 +148,12 @@ export function didYouMean(cwd, p) {
 }
 
 export function resolvePath(cwd, p) {
+  // "MATH/…" is the user's math notes folder (src/agent/expertise.mjs),
+  // read-only, unless the project really has a MATH folder of its own.
+  if ((p === 'MATH' || p.startsWith('MATH/')) && !existsSync(resolve(cwd, p))) {
+    const m = mathPathFor(p);
+    if (m) return { abs: m.abs, rel: p, inside: true, math: true };
+  }
   // The folder's own name used as a path ("project", "project/a.js") means the folder.
   const own = cwd.split(sep).pop();
   if (!isAbsolute(p) && own && (p === own || p.startsWith(`${own}/`)) && !existsSync(resolve(cwd, p))) p = p === own ? '.' : p.slice(own.length + 1);
@@ -169,6 +176,11 @@ export function resolvePath(cwd, p) {
   // A link inside the project that points outside it is outside too.
   let inside = within(cwd, abs);
   if (inside && existsSync(abs)) { try { inside = within(realpathSync(cwd), realpathSync(abs)); } catch {} }
+  // A full path into the math notes folder still means the notes, read-only.
+  if (!inside && existsSync(abs) && within(mathDir(), abs)) {
+    const r = relative(mathDir(), abs);
+    return { abs, rel: `MATH${r ? `/${r}` : ''}`, inside: true, math: true };
+  }
   return { abs, rel: rel || '.', inside };
 }
 
@@ -329,6 +341,7 @@ export function prepare(name, args, env) {
     for (const k of ['old_text', 'new_text', 'content']) if (args[k] !== undefined) args[k] = stripLineNumbers(args[k]).text;
     const p = resolvePath(env.cwd, args.path);
     if (!p.inside) return { error: `${args.path} is outside the project folder, which is not allowed.` };
+    if (p.math) return { error: `${p.rel} is in the user's math notes, which are read-only here. Read them; never change them.` };
     let exists = existsSync(p.abs);
     if (!exists && name === 'Edit') {
       const alt = didYouMean(env.cwd, args.path);
@@ -411,16 +424,21 @@ export async function execute(name, args, prepared, env) {
         const lines = readFileSync(lp.abs, 'utf8').split('\n').length;
         return { text: `${lp.rel} is a file (${lines} lines, ${(statSync(lp.abs).size / 1024).toFixed(1)} KB). Use Read to see it.`, view: { kind: 'list', count: 1, content: lp.rel } };
       }
-      const r = listFiles(env.cwd, { path: lp.abs, pattern: args.pattern });
+      const r = listFiles(lp.math ? mathDir() : env.cwd, { path: lp.abs, pattern: args.pattern });
       if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: r.error } };
-      const more = r.total > r.lines.length ? `\n… and ${r.total - r.lines.length} more` : '';
-      return { text: (r.lines.join('\n') || `(nothing found)${projectFiles(env.cwd)}`) + more, view: { kind: 'list', count: r.total, content: r.lines.join('\n') } };
+      // Entries in the math notes keep their MATH/ prefix so Read can use them as they are.
+      const lines = lp.math ? r.lines.map((l) => `${lp.rel}/${l}`) : r.lines;
+      const more = r.total > lines.length ? `\n… and ${r.total - lines.length} more` : '';
+      return { text: (lines.join('\n') || `(nothing found)${lp.math ? '' : projectFiles(env.cwd)}`) + more, view: { kind: 'list', count: r.total, content: lines.join('\n') } };
     }
     case 'Search': {
-      const r = searchFiles(env.cwd, { pattern: args.pattern, path: resolvePath(env.cwd, args.path ?? '.').abs, glob: args.glob });
+      const sp = resolvePath(env.cwd, args.path ?? '.');
+      const r = searchFiles(sp.math ? mathDir() : env.cwd, { pattern: args.pattern, path: sp.abs, glob: args.glob });
       if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: r.error } };
-      const more = r.total > r.lines.length ? `\n… and ${r.total - r.lines.length} more matches` : '';
-      return { text: cut((r.lines.join('\n') || `No matches. Try one plain word, or Read a likely file.${projectFiles(env.cwd)}`) + more, max), view: { kind: 'search', count: r.total, content: r.lines.join('\n') } };
+      // Matches in the math notes keep their MATH/ prefix so Read can use them as they are.
+      const lines = sp.math ? r.lines.map((l) => `MATH/${l}`) : r.lines;
+      const more = r.total > lines.length ? `\n… and ${r.total - lines.length} more matches` : '';
+      return { text: cut((lines.join('\n') || `No matches. Try one plain word, or Read a likely file.${sp.math ? '' : projectFiles(env.cwd)}`) + more, max), view: { kind: 'search', count: r.total, content: lines.join('\n') } };
     }
     case 'Edit':
     case 'Write': {
