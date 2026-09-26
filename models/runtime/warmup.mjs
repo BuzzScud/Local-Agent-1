@@ -37,7 +37,9 @@ export function pruneSaved(dir = SLOT_DIR, keep = KEEP_SAVED, kind = /^warm-[0-9
 // onPhase('restoring' | 'reading') lets the screen say what it waits for.
 // sessionMark: where the session's own details start in the system prompt
 // (the terminal passes SESSION_MARK from its prompt).
-export async function warmUp({ url, model, system, tools, thinking, effort, slot = 0, sessionMark, onPhase = () => {}, signal }) {
+// helper: whether the server really runs the guessing helper (it can be off
+// at High effort even when the file is there); default: the env/file check.
+export async function warmUp({ url, model, system, tools, thinking, effort, slot = 0, sessionMark, helper: helperOn, onPhase = () => {}, signal }) {
   const kw = thinkingKwargs(model, thinking, effort);
   try {
     // The prompt exactly as the model sees it, up to the user's first words.
@@ -49,7 +51,7 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     const shared = upToUser.slice(0, cut);
     // A saved state belongs to one engine build and one helper setup: a state
     // saved by another build is read again instead of restored.
-    const helper = hasDraft(model) ? model.draft.file : '';
+    const helper = (helperOn ?? hasDraft(model)) ? model.draft.file : '';
     const key = (text) => createHash('sha256').update(`${model.file}\0${ENGINE.tag}\0${helper}\0${text}`).digest('hex').slice(0, 16);
     const file = `warm-${key(shared)}.bin`;
     // The same instructions as a start before (same folder, day, git state):

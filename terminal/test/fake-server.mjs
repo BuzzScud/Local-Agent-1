@@ -26,7 +26,7 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6 } = {}) {
       send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: reply.tool.name, arguments: '' } }] });
       for (const p of pieces(args)) { send({ tool_calls: [{ index: 0, function: { arguments: p } }] }); n++; await wait(); }
     }
-    send({}, reply.tool ? 'tool_calls' : 'stop');
+    send({}, reply.finish ?? (reply.tool ? 'tool_calls' : 'stop'));
     res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900 + requests.length * 150, completion_tokens: n }, timings: { prompt_n: 120, prompt_per_second: 233.4, predicted_n: n, predicted_per_second: 41.9 } })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();

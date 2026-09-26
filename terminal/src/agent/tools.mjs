@@ -41,7 +41,7 @@ export const TOOL_DEFS = [
   },
   {
     name: 'Write',
-    description: 'Create a new file. To change an existing file use Edit instead; Write replaces the whole file.',
+    description: 'Create a new file. To change an existing file use Edit instead; Write replaces the whole file. A big file (hundreds of lines) does not fit in one reply: Write a short skeleton first, then add one section at a time with Edit.',
     parameters: { type: 'object', properties: { path: str('File path'), content: str('The full file content') }, required: ['path', 'content'] },
   },
   {
@@ -100,7 +100,7 @@ export function normalizeArgs(name, raw) {
 
 export function parseArgs(name, json) {
   let raw;
-  try { raw = json && json.trim() ? JSON.parse(json) : {}; } catch (e) { return { error: `The arguments were not valid JSON (${e.message}). Send them again as a JSON object.` }; }
+  try { raw = json && json.trim() ? JSON.parse(json) : {}; } catch (e) { return { error: `The arguments were not valid JSON (${e.message}). Write the call again with a valid JSON object. If the content is long, do not resend it whole: Write a short skeleton of the file first, then add one section at a time with Edit.` }; }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { error: 'The arguments must be a JSON object.' };
   const args = normalizeArgs(name, raw);
   const def = TOOL_DEFS.find((d) => d.name === name);

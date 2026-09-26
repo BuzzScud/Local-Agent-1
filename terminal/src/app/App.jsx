@@ -100,6 +100,7 @@ export function App({ opts, win }) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   const [ramGb, setRamGb] = useState(null);
+  const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
 
   // Each new item is measured before it is shown (see primeRows), so the
   // space above the prompt box is right on the first frame; measured just
@@ -271,9 +272,11 @@ export function App({ opts, win }) {
       // as it is; otherwise the memory size is chosen from what is free now.
       const running = runningServer(model);
       if (!size && running) size = running.ctx;
+      let helper;
       if (!size) {
-        const c = chooseContext(model);
+        const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined });
         size = c.ctx;
+        helper = c.helper; // false: High keeps its memory, the speed helper stays off
         memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
       }
       agent.ctx = size;
@@ -287,7 +290,7 @@ export function App({ opts, win }) {
       });
       let st;
       try {
-        st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS });
+        st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
@@ -306,7 +309,7 @@ export function App({ opts, win }) {
       // A model kept loaded from an earlier start is ours now: warm it for
       // this folder too (instant when nothing changed). Another window's is left alone.
       if (!st.shared || st.idle) try {
-        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: (p) => { if (alive) setStartPhase(p); } });
+        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (alive) setStartPhase(p); } });
       } catch {}
       if (!alive) return;
       setStarting(false);
@@ -464,6 +467,13 @@ export function App({ opts, win }) {
       case 'doctor':
         doctor();
         break;
+      case 'meters': {
+        const on = arg ? /^(on|show|yes)$/i.test(arg) : !meters;
+        setMeters(on);
+        saveSettings({ meters: on });
+        push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
+        break;
+      }
       case 'exit':
       case 'quit':
         await quit();
@@ -471,7 +481,7 @@ export function App({ opts, win }) {
       default:
         push({ type: 'note', text: `Unknown command /${cmd}. Type /help for the list.`, tone: 'warn' });
     }
-  }, [agent, cwd, doctor, flash, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, toggleLayout]);
+  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, toggleLayout]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');
@@ -492,11 +502,13 @@ export function App({ opts, win }) {
     }
     if (value.startsWith('/')) { runSlash(value); return; }
     if (value.startsWith('!')) { runShell(value.slice(1).trim()); return; }
+    // "exit" or "quit" typed as a plain message quits, like /exit.
+    if (/^(exit|quit)[.!]?$/i.test(value.trim())) { quit(); return; }
     addHistory(cwd, value);
     historyRef.current.push(value);
     if (agent.busy || S.current.starting) { queuedRef.current = value; setQueued(value); return; }
     sendPrompt(value);
-  }, [agent, cwd, push, runShell, runSlash, sendPrompt]);
+  }, [agent, cwd, push, quit, runShell, runSlash, sendPrompt]);
 
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
@@ -692,7 +704,7 @@ export function App({ opts, win }) {
   itemsRef.current = items;
   const app = {
     items, live, perm, picker, input, mode, layout, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
-    modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
   };

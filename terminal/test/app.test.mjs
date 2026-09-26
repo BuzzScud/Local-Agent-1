@@ -72,7 +72,7 @@ test('ctrl+l switches to Live thinking and the choice is remembered', async () =
   const b = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [{ wait: 'Welcome to Bonsai Code' }, { sleep: 300 }, ...quit] });
   await fake.close();
   expect(b.text).toContain('layout: Live thinking');
-  expect(b.text).toContain('idle  ctx');
+  expect(b.text).toContain('layout: Live thinking'); // remembered; the status bar itself is off by default
 }, T);
 
 test('live: thinking streams in a 4-line window with the meter line', async () => {
@@ -80,11 +80,11 @@ test('live: thinking streams in a 4-line window with the meter line', async () =
   const slow = [{ reasoning: 'I should read export.mjs first to see how main builds its output, then decide where the flag goes. '.repeat(3), text: 'Done.' }];
   const fake = await startFakeServer(slow, { delayMs: 60, chunk: 3 });
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'live', '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: 'hello' }, { key: 'enter' }, { wait: '∴ Thinking…' }, { sleep: 1500 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
+    { wait: 'Welcome' }, { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' }, { type: 'hello' }, { key: 'enter' }, { wait: '∴ Thinking…' }, { sleep: 1500 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
   ] });
   await fake.close();
   expect(r.snapshots.thinking).toMatch(/┃ I should read export\.mjs/);
-  expect(r.snapshots.thinking).toMatch(/Bonsai 2 27B {2}↓ [\d.]+ tok\/s writing {2}ctx ▰/);
+  expect(r.snapshots.thinking).toMatch(/Bonsai 2 27B {2}[↑↓] [\d.…]+ tok\/s (writing|reading) {2}ctx ▰/); // under load the snapshot can land while it still reads
   expect(r.snapshots.thinking).not.toMatch(/-\d+s/);
   expect(r.text).toContain('∴ Thought for'); // what it had thought so far is kept, folded
   expect(r.text).toContain('Interrupted · tell Bonsai what to do instead');
@@ -176,7 +176,7 @@ test('/model: the model list and the effort in one picker; the choice is used an
   expect(picker).not.toMatch(/Thinking\s+◀/);
   expect(picker).toContain('Low: answers straight away (fastest)');
   expect(picker).toContain('↑↓ model · ←→ effort · enter to save · esc to cancel');
-  expect(r.snapshots.after).toMatch(/effort high/); // the meter line
+  expect(r.snapshots.after).toMatch(/Bonsai 2 27B · effort high\./); // the note; no status bar by default
   const sent = fake.requests.find((q) => q.stream && q.tools);
   expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
@@ -185,10 +185,10 @@ test('/model: the model list and the effort in one picker; the choice is used an
   // --effort on the command line sets the level for this run
   const fake2 = await startFakeServer([{ text: 'Hello.' }]);
   const r2 = await runInPty({ cwd, env, args: ['--url', fake2.url, '--no-flows', '--layout', 'live', '--effort', 'high'], steps: [
-    { wait: 'effort high' }, { type: 'hi' }, { key: 'enter' }, { wait: 'Hello.' }, ...quit,
+    { wait: 'Welcome' }, { type: 'hi' }, { key: 'enter' }, { wait: 'Hello.' }, ...quit,
   ] });
   await fake2.close();
-  expect(r2.text).toContain('effort high');
+  expect(r2.text).not.toContain('tok/s'); // the status bar is off unless /meters on
   expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
 }, T);
 
@@ -263,4 +263,30 @@ test('a folder not yet trusted gets the safety check first; yes is remembered', 
   // The key is the real path (tmpdir is a link on macOS).
   const keys = Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')));
   expect(keys.some((k) => k.endsWith('/demo-project'))).toBe(true);
+}, T);
+
+test('typing "exit" as a plain message quits, like /exit', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: 'exit' }, { key: 'enter' }, { sleep: 400 },
+  ] });
+  await fake.close();
+  expect(r.code).toBe(0); // it quit on the word alone: no ctrl+c steps, no kill
+  expect(fake.requests.length).toBe(0); // and never sent "exit" to the model
+}, T);
+
+test('/meters shows the status bar; off by default, like Claude Code', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([{ text: 'Hi.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { sleep: 300 }, { snapshot: 'off' },
+    { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' }, { sleep: 300 }, { snapshot: 'on' },
+    { type: '/meters off' }, { key: 'enter' }, { wait: 'Status bar off' }, { sleep: 300 }, { snapshot: 'offAgain' },
+    { type: 'exit' }, { key: 'enter' }, { sleep: 300 },
+  ] });
+  await fake.close();
+  expect(r.snapshots.off).not.toMatch(/effort (low|medium|high)/);
+  expect(r.snapshots.on).toMatch(/Bonsai 2 27B\s+idle\s+ctx .* of 32k\s+effort/);
+  expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);

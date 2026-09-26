@@ -21,7 +21,7 @@ Bonsai follows this file. It is the only copy: change it here and Bonsai changes
 6. Make one change.
 7. Check it with the check for its kind, not the whole test suite. If it fails, go back to step 4.
 8. Look at the result yourself.
-9. Commit only when asked. Say how you checked it.
+9. Commit only when asked. Say how you checked it, and leave that check behind so the bug can't come back.
 
 ## Why each step matters
 

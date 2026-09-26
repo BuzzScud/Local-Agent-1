@@ -93,6 +93,7 @@ function ToolView({ it, width }) {
     case 'declined': body = <Text color={C.dim}>You said no{v.feedback ? `: ${v.feedback}` : ''}</Text>; break;
     case 'answer': body = <Text><Text color={C.dim}>You: </Text>{v.text}</Text>; break;
     case 'error': body = <Text color={C.bad}>Error: {v.message}</Text>; break;
+    case 'same': body = <Text color={C.dim}>Already read above, unchanged; not read again</Text>; break;
     default: body = null;
   }
   return <Box flexDirection="column">{head}{body ? <Result>{body}</Result> : null}</Box>;
@@ -189,7 +190,21 @@ function speedOf(app) {
   return speed;
 }
 
-// The status line under the footer, in both layouts.
+// Like Claude Code, the memory is invisible until it matters: from 70% full a
+// dim line says what happens next (old output trimmed at 78%, the talk
+// summarized near 85%); /stats has the numbers; /meters brings the old bar back.
+export function memoryWarning(used, ctx) {
+  const pct = ctx ? Math.round((used / ctx) * 100) : 0;
+  if (pct < 70) return null;
+  return pct >= 85 ? `Memory ${pct}% full: the conversation is summarized at the next step` : `Memory ${pct}% full: old tool output is trimmed soon, the conversation summarized when full`;
+}
+function MemoryWarning({ app }) {
+  const text = memoryWarning(app.stats.ctxUsed ?? 0, app.ctx);
+  if (!text) return null;
+  return <Box paddingX={2} width={app.width}><Text color={C.warn} wrap="truncate-end">{text}</Text></Box>;
+}
+
+// The status line under the footer (/meters on): model, speed, memory, effort.
 function Meters({ app }) {
   const { stats, modelName, ctx, ramGb } = app;
   const speed = speedOf(app);
@@ -628,7 +643,7 @@ export function Screen({ app }) {
           <Footer app={app} />
         </Box>
       )}
-      <Meters app={app} />
+      {app.meters ? <Meters app={app} /> : <MemoryWarning app={app} />}
       </Box>
       </Box>
     </Box>
