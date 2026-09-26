@@ -134,3 +134,28 @@ test('only the two most recently used saved warm-ups are kept', () => {
   `);
   expect(out.files).toEqual(['other.bin', 'warm-' + 'a'.repeat(16) + '.bin', 'warm-' + 'b'.repeat(16) + '.bin']);
 });
+
+test('the saved warm-up follows the WEIGHTS: a model file changed on disk gets new keys', () => {
+  const out = inChild(`
+    const { modelPath } = await import(${JSON.stringify(join(import.meta.dir, '..', '..', 'models/registry.mjs'))});
+    const f = await fake();
+    const system = systemPrompt({ cwd: '/tmp/a', git: 'x', date: new Date('2026-09-26') });
+    // A stand-in model file, so the key can include when it last changed.
+    mkdirSync(join(HOME, 'models'), { recursive: true });
+    writeFileSync(modelPath(model), 'weights');
+    const t = Date.now() / 1000; utimesSync(modelPath(model), t - 100, t - 100);
+    await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system, tools: [], thinking: false, slot: 0 });
+    const first = readdirSync(SLOT_DIR).sort();
+    // The same file, edited again (same name, new content time): nothing may be reused.
+    utimesSync(modelPath(model), t, t);
+    f.calls.length = 0;
+    const r = await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system, tools: [], thinking: false, slot: 0 });
+    const second = readdirSync(SLOT_DIR).sort();
+    Object.assign(out, { first, second, restoredAfterEdit: r.restored, readsAfterEdit: f.calls.filter((c) => c.path === '/completion').length });
+    f.close();
+  `);
+  expect(out.first).toHaveLength(2); // warm- and warmw-
+  expect(out.restoredAfterEdit).toBe(false); // old state never lands on new weights
+  expect(out.readsAfterEdit).toBe(2); // read again in full
+  expect(out.second.filter((f) => !out.first.includes(f))).toHaveLength(2); // new keys
+});

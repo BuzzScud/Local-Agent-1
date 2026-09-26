@@ -9,3 +9,4 @@ export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, runnin
 export { availableBytes, kvBytesPerToken, needBytes, draftBytes, chooseContext, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { setup, RUNTIME } from './runtime/setup.mjs';
+export { readEdited, writeEdited, removeEdited, editedModel, editedFileName, modelById, EDITED_MANIFEST } from './runtime/edited.mjs';

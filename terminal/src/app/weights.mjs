@@ -15,7 +15,8 @@ import html from './weights.html' with { type: 'text' };
 import hubHtml from './hub.html' with { type: 'text' };
 import helpHtml from './help.html' with { type: 'text' };
 import { helpData, VERSION } from './help.mjs';
-import { MODELS, DEFAULT_MODEL, LINGER_SECS } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName } from '../../../models/index.mjs';
+import { applyEdits } from './gguf-edit.mjs';
 
 export function findDocsDir() {
   const tries = [process.env.BONSAI_DOCS, process.env.BONSAI_REPO && join(process.env.BONSAI_REPO, 'bonsai-code DOCS'), join(import.meta.dir, '..', '..', '..', 'bonsai-code DOCS')].filter(Boolean);
@@ -55,7 +56,12 @@ export function listDocs(dir) {
 // window) → any free port. BONSAI_HUB_PORT overrides.
 export const HUB_PORT = Number(process.env.BONSAI_HUB_PORT) || 8757;
 
-export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT }) {
+// onEdits: called after a save or revert of the edited copy (the app shows a
+// note and lights the weights badge). Editing endpoints:
+//   GET  /edits.json    what is saved: the manifest, or { saved: null }
+//   POST /edits/save    { edits } → a fresh clone of the original + all edits
+//   POST /edits/revert  deletes the copy and its manifest
+export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
   const size = missing ? 0 : statSync(path).size;
@@ -63,8 +69,30 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
   const model = MODELS[DEFAULT_MODEL];
   const serve = (p) => Bun.serve({
     hostname: '127.0.0.1', port: p,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
+      if (url.pathname.startsWith('/edits')) {
+        const bad = (m, code = 400) => Response.json({ error: m }, { status: code, headers: { 'cache-control': 'no-store' } });
+        if (url.pathname === '/edits.json' && req.method === 'GET') return Response.json({ saved: readEdited() }, { headers: { 'cache-control': 'no-store' } });
+        if (url.pathname === '/edits/save' && req.method === 'POST') {
+          if (missing) return bad('the model file is not on this Mac yet', 404);
+          let edits; try { ({ edits } = await req.json()); } catch { return bad('the request body is not JSON'); }
+          try {
+            const file = editedFileName(model);
+            const r = await applyEdits({ src: path, dest: join(MODELS_DIR, file), edits });
+            const saved = { base: DEFAULT_MODEL, file, saved: new Date().toISOString(), edits };
+            writeEdited(saved);
+            onEdits?.({ kind: 'save', saved, rowsChanged: r.rowsChanged });
+            return Response.json({ ok: true, saved, rowsChanged: r.rowsChanged, bytesChanged: r.bytesChanged });
+          } catch (e) { return bad(e.message); }
+        }
+        if (url.pathname === '/edits/revert' && req.method === 'POST') {
+          const was = removeEdited();
+          onEdits?.({ kind: 'revert', was });
+          return Response.json({ ok: true });
+        }
+        return bad('not found', 404);
+      }
       const page = (text) => new Response(text, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (url.pathname === '/') return page(hubHtml);
       if (url.pathname === '/weights') return page(html);

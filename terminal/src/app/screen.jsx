@@ -398,11 +398,14 @@ function Footer({ app }) {
   if (app.menu?.items?.length) return null;
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts');
   const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2);
+  // The weights badge shares the lower right with the mode label.
+  const ml = modeLabel(mode, { cycle: pick.cycle });
+  const badge = app.weightsBadge ? <Text color={C.accent}>{app.weightsBadge}</Text> : null;
   return (
     <Box flexDirection="column">
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
         <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text>
-        <Text wrap="truncate-start">{modeLabel(mode, { cycle: pick.cycle })}</Text>
+        <Text wrap="truncate-start">{badge}{badge && ml ? <Text color={C.dim}> · </Text> : null}{ml}</Text>
       </Box>
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
@@ -503,10 +506,13 @@ function ModelPicker({ app }) {
       <Text> </Text>
       {pk.models.map((m, i) => {
         const on = i === pk.index;
+        const desc = m.edited
+          ? `${(m.bytes / 1e9).toFixed(1)} GB · ${m.edited.edits.length} edit${m.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(m.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+          : `${(m.bytes / 1e9).toFixed(1)} GB · on this Mac`;
         return (
           <Text key={m.id}>
             <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {m.name.padEnd(16)}</Text>
-            <Text color={C.dim}>{`${(m.bytes / 1e9).toFixed(1)} GB · on this Mac`.padEnd(24)}</Text>
+            <Text color={C.dim}>{desc.padEnd(24)}</Text>
             {m.name === app.modelName ? <Text color={C.ok}>✔ in use</Text> : null}
           </Text>
         );

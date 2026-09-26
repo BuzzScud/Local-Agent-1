@@ -5,7 +5,7 @@ import { render } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS, modelPath } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
@@ -67,7 +67,7 @@ async function ensureTrusted(cwd) {
 const HELP = cliHelpText({ version: VERSION, modelName: MODELS[DEFAULT_MODEL].name, lingerMins: LINGER_SECS / 60 });
 
 function parse(argv) {
-  const o = { cwd: process.cwd(), modelId: DEFAULT_MODEL };
+  const o = { cwd: process.cwd() };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -119,11 +119,14 @@ if (process.argv[2] === 'setup') {
 const opts = parse(process.argv.slice(2));
 if (opts.help) { process.stdout.write(HELP); process.exit(0); }
 if (opts.version) { process.stdout.write(`${VERSION}\n`); process.exit(0); }
+// The model picked last time (kept by /model) — the edited copy included,
+// when its file and manifest are still there.
+opts.modelId = (modelById(opts.modelId) ?? modelById(loadSettings(opts.cwd).model) ?? MODELS[DEFAULT_MODEL]).id;
 
 if (opts.print) {
   if (!opts.prompt) { process.stderr.write('bonsai -p needs a prompt\n'); process.exit(2); }
   if (!(await ensureTrusted(opts.cwd))) process.exit(2);
-  const model = MODELS[opts.modelId];
+  const model = modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL];
   const settings = loadSettings(opts.cwd);
   let server = null;
   let url = opts.url;
@@ -182,7 +185,7 @@ if (opts.print) {
   try {
     const { homedir } = await import('node:os');
     const cwdShort = opts.cwd.startsWith(homedir()) ? `~${opts.cwd.slice(homedir().length)}` : opts.cwd;
-    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: MODELS[opts.modelId ?? DEFAULT_MODEL].name, cwdShort, loaded: opts.loaded ?? '' });
+    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name, cwdShort, loaded: opts.loaded ?? '' });
   } catch {}
   const win = new TerminalWindow(process.stdout);
   const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });

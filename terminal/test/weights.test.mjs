@@ -80,3 +80,51 @@ test('the hub keeps its usual address when it is free, and a second hub on the s
     for (const s of [a, b]) expect((await fetch(s.url + 'model.json')).status).toBe(200);
   } finally { a.stop(); b.stop(); }
 });
+
+// The editing endpoints write a manifest and a copy under BONSAI_HOME, so
+// they run in their own process with their own temp home (as warmup.test does).
+test('edits: save builds the copy + manifest and tells the app; a bad edit changes nothing; revert removes both', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bonsai-edits-'));
+  const script = `
+    import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+    import { join } from 'node:path';
+    const { tinyModel } = await import(${JSON.stringify(join(import.meta.dir, 'tiny-gguf.mjs'))});
+    const { MODELS_DIR, MODELS, DEFAULT_MODEL, modelPath, readEdited } = await import(${JSON.stringify(join(import.meta.dir, '..', '..', 'models', 'index.mjs'))});
+    const { startWeightsServer } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'app', 'weights.mjs'))});
+    mkdirSync(MODELS_DIR, { recursive: true });
+    const path = modelPath(MODELS[DEFAULT_MODEL]); // the endpoints edit the model the hub serves
+    writeFileSync(path, tinyModel());
+    const told = [];
+    const s = startWeightsServer({ path, docsDir: null, port: 0, onEdits: (e) => told.push(e.kind) });
+    const out = {};
+    out.empty = await (await fetch(s.url + 'edits.json')).json();
+    const save = await fetch(s.url + 'edits/save', { method: 'POST', body: JSON.stringify({ edits: [{ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: 3, k: 0.5 }] }) });
+    out.save = await save.json(); out.saveStatus = save.status;
+    out.manifest = readEdited();
+    out.copyThere = existsSync(join(MODELS_DIR, out.manifest.file));
+    const bad = await fetch(s.url + 'edits/save', { method: 'POST', body: JSON.stringify({ edits: [{ op: 'scale', tensor: 'nope', row: 0, k: 2 }] }) });
+    out.bad = await bad.json(); out.badStatus = bad.status;
+    out.manifestAfterBad = readEdited(); // still the good save
+    const revert = await fetch(s.url + 'edits/revert', { method: 'POST' });
+    out.revertStatus = revert.status;
+    out.after = { manifest: readEdited(), copyThere: existsSync(join(MODELS_DIR, out.manifest.file)), originalIntact: readFileSync(path).length > 0 };
+    out.told = told;
+    s.stop();
+    console.log(JSON.stringify(out));
+  `;
+  const r = require('node:child_process').spawnSync('bun', ['-e', script], { env: { ...process.env, BONSAI_HOME: home }, encoding: 'utf8', timeout: 30000 });
+  const out = JSON.parse(r.stdout.trim().split('\n').pop() || (() => { throw new Error(r.stderr); })());
+  expect(out.empty).toEqual({ saved: null });
+  expect(out.saveStatus).toBe(200);
+  expect(out.save.ok).toBe(true);
+  expect(out.save.rowsChanged).toBe(1);
+  expect(out.manifest.edits).toHaveLength(1);
+  expect(out.manifest.file).toContain('-edited.gguf');
+  expect(out.copyThere).toBe(true);
+  expect(out.badStatus).toBe(400);
+  expect(out.bad.error).toContain('no tensor named nope');
+  expect(out.manifestAfterBad.saved).toBe(out.manifest.saved);
+  expect(out.revertStatus).toBe(200);
+  expect(out.after).toEqual({ manifest: null, copyThere: false, originalIntact: true });
+  expect(out.told).toEqual(['save', 'revert']);
+});

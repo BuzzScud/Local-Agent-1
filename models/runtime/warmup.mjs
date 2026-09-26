@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import { SLOT_DIR, ENGINE, thinkingKwargs } from '../registry.mjs';
+import { SLOT_DIR, ENGINE, thinkingKwargs, modelPath } from '../registry.mjs';
 import { hasDraft } from './server.mjs';
 
 export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a line)
@@ -49,10 +49,13 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     const cut = (sessionMark ? upToUser.indexOf(sessionMark) : -1);
     if (prompt.indexOf(MARK) < 0 || cut < 0) throw new Error('prompt layout not recognised');
     const shared = upToUser.slice(0, cut);
-    // A saved state belongs to one engine build and one helper setup: a state
-    // saved by another build is read again instead of restored.
+    // A saved state belongs to one engine build, one helper setup and one set
+    // of WEIGHTS: the file's name plus when it last changed. An edited copy
+    // saved again under the same name gets new keys, so a state read with
+    // older weights is never restored onto newer ones.
     const helper = (helperOn ?? hasDraft(model)) ? model.draft.file : '';
-    const key = (text) => createHash('sha256').update(`${model.file}\0${ENGINE.tag}\0${helper}\0${text}`).digest('hex').slice(0, 16);
+    let stamp = ''; try { stamp = String(Math.round(statSync(modelPath(model)).mtimeMs)); } catch {}
+    const key = (text) => createHash('sha256').update(`${model.file}\0${stamp}\0${ENGINE.tag}\0${helper}\0${text}`).digest('hex').slice(0, 16);
     const file = `warm-${key(shared)}.bin`;
     // The same instructions as a start before (same folder, day, git state):
     // restore everything up to your first words at once.

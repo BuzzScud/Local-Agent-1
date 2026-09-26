@@ -148,6 +148,18 @@ progress { width: 200px; accent-color: var(--accent); }
   #tab-layers .grid { grid-template-columns: 40px repeat(10, 1fr); }
   .chbottom, .words { grid-template-columns: minmax(0, 1fr); }
 }
+/* ---------- editing ---------- */
+.editcard { margin: 10px 10px 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+.editcard h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); }
+.edit-it { display: flex; align-items: baseline; gap: 6px; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: var(--panel); margin: 3px 0; }
+.edit-it b { font-weight: 600; }
+.edit-it .x { cursor: pointer; color: var(--ink3); margin-left: auto; padding: 0 2px; }
+.edit-it .x:hover { color: var(--pos); }
+.editbtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.editbtns button { font-size: 12px; padding: 4px 10px; }
+.editbtns .lbl { font-size: 12px; color: var(--ink2); margin-right: 2px; }
+#editnote { margin-top: 6px; }
+#editsave[disabled] { opacity: .5; cursor: default; }
 </style>
 </head>
 <body>
@@ -167,6 +179,12 @@ progress { width: 200px; accent-color: var(--accent); }
       <input id="filter" placeholder="find a tensor" autocomplete="off">
     </div>
     <div id="list"></div>
+    <div class="editcard" id="editcard" hidden>
+      <h3>Edits <span id="editcount"></span></h3>
+      <div id="editlist"></div>
+      <div class="editbtns"><button class="primary" id="editsave">Save</button><button id="editrevert" hidden>Remove the copy</button></div>
+      <div class="small" id="editnote"></div>
+    </div>
   </aside>
   <main>
     <div id="empty">
@@ -205,6 +223,7 @@ progress { width: 200px; accent-color: var(--accent); }
               <h3>One stored block of 128 weights</h3>
               <div class="small" id="blockmeta"></div>
               <div id="blockgrid"></div>
+              <div class="editbtns" id="rowedit"><span class="lbl" id="roweditlbl"></span><button data-k="2">×2</button><button data-k="0.5">×½</button><button data-k="0">off</button><button data-k="ask">×…</button><button id="rowcopy">copy to…</button><button id="rowswap">swap with…</button></div>
             </div>
           </div>
           <div class="right">
@@ -277,6 +296,7 @@ progress { width: 200px; accent-color: var(--accent); }
             <input id="wq2" placeholder="for example world" autocomplete="off">
             <div class="alike" id="wcmp"></div>
             <div class="btns"><button id="wopen1">Open the word table at this row</button><button id="wopen2">Open the output matrix at this row</button></div>
+            <div class="editbtns"><span class="lbl">Edit how it reads this word</span><button data-t="token_embd.weight" data-k="2">×2</button><button data-t="token_embd.weight" data-k="0.5">×½</button><button data-t="token_embd.weight" data-k="0">off</button><span class="lbl" style="margin-left:8px">how it says it</span><button data-t="output.weight" data-k="2">×2</button><button data-t="output.weight" data-k="0.5">×½</button><button data-t="output.weight" data-k="0">off</button></div>
           </div>
         </div>
       </div>
@@ -628,6 +648,9 @@ if (typeof module !== 'undefined') module.exports = Core;
     for (const [k, v] of Object.entries(kv)) { const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = typeof v === 'string' && v.length > 200 ? v.slice(0, 200) + '…' : Array.isArray(v) ? v.join(', ') : String(v); dl.append(dt, dd); }
     const sel = $('#layer'); sel.innerHTML = '<option value="shared">Shared</option>' + Array.from({ length: layers || 0 }, (_, i) => `<option value="${i}">Layer ${i}</option>`).join('');
     $('#empty').hidden = true; $('#view').hidden = false;
+    // the edit queue for this file, and what is already saved on the hub
+    loadEdits();
+    refreshSaved().then(() => { if (!edits.length && savedManifest && savedManifest.edits.length) { edits = savedManifest.edits.slice(); persistEdits(); } renderEdits(); });
     const place = loadPlace() || {};
     if (place.mode === 'stored' || place.mode === 'real') state.mode = place.mode;
     if (place.chmat && [...$('#chmat').options].some((o) => o.value === place.chmat)) $('#chmat').value = place.chmat;
@@ -737,6 +760,9 @@ if (typeof module !== 'undefined') module.exports = Core;
       // colours reach full strength at 2.5× the typical size: the matrix's once it is known, else this window's
       scale = 2.5 * (rst ? rst.rms : Math.sqrt(sq / (rows * t.ne0)) || 1);
     }
+    // queued edits, previewed: scaled rows change now, before anything is saved
+    const q = queuedRowOps(t);
+    if (real && q.size) for (const [row, k] of q) { if (typeof k === 'number' && k !== 1 && row >= r0 && row < r0 + rows) { const base = (row - r0) * t.ne0; for (let i = 0; i < t.ne0; i++) vals[base + i] *= k; } }
     view.win = { r0, c0, rows, cols, dec, vals, real, scale };
     const C = colors(); const img = zctx.createImageData(zoomC.width, zoomC.height); const d = img.data;
     const bg = C.surface; for (let i = 0; i < d.length; i += 4) { d[i] = bg[0]; d[i + 1] = bg[1]; d[i + 2] = bg[2]; d[i + 3] = 255; }
@@ -747,6 +773,8 @@ if (typeof module !== 'undefined') module.exports = Core;
       for (let y = 0; y < z - gap; y++) { let p = ((r * z + y) * W + c * z) * 4; for (let x = 0; x < z - gap; x++) { d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; p += 4; } }
     }
     zctx.putImageData(img, 0, 0);
+    // a small accent bar marks every row with a queued edit
+    if (q.size) { zctx.fillStyle = css('--accent'); for (const [row] of q) if (row >= r0 && row < r0 + rows) zctx.fillRect(0, (row - r0) * z, 3, Math.max(1, z - gap)); }
     $('#zlabel').textContent = `${z} px`;
     drawing = false; if (pending) { pending = false; drawZoom(); } else { drawOverviewBox(); savePlace(); }
   }
@@ -776,13 +804,17 @@ if (typeof module !== 'undefined') module.exports = Core;
   }
   zoomC.onmousemove = (e) => {
     if (drag && drag.moved) return; const a = at(e); if (!a) return; const w = view.win;
-    if (w.real && w.dec.scales) $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · real weight ≈ ${a.v.toPrecision(3)} · ${(Math.abs(a.v) / (w.scale / 2.5)).toFixed(1)}× the typical size${curRot ? ' · made from its whole row of stored digits' : ''} · click for the stored block`;
+    const qk = queuedRowOps(cur).get(a.row);
+    const qnote = typeof qk === 'number' ? ` · queued ×${qk} shown` : qk === null ? ' · this row has a queued edit' : '';
+    if (w.real && w.dec.scales) $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · real weight ≈ ${a.v.toPrecision(3)} · ${(Math.abs(a.v) / (w.scale / 2.5)).toFixed(1)}× the typical size${curRot ? ' · made from its whole row of stored digits' : ''}${qnote} · click for the stored block`;
     else if (w.dec.scales) $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · stored digit ${a.digit > 0 ? '+1' : a.digit < 0 ? '−1' : '0'} × scale ${a.scale.toPrecision(4)} = ${(a.digit * a.scale).toPrecision(4)} · block ${Math.floor(a.col / Core.QK)} of this row`;
     else $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · value ${a.v.toPrecision(5)}`;
   };
   zoomC.onclick = (e) => { if (drag && drag.moved) return; const a = at(e); if (!a || !view.win.dec.ternary) return; showBlock(a); };
   function showBlock(a) {
     const w = view.win; const b = Math.floor(a.col / Core.QK); const base = a.rr * cur.ne0 + b * Core.QK;
+    lastPick = { tensor: cur.name, row: a.row };
+    $('#roweditlbl').textContent = `Edit row ${fmt(a.row)}`;
     $('#block').hidden = false;
     const g = $('#blockgrid'); g.innerHTML = '';
     let neg = 0, pos = 0;
@@ -1056,6 +1088,99 @@ if (typeof module !== 'undefined') module.exports = Core;
   $('#wopen1').onclick = () => openRow('token_embd.weight');
   $('#wopen2').onclick = () => openRow('output.weight');
   function openRow(name) { const t = model.tensors.find((x) => x.name === name); if (!t || !wordSel) return; revealInList(t); showTab('picture'); select(t, { r0: Math.max(0, wordSel.id - 4), c0: 0, z: 4 }); }
+
+  // ---------- editing ----------
+  // A queue of whole-row edits, kept per file in this browser. Saving sends
+  // it to the hub, which writes an edited COPY of the model (the original is
+  // never written) and tells Bonsai; you then pick "27B · edited" in /model.
+  // Opened from disk (file://) there is no hub, so the queue only previews.
+  const served = /^https?:/.test(location.protocol);
+  let edits = [], savedManifest = null, lastPick = null;
+  const editsKey = () => `bonsai-weights-edits:${file.name}`;
+  function loadEdits() { try { edits = JSON.parse(localStorage.getItem(editsKey())) || []; } catch { edits = []; } }
+  function persistEdits() { try { localStorage.setItem(editsKey(), JSON.stringify(edits)); } catch {} }
+  async function refreshSaved() { if (!served) return; try { savedManifest = (await (await fetch('/edits.json')).json()).saved; } catch { savedManifest = null; } }
+  // One queued edit per target: scaling a row again replaces its earlier factor.
+  const editIdent = (e) => e.op === 'scale' ? `scale:${e.tensor}:${e.row}` : e.op === 'copy' ? `copy:${e.tensor}:${e.to}` : `swap:${e.tensor}:${e.a}:${e.b}`;
+  function addEdit(e) {
+    const i = edits.findIndex((x) => editIdent(x) === editIdent(e));
+    if (i >= 0) edits[i] = e; else edits.push(e);
+    persistEdits(); renderEdits(); drawZoom();
+  }
+  // The rows of tensor t with queued edits: row → the factor (scales), or null.
+  function queuedRowOps(t) {
+    const m = new Map(); if (!t || !edits.length) return m;
+    for (const e of edits) {
+      if (e.tensor !== t.name) continue;
+      if (e.op === 'scale') m.set(e.row, (typeof m.get(e.row) === 'number' ? m.get(e.row) : 1) * e.k);
+      else for (const r of e.op === 'copy' ? [e.to] : [e.a, e.b]) if (!m.has(r)) m.set(r, null);
+    }
+    return m;
+  }
+  function describeEdit(e) {
+    const short = (n) => n === 'token_embd.weight' ? 'word table' : n === 'output.weight' ? 'output' : n.replace(/^blk\.(\d+)\.(.+)\.weight$/, '$2 · layer $1').replace(/\.weight$/, '');
+    const rowName = (r) => (e.tensor === 'token_embd.weight' || e.tensor === 'output.weight') && ensureTokens() && r < tix.texts.length ? `“${showTok(tix.texts[r])}” · row ${fmt(r)}` : `row ${fmt(r)}`;
+    if (e.op === 'scale') return `${short(e.tensor)} · ${rowName(e.row)} ${e.k === 0 ? 'off' : '×' + e.k}`;
+    if (e.op === 'copy') return `${short(e.tensor)} · ${rowName(e.from)} → ${rowName(e.to)}`;
+    return `${short(e.tensor)} · ${rowName(e.a)} ⇄ ${rowName(e.b)}`;
+  }
+  function renderEdits() {
+    const card = $('#editcard');
+    if (!model || (!edits.length && !savedManifest)) { card.hidden = true; return; }
+    card.hidden = false;
+    $('#editcount').textContent = edits.length ? `(${edits.length})` : '';
+    $('#editlist').innerHTML = edits.map((e, i) => `<div class="edit-it"><b>${describeEdit(e)}</b><span class="x" data-i="${i}" title="remove this edit">✕</span></div>`).join('') || '<div class="small">Nothing queued.</div>';
+    const same = savedManifest && JSON.stringify(edits) === JSON.stringify(savedManifest.edits);
+    const save = $('#editsave');
+    save.disabled = !served || !edits.length || same;
+    save.textContent = 'Save to “27B · edited”';
+    $('#editrevert').hidden = !savedManifest;
+    $('#editnote').textContent = !served ? 'Open this page with /weights in Bonsai to save; here the queue only previews.'
+      : same ? `Saved ${new Date(savedManifest.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · pick 27B · edited in /model to run on it`
+      : savedManifest ? 'Changed since the last save.' : edits.length ? 'Not saved yet. Saving writes a copy; the original is never touched.' : '';
+  }
+  $('#editlist').onclick = (e) => { const x = e.target.closest('.x'); if (!x) return; edits.splice(Number(x.dataset.i), 1); persistEdits(); renderEdits(); drawZoom(); };
+  $('#editsave').onclick = async () => {
+    const btn = $('#editsave'); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const r = await fetch('/edits/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ edits }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `the hub said ${r.status}`);
+      savedManifest = j.saved;
+    } catch (err) { $('#editnote').textContent = `Could not save: ${err.message}`; btn.textContent = 'Save to “27B · edited”'; return; }
+    renderEdits();
+  };
+  $('#editrevert').onclick = async () => {
+    try { await fetch('/edits/revert', { method: 'POST' }); } catch {}
+    savedManifest = null; renderEdits();
+  };
+  // a whole number or a decimal, 0 to 16
+  function askFactor() {
+    const s = prompt('Multiply the row by… (0 turns it off)', '1.5'); if (s == null) return null;
+    const k = Number(s);
+    if (!isFinite(k) || k < 0 || k > 16) { $('#editnote').textContent = 'The factor must be between 0 and 16.'; return null; }
+    return k;
+  }
+  function askRow(what) {
+    const s = prompt(what, ''); if (s == null) return null;
+    const r = Number(s.replace(/[^\d]/g, ''));
+    if (!Number.isInteger(r) || r < 0 || r >= cur.rows) { $('#editnote').textContent = `Rows here go 0–${fmt(cur.rows - 1)}.`; return null; }
+    return r;
+  }
+  $('#rowedit').onclick = (e) => {
+    const b = e.target.closest('button'); if (!b || !lastPick || lastPick.tensor !== cur.name) return;
+    if (b.id === 'rowcopy') { const to = askRow(`Copy row ${fmt(lastPick.row)} onto which row?`); if (to == null || to === lastPick.row) return; addEdit({ op: 'copy', tensor: cur.name, from: lastPick.row, to }); return; }
+    if (b.id === 'rowswap') { const other = askRow(`Swap row ${fmt(lastPick.row)} with which row?`); if (other == null || other === lastPick.row) return; addEdit({ op: 'swap', tensor: cur.name, a: lastPick.row, b: other }); return; }
+    let k = b.dataset.k === 'ask' ? askFactor() : Number(b.dataset.k);
+    if (k == null) return;
+    addEdit({ op: 'scale', tensor: cur.name, row: lastPick.row, k });
+  };
+  $('#wcard').addEventListener('click', (e) => {
+    const b = e.target.closest('.editbtns button'); if (!b || !wordSel) return;
+    const t = model.tensors.find((x) => x.name === b.dataset.t);
+    if (!t || wordSel.id >= t.rows) return;
+    addEdit({ op: 'scale', tensor: b.dataset.t, row: wordSel.id, k: Number(b.dataset.k) });
+  });
 
   // ---------- tabs, resize, theme ----------
   function showTab(id, quiet) {

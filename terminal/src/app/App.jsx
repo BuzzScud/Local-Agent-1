@@ -12,7 +12,7 @@ import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById } from '../../../models/index.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
@@ -78,8 +78,13 @@ export function App({ opts, win }) {
   const [menuClosedFor, setMenuClosedFor] = useState(null);
   // Where Bonsai works; it can move into a project named from the home folder.
   const [cwd, setCwd] = useState(opts.cwd);
-  const model = MODELS[opts.modelId ?? DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
   const settings = useRef(loadSettings(opts.cwd)).current;
+  // The model can change while the window is open (/model switches to the
+  // edited copy and back), so it is state; the last pick is kept in settings.
+  const [model, setModel] = useState(() => modelById(opts.modelId) ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL]);
+  // What the Weights tab last saved (the edited copy's manifest): feeds the
+  // weights badge in the lower right.
+  const [editedSaved, setEditedSaved] = useState(readEdited);
   const memoryNote = useRef(null);
   const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
   const itemsRef = useRef([]);
@@ -185,10 +190,58 @@ export function App({ opts, win }) {
   // The hub in the browser (/weights, /docs, /help): one small server per
   // window, closed with it. Answers { server, url } or null after a warning.
   const openHub = (tab) => {
-    try { weightsRef.current ??= startWeightsServer({ path: modelPath(model) }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
+    // The hub always serves and edits the ORIGINAL model file: each save
+    // rebuilds the copy from a fresh clone of it plus the whole edit list.
+    const base = MODELS[model.edited ? model.edited.base : DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
+    const onEdits = (e) => {
+      if (e.kind === 'save') {
+        setEditedSaved(e.saved);
+        const n = e.saved.edits.length;
+        push({ type: 'note', text: `Saved 27B · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
+      } else { setEditedSaved(null); push({ type: 'note', text: 'The edited copy was removed. The original was never touched.', tone: 'dim' }); }
+    };
+    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
     const url = `${weightsRef.current.url}?tab=${tab}`;
     if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
     return { server: weightsRef.current, url };
+  };
+  // /model picked a different set of weights: only the model server restarts;
+  // the window, the conversation and the history all stay. About 40 s: the
+  // new weights never reuse a saved warm-up, so the instructions are re-read.
+  const switchModel = async (next) => {
+    if (S.current.live !== IDLE) { push({ type: 'note', text: 'Bonsai is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+    const cur = serverRef.current;
+    // Only one 27B fits in memory, so nobody else may be on the old server.
+    const others = cur?.port ? liveUsers(cur.port).filter((p) => p !== process.pid) : [];
+    if (others.length) { push({ type: 'note', text: `Another Bonsai window is using ${model.name}. Close it first, then switch.`, tone: 'warn' }); return; }
+    setModel(next);
+    setStarting(true); setStartPhase('loading');
+    try {
+      const oldPid = cur?.child?.pid ?? cur?.shared?.pid;
+      await cur?.stop();
+      stopIdleServers(); // a server we only attached to (kept loaded earlier) is freed too
+      // Wait for the old one to really exit: two 27Bs never fit side by side.
+      if (oldPid) { const t0 = Date.now(); for (;;) { try { process.kill(oldPid, 0); } catch { break; } if (Date.now() - t0 > 15000) throw new Error('the old model server did not stop'); await new Promise((r) => setTimeout(r, 200)); } }
+      const c = chooseContext(next, { effort: agent.thinking ? agent.effort : undefined });
+      memoryNote.current = c.reason ?? null;
+      const srv = new ModelServer(next);
+      serverRef.current = srv;
+      srv.on('crash', ({ code, signal }) => {
+        if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.bonsai-code/logs/server.log, then restart Bonsai Code.`, tone: 'error' }); return; }
+        push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
+        restartRef.current = srv.restart().then(() => { push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { restartRef.current = null; });
+      });
+      const st = await srv.start({ ctx: c.ctx, lingerSecs: LINGER_SECS, helper: c.helper });
+      agent.url = srv.url;
+      agent.model = next;
+      agent.ctx = st.ctx ?? c.ctx; setCtx(agent.ctx);
+      if (st.slots > 1) agent.slots = { main: 0, side: 1 };
+      setStartPhase('reading');
+      await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase });
+      const n = next.edited?.edits.length ?? 0;
+      push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
+    } catch (e) { push({ type: 'note', text: `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' }); }
+    setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
   const applyChoice = (id, value) => {
@@ -512,15 +565,18 @@ export function App({ opts, win }) {
         break;
       }
       case 'model': {
-        // The model list and the thinking level in one picker.
+        // The model list and the thinking level in one picker. The edited
+        // copy, when one is saved, is one more row.
         const levels = model.thinkingLevels ?? [];
         const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
-        const models = Object.values(MODELS);
+        const edited = editedModel();
+        const models = [...Object.values(MODELS), ...(edited ? [edited] : [])];
         setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => m.id === model.id)), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
         break;
       }
       case 'stats':
         push({ type: 'panel', title: 'Stats', pad: 20, rows: [
+          ['model', `${model.name}${model.edited ? ` · ${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(model.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`],
           ['context used', `${(stats.ctxUsed ?? agent.ctxUsed).toLocaleString()} of ${agent.ctx.toLocaleString()} tokens`],
           ['writing speed', stats.tps ? `${stats.tps.toFixed(1)} tokens/s (last reply)` : '—'],
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
@@ -666,8 +722,11 @@ export function App({ opts, win }) {
         setThinking(on, on ? lv.id : undefined);
         setPicker(null);
         const picked = pk.models[pk.index];
-        push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}${picked.id !== model.id ? ' (restart Bonsai Code to switch models)' : ''}.`, tone: 'dim' });
-        if (picked.id !== model.id) saveSettings({ model: picked.id });
+        // A different model — or the same edited copy with newer edits saved
+        // since — restarts the model server in place; the window stays.
+        const changed = picked.id !== model.id || (picked.edited && model.edited && picked.edited.saved !== model.edited.saved);
+        if (changed) { saveSettings({ model: picked.id }); switchModel(picked); }
+        else push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
       }
       return;
     }
@@ -803,6 +862,12 @@ export function App({ opts, win }) {
     modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
+    // The weights badge, lower right: edited weights saved and waiting, in
+    // use, or newer ones saved than the copy loaded now.
+    weightsBadge: model.edited
+      ? (editedSaved && editedSaved.saved !== model.edited.saved ? '✱ newer edits saved · /model to reload'
+        : `✱ on edited weights (${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'})`)
+      : (editedSaved ? '✱ edited weights ready · /model to switch' : null),
   };
   return <Screen app={app} />;
 }

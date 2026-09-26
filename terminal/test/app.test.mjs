@@ -487,3 +487,29 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   expect(r.snapshots.on).toMatch(/Bonsai 2 27B\s+idle\s+ctx .* of 32k\s+effort/);
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);
+
+test('edited weights: the badge points at /model, the picker lists the copy, and picking it tries the switch in place', async () => {
+  const { cwd, env, base } = setup();
+  // A saved edited copy: its manifest and both stand-in files.
+  const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
+  writeFileSync(join(models, 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
+  writeFileSync(join(models, 'Ternary-Bonsai-2-27B-PQ2_0-edited.gguf'), 'stand-in-edited');
+  writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: '27b', file: 'Ternary-Bonsai-2-27B-PQ2_0-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { sleep: 400 }, { snapshot: 'badge' },
+    { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
+    { key: 'down' }, { sleep: 150 }, { key: 'enter' },
+    { wait: 'Could not switch' }, { sleep: 300 }, { snapshot: 'after' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.badge).toContain('✱ edited weights ready · /model to switch');
+  expect(r.snapshots.picker).toContain('27B · edited');
+  expect(r.snapshots.picker).toContain('1 edit · saved');
+  expect(r.snapshots.picker).toContain('✔ in use'); // still on the original here
+  // No llama-server in this stand-in home: the switch fails cleanly with a
+  // note, which proves the picker really tried it in place (no app restart).
+  expect(r.text).toContain('Could not switch:');
+  expect(r.snapshots.after).toContain('✱ on edited weights (1 edit)');
+}, T);
