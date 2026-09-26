@@ -153,6 +153,34 @@ test('focused paths on screen: the plan, the try counter, the rename prompt and 
   expect(readFileSync(join(cwd, 'stats.test.mjs'), 'utf8')).toContain('middleValue(');
 }, T);
 
+test('/effort alone opens a menu like Claude Code: arrows or a number pick, esc goes back unchanged, "/eff" + enter opens it too', async () => {
+  const { cwd, env, base } = setup();
+  const fake = await startFakeServer([{ text: 'Hi.' }]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: '/effort' }, { key: 'enter' },
+    { wait: 'How much Bonsai thinks before it acts' }, { sleep: 200 }, { snapshot: 'menu' },
+    { key: 'down' }, { sleep: 100 }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is medium' },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'How much Bonsai thinks before it acts' }, { sleep: 200 }, { snapshot: 'again' },
+    { key: 'esc' }, { wait: 'Kept effort as medium' }, { sleep: 200 }, { snapshot: 'back' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'How much Bonsai thinks before it acts' }, { sleep: 200 }, { type: '3' }, { wait: 'Effort is high' },
+    { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.menu).toMatch(/❯ 1\. Low\s+answers straight away \(fastest\)\s+✔ in use/);
+  expect(r.snapshots.menu).toMatch(/ 2\. Medium\s+thinks briefly first/);
+  expect(r.snapshots.menu).toMatch(/ 3\. High\s+thinks carefully first/);
+  expect(r.snapshots.menu).toContain('↑↓ to choose · enter to select · esc to go back');
+  expect(r.snapshots.moved).toMatch(/❯ 2\. Medium/);
+  expect(r.snapshots.again).toMatch(/❯ 2\. Medium\s+thinks briefly first[^\n]*✔ in use/); // opens on the level in use
+  expect(r.snapshots.back).not.toContain('How much Bonsai thinks before it acts'); // esc closed it
+  expect(r.text).toContain('Effort is high: it thinks carefully first');
+  const sent = fake.requests.find((q) => q.stream && q.tools);
+  expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' }); // High reached the model
+  const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+  expect([saved.thinking, saved.effort]).toEqual([true, 'high']); // and is kept for next time
+}, T);
+
 test('/model: the model list and the effort in one picker; the choice is used and kept; /effort and --effort', async () => {
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);

@@ -402,10 +402,17 @@ export function App({ opts, win }) {
         break;
       case 'effort':
       case 'think': { // /think is the old name, still accepted
-        // /effort, /effort on|off, or a level: /effort low|medium|high
-        // ("off" and "xhigh" are the old names for low and high).
-        const a = arg.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
+        // Alone: a menu of the levels, like Claude Code's. With a word:
+        // /effort low|medium|high, or on|off ("off" and "xhigh" are the old
+        // names for low and high).
         const levels = model.thinkingLevels ?? [];
+        if (!arg.trim() && levels.length) {
+          const now = thinkingLevel(model, agent.thinking, agent.effort);
+          const at = Math.max(0, levels.findIndex((l) => l.id === now.id));
+          setPicker({ kind: 'effort', index: at, current: now.id });
+          break;
+        }
+        const a = arg.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
         const picked = levels.find((l) => l.id === a);
         const on = picked ? !!picked.effort : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
         const eff = on && picked?.effort ? picked.id : undefined;
@@ -527,7 +534,7 @@ export function App({ opts, win }) {
   let menu = null;
   if (!perm && !picker && input.value !== menuClosedFor) {
     const cmds = inputMode === 'prompt' ? matchCommands(input.value) : [];
-    if (cmds.length) menu = { kind: 'slash', pad: 14, items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg })) };
+    if (cmds.length) menu = { kind: 'slash', pad: 14, items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     const at = mentionAt(input);
     if (!menu && at) {
       if (!filesRef.current) { filesRef.current = []; let n = 0; for (const f of walk(cwd)) { if (!f.dir) filesRef.current.push(f.path); if (++n > 5000) break; } }
@@ -604,6 +611,29 @@ export function App({ opts, win }) {
       }
       return;
     }
+    // Effort menu: ↑↓ or a number, enter picks, esc goes back unchanged
+    if (cur.picker?.kind === 'effort') {
+      const pk = cur.picker;
+      const levels = model.thinkingLevels ?? [];
+      const n = levels.length;
+      const pick = (i) => {
+        const lv = levels[i];
+        const on = !!lv.effort;
+        setThinking(on, on ? lv.id : undefined);
+        setPicker(null);
+        push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.`, tone: 'dim' });
+      };
+      if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
+      else if (key.return) pick(pk.index);
+      else if (/^[1-9]$/.test(ch) && Number(ch) <= n) pick(Number(ch) - 1);
+      else if (key.escape || (key.ctrl && ch === 'c')) {
+        setPicker(null);
+        const kept = levels.find((l) => l.id === pk.current);
+        push({ type: 'note', text: `Kept effort as ${kept ? kept.label.toLowerCase() : 'it was'}.`, tone: 'dim' });
+      }
+      return;
+    }
     // Resume picker
     if (cur.picker) {
       const pk = cur.picker;
@@ -663,7 +693,8 @@ export function App({ opts, win }) {
       if (key.return) {
         if (menu.kind === 'slash') {
           const it = menu.items[menuIdx];
-          if (it.takesArg && !/\s/.test(cur.input.value) && `/${it.value}` !== cur.input.value) { completeMenu(menu, menuIdx); return; }
+          // a command that takes a word waits for it; one that opens a menu when alone (/effort) runs now
+          if (it.takesArg && !it.picker && !/\s/.test(cur.input.value) && `/${it.value}` !== cur.input.value) { completeMenu(menu, menuIdx); return; }
           submit(`/${it.value}`);
           return;
         }

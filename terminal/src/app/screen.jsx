@@ -447,6 +447,33 @@ const START_PHASE = {
   restoring: 'restoring its instructions from last time ',
 };
 
+// /effort alone: the levels as a menu, like Claude Code's. The ❯ starts on
+// the level in use; ↑↓ or a number, enter picks, esc goes back unchanged.
+function EffortPicker({ app }) {
+  const pk = app.picker;
+  const levels = app.thinkingLevels;
+  const w = Math.max(...levels.map((l) => l.label.length)) + 2;
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Effort</Text>
+      <Text color={C.dim}>How much Bonsai thinks before it acts. Kept for next time.</Text>
+      <Text> </Text>
+      {levels.map((l, i) => {
+        const on = i === pk.index;
+        return (
+          <Text key={l.id}>
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {i + 1}. {l.label.padEnd(w)}</Text>
+            <Text color={C.dim}>{l.note}</Text>
+            {l.id === pk.current ? <Text color={C.ok}>  ✔ in use</Text> : null}
+          </Text>
+        );
+      })}
+      <Text> </Text>
+      <Text color={C.dim}>↑↓ to choose · enter to select · esc to go back</Text>
+    </Box>
+  );
+}
+
 // /model: the model list and the effort level in one picker.
 function ModelPicker({ app }) {
   const pk = app.picker;
@@ -583,6 +610,8 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.picker?.kind === 'model' ? (
         <ModelPicker app={app} />
+      ) : app.picker?.kind === 'effort' ? (
+        <EffortPicker app={app} />
       ) : app.picker ? (
         <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={width}>
           <Text bold>{app.picker.title}</Text>

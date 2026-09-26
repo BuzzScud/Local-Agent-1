@@ -3,7 +3,7 @@ export const COMMANDS = [
   { name: 'help', desc: 'Show commands and keys' },
   { name: 'clear', desc: 'Start a new conversation (the screen keeps its history)' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
-  { name: 'effort', desc: 'Effort: low, medium or high (also in /model)', arg: '[low|medium|high]' },
+  { name: 'effort', desc: 'Pick the effort: low, medium or high (also in /model)', arg: '[low|medium|high]', picker: true }, // alone: a menu
   { name: 'mode', desc: 'ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]' },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
