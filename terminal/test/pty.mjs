@@ -38,6 +38,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   };
   const snapshots = {};
   const terms = {};
+  let code;
   try {
     for (const s of steps) {
       // Wait until a text is no longer on the screen (a spinner or "Starting" gone).
@@ -63,15 +64,18 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
       if (s.key) stdin.write(KEYS[s.key] ?? s.key);
     }
   } finally {
-    const code = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 8000))]);
+    // The fifo closes first: cat sees its end and lets the pipeline finish,
+    // so an app that quit on its own reports its real exit code here.
+    try { closeSync(fd); } catch {}
+    code = await Promise.race([done, new Promise((r) => setTimeout(() => r('timeout'), 8000))]);
     clearTimeout(killer);
     if (code === 'timeout') killAll();
-    try { closeSync(fd); } catch {}
     rmSync(fifo, { force: true });
   }
   const raw = read();
   rmSync(out, { force: true });
-  return { raw, snapshots, terms, text: await screenText(raw, cols, rows), term: await emulate(raw, cols, rows) };
+  // code: the app's own exit code, or 'timeout' when it had to be killed.
+  return { raw, snapshots, terms, code, text: await screenText(raw, cols, rows), term: await emulate(raw, cols, rows) };
 }
 
 export function emulate(raw, cols, rows) {

@@ -238,3 +238,14 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   ] });
   expect(second.text).toContain('Hello from the stand-in model.');
 }, 240_000);
+
+test('typing "exit" as a plain message quits, like /exit', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: 'exit' }, { key: 'enter' }, { sleep: 400 },
+  ] });
+  await fake.close();
+  expect(r.code).toBe(0); // it quit on the word alone: no ctrl+c steps, no kill
+  expect(fake.requests.length).toBe(0); // and never sent "exit" to the model
+}, T);

@@ -478,11 +478,13 @@ export function App({ opts, win }) {
     }
     if (value.startsWith('/')) { runSlash(value); return; }
     if (value.startsWith('!')) { runShell(value.slice(1).trim()); return; }
+    // "exit" or "quit" typed as a plain message quits, like /exit.
+    if (/^(exit|quit)[.!]?$/i.test(value.trim())) { quit(); return; }
     addHistory(cwd, value);
     historyRef.current.push(value);
     if (agent.busy || S.current.starting) { queuedRef.current = value; setQueued(value); return; }
     sendPrompt(value);
-  }, [agent, cwd, push, runShell, runSlash, sendPrompt]);
+  }, [agent, cwd, push, quit, runShell, runSlash, sendPrompt]);
 
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
