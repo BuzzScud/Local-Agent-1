@@ -10,15 +10,22 @@ import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
 
-// bonsai -p: a question from Bonsai is printed and answered on the same terminal.
+// bonsai -p: a question from Bonsai is printed and answered on the same
+// terminal. Its choices are a menu like the app's (arrows, enter, or the
+// number), with "Type an answer" as the last row; esc skips the question.
+// A question with no choices takes a typed line.
 async function askOnTerminal(question, req) {
   const options = req?.args?.options ?? [];
-  process.stderr.write(`\n? ${question}\n${options.map((o, i) => `  ${i + 1}. ${o}\n`).join('')}`);
+  process.stderr.write(`\n? ${question}\n`);
+  if (options.length) {
+    const pick = await pickOnTerminal([...options, 'Type an answer'], { hint: 'Enter to confirm · Esc to skip' });
+    if (pick === null) return null;
+    if (pick < options.length) return options[pick];
+  }
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   const line = await new Promise((resolve) => rl.question('> ', resolve));
   rl.close();
-  const n = Number(line.trim());
-  return options[n - 1] ?? (line.trim() || null);
+  return line.trim() || null;
 }
 import { loadSettings } from './app/store.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';

@@ -293,6 +293,31 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
   expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
 }, T * 2);
 
+test('bonsai -p: a question with choices is an arrow menu, "Type an answer" takes a line, a bare question takes a line', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([
+    { tool: { name: 'Ask', args: { question: 'Which file should change?', options: ['export.mjs', 'trades.json'] } } },
+    { tool: { name: 'Ask', args: { question: 'Pretty or one line?', options: ['pretty', 'one line'] } } },
+    { tool: { name: 'Ask', args: { question: 'What should the flag be called?' } } },
+    { text: 'trades.json, indented by 4, named --json.' },
+  ]);
+  const r = await runInPty({ cwd, env, args: ['-p', 'do the thing', '--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Which file should change?' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'down' }, { key: 'enter' },
+    { wait: 'Pretty or one line?' }, { sleep: 200 }, { type: '3' }, { wait: '>' }, { type: 'indented by 4' }, { key: 'enter' },
+    { wait: 'What should the flag be called?' }, { sleep: 200 }, { type: '--json' }, { key: 'enter' },
+    { wait: 'named --json.' }, { sleep: 300 },
+  ] });
+  await fake.close();
+  expect(r.snapshots.menu).toContain('❯ 1. export.mjs');
+  expect(r.snapshots.menu).toContain('  3. Type an answer');
+  expect(r.snapshots.down).toContain('❯ 2. trades.json');
+  expect(r.text).toContain('trades.json, indented by 4, named --json.');
+  expect(r.code).toBe(0);
+  // The answers reached the model: the picked row, the typed line, the bare line.
+  const sent = JSON.stringify(fake.requests);
+  for (const a of ['trades.json', 'indented by 4', '--json']) expect(sent).toContain(a);
+}, T);
+
 test('typing "exit" as a plain message quits, like /exit', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
