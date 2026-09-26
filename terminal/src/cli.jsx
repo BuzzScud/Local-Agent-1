@@ -30,7 +30,8 @@ async function askOnTerminal(question, req) {
 import { loadSettings } from './app/store.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';
 
-export const VERSION = '0.1.0';
+import { VERSION, cliHelpText } from './app/help.mjs';
+export { VERSION };
 
 // Claude Code's quick safety check: the first visit to a folder asks once
 // whether you trust it, before anything there is read into the model or
@@ -63,29 +64,7 @@ async function ensureTrusted(cwd) {
   return false;
 }
 
-const HELP = `bonsai ${VERSION} — a coding agent in your terminal, running ${MODELS[DEFAULT_MODEL].name} on this Mac
-
-Usage
-  bonsai                    start in the current folder
-  bonsai "fix the tests"    start and send a first prompt
-  bonsai -p "question"      answer once and exit (changes are refused unless --yes)
-  bonsai -c                 continue the last conversation in this folder
-  bonsai setup              download the model and runtime (if missing) and check them
-  bonsai stop               free the model's memory now (it stays loaded ${LINGER_SECS / 60} min after you quit)
-  bonsai weights            the hub in the browser, on the model's weights (ctrl+c here closes it)
-  bonsai docs               the hub on the harness and structure diagrams and every Bonsai page
-
-Options
-  --effort low|medium|high  how much the model thinks before it acts (default: low = answers straight away)
-  --think / --no-think      the old names: --effort medium / --effort low
-  --ctx 16k|32k|64k         memory size (default: 32k, or 16k when memory is short)
-  --mode ask|edits|plan     start in this permission mode
-  --yes                     with -p: allow edits and commands without asking
-  --url http://host:port    use a llama-server that is already running
-  --no-flows                always work step by step (skip the focused fix/change/rename paths)
-  -v, --version             print the version
-  -h, --help                this help
-`;
+const HELP = cliHelpText({ version: VERSION, modelName: MODELS[DEFAULT_MODEL].name, lingerMins: LINGER_SECS / 60 });
 
 function parse(argv) {
   const o = { cwd: process.cwd(), modelId: DEFAULT_MODEL };

@@ -20,6 +20,7 @@ import { checkInText } from '../flows/fix.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete } from '../flows/llm.mjs';
+import { isMemoryRequest, memoryFile, readMemory, applyMemory, digest, memoryPrompt, MEMORY_SCHEMA } from './memory.mjs';
 import { diffLines } from '../tools/edit.mjs';
 
 const MAX_STEPS = 40;
@@ -323,6 +324,8 @@ export class Agent extends EventEmitter {
     this.messages.push({ role: 'user', content: text });
     this.emit('turn-start', { started });
     if (isSmallTalk(text)) return this.chat(text, started, signal);
+    // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
+    if (isMemoryRequest(text)) return this.updateMemory(text, started, signal);
     this.lastRoute = null;
     const stopNow = (reason) => {
       this.busy = false;
@@ -381,13 +384,18 @@ export class Agent extends EventEmitter {
     // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
     // go with this turn's requests to the model, not into the conversation.
     const bug = kind === 'fix' ? sortBug(text) : null;
-    // A request that uses the words of the user's own math notes brings the
-    // matching notes the same way (src/agent/expertise.mjs). /math forces it.
+    // The user's own math notes (src/agent/expertise.mjs) come only when asked
+    // for with /math, as Claude Code reads nothing beyond the project unasked.
+    // Matching them to every request by its words sent ordinary requests
+    // there: "pages" and "top" in a notes.html request picked "Pages at the
+    // top of MATH" and the model went looking through the folder (2026-09-26).
     let math = null;
-    try {
-      math = sortMath(text, this.mathForce ? { min: 1 } : {});
-      if (!math && this.mathForce) { const index = mathIndex(); math = index?.areas?.length ? { browse: true, index } : null; }
-    } catch {}
+    if (this.mathForce) {
+      try {
+        math = sortMath(text, { min: 1 });
+        if (!math) { const index = mathIndex(); math = index?.areas?.length ? { browse: true, index } : null; }
+      } catch {}
+    }
     this.mathForce = false;
     const request = this.messages.at(-1);
     // A question about named files: read them now, in one go, instead of
@@ -663,6 +671,39 @@ export class Agent extends EventEmitter {
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
       else { reason = 'error'; this.emit('note', { text: e.message, tone: 'error' }); }
+    } finally {
+      this.busy = false;
+    }
+    if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
+    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
+    return reason;
+  }
+
+  // "update memory": the facts worth keeping from this conversation go into
+  // the file Bonsai reads at every start here (memory.mjs), no question asked.
+  async updateMemory(request, started, signal) {
+    let reason = 'done';
+    const home = homedir();
+    const file = memoryFile(this.cwd);
+    const short = file.startsWith(home) ? `~${file.slice(home.length)}` : file;
+    try {
+      this.emit('flow-step', { index: 0, count: 1, text: 'Updating memory' });
+      const saved = readMemory(file);
+      const p = memoryPrompt({ request, saved, conversation: digest(this.messages.slice(0, -1)), today: new Date().toISOString().slice(0, 10) });
+      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 700, schema: MEMORY_SCHEMA, system: p.system, user: p.user });
+      if (signal?.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
+      const res = applyMemory(file, r.json ?? { add: [], drop: [] });
+      const text = res.added.length || res.dropped.length
+        ? `Saved to memory (${short}):\n${res.added.map((l) => `- ${l}`).join('\n')}${res.dropped.length ? `\n\nRemoved as out of date:\n${res.dropped.map((l) => `- ${l}`).join('\n')}` : ''}`
+        : `Nothing new to remember from this conversation. Your memory here is ${short}${saved.length ? ` (${saved.length} line${saved.length === 1 ? '' : 's'})` : ''}.`;
+      this.emit('flow-step', null);
+      this.messages.push({ role: 'assistant', content: text });
+      this.emit('assistant', { text, reasoning: '', secs: r.secs, thinkSecs: 0, tokens: r.tokens, final: true });
+      this.emit('note', { text: `Memory: ${short} · read at every start ${short.startsWith('~/.bonsai/') ? 'anywhere in your home folder' : 'in this project'}${res.chars > 4500 ? ' · getting long: /memory shows it, edit it freely' : ''}.`, tone: 'dim' });
+    } catch (e) {
+      this.emit('flow-step', null);
+      if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
+      else { reason = 'error'; this.emit('note', { text: `Could not update the memory (${e.message}).`, tone: 'error' }); }
     } finally {
       this.busy = false;
     }

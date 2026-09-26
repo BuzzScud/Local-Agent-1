@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai Help</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-soft: rgba(42,120,214,.09);
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --accent-soft: rgba(57,135,229,.14); }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --accent-soft: rgba(57,135,229,.14); }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 14.5px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 28px; max-width: 1180px; margin: 0 auto; padding: 22px 24px 60px; }
+nav.side { position: sticky; top: 18px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+nav.side a { color: var(--ink2); text-decoration: none; padding: 5px 10px; border-radius: 7px; font-size: 13.5px; }
+nav.side a:hover { background: var(--panel); color: var(--ink); }
+nav.side a.on { background: var(--accent-soft); color: var(--ink); }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.01em; }
+.lede { color: var(--ink2); margin: 0 0 14px; max-width: 720px; }
+.find { display: flex; gap: 10px; align-items: center; margin: 0 0 8px; }
+.find input { flex: 1; max-width: 460px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; }
+.find .small { color: var(--ink3); font-size: 12.5px; }
+section { margin-top: 30px; scroll-margin-top: 16px; }
+section.hidden { display: none; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+.sub { color: var(--ink2); margin: 0 0 12px; font-size: 14px; max-width: 760px; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin: 16px 0 6px; font-weight: 600; }
+.tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tr { display: grid; grid-template-columns: minmax(150px, 260px) minmax(0, 1fr); gap: 16px; padding: 9px 14px; border-top: 1px solid var(--line); align-items: baseline; }
+.tr:first-child { border-top: none; }
+.tr.hidden { display: none; }
+.tr .k { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.tr .k .arg { color: var(--ink3); }
+.tr .d { color: var(--ink2); }
+.badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 6px; vertical-align: 1px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.card .t { font-weight: 650; margin-bottom: 4px; }
+.card .n { color: var(--ink2); font-size: 14px; }
+.card .h { font-family: var(--mono); font-size: 12px; color: var(--ink3); margin-top: 8px; }
+ul.plain { margin: 0; padding-left: 20px; } ul.plain li { margin: 6px 0; color: var(--ink2); }
+code { font-family: var(--mono); font-size: .92em; background: var(--panel); padding: 1px 5px; border-radius: 5px; }
+.none { color: var(--ink3); font-size: 14px; margin-top: 18px; display: none; }
+@media (max-width: 820px) {
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 18px 16px 48px; }
+  nav.side { position: static; flex-direction: row; flex-wrap: wrap; }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .tr { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav class="side" id="side"></nav>
+  <main>
+    <h1>Bonsai Code help</h1>
+    <p class="lede" id="lede">A coding agent in your terminal that runs its model on this Mac.</p>
+    <div class="find"><input id="q" type="search" placeholder="find a command, key or setting" autocomplete="off" aria-label="find"><span class="small" id="count"></span></div>
+    <div id="content"></div>
+    <p class="none" id="none">Nothing matches. Try a shorter word.</p>
+  </main>
+</div>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const row = (k, d, extra = '') => `<div class="tr"><div class="k">${k}</div><div class="d">${esc(d)}${extra}</div></div>`;
+  const table = (rows) => `<div class="tbl">${rows.join('')}</div>`;
+  const HUB = [
+    ['Weights', 'the model’s weights: real values, Channels across all layers, Words, and more (/weights)'],
+    ['Harness', 'how a request travels through Bonsai, as a diagram'],
+    ['Structure', 'where every part of Bonsai Code lives'],
+    ['All docs', 'every Bonsai page in the DOCS folder, by group, read live (/docs)'],
+    ['Help', 'this page (/help)'],
+  ];
+
+  function render(h) {
+    $('#lede').textContent = `A coding agent in your terminal${h.modelName ? `, running ${h.modelName}` : ''} on this Mac.${h.version ? ` Version ${h.version}.` : ''} Type / in Bonsai for the command list; this page has everything in one place.`;
+    const S = [];
+    S.push(['commands', 'Commands', 'Type them in Bonsai’s prompt. The ones marked menu open a list to choose from when typed alone; add a word to set it straight away.',
+      table(h.commands.map((c) => row(`/${esc(c.name)}${c.arg ? ` <span class="arg">${esc(c.arg)}</span>` : ''}`, c.desc, c.menu ? '<span class="badge">menu</span>' : '')))]);
+    S.push(['keys', 'Keys', 'What each key does, grouped by where you use it.',
+      h.keys.map((g) => `<h3>${esc(g.group)}</h3>${table(g.rows.map(([k, d]) => row(esc(k), d)))}`).join('')]);
+    S.push(['modes', 'Modes', 'How Bonsai asks before it changes things. Pick with /mode or switch with shift+tab. It lasts for the conversation.',
+      `<div class="cards">${h.modes.map((m) => `<div class="card tr-card"><div class="t">${esc(m.label)}</div><div class="n">${esc(m.note)}</div><div class="h">/mode ${esc(m.id)}</div></div>`).join('')}</div>`]);
+    if (h.effort.length) S.push(['effort', 'Effort', 'How much Bonsai thinks before it acts. Pick with /effort; it is kept for next time.',
+      `<div class="cards">${h.effort.map((l) => `<div class="card tr-card"><div class="t">${esc(l.label)}</div><div class="n">${esc(l.note)}</div><div class="h">/effort ${esc(l.id)}</div></div>`).join('')}</div>`]);
+    S.push(['start', 'Starting Bonsai', 'From any terminal.',
+      `<h3>Ways to start</h3>${table(h.cli.usage.map(([k, d]) => row(esc(k), d)))}<h3>Options</h3>${table(h.cli.options.map(([k, d]) => row(esc(k), d)))}`]);
+    S.push(['safety', 'Staying safe', 'What Bonsai does before it touches anything.', `<ul class="plain">${h.safety.map((s) => `<li class="tr-li">${esc(s)}</li>`).join('')}</ul>`]);
+    S.push(['places', 'Where things live', 'The files Bonsai reads and keeps.', table(h.places.map(([k, d]) => row(esc(k), d)))]);
+    S.push(['hub', 'The hub', 'The browser page this help lives in. /weights, /docs and /help open it; it stays up while that Bonsai window is open.', table(HUB.map(([k, d]) => row(esc(k), d)))]);
+    S.push(['tips', 'Tips', 'Small things that help.', `<ul class="plain">${h.tips.map((s) => `<li class="tr-li">${esc(s)}</li>`).join('')}</ul>`]);
+    $('#content').innerHTML = S.map(([id, t, sub, body]) => `<section id="${id}"><h2>${t}</h2><p class="sub">${sub}</p>${body}</section>`).join('');
+    $('#side').innerHTML = S.map(([id, t]) => `<a href="#${id}" data-id="${id}">${t}</a>`).join('');
+    filter();
+  }
+
+  // The find box: every row, card and tip that contains all the typed words stays.
+  function filter() {
+    const words = $('#q').value.toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0, total = 0;
+    for (const sec of document.querySelectorAll('section')) {
+      let any = false;
+      for (const el of sec.querySelectorAll('.tr, .tr-card, .tr-li')) {
+        total++; const ok = words.every((w) => el.textContent.toLowerCase().includes(w));
+        el.classList.toggle('hidden', !ok); el.style.display = ok ? '' : 'none'; if (ok) { any = true; shown++; }
+      }
+      for (const h3 of sec.querySelectorAll('h3')) { const tbl = h3.nextElementSibling; h3.style.display = tbl && [...tbl.children].some((c) => c.style.display !== 'none') ? '' : 'none'; }
+      sec.classList.toggle('hidden', !any);
+    }
+    $('#count').textContent = words.length ? `${shown} of ${total}` : '';
+    $('#none').style.display = words.length && !shown ? 'block' : 'none';
+  }
+  $('#q').addEventListener('input', filter);
+  document.addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement !== $('#q')) { e.preventDefault(); $('#q').focus(); } if (e.key === 'Escape' && document.activeElement === $('#q')) { $('#q').value = ''; filter(); } });
+
+  // The side list follows the section in view.
+  const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) for (const a of document.querySelectorAll('nav.side a')) a.classList.toggle('on', a.dataset.id === e.target.id); }, { rootMargin: '0px 0px -70% 0px' });
+  const watch = () => document.querySelectorAll('section').forEach((s) => io.observe(s));
+
+  fetch('/help.json').then((r) => r.json()).then((h) => { render(h); watch(); if (location.hash) document.querySelector(location.hash)?.scrollIntoView(); })
+    .catch(() => { $('#content').innerHTML = '<p class="sub">Could not read the help from Bonsai. Is the Bonsai window that opened this page still running?</p>'; });
+})();
+</script>
+</body>
+</html>

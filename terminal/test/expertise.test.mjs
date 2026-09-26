@@ -1,5 +1,5 @@
 // The user's own math notes (src/agent/expertise.mjs): indexed into areas,
-// matched by a request's words, carried with the request, and reachable
+// matched by a /math request's words, carried with the request, and reachable
 // read-only through MATH/ paths. Built against a small fixture folder, so
 // nothing here depends on the real ~/Desktop/MATH.
 import { test, expect, beforeAll } from 'bun:test';
@@ -72,7 +72,7 @@ test('the notes carry the matched section, how to treat them, and where more is'
   expect(page).not.toContain('<html>');
 });
 
-test('a short pointer sits in the shared part of the prompt; no catalog to re-read', () => {
+test('a pointer, when one is passed, sits in the shared part of the prompt; no catalog (off by default since 2026-09-26)', () => {
   const map = E.mathMap(fresh());
   const p = systemPrompt({ cwd: '/tmp', git: 'test', tests: null, math: map });
   const shared = p.slice(0, p.indexOf(SESSION_MARK));
@@ -108,4 +108,32 @@ test('MATH/ paths read from the folder and are never writable', () => {
   writeFileSync(join(cwd, 'MATH/own.md'), 'ours');
   expect(resolvePath(cwd, 'MATH/own.md').math).toBeUndefined();
   rmSync(cwd, { recursive: true, force: true });
+});
+
+// Like Claude Code, Bonsai reads nothing beyond the project unless asked: the
+// math notes come only with /math. (Matching every request by its words sent
+// a notes.html request into the MATH folder on 2026-09-26.)
+test('the notes come only with /math: not named in the instructions, never attached to an ordinary request', async () => {
+  fresh();
+  const { Agent } = await import('../src/agent/agent.mjs');
+  const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
+  const { startFakeServer } = await import('./fake-server.mjs');
+  const cwd = join(tmpdir(), `bonsai-math-plain-${process.pid}`); mkdirSync(cwd, { recursive: true });
+  for (const at of [cwd, HOME, join(HOME, '..')]) {
+    const sys = systemPrompt({ cwd: at, git: 'test', tests: null });
+    expect(sys).not.toMatch(/MATH|own mathematic/); // no pointer to the folder, not even in the home-folder note
+  }
+  const fake = await startFakeServer([{ text: 'Sure.' }, { text: 'From your notes.' }]);
+  const notes = [];
+  const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'ask', flows: false, ask: async () => ({ choice: 'no' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  // every word here names the fixture's clock-lattice area
+  await agent.send('explain quadrant folding on the clock lattice');
+  expect(notes.some((t) => t.startsWith('Using the math notes'))).toBe(false);
+  expect(JSON.stringify(fake.requests[0].messages)).not.toContain("From the user's own math notes");
+  agent.mathForce = true; // what /math sets
+  await agent.send('explain quadrant folding on the clock lattice');
+  await fake.close();
+  expect(notes.some((t) => t.startsWith('Using the math notes: Clock Lattice Structure'))).toBe(true);
+  expect(JSON.stringify(fake.requests.at(-1).messages)).toContain("From the user's own math notes");
 });

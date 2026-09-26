@@ -16,9 +16,12 @@ import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, Mo
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
-import { editInput, insertText, cursorLine, mentionAt } from './edit-input.mjs';
+import { editInput, insertText, cursorLine, mentionAt, selectedText } from './edit-input.mjs';
+import { copyToClipboard } from './clipboard.mjs';
 import { COMMANDS, matchCommands } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
+import { MODE_OPTIONS } from './help.mjs';
+import { memoryFile, readMemory } from '../agent/memory.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
@@ -149,11 +152,62 @@ export function App({ opts, win }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, menuIndex, mode, starting, live, queued, tooSmall };
+  S.current = { input, perm, picker, menuIndex, mode, starting, live, queued, tooSmall, meters };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
+  // Text selected in the prompt (shift + arrows) is copied as soon as the
+  // selection settles, like Claude Code's copy on select.
+  const copiedRef = useRef('');
+  useEffect(() => {
+    const text = selectedText(input);
+    if (!text) { copiedRef.current = ''; return undefined; }
+    const t = setTimeout(() => {
+      if (text === copiedRef.current) return;
+      copiedRef.current = text;
+      if (copyToClipboard(text)) flash(`copied ${text.length.toLocaleString()} char${text.length === 1 ? '' : 's'} to clipboard`, 2500);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [input, flash]);
 
   const setMode = useCallback((m) => { agent.mode = m; setModeState(m); }, [agent]);
+
+  // The menus that /effort, /mode and /meters open when typed alone: a
+  // title, a line on what it sets, the options with what each does, the one
+  // in use. applyChoice is also what the typed forms use, so both say the same.
+  const choiceMenu = (id) => {
+    if (id === 'effort') {
+      const now = thinkingLevel(model, agent.thinking, agent.effort);
+      return { title: 'Effort', blurb: 'How much Bonsai thinks before it acts. Kept for next time.', what: 'effort', current: now.id, options: (model.thinkingLevels ?? []).map((l) => ({ id: l.id, label: l.label, note: l.note ?? '' })) };
+    }
+    if (id === 'mode') return { title: 'Mode', blurb: 'How Bonsai asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
+    return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
+  };
+  // The hub in the browser (/weights, /docs, /help): one small server per
+  // window, closed with it. Answers { server, url } or null after a warning.
+  const openHub = (tab) => {
+    try { weightsRef.current ??= startWeightsServer({ path: modelPath(model) }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
+    const url = `${weightsRef.current.url}?tab=${tab}`;
+    if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+    return { server: weightsRef.current, url };
+  };
+  const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
+  const applyChoice = (id, value) => {
+    if (id === 'effort') {
+      const lv = (model.thinkingLevels ?? []).find((l) => l.id === value); if (!lv) return;
+      const on = !!lv.effort;
+      setThinking(on, on ? lv.id : undefined);
+      push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.`, tone: 'dim' });
+    } else if (id === 'mode') {
+      const o = MODE_OPTIONS.find((x) => x.id === value); if (!o) return;
+      setMode(o.id);
+      push({ type: 'note', text: `Mode is ${o.label.toLowerCase()}: Bonsai ${o.note}.`, tone: 'dim' });
+    } else if (id === 'meters') {
+      const on = value === 'on';
+      setMeters(on);
+      saveSettings({ meters: on });
+      push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
+    }
+  };
   const setThinking = useCallback((on, eff) => {
     agent.thinking = on;
     setThinkingState(on);
@@ -385,9 +439,14 @@ export function App({ opts, win }) {
     const arg = rest.join(' ').trim();
     const busy = agent.busy;
     switch (cmd) {
-      case 'help':
+      case 'help': {
+        // The list here, and the whole Help page (keys, modes, effort, where
+        // things live) in the hub's Help tab.
         push({ type: 'panel', title: 'Commands', pad: 12, rows: [...COMMANDS.map((c) => [`/${c.name}`, c.desc]), ['Keys: shift+tab mode · ctrl+o expand · esc interrupt · ctrl+c twice quit · \\+enter new line · @ file · ! shell']] });
+        const hub = openHub('help');
+        if (hub) push({ type: 'note', text: `The full help, with every key and setting, opened in the browser at ${hub.url}`, tone: 'dim' });
         break;
+      }
       case 'clear':
         if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
         agent.reset();
@@ -406,12 +465,7 @@ export function App({ opts, win }) {
         // /effort low|medium|high, or on|off ("off" and "xhigh" are the old
         // names for low and high).
         const levels = model.thinkingLevels ?? [];
-        if (!arg.trim() && levels.length) {
-          const now = thinkingLevel(model, agent.thinking, agent.effort);
-          const at = Math.max(0, levels.findIndex((l) => l.id === now.id));
-          setPicker({ kind: 'effort', index: at, current: now.id });
-          break;
-        }
+        if (!arg.trim() && levels.length) { openChoice('effort'); break; }
         const a = arg.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
         const picked = levels.find((l) => l.id === a);
         const on = picked ? !!picked.effort : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
@@ -422,8 +476,18 @@ export function App({ opts, win }) {
         break;
       }
       case 'mode': {
+        if (!arg.trim()) { openChoice('mode'); break; }
         const m = MODES.includes(arg) ? arg : MODES[(MODES.indexOf(agent.mode) + 1) % MODES.length];
-        setMode(m);
+        applyChoice('mode', m);
+        break;
+      }
+      case 'memory': {
+        // What "update memory" has saved for this folder, and where.
+        const file = memoryFile(cwd);
+        const where = file.startsWith(homedir()) ? `~${file.slice(homedir().length)}` : file;
+        const facts = readMemory(file);
+        if (!facts.length) { push({ type: 'note', text: `Nothing saved yet. Say "update memory" (or "remember that …") and Bonsai saves what matters to ${where}, read at every start.`, tone: 'dim' }); break; }
+        push({ type: 'panel', title: `Memory · ${where}`, pad: 0, rows: [...facts.map((f) => [`- ${f}`]), ['Say "update memory" to add to it; edit the file freely.']] });
         break;
       }
       case 'init':
@@ -475,11 +539,9 @@ export function App({ opts, win }) {
         // inside this window. /weights opens it on the model's weights, /docs on
         // the harness diagram with structure and every page one tab away.
         const path = modelPath(model);
-        if (!existsSync(path)) { push({ type: 'note', text: `The model file is not here yet (${path}). Run bonsai setup first.`, tone: 'warn' }); break; }
-        try { weightsRef.current ??= startWeightsServer({ path }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); break; }
-        const w = weightsRef.current;
-        const url = `${w.url}?tab=${cmd === 'docs' ? 'harness' : 'weights'}`;
-        if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+        if (cmd === 'weights' && !existsSync(path)) { push({ type: 'note', text: `The model file is not here yet (${path}). Run bonsai setup first.`, tone: 'warn' }); break; }
+        const hub = openHub(cmd === 'docs' ? 'harness' : 'weights'); if (!hub) break;
+        const w = hub.server; const url = hub.url;
         if (cmd === 'docs') {
           const d = listDocs(w.docsDir);
           push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (bonsai-code DOCS at the top of the repo; set BONSAI_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
@@ -487,10 +549,8 @@ export function App({ opts, win }) {
         break;
       }
       case 'meters': {
-        const on = arg ? /^(on|show|yes)$/i.test(arg) : !meters;
-        setMeters(on);
-        saveSettings({ meters: on });
-        push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
+        if (!arg.trim()) { openChoice('meters'); break; }
+        applyChoice('meters', /^(on|show|yes)$/i.test(arg) ? 'on' : 'off');
         break;
       }
       case 'exit':
@@ -611,26 +671,19 @@ export function App({ opts, win }) {
       }
       return;
     }
-    // Effort menu: ↑↓ or a number, enter picks, esc goes back unchanged
-    if (cur.picker?.kind === 'effort') {
+    // A choice menu (/effort, /mode, /meters): ↑↓ or a number, enter picks, esc goes back unchanged
+    if (cur.picker?.kind === 'choice') {
       const pk = cur.picker;
-      const levels = model.thinkingLevels ?? [];
-      const n = levels.length;
-      const pick = (i) => {
-        const lv = levels[i];
-        const on = !!lv.effort;
-        setThinking(on, on ? lv.id : undefined);
-        setPicker(null);
-        push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.`, tone: 'dim' });
-      };
+      const n = pk.options.length;
+      const pick = (i) => { setPicker(null); applyChoice(pk.id, pk.options[i].id); };
       if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
       else if (key.return) pick(pk.index);
       else if (/^[1-9]$/.test(ch) && Number(ch) <= n) pick(Number(ch) - 1);
       else if (key.escape || (key.ctrl && ch === 'c')) {
         setPicker(null);
-        const kept = levels.find((l) => l.id === pk.current);
-        push({ type: 'note', text: `Kept effort as ${kept ? kept.label.toLowerCase() : 'it was'}.`, tone: 'dim' });
+        const kept = pk.options.find((o) => o.id === pk.current);
+        push({ type: 'note', text: `Kept ${pk.what} as ${kept ? kept.label.toLowerCase() : 'it was'}.`, tone: 'dim' });
       }
       return;
     }
@@ -657,6 +710,7 @@ export function App({ opts, win }) {
       // An open menu or shortcut list closes first; the next esc stops Bonsai.
       if (menu) { setMenuClosedFor(cur.input.value); return; }
       if (showShortcuts) { setShowShortcuts(false); return; }
+      if (selectedText(cur.input)) { setInput({ value: cur.input.value, cursor: cur.input.cursor }); return; } // drops the selection only
       if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
       if (cur.input.value) {
         if (Date.now() - escArmed.current < 1500) { setInput({ value: '', cursor: 0 }); return; }
@@ -704,7 +758,7 @@ export function App({ opts, win }) {
     }
     // History
     const pos = cursorLine(cur.input);
-    if (key.upArrow && pos.line === 0) {
+    if (key.upArrow && !key.shift && pos.line === 0) {
       const h = historyRef.current;
       if (!h.length) return;
       if (histIdx.current === null) { draftRef.current = cur.input.value; histIdx.current = h.length; }
@@ -713,7 +767,7 @@ export function App({ opts, win }) {
       setInput({ value: v, cursor: v.length });
       return;
     }
-    if (key.downArrow && pos.line === pos.lines - 1) {
+    if (key.downArrow && !key.shift && pos.line === pos.lines - 1) {
       if (histIdx.current === null) return;
       const h = historyRef.current;
       histIdx.current += 1;

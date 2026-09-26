@@ -609,7 +609,7 @@ if (typeof module !== 'undefined') module.exports = Core;
   if (/^https?:/.test(location.protocol)) {
     $('#empty').innerHTML = '<h2>Loading the model…</h2><p class="hint">Reading its header through the Bonsai hub.</p>';
     $('#pick').hidden = true; // served: nothing to pick
-    fetch('/model.json').then((r) => r.ok ? r.json() : Promise.reject(new Error(`the server said ${r.status}`))).then((m) => open({
+    fetch('/model.json').then((r) => r.ok ? r.json() : Promise.reject(new Error(`the server said ${r.status}`))).then((m) => m.missing ? Promise.reject(new Error('The model file is not on this Mac yet. Run bonsai setup to download it.')) : open({
       name: m.name, size: m.size,
       slice: (a, b) => ({ arrayBuffer: async () => { const r = await fetch('/model', { headers: { Range: `bytes=${a}-${b - 1}` } }); if (r.status !== 206 && r.status !== 200) throw new Error(`range read failed: ${r.status}`); return r.arrayBuffer(); } }),
     })).catch((err) => { $('#empty').innerHTML = `<h2>Could not load the model</h2><p>${String(err.message)}</p><p class="hint">Is the Bonsai window that opened this page still running?</p>`; });

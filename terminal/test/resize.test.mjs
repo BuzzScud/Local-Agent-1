@@ -69,7 +69,7 @@ test('esc closes the "/" menu first and keeps Bonsai working; the next esc stops
     await t.waitFor('? for shortcuts'); await t.type('think'); t.key('enter'); await t.waitFor('esc to interrupt');
     await t.type('/'); await t.waitFor('/help');
     t.key('esc'); await sleep(300);
-    expect(await t.screen()).not.toContain('Show commands and keys');
+    expect(await t.screen()).not.toContain('Commands and keys here');
     expect(await t.screen()).toContain('esc to interrupt');
     t.key('backspace'); await sleep(100); t.key('esc');
     await t.waitFor('Interrupted');

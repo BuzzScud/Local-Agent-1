@@ -5,6 +5,7 @@
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned harness and structure pages
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
+//   /help, /help.json the Help page and what it lists (help.mjs)
 // The DOCS folder is `bonsai-code DOCS/` at the top of the repo on this Mac:
 // BONSAI_DOCS names it outright, else BONSAI_REPO (the launcher passes it),
 // else the repo this source runs from.
@@ -12,6 +13,9 @@ import { statSync, existsSync, readdirSync, openSync, readSync, closeSync } from
 import { basename, join, resolve } from 'node:path';
 import html from './weights.html' with { type: 'text' };
 import hubHtml from './hub.html' with { type: 'text' };
+import helpHtml from './help.html' with { type: 'text' };
+import { helpData, VERSION } from './help.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS } from '../../../models/index.mjs';
 
 export function findDocsDir() {
   const tries = [process.env.BONSAI_DOCS, process.env.BONSAI_REPO && join(process.env.BONSAI_REPO, 'bonsai-code DOCS'), join(import.meta.dir, '..', '..', '..', 'bonsai-code DOCS')].filter(Boolean);
@@ -52,8 +56,11 @@ export function listDocs(dir) {
 export const HUB_PORT = Number(process.env.BONSAI_HUB_PORT) || 8757;
 
 export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT }) {
-  const size = statSync(path).size;
-  const name = basename(path);
+  // Help and docs work before the model is downloaded; only Weights needs it.
+  const missing = !path || !existsSync(path);
+  const size = missing ? 0 : statSync(path).size;
+  const name = path ? basename(path) : '';
+  const model = MODELS[DEFAULT_MODEL];
   const serve = (p) => Bun.serve({
     hostname: '127.0.0.1', port: p,
     fetch(req) {
@@ -61,8 +68,11 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       const page = (text) => new Response(text, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (url.pathname === '/') return page(hubHtml);
       if (url.pathname === '/weights') return page(html);
-      if (url.pathname === '/model.json') return Response.json({ name, size });
+      if (url.pathname === '/help') return page(helpHtml);
+      if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
+      if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });
       if (url.pathname === '/model') {
+        if (missing) return new Response('the model file is not on this Mac yet', { status: 404 });
         const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.get('range') || '');
         if (!range) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
         const a = Number(range[1]); const b = range[2] === '' ? size - 1 : Math.min(size - 1, Number(range[2]));
@@ -85,5 +95,5 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
   });
   let server;
   try { server = serve(port); } catch (e) { if (!port) throw e; server = serve(0); }
-  return { url: `http://127.0.0.1:${server.port}/`, port: server.port, size, name, docsDir, stop: () => server.stop(true) };
+  return { url: `http://127.0.0.1:${server.port}/`, port: server.port, size, name, missing, docsDir, stop: () => server.stop(true) };
 }

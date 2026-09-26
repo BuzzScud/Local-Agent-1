@@ -15,6 +15,7 @@ export const C = {
   addBg: 'ansi256(22)',     // #005f00
   delBg: 'ansi256(52)',     // #5f0000
   think: 'ansi256(246)',
+  selBg: 'ansi256(24)',     // selected text in the prompt #005f87
 };
 
 export const SPIN = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];

@@ -382,7 +382,7 @@ const SHORTCUTS = [
   ['@ to attach a file', 'ctrl+o to expand the last output'],
   ['! to run a shell command', 'esc to interrupt Bonsai'],
   ['\\ + enter for a new line', 'ctrl+c twice to quit'],
-  ['↑ ↓ for earlier prompts', ''],
+  ['↑ ↓ for earlier prompts', 'shift+arrows to select and copy'],
 ];
 
 // The footer's right side is the mode, as in Claude Code; a narrow window
@@ -413,6 +413,20 @@ function Footer({ app }) {
   );
 }
 
+// One line of the prompt with part of it selected: the selected characters on
+// a blue background, the cursor inverse, the rest plain. A selected line
+// break shows as one highlighted space.
+function selectedLine(line, start, sel, col) {
+  const chars = [...(line || ' ')].map((ch, i) => ({ ch, sel: start + i >= sel[0] && start + i < sel[1] && (line || start + i < sel[1]), cur: i === col }));
+  if (col === line.length && line.length) chars.push({ ch: ' ', sel: false, cur: true });
+  if (line.length && start + line.length >= sel[0] && start + line.length < sel[1] && col !== line.length) chars.push({ ch: ' ', sel: true, cur: false });
+  const out = []; let run = '', style = null;
+  const flush = (k) => { if (!run) return; out.push(style.cur ? <Text key={k} inverse>{run}</Text> : style.sel ? <Text key={k} backgroundColor={C.selBg} color="white">{run}</Text> : <Text key={k}>{run}</Text>); run = ''; };
+  chars.forEach((c, i) => { const st = { sel: c.sel && !c.cur, cur: c.cur }; if (style && (st.sel !== style.sel || st.cur !== style.cur)) flush(i); style = st; run += c.ch; });
+  flush('end');
+  return out;
+}
+
 function PromptBox({ app }) {
   const { input, width, inputMode } = app;
   const border = inputMode === 'bash' ? C.edits : C.border;
@@ -421,6 +435,9 @@ function PromptBox({ app }) {
   const cursor = inputMode === 'bash' ? Math.max(0, input.cursor - 1) : input.cursor;
   const placeholder = app.placeholder;
   const lines = value.split('\n');
+  // the selection, in this box's own positions (the ! of shell mode is not drawn)
+  const shift = inputMode === 'bash' ? 1 : 0;
+  const sel = input.anchor != null && input.anchor !== input.cursor ? [Math.min(input.anchor, input.cursor) - shift, Math.max(input.anchor, input.cursor) - shift] : null;
   let pos = 0;
   return (
     <Box borderStyle="round" borderColor={border} paddingX={1} width={width} flexDirection="column">
@@ -433,6 +450,7 @@ function PromptBox({ app }) {
         if (!value && li === 0) {
           return <Text key={li}>{lead}<Text inverse>{placeholder[0]}</Text><Text color={C.dim}>{placeholder.slice(1)}</Text></Text>;
         }
+        if (sel && sel[0] <= start + line.length && sel[1] > start) return <Text key={li}>{lead}{selectedLine(line, start, sel, here ? col : -1)}</Text>;
         if (!here) return <Text key={li}>{lead}{line || ' '}</Text>;
         return <Text key={li}>{lead}{line.slice(0, col)}<Text inverse>{line[col] ?? ' '}</Text>{line.slice(col + 1)}</Text>;
       })}
@@ -447,24 +465,23 @@ const START_PHASE = {
   restoring: 'restoring its instructions from last time ',
 };
 
-// /effort alone: the levels as a menu, like Claude Code's. The ❯ starts on
-// the level in use; ↑↓ or a number, enter picks, esc goes back unchanged.
-function EffortPicker({ app }) {
+// /effort, /mode, /meters alone: their choices as a menu, like Claude Code's.
+// The ❯ starts on the one in use; ↑↓ or a number, enter picks, esc goes back.
+function ChoicePicker({ app }) {
   const pk = app.picker;
-  const levels = app.thinkingLevels;
-  const w = Math.max(...levels.map((l) => l.label.length)) + 2;
+  const w = Math.max(...pk.options.map((o) => o.label.length)) + 2;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>Effort</Text>
-      <Text color={C.dim}>How much Bonsai thinks before it acts. Kept for next time.</Text>
+      <Text bold>{pk.title}</Text>
+      <Text color={C.dim}>{pk.blurb}</Text>
       <Text> </Text>
-      {levels.map((l, i) => {
+      {pk.options.map((o, i) => {
         const on = i === pk.index;
         return (
-          <Text key={l.id}>
-            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {i + 1}. {l.label.padEnd(w)}</Text>
-            <Text color={C.dim}>{l.note}</Text>
-            {l.id === pk.current ? <Text color={C.ok}>  ✔ in use</Text> : null}
+          <Text key={o.id}>
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {i + 1}. {o.label.padEnd(w)}</Text>
+            <Text color={C.dim}>{o.note}</Text>
+            {o.id === pk.current ? <Text color={C.ok}>  ✔ in use</Text> : null}
           </Text>
         );
       })}
@@ -610,8 +627,8 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.picker?.kind === 'model' ? (
         <ModelPicker app={app} />
-      ) : app.picker?.kind === 'effort' ? (
-        <EffortPicker app={app} />
+      ) : app.picker?.kind === 'choice' ? (
+        <ChoicePicker app={app} />
       ) : app.picker ? (
         <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={width}>
           <Text bold>{app.picker.title}</Text>

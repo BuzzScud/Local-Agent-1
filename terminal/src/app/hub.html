@@ -49,6 +49,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="harness">Harness</button>
   <button data-tab="structure">Structure</button>
   <button data-tab="docs">All docs</button>
+  <button data-tab="help">Help</button>
   <span class="spacer"></span>
   <span class="now" id="now"></span>
   <a id="own" href="/weights" target="_blank" rel="noopener">open in its own tab ↗</a>
@@ -86,6 +87,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   function open(tab, page) {
     setTab(tab);
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
+    if (tab === 'help') return show('/help', 'every command, key and setting');
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
@@ -96,8 +98,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
-  if (tab === 'weights' && !page) open('weights'); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
-  fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (tab !== 'weights' || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (tab !== 'weights') open(tab); });
+  if ((tab === 'weights' || tab === 'help') && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
+  fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if ((tab !== 'weights' && tab !== 'help') || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (tab !== 'weights') open(tab); });
 })();
 </script>
 </body>

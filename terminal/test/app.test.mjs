@@ -94,7 +94,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
   const fake = await startFakeServer([{ text: 'Hi there.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' },
-    { type: '/' }, { wait: 'Show commands and keys' }, { type: 'he' }, { key: 'enter' }, { wait: 'Commands' },
+    { type: '/' }, { wait: 'Commands and keys here' }, { type: 'he' }, { key: 'enter' }, { wait: 'Commands' },
     { type: '?' }, { wait: '\\ + enter for a new line' }, { key: 'esc' },
     { type: '!echo shell-ok' }, { key: 'enter' }, { wait: 'shell-ok' },
     { type: 'say hi' }, { key: 'enter' }, { wait: 'Hi there.' },
@@ -105,7 +105,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
     ...quit,
   ] });
   await fake.close();
-  expect(r.text).toContain('/help       Show commands and keys');
+  expect(r.text).toContain('/help       Commands and keys here, and the full Help page in the browser');
   expect(r.text).toContain('! echo shell-ok');
   expect(r.text).toContain('Hi there.');
   expect(r.text).toContain('plan mode on');
@@ -181,6 +181,32 @@ test('/effort alone opens a menu like Claude Code: arrows or a number pick, esc 
   expect([saved.thinking, saved.effort]).toEqual([true, 'high']); // and is kept for next time
 }, T);
 
+test('/mode and /meters alone open the same kind of menu: the one in use marked, a pick applies it, esc keeps it', async () => {
+  const { cwd, env, base } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: '/mode' }, { key: 'enter' },
+    { wait: 'How Bonsai asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
+    { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is auto-edit' }, { wait: 'accept edits on' },
+    { type: '/mo' }, { key: 'enter' }, { wait: 'How Bonsai asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as auto-edit' },
+    { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { sleep: 200 }, { snapshot: 'meters' },
+    { type: '1' }, { wait: 'Status bar on' },
+    { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { key: 'esc' }, { wait: 'Kept the status bar as on' },
+    { type: '/mode plan' }, { key: 'enter' }, { wait: 'Mode is plan' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.mode).toMatch(/❯ 1\. Ask first\s+asks before every edit and before commands that change things\s+✔ in use/);
+  expect(r.snapshots.mode).toMatch(/ 2\. Auto-edit\s+edits files without asking; still asks before commands/);
+  expect(r.snapshots.mode).toMatch(/ 3\. Plan\s+only reads and searches, then replies with a plan/);
+  expect(r.snapshots.mode).toContain('↑↓ to choose · enter to select · esc to go back');
+  expect(r.snapshots.mode2).toMatch(/❯ 2\. Auto-edit[^\n]*✔ in use/); // "/mo" opened it, on the mode in use
+  expect(r.snapshots.meters).toMatch(/ 1\. On\s+show it under the prompt/);
+  expect(r.snapshots.meters).toMatch(/❯ 2\. Off\s+hide it; \/stats has the numbers\s+✔ in use/); // off by default
+  const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+  expect(saved.meters).toBe(true); // esc kept it on
+}, T);
+
 test('/model: the model list and the effort in one picker; the choice is used and kept; /effort and --effort', async () => {
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
@@ -223,7 +249,7 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Show commands and keys' }, { sleep: 200 }, { snapshot: 'all' },
+    { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Commands and keys here' }, { sleep: 200 }, { snapshot: 'all' },
     { type: 'model' }, { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'mo' },
     { key: 'tab' }, { sleep: 300 }, { snapshot: 'tab' },
     ...quit,
@@ -388,6 +414,52 @@ test('/docs opens the hub on the harness page and says how many pages the DOCS f
   expect(served.list.pinned.harness.file).toBe('bonsai-harness-flow-v2.html');
   expect(served.page).toContain('flow');
   expect(served.hub).toContain('<title>Bonsai Hub</title>');
+}, T);
+
+test('shift + arrows select text in the prompt: copied at once, delete removes it, typing replaces it, esc keeps the text', async () => {
+  const { cwd, env, base } = setup();
+  const clip = join(base, 'clipboard.txt'); // stands in for the Mac clipboard
+  const fake = await startFakeServer([]);
+  const SL = '\x1b[1;2D', SU = '\x1b[1;2A'; // what Terminal.app sends for shift+← and shift+↑
+  const r = await runInPty({ cwd, env: { ...env, BONSAI_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: 'hello world' }, { sleep: 150 },
+    ...Array.from({ length: 5 }, () => [{ key: SL }, { sleep: 40 }]).flat(),
+    { wait: 'copied 5 chars to clipboard' }, { snapshot: 'selected' },
+    { key: 'backspace' }, { sleep: 200 }, { snapshot: 'deleted' },
+    { type: 'there' }, { sleep: 150 }, { key: SU }, { wait: 'copied 11 chars to clipboard' },
+    { type: 'x' }, { sleep: 200 }, { snapshot: 'replaced' },
+    { type: 'yz' }, { key: SL }, { sleep: 400 }, { key: 'esc' }, { sleep: 200 }, { snapshot: 'kept' },
+    ...quit,
+  ] });
+  await fake.close();
+  const prompt = (snap) => snap.split('\n').find((l) => /^[│ ]*> /.test(l)) ?? '';
+  expect(prompt(r.snapshots.selected)).toContain('> hello world');
+  expect(prompt(r.snapshots.deleted)).toMatch(/> hello\s*│?\s*$/);
+  expect(prompt(r.snapshots.replaced)).toMatch(/> x\s*│?\s*$/); // shift+↑ took the whole line
+  expect(prompt(r.snapshots.kept)).toMatch(/> xyz\s*│?\s*$/); // esc dropped only the selection
+  expect(readFileSync(clip, 'utf8')).toBe('z'); // the last selection copied
+}, T);
+
+test('/help: the command list here, and the Help page with every key and setting in the hub', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  let served = null;
+  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: '/help' }, { key: 'enter' }, { wait: 'opened in the browser at http://127.0.0.1:' },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'help.json')).json(), page: await (await fetch(url + 'help')).text(), hub: await (await fetch(url + '?tab=help')).text() }; } },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.text).toContain('/effort');
+  expect(r.text).toContain('?tab=help');
+  const { COMMANDS } = await import('../src/app/commands.mjs');
+  expect(served.data.commands.map((c) => c.name)).toEqual(COMMANDS.map((c) => c.name)); // every command, from the same list
+  expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'meters']);
+  expect(served.data.keys.flatMap((g) => g.rows.map(([k]) => k))).toContain('shift + ← →');
+  expect(served.data.modes.map((m) => m.id)).toEqual(['ask', 'edits', 'plan']);
+  expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'medium', 'high']);
+  expect(served.page).toContain('<title>Bonsai Help</title>');
+  expect(served.hub).toContain('data-tab="help"');
 }, T);
 
 test('typing "exit" as a plain message quits, like /exit', async () => {
