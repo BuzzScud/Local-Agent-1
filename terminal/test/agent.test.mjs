@@ -488,3 +488,39 @@ test('a layout-kind fix with no named check never auto-runs the test suite', asy
   await fake.close();
   expect(events.filter((e) => e.name === 'Bash').length).toBe(0); // a browser check is the model's job; the suite would only mislead
 });
+
+// ————— A Write too big for one reply (the finance-dashboard bug, 26 Sep) —————
+test('a Write cut off at the reply limit never runs; the model is told to build the file in parts', async () => {
+  const cut = { tool: { name: 'Write', args: { path: 'dashboard.html', content: '<html><head><style>body{margin:0' } }, finish: 'length' };
+  const replies = [cut, { tool: { name: 'Write', args: { path: 'dashboard.html', content: '<html><!-- skeleton --></html>' } } }, { text: 'Skeleton written; adding sections next.' }, { text: '{"done": true, "missing": ""}' }];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  for (const t of ['tool', 'note']) agent.on(t, (e) => events.push({ type: t, ...e }));
+  const reason = await agent.send('make dashboard.html, a finance dashboard');
+  await fake.close();
+  expect(reason).toBe('done');
+  expect(events.some((e) => e.type === 'note' && /ran out of room mid-way/.test(e.text))).toBe(true);
+  const note = agent.messages.find((m) => m.role === 'user' && m.content.includes('skeleton'));
+  expect(note.content).toStartWith(AUTO);
+  expect(note.content).toContain('dashboard.html');
+  const writes = events.filter((e) => e.type === 'tool' && e.name === 'Write');
+  expect(writes.length).toBe(1); // only the skeleton Write ran; the cut one never did
+  expect(writes[0].error).toBeFalsy();
+  expect(readFileSync(join(cwd, 'dashboard.html'), 'utf8')).toContain('skeleton');
+});
+
+test('three cut-off calls in a row stop the turn instead of looping for half an hour', async () => {
+  const cut = { tool: { name: 'Write', args: { path: 'big.html', content: '<html>' } }, finish: 'length' };
+  const cwd = project();
+  const fake = await startFakeServer([cut, cut, cut, { text: 'never reached' }]);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => events.push(e));
+  const reason = await agent.send('make big.html');
+  await fake.close();
+  expect(reason).toBe('stuck');
+  expect(events.some((e) => /cut off mid-call, so it stopped/.test(e.text))).toBe(true);
+  expect(fake.remaining()).toBe(1);
+});

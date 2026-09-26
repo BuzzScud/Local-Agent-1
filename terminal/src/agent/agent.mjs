@@ -138,6 +138,18 @@ export function keyLines(text, max = 4) {
 }
 export const namesAFix = (line) => FIX.test(line) || /^so the (?:problem|issue|bug)|^the (?:root )?cause|^that(?:'s| is) the (?:bug|problem|cause)/i.test(line);
 
+// What the model is told when its call was cut off at the reply limit: the
+// arguments end mid-string, so running the call can only fail. Usually it is
+// a Write with a whole file in it (a finance dashboard cost two 6-8 minute
+// tries at the same too-big Write on 26 Sep).
+export function cutCallNote(name, path) {
+  const file = path || 'the file';
+  if (name === 'Write' || name === 'Edit') {
+    return `Your ${name} call ran out of room before the end, so nothing was written: the whole content does not fit in one reply. Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`;
+  }
+  return `Your ${name} call ran out of room before the end and was not run. Do it again in smaller pieces.`;
+}
+
 // A tool call written as text instead of a real call: <tool_call>{...}</tool_call>
 export function toolCallInText(text) {
   // The 27B's own format: <tool_call><function=Name><parameter=key>value</parameter>…</function></tool_call>
@@ -376,6 +388,7 @@ export class Agent extends EventEmitter {
     let errorsInRow = 0;
     let nudges = 0;
     let checks = 0;
+    let cuts = 0; // replies cut off at the reply limit mid-tool-call
     let toolsUsed = 0; // tool calls run for this message: a nudge is only for work already under way
     this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false,
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
@@ -418,6 +431,24 @@ export class Agent extends EventEmitter {
         // Only the first call runs, so only the first is kept in the history
         // (otherwise the model waits for results that never come).
         calls = calls.slice(0, 1);
+        // A call cut off by the reply limit (finish 'length'): running it can
+        // only give "not valid JSON", and the old error told the model to send
+        // the same too-big call again. Instead: build the file in parts.
+        const cutCall = turn.finish === 'length' && (calls[0] ?? (/<tool_call>/.test(text) ? { name: /<function=([^>\s]+)>/.exec(text)?.[1] ?? 'the last', args: text } : null));
+        if (cutCall) {
+          cuts++;
+          if (cuts >= 3) {
+            reason = 'stuck';
+            this.emit('note', { text: 'Three replies in a row were cut off mid-call, so it stopped. Ask for the file in smaller pieces.', tone: 'warn' });
+            break;
+          }
+          const p = /"path"\s*:\s*"([^"]+)"|<parameter=path>\s*\n?([^\n<]+)/.exec(cutCall.args ?? '');
+          const thought = turn.reasoning.split('<tool_call>')[0].trim();
+          this.messages.push({ role: 'assistant', content: text.split('<tool_call>')[0], ...(thought ? { reasoning_content: thought } : {}) });
+          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, p?.[1] ?? p?.[2]?.trim())) });
+          this.emit('note', { text: `The ${cutCall.name} call ran out of room mid-way; asked it to build the file in parts.`, tone: 'warn' });
+          continue;
+        }
         // A reply that puts a question to you ends the turn, even with a tool
         // call in it: the call is dropped and Bonsai waits for your answer.
         if (calls.length && text.trim() && asksTheUserDirectly(text)) calls = [];
@@ -503,6 +534,7 @@ export class Agent extends EventEmitter {
         const call = calls[0];
         toolsUsed++;
         const out = await this.runTool(call, signal);
+        if (!out.error) cuts = 0; // a step landed: cut-off replies are no longer "in a row"
         const result = { role: 'tool', tool_call_id: call.id, content: out.text };
         this.messages.push(result);
         if (out.readKey) this.turn.reads.set(out.readKey, { msg: result, mtime: out.mtime });
