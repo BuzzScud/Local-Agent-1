@@ -73,20 +73,20 @@ test('working: "∴ Thinking…" above the spinner, which shows time and tokens;
   ] });
   await fake.close();
   expect(r.snapshots.thinking).toMatch(/∴ Thinking…/);
-  expect(r.snapshots.thinking).toMatch(/[·✢✳✶✻✽] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · esc to interrupt\)/);
+  expect(r.snapshots.thinking).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · esc to interrupt\)/);
   expect(r.snapshots.thinking).not.toMatch(/┃/); // no streaming window: one layout, like Claude Code
   expect(r.text).toContain('∴ Thought for'); // what it had thought so far is kept, folded
   expect(r.text).toContain('Interrupted · What should Bonsai do instead?');
 }, T);
 
-test('a finished turn leaves its time behind, like Claude Code: "✳ Worked for 2s · done 12:58 PM"', async () => {
+test('a finished turn leaves its time behind, like Claude Code: "⠿ Worked for 2s · done 12:58 PM"', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'Hi there, how can I help you today with this project?' }], { delayMs: 40, chunk: 1 });
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' }, { type: 'hello' }, { key: 'enter' }, { wait: 'with this project?' }, { wait: '· done ' }, { sleep: 300 }, ...quit,
   ] });
   await fake.close();
-  expect(r.text).toMatch(/✳ [A-Z][a-z]+ for \d+s · done \d{1,2}:\d\d [AP]M/);
+  expect(r.text).toMatch(/⠿ [A-Z][a-z]+ for \d+s · done \d{1,2}:\d\d [AP]M/);
 }, T);
 
 test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', async () => {

@@ -6,7 +6,7 @@
 // scrollback keeps working); the live area below them is redrawn.
 import React, { useRef, useLayoutEffect } from 'react';
 import { Box, Text, Static, renderToString, measureElement } from 'ink';
-import { C, spinGlyph, fmtSecs, fmtTok } from '../ui/theme.mjs';
+import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
@@ -38,7 +38,7 @@ export function Welcome({ model, cwd, width, loaded }) {
   return (
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column">
-        <Text><Text color={C.accent}>✻</Text> Welcome to <Text bold>Bonsai Code</Text>!</Text>
+        <Text><Text color={C.accent}>{MARK}</Text> Welcome to <Text bold>Bonsai Code</Text>!</Text>
         <Text> </Text>
         <Text color={C.dim}>  /help for help · /stats for your current setup</Text>
         <Text> </Text>
@@ -111,8 +111,8 @@ export function Item({ it, width, model, cwd, loaded }) {
       </Box>
     );
     case 'thinking': return <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
-    // The line a finished turn leaves behind: "✳ Worked for 41s · done 12:58 PM".
-    case 'done': return <Text><Text color={C.accent}>✳</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)} · done {clock(it.at)}</Text></Text>;
+    // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".
+    case 'done': return <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)} · done {clock(it.at)}</Text></Text>;
     case 'text': return <Row><Markdown text={it.text} /></Row>;
     case 'tool': return <ToolView it={it} width={width} />;
     case 'note': {
@@ -212,14 +212,21 @@ function Meters({ app }) {
   );
 }
 
-function Spinner({ app }) {
+// The icon on the "Starting …" line: no tokens yet, so orbit drifts dim.
+function StartIcon({ app }) {
+  const icon = spinFrame(app.spinner, Math.max(0, (app.now - app.startedAt) / 1000));
+  return <Text color={icon.color}>{icon.glyph}</Text>;
+}
+
+export function Spinner({ app }) {
   const { live, now } = app;
   const secs = Math.max(0, (now - live.turnStart) / 1000);
   const note = live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : '';
+  const icon = spinFrame(app.spinner, secs, { tokens: live.tokens, sinceToken: live.lastTokenAt ? (now - live.lastTokenAt) / 1000 : Infinity });
   return (
     <Box marginBottom={1} width={app.width}>
       <Text wrap="truncate-end">
-        <Text color={C.accent}>{spinGlyph(secs)} {live.verb}…</Text>
+        <Text color={icon.color}>{icon.glyph}</Text><Text color={C.accent}> {live.verb}…</Text>
         <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(live.tokens)} tokens{note} · esc to interrupt)</Text>
       </Text>
     </Box>
@@ -248,7 +255,7 @@ export function tailToFit(text, maxLines, width) {
   return out.join('\n');
 }
 
-function LiveArea({ app }) {
+export function LiveArea({ app }) {
   const { live, width, rows } = app;
   if (live.phase !== 'working') return null;
   const maxLines = Math.max(6, rows - 16);
@@ -624,7 +631,7 @@ export function Screen({ app }) {
       <Box ref={liveRef} flexDirection="column" minHeight={fill} maxHeight={Math.max(fill, app.rows - 1)} overflow="hidden" justifyContent="flex-end">
       <Box flexDirection="column" flexShrink={0}>
       {app.starting ? (
-        <Box marginBottom={1}><Text><Text color={C.accent}>{spinGlyph((app.now - app.startedAt) / 1000)} Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text></Box>
+        <Box marginBottom={1}><Text><StartIcon app={app} /><Text color={C.accent}> Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text></Box>
       ) : null}
       <LiveArea app={app} />
       {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : ''}</Text></Box> : null}

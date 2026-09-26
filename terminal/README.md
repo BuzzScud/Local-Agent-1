@@ -6,9 +6,10 @@ one file, `../models/index.mjs`, and never reads a model's settings directly.
 ## Screen
 
 Laid out like Claude Code, one layout: while it thinks, a folded `∴ Thinking…` line above
-the spinner (`✻ Baking… (4s · ↓ 120 tokens · esc to interrupt)`); tool lines with their
+the spinner (`⠹ Baking… (4s · ↓ 120 tokens · esc to interrupt)`: Orbit, dots that move one step per token
+written, fast and bright while it writes, slow and dim while it reads or a tool runs); tool lines with their
 results folded (`⏺ Read(file)` / `⎿ Read 28 lines (ctrl+o to expand)`); and when a turn
-ends, the time it took: `✳ Worked for 41s · done 12:58 PM`. Nothing sits under the prompt
+ends, the time it took: `⠿ Worked for 41s · done 12:58 PM`. Nothing sits under the prompt
 but the footer; from 70% memory a line says what happens next, `/stats` has every number,
 and `/meters on` adds the old status bar (model, speed, memory, effort) for those who want it.
 

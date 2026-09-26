@@ -25,9 +25,10 @@ import { memoryFile, readMemory } from '../agent/memory.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
+import { spinStyle } from '../ui/theme.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
-// when the turn ends ("✳ Baked for 41s · done 12:58 PM"), as Claude Code does.
+// when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
 const VERBS = [['Baking', 'Baked'], ['Brewing', 'Brewed'], ['Cogitating', 'Cogitated'], ['Computing', 'Computed'], ['Conjuring', 'Conjured'], ['Cooking', 'Cooked'], ['Crafting', 'Crafted'], ['Crunching', 'Crunched'], ['Deliberating', 'Deliberated'], ['Forging', 'Forged'], ['Hatching', 'Hatched'], ['Ideating', 'Ideated'], ['Marinating', 'Marinated'], ['Mulling', 'Mulled'], ['Musing', 'Mused'], ['Noodling', 'Noodled'], ['Percolating', 'Percolated'], ['Pondering', 'Pondered'], ['Puzzling', 'Puzzled'], ['Ruminating', 'Ruminated'], ['Simmering', 'Simmered'], ['Stewing', 'Stewed'], ['Synthesizing', 'Synthesized'], ['Tinkering', 'Tinkered'], ['Working', 'Worked'], ['Wrangling', 'Wrangled']];
 const PLACEHOLDERS = ['Try "explain what this project does"', 'Try "add a test for …"', 'Try "fix the failing tests"', 'Try "find where … is set"'];
 const MODES = ['ask', 'edits', 'plan'];
@@ -312,7 +313,7 @@ export function App({ opts, win }) {
       const first = l.firstTokenAt ?? t;
       const n = (l.streamTokens ?? 0) + 1;
       const secs = (t - first) / 1000;
-      return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + 1, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
+      return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + 1, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
     };
     const offs = [
       on('turn-start', () => { const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true }); }),
@@ -354,7 +355,7 @@ export function App({ opts, win }) {
         setPerm(null);
         answerRef.current = null;
         if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Bonsai do instead?', tone: 'warn' }); setPlaceholder('Tell Bonsai what to do instead'); }
-        // A finished turn leaves its time behind, as in Claude Code: "✳ Worked for 41s · done 12:58 PM".
+        // A finished turn leaves its time behind, as in Claude Code: "⠿ Worked for 41s · done 12:58 PM".
         else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now() });
         if (reason === 'declined') setPlaceholder('Tell Bonsai what to do instead');
         saveNow();
@@ -859,7 +860,7 @@ export function App({ opts, win }) {
   itemsRef.current = items;
   const app = {
     items, live, perm, picker, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
-    modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, now, spinner: spinStyle(process.env.BONSAI_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
     // The weights badge, lower right: edited weights saved and waiting, in

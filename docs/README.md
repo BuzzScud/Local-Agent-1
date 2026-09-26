@@ -8,6 +8,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/bonsai-spinner-2-designs-2026-09-26.html](design%20rounds/bonsai-spinner-2-designs-2026-09-26.html) | page | Bonsai working icon | 31 KB | 2026-09-26 |
 | [reports/bonsai-weight-editing-terminal-preview-2026-09-26.html](reports/bonsai-weight-editing-terminal-preview-2026-09-26.html) | page | Editing Weights in the Terminal | 11 KB | 2026-09-26 |
 | [reports/bonsai-weight-editing-plan-2026-09-26.html](reports/bonsai-weight-editing-plan-2026-09-26.html) | page | Editing Bonsai's Weights | 32 KB | 2026-09-26 |
 | [other/claude-harness-opus-5-5-fable-5-1-v2-2026-09-26.html](other/claude-harness-opus-5-5-fable-5-1-v2-2026-09-26.html) | page | Opus 5.5 and Fable 5.1 harness v2 | 60 KB | 2026-09-26 |

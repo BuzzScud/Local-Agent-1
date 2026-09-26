@@ -6,6 +6,7 @@
   "description": "Bonsai Code: a Claude Code-style coding agent for your terminal (terminal/) running local models (models/).",
   "scripts": {
     "demo": "bun terminal/scripts/demo/live.jsx --design",
+    "spin": "bun terminal/scripts/demo/spin.jsx",
     "record": "node terminal/scripts/demo/record.mjs",
     "preview": "bun terminal/scripts/demo/build-preview.jsx",
     "start": "bun terminal/src/cli.jsx",
