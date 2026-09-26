@@ -8,6 +8,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [other/claude-harness-opus-5-5-fable-5-1-v2-2026-09-26.html](other/claude-harness-opus-5-5-fable-5-1-v2-2026-09-26.html) | page | Opus 5.5 and Fable 5.1 harness v2 | 60 KB | 2026-09-26 |
 | [older versions/claude-harness-opus-5-5-fable-5-1-2026-09-26.html](older%20versions/claude-harness-opus-5-5-fable-5-1-2026-09-26.html) | page | Opus 5.5 and Fable 5.1 harness | 23 KB | 2026-09-26 |
 | [diagrams/bonsai-2-27b-inside-2026-09-25.html](diagrams/bonsai-2-27b-inside-2026-09-25.html) | page | Inside Bonsai 2 27B | 23 KB | 2026-09-26 |
 | [bonsai-accuracy-round-2026-09-26.html](bonsai-accuracy-round-2026-09-26.html) | page | Bonsai accuracy round | 8 KB | 2026-09-26 |
