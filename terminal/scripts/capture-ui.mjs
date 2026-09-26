@@ -31,7 +31,7 @@ const r = await runInPty({
     { type: '/' }, { wait: 'Pick the model and how much it thinks' }, { sleep: 400 }, { snapshot: 'slash' },
     { type: 'model' }, { key: 'enter' }, { wait: 'Pick the model and how much it thinks first' }, { key: 'right' }, { sleep: 500 }, { snapshot: 'model' },
     { key: 'esc' }, { sleep: 400 },
-    { type: 'hello' }, { key: 'enter' }, { wait: 'esc to stop', ms: 30_000 }, { waitGone: 'esc to stop', ms: 180_000 }, { sleep: 1500 }, { snapshot: 'hello' },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'esc to interrupt', ms: 30_000 }, { waitGone: 'esc to interrupt', ms: 180_000 }, { sleep: 1500 }, { snapshot: 'hello' },
     { key: 'ctrlC' }, { sleep: 300 }, { key: 'ctrlC' },
   ],
 });

@@ -130,7 +130,7 @@ export function Spinner({ t, verb, secs, tokens, note }) {
     <Box marginBottom={1}>
       <Text>
         <Text color={C.accent}>{spinGlyph(t)} {verb}…</Text>
-        <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(tokens)} tokens{note ? ` · ${note}` : ''} · esc to stop)</Text>
+        <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(tokens)} tokens{note ? ` · ${note}` : ''} · esc to interrupt)</Text>
       </Text>
     </Box>
   );

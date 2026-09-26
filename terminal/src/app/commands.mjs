@@ -3,7 +3,6 @@ export const COMMANDS = [
   { name: 'help', desc: 'Show commands and keys' },
   { name: 'clear', desc: 'Start a new conversation (the screen keeps its history)' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
-  { name: 'layout', desc: 'Switch layout: classic or live (ctrl+l)', arg: '[classic|live]' },
   { name: 'effort', desc: 'Effort: off, medium or high (also in /model)', arg: '[off|medium|high]' },
   { name: 'mode', desc: 'ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },

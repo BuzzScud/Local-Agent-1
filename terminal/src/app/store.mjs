@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { layout: 'classic', thinking: null, model: '27b' };
+const DEFAULTS = { thinking: null, model: '27b' };
 
 export function loadSettings() {
   try { return { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { return { ...DEFAULTS }; }

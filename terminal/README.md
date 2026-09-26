@@ -5,26 +5,26 @@ one file, `../models/index.mjs`, and never reads a model's settings directly.
 
 ## Screen
 
-Two layouts, switched with **ctrl+l** or `/layout` (your choice is remembered):
-
-- **Classic** — Claude Code as it is: thinking folded to one line, one spinner, a quiet footer.
-- **Live thinking** — you watch it work: thinking streams in a 4-line window, tool calls
-  show how much is written, and a meter line shows speed, context and memory.
+Laid out like Claude Code, one layout: while it thinks, a folded `∴ Thinking…` line above
+the spinner (`✻ Baking… (4s · ↓ 120 tokens · esc to interrupt)`); tool lines with their
+results folded (`⏺ Read(file)` / `⎿ Read 28 lines (ctrl+o to expand)`); and when a turn
+ends, the time it took: `✳ Worked for 41s · done 12:58 PM`. Nothing sits under the prompt
+but the footer; from 70% memory a line says what happens next, `/stats` has every number,
+and `/meters on` adds the old status bar (model, speed, memory, effort) for those who want it.
 
 ## Keys
 
 | Key | Does |
 |---|---|
 | enter | send · `\` + enter for a new line |
-| esc | stop Bonsai · twice to clear the prompt |
+| esc | interrupt Bonsai · twice to clear the prompt |
 | shift+tab | ask first → accept edits → plan (read-only) |
-| ctrl+l | switch layout |
 | ctrl+o | show the last thinking or output in full |
 | ↑ ↓ | earlier prompts |
 | `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
 | ctrl+c twice | quit (the conversation is saved) |
 
-Commands: `/help /clear /compact /layout /effort /mode /init /resume /model /stats /doctor /exit`.
+Commands: `/help /clear /compact /effort /mode /init /resume /model /stats /meters /doctor /exit` — and typing `exit` quits too.
 
 **Effort** is how much the model thinks before it acts: Off (the default), Medium or High,
 set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` still work.

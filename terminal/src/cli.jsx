@@ -34,7 +34,6 @@ Usage
   bonsai stop               free the model's memory now (it stays loaded ${LINGER_SECS / 60} min after you quit)
 
 Options
-  --layout classic|live     screen layout (ctrl+l switches while running)
   --effort off|medium|high  how much the model thinks before it acts (default: off, or your last /effort)
   --think / --no-think      the old names: --effort medium / --effort off
   --ctx 16k|32k|64k         memory size (default: 32k, or 16k when memory is short)
@@ -57,7 +56,7 @@ function parse(argv) {
     else if (a === '-p' || a === '--print') { o.print = true; if (argv[i + 1] && !argv[i + 1].startsWith('-')) rest.push(val()); }
     else if (a === '-c' || a === '--continue') o.continueLast = true;
     else if (a === '--resume') o.resumeId = val();
-    else if (a === '--layout') o.layout = val() === 'live' ? 'live' : 'classic';
+    else if (a === '--layout') val(); // one layout now (like Claude Code); still accepted so older scripts run
     else if (a === '--effort') { const v = String(val() ?? '').toLowerCase(); o.thinking = v !== 'off'; if (v === 'medium' || v === 'high') o.effort = v; }
     else if (a === '--think') o.thinking = true;
     else if (a === '--no-think') o.thinking = false;
@@ -133,9 +132,8 @@ if (opts.print) {
   // prompt box is right from the start (App measures everything after it).
   try {
     const { homedir } = await import('node:os');
-    const layout = opts.layout ?? loadSettings().layout ?? 'classic';
     const cwdShort = opts.cwd.startsWith(homedir()) ? `~${opts.cwd.slice(homedir().length)}` : opts.cwd;
-    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), layout, modelName: MODELS[opts.modelId ?? DEFAULT_MODEL].name, cwdShort });
+    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: MODELS[opts.modelId ?? DEFAULT_MODEL].name, cwdShort });
   } catch {}
   const win = new TerminalWindow(process.stdout);
   const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });

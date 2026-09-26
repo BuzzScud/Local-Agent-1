@@ -1,8 +1,7 @@
-// What the terminal shows, in either layout:
-//   classic — Claude Code as it is: thinking folded to one line, one spinner.
-//   live    — you watch it work: thinking streams in a 4-line window, tool
-//             calls show how much is written, a meter line shows speed,
-//             context and memory.
+// What the terminal shows, laid out like Claude Code: thinking folded to one
+// line, one spinner with the time and tokens, a line with the time left behind
+// when a turn ends, nothing under the prompt but the footer (/meters on adds
+// the status bar).
 // Finished lines go in <Static> (printed once, so the terminal's own
 // scrollback keeps working); the live area below them is redrawn.
 import React, { useRef, useLayoutEffect } from 'react';
@@ -34,14 +33,14 @@ const TIPS = [
 
 // Like Claude Code: a welcome box as wide as its words, then the tips.
 export function Welcome({ model, cwd, width }) {
-  const lines = [`  /help for help · /layout or ctrl+l to switch layouts`, `  ${model}, on this Mac`, `  cwd: ${cwd}`];
+  const lines = [`  /help for help · /stats for your current setup`, `  ${model}, on this Mac`, `  cwd: ${cwd}`];
   const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Bonsai Code!'.length + 6));
   return (
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column">
         <Text><Text color={C.accent}>✻</Text> Welcome to <Text bold>Bonsai Code</Text>!</Text>
         <Text> </Text>
-        <Text color={C.dim}>  /help for help · /layout or ctrl+l to switch layouts</Text>
+        <Text color={C.dim}>  /help for help · /stats for your current setup</Text>
         <Text> </Text>
         <Text color={C.dim}>  {model}, on this Mac</Text>
         <Text color={C.dim}>  cwd: {fitPath(cwd, boxW - 11)}</Text>
@@ -98,7 +97,10 @@ function ToolView({ it, width }) {
   return <Box flexDirection="column">{head}{body ? <Result>{body}</Result> : null}</Box>;
 }
 
-export function Item({ it, layout, width, model, cwd }) {
+// The clock time a turn ended, as Claude Code writes it: "12:58 PM".
+const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+export function Item({ it, width, model, cwd }) {
   switch (it.type) {
     case 'welcome': return <Welcome model={model} cwd={cwd} width={width} />;
     case 'user': return (
@@ -107,17 +109,9 @@ export function Item({ it, layout, width, model, cwd }) {
         {it.attached?.length ? <Result><Text color={C.dim}>Attached {it.attached.map((a) => `${a.path} (${plural(a.lines, 'line')})`).join(', ')}</Text></Result> : null}
       </Box>
     );
-    case 'thinking':
-      if (layout === 'live') {
-        const first = wrap(it.text, Math.max(30, Math.min(100, width - 8)))[0] ?? '';
-        return (
-          <Box flexDirection="column">
-            <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} · {plural(it.tokens, 'token')} <Text color={C.faint}>(ctrl+o to show)</Text></Text>
-            <Text color={C.faint} italic>  {first}{it.text.length > first.length ? ' …' : ''}</Text>
-          </Box>
-        );
-      }
-      return <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
+    case 'thinking': return <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
+    // The line a finished turn leaves behind: "✳ Worked for 41s · done 12:58 PM".
+    case 'done': return <Text><Text color={C.accent}>✳</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)} · done {clock(it.at)}</Text></Text>;
     case 'text': return <Row><Markdown text={it.text} /></Row>;
     case 'tool': return <ToolView it={it} width={width} />;
     case 'note': {
@@ -220,24 +214,15 @@ function Meters({ app }) {
 function Spinner({ app }) {
   const { live, now } = app;
   const secs = Math.max(0, (now - live.turnStart) / 1000);
-  const note = live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : live.thinking && !live.text && !live.writing ? ' · thinking' : '';
+  const note = live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : '';
   return (
     <Box marginBottom={1} width={app.width}>
       <Text wrap="truncate-end">
         <Text color={C.accent}>{spinGlyph(secs)} {live.verb}…</Text>
-        <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(live.tokens)} tokens{note} · esc to stop)</Text>
+        <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(live.tokens)} tokens{note} · esc to interrupt)</Text>
       </Text>
     </Box>
   );
-}
-
-const WRITING = { Edit: 'the edit', Write: 'the file', Bash: 'the command', Read: 'the request', List: 'the request', Search: 'the search', TodoWrite: 'the plan' };
-const LABEL = { Edit: 'Update', Write: 'Write', Bash: 'Bash', Read: 'Read', List: 'List', Search: 'Search', TodoWrite: 'Update Todos' };
-
-// The part of a half-written tool call worth showing: its file or command.
-function partialArg(name, args) {
-  const m = /"(?:path|file_path|command|pattern)"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(args ?? '');
-  return m ? m[1].replace(/\\"/g, '"') : '';
 }
 
 // The end of a reply still being written, cut to at most `maxLines` lines
@@ -263,21 +248,13 @@ export function tailToFit(text, maxLines, width) {
 }
 
 function LiveArea({ app }) {
-  const { live, layout, width, rows } = app;
+  const { live, width, rows } = app;
   if (live.phase !== 'working') return null;
   const maxLines = Math.max(6, rows - 16);
   const blocks = [];
-  if (layout === 'live' && live.thinking && !live.text && !live.writing) {
-    const lines = wrap(live.thinking.text, Math.max(30, Math.min(100, width - 6)));
-    const tail = lines.slice(-4);
-    blocks.push(
-      <Box key="think" flexDirection="column" marginBottom={1}>
-        <Text color={C.think} italic>∴ Thinking… {fmtSecs(Math.max(0, (app.now - live.thinking.startedAt) / 1000))} · {live.thinking.tokens} tokens</Text>
-        {tail.map((l, i) => <Text key={i}><Text color={C.accentDim}>┃ </Text><Text color={C.think} italic>{l}</Text></Text>)}
-        {Array.from({ length: 4 - tail.length }, (_, i) => <Text key={`p${i}`} color={C.accentDim}>┃</Text>)}
-      </Box>,
-    );
-  }
+  // While it thinks: one folded line above the spinner, as in Claude Code
+  // (ctrl+o shows the thinking once the turn is over).
+  if (live.thinking && !live.text && !live.writing) blocks.push(<Box key="think" marginBottom={1}><Text color={C.think} italic>∴ Thinking…</Text></Box>);
   if (live.text) {
     const shown = tailToFit(live.text, maxLines, width - 3);
     // Clipped to maxLines rows, keeping the end: however the text renders
@@ -286,15 +263,6 @@ function LiveArea({ app }) {
     blocks.push(
       <Box key="text" marginBottom={1} maxHeight={maxLines} overflow="hidden" flexDirection="column" justifyContent="flex-end">
         <Box flexDirection="column" flexShrink={0}><Row><Markdown text={shown} /></Row></Box>
-      </Box>,
-    );
-  }
-  if (layout === 'live' && live.writing && live.writing.name) {
-    const w = live.writing;
-    blocks.push(
-      <Box key="writing" flexDirection="column" marginBottom={1}>
-        <ToolHead tool={LABEL[w.name] ?? w.name} arg={partialArg(w.name, w.args)} color={C.dim} dim />
-        <Result><Text color={C.dim}>writing {WRITING[w.name] ?? 'the call'}… {plural(w.tokens, 'token')}</Text></Result>
       </Box>,
     );
   }
@@ -410,41 +378,30 @@ function Menu({ app }) {
 
 const SHORTCUTS = [
   ['/ for commands', 'shift+tab to switch mode'],
-  ['@ to attach a file', 'ctrl+l to switch layout'],
-  ['! to run a shell command', 'ctrl+o to expand the last output'],
-  ['\\ + enter for a new line', 'esc to stop Bonsai'],
-  ['↑ ↓ for earlier prompts', 'ctrl+c twice to quit'],
+  ['@ to attach a file', 'ctrl+o to expand the last output'],
+  ['! to run a shell command', 'esc to interrupt Bonsai'],
+  ['\\ + enter for a new line', 'ctrl+c twice to quit'],
+  ['↑ ↓ for earlier prompts', ''],
 ];
 
-// The footer's right side, longest first, down to what fits in `room`
-// columns: a narrow window drops the shift+tab hint, then "ctrl+l", then the
-// layout, so the two sides never run into each other.
-export function footerRight(mode, layoutName, room) {
+// The footer's right side is the mode, as in Claude Code; a narrow window
+// drops the "(shift+tab to cycle)" hint so it never runs into "? for shortcuts".
+export function footerRight(mode, room) {
   const m = MODE_TEXT[mode] ?? '';
-  const tries = [
-    { cycle: true, layout: `ctrl+l  layout: ${layoutName}` },
-    { cycle: false, layout: `ctrl+l  layout: ${layoutName}` },
-    { cycle: false, layout: `layout: ${layoutName}` },
-    { cycle: false, layout: '' },
-  ];
-  const len = (t) => (m ? m.length + (t.cycle ? CYCLE_HINT.length : 0) + (t.layout ? 5 : 0) : 0) + t.layout.length;
-  return tries.find((t) => len(t) <= room) ?? tries.at(-1);
+  return { cycle: !m || m.length + CYCLE_HINT.length <= room };
 }
 
 function Footer({ app }) {
-  const { mode, layout, notice, width } = app;
+  const { mode, notice, width } = app;
   // An open menu takes the footer's place, as in Claude Code.
   if (app.menu?.items?.length) return null;
-  const layoutName = layout === 'live' ? 'Live thinking' : 'Classic';
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts');
-  const pick = footerRight(mode, layoutName, width - 4 - Math.min(left.length, 15) - 2);
+  const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2);
   return (
     <Box flexDirection="column">
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
         <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text>
-        <Text wrap="truncate-start">
-          {modeLabel(mode, { cycle: pick.cycle })}{MODE_TEXT[mode] && pick.layout ? <Text color={C.dim}>  ·  </Text> : null}{pick.layout ? <Text color={C.dim}>{pick.layout}</Text> : null}
-        </Text>
+        <Text wrap="truncate-start">{modeLabel(mode, { cycle: pick.cycle })}</Text>
       </Box>
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
@@ -542,9 +499,9 @@ function TooSmall({ app }) {
 // so the space between the conversation and the prompt box can be worked
 // out. Measured OUTSIDE rendering (when an item is added, after a resize,
 // before the first frame): measuring inside a render makes React print a
-// warning into the terminal. Only thinking items look different per layout.
+// warning into the terminal.
 const itemHeights = new Map();
-const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}\0${it.type === 'thinking' ? ctx.layout : ''}`;
+const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}`;
 export function primeRows(items, ctx) {
   let added = false;
   for (const it of items) {
@@ -553,7 +510,7 @@ export function primeRows(items, ctx) {
     if (itemHeights.size > 5000) itemHeights.clear();
     const out = renderToString(
       <Box flexDirection="column" marginBottom={1} width={ctx.width}>
-        <Item it={it} layout={ctx.layout} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} />
+        <Item it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} />
       </Box>, { columns: ctx.width });
     itemHeights.set(k, out.split('\n').length); // the margin under it is the last line
     added = true;
@@ -576,7 +533,7 @@ export function usedRows(app) {
 }
 
 export function Screen({ app }) {
-  const { layout, width, modelName, cwd } = app;
+  const { width, modelName, cwd } = app;
   // The live part's height as last drawn, and how many items were printed then.
   const liveRef = useRef(null);
   const drawn = useRef({ redraw: null, height: 0, count: 0 });
@@ -609,7 +566,7 @@ export function Screen({ app }) {
           // Static lines are laid out on their own, so they need the width
           // too; without it long lines are wrapped by the terminal mid-word.
           <Box key={it.key} flexDirection="column" marginBottom={1} width={width}>
-            <Item it={it} layout={layout} width={width} model={modelName} cwd={app.cwdShort} />
+            <Item it={it} width={width} model={modelName} cwd={app.cwdShort} />
           </Box>
         )}
       </Static>

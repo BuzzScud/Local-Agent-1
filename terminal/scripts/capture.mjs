@@ -28,7 +28,7 @@ const r = await runInPty({
   steps: [
     { wait: '? for shortcuts', ms: 120_000 }, { sleep: 1500 },
     { type: task }, { key: 'enter' },
-    { wait: 'esc to stop', ms: long }, { sleep: 3500 }, { snapshot: 'working' },
+    { wait: 'esc to interrupt', ms: long }, { sleep: 3500 }, { snapshot: 'working' },
     { autoYes: true, snapshotFirstAsk: true, ms: 800_000 }, { sleep: 1000 }, { snapshot: 'done' },
     { key: 'ctrlC' }, { sleep: 300 }, { key: 'ctrlC' },
   ],

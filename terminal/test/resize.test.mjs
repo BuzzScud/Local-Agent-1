@@ -63,11 +63,11 @@ test('esc closes the "/" menu first and keeps Bonsai working; the next esc stops
   const fake = await startFakeServer([{ reasoning: 'Thinking it over at length. '.repeat(400) }], { delayMs: 10 });
   const t = openTerm({ cwd, env, cols: 120, rows: 36, args: ['--url', fake.url, '--no-flows'] });
   try {
-    await t.waitFor('? for shortcuts'); await t.type('think'); t.key('enter'); await t.waitFor('esc to stop');
+    await t.waitFor('? for shortcuts'); await t.type('think'); t.key('enter'); await t.waitFor('esc to interrupt');
     await t.type('/'); await t.waitFor('/help');
     t.key('esc'); await sleep(300);
     expect(await t.screen()).not.toContain('Show commands and keys');
-    expect(await t.screen()).toContain('esc to stop');
+    expect(await t.screen()).toContain('esc to interrupt');
     t.key('backspace'); await sleep(100); t.key('esc');
     await t.waitFor('Interrupted');
   } finally { await t.close(); await fake.close(); }
@@ -87,10 +87,10 @@ test('text and enter arriving together (a busy app) still send the message', asy
 
 test('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"', async () => {
   const { footerRight } = await import('../src/app/screen.jsx');
-  expect(footerRight('edits', 'Classic', 200)).toEqual({ cycle: true, layout: 'ctrl+l  layout: Classic' });
-  expect(footerRight('edits', 'Classic', 59)).toEqual({ cycle: false, layout: 'ctrl+l  layout: Classic' });
-  expect(footerRight('plan', 'Live thinking', 30)).toEqual({ cycle: false, layout: '' });
-  expect(footerRight('ask', 'Classic', 59)).toEqual({ cycle: true, layout: 'ctrl+l  layout: Classic' });
+  expect(footerRight('edits', 200)).toEqual({ cycle: true });
+  expect(footerRight('edits', 30)).toEqual({ cycle: false }); // the mode stays, the "(shift+tab to cycle)" hint goes
+  expect(footerRight('plan', 30)).toEqual({ cycle: false });
+  expect(footerRight('ask', 20)).toEqual({ cycle: true }); // nothing on the right in ask mode
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const t = openTerm({ cwd, cols: 80, rows: 24, env, args: ['--url', fake.url, '--mode', 'edits'] });
@@ -124,7 +124,7 @@ test('a long reply being written never spills into the scrollback (it once print
   try {
     await t.waitFor('? for shortcuts'); await t.idle();
     await t.type('explain it'); t.key('enter');
-    await t.waitFor('Paragraph 30', 30_000); await t.waitGone('esc to stop', 30_000); await t.idle();
+    await t.waitFor('Paragraph 30', 30_000); await t.waitGone('esc to interrupt', 30_000); await t.idle();
     const all = (await t.lines({ all: true })).map((l) => l.text).join('\n');
     expect(all.split('FIRST-LINE-MARKER').length - 1).toBe(1);
   } finally { await t.close(); await fake.close(); }

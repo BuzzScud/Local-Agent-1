@@ -20,7 +20,9 @@ import { editInput, insertText, cursorLine, mentionAt } from './edit-input.mjs';
 import { COMMANDS, matchCommands } from './commands.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 
-const VERBS = ['Pruning', 'Shaping', 'Wiring', 'Grafting', 'Rooting', 'Branching', 'Watering', 'Potting', 'Trimming', 'Budding'];
+// The spinner's verb for a turn and its past tense for the line left behind
+// when the turn ends ("✳ Baked for 41s · done 12:58 PM"), as Claude Code does.
+const VERBS = [['Baking', 'Baked'], ['Brewing', 'Brewed'], ['Cogitating', 'Cogitated'], ['Computing', 'Computed'], ['Conjuring', 'Conjured'], ['Cooking', 'Cooked'], ['Crafting', 'Crafted'], ['Crunching', 'Crunched'], ['Deliberating', 'Deliberated'], ['Forging', 'Forged'], ['Hatching', 'Hatched'], ['Ideating', 'Ideated'], ['Marinating', 'Marinated'], ['Mulling', 'Mulled'], ['Musing', 'Mused'], ['Noodling', 'Noodled'], ['Percolating', 'Percolated'], ['Pondering', 'Pondered'], ['Puzzling', 'Puzzled'], ['Ruminating', 'Ruminated'], ['Simmering', 'Simmered'], ['Stewing', 'Stewed'], ['Synthesizing', 'Synthesized'], ['Tinkering', 'Tinkered'], ['Working', 'Worked'], ['Wrangling', 'Wrangled']];
 const PLACEHOLDERS = ['Try "explain what this project does"', 'Try "add a test for …"', 'Try "fix the failing tests"', 'Try "find where … is set"'];
 const MODES = ['ask', 'edits', 'plan'];
 const IDLE = { phase: 'idle' };
@@ -73,7 +75,7 @@ export function App({ opts, win }) {
   const model = MODELS[opts.modelId ?? DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
   const settings = useRef(loadSettings()).current;
   const memoryNote = useRef(null);
-  const measure = useRef({ width: 100, layout: 'classic', modelName: '', cwdShort: '' });
+  const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
   const itemsRef = useRef([]);
   const [, bumpRows] = useState(0);
 
@@ -84,7 +86,6 @@ export function App({ opts, win }) {
   const [input, setInput] = useState({ value: '', cursor: 0 });
   const [menuIndex, setMenuIndex] = useState(0);
   const [mode, setModeState] = useState(opts.mode ?? 'ask');
-  const [layout, setLayout] = useState(opts.layout ?? settings.layout ?? 'classic');
   const [thinking, setThinkingState] = useState(opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true);
   const [effort, setEffortState] = useState(opts.effort ?? settings.effort ?? model.thinkingEffort);
   const [startPhase, setStartPhase] = useState('loading');
@@ -145,7 +146,7 @@ export function App({ opts, win }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, menuIndex, mode, layout, starting, live, queued, tooSmall };
+  S.current = { input, perm, picker, menuIndex, mode, starting, live, queued, tooSmall };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
 
@@ -156,15 +157,6 @@ export function App({ opts, win }) {
     if (eff) { agent.effort = eff; setEffortState(eff); }
     saveSettings(eff ? { thinking: on, effort: eff } : { thinking: on });
   }, [agent]);
-  const toggleLayout = useCallback((to) => {
-    setLayout((cur) => {
-      const next = to ?? (cur === 'classic' ? 'live' : 'classic');
-      saveSettings({ layout: next });
-      flash(`Layout: ${next === 'live' ? 'Live thinking' : 'Classic'}`);
-      return next;
-    });
-  }, [flash]);
-
   // Clock for spinners and timers, only while something is moving.
   useEffect(() => {
     if (!(starting || live.phase === 'working')) return;
@@ -213,7 +205,7 @@ export function App({ opts, win }) {
       return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + 1, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
     };
     const offs = [
-      on('turn-start', () => setLive({ phase: 'working', turnStart: Date.now(), verb: pick(VERBS), tokens: 0, waiting: true })),
+      on('turn-start', () => { const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true }); }),
       on('waiting', () => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0 }))),
       on('reasoning', ({ all }) => setLive((l) => stream(l, { thinking: { text: all, startedAt: l.thinking?.startedAt ?? Date.now(), tokens: (l.thinking?.tokens ?? 0) + 1 } }))),
       on('text', ({ all }) => setLive((l) => stream(l, { text: all }))),
@@ -245,11 +237,14 @@ export function App({ opts, win }) {
       on('stats', (st) => setStats(st)),
       on('mode', (m) => setModeState(m)),
       on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); lastFold.current = { title: 'Summary', text: summary }; }),
-      on('turn-end', ({ reason }) => {
+      on('turn-end', ({ reason, secs }) => {
+        const past = S.current.live?.past ?? 'Worked';
         setLive(IDLE);
         setPerm(null);
         answerRef.current = null;
-        if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · tell Bonsai what to do instead', tone: 'warn' }); setPlaceholder('Tell Bonsai what to do instead'); }
+        if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Bonsai do instead?', tone: 'warn' }); setPlaceholder('Tell Bonsai what to do instead'); }
+        // A finished turn leaves its time behind, as in Claude Code: "✳ Worked for 41s · done 12:58 PM".
+        else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now() });
         if (reason === 'declined') setPlaceholder('Tell Bonsai what to do instead');
         saveNow();
         const q = queuedRef.current;
@@ -385,7 +380,7 @@ export function App({ opts, win }) {
     const busy = agent.busy;
     switch (cmd) {
       case 'help':
-        push({ type: 'panel', title: 'Commands', pad: 12, rows: [...COMMANDS.map((c) => [`/${c.name}`, c.desc]), ['Keys: shift+tab mode · ctrl+l layout · ctrl+o expand · esc stop · ctrl+c twice quit · \\+enter new line · @ file · ! shell']] });
+        push({ type: 'panel', title: 'Commands', pad: 12, rows: [...COMMANDS.map((c) => [`/${c.name}`, c.desc]), ['Keys: shift+tab mode · ctrl+o expand · esc interrupt · ctrl+c twice quit · \\+enter new line · @ file · ! shell']] });
         break;
       case 'clear':
         if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
@@ -398,9 +393,6 @@ export function App({ opts, win }) {
         setLive({ phase: 'working', turnStart: Date.now(), verb: 'Compacting', tokens: 0 });
         try { await agent.compact(undefined, { instructions: arg || undefined }); } catch (e) { push({ type: 'note', text: e.message, tone: 'error' }); }
         setLive(IDLE);
-        break;
-      case 'layout':
-        toggleLayout(arg.startsWith('l') ? 'live' : arg.startsWith('c') ? 'classic' : undefined);
         break;
       case 'effort':
       case 'think': { // /think is the old name, still accepted
@@ -465,7 +457,7 @@ export function App({ opts, win }) {
       default:
         push({ type: 'note', text: `Unknown command /${cmd}. Type /help for the list.`, tone: 'warn' });
     }
-  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, toggleLayout]);
+  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');
@@ -608,7 +600,6 @@ export function App({ opts, win }) {
       return;
     }
     if (key.tab && key.shift) { const m = MODES[(MODES.indexOf(cur.mode) + 1) % MODES.length]; setMode(m); return; }
-    if (key.ctrl && ch === 'l') { toggleLayout(); return; }
     if (key.ctrl && ch === 'o') {
       if (lastFold.current) push({ type: 'expand', title: lastFold.current.title, text: lastFold.current.text });
       else flash('Nothing to expand yet');
@@ -676,18 +667,18 @@ export function App({ opts, win }) {
     setInput((s) => editInput(s, ch, key));
   });
 
-  // Items added some other way (a resumed conversation, /clear) or a layout
-  // switch: measure after the frame, then draw once more with the space right.
+  // Items added some other way (a resumed conversation, /clear) or a resize:
+  // measure after the frame, then draw once more with the space right.
   useEffect(() => {
     let on = true;
     queueMicrotask(() => { try { if (on && primeRows(itemsRef.current, measure.current)) bumpRows((n) => n + 1); } catch {} });
     return () => { on = false; };
-  }, [items, width, layout]);
+  }, [items, width]);
   // What primeRows needs to measure items as they are printed.
-  measure.current = { width, layout, modelName: model.name, cwdShort: short(cwd) };
+  measure.current = { width, modelName: model.name, cwdShort: short(cwd) };
   itemsRef.current = items;
   const app = {
-    items, live, perm, picker, input, mode, layout, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd),
+    items, live, perm, picker, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd),
     modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,

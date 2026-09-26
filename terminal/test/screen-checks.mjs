@@ -16,7 +16,7 @@ export function checkScreen(lines, { cols, rows, anchored = false, scrollback = 
   const count = (re) => text.filter((l) => re.test(l)).length;
   add('one prompt box', count(/^│ [>!] /) <= 1, `${count(/^│ [>!] /)} seen`);
   add('one footer', count(/(for shortcuts|shell mode:)/) <= 1, `${count(/(for shortcuts|shell mode:)/)} seen`);
-  add('one spinner', count(/esc to stop\)/) <= 1, `${count(/esc to stop\)/)} seen`);
+  add('one spinner', count(/esc to interrupt\)/) <= 1, `${count(/esc to interrupt\)/)} seen`);
   // A border piece on its own line (─────╮ without its ╭, or a lone │) is a leftover.
   const frags = text.filter((l) => /^\s*─/.test(l) && BORDER.test(l) || /^\s+│\s*$/.test(l));
   add('box borders whole', !frags.length, frags.slice(0, 2).map((l) => l.trim().slice(0, 40)).join(' | '));

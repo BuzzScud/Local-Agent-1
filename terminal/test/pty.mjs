@@ -56,7 +56,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
           const tail = scr.trimEnd().split('\n').slice(-12).join('\n');
           if (/Do you want to|Use this test to decide|Rename \S+ to \S+: \d+ use/.test(tail)) { if (s.snapshotFirstAsk && !asked) { snapshots.asking = scr; terms.asking = await emulate(read(), cols, rows); } asked++; stdin.write('\r'); await new Promise((r) => setTimeout(r, 1500)); continue; }
           // Done when the prompt box is back and nothing is working (no spinner).
-          if (/\? for shortcuts/.test(tail) && !/esc to stop/.test(tail)) { idle++; if (idle >= 3) break; } else idle = 0;
+          if (/\? for shortcuts/.test(tail) && !/esc to (stop|interrupt)/.test(tail)) { idle++; if (idle >= 3) break; } else idle = 0;
           await new Promise((r) => setTimeout(r, 500));
         }
       }

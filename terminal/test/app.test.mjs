@@ -21,7 +21,7 @@ const quit = [{ sleep: 300 }, { key: 'ctrlC' }, { sleep: 200 }, { key: 'ctrlC' }
 test('classic: the whole task, answering each question by key', async () => {
   const { cwd, env, base } = setup();
   const fake = await startFakeServer(demoReplies);
-  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'classic', '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome to Bonsai Code' }, { type: 'add a --json flag to export.mjs' }, { key: 'enter' },
     { wait: 'Do you want to make this edit' }, { sleep: 200 }, { key: 'enter' },
     { wait: 'export.test.mjs?' }, { sleep: 200 }, { type: '2' },
@@ -30,7 +30,7 @@ test('classic: the whole task, answering each question by key', async () => {
   ] });
   await fake.close();
   for (const s of ['> add a --json flag to export.mjs', '∴ Thought for', '⏺ Read(export.mjs)', 'Read 19 lines', '⏺ Update Todos', '⏺ Update(export.mjs)', 'Updated export.mjs with 1 addition',
-    "14 +   if (argv.includes('--json'))", '⏺ Bash(node --test)', '✔ --json prints the rows as JSON', 'accept edits on', 'layout: Classic', 'Saved. Continue this conversation with: bonsai -c']) expect(r.text).toContain(s);
+    "14 +   if (argv.includes('--json'))", '⏺ Bash(node --test)', '✔ --json prints the rows as JSON', 'accept edits on', 'Saved. Continue this conversation with: bonsai -c']) expect(r.text).toContain(s);
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
   expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
 }, T);
@@ -43,7 +43,7 @@ test('Bonsai asks: answer by number, or type an answer on the prompt line', asyn
     { tool: { name: 'Ask', args: { question: 'What should the flag be called?' } } },
     { text: 'Named it --json.' },
   ]);
-  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'classic', '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome to Bonsai Code' }, { type: 'do the thing' }, { key: 'enter' },
     { wait: 'Which file should change?' }, { sleep: 200 }, { snapshot: 'asking' }, { type: '1' },
     { wait: 'OK, export.mjs it is.' }, { type: 'add the flag' }, { key: 'enter' },
@@ -57,30 +57,29 @@ test('Bonsai asks: answer by number, or type an answer on the prompt line', asyn
   for (const s of ['⏺ Ask(Which file should change?)', 'You: export.mjs', '> --json', 'You: --json', 'Named it --json.']) expect(r.text).toContain(s);
 }, T);
 
-test('ctrl+l switches to Live thinking and the choice is remembered', async () => {
-  const { cwd, env } = setup();
-  const fake = await startFakeServer([]);
-  const a = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [{ wait: 'layout: Classic' }, { key: 'ctrlL' }, { wait: 'layout: Live thinking' }, ...quit] });
-  expect(a.text).toContain('layout: Live thinking');
-  const b = await runInPty({ cwd, env, args: ['--url', fake.url], steps: [{ wait: 'Welcome to Bonsai Code' }, { sleep: 300 }, ...quit] });
-  await fake.close();
-  expect(b.text).toContain('layout: Live thinking');
-  expect(b.text).toContain('layout: Live thinking'); // remembered; the status bar itself is off by default
-}, T);
-
-test('live: thinking streams in a 4-line window with the meter line', async () => {
+test('working: "∴ Thinking…" above the spinner, which shows time and tokens; esc interrupts', async () => {
   const { cwd, env } = setup();
   const slow = [{ reasoning: 'I should read export.mjs first to see how main builds its output, then decide where the flag goes. '.repeat(3), text: 'Done.' }];
   const fake = await startFakeServer(slow, { delayMs: 60, chunk: 3 });
-  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--layout', 'live', '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' }, { type: 'hello' }, { key: 'enter' }, { wait: '∴ Thinking…' }, { sleep: 1500 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: 'hello' }, { key: 'enter' }, { wait: '∴ Thinking…' }, { sleep: 1200 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.thinking).toMatch(/┃ I should read export\.mjs/);
-  expect(r.snapshots.thinking).toMatch(/Bonsai 2 27B {2}[↑↓] [\d.…]+ tok\/s (writing|reading) {2}ctx ▰/); // under load the snapshot can land while it still reads
-  expect(r.snapshots.thinking).not.toMatch(/-\d+s/);
+  expect(r.snapshots.thinking).toMatch(/∴ Thinking…/);
+  expect(r.snapshots.thinking).toMatch(/[·✢✳✶✻✽] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · esc to interrupt\)/);
+  expect(r.snapshots.thinking).not.toMatch(/┃/); // no streaming window: one layout, like Claude Code
   expect(r.text).toContain('∴ Thought for'); // what it had thought so far is kept, folded
-  expect(r.text).toContain('Interrupted · tell Bonsai what to do instead');
+  expect(r.text).toContain('Interrupted · What should Bonsai do instead?');
+}, T);
+
+test('a finished turn leaves its time behind, like Claude Code: "✳ Worked for 2s · done 12:58 PM"', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([{ text: 'Hi there, how can I help you today with this project?' }], { delayMs: 40, chunk: 1 });
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' }, { type: 'hello' }, { key: 'enter' }, { wait: 'with this project?' }, { wait: '· done ' }, { sleep: 300 }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.text).toMatch(/✳ [A-Z][a-z]+ for \d+s · done \d{1,2}:\d\d [AP]M/);
 }, T);
 
 test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', async () => {
@@ -149,7 +148,7 @@ test('focused paths on screen: the plan, the try counter, the rename prompt and 
 test('/model: the model list and the effort in one picker; the choice is used and kept; /effort and --effort', async () => {
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
-  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows', '--layout', 'live'], steps: [
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' }, { type: '/model' }, { key: 'enter' },
     { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'picker' },
     { key: 'right' }, { wait: 'Medium: thinks briefly first' },
@@ -176,7 +175,7 @@ test('/model: the model list and the effort in one picker; the choice is used an
   expect(saved.effort).toBe('medium'); // …and /effort on would bring back Medium
   // --effort on the command line sets the level for this run
   const fake2 = await startFakeServer([{ text: 'Hello.' }]);
-  const r2 = await runInPty({ cwd, env, args: ['--url', fake2.url, '--no-flows', '--layout', 'live', '--effort', 'high'], steps: [
+  const r2 = await runInPty({ cwd, env, args: ['--url', fake2.url, '--no-flows', '--effort', 'high'], steps: [
     { wait: 'Welcome' }, { type: 'hi' }, { key: 'enter' }, { wait: 'Hello.' }, ...quit,
   ] });
   await fake2.close();
