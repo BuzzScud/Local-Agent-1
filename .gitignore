@@ -8,6 +8,9 @@ Bonsai Code.app/
 *.key
 .split-map.json
 
+# The pages' working folder, on this Mac only: `bun run docs` mirrors it into docs/
+bonsai-code DOCS/
+
 # Part 1 · terminal: capture and UI-walk outputs are scratch (one script rebuilds them)
 terminal/scripts/capture-*.json
 terminal/scripts/*.log

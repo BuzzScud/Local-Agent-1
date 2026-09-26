@@ -1,11 +1,13 @@
 // Every finished Bonsai Code page (report, preview, diagram, test page) is
-// also saved into the Desktop folder "bonsai-code DOCS", the one place they
-// are all kept; `bun run docs` then mirrors that folder into this repo's docs/.
+// also saved into the folder "bonsai-code DOCS" at the top of this repo (on
+// this Mac only, not in git), the one place they are all kept; `bun run docs`
+// then mirrors that folder into this repo's docs/.
 import { existsSync, copyFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 
-export const DOCS_DIR = process.env.BONSAI_DOCS ?? join(homedir(), 'Desktop', 'bonsai-code DOCS');
+export const DOCS_DIR = process.env.BONSAI_DOCS ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'bonsai-code DOCS');
 
 // Where a builder writes its page: straight into the DOCS folder (the pages'
 // one home). A missing folder stops with a clear message rather than recreating it.

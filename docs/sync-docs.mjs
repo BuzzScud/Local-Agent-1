@@ -1,4 +1,4 @@
-// Mirrors the Desktop folder "bonsai-code DOCS" (where every Bonsai Code
+// Mirrors the folder "bonsai-code DOCS" at the top of the repo (where every Bonsai Code
 // diagram, preview, report and test page is saved) into this repo's docs/,
 // and writes docs/README.md, an index GitHub shows.
 //   bun run docs              copy new and changed files, remove files gone from the Desktop folder
@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url)); // <repo>/docs
-const SRC = process.env.BONSAI_DOCS ?? join(homedir(), 'Desktop', 'bonsai-code DOCS');
+const SRC = process.env.BONSAI_DOCS ?? join(here, '..', 'bonsai-code DOCS');
 const KEEP = new Set(['README.md', 'sync-docs.mjs', 'to-docs.mjs']); // this folder's own files
 const SKIP = /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/;
 const dry = process.argv.includes('--dry');
@@ -71,7 +71,7 @@ const rows = src
 const readme = `# Bonsai Code docs
 
 Every diagram, preview, report and test page about Bonsai Code, newest first. This
-folder mirrors \`~/Desktop/bonsai-code DOCS\` on the Mac: pages are saved there, and
+folder mirrors \`bonsai-code DOCS/\` at the top of the repo on the Mac: pages are saved there, and
 \`bun run docs\` copies them here before a commit. The pages are single HTML files
 with nothing loaded from outside; download one and open it in a browser to see it
 (GitHub shows HTML as source).

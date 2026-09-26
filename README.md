@@ -41,7 +41,7 @@ bonsai-code/
 │  ├─ bonsai-2-27b/     the model: settings and README (results/ stays local)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), reports, tools, dev
 │  └─ test/             unit tests of the models part
-└─ docs/                every diagram, preview and report page, the one home (mirrors ~/Desktop/bonsai-code DOCS)
+└─ docs/                every diagram, preview and report page, the one home (mirrors bonsai-code DOCS/, which is on the Mac only)
 ```
 
 ## Commands
@@ -55,7 +55,7 @@ bun run eval               # the 28 practice tasks against the real model (model
 bun run eval:words         # the 28 real requests
 bun run eval:verify        # prove every practice task's check can fail and pass
 bun run install-cli        # build one file and put it at ~/.local/bin/bonsai
-bun run docs               # mirror ~/Desktop/bonsai-code DOCS into docs/ (run before a commit)
+bun run docs               # mirror bonsai-code DOCS/ into docs/ (run before a commit)
 ```
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.

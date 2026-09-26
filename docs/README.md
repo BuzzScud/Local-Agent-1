@@ -1,13 +1,16 @@
 # Bonsai Code docs
 
 Every diagram, preview, report and test page about Bonsai Code, newest first. This
-folder mirrors `~/Desktop/bonsai-code DOCS` on the Mac: pages are saved there, and
+folder mirrors `bonsai-code DOCS/` at the top of the repo on the Mac: pages are saved there, and
 `bun run docs` copies them here before a commit. The pages are single HTML files
 with nothing loaded from outside; download one and open it in a browser to see it
 (GitHub shows HTML as source).
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [bonsai-terminal-2-designs-2026-09-25.html](bonsai-terminal-2-designs-2026-09-25.html) | page | Bonsai terminal: 2 designs | 56 KB | 2026-09-26 |
+| [bonsai-chart-bug-round-2-2026-09-25.html](bonsai-chart-bug-round-2-2026-09-25.html) | page | Bonsai vs the chart bug, round 2 | 178 KB | 2026-09-26 |
+| [bonsai-chart-bug-test-2026-09-25.html](bonsai-chart-bug-test-2026-09-25.html) | page | Bonsai vs the chart bug | 156 KB | 2026-09-25 |
 | [bonsai-2-27b-inside-2026-09-25.html](bonsai-2-27b-inside-2026-09-25.html) | page | Inside Bonsai 2 27B | 23 KB | 2026-09-25 |
 | [bonsai-faster-2026-09-25.html](bonsai-faster-2026-09-25.html) | page | Bonsai faster: before and after | 43 KB | 2026-09-25 |
 | [bonsai-code-structure-v4.html](bonsai-code-structure-v4.html) | page | Bonsai Code structure v4 | 31 KB | 2026-09-25 |
