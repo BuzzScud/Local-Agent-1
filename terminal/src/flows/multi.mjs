@@ -13,6 +13,7 @@ import { tryUntilPass } from './tries.mjs';
 import { complete, fence } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM } from './testfirst.mjs';
+import { rescueTests } from './rescue.mjs';
 import { testPlan } from './change.mjs';
 import { applyChange } from './apply.mjs';
 import { diffLines } from '../tools/edit.mjs';
@@ -155,7 +156,7 @@ export async function multiFlow(ctx, task, targets) {
     scratch.write(tp.rel, testText);
     const failRun = await scratch.run(tp.cmd, { signal: ctx.signal });
     const digest = failureDigest(failRun.out);
-    const result = chosen.passing.length ? { ok: true, texts: chosen.passing[0].texts, marks: ['✓'] } : await tryUntilPass(ctx, {
+    let result = chosen.passing.length ? { ok: true, texts: chosen.passing[0].texts, marks: ['✓'] } : await tryUntilPass(ctx, {
       label: 'Trying changes', max: ctx.maxTries, system: CODE_SYSTEM, maxTokens: 3000, raw: true,
       prompt: ({ last }) => `Task: ${task}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${shownAll}${dataBlock}\n\nChange the source files so that every test passes (do not change the tests). ${BLOCKS_FORMAT}${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n${last.code.slice(0, 2500)}\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
       apply: (reply) => { const a = fromBlocks(reply); if (a.error) return a; writeTexts(a.texts); return { ...a, undo: () => restoreTexts(a.texts) }; },
@@ -166,26 +167,37 @@ export async function multiFlow(ctx, task, targets) {
         return { ok, score: rs.reduce((s, r) => s + (r.passed ?? 0), 0), why: failing.length ? `still failing: ${failing.slice(0, 3).join('; ')}` : 'the tests still fail', detail: '', summary: `passes ${tp.throwaway ? 'the check' : 'every test'}` };
       },
     });
+    // Often the existing tests are what fail (a new field changes an expected
+    // value). When the best try passes its new test and only old tests fail,
+    // one rescue round may update those stale tests — each edit still asks you.
+    let rescue = null;
+    if (!result.ok && result.best?.code && !tp.throwaway && testCmd && !ctx.signal?.aborted) {
+      let bestApplied = null;
+      rescue = await rescueTests(ctx, { scratch, task, tp, testText, testOriginal, files,
+        cmds: [...new Set([tp.cmd, testCmd].filter(Boolean))],
+        applyBest: () => { const a = fromBlocks(result.best.code); if (a.error) return null; bestApplied = a; writeTexts(a.texts); return () => restoreTexts(a.texts); } });
+      if (rescue.ok) result = { ok: true, texts: bestApplied.texts, marks: result.marks };
+    }
     if (!result.ok) {
-      // Often the existing tests are what fail (a new field changes an expected
-      // value); the step-by-step way may update them, with your OK on each edit.
       return { handled: false, tried: true, why: `none of the ${result.marks.length} tries passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
     }
 
-    // 4. Apply: every changed file (asks, as usual) and the approved test.
+    // 4. Apply: every changed file (asks, as usual), the approved test, and
+    // any rescued test files (each asks too).
     plan.step(4);
-    const texts = result.applied?.texts ?? result.texts;
+    const texts = new Map(result.applied?.texts ?? result.texts);
+    if (rescue?.ok) for (const [rel, text] of rescue.texts) texts.set(rel, text);
     const changes = [...texts].map(([rel, after]) => ({ rel, before: existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null, after })).filter((c) => c.before !== c.after);
     const applied = await applyChange(ctx, changes);
     if (!applied.ok) return { handled: true, done: false, declined: true, summary: 'You said no to the change; nothing was changed.' };
-    if (!tp.throwaway) {
+    if (!tp.throwaway && !rescue?.texts?.has(tp.rel)) {
       mkdirSync(dirname(join(cwd, tp.rel)), { recursive: true });
       writeFileSync(join(cwd, tp.rel), testText);
     }
     const final = testCmd ? await ctx.runReal(testCmd) : { ok: true };
     plan.done();
     const names = changes.map((c) => c.rel).join(', ');
-    return { handled: true, done: final.ok, summary: `${ctx.describe && changes.length ? await ctx.describe(changes[0].rel, changes[0].before ?? '', changes[0].after) : ''}Changed ${names}${tp.throwaway ? ' (checked with a throwaway test, not added to your project)' : ` and added a test to ${tp.rel}`}${testCmd ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above') : ''}.` };
+    return { handled: true, done: final.ok, summary: `${ctx.describe && changes.length ? await ctx.describe(changes[0].rel, changes[0].before ?? '', changes[0].after) : ''}Changed ${names}${tp.throwaway ? ' (checked with a throwaway test, not added to your project)' : ` and added a test to ${tp.rel}`}${rescue?.ok ? `; updated stale expected values in ${[...rescue.texts.keys()].join(', ')} (approved)` : ''}${testCmd ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above') : ''}.` };
   } finally {
     scratch.dispose();
   }

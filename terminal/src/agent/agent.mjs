@@ -403,6 +403,8 @@ export class Agent extends EventEmitter {
     let cuts = 0; // replies cut off at the reply limit mid-tool-call
     let toolsUsed = 0; // tool calls run for this message: a nudge is only for work already under way
     this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false,
+      // The request's words steer which lines of a long file a Read shows first.
+      request: typeof request?.content === 'string' ? request.content : '',
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
       fixing: kind === 'fix', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
@@ -755,7 +757,7 @@ export class Agent extends EventEmitter {
     }
     const args = parsed.args;
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, request: this.turn?.request ?? '', setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -845,11 +847,16 @@ export class Agent extends EventEmitter {
     const request = [...this.messages].reverse().find((m) => m.role === 'user' && !/^\[|^Not done yet|^Go ahead|^The tests fail|^You created|^Reply to the user|^You ran out/.test(m.content))?.content ?? '';
     if (!request.trim() || !this.turn.diffs.trim()) return null;
     try {
-      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 120,
+      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 220,
         system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
-        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Bonsai shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nIs every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
-        schema: { type: 'object', properties: { done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['done', 'missing'] } });
-      if (!r.json || r.json.done || !r.json.missing?.trim()) return null;
+        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Bonsai shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
+        schema: { type: 'object', properties: { parts: { type: 'array', items: { type: 'object', properties: { part: { type: 'string' }, done: { type: 'boolean' } }, required: ['part', 'done'] }, maxItems: 6 }, done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['parts', 'done', 'missing'] } });
+      if (!r.json) return null;
+      // Parts first: a request with several asks fails on the ones not done
+      // (task 28's class: "the fallback missed a part").
+      const undone = (r.json.parts ?? []).filter((p) => p && p.done === false && typeof p.part === 'string' && p.part.trim()).map((p) => p.part.trim());
+      if (undone.length) return undone.join('; ').slice(0, 200);
+      if (r.json.done || !r.json.missing?.trim()) return null;
       return r.json.missing.trim().slice(0, 200);
     } catch { return null; }
   }

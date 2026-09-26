@@ -12,6 +12,7 @@ import { tryUntilPass } from './tries.mjs';
 import { complete, fence } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM, stem } from './testfirst.mjs';
+import { rescueTests } from './rescue.mjs';
 import { applyChange } from './apply.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { syntaxError } from '../agent/tools.mjs';
@@ -167,7 +168,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     scratch.write(tp.rel, testText);
     const failRun = await scratch.run(tp.cmd, { signal: ctx.signal });
     const digest = failureDigest(failRun.out);
-    const result = chosen.passing.length ? { ok: true, code: chosen.passing[0].code, marks: ['✓'] } : await tryUntilPass(ctx, {
+    let result = chosen.passing.length ? { ok: true, code: chosen.passing[0].code, marks: ['✓'] } : await tryUntilPass(ctx, {
       label: 'Trying changes', max: ctx.maxTries, system: CODE_SYSTEM,
       prompt: ({ last }) => `Task: ${task}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nChange ${target} so that every test passes (do not change the tests). Reply with ${want}.${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n\`\`\`\n${last.code.slice(0, 2500)}\n\`\`\`\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
       apply: (code) => {
@@ -188,27 +189,38 @@ export async function changeFlow(ctx, task, { hint } = {}) {
       // more than one place, which the step-by-step way can do.
       return { handled: false, why: `none of the ${result.marks.length} tries that ${unit.isNew ? 'only added a new function' : `changed only ${unit.name}`} passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
     }
+    // Often the existing tests are what fail (a new field changes an expected
+    // value). When the best try passes its new test and only old tests fail,
+    // one rescue round may update those stale tests — each edit still asks you.
+    let rescue = null;
+    if (!result.ok && result.best?.code && !tp.throwaway && testCmd && !ctx.signal?.aborted) {
+      rescue = await rescueTests(ctx, { scratch, task, tp, testText, testOriginal, files,
+        cmds: [...new Set([tp.cmd, testCmd].filter(Boolean))],
+        applyBest: () => { scratch.write(tp.rel, testText); scratch.write(target, build(result.best.code)); return () => { scratch.restore(target); scratch.restore(tp.rel); }; } });
+      if (rescue.ok) result = { ok: true, code: result.best.code, marks: result.marks };
+    }
     if (!result.ok) {
-      // Often the existing tests are what fail (a new field changes an expected
-      // value); the step-by-step way may update them, with your OK on each edit.
       return { handled: false, why: `none of the ${result.marks.length} tries passed the test${result.best?.why ? ` (the closest: ${result.best.why})` : ''}` };
     }
 
-    // 4. Apply: the source change (asks, as usual) and the approved test.
+    // 4. Apply: the source change (asks, as usual), the approved test, and
+    // any rescued test files (each asks too).
     plan.step(4);
     const after = build(result.code);
     const changes = [{ rel: target, before: original, after }];
+    if (rescue?.ok) for (const [rel, text] of rescue.texts) changes.push({ rel, before: existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf8') : null, after: text });
     const applied = await applyChange(ctx, changes);
     if (!applied.ok) return { handled: true, done: false, declined: true, summary: 'You said no to the change; nothing was changed.' };
-    if (!tp.throwaway) {
-      // Already approved as the test; written without asking again.
+    if (!tp.throwaway && !rescue?.texts?.has(tp.rel)) {
+      // Already approved as the test; written without asking again. (A rescued
+      // tp.rel was already written by applyChange, with your OK on the diff.)
       const { writeFileSync, mkdirSync } = await import('node:fs');
       mkdirSync(dirname(join(cwd, tp.rel)), { recursive: true });
       writeFileSync(join(cwd, tp.rel), testText);
     }
     const final = testCmd ? await ctx.runReal(testCmd) : { ok: true };
     plan.done();
-    return { handled: true, done: final.ok, summary: `${ctx.describe ? await ctx.describe(target, original, after) : ''}Changed ${target}${tp.throwaway ? ' (checked with a throwaway test, not added to your project)' : ` and added a test to ${tp.rel}`}${testCmd ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above') : ''}.` };
+    return { handled: true, done: final.ok, summary: `${ctx.describe ? await ctx.describe(target, original, after) : ''}Changed ${target}${tp.throwaway ? ' (checked with a throwaway test, not added to your project)' : ` and added a test to ${tp.rel}`}${rescue?.ok ? `; updated stale expected values in ${[...rescue.texts.keys()].join(', ')} (approved)` : ''}${testCmd ? (final.ok ? `; all ${final.total ?? ''} tests pass`.replace('  ', ' ') : '; but the tests fail in your project, see above') : ''}.` };
   } finally {
     scratch.dispose();
   }

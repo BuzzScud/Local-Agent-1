@@ -406,7 +406,20 @@ export async function execute(name, args, prepared, env) {
       const whole = total <= WHOLE_MAX;
       if (!whole && args.offset === undefined && args.limit === undefined && !full.includes('\u0000')) {
         const o = outlineText(full, args.path);
-        return { text: `${note}${o}`, view: { kind: 'read', outline: true, parts: o.split('\n').length - 2, lines: 0, total, content: o } };
+        // Lines matching the request's words go with the outline, so the model
+        // reads the right part first instead of walking the file. (On a real
+        // repo it once re-read one stylesheet four times hunting for a rule.)
+        let hits = '';
+        if (env.request) {
+          // Imported at call time: localize/excerpts import from this file.
+          const [{ taskWords }, { excerpts }] = await Promise.all([import('../flows/localize.mjs'), import('../flows/excerpts.mjs')]);
+          // File-extension words from paths in the request ("server.mjs")
+          // would match every import line.
+          const terms = taskWords(env.request, 12).filter((t) => !/^(m?[jt]sx?|cjs|py|css|s?html?|file|line|lines)$/.test(t)).slice(0, 10);
+          const ex = terms.length ? excerpts(env.cwd, [p.rel], terms, { around: 2, maxLines: 24 }) : { hits: 0 };
+          if (ex.hits) hits = `\n\nLines matching the request (pass offset and limit to read around them):\n${ex.text}`;
+        }
+        return { text: `${note}${o}${hits}`, view: { kind: 'read', outline: true, parts: o.split('\n').length - 2, lines: 0, total, content: `${o}${hits}` } };
       }
       const limit = whole ? WHOLE_MAX : Math.min(Math.max(args.limit ?? PART_DEFAULT, 20), PART_MAX);
       const r = readFile(p.abs, { offset: whole ? 1 : args.offset ?? 1, limit });
