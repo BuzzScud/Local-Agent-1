@@ -318,6 +318,50 @@ test('bonsai -p: a question with choices is an arrow menu, "Type an answer" take
   for (const a of ['trades.json', 'indented by 4', '--json']) expect(sent).toContain(a);
 }, T);
 
+test('/weights starts the viewer inside the window: the note names the page, and it serves the model while the app runs', async () => {
+  const { cwd, env, base } = setup();
+  mkdirSync(join(base, 'home', 'models'), { recursive: true });
+  writeFileSync(join(base, 'home', 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in'); // 8 bytes
+  const fake = await startFakeServer([]);
+  let served = null;
+  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: '/wei' }, { sleep: 250 }, { snapshot: 'menu' }, { key: 'enter' },
+    { wait: 'opened in the browser at http://127.0.0.1:' },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.menu).toContain('/weights');
+  expect(r.text).toContain('Weights of Ternary-Bonsai-2-27B-PQ2_0.gguf (0.00 GB) opened in the browser at http://127.0.0.1:');
+  expect(served.facts).toEqual({ name: 'Ternary-Bonsai-2-27B-PQ2_0.gguf', size: 8 });
+  expect(served.page).toContain('<title>Bonsai Weights</title>');
+  expect(served.hub).toContain('<title>Bonsai Hub</title>');
+  expect(served.bytes).toBe('stand');
+}, T);
+
+test('/docs opens the hub on the harness page and says how many pages the DOCS folder holds', async () => {
+  const { cwd, env, base } = setup();
+  mkdirSync(join(base, 'home', 'models'), { recursive: true });
+  writeFileSync(join(base, 'home', 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
+  const docs = join(base, 'bonsai-code DOCS'); mkdirSync(docs);
+  writeFileSync(join(docs, 'bonsai-harness-flow-v2.html'), '<!doctype html><title>Bonsai harness v2</title><p>flow');
+  writeFileSync(join(docs, 'bonsai-code-structure-v4.html'), '<!doctype html><title>Bonsai Code structure v4</title><p>tree');
+  const fake = await startFakeServer([]);
+  let served = null;
+  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1', BONSAI_DOCS: docs }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: '/docs' }, { key: 'enter' },
+    { wait: 'Docs opened in the browser at http://127.0.0.1:' },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { list: await (await fetch(url + 'docs.json')).json(), page: await (await fetch(url + 'docs/bonsai-harness-flow-v2.html')).text(), hub: await (await fetch(url + '?tab=harness')).text() }; } },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.text).toContain('?tab=harness · 2 pages from');
+  expect(r.text).toContain('harness: Bonsai harness v2 · structure: Bonsai Code structure v4');
+  expect(served.list.pinned.harness.file).toBe('bonsai-harness-flow-v2.html');
+  expect(served.page).toContain('flow');
+  expect(served.hub).toContain('<title>Bonsai Hub</title>');
+}, T);
+
 test('typing "exit" as a plain message quits, like /exit', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);

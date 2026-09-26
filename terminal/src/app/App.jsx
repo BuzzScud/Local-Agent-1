@@ -18,6 +18,7 @@ import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, mentionAt } from './edit-input.mjs';
 import { COMMANDS, matchCommands } from './commands.mjs';
+import { startWeightsServer, listDocs } from './weights.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
@@ -311,8 +312,10 @@ export function App({ opts, win }) {
       const q = queuedRef.current;
       if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
     })();
-    return () => { alive = false; serverRef.current?.stop({ keep: true }); };
+    return () => { alive = false; serverRef.current?.stop({ keep: true }); weightsRef.current?.stop(); weightsRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // /weights: the viewer's little server, started once per window and closed with it.
+  const weightsRef = useRef(null);
 
   // Continue or resume a saved session given on the command line.
   useEffect(() => {
@@ -459,6 +462,23 @@ export function App({ opts, win }) {
       case 'doctor':
         doctor();
         break;
+      case 'weights':
+      case 'docs': {
+        // The hub in the browser: the same server as `bonsai weights` / `bonsai docs`,
+        // inside this window. /weights opens it on the model's weights, /docs on
+        // the harness diagram with structure and every page one tab away.
+        const path = modelPath(model);
+        if (!existsSync(path)) { push({ type: 'note', text: `The model file is not here yet (${path}). Run bonsai setup first.`, tone: 'warn' }); break; }
+        try { weightsRef.current ??= startWeightsServer({ path }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); break; }
+        const w = weightsRef.current;
+        const url = `${w.url}?tab=${cmd === 'docs' ? 'harness' : 'weights'}`;
+        if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+        if (cmd === 'docs') {
+          const d = listDocs(w.docsDir);
+          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (bonsai-code DOCS at the top of the repo; set BONSAI_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
+        } else push({ type: 'note', text: `Weights of ${w.name} (${(w.size / 1e9).toFixed(2)} GB) opened in the browser at ${url} · it stays up while this window is open`, tone: 'dim' });
+        break;
+      }
       case 'meters': {
         const on = arg ? /^(on|show|yes)$/i.test(arg) : !meters;
         setMeters(on);

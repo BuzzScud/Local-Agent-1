@@ -5,7 +5,7 @@ import { render } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS, modelPath } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
@@ -72,6 +72,8 @@ Usage
   bonsai -c                 continue the last conversation in this folder
   bonsai setup              download the model and runtime (if missing) and check them
   bonsai stop               free the model's memory now (it stays loaded ${LINGER_SECS / 60} min after you quit)
+  bonsai weights            the hub in the browser, on the model's weights (ctrl+c here closes it)
+  bonsai docs               the hub on the harness and structure diagrams and every Bonsai page
 
 Options
   --effort low|medium|high  how much the model thinks before it acts (default: low = answers straight away)
@@ -118,6 +120,18 @@ if (process.argv[2] === 'stop') {
   if (r.inUse.length) process.stdout.write(`Still in use by an open Bonsai window: ${r.inUse.map(gb).join(', ')}. Quit that window first.\n`);
   if (!r.stopped.length && !r.inUse.length) process.stdout.write('No model is loaded.\n');
   process.exit(0);
+}
+if (process.argv[2] === 'weights' || process.argv[2] === 'docs') {
+  const { existsSync } = await import('node:fs');
+  const path = modelPath(MODELS[DEFAULT_MODEL]);
+  if (!existsSync(path)) { process.stderr.write(`bonsai weights: the model file is not here yet (${path}). Run bonsai setup first.\n`); process.exit(1); }
+  const { startWeightsServer } = await import('./app/weights.mjs');
+  const s = startWeightsServer({ path });
+  const url = `${s.url}?tab=${process.argv[2] === 'docs' ? 'harness' : 'weights'}`;
+  process.stdout.write(`Bonsai hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
+  if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+  process.on('SIGINT', () => { s.stop(); process.exit(0); });
+  await new Promise(() => {});
 }
 if (process.argv[2] === 'setup') {
   try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\nbonsai setup: ${e.message}\n`); process.exit(1); }

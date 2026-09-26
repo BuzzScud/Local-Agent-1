@@ -36,4 +36,4 @@ if [ "${BONSAI_NO_UPDATE:-0}" != 1 ] && [ -f "$REPO/terminal/src/cli.jsx" ] && [
     fi
   fi
 fi
-exec "$APP" "$@"
+BONSAI_REPO="$REPO" exec "$APP" "$@"  # the app learns where the repo (and its DOCS folder) is

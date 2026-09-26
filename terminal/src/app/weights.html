@@ -1,0 +1,1078 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai Weights</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f;
+  --neg: #2a78d6; --pos: #e34948; --zero: #f0efec;
+  --seq1: #cde2fb; --seq7: #0d366b;
+  --accent: #2a78d6; --accent-ink: #ffffff;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f;
+    --ink: #ffffff; --ink2: #c3c2b7; --ink3: #8f8e86;
+    --neg: #3987e5; --pos: #e66767; --zero: #383835;
+    --seq1: #184f95; --seq7: #cde2fb;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f;
+  --ink: #ffffff; --ink2: #c3c2b7; --ink3: #8f8e86;
+  --neg: #3987e5; --pos: #e66767; --zero: #383835;
+  --seq1: #184f95; --seq7: #cde2fb;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; min-height: 100vh; }
+header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .01em; }
+header .sub { color: var(--ink2); font-size: 13px; }
+header .spacer { flex: 1; }
+body.embedded header { display: none; }
+button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--ink3); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+button:disabled { opacity: .5; cursor: default; }
+input, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+.layout { display: flex; flex: 1; min-height: 0; }
+aside { width: 300px; flex: none; border-right: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; min-height: 0; }
+aside .model { padding: 10px 12px 8px; font-size: 12px; color: var(--ink2); border-bottom: 1px solid var(--line); }
+aside .model b { color: var(--ink); font-weight: 600; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+aside .tools { padding: 10px 12px; display: flex; gap: 8px; border-bottom: 1px solid var(--line); }
+aside .tools input { flex: 1; }
+#list { overflow: auto; flex: 1; padding: 6px 0; }
+#list .row { padding: 5px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 12px; }
+#list .row:hover { background: var(--panel); }
+#list .row.on { background: var(--accent); color: var(--accent-ink); }
+#list .row .shape { color: var(--ink3); white-space: nowrap; }
+#list .row.on .shape { color: var(--accent-ink); opacity: .85; }
+#list .grp { padding: 10px 12px 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); }
+main { flex: 1; min-width: 0; padding: 12px 16px 16px; overflow: auto; }
+#empty { max-width: 560px; margin: 60px auto; text-align: center; color: var(--ink2); }
+#empty h2 { color: var(--ink); font-weight: 600; font-size: 20px; margin: 0 0 8px; }
+#empty p { margin: 8px 0; }
+#empty .hint { font-size: 12px; color: var(--ink3); }
+nav.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 10px; flex-wrap: wrap; align-items: flex-end; }
+nav.tabs button { border: none; background: none; border-radius: 8px 8px 0 0; padding: 8px 12px; color: var(--ink2); }
+nav.tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+nav.tabs .sep { width: 1px; height: 18px; background: var(--line); margin: 0 8px 9px; }
+nav.tabs .cap { font-size: 11px; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; padding: 0 4px 10px; }
+#tname { font-family: var(--mono); font-size: 15px; margin: 0 0 2px; font-weight: 600; word-break: break-all; }
+#tmeta { color: var(--ink2); font-size: 13px; margin-bottom: 12px; min-height: 19px; }
+.tab { display: none; } .tab.on { display: block; }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; color: var(--ink2); font-size: 13px; }
+.bar .grow { flex: 1; }
+#tab-picture .bar { flex-wrap: nowrap; } #tab-picture .bar .legend { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; min-width: 0; }
+@media (max-width: 1100px) { #tab-picture .bar { flex-wrap: wrap; } }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; background: var(--surface); padding: 5px 11px; color: var(--ink2); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.seg button:disabled { opacity: 1; color: var(--ink3); }
+.pic { display: flex; gap: 14px; align-items: flex-start; }
+.pic .left { flex: none; width: 260px; display: flex; flex-direction: column; gap: 8px; }
+.pic .right { flex: 1; min-width: 0; }
+canvas { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; image-rendering: pixelated; }
+#zoom { width: 100%; height: 520px; cursor: grab; }
+#zoom.dragging { cursor: grabbing; }
+#overview { width: 260px; cursor: crosshair; }
+.readout { font-family: var(--mono); font-size: 12px; color: var(--ink2); min-height: 20px; margin-top: 8px; white-space: pre-wrap; }
+.legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink2); flex-wrap: wrap; }
+.legend .sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; vertical-align: -3px; margin-right: 3px; }
+.legend .ramp { width: 110px; height: 12px; border-radius: 3px; border: 1px solid var(--line); background: linear-gradient(90deg, var(--seq1), var(--seq7)); flex: none; }
+.legend .div { width: 110px; height: 12px; border-radius: 3px; border: 1px solid var(--line); background: linear-gradient(90deg, var(--neg), var(--zero), var(--pos)); flex: none; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.card h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.card .note { color: var(--ink3); font-size: 12px; }
+#block { margin-top: 10px; }
+#blockgrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; font-family: var(--mono); font-size: 11px; margin-top: 8px; }
+#blockgrid span { text-align: center; padding: 3px 0; border-radius: 3px; background: var(--zero); color: var(--ink2); }
+#blockgrid span.n { background: var(--neg); color: #fff; } #blockgrid span.p { background: var(--pos); color: #fff; }
+#scales { width: 100%; height: 520px; cursor: crosshair; }
+.chart { width: 100%; height: 220px; cursor: crosshair; }
+.charts { display: flex; flex-direction: column; gap: 14px; }
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--page); font: 12px/1.4 var(--mono); padding: 6px 8px; border-radius: 6px; z-index: 10; display: none; white-space: pre; }
+#layersby { font-size: 12px; padding: 3px 6px; border-radius: 6px; }
+#tab-layers .grid { display: grid; grid-template-columns: 52px repeat(10, 1fr); gap: 2px; font-size: 11px; font-family: var(--mono); }
+#tab-layers .grid .h { color: var(--ink2); text-align: center; padding: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tab-layers .grid .l { color: var(--ink2); text-align: right; padding: 0 6px; line-height: 16px; white-space: nowrap; }
+#tab-layers .grid .l.full { color: var(--ink); font-weight: 600; }
+#tab-layers .kind { font-size: 12px; color: var(--ink3); margin: 6px 0 10px; }
+#tab-layers .grid .c { height: 16px; border-radius: 3px; cursor: pointer; background: var(--panel); }
+#tab-layers .grid .c.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+progress { width: 200px; accent-color: var(--accent); }
+#chmat { font-size: 12px; padding: 3px 6px; border-radius: 6px; }
+#chmap { width: 100%; height: 478px; cursor: crosshair; }
+.chbottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 14px; margin-top: 12px; align-items: start; }
+#chlist .it { display: grid; grid-template-columns: 104px 1fr auto; gap: 10px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; align-items: baseline; }
+#chlist .it:hover { background: var(--panel); }
+#chlist .it.on { background: var(--accent); color: var(--accent-ink); }
+#chlist .it .n { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+#chlist .it .w, #chlist .it .p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#chlist .it .w { color: var(--ink2); } #chlist .it.on .w { color: var(--accent-ink); }
+#chlist .it .p { font-family: var(--mono); color: var(--ink3); } #chlist .it.on .p { color: var(--accent-ink); }
+#chline { height: 200px; }
+.words { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 14px; align-items: start; }
+#wq, #wq2 { width: 100%; max-width: 420px; }
+#wlist .it { display: flex; justify-content: space-between; gap: 10px; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#wlist .it:hover { background: var(--panel); }
+#wlist .wgrp { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin: 10px 8px 4px; }
+#wlist .it .id { white-space: nowrap; }
+#wlist .it.on { background: var(--accent); color: var(--accent-ink); }
+#wlist .it .id { font-family: var(--mono); font-size: 12px; color: var(--ink3); } #wlist .it.on .id { color: var(--accent-ink); }
+.tok { font-family: var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; white-space: pre; }
+#wlist .it.on .tok { background: transparent; border-color: var(--accent-ink); }
+.strip { width: 100%; height: 34px; cursor: crosshair; margin: 4px 0 2px; }
+.striphead { font-size: 12px; color: var(--ink2); margin-top: 12px; }
+.alike { font-size: 13px; margin-top: 8px; }
+.alike b { font-family: var(--mono); }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; font-size: 13px; }
+.kv dt { color: var(--ink2); } .kv dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.steps { margin: 4px 0 0; padding-left: 20px; color: var(--ink2); font-size: 13px; }
+.steps li { margin: 3px 0; }
+.small { font-size: 12px; color: var(--ink3); }
+@media (max-width: 860px) {
+  .layout { flex-direction: column; }
+  aside { width: auto; max-height: 40vh; border-right: none; border-bottom: 1px solid var(--line); }
+  .pic { flex-direction: column; } .pic .left { width: 100%; } #overview { width: 100%; }
+  #zoom { height: 360px; }
+  #tab-layers .grid { grid-template-columns: 40px repeat(10, 1fr); }
+  .chbottom, .words { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bonsai weights</h1>
+  <span class="sub">The weights of the model Bonsai Code runs, read straight from the file on this Mac.</span>
+  <span class="spacer"></span>
+  <span class="sub" id="fileinfo"></span>
+  <button class="primary" id="pick">Open the model file…</button>
+  <input type="file" id="file" accept=".gguf" hidden>
+</header>
+<div class="layout">
+  <aside>
+    <div class="model" id="modelbox"><b id="modelname">No model yet</b><span id="modelinfo"></span></div>
+    <div class="tools">
+      <select id="layer" title="Layer"></select>
+      <input id="filter" placeholder="find a tensor" autocomplete="off">
+    </div>
+    <div id="list"></div>
+  </aside>
+  <main>
+    <div id="empty">
+      <h2>Pick the model file</h2>
+      <p>Choose <code>Ternary-Bonsai-2-27B-PQ2_0.gguf</code> from <code>~/.bonsai-code/models</code>. The page reads only the bytes it needs, so the 7 GB file is never copied or loaded whole.</p>
+      <p class="hint">Nothing leaves this Mac. The file is read in place with the browser's file reader. To skip the picking, type <code>/weights</code> in Bonsai or run <code>bonsai weights</code>: it opens this page with the model already loaded.</p>
+    </div>
+    <section id="view" hidden>
+      <nav class="tabs">
+        <button data-tab="picture" class="on">Picture</button>
+        <button data-tab="scales">Scales</button>
+        <button data-tab="profiles">Profiles</button>
+        <span class="sep"></span><span class="cap">whole model</span>
+        <button data-tab="layers">Layers</button>
+        <button data-tab="channels">Channels</button>
+        <button data-tab="words">Words</button>
+        <button data-tab="about">About the file</button>
+      </nav>
+      <h2 id="tname"></h2>
+      <div id="tmeta"></div>
+
+      <div class="tab on" id="tab-picture">
+        <div class="bar">
+          <span class="legend" id="piclegend"></span>
+          <span class="grow"></span>
+          <span class="seg" id="modeseg" title="Real: the stored mix-up undone, so each square is an actual weight. Stored: exactly the −1 / 0 / +1 digits in the file."><button data-mode="real">Real weights</button><button data-mode="stored">Stored digits</button></span>
+          <button id="zout" title="Zoom out">−</button><span id="zlabel">4 px</span><button id="zin" title="Zoom in">+</button>
+          <button id="home" title="Back to the top left">Top left</button>
+        </div>
+        <div class="pic">
+          <div class="left">
+            <canvas id="overview" width="260" height="200"></canvas>
+            <div class="legend"><span class="ramp"></span><span id="ovlegend"></span></div>
+            <div class="small" id="ovnote"></div>
+            <div class="card" id="block" hidden>
+              <h3>One stored block of 128 weights</h3>
+              <div class="small" id="blockmeta"></div>
+              <div id="blockgrid"></div>
+            </div>
+          </div>
+          <div class="right">
+            <canvas id="zoom" width="800" height="520"></canvas>
+            <div class="readout" id="readout">Move over the picture to read a weight; click one to see the stored block it comes from. Drag or scroll to move, ⌘/ctrl+scroll or the buttons to zoom.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-scales">
+        <div class="bar">
+          <span class="legend"><span class="ramp"></span><span id="scalelegend">block scale, low → high</span></span>
+          <span class="grow"></span><span class="small" id="scalenote"></span>
+        </div>
+        <canvas id="scales" width="800" height="520"></canvas>
+        <div class="readout" id="scalereadout">Each square is one stored block of 128 weights along a row. The scale multiplies its −1 / +1 digits. Scales belong to the stored form, so they are the same in both views.</div>
+      </div>
+
+      <div class="tab" id="tab-profiles">
+        <div class="charts">
+          <div class="card"><h3 id="rowtitle">Per row</h3><canvas class="chart" id="rowchart" width="800" height="220"></canvas></div>
+          <div class="card"><h3 id="coltitle">Per column</h3><canvas class="chart" id="colchart" width="800" height="220"></canvas></div>
+          <div class="small" id="profnote"></div>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-layers">
+        <div class="bar">
+          <span id="layersnote">All 64 layers side by side, from the stored form. Sampled rows, about 30 MB read.</span>
+          <span class="grow"></span>
+          <label class="small">colour by <select id="layersby"><option value="zero">share of zeros</option><option value="smax">largest block scale</option><option value="smean">typical block scale</option><option value="bal">balance of −1 vs +1</option></select></label>
+          <progress id="layersprog" value="0" max="1" hidden></progress>
+          <button id="layersgo" class="primary">Read the layers</button>
+        </div>
+        <div class="legend" style="margin-bottom:8px"><span class="ramp"></span><span id="layerslegend">share of zeros</span></div>
+        <div class="kind" id="layerskind"></div>
+        <div class="grid" id="layersgrid"></div>
+      </div>
+
+      <div class="tab" id="tab-channels">
+        <div class="bar">
+          <span>Which of the model's input channels each layer leans on, from the real weights. A bright mark = that layer's matrix is unusually big on that channel.</span>
+          <span class="grow"></span>
+          <label class="small">matrix <select id="chmat"><option value="ffn_gate">ffn_gate</option><option value="ffn_up">ffn_up</option><option value="attn_in">attention input</option></select></label>
+          <progress id="chprog" value="0" max="1" hidden></progress>
+          <button id="chgo" class="primary">Read the channels</button>
+        </div>
+        <div class="legend" style="margin-bottom:8px"><span class="ramp"></span><span id="chlegend">1× the layer's average channel → 2× or more</span></div>
+        <canvas id="chmap" width="800" height="474"></canvas>
+        <div class="readout" id="chreadout">Press “Read the channels”: about 45 MB read and 2 seconds of work. The result is kept for next time.</div>
+        <div class="chbottom">
+          <div class="card"><h3>Channels that stand out</h3><div class="small" style="margin-bottom:6px">Ranked by how many layers put them at 1.3× the average or more.</div><div id="chlist"></div></div>
+          <div class="card" id="chone" hidden><h3 id="chonetitle"></h3><canvas class="chart" id="chline" width="800" height="200"></canvas><div class="btns"><button id="chopen">Open that layer's matrix at this channel</button></div></div>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-words">
+        <div class="bar"><input id="wq" placeholder="type a word, for example hello" autocomplete="off"><span class="small" id="wnote"></span></div>
+        <div class="words">
+          <div class="card"><div class="small" id="wlisthead">The model reads text as tokens: whole words, pieces of words, or symbols. ␣ marks a space before the word.</div><div id="wlist"></div></div>
+          <div class="card" id="wcard" hidden>
+            <h3 id="wtitle"></h3>
+            <div class="small" id="wmeta"></div>
+            <div class="striphead">Word table row: what the model starts from when it reads this token (5,120 channels, real weights)</div>
+            <canvas class="strip" id="wstrip1" width="800" height="34"></canvas>
+            <div class="striphead">Output row: how the model scores this token when it writes the next word</div>
+            <canvas class="strip" id="wstrip2" width="800" height="34"></canvas>
+            <div class="readout" id="wreadout">Move over a strip to read one channel.</div>
+            <div class="striphead">Compare with another word</div>
+            <input id="wq2" placeholder="for example world" autocomplete="off">
+            <div class="alike" id="wcmp"></div>
+            <div class="btns"><button id="wopen1">Open the word table at this row</button><button id="wopen2">Open the output matrix at this row</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab" id="tab-about">
+        <div class="card" style="margin-bottom:12px"><h3>How the file stores a weight</h3>
+          <ol class="steps">
+            <li>Every big matrix is cut into blocks of 128 weights along each row.</li>
+            <li>Each weight is kept as one digit, −1, 0 or +1, and each block has one scale. Weight = digit × scale.</li>
+            <li id="aboutrot">Before storing, each row was mixed with a fixed recipe (a Hadamard mix plus sign flips). That spreads out the few big weights so two bits lose less, and it is why the stored digits look like static.</li>
+            <li>“Real weights” undoes that mix, row by row. The result is close to the original weights, with some fuzz left by the two-bit storage.</li>
+          </ol>
+        </div>
+        <div class="card"><h3>What the file says about itself</h3><dl class="kv" id="kv"></dl></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="tip" id="tip"></div>
+
+<script id="core">
+// The part that understands the file. No page code in here, so the same
+// functions run under Node and Bun against the real model and in the tests.
+// A "file" is anything with .size, .name and .slice(a, b).arrayBuffer().
+var Core = (function () {
+  const TYPES = { 0: 'F32', 1: 'F16', 30: 'BF16', 142: 'PQ2_0' };
+  const QK = 128, BLOCK_BYTES = 34; // PQ2_0: fp16 scale + 32 bytes of 2-bit digits (4 per byte, high bits first)
+  // Header arrays kept whole; every other long array is skipped.
+  const KEEP = new Set(['prism.hadamard.weight_names', 'prism.hadamard.inverse_weight_names', 'prism.hadamard.sign_widths', 'prism.hadamard.sign_values', 'tokenizer.ggml.tokens']);
+
+  function half(h) {
+    const s = h >> 15 ? -1 : 1, e = (h >> 10) & 31, f = h & 1023;
+    if (e === 0) return s * Math.pow(2, -14) * (f / 1024);
+    if (e === 31) return f ? NaN : s * Infinity;
+    return s * Math.pow(2, e - 15) * (1 + f / 1024);
+  }
+  const bfBuf = new DataView(new ArrayBuffer(4));
+  function bf16(h) { bfBuf.setUint32(0, h << 16); return bfBuf.getFloat32(0); }
+
+  function rowBytes(type, ne0) {
+    if (type === 142) return (ne0 / QK) * BLOCK_BYTES;
+    if (type === 0) return ne0 * 4;
+    if (type === 1 || type === 30) return ne0 * 2;
+    return null;
+  }
+
+  // Reads the start of the file and parses it; when the header runs past what
+  // was read, reads four times as much and tries again.
+  async function parseHeader(file, first) {
+    let size = Math.min(file.size, first || (16 << 20));
+    for (;;) {
+      const buf = new DataView(await file.slice(0, size).arrayBuffer());
+      try { return parse(buf, file); } catch (e) { if (e instanceof RangeError && size < file.size) { size = Math.min(file.size, size * 4); continue; } throw e; }
+    }
+  }
+
+  function parse(buf, file) {
+    const bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    const dec = new TextDecoder();
+    let o = 0;
+    const need = (n) => { if (o + n > buf.byteLength) throw new RangeError('the header goes on past what was read'); };
+    const u32 = () => { const v = buf.getUint32(o, true); o += 4; return v; };
+    const u64 = () => { const v = Number(buf.getBigUint64(o, true)); o += 8; return v; };
+    const str = () => { const n = u64(); need(n); const s = dec.decode(bytes.subarray(o, o + n)); o += n; return s; };
+    const skipStr = () => { const n = u64(); need(n); o += n; };
+    const SIZES = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8 };
+    function val(t, keep) {
+      switch (t) {
+        case 0: return buf.getUint8(o++); case 1: return buf.getInt8(o++);
+        case 2: { const v = buf.getUint16(o, true); o += 2; return v; } case 3: { const v = buf.getInt16(o, true); o += 2; return v; }
+        case 4: return u32(); case 5: { const v = buf.getInt32(o, true); o += 4; return v; }
+        case 6: { const v = buf.getFloat32(o, true); o += 4; return v; } case 7: return !!buf.getUint8(o++);
+        case 8: return str();
+        case 9: { const et = u32(); const n = u64();
+          if (keep) { const a = new Array(n); for (let i = 0; i < n; i++) a[i] = val(et); return a; }
+          if (et === 8) { for (let i = 0; i < n; i++) skipStr(); return `[${n} strings]`; }
+          if (n <= 64) { const a = []; for (let i = 0; i < n; i++) a.push(val(et)); return a; }
+          need(SIZES[et] * n); o += SIZES[et] * n; return `[${n} values]`; }
+        case 10: return u64(); case 11: { const v = Number(buf.getBigInt64(o, true)); o += 8; return v; }
+        case 12: { const v = buf.getFloat64(o, true); o += 8; return v; }
+      }
+      throw new Error('unknown value type ' + t);
+    }
+    if (buf.byteLength < 4 || dec.decode(bytes.subarray(0, 4)) !== 'GGUF') throw new Error('This is not a GGUF file.');
+    o = 4; const version = u32(); const nt = u64(); const nkv = u64();
+    const kv = {}; const kept = {}; let align = 32;
+    for (let i = 0; i < nkv; i++) {
+      const k = str(); const t = u32(); const keep = KEEP.has(k); const v = val(t, keep);
+      if (k === 'general.alignment') align = v;
+      if (keep) { kept[k] = v; kv[k] = k === 'tokenizer.ggml.tokens' ? `[${v.length} tokens]` : v.length <= 8 ? v : `[${v.length} values]`; }
+      else if (!/^tokenizer\./.test(k) || /tokenizer\.ggml\.(model|pre)$/.test(k)) kv[k] = v;
+    }
+    const tensors = [];
+    for (let i = 0; i < nt; i++) {
+      const name = str(); const nd = u32(); const dims = []; for (let d = 0; d < nd; d++) dims.push(u64());
+      const type = u32(); const off = u64();
+      const ne0 = dims[0]; const rows = dims.slice(1).reduce((a, b) => a * b, 1);
+      const rb = rowBytes(type, ne0); const m = name.match(/^blk\.(\d+)\./);
+      tensors.push({ name, dims, type, typeName: TYPES[type] || ('type ' + type), off, ne0, rows, rowBytes: rb, bytes: rb ? rb * rows : null, layer: m ? Number(m[1]) : undefined });
+    }
+    const dataStart = Math.ceil(o / align) * align;
+    return { version, kv, tensors, dataStart, align, size: file.size, name: file.name, rot: rotationInfo(kv, kept), tokens: kept['tokenizer.ggml.tokens'] || null };
+  }
+
+  // The storage mix-up, from the header: a Hadamard mix in blocks along each
+  // row, with one fixed ±1 sign per column. null when the file has none.
+  function rotationInfo(kv, kept) {
+    const names = kept['prism.hadamard.weight_names'], widths = kept['prism.hadamard.sign_widths'], values = kept['prism.hadamard.sign_values'];
+    if (!names || !widths || !values) return null;
+    if ((kv['prism.hadamard.transform'] || 'normalized-sylvester-walsh-hadamard') !== 'normalized-sylvester-walsh-hadamard') return null;
+    if ((kv['prism.hadamard.axis'] || 'input-last-dimension') !== 'input-last-dimension') return null;
+    const signs = {}; let at = 0;
+    for (const w of widths) { signs[w] = Int8Array.from(values.slice(at, at + w)); at += w; }
+    const block = kv['prism.hadamard.block_size'] || 1024;
+    if (block & (block - 1)) return null; // not a power of two
+    return { block, signs, names: new Set(names), inverse: new Set(kept['prism.hadamard.inverse_weight_names'] || []) };
+  }
+
+  // How to undo the mix on one tensor's rows, or null when it was stored as is.
+  function rotationOf(model, t) {
+    const R = model && model.rot; if (!R) return null;
+    const inverse = R.inverse.has(t.name); if (!inverse && !R.names.has(t.name)) return null;
+    const signs = R.signs[t.ne0]; if (!signs || t.ne0 % R.block) return null;
+    return { block: R.block, signs, inverse };
+  }
+
+  // The normalized Walsh-Hadamard mix on v[off .. off+n), in place. It is its own undo.
+  function fwht(v, off, n) {
+    for (let h = 1; h < n; h <<= 1) for (let i = off; i < off + n; i += h << 1) for (let j = i; j < i + h; j++) { const x = v[j], y = v[j + h]; v[j] = x + y; v[j + h] = x - y; }
+    const s = 1 / Math.sqrt(n); for (let i = off; i < off + n; i++) v[i] *= s;
+  }
+  // Most matrices were stored as (row × signs) then mixed, so undoing is: mix,
+  // then the signs. The word table was stored the inverse way (mixed, then
+  // signs), so it is undone with the signs first. Checked on the real file:
+  // the other order leaves a spike on every 1,024th channel of the word table.
+  function unrotate(v, rot) {
+    const n = v.length, s = rot.signs;
+    if (rot.inverse) { for (let i = 0; i < n; i++) v[i] *= s[i]; for (let q = 0; q < n; q += rot.block) fwht(v, q, rot.block); }
+    else { for (let q = 0; q < n; q += rot.block) fwht(v, q, rot.block); for (let i = 0; i < n; i++) v[i] *= s[i]; }
+    return v;
+  }
+  // The storage direction (for the tests): the exact opposite of unrotate.
+  function rotate(v, rot) {
+    const n = v.length, s = rot.signs;
+    if (rot.inverse) { for (let q = 0; q < n; q += rot.block) fwht(v, q, rot.block); for (let i = 0; i < n; i++) v[i] *= s[i]; }
+    else { for (let i = 0; i < n; i++) v[i] *= s[i]; for (let q = 0; q < n; q += rot.block) fwht(v, q, rot.block); }
+    return v;
+  }
+
+  // The bytes of n rows starting at row r0 (rows are contiguous in the file).
+  async function readRows(file, model, t, r0, n) {
+    const start = model.dataStart + t.off + r0 * t.rowBytes;
+    return new Uint8Array(await file.slice(start, start + n * t.rowBytes).arrayBuffer());
+  }
+
+  // Decoded rows: vals has n*ne0 numbers. For PQ2_0 they are the digits −1/0/+1
+  // and scales has one fp16 scale per block (n * ne0/128); stored weight = digit × scale.
+  function decodeRows(t, bytes, n) {
+    const ne0 = t.ne0;
+    if (t.type === 142) {
+      const nb = ne0 / QK; const vals = new Int8Array(n * ne0); const scales = new Float32Array(n * nb);
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      for (let r = 0; r < n; r++) for (let b = 0; b < nb; b++) {
+        const p = (r * nb + b) * BLOCK_BYTES;
+        scales[r * nb + b] = half(dv.getUint16(p, true));
+        let k = r * ne0 + b * QK;
+        for (let j = 0; j < 32; j++) { const byte = bytes[p + 2 + j]; vals[k++] = ((byte >> 6) & 3) - 1; vals[k++] = ((byte >> 4) & 3) - 1; vals[k++] = ((byte >> 2) & 3) - 1; vals[k++] = (byte & 3) - 1; }
+      }
+      return { vals, scales, ternary: true };
+    }
+    const vals = new Float32Array(n * ne0);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (t.type === 0) for (let i = 0; i < vals.length; i++) vals[i] = dv.getFloat32(i * 4, true);
+    else if (t.type === 1) for (let i = 0; i < vals.length; i++) vals[i] = half(dv.getUint16(i * 2, true));
+    else if (t.type === 30) for (let i = 0; i < vals.length; i++) vals[i] = bf16(dv.getUint16(i * 2, true));
+    return { vals, scales: null, ternary: false };
+  }
+
+  // Row r of decoded rows as real weights, into out (length ne0): digit × scale
+  // (or the plain number), with the storage mix undone when the tensor has one.
+  function realRow(t, dec, r, rot, out) {
+    const ne0 = t.ne0, base = r * ne0;
+    if (dec.scales) { const nb = ne0 / QK, sb = r * nb; for (let i = 0; i < ne0; i++) out[i] = dec.vals[base + i] * dec.scales[sb + (i >> 7)]; }
+    else for (let i = 0; i < ne0; i++) out[i] = dec.vals[base + i];
+    return rot ? unrotate(out, rot) : out;
+  }
+
+  // Which rows to read for a picture of the whole tensor: all of them when they
+  // fit under cap, otherwise `groups` evenly spaced runs of contiguous rows.
+  function samplePlan(rows, cap, groups) {
+    if (rows <= cap) return { chunks: [{ r0: 0, n: rows }], sampled: false, count: rows };
+    groups = groups || 32; const per = Math.max(1, Math.floor(cap / groups));
+    const chunks = []; for (let g = 0; g < groups; g++) { const r0 = Math.min(rows - per, Math.floor((g + 0.5) * rows / groups - per / 2)); chunks.push({ r0: Math.max(0, r0), n: per }); }
+    return { chunks, sampled: true, count: groups * per };
+  }
+
+  async function loadSample(file, model, t, cap, groups) {
+    const plan = samplePlan(t.rows, cap, groups);
+    const chunks = [];
+    for (const c of plan.chunks) chunks.push({ r0: c.r0, n: c.n, dec: decodeRows(t, await readRows(file, model, t, c.r0, c.n), c.n) });
+    return { plan, chunks };
+  }
+
+  // Counts over a sample of the stored form: per row and per column how many
+  // digits are non-zero, the −1 / 0 / +1 totals, and the scale range.
+  function stats(t, sample) {
+    const ne0 = t.ne0; const col = new Float64Array(ne0); const rowIdx = []; const rowNz = [];
+    let neg = 0, zero = 0, pos = 0, smin = Infinity, smax = -Infinity, amax = 0, n = 0, ssum = 0, scount = 0;
+    for (const c of sample.chunks) {
+      const v = c.dec.vals;
+      for (let r = 0; r < c.n; r++) {
+        let nz = 0; const base = r * ne0;
+        for (let i = 0; i < ne0; i++) { const x = v[base + i]; if (x !== 0) { nz++; col[i]++; if (x < 0) neg++; else pos++; const a = x < 0 ? -x : x; if (a > amax) amax = a; } else zero++; }
+        rowIdx.push(c.r0 + r); rowNz.push(nz / ne0); n++;
+      }
+      if (c.dec.scales) for (let i = 0; i < c.dec.scales.length; i++) { const s = c.dec.scales[i]; if (s < smin) smin = s; if (s > smax) smax = s; ssum += s; scount++; }
+    }
+    const total = neg + zero + pos;
+    return { rows: n, rowIdx, rowNz, colNz: Array.from(col, (x) => x / n), neg: neg / total, zero: zero / total, pos: pos / total, smin, smax, smean: scount ? ssum / scount : null, amax };
+  }
+
+  // Sizes over a sample of the real weights: RMS per row and per column, the
+  // overall RMS, and (with grid {W, H}) the RMS in each cell of a W×H overview.
+  function realStats(t, sample, rot, grid) {
+    const ne0 = t.ne0; const colSq = new Float64Array(ne0); const rowIdx = [], rowRms = []; let sum = 0, n = 0;
+    const row = new Float32Array(ne0);
+    const cells = grid ? new Float64Array(grid.W * grid.H) : null, cnt = grid ? new Float64Array(grid.W * grid.H) : null;
+    const colPx = grid ? Int32Array.from({ length: ne0 }, (_, i) => Math.min(grid.W - 1, Math.floor(i / ne0 * grid.W))) : null;
+    for (const c of sample.chunks) for (let r = 0; r < c.n; r++) {
+      realRow(t, c.dec, r, rot, row); let rs = 0;
+      const py = grid ? Math.min(grid.H - 1, Math.floor((c.r0 + r) / t.rows * grid.H)) * grid.W : 0;
+      for (let i = 0; i < ne0; i++) { const q = row[i] * row[i]; rs += q; colSq[i] += q; if (grid) { const k = py + colPx[i]; cells[k] += q; cnt[k]++; } }
+      rowIdx.push(c.r0 + r); rowRms.push(Math.sqrt(rs / ne0)); sum += rs; n++;
+    }
+    const rms = Math.sqrt(sum / (n * ne0)) || 1e-12;
+    return { rows: n, rowIdx, rowRms, colRms: Array.from(colSq, (x) => Math.sqrt(x / n)), rms, cells: grid ? Array.from(cells, (x, k) => cnt[k] ? Math.sqrt(x / cnt[k]) : null) : null };
+  }
+
+  // A colour range for values that never exaggerates: at least minSpan wide,
+  // centred on the values when they are closer together than that.
+  function colourDomain(values, minSpan) {
+    let lo = Infinity, hi = -Infinity;
+    for (const v of values) if (v != null && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    if (!isFinite(lo)) return { lo: 0, hi: 1, min: null, max: null, narrow: false };
+    if (hi - lo >= minSpan) return { lo, hi, min: lo, max: hi, narrow: false };
+    const mid = (lo + hi) / 2; return { lo: mid - minSpan / 2, hi: mid + minSpan / 2, min: lo, max: hi, narrow: true };
+  }
+
+  // Tokens: the file stores them the GPT-2 way, one printable character per
+  // byte ("Ġ" is a space). decodeToken turns one back into its text.
+  const BYTE_OF = (() => {
+    const bs = []; for (let i = 33; i <= 126; i++) bs.push(i); for (let i = 161; i <= 172; i++) bs.push(i); for (let i = 174; i <= 255; i++) bs.push(i);
+    const cs = bs.slice(); let n = 0; for (let b = 0; b < 256; b++) if (!bs.includes(b)) { bs.push(b); cs.push(256 + n); n++; }
+    const m = new Map(); bs.forEach((b, i) => m.set(String.fromCharCode(cs[i]), b)); return m;
+  })();
+  const enc = new TextEncoder(), tdec = new TextDecoder('utf-8');
+  function decodeToken(tok) { const out = []; for (const ch of tok) { const b = BYTE_OF.get(ch); if (b !== undefined) out.push(b); else for (const x of enc.encode(ch)) out.push(x); } return tdec.decode(new Uint8Array(out)); }
+
+  // A lookup over every token: its text, and a way to find a word.
+  function tokenIndex(tokens) {
+    const texts = tokens.map(decodeToken); const lower = texts.map((s) => s.toLowerCase()); const byText = new Map();
+    texts.forEach((s, i) => { if (!byText.has(s)) byText.set(s, i); });
+    return { texts, lower, byText };
+  }
+  // Exact tokens first (the word with and without a space before it, as typed,
+  // lower case, capitalised), then tokens that contain it, shortest first.
+  function findTokens(ix, query, limit) {
+    limit = limit || 30; const base = String(query || '').trim(); if (!base) return [];
+    const out = [], seen = new Set();
+    const cap = base.charAt(0).toUpperCase() + base.slice(1);
+    for (const v of [' ' + base, base, ' ' + base.toLowerCase(), base.toLowerCase(), ' ' + cap, cap]) { const id = ix.byText.get(v); if (id !== undefined && !seen.has(id)) { seen.add(id); out.push({ id, text: ix.texts[id], exact: true }); } }
+    const q = base.toLowerCase(); const more = [];
+    for (let i = 0; i < ix.lower.length; i++) if (!seen.has(i) && ix.lower[i].includes(q)) more.push(i);
+    more.sort((a, b) => (ix.texts[a].trim().length - ix.texts[b].trim().length) || (a - b));
+    for (const id of more.slice(0, Math.max(0, limit - out.length))) out.push({ id, text: ix.texts[id], exact: false });
+    return out;
+  }
+
+  function cosine(a, b) { let d = 0, x = 0, y = 0; for (let i = 0; i < a.length; i++) { d += a[i] * b[i]; x += a[i] * a[i]; y += b[i] * b[i]; } return d / (Math.sqrt(x * y) || 1); }
+
+  return { TYPES, QK, half, bf16, rowBytes, parseHeader, rotationOf, fwht, unrotate, rotate, readRows, decodeRows, realRow, samplePlan, loadSample, stats, realStats, colourDomain, decodeToken, tokenIndex, findTokens, cosine };
+})();
+if (typeof module !== 'undefined') module.exports = Core;
+</script>
+
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const fmt = (n) => n.toLocaleString('en-US');
+  const gb = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? (b / 1e3).toFixed(1) + ' KB' : b + ' B';
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const hex = (h) => { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; };
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const rgb = (c) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+  const clamp01 = (x) => x < 0 ? 0 : x > 1 ? 1 : x;
+  const x2 = (v) => v.toFixed(2) + '×';
+  const MATS = ['attn_qkv', 'attn_gate', 'ssm_out', 'attn_q', 'attn_k', 'attn_v', 'attn_output', 'ffn_gate', 'ffn_up', 'ffn_down'];
+  const MODEL_TABS = new Set(['layers', 'channels', 'words', 'about']);
+  let embedded = false; try { embedded = window.self !== window.top; } catch { embedded = true; }
+  if (embedded) document.body.classList.add('embedded');
+
+  let file = null, model = null, cur = null, sample = null, st = null, rst = null, curRot = null;
+  const view = { z: 4, r0: 0, c0: 0, win: null };
+  const state = { tab: 'picture', mode: 'real' };
+  const tip = $('#tip');
+  const showTip = (e, text) => { tip.textContent = text; tip.style.display = 'block'; tip.style.left = Math.max(4, Math.min(window.innerWidth - tip.offsetWidth - 8, e.clientX + 14)) + 'px'; tip.style.top = (e.clientY + 14) + 'px'; };
+  const hideTip = () => { tip.style.display = 'none'; };
+
+  // ---------- remembering your place ----------
+  const placeKey = () => `bonsai-weights-place:${file.name}:${file.size}`;
+  let saveT = null;
+  // Saved a moment after each change, and at once when the page is left, so a
+  // quick reload never loses the last click.
+  function flushPlace() {
+    if (!file || !model) return; clearTimeout(saveT); saveT = null;
+    try { localStorage.setItem(placeKey(), JSON.stringify({ t: cur && cur.name, tab: state.tab, mode: state.mode, z: view.z, r0: view.r0, c0: view.c0, chmat: $('#chmat').value, ch: chSel, word: wordSel && wordSel.id, word2: $('#wq2').value })); } catch {}
+  }
+  function savePlace() { if (!file) return; clearTimeout(saveT); saveT = setTimeout(flushPlace, 250); }
+  window.addEventListener('pagehide', () => { if (saveT) flushPlace(); });
+  window.addEventListener('beforeunload', () => { if (saveT) flushPlace(); });
+  function loadPlace() { try { return JSON.parse(localStorage.getItem(placeKey())) || null; } catch { return null; } }
+
+  // ---------- opening the file ----------
+  $('#pick').onclick = () => $('#file').click();
+  $('#file').onchange = async (e) => { const f = e.target.files[0]; if (f) await open(f); };
+  window.__openFile = open; // for the checks
+
+  // Served by the hub (/weights, bonsai weights): the model is read through
+  // the server, no picking. Each slice becomes one HTTP range request.
+  if (/^https?:/.test(location.protocol)) {
+    $('#empty').innerHTML = '<h2>Loading the model…</h2><p class="hint">Reading its header through the Bonsai hub.</p>';
+    $('#pick').hidden = true; // served: nothing to pick
+    fetch('/model.json').then((r) => r.ok ? r.json() : Promise.reject(new Error(`the server said ${r.status}`))).then((m) => open({
+      name: m.name, size: m.size,
+      slice: (a, b) => ({ arrayBuffer: async () => { const r = await fetch('/model', { headers: { Range: `bytes=${a}-${b - 1}` } }); if (r.status !== 206 && r.status !== 200) throw new Error(`range read failed: ${r.status}`); return r.arrayBuffer(); } }),
+    })).catch((err) => { $('#empty').innerHTML = `<h2>Could not load the model</h2><p>${String(err.message)}</p><p class="hint">Is the Bonsai window that opened this page still running?</p>`; });
+  }
+
+  async function open(f) {
+    file = f; $('#fileinfo').textContent = 'reading the header…'; $('#modelname').textContent = f.name;
+    try { model = await Core.parseHeader(f); } catch (err) { $('#fileinfo').textContent = err.message; $('#modelinfo').textContent = err.message; return; }
+    const kv = model.kv; const arch = kv['general.architecture'];
+    const layers = kv[`${arch}.block_count`], emb = kv[`${arch}.embedding_length`];
+    $('#fileinfo').textContent = `${f.name} · ${gb(f.size)} · ${fmt(model.tensors.length)} tensors`;
+    $('#modelname').textContent = f.name.replace(/\.gguf$/i, '');
+    $('#modelinfo').textContent = `${arch}${layers ? ` · ${layers} layers` : ''}${emb ? ` · width ${fmt(emb)}` : ''} · ${gb(f.size)} · ${Object.entries(byType()).map(([k, n]) => `${n} ${k}`).join(', ')}`;
+    if (!model.rot) $('#aboutrot').textContent = 'This file has no storage mix-up, so the real weights are simply digit × scale.';
+    const dl = $('#kv'); dl.innerHTML = '';
+    for (const [k, v] of Object.entries(kv)) { const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = typeof v === 'string' && v.length > 200 ? v.slice(0, 200) + '…' : Array.isArray(v) ? v.join(', ') : String(v); dl.append(dt, dd); }
+    const sel = $('#layer'); sel.innerHTML = '<option value="shared">Shared</option>' + Array.from({ length: layers || 0 }, (_, i) => `<option value="${i}">Layer ${i}</option>`).join('');
+    $('#empty').hidden = true; $('#view').hidden = false;
+    const place = loadPlace() || {};
+    if (place.mode === 'stored' || place.mode === 'real') state.mode = place.mode;
+    if (place.chmat && [...$('#chmat').options].some((o) => o.value === place.chmat)) $('#chmat').value = place.chmat;
+    const first = (place.t && model.tensors.find((t) => t.name === place.t)) || model.tensors.find((t) => t.name === 'blk.0.attn_qkv.weight') || model.tensors[0];
+    sel.value = first.layer !== undefined ? String(first.layer) : 'shared'; renderList();
+    buildLayersGrid();
+    loadChannels(false);
+    showTab(place.tab && document.getElementById('tab-' + place.tab) ? place.tab : 'picture', true);
+    // the tensor loads in the background while the channel and word come back, so a reload on those tabs is instant
+    const loading = select(first, place.t === first.name ? { r0: place.r0, c0: place.c0, z: place.z } : null);
+    if (place.ch != null && chData) pickChannel(place.ch);
+    if (place.word != null && model.tokens && ensureTokens() && place.word < tix.texts.length) { $('#wq').value = tix.texts[place.word].trim(); $('#wq').oninput(); if (place.word2) $('#wq2').value = place.word2; await showWord(place.word); }
+    await loading;
+  }
+  function byType() { const m = {}; for (const t of model.tensors) m[t.typeName] = (m[t.typeName] || 0) + 1; return m; }
+
+  // ---------- the tensor list ----------
+  $('#layer').onchange = renderList; $('#filter').oninput = renderList;
+  function renderList() {
+    const q = $('#filter').value.trim().toLowerCase(); const layer = $('#layer').value;
+    const list = $('#list'); list.innerHTML = '';
+    let ts = model.tensors;
+    if (q) ts = ts.filter((t) => t.name.toLowerCase().includes(q));
+    else ts = ts.filter((t) => layer === 'shared' ? t.layer === undefined : t.layer === Number(layer));
+    const grp = document.createElement('div'); grp.className = 'grp'; grp.textContent = q ? `${fmt(ts.length)} matching` : layer === 'shared' ? 'Shared by every layer' : `Layer ${layer} · ${ts.length} tensors`; list.append(grp);
+    for (const t of ts.slice(0, 400)) {
+      const row = document.createElement('div'); row.className = 'row' + (t === cur ? ' on' : ''); row.dataset.name = t.name;
+      row.innerHTML = `<span>${q ? t.name : t.name.replace(/^blk\.\d+\./, '')}</span><span class="shape">${t.dims.join('×')}</span>`;
+      row.onclick = () => { select(t); if (MODEL_TABS.has(state.tab)) showTab('picture'); }; list.append(row);
+    }
+    if (ts.length > 400) { const more = document.createElement('div'); more.className = 'grp'; more.textContent = `… ${fmt(ts.length - 400)} more, narrow the search`; list.append(more); }
+  }
+  // Show t in the list: its layer (or Shared), filter cleared.
+  function revealInList(t) { $('#filter').value = ''; $('#layer').value = t.layer !== undefined ? String(t.layer) : 'shared'; renderList(); }
+
+  // ---------- selecting a tensor ----------
+  let selectGen = 0;
+  const hasRealView = (t) => !!(t && t.type === 142); // the switch only changes ternary matrices
+  function describe(t) {
+    return t.name.includes('token_embd') ? 'the word table: one row per token' : t.name.includes('output.weight') ? 'the last step: scores for every token' : /norm/.test(t.name) ? 'a normalisation vector' : t.name.includes('ssm') ? 'part of the linear-attention (memory) block' : t.name.includes('attn') ? 'part of attention' : t.name.includes('ffn') ? 'part of the feed-forward block' : '';
+  }
+  function heading() {
+    if (MODEL_TABS.has(state.tab) || !cur) {
+      const kv = model.kv, arch = kv['general.architecture'];
+      $('#tname').textContent = { layers: 'Every layer', channels: 'Every layer, channel by channel', words: 'Words', about: 'About the file' }[state.tab] || '';
+      $('#tmeta').textContent = `${kv[`${arch}.block_count`]} layers · width ${fmt(kv[`${arch}.embedding_length`] || 0)} · ${model.tokens ? fmt(model.tokens.length) + ' tokens · ' : ''}${fmt(model.tensors.length)} tensors`;
+      return;
+    }
+    const t = cur, what = describe(t);
+    $('#tname').textContent = t.name;
+    $('#tmeta').textContent = `${t.typeName} · ${fmt(t.rows)} rows × ${fmt(t.ne0)} columns = ${fmt(t.rows * t.ne0)} weights · ${gb(t.bytes)} in the file${t.type === 142 ? (curRot ? ' · stored as digits × block scales, mixed up for storage' : ' · stored as digits × block scales') : ''}${what ? ' · ' + what : ''}`;
+  }
+  async function select(t, at) {
+    const gen = ++selectGen;
+    cur = t; sample = null; st = null; rst = null; curRot = Core.rotationOf(model, t);
+    view.r0 = at && at.r0 != null ? at.r0 : 0; view.c0 = at && at.c0 != null ? at.c0 : 0; if (at && at.z && ZOOMS.includes(at.z)) view.z = at.z; view.win = null;
+    $('#ovnote').textContent = 'reading…'; ovImg = null; octx.clearRect(0, 0, ovC.width, ovC.height);
+    for (const r of document.querySelectorAll('#list .row')) r.classList.toggle('on', r.dataset.name === t.name);
+    heading(); paintModeSeg(); paintLegend();
+    $('#block').hidden = true;
+    if (!t.rowBytes) { $('#readout').textContent = `This page cannot read ${t.typeName}.`; return; }
+    await drawZoom();
+    const smp = await Core.loadSample(file, model, t, 2048, 32);
+    if (gen !== selectGen) return; // a newer tensor was picked meanwhile
+    sample = smp; st = Core.stats(t, sample);
+    ovGeom = ovSize(t);
+    rst = Core.realStats(t, sample, curRot, ovGeom);
+    drawOverview(); drawScales(); drawProfiles(); drawZoom();
+    markLayerCell(); savePlace();
+  }
+
+  // ---------- real weights or stored digits ----------
+  const isReal = () => state.mode === 'real' || !hasRealView(cur);
+  function paintModeSeg() {
+    const can = hasRealView(cur);
+    for (const b of document.querySelectorAll('#modeseg button')) { b.classList.toggle('on', can ? b.dataset.mode === state.mode : b.dataset.mode === 'real'); b.disabled = !can; }
+    $('#modeseg').title = can ? 'Real: the stored mix-up undone, so each square is an actual weight. Stored: exactly the −1 / 0 / +1 digits in the file.' : `${cur ? cur.typeName : ''} is stored as plain numbers: there is nothing to undo.`;
+  }
+  function paintLegend() {
+    $('#piclegend').innerHTML = isReal()
+      ? '<span class="div"></span><span>below zero · zero · above zero</span><span class="small">· one square per weight</span>'
+      : '<span class="sw" style="background:var(--neg)"></span>−1 <span class="sw" style="background:var(--zero)"></span>0 <span class="sw" style="background:var(--pos)"></span>+1 <span class="small">· one square per stored digit</span>';
+  }
+  for (const b of document.querySelectorAll('#modeseg button')) b.onclick = () => { if (b.disabled || state.mode === b.dataset.mode) return; state.mode = b.dataset.mode; paintModeSeg(); paintLegend(); drawZoom(); drawOverview(); drawProfiles(); savePlace(); };
+
+  // ---------- the picture ----------
+  const zoomC = $('#zoom'), zctx = zoomC.getContext('2d');
+  const ZOOMS = [1, 2, 3, 4, 6, 8, 12, 16];
+  function fitCanvas(c) { const w = c.clientWidth | 0, h = c.clientHeight | 0; if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } }
+  function colors() { return { neg: hex(css('--neg')), pos: hex(css('--pos')), zero: hex(css('--zero')), surface: hex(css('--surface')), seq1: hex(css('--seq1')), seq7: hex(css('--seq7')) }; }
+  function clampView() { const t = cur; const cols = Math.max(1, Math.floor(zoomC.width / view.z)), rows = Math.max(1, Math.floor(zoomC.height / view.z)); view.r0 = Math.max(0, Math.min(t.rows - rows, view.r0)); view.c0 = Math.max(0, Math.min(t.ne0 - cols, view.c0)); return { cols: Math.min(cols, t.ne0), rows: Math.min(rows, t.rows) }; }
+  let drawing = false, pending = false;
+  async function drawZoom() {
+    if (!cur || !cur.rowBytes) return;
+    if (!zoomC.clientWidth) return; // the Picture tab is not showing; showTab redraws it
+    if (drawing) { pending = true; return; } drawing = true;
+    fitCanvas(zoomC);
+    const { cols, rows } = clampView(); const t = cur; const z = view.z; const r0 = view.r0, c0 = view.c0;
+    const bytes = await Core.readRows(file, model, t, r0, rows);
+    if (cur !== t) { drawing = false; if (pending) { pending = false; drawZoom(); } return; }
+    const dec = Core.decodeRows(t, bytes, rows);
+    const real = isReal();
+    let vals = dec.vals, scale = 1;
+    if (real) {
+      vals = new Float32Array(rows * t.ne0); const row = new Float32Array(t.ne0); let sq = 0;
+      for (let r = 0; r < rows; r++) { Core.realRow(t, dec, r, curRot, row); vals.set(row, r * t.ne0); for (let i = 0; i < t.ne0; i++) sq += row[i] * row[i]; }
+      // colours reach full strength at 2.5× the typical size: the matrix's once it is known, else this window's
+      scale = 2.5 * (rst ? rst.rms : Math.sqrt(sq / (rows * t.ne0)) || 1);
+    }
+    view.win = { r0, c0, rows, cols, dec, vals, real, scale };
+    const C = colors(); const img = zctx.createImageData(zoomC.width, zoomC.height); const d = img.data;
+    const bg = C.surface; for (let i = 0; i < d.length; i += 4) { d[i] = bg[0]; d[i + 1] = bg[1]; d[i + 2] = bg[2]; d[i + 3] = 255; }
+    const W = zoomC.width; const gap = z >= 6 ? 1 : 0;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const v = vals[r * t.ne0 + c0 + c];
+      const col = real ? (v < 0 ? mix(C.zero, C.neg, clamp01(-v / scale)) : mix(C.zero, C.pos, clamp01(v / scale))) : (v < 0 ? C.neg : v > 0 ? C.pos : C.zero);
+      for (let y = 0; y < z - gap; y++) { let p = ((r * z + y) * W + c * z) * 4; for (let x = 0; x < z - gap; x++) { d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; p += 4; } }
+    }
+    zctx.putImageData(img, 0, 0);
+    $('#zlabel').textContent = `${z} px`;
+    drawing = false; if (pending) { pending = false; drawZoom(); } else { drawOverviewBox(); savePlace(); }
+  }
+  $('#zin').onclick = () => zoomTo(ZOOMS[Math.min(ZOOMS.length - 1, ZOOMS.indexOf(view.z) + 1)]);
+  $('#zout').onclick = () => zoomTo(ZOOMS[Math.max(0, ZOOMS.indexOf(view.z) - 1)]);
+  $('#home').onclick = () => { view.r0 = 0; view.c0 = 0; drawZoom(); };
+  function zoomTo(z, ax, ay) {
+    if (z === view.z) return;
+    const cx = view.c0 + (ax ?? zoomC.width / 2) / view.z, cy = view.r0 + (ay ?? zoomC.height / 2) / view.z;
+    view.z = z; view.c0 = Math.round(cx - (ax ?? zoomC.width / 2) / z); view.r0 = Math.round(cy - (ay ?? zoomC.height / 2) / z); drawZoom();
+  }
+  let drag = null;
+  zoomC.onmousedown = (e) => { drag = { x: e.clientX, y: e.clientY, r0: view.r0, c0: view.c0, moved: false }; zoomC.classList.add('dragging'); };
+  // the click that ends a drag must not open a block, so the drag is forgotten just after it
+  window.addEventListener('mouseup', () => { if (drag) { drag.up = true; zoomC.classList.remove('dragging'); setTimeout(() => { drag = null; }, 0); } });
+  window.addEventListener('mousemove', (e) => { if (!drag || drag.up) return; const dc = Math.round((drag.x - e.clientX) / view.z), dr = Math.round((drag.y - e.clientY) / view.z); if (dc || dr) drag.moved = true; view.c0 = drag.c0 + dc; view.r0 = drag.r0 + dr; drawZoom(); });
+  zoomC.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.metaKey || e.ctrlKey) { const r = zoomC.getBoundingClientRect(); const i = ZOOMS.indexOf(view.z); zoomTo(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + (e.deltaY < 0 ? 1 : -1)))], e.clientX - r.left, e.clientY - r.top); return; }
+    view.c0 += Math.round(e.deltaX / view.z); view.r0 += Math.round(e.deltaY / view.z); drawZoom();
+  }, { passive: false });
+  function at(e) {
+    const w = view.win; if (!w) return null; const r = zoomC.getBoundingClientRect(); const c = Math.floor((e.clientX - r.left) / view.z), rr = Math.floor((e.clientY - r.top) / view.z);
+    if (c < 0 || rr < 0 || c >= w.cols || rr >= w.rows) return null;
+    const col = w.c0 + c, k = rr * cur.ne0 + col;
+    return { row: w.r0 + rr, col, rr, v: w.vals[k], digit: w.dec.scales ? w.dec.vals[k] : null, scale: w.dec.scales ? w.dec.scales[rr * (cur.ne0 / Core.QK) + Math.floor(col / Core.QK)] : null };
+  }
+  zoomC.onmousemove = (e) => {
+    if (drag && drag.moved) return; const a = at(e); if (!a) return; const w = view.win;
+    if (w.real && w.dec.scales) $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · real weight ≈ ${a.v.toPrecision(3)} · ${(Math.abs(a.v) / (w.scale / 2.5)).toFixed(1)}× the typical size${curRot ? ' · made from its whole row of stored digits' : ''} · click for the stored block`;
+    else if (w.dec.scales) $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · stored digit ${a.digit > 0 ? '+1' : a.digit < 0 ? '−1' : '0'} × scale ${a.scale.toPrecision(4)} = ${(a.digit * a.scale).toPrecision(4)} · block ${Math.floor(a.col / Core.QK)} of this row`;
+    else $('#readout').textContent = `row ${fmt(a.row)} · column ${fmt(a.col)} · value ${a.v.toPrecision(5)}`;
+  };
+  zoomC.onclick = (e) => { if (drag && drag.moved) return; const a = at(e); if (!a || !view.win.dec.ternary) return; showBlock(a); };
+  function showBlock(a) {
+    const w = view.win; const b = Math.floor(a.col / Core.QK); const base = a.rr * cur.ne0 + b * Core.QK;
+    $('#block').hidden = false;
+    const g = $('#blockgrid'); g.innerHTML = '';
+    let neg = 0, pos = 0;
+    for (let i = 0; i < Core.QK; i++) { const v = w.dec.vals[base + i]; const s = document.createElement('span'); s.className = v < 0 ? 'n' : v > 0 ? 'p' : ''; s.textContent = v < 0 ? '−1' : v > 0 ? '+1' : '0'; s.title = `column ${fmt(b * Core.QK + i)}: ${(v * a.scale).toPrecision(4)} stored`; g.append(s); if (v < 0) neg++; if (v > 0) pos++; }
+    $('#blockmeta').textContent = `row ${fmt(a.row)} · columns ${fmt(b * Core.QK)}–${fmt(b * Core.QK + 127)} · scale ${a.scale.toPrecision(4)} · 34 bytes in the file · ${neg} × −1, ${Core.QK - neg - pos} × 0, ${pos} × +1${curRot ? '. These are the digits as stored, before the mix is undone.' : ''}`;
+  }
+
+  // ---------- the overview ----------
+  const ovC = $('#overview'), octx = ovC.getContext('2d'); let ovImg = null, ovGeom = null;
+  // Always 260 px wide so every matrix gets a usable overview; very tall or
+  // very flat ones are squeezed (said under it) rather than drawn as a sliver.
+  function ovSize(t) {
+    const W = 260; if (t.rows === 1) return { W, H: 24, squeezed: false };
+    const H = Math.max(60, Math.min(360, Math.round(W * t.rows / t.ne0)));
+    return { W, H, squeezed: Math.abs(H / W - t.rows / t.ne0) / (t.rows / t.ne0) > 0.1 };
+  }
+  function drawOverview() {
+    if (!cur || !sample || !st || !rst) return;
+    const t = cur; const { W, H, squeezed } = ovGeom;
+    ovC.width = W; ovC.height = H; ovC.style.width = W + 'px'; ovC.style.height = H + 'px';
+    const real = isReal(); let vals;
+    if (real) vals = rst.cells.map((x) => x == null ? null : x / rst.rms);
+    else {
+      const acc = new Float64Array(W * H), cnt = new Float64Array(W * H);
+      for (const c of sample.chunks) { const v = c.dec.vals; for (let r = 0; r < c.n; r++) { const py = Math.min(H - 1, Math.floor((c.r0 + r) / t.rows * H)); const base = r * t.ne0; for (let i = 0; i < t.ne0; i++) { const k = py * W + Math.min(W - 1, Math.floor(i / t.ne0 * W)); cnt[k]++; if (v[base + i] !== 0) acc[k]++; } } }
+      vals = Array.from(acc, (a, k) => cnt[k] ? a / cnt[k] : null);
+    }
+    const dom = Core.colourDomain(vals, real ? 0.4 : 0.1);
+    // rows nobody sampled take the nearest sampled row's look
+    const rowHas = new Uint8Array(H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (vals[y * W + x] != null) { rowHas[y] = 1; break; }
+    const C = colors(); const img = octx.createImageData(W, H); const d = img.data;
+    for (let y = 0; y < H; y++) { let src = y; if (!rowHas[y]) { let best = 1e9; for (let yy = 0; yy < H; yy++) if (rowHas[yy] && Math.abs(yy - y) < best) { best = Math.abs(yy - y); src = yy; } }
+      for (let x = 0; x < W; x++) { const v = vals[src * W + x]; const col = mix(C.seq1, C.seq7, v == null ? 0 : clamp01((v - dom.lo) / (dom.hi - dom.lo))); const p = (y * W + x) * 4; d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; d[p + 3] = 255; } }
+    ovImg = img; drawOverviewBox();
+    const samp = sample.plan.sampled ? `Sampled: ${fmt(sample.plan.count)} of ${fmt(t.rows)} rows in ${sample.plan.chunks.length} runs. ` : 'Every row read. ';
+    const sq = squeezed ? 'Not to scale: squeezed to fit. ' : '';
+    if (real) {
+      let top = 0; for (let i = 1; i < rst.colRms.length; i++) if (rst.colRms[i] > rst.colRms[top]) top = i;
+      const avg = rst.colRms.reduce((a, x) => a + x, 0) / rst.colRms.length;
+      $('#ovlegend').textContent = `size vs the matrix's average, ${x2(dom.lo)} → ${x2(dom.hi)}`;
+      $('#ovnote').textContent = samp + sq + `Typical weight size ${rst.rms.toPrecision(3)}.` + (t.ne0 > 1 && t.rows > 1 ? ` The biggest column is ${x2(rst.colRms[top] / avg)} the average (column ${fmt(top)}).` : '');
+    } else {
+      $('#ovlegend').textContent = `share of non-zero digits, ${(dom.lo * 100).toFixed(0)}% → ${(dom.hi * 100).toFixed(0)}%`;
+      $('#ovnote').textContent = samp + sq + `Overall: ${(st.neg * 100).toFixed(1)}% −1, ${(st.zero * 100).toFixed(1)}% 0, ${(st.pos * 100).toFixed(1)}% +1.`;
+    }
+  }
+  function drawOverviewBox() {
+    if (!ovImg || !ovGeom || !view.win) return; octx.putImageData(ovImg, 0, 0);
+    const { W, H } = ovGeom; const w = view.win; const x = w.c0 / cur.ne0 * W, y = w.r0 / cur.rows * H, bw = Math.max(2, w.cols / cur.ne0 * W), bh = Math.max(2, w.rows / cur.rows * H);
+    octx.strokeStyle = css('--ink'); octx.lineWidth = 1.5; octx.strokeRect(x + .75, y + .75, bw, bh);
+  }
+  ovC.onclick = (e) => { if (!ovGeom) return; const r = ovC.getBoundingClientRect(); const { W, H } = ovGeom; const w = view.win || { cols: 1, rows: 1 }; view.c0 = Math.round((e.clientX - r.left) / W * cur.ne0 - w.cols / 2); view.r0 = Math.round((e.clientY - r.top) / H * cur.rows - w.rows / 2); drawZoom(); };
+  ovC.onmousemove = (e) => { if (!ovGeom) return; const r = ovC.getBoundingClientRect(); const { W, H } = ovGeom; showTip(e, `about row ${fmt(Math.floor((e.clientY - r.top) / H * cur.rows))}, column ${fmt(Math.floor((e.clientX - r.left) / W * cur.ne0))}\nclick to go there`); };
+  ovC.onmouseleave = hideTip;
+
+  // ---------- the scales ----------
+  const scC = $('#scales'), sctx = scC.getContext('2d'); let scGeom = null;
+  function drawScales() {
+    if (!scC.clientWidth || !st) return;
+    const t = cur; fitCanvas(scC); const W = scC.width, H = scC.height;
+    sctx.fillStyle = css('--surface'); sctx.fillRect(0, 0, W, H);
+    if (!sample.chunks[0].dec.scales) { sctx.fillStyle = css('--ink2'); sctx.font = '13px -apple-system, sans-serif'; sctx.fillText(`${t.typeName} weights are stored as plain numbers: there are no block scales here.`, 16, 28); $('#scalenote').textContent = ''; scGeom = null; return; }
+    const nb = t.ne0 / Core.QK; const rowsS = st.rows; const C = colors();
+    const cw = W / nb, ch = H / rowsS; scGeom = { nb, rowsS, cw, ch };
+    const lo = st.smin, hi = st.smax; const span = hi - lo || 1e-9;
+    let k = 0;
+    for (const c of sample.chunks) for (let r = 0; r < c.n; r++, k++) for (let b = 0; b < nb; b++) { const s = (c.dec.scales[r * nb + b] - lo) / span; sctx.fillStyle = rgb(mix(C.seq1, C.seq7, s)); sctx.fillRect(Math.floor(b * cw), Math.floor(k * ch), Math.ceil(cw), Math.ceil(ch)); }
+    $('#scalelegend').textContent = `block scale ${lo.toPrecision(3)} → ${hi.toPrecision(3)}`;
+    $('#scalenote').textContent = `${fmt(nb)} blocks per row × ${fmt(rowsS)} ${sample.plan.sampled ? 'sampled ' : ''}rows`;
+  }
+  scC.onmousemove = (e) => { if (!scGeom) return; const r = scC.getBoundingClientRect(); const b = Math.floor((e.clientX - r.left) / scGeom.cw), k = Math.floor((e.clientY - r.top) / scGeom.ch); if (b < 0 || b >= scGeom.nb || k < 0 || k >= scGeom.rowsS) return; let s = null; let kk = k; for (const c of sample.chunks) { if (kk < c.n) { s = c.dec.scales[kk * scGeom.nb + b]; break; } kk -= c.n; } $('#scalereadout').textContent = `row ${fmt(st.rowIdx[k])} · block ${b} (columns ${fmt(b * Core.QK)}–${fmt(b * Core.QK + 127)}) · scale ${s == null ? '?' : s.toPrecision(4)}`; };
+
+  // ---------- line charts (profiles, one channel) ----------
+  // o: { xLabel, fmtX, fmtY, tipY, ref } — ref draws a dashed line at that value
+  function lineChart(canvas, xs, ys, o) {
+    fitCanvas(canvas); const ctx = canvas.getContext('2d'); const W = canvas.width, H = canvas.height; const L = 48, R = 12, T = 10, B = 26;
+    ctx.fillStyle = css('--surface'); ctx.fillRect(0, 0, W, H);
+    let mx = 0; for (const y of ys) if (y > mx) mx = y;
+    const lo = 0, hi = Math.max(o.minTop || 0.05, mx * 1.05);
+    ctx.strokeStyle = css('--line'); ctx.lineWidth = 1; ctx.fillStyle = css('--ink2'); ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) { const y = T + (H - T - B) * (1 - i / 4); ctx.beginPath(); ctx.moveTo(L, y + .5); ctx.lineTo(W - R, y + .5); ctx.stroke(); ctx.fillText(o.fmtY(lo + (hi - lo) * i / 4), L - 6, y + 4); }
+    const n = xs.length;
+    for (let i = 0; i <= 4; i++) { const idx = Math.min(n - 1, Math.round((n - 1) * i / 4)); ctx.textAlign = i === 0 ? 'left' : i === 4 ? 'right' : 'center'; ctx.fillText(o.fmtX(xs[idx]), L + (W - L - R) * i / 4, H - 8); }
+    if (o.ref != null && o.ref <= hi) { const y = T + (H - T - B) * (1 - (o.ref - lo) / (hi - lo)); ctx.setLineDash([4, 4]); ctx.strokeStyle = css('--ink3'); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(W - R, y); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2; ctx.beginPath();
+    for (let i = 0; i < n; i++) { const x = L + (W - L - R) * (n === 1 ? 0.5 : i / (n - 1)); const y = T + (H - T - B) * (1 - (ys[i] - lo) / (hi - lo)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+    canvas.onmousemove = (e) => { const r = canvas.getBoundingClientRect(); const fx = (e.clientX - r.left - L) / (W - L - R); if (fx < 0 || fx > 1) { hideTip(); return; } const i = Math.round(fx * (n - 1)); showTip(e, `${o.xLabel} ${o.fmtX(xs[i])}\n${o.tipY(ys[i])}`); };
+    canvas.onmouseleave = hideTip;
+  }
+  function drawProfiles() {
+    if (!$('#rowchart').clientWidth || !st || !rst) return;
+    const t = cur, real = isReal();
+    const pct = (v) => (v * 100).toFixed(0) + '%';
+    const colStep = Math.max(1, Math.floor(t.ne0 / 2048));
+    if (real) {
+      const avgRow = rst.rowRms.reduce((a, x) => a + x, 0) / rst.rowRms.length, avgCol = rst.colRms.reduce((a, x) => a + x, 0) / rst.colRms.length;
+      lineChart($('#rowchart'), rst.rowIdx, rst.rowRms.map((x) => x / avgRow), { xLabel: 'row', fmtX: fmt, fmtY: x2, tipY: (v) => `size ${x2(v)} the average row`, ref: 1, minTop: 1.5 });
+      const xs = [], ys = []; for (let i = 0; i < t.ne0; i += colStep) { let m = 0; for (let j = i; j < Math.min(t.ne0, i + colStep); j++) if (rst.colRms[j] > m) m = rst.colRms[j]; xs.push(i); ys.push(m / avgCol); }
+      lineChart($('#colchart'), xs, ys, { xLabel: 'column', fmtX: fmt, fmtY: x2, tipY: (v) => `size ${x2(v)} the average column`, ref: 1, minTop: 1.5 });
+      $('#rowtitle').innerHTML = `Size per row, real weights <span class="small">· ${sample.plan.sampled ? fmt(st.rows) + ' sampled rows' : 'all ' + fmt(st.rows) + ' rows'} · 1× = the average row</span>`;
+      $('#coltitle').innerHTML = `Size per column, real weights <span class="small">· ${fmt(t.ne0)} columns${colStep > 1 ? `, the biggest of every ${colStep} shown` : ''} · 1× = the average column</span>`;
+      $('#profnote').textContent = 'A row is one output channel of this matrix and a column one input channel. A tall spike is a channel this matrix leans on hard; the Channels tab shows the same thing across every layer.';
+    } else {
+      lineChart($('#rowchart'), st.rowIdx, st.rowNz, { xLabel: 'row', fmtX: fmt, fmtY: pct, tipY: (v) => `non-zero ${(v * 100).toFixed(1)}%` });
+      const xs = [], ys = []; for (let i = 0; i < t.ne0; i += colStep) { let s = 0, m = 0; for (let j = i; j < Math.min(t.ne0, i + colStep); j++) { s += st.colNz[j]; m++; } xs.push(i); ys.push(s / m); }
+      lineChart($('#colchart'), xs, ys, { xLabel: 'column', fmtX: fmt, fmtY: pct, tipY: (v) => `non-zero ${(v * 100).toFixed(1)}%` });
+      $('#rowtitle').innerHTML = `Non-zero share per row, stored digits <span class="small">· ${sample.plan.sampled ? fmt(st.rows) + ' sampled rows' : 'all ' + fmt(st.rows) + ' rows'}</span>`;
+      $('#coltitle').innerHTML = `Non-zero share per column, stored digits <span class="small">· ${fmt(t.ne0)} columns${colStep > 1 ? `, ${colStep} per point` : ''}</span>`;
+      $('#profnote').textContent = 'These count the stored digits, which were mixed up before storing, so they are flat by design. Switch the Picture to Real weights to see the actual sizes.';
+    }
+  }
+
+  // ---------- the layers ----------
+  let layerStats = null;
+  function layerKey() { return `bonsai-weights:${file.name}:${file.size}`; }
+  function buildLayersGrid() {
+    const g = $('#layersgrid'); g.innerHTML = ''; const n = model.kv[`${model.kv['general.architecture']}.block_count`] || 0;
+    g.insertAdjacentHTML('beforeend', '<div class="h"></div>' + MATS.map((m) => `<div class="h" title="${m}">${m}</div>`).join(''));
+    const every = model.kv[`${model.kv['general.architecture']}.full_attention_interval`];
+    const isFull = (l) => model.tensors.some((t) => t.name === `blk.${l}.attn_q.weight`);
+    for (let l = 0; l < n; l++) { g.insertAdjacentHTML('beforeend', `<div class="l${isFull(l) ? ' full' : ''}" title="${isFull(l) ? 'full attention layer' : 'linear attention layer'}">${l}</div>` + MATS.map((m) => `<div class="c" data-l="${l}" data-m="${m}"></div>`).join('')); }
+    const fulls = Array.from({ length: n }, (_, l) => l).filter(isFull);
+    $('#layerskind').textContent = fulls.length ? `Two kinds of layer. The ${fulls.length} in bold (${fulls.slice(0, 3).join(', ')}${every ? `, every ${every}th` : '…'}) are full-attention layers with q, k, v and output matrices. The other ${n - fulls.length} use the linear-attention block: qkv, gate and ssm_out. Every layer has the three feed-forward matrices. A blank cell means that layer has no such matrix.` : '';
+    try { const saved = JSON.parse(localStorage.getItem(layerKey())); if (saved && saved.length === n) { layerStats = saved; paintLayers(); } } catch {}
+    g.onclick = (e) => { const c = e.target.closest('.c'); if (!c || !c.style.background) return; const t = model.tensors.find((x) => x.name === `blk.${c.dataset.l}.${c.dataset.m}.weight`); if (t) { revealInList(t); showTab('picture'); select(t); } };
+    g.onmousemove = (e) => { const c = e.target.closest('.c'); if (!c || !layerStats) { hideTip(); return; } const s = layerStats[c.dataset.l] && layerStats[c.dataset.l][c.dataset.m]; if (!s) { hideTip(); return; } showTip(e, `layer ${c.dataset.l} · ${c.dataset.m}\n${(s.neg * 100).toFixed(1)}% −1 · ${(s.zero * 100).toFixed(1)}% 0 · ${(s.pos * 100).toFixed(1)}% +1${s.smin != null ? `\nscales ${s.smin.toPrecision(3)} → ${s.smax.toPrecision(3)}, typical ${s.smean.toPrecision(3)}` : ''}\nclick to open`); };
+    g.onmouseleave = hideTip;
+  }
+  $('#layersgo').onclick = async () => {
+    const btn = $('#layersgo'); btn.disabled = true; const prog = $('#layersprog'); prog.hidden = false;
+    const n = model.kv[`${model.kv['general.architecture']}.block_count`] || 0; const out = []; let done = 0;
+    for (let l = 0; l < n; l++) { out[l] = {}; for (const m of MATS) { const t = model.tensors.find((x) => x.name === `blk.${l}.${m}.weight`); if (t && t.rowBytes) { const s = Core.stats(t, await Core.loadSample(file, model, t, 64, 4)); out[l][m] = { neg: s.neg, zero: s.zero, pos: s.pos, smin: isFinite(s.smin) ? s.smin : null, smax: isFinite(s.smax) ? s.smax : null, smean: s.smean }; } prog.value = ++done / (n * MATS.length); } }
+    layerStats = out; try { localStorage.setItem(layerKey(), JSON.stringify(out)); } catch {}
+    paintLayers(); prog.hidden = true; btn.disabled = false; btn.textContent = 'Read again';
+  };
+  // minSpan: the smallest difference worth a full colour sweep, so near-equal
+  // cells stay near-equal colours instead of being stretched to look different.
+  const BY = {
+    zero: { get: (s) => s.zero, fmt: (v) => (v * 100).toFixed(1) + '%', label: 'share of zeros', minSpan: () => 0.05, span: '5 points' },
+    smax: { get: (s) => s.smax, fmt: (v) => v.toPrecision(3), label: 'largest block scale', minSpan: (mean) => mean * 0.5, span: 'half the average' },
+    smean: { get: (s) => s.smean, fmt: (v) => v.toPrecision(3), label: 'typical block scale', minSpan: (mean) => mean * 0.5, span: 'half the average' },
+    bal: { get: (s) => s.pos - s.neg, fmt: (v) => (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + ' pts', label: 'balance: +1 share minus −1 share', minSpan: () => 0.05, span: '5 points' },
+  };
+  $('#layersby').onchange = () => { if (layerStats) paintLayers(); };
+  function paintLayers() {
+    const C = colors(); const by = BY[$('#layersby').value];
+    const vals = []; for (const row of layerStats) for (const m of MATS) if (row[m] && by.get(row[m]) != null) vals.push(by.get(row[m]));
+    const mean = vals.reduce((a, x) => a + x, 0) / (vals.length || 1);
+    const dom = Core.colourDomain(vals, by.minSpan(Math.abs(mean)));
+    for (const c of document.querySelectorAll('#layersgrid .c')) { const s = layerStats[c.dataset.l] && layerStats[c.dataset.l][c.dataset.m]; if (!s || by.get(s) == null) continue; c.style.background = rgb(mix(C.seq1, C.seq7, clamp01((by.get(s) - dom.lo) / (dom.hi - dom.lo)))); c.title = by.fmt(by.get(s)); }
+    $('#layerslegend').textContent = `${by.label} ${by.fmt(dom.min)} → ${by.fmt(dom.max)}` + (dom.narrow ? ` · all within ${by.fmt(dom.max - dom.min).replace(/^\+/, '')} of each other, so the colours barely change (a full sweep needs ${by.span})` : '');
+    $('#layersnote').textContent = `All ${layerStats.length} layers side by side, from the stored form. Darker = higher. Hover for the numbers, click to open that matrix.`;
+    markLayerCell();
+  }
+  function markLayerCell() { for (const c of document.querySelectorAll('#layersgrid .c')) c.classList.toggle('on', !!cur && cur.name === `blk.${c.dataset.l}.${c.dataset.m}.weight`); }
+
+  // ---------- the channels ----------
+  // For each layer, how big the real weights are on each input channel,
+  // as a ratio to that layer's average channel. 512 sampled rows per layer.
+  let chData = null, chSel = null, chGeom = null;
+  const chKey = () => `bonsai-weights-channels:${file.name}:${file.size}:${$('#chmat').value}`;
+  const nLayers = () => model.kv[`${model.kv['general.architecture']}.block_count`] || 0;
+  function chTensor(l) { const m = $('#chmat').value; return m === 'attn_in' ? model.tensors.find((t) => t.name === `blk.${l}.attn_qkv.weight`) || model.tensors.find((t) => t.name === `blk.${l}.attn_q.weight`) : model.tensors.find((t) => t.name === `blk.${l}.${m}.weight`); }
+  function loadChannels(paint) {
+    chData = null;
+    try { const s = localStorage.getItem(chKey()); if (s) { const o = JSON.parse(s); const bin = atob(o.u16); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); const u16 = new Uint16Array(u8.buffer); chData = { layers: o.layers, width: o.width, rows: o.rows, r: Float32Array.from(u16, (x) => x / 10000) }; } } catch { chData = null; }
+    $('#chgo').textContent = chData ? 'Read again' : 'Read the channels';
+    if (paint !== false) drawChannels();
+  }
+  $('#chmat').onchange = () => { chSel = null; $('#chone').hidden = true; loadChannels(); savePlace(); };
+  $('#chgo').onclick = async () => {
+    const btn = $('#chgo'); btn.disabled = true; const prog = $('#chprog'); prog.hidden = false; const t0 = performance.now();
+    const n = nLayers(), first = chTensor(0); const width = first ? first.ne0 : 0; const r = new Float32Array(n * width); let rowsUsed = 0;
+    for (let l = 0; l < n; l++) {
+      const t = chTensor(l); if (t && t.ne0 === width && t.rowBytes) {
+        const s = Core.realStats(t, await Core.loadSample(file, model, t, 512, 8), Core.rotationOf(model, t));
+        const avg = s.colRms.reduce((a, x) => a + x, 0) / width; for (let i = 0; i < width; i++) r[l * width + i] = s.colRms[i] / avg; rowsUsed = s.rows;
+      }
+      prog.value = (l + 1) / n; if (l % 4 === 3) await new Promise((res) => setTimeout(res, 0));
+    }
+    chData = { layers: n, width, rows: rowsUsed, r };
+    try { const u16 = Uint16Array.from(r, (x) => Math.min(65535, Math.round(x * 10000))); const u8 = new Uint8Array(u16.buffer); let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); localStorage.setItem(chKey(), JSON.stringify({ layers: n, width, rows: rowsUsed, u16: btoa(s) })); } catch {}
+    prog.hidden = true; btn.disabled = false; btn.textContent = 'Read again';
+    $('#chreadout').textContent = `Read in ${((performance.now() - t0) / 1000).toFixed(1)} s. Move over the map to read a channel; click one to follow it through the layers.`;
+    drawChannels(); if (chSel != null) pickChannel(chSel);
+  };
+  const chC = $('#chmap'), chx = chC.getContext('2d');
+  function drawChannels() {
+    if (!chC.clientWidth) return;
+    fitCanvas(chC); const W = chC.width, H = chC.height; chx.fillStyle = css('--surface'); chx.fillRect(0, 0, W, H);
+    const list = $('#chlist'); if (!chData) { list.innerHTML = '<div class="small">Nothing read yet.</div>'; chGeom = null; return; }
+    const L = 58, R = 8, T = 6, B = 22; const n = chData.layers, w = chData.width; const pw = W - L - R, lh = Math.max(3, Math.floor((H - T - B) / n));
+    chGeom = { L, T, pw, lh, n, w };
+    const C = colors(); const img = chx.createImageData(pw, lh * n); const d = img.data;
+    for (let px = 0; px < pw; px++) {
+      const a = Math.floor(px * w / pw), b = Math.max(a + 1, Math.floor((px + 1) * w / pw));
+      for (let l = 0; l < n; l++) { let m = 0; for (let i = a; i < b; i++) { const v = chData.r[l * w + i]; if (v > m) m = v; } const col = mix(C.seq1, C.seq7, clamp01(m - 1)); for (let y = 0; y < lh - (lh > 4 ? 1 : 0); y++) { const p = ((l * lh + y) * pw + px) * 4; d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; d[p + 3] = 255; } }
+    }
+    chx.putImageData(img, L, T);
+    chx.fillStyle = css('--ink2'); chx.font = '11px -apple-system, sans-serif'; chx.textAlign = 'right';
+    for (let l = 0; l < n; l += 8) chx.fillText('layer ' + l, L - 4, T + l * lh + lh);
+    for (let i = 0; i <= 5; i++) { const ch = Math.round(w * i / 5); chx.textAlign = i === 0 ? 'left' : i === 5 ? 'right' : 'center'; chx.fillText(fmt(Math.min(ch, w - 1)), L + pw * i / 5, H - 6); }
+    if (chSel != null) { const x = L + (chSel + 0.5) * pw / w; chx.strokeStyle = css('--ink'); chx.lineWidth = 1; chx.setLineDash([3, 3]); chx.beginPath(); chx.moveTo(x, T); chx.lineTo(x, T + lh * n); chx.stroke(); chx.setLineDash([]); }
+    // the ranking
+    const rows = []; for (let i = 0; i < w; i++) { let cnt = 0, sum = 0, peak = 0, pl = 0; for (let l = 0; l < n; l++) { const v = chData.r[l * w + i]; sum += v; if (v >= 1.3) cnt++; if (v > peak) { peak = v; pl = l; } } rows.push({ i, cnt, mean: sum / n, peak, pl }); }
+    rows.sort((a, b) => (b.cnt - a.cnt) || (b.mean - a.mean));
+    list.innerHTML = rows.slice(0, 12).map((c) => `<div class="it${c.i === chSel ? ' on' : ''}" data-ch="${c.i}"><span class="n">channel ${c.i}</span><span class="w">${c.cnt} of ${n} layers</span><span class="p">peak ${x2(c.peak)} · layer ${c.pl}</span></div>`).join('');
+    $('#chlegend').textContent = `1× the layer's average channel → 2× or more · ${chData.rows} rows sampled per layer · the brightest of each ${Math.max(1, Math.round(w / pw))} channels shown per pixel`;
+  }
+  $('#chlist').onclick = (e) => { const it = e.target.closest('.it'); if (it) pickChannel(Number(it.dataset.ch)); };
+  function chAt(e) { if (!chGeom) return null; const r = chC.getBoundingClientRect(); const x = e.clientX - r.left - chGeom.L, y = e.clientY - r.top - chGeom.T; if (x < 0 || x >= chGeom.pw || y < 0 || y >= chGeom.lh * chGeom.n) return null; const l = Math.floor(y / chGeom.lh); const a = Math.floor(x * chGeom.w / chGeom.pw), b = Math.max(a + 1, Math.floor((x + 1) * chGeom.w / chGeom.pw)); let best = a; for (let i = a; i < b; i++) if (chData.r[l * chGeom.w + i] > chData.r[l * chGeom.w + best]) best = i; return { l, ch: best, v: chData.r[l * chGeom.w + best], a, b }; }
+  chC.onmousemove = (e) => { const p = chAt(e); if (!p) { hideTip(); return; } showTip(e, `layer ${p.l} · channel ${p.ch}\n${x2(p.v)} the layer's average${p.b - p.a > 1 ? `\n(the biggest of channels ${p.a}–${p.b - 1})` : ''}\nclick to follow it`); };
+  chC.onmouseleave = hideTip;
+  chC.onclick = (e) => { const p = chAt(e); if (p) pickChannel(p.ch); };
+  function pickChannel(ch) {
+    if (!chData || ch == null || ch >= chData.width) return; chSel = ch; drawChannels();
+    const n = chData.layers, xs = [], ys = []; let pl = 0; for (let l = 0; l < n; l++) { xs.push(l); ys.push(chData.r[l * chData.width + ch]); if (ys[l] > ys[pl]) pl = l; }
+    $('#chone').hidden = false; $('#chonetitle').textContent = `Channel ${ch} through the ${n} layers · biggest at layer ${pl} (${x2(ys[pl])})`;
+    lineChart($('#chline'), xs, ys, { xLabel: 'layer', fmtX: String, fmtY: x2, tipY: (v) => `${x2(v)} the layer's average`, ref: 1, minTop: 1.5 });
+    $('#chopen').onclick = () => { const t = chTensor(pl); if (!t) return; revealInList(t); state.mode = 'real'; showTab('picture'); select(t, { r0: 0, c0: Math.max(0, ch - 60), z: 4 }); };
+    savePlace();
+  }
+
+  // ---------- the words ----------
+  let tix = null, wordSel = null;
+  const showTok = (s) => s.replace(/ /g, '␣').replace(/\n/g, '↵').replace(/\t/g, '⇥');
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function ensureTokens() { if (!tix && model.tokens) tix = Core.tokenIndex(model.tokens); return tix; }
+  $('#wq').oninput = () => {
+    if (!ensureTokens()) { $('#wnote').textContent = 'This file has no token list.'; return; }
+    const res = Core.findTokens(tix, $('#wq').value, 30);
+    const item = (r) => `<div class="it${wordSel && wordSel.id === r.id ? ' on' : ''}" data-id="${r.id}"><span class="tok">${esc(showTok(r.text))}</span><span class="id">token ${fmt(r.id)}</span></div>`;
+    const ex = res.filter((r) => r.exact), part = res.filter((r) => !r.exact);
+    $('#wlist').innerHTML = (ex.length ? `<div class="wgrp">The word itself</div>${ex.map(item).join('')}` : '') + (part.length ? `<div class="wgrp">Tokens that contain it</div>${part.map(item).join('')}` : '') || ($('#wq').value.trim() ? '<div class="small">No token contains that.</div>' : '');
+    $('#wnote').textContent = $('#wq').value.trim() ? `${res.length === 30 ? '30+' : res.length} tokens` : '';
+  };
+  $('#wlist').onclick = (e) => { const it = e.target.closest('.it'); if (it) showWord(Number(it.dataset.id)); };
+  async function tokenRow(name, id) { const t = model.tensors.find((x) => x.name === name); if (!t || !t.rowBytes || id >= t.rows) return null; const dec = Core.decodeRows(t, await Core.readRows(file, model, t, id, 1), 1); return Core.realRow(t, dec, 0, Core.rotationOf(model, t), new Float32Array(t.ne0)); }
+  async function showWord(id) {
+    if (!ensureTokens() || id == null || id >= tix.texts.length) return;
+    const [a, b] = await Promise.all([tokenRow('token_embd.weight', id), tokenRow('output.weight', id)]);
+    wordSel = { id, text: tix.texts[id], a, b };
+    for (const it of document.querySelectorAll('#wlist .it')) it.classList.toggle('on', Number(it.dataset.id) === id);
+    $('#wcard').hidden = false;
+    $('#wtitle').innerHTML = `<span class="tok">${esc(showTok(wordSel.text))}</span> · token ${fmt(id)}`;
+    const top = (v) => Array.from(v, (x, i) => [Math.abs(x), i]).sort((p, q) => q[0] - p[0]).slice(0, 5).map((p) => p[1]).join(', ');
+    $('#wmeta').textContent = a ? `Biggest channels in its word-table row: ${top(a)}${b ? ` · in its output row: ${top(b)}` : ''}.` : '';
+    drawStrip($('#wstrip1'), a); drawStrip($('#wstrip2'), b);
+    compare(); savePlace();
+  }
+  function drawStrip(c, v) {
+    if (!c.clientWidth) return; fitCanvas(c); const x = c.getContext('2d'); const W = c.width, H = c.height; x.fillStyle = css('--surface'); x.fillRect(0, 0, W, H); c._v = v; if (!v) return;
+    let sq = 0; for (const y of v) sq += y * y; const s = 2.5 * Math.sqrt(sq / v.length) || 1; const C = colors();
+    for (let px = 0; px < W; px++) { const a = Math.floor(px * v.length / W), b = Math.max(a + 1, Math.floor((px + 1) * v.length / W)); let m = 0; for (let i = a; i < b; i++) if (Math.abs(v[i]) > Math.abs(m)) m = v[i]; x.fillStyle = rgb(m < 0 ? mix(C.zero, C.neg, clamp01(-m / s)) : mix(C.zero, C.pos, clamp01(m / s))); x.fillRect(px, 0, 1, H); }
+  }
+  for (const id of ['#wstrip1', '#wstrip2']) {
+    const c = $(id);
+    c.onmousemove = (e) => { const v = c._v; if (!v) return; const r = c.getBoundingClientRect(); const a = Math.floor((e.clientX - r.left) * v.length / r.width), b = Math.max(a + 1, Math.floor((e.clientX - r.left + 1) * v.length / r.width)); let best = a; for (let i = a; i < b && i < v.length; i++) if (Math.abs(v[i]) > Math.abs(v[best])) best = i; $('#wreadout').textContent = `${id === '#wstrip1' ? 'word table' : 'output'} · channel ${best} · real weight ${v[best].toPrecision(3)}${b - a > 1 ? ` (the biggest of channels ${a}–${b - 1})` : ''}`; };
+  }
+  let cmpT = null;
+  $('#wq2').oninput = () => { clearTimeout(cmpT); cmpT = setTimeout(compare, 150); };
+  async function compare() {
+    const q = $('#wq2').value.trim(); if (!wordSel || !q || !ensureTokens()) { $('#wcmp').textContent = q ? '' : 'Type a second word to see how alike the model keeps the two.'; return; }
+    const hit = Core.findTokens(tix, q, 1)[0]; if (!hit) { $('#wcmp').textContent = 'No token matches that.'; return; }
+    const [a, b] = await Promise.all([tokenRow('token_embd.weight', hit.id), tokenRow('output.weight', hit.id)]);
+    const f = (x) => (x >= 0 ? '+' : '−') + Math.abs(x).toFixed(2);
+    $('#wcmp').innerHTML = `<span class="tok">${esc(showTok(wordSel.text))}</span> and <span class="tok">${esc(showTok(hit.text))}</span> (token ${fmt(hit.id)}): word table <b>${f(Core.cosine(wordSel.a, a))}</b> · output <b>${f(Core.cosine(wordSel.b, b))}</b><div class="small">How alike the two rows point: +1 = the same direction, 0 = unrelated, −1 = opposite. Unrelated words usually sit near 0.</div>`;
+    savePlace();
+  }
+  $('#wopen1').onclick = () => openRow('token_embd.weight');
+  $('#wopen2').onclick = () => openRow('output.weight');
+  function openRow(name) { const t = model.tensors.find((x) => x.name === name); if (!t || !wordSel) return; revealInList(t); showTab('picture'); select(t, { r0: Math.max(0, wordSel.id - 4), c0: 0, z: 4 }); }
+
+  // ---------- tabs, resize, theme ----------
+  function showTab(id, quiet) {
+    hideTip(); state.tab = id;
+    for (const b of document.querySelectorAll('nav.tabs button')) b.classList.toggle('on', b.dataset.tab === id);
+    for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', t.id === 'tab-' + id);
+    if (model) heading();
+    if (id === 'picture') { paintModeSeg(); paintLegend(); drawZoom(); drawOverview(); }
+    if (cur && st) { if (id === 'scales') drawScales(); if (id === 'profiles') drawProfiles(); }
+    if (id === 'channels') { drawChannels(); if (chSel != null && chData) pickChannel(chSel); }
+    if (id === 'words') { setTimeout(ensureTokens, 0); if (wordSel) { drawStrip($('#wstrip1'), wordSel.a); drawStrip($('#wstrip2'), wordSel.b); } setTimeout(() => $('#wq').focus(), 0); }
+    if (!quiet) savePlace();
+  }
+  for (const b of document.querySelectorAll('nav.tabs button')) b.onclick = () => showTab(b.dataset.tab);
+  let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (cur && st) { drawZoom(); drawScales(); drawProfiles(); } drawChannels(); if (wordSel) { drawStrip($('#wstrip1'), wordSel.a); drawStrip($('#wstrip2'), wordSel.b); } }, 120); });
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (cur && st) { drawZoom(); drawOverview(); drawScales(); drawProfiles(); } if (layerStats) paintLayers(); drawChannels(); if (wordSel) { drawStrip($('#wstrip1'), wordSel.a); drawStrip($('#wstrip2'), wordSel.b); } });
+})();
+</script>
+</body>
+</html>

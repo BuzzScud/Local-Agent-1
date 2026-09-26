@@ -12,6 +12,8 @@ export const COMMANDS = [
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]' },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
+  { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
+  { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Bonsai page' },
   { name: 'exit', desc: 'Quit Bonsai Code' },
 ];
 

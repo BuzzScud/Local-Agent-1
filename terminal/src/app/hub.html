@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai Hub</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-ink: #fff;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+header { display: flex; align-items: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); height: 44px; flex: none; }
+header h1 { font-size: 15px; margin: 0 14px 0 4px; font-weight: 600; white-space: nowrap; }
+header button { font: inherit; color: var(--ink2); background: none; border: none; border-radius: 8px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+header button:hover { color: var(--ink); background: var(--panel); }
+header button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 8px 8px 0 0; }
+header .spacer { flex: 1; }
+header .now { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+header a { color: var(--accent); font-size: 12px; text-decoration: none; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
+header a:hover { background: var(--panel); }
+main { flex: 1; min-height: 0; position: relative; }
+iframe { width: 100%; height: 100%; border: none; background: var(--surface); display: block; }
+#list { position: absolute; inset: 0; overflow: auto; padding: 20px 24px; display: none; }
+#list.on { display: block; } iframe.off { display: none; }
+#list h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin: 18px 0 8px; font-weight: 600; }
+#list h2:first-child { margin-top: 0; }
+.row { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: baseline; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.row:hover { background: var(--panel); }
+.row .t { font-weight: 500; } .row .f { font-family: var(--mono); font-size: 12px; color: var(--ink3); margin-left: 8px; }
+.row .m { color: var(--ink3); font-size: 12px; font-family: var(--mono); white-space: nowrap; }
+.row .k { color: var(--ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+#list .note { color: var(--ink2); max-width: 560px; }
+#list .note code { font-family: var(--mono); font-size: 12px; }
+@media (max-width: 720px) { header h1 { display: none; } header .now { display: none; } .row { grid-template-columns: 1fr auto; } .row .k { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bonsai hub</h1>
+  <button data-tab="weights">Weights</button>
+  <button data-tab="harness">Harness</button>
+  <button data-tab="structure">Structure</button>
+  <button data-tab="docs">All docs</button>
+  <span class="spacer"></span>
+  <span class="now" id="now"></span>
+  <a id="own" href="/weights" target="_blank" rel="noopener">open in its own tab ↗</a>
+</header>
+<main>
+  <iframe id="frame" title="page"></iframe>
+  <div id="list"></div>
+</main>
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own');
+  let docs = null; // { dir, missing, pinned: { harness, structure }, pages: [{ file, title, kind, size, saved }] }
+  const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
+
+  function setTab(tab) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
+  function show(url, label) {
+    list.classList.remove('on'); frame.classList.remove('off');
+    if (frame.getAttribute('src') !== url) frame.src = url;
+    now.textContent = label || ''; own.href = url; own.style.display = '';
+    const q = new URL(location.href); if (url.startsWith('/docs/')) q.searchParams.set('page', url.slice(6)); else q.searchParams.delete('page'); history.replaceState(null, '', q);
+  }
+  function showList() {
+    frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none';
+    const q = new URL(location.href); q.searchParams.delete('page'); history.replaceState(null, '', q);
+    if (!docs) { list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
+    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Bonsai looks for <code>${docs.dir || 'bonsai-code DOCS'}</code> at the top of the repo. Set <code>BONSAI_DOCS</code> to point somewhere else.</p>`; return; }
+    const row = (p, kind) => `<div class="row" data-file="${p.file}"><span><span class="t">${p.title || p.name}</span>${p.title ? `<span class="f">${p.name}</span>` : ''}</span><span class="k">${kind || p.kind}</span><span class="m">${p.saved} · ${kb(p.size)}</span></div>`;
+    const pinned = [docs.pinned.harness, docs.pinned.structure].filter(Boolean);
+    const BLURB = { unsorted: 'at the top level, not filed yet', diagrams: 'how Bonsai is built and how a request moves through it', reports: 'what got built, day by day', tests: 'measured runs, checks and the chart-bug rounds', 'design rounds': 'looks that were tried and picked', other: 'kept here, not about Bonsai itself', 'older versions': 'replaced by a newer page, kept as the record' };
+    list.innerHTML = (pinned.length ? '<h2>Pinned</h2>' + pinned.map((p) => row(p, p === docs.pinned.harness ? 'harness' : 'structure')).join('') : '')
+      + docs.groups.map((g) => { const ps = docs.pages.filter((p) => p.group === g); return `<h2>${g} · ${ps.length}${BLURB[g] ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400">— ${BLURB[g]}</span>` : ''}</h2>` + ps.map((p) => row(p)).join(''); }).join('')
+      + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${docs.dir}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
+  }
+  function open(tab, page) {
+    setTab(tab);
+    if (tab === 'weights') return show('/weights', 'the model\'s weights');
+    if (tab === 'docs' && !page) return showList();
+    if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
+    const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
+    if (!p) { setTab('docs'); showList(); if (!docs.missing) list.insertAdjacentHTML('afterbegin', `<p class="note">No ${page ? `page called <code>${page}</code>` : `${tab} page`} in the DOCS folder.</p>`); return; }
+    show('/docs/' + p.file.split('/').map(encodeURIComponent).join('/'), p.title || p.name);
+  }
+  for (const b of document.querySelectorAll('header button')) b.onclick = () => open(b.dataset.tab);
+  list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
+
+  const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
+  if (tab === 'weights' && !page) open('weights'); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
+  fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (tab !== 'weights' || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (tab !== 'weights') open(tab); });
+})();
+</script>
+</body>
+</html>
