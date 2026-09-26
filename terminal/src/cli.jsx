@@ -8,6 +8,7 @@ import { TerminalWindow, MIN_COLS } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
+import { pickOnTerminal } from './app/pick.mjs';
 
 // bonsai -p: a question from Bonsai is printed and answered on the same terminal.
 async function askOnTerminal(question, req) {
@@ -46,15 +47,11 @@ async function ensureTrusted(cwd) {
     'you allow them. A yes covers this folder and everything inside it, and',
     'is remembered.',
     '',
-    '  1. Yes, I trust this folder',
-    '  2. No, exit',
-    '',
     '',
   ].join('\n'));
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  const line = await new Promise((resolve) => rl.question('> ', resolve));
-  rl.close();
-  if (/^(1|y|yes|trust)/i.test(line.trim())) { saveTrust(cwd); return true; }
+  // A menu like the ones inside the app: arrows move ❯, enter picks, 1 or 2 pick at once.
+  const pick = await pickOnTerminal(['Yes, I trust this folder', 'No, exit']);
+  if (pick === 0) { saveTrust(cwd); return true; }
   process.stderr.write('\x1b[2mNothing was read here. Start bonsai in a folder you trust.\x1b[0m\n');
   return false;
 }

@@ -246,23 +246,52 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   expect(second.text).toContain('Hello from the stand-in model.');
 }, 240_000);
 
-test('a folder not yet trusted gets the safety check first; yes is remembered', async () => {
+// The safety check is a menu: ❯ on "Yes" first, the arrows move it, enter
+// picks. Here it is moved down to No and back up to Yes before enter.
+test('a folder not yet trusted gets the safety check first; arrows + enter say yes, and it is remembered', async () => {
   const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const env = { BONSAI_HOME: join(base, 'home') }; // no trust seeded
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Quick safety check' }, { type: '1' }, { key: 'enter' },
+    { wait: 'Quick safety check' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'onNo' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
     { wait: 'Welcome to Bonsai Code' }, ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('Is this a folder you created or one you trust?');
+  expect(r.snapshots.menu).toContain('❯ 1. Yes, I trust this folder');
+  expect(r.snapshots.menu).toContain('  2. No, exit');
+  expect(r.snapshots.onNo).toContain('❯ 2. No, exit');
+  expect(r.snapshots.onNo).toContain('  1. Yes, I trust this folder');
   expect(r.text).toContain('loaded:'); // the welcome says what was read
   // The key is the real path (tmpdir is a link on macOS).
   const keys = Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')));
   expect(keys.some((k) => k.endsWith('/demo-project'))).toBe(true);
 }, T);
+
+test('safety check: typing 2 picks No at once and nothing is read; 1 still says yes', async () => {
+  const mk = () => {
+    const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+    const cwd = join(base, 'demo-project');
+    cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+    return { base, cwd, env: { BONSAI_HOME: join(base, 'home') } };
+  };
+  const a = mk();
+  const no = await runInPty({ cwd: a.cwd, env: a.env, args: ['--no-flows'], steps: [
+    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '2' }, { wait: 'Nothing was read here' }, { sleep: 300 },
+  ] });
+  expect(no.code).toBe(0);
+  expect(existsSync(join(a.base, 'home', 'trust.json'))).toBe(false);
+  const b = mk();
+  const fake = await startFakeServer([{ text: 'Hello.' }]);
+  const yes = await runInPty({ cwd: b.cwd, env: b.env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Welcome to Bonsai Code' }, ...quit,
+  ] });
+  await fake.close();
+  expect(yes.text).toContain('Welcome to Bonsai Code');
+  expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
+}, T * 2);
 
 test('typing "exit" as a plain message quits, like /exit', async () => {
   const { cwd, env } = setup();
