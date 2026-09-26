@@ -15,7 +15,14 @@ and `/meters on` adds the old status bar (model, speed, memory, effort) for thos
 When a commit that changes Bonsai's code lands on main while it runs, the lower right says
 `↻ Update available · /update to use it`; pushed to GitHub's main from a worktree but not in this
 folder yet, `↻ Update on GitHub · /update to get it` (`src/app/update.mjs`, checked every 20 s;
-`BONSAI_NO_UPDATE=1` turns it off). `/update` restarts Bonsai in the same window on the new code,
+`BONSAI_NO_UPDATE=1` turns it off). GitHub itself is asked too, with `git fetch` 30 s after the
+start, every 5 minutes and at each `/update` (`BONSAI_FETCH_EVERY=<ms>`, `0` never), so a push
+from another machine shows as well. That fetch only reads: it moves one ref
+(`refs/remotes/origin/main`), never your branches, tags, submodules or files; only from an https,
+ssh or on-this-Mac origin (never `http://`, `git://` or `ext::`); with TLS checks on, objects
+checked as they arrive, and git run with no terminal, so a password or host-key prompt fails
+instead of taking over the screen. Your folder changes only when you type `/update`, and then
+only by a fast-forward. `/update` restarts Bonsai in the same window on the new code,
 the conversation picked back up and the model kept loaded: the app exits with code 75 and the
 `bonsai` launcher, which waits on it, rebuilds and starts it again (an update only on GitHub is
 fast-forwarded into this folder's main first, when git can do that without touching anything

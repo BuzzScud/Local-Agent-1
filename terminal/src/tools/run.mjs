@@ -12,6 +12,7 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
     // Its own process group, so stopping it stops everything it started
     // (npm → node → test workers), not just the shell.
     const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1' };
+    delete env.BONSAI_RESTART_FILE; // where /update leaves its restart: the app's alone
     const fenced = sandbox !== false && sandboxAvailable();
     const child = fenced
       ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })

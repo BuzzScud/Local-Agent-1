@@ -3,11 +3,12 @@
 // was already built in, and pushes not yet in this folder are told apart.
 // /update restarts the app on the new code with the conversation kept.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, symlinkSync, chmodSync, realpathSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, symlinkSync, chmodSync, realpathSync, statSync, lstatSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { isAppCode, checkUpdate, updateText, bringIn } from '../src/app/update.mjs';
+import { isAppCode, checkUpdate, updateText, bringIn, fetchMain, isSafeRemote, plain, runGit, leaveRestart } from '../src/app/update.mjs';
+import { runCommand } from '../src/tools/run.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { openTerm } from './term.mjs';
 
@@ -89,6 +90,7 @@ test('the real app shows the badge in the lower right when a code commit lands w
 
 test('/update brings a GitHub-only update into main only when git can fast-forward cleanly', async () => {
   const repo = makeRepo();
+  git(repo, 'remote', 'add', 'origin', repo); // a folder on this Mac: a safe origin
   const base = git(repo, 'rev-parse', 'main');
   git(repo, 'checkout', '-q', '-b', 'other');
   const pushed = commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 5;\n' }, 'from a worktree');
@@ -141,7 +143,7 @@ test('/update through the bonsai launcher: rebuilt, restarted in the same window
   const src = join(import.meta.dir, '..', '..');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-update-repo-')));
   const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/bonsai-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
-    .split('\n').filter((f) => f && !/^models\/(evals|test)\//.test(f));
+    .split('\n').filter(Boolean); // models/ whole: the app imports from evals/ too (the test record)
   for (const f of files) { mkdirSync(dirname(join(repo, f)), { recursive: true }); cpSync(join(src, f), join(repo, f)); }
   symlinkSync(join(src, 'node_modules'), join(repo, 'node_modules'));
   git(repo, 'init', '-q', '-b', 'main'); git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'this tree');
@@ -179,3 +181,128 @@ test('/update through the bonsai launcher: rebuilt, restarted in the same window
     expect(ps.length).toBe(1); // one app, not a chain of them
   } finally { await t.close(); await fake.close(); }
 }, 120_000);
+
+// ── The GitHub check (git fetch) and what keeps it safe ─────────────────────
+
+// A stand-in GitHub: a bare repo; `local` is Bonsai's folder (a clone of it),
+// `other` is another machine pushing to it.
+function github() {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-gh-')));
+  const hub = join(root, 'hub.git');
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', hub]);
+  const seed = join(root, 'seed');
+  execFileSync('git', ['clone', '-q', hub, seed], { stdio: 'ignore' });
+  commit(seed, { 'terminal/src/cli.jsx': '// app\n', 'terminal/src/app/a.mjs': 'export const a = 1;\n' }, 'start');
+  git(seed, 'push', '-q', 'origin', 'main');
+  const local = join(root, 'local');
+  const other = join(root, 'other');
+  execFileSync('git', ['clone', '-q', hub, local], { stdio: 'ignore' });
+  execFileSync('git', ['clone', '-q', hub, other], { stdio: 'ignore' });
+  return { hub, local, other };
+}
+
+test('only https, ssh or a folder on this Mac count as a safe place to update from', () => {
+  for (const u of ['https://github.com/BuzzScud/Local-Agent-1.git', 'ssh://git@github.com/o/r.git', 'git@github.com:o/r.git', '/Users/me/hub.git', 'file:///Users/me/hub.git'])
+    expect([u, isSafeRemote(u)]).toEqual([u, true]);
+  for (const u of ['http://github.com/o/r.git', 'git://github.com/o/r.git', 'ext::sh -c touch% /tmp/pwned', 'fd::3', '-oProxyCommand=x@h:p', 'git@github.com:-oops', 'https://a b', '', null])
+    expect([u, isSafeRemote(u)]).toEqual([u, false]);
+});
+
+test('the fetch moves only refs/remotes/origin/main: no branch of yours, no tags, no FETCH_HEAD, nothing in the folder', async () => {
+  const { local, other } = github();
+  const mainBefore = git(local, 'rev-parse', 'main');
+  const pushed = commit(other, { 'terminal/src/app/a.mjs': 'export const a = 2;\n' }, 'pushed elsewhere');
+  git(other, 'tag', 'v9'); git(other, 'push', '-q', 'origin', 'main', 'v9');
+  // A setting that would map GitHub's main onto a branch of yours: --refmap= ignores it.
+  git(local, 'config', '--add', 'remote.origin.fetch', '+refs/heads/main:refs/heads/victim');
+  expect((await fetchMain(local)).ok).toBe(true);
+  expect(git(local, 'rev-parse', 'refs/remotes/origin/main')).toBe(pushed);
+  expect(git(local, 'rev-parse', 'main')).toBe(mainBefore);
+  expect(git(local, 'branch', '--list', 'victim')).toBe('');
+  expect(git(local, 'tag', '--list')).toBe('');
+  expect(existsSync(join(local, '.git', 'FETCH_HEAD'))).toBe(false);
+  expect(readFileSync(join(local, 'terminal/src/app/a.mjs'), 'utf8')).toBe('export const a = 1;\n');
+  expect((await checkUpdate(local, { main: mainBefore }, Date.now()))?.kind).toBe('pull');
+});
+
+test('an http:// or git:// origin is never fetched from or brought in', async () => {
+  const { local, other } = github();
+  commit(other, { 'terminal/src/app/a.mjs': 'export const a = 3;\n' }, 'x'); git(other, 'push', '-q', 'origin', 'main');
+  const before = git(local, 'rev-parse', 'refs/remotes/origin/main');
+  for (const url of ['http://127.0.0.1:9/hub.git', 'git://127.0.0.1:9/hub.git']) {
+    git(local, 'remote', 'set-url', 'origin', url);
+    const f = await fetchMain(local);
+    expect(f.ok).toBe(false);
+    expect(f.why).toContain('not an https or ssh address');
+    expect((await bringIn(local)).why).toContain('not an https or ssh address');
+  }
+  expect(git(local, 'rev-parse', 'refs/remotes/origin/main')).toBe(before);
+});
+
+test('git runs without a terminal: nothing it starts can open /dev/tty to ask for a password', async () => {
+  // Run inside a real pty, so the direct run below does have a terminal to open.
+  const repo = makeRepo();
+  const probe = join(mkdtempSync(join(tmpdir(), 'bonsai-tty-')), 'probe.mjs');
+  const alias = ['-c', 'alias.ttycheck=!sh -c "(exec 3</dev/tty) 2>/dev/null && echo HAS-TTY || echo NO-TTY"', 'ttycheck'];
+  writeFileSync(probe, `import { runGit } from ${JSON.stringify(join(import.meta.dir, '../src/app/update.mjs'))};
+import { execFileSync } from 'node:child_process';
+const direct = execFileSync('git', ['-C', ${JSON.stringify(repo)}, ...${JSON.stringify(alias)}], { encoding: 'utf8', stdio: ['inherit', 'pipe', 'inherit'] }).trim();
+const r = await runGit(${JSON.stringify(repo)}, ${JSON.stringify(alias)});
+console.log('direct=' + direct + ' runGit=' + r.out);`);
+  const t = openTerm({ cwd: repo, bin: process.execPath, args: [probe], cols: 100, rows: 10 });
+  try {
+    await t.waitFor(/runGit=\w/, 15_000);
+    const line = (await t.screen()).split('\n').find((l) => l.includes('runGit='));
+    expect(line).toContain('direct=HAS-TTY'); // the probe works: a plain child can reach the terminal
+    expect(line).toContain('runGit=NO-TTY'); // Bonsai's git calls cannot
+  } finally { await t.close(); }
+}, 30_000);
+
+test("git's words on screen carry no control characters", () => {
+  expect(plain('error: Your local changes to \x1b[31mred\x1b[0m\u009b2J would be overwritten\nsecond')).toBe('Your local changes to [31mred[0m2J would be overwritten');
+  expect(plain('')).toBe('');
+});
+
+test('the restart file is written fresh for you only; a link planted in its place is removed, not followed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'bonsai-restart-'));
+  const target = join(dir, 'precious.txt');
+  writeFileSync(target, 'keep me\n');
+  const file = join(dir, 'restart.123');
+  symlinkSync(target, file);
+  const keep = process.env.BONSAI_RESTART_FILE;
+  try {
+    process.env.BONSAI_RESTART_FILE = file;
+    leaveRestart(['--resume', 'abc', '--url', 'http://127.0.0.1:1\nevil']);
+  } finally { if (keep === undefined) delete process.env.BONSAI_RESTART_FILE; else process.env.BONSAI_RESTART_FILE = keep; }
+  expect(readFileSync(target, 'utf8')).toBe('keep me\n');
+  expect(lstatSync(file).isSymbolicLink()).toBe(false);
+  expect(statSync(file).mode & 0o777).toBe(0o600);
+  expect(readFileSync(file, 'utf8')).toBe('--resume\nabc\n--url\nhttp://127.0.0.1:1 evil\n');
+});
+
+test("commands Bonsai runs do not see where the restart file goes", async () => {
+  const keep = process.env.BONSAI_RESTART_FILE;
+  process.env.BONSAI_RESTART_FILE = '/tmp/x';
+  try {
+    const r = await runCommand('echo "file=${BONSAI_RESTART_FILE:-none}"', { cwd: tmpdir(), sandbox: false });
+    expect(r.output ?? r.lines?.join('\n') ?? String(r)).toContain('file=none');
+  } finally { if (keep === undefined) delete process.env.BONSAI_RESTART_FILE; else process.env.BONSAI_RESTART_FILE = keep; }
+});
+
+test('the real app asks GitHub on its own: a push from another machine lights "Update on GitHub", and /update brings it in', async () => {
+  const { local, other } = github();
+  const { base, cwd } = trustedProject();
+  const fake = await startFakeServer([{ text: 'Hello.' }]);
+  const t = openTerm({ cwd, env: { BONSAI_HOME: join(base, 'home'), BONSAI_REPO: local, BONSAI_UPDATE_EVERY: '300', BONSAI_FETCH_EVERY: '400', BONSAI_RESTART_FILE: '' }, args: ['--url', fake.url, '--no-flows'] });
+  try {
+    await t.waitFor('? for shortcuts');
+    await new Promise((r) => setTimeout(r, 900));
+    expect(await t.screen()).not.toContain('Update');
+    const pushed = commit(other, { 'models/index.mjs': 'export {};\n' }, 'pushed from another machine');
+    git(other, 'push', '-q', 'origin', 'main');
+    await t.waitFor('↻ Update on GitHub · /update to get it', 10_000);
+    await t.type('/update'); t.key('enter');
+    await t.waitFor('The update is in the repo now', 15_000);
+    expect(git(local, 'rev-parse', 'main')).toBe(pushed);
+  } finally { await t.close(); await fake.close(); }
+}, 60_000);

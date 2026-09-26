@@ -23,7 +23,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   const fifo = `${out}.in`;
   execFileSync('mkfifo', [fifo]);
   const q = (x) => `'${x.replace(/'/g, `'\\''`)}'`;
-  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', BONSAI_NO_OPEN: '1', ...env }, stdio: 'ignore' });
+  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', BONSAI_NO_OPEN: '1', BONSAI_FETCH_EVERY: '0', ...env }, stdio: 'ignore' });
   const fd = openSync(fifo, 'w');
   const stdin = { write: (s) => { try { writeSync(fd, s); } catch {} } };
   const done = new Promise((resolve) => child.on('exit', (code) => resolve(code)));

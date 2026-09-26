@@ -50,7 +50,9 @@ while :; do
   rm -f "$RESTART"
   BONSAI_REPO="$REPO" BONSAI_RESTART_FILE="$RESTART" "$APP" "$@"
   code=$?
-  if [ "$code" = 75 ] && [ -f "$RESTART" ]; then
+  # Only a plain file of yours that the app just wrote (not a link); each line
+  # is one argument, never run as shell code.
+  if [ "$code" = 75 ] && [ -f "$RESTART" ] && [ ! -L "$RESTART" ] && [ -O "$RESTART" ]; then
     set --
     while IFS= read -r a; do set -- "$@" "$a"; done < "$RESTART"
     rm -f "$RESTART"
