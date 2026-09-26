@@ -14,6 +14,9 @@ import { SLOT_DIR, ENGINE, thinkingKwargs } from '../registry.mjs';
 import { hasDraft } from './server.mjs';
 
 export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a line)
+// Whole first reads, this session's part included (folder, date, git, notes):
+// a second start with the same instructions skips even that part. ~225 MB each.
+export const KEEP_WHOLE = 4;
 
 async function post(url, path, body, signal) {
   const r = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal });
@@ -23,9 +26,9 @@ async function post(url, path, body, signal) {
 }
 
 // Keeps the most recently used saved states, removes the rest.
-export function pruneSaved(dir = SLOT_DIR, keep = KEEP_SAVED) {
+export function pruneSaved(dir = SLOT_DIR, keep = KEEP_SAVED, kind = /^warm-[0-9a-f]+\.bin$/) {
   let files;
-  try { files = readdirSync(dir).filter((f) => /^warm-[0-9a-f]+\.bin$/.test(f)); } catch { return; }
+  try { files = readdirSync(dir).filter((f) => kind.test(f)); } catch { return; }
   files.map((f) => ({ f, t: statSync(join(dir, f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(keep)
     .forEach(({ f }) => rmSync(join(dir, f), { force: true }));
 }
@@ -47,7 +50,20 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     // A saved state belongs to one engine build and one helper setup: a state
     // saved by another build is read again instead of restored.
     const helper = hasDraft(model) ? model.draft.file : '';
-    const file = `warm-${createHash('sha256').update(`${model.file}\0${ENGINE.tag}\0${helper}\0${shared}`).digest('hex').slice(0, 16)}.bin`;
+    const key = (text) => createHash('sha256').update(`${model.file}\0${ENGINE.tag}\0${helper}\0${text}`).digest('hex').slice(0, 16);
+    const file = `warm-${key(shared)}.bin`;
+    // The same instructions as a start before (same folder, day, git state):
+    // restore everything up to your first words at once.
+    const whole = `warmw-${key(upToUser)}.bin`;
+    if (existsSync(join(SLOT_DIR, whole))) {
+      onPhase('restoring');
+      try {
+        await post(url, `/slots/${slot}?action=restore`, { filename: whole }, signal);
+        const now = new Date();
+        utimesSync(join(SLOT_DIR, whole), now, now);
+        return { restored: true, whole: true, file: whole };
+      } catch { /* an old or damaged file: the usual way below */ }
+    }
     let restored = false;
     if (existsSync(join(SLOT_DIR, file))) {
       onPhase('restoring');
@@ -67,6 +83,10 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     }
     // This session's details (date, git, tests, project notes): a few hundred tokens.
     await post(url, '/completion', { prompt: upToUser, n_predict: 0, cache_prompt: true, id_slot: slot }, signal);
+    try {
+      await post(url, `/slots/${slot}?action=save`, { filename: whole }, signal);
+      pruneSaved(SLOT_DIR, KEEP_WHOLE, /^warmw-[0-9a-f]+\.bin$/);
+    } catch { /* saving is only a speed-up */ }
     return { restored, file };
   } catch (e) {
     if (signal?.aborted) throw e;

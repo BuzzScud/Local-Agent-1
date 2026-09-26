@@ -6,6 +6,12 @@ import { join, dirname } from 'node:path';
 import { diffLines } from '../tools/edit.mjs';
 
 export async function applyChange(ctx, changes) {
+  // On auto-accept, the plan is shown once first (yes, or what to do instead).
+  if (ctx.mode() === 'edits' && ctx.confirm && changes.length) {
+    const plan = `change ${changes.map((c) => { const d = diffLines(c.before ?? '', c.after); return `${c.rel} (+${d.additions} −${d.removals})`; }).join(', ')}`;
+    const r = await ctx.confirm(plan);
+    if (!r.ok) return { ok: false, feedback: r.feedback };
+  }
   for (const c of changes) {
     const d = diffLines(c.before ?? '', c.after);
     const prepared = { abs: join(ctx.cwd, c.rel), rel: c.rel, before: c.before ?? '', after: c.after, ...d, created: c.before === null || c.before === undefined };

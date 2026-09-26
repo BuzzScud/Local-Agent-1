@@ -4,7 +4,7 @@ import React from 'react';
 import { render } from 'ink';
 import { App } from './app/App.jsx';
 import { TerminalWindow } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 
@@ -30,6 +30,7 @@ Usage
   bonsai -p "question"      answer once and exit (changes are refused unless --yes)
   bonsai -c                 continue the last conversation in this folder
   bonsai setup              download the model and runtime (if missing) and check them
+  bonsai stop               free the model's memory now (it stays loaded ${LINGER_SECS / 60} min after you quit)
 
 Options
   --layout classic|live     screen layout (ctrl+l switches while running)
@@ -70,6 +71,14 @@ function parse(argv) {
   return o;
 }
 
+if (process.argv[2] === 'stop') {
+  const r = stopIdleServers();
+  const gb = (e) => `the model on port ${e.port}`;
+  if (r.stopped.length) process.stdout.write(`Stopped ${r.stopped.map(gb).join(', ')}; its memory is free.\n`);
+  if (r.inUse.length) process.stdout.write(`Still in use by an open Bonsai window: ${r.inUse.map(gb).join(', ')}. Quit that window first.\n`);
+  if (!r.stopped.length && !r.inUse.length) process.stdout.write('No model is loaded.\n');
+  process.exit(0);
+}
 if (process.argv[2] === 'setup') {
   try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\nbonsai setup: ${e.message}\n`); process.exit(1); }
 }
@@ -113,10 +122,8 @@ if (opts.print) {
   }
 } else {
   if (!process.stdin.isTTY) { process.stderr.write('bonsai needs a terminal. For scripts use: bonsai -p "…"\n'); process.exit(2); }
-  // Chat style: push what is on screen up, so the prompt box starts on the
-  // last lines of the window and the conversation grows upward above it.
-  // Terminal's own scrolling and copying keep working.
-  if (process.stdout.isTTY) process.stdout.write('\n'.repeat(process.stdout.rows || 24));
+  // Like Claude Code: the welcome starts where the cursor is (the top of a
+  // new window) and the prompt box follows what is on screen.
   const win = new TerminalWindow(process.stdout);
   const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
   const bye = () => { try { instance.unmount(); } catch {} };

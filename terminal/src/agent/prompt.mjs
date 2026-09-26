@@ -3,6 +3,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
+import { RULES } from './rules.mjs';
+
+// The home folder and its Desktop, Documents and Downloads: places to start
+// from, not projects. Bonsai answers from what it knows there, and goes into a
+// project when one is named (src/agent/projects.mjs).
+export function isHomeFolder(cwd, home = homedir()) {
+  return [home, join(home, 'Desktop'), join(home, 'Documents'), join(home, 'Downloads')].includes(cwd);
+}
+
+const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools: a few sentences and a small example, then one short line offering more detail. Search, Read or List files only when the user asks about their own files, code or notes, or names a file.`;
 
 // AGENTS.md (or CLAUDE.md) from the project folder up to the home folder.
 export function projectNotes(cwd, maxChars = 6000) {
@@ -90,11 +100,11 @@ How to work
 8. When you are done, reply in 1-3 short sentences: what changed and how you checked it. Cover every part of the request; if a part was not done, say so. When answering a question, give the actual values you found (numbers, names, file paths).
 9. If the same thing fails twice, stop and say what is blocking you.
 
-${example ? `${EXAMPLE}\n` : ''}Rules
+${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
 - Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 
-${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}
+${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}${isHomeFolder(cwd) ? `\n${HOME_NOTE}` : ''}
 ${notes ? `\nProject notes\n${notes}\n` : ''}`;
 }

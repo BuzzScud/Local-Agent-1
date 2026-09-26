@@ -201,16 +201,17 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   expect(r.snapshots.tab).toMatch(/> \/model/);
 }, T);
 
-test('chat style: the prompt box starts at the bottom of the window', async () => {
+test('like Claude Code: the welcome starts at the top and the prompt box follows it', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, rows: 43, args: ['--url', fake.url], steps: [{ wait: '? for shortcuts' }, { sleep: 400 }, { snapshot: 'start' }, ...quit] });
   await fake.close();
   const lines = r.snapshots.start.split('\n');
-  while (lines.length < 43) lines.push('');
+  const welcome = lines.findIndex((l) => l.includes('Welcome to Bonsai Code'));
   const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
-  expect(footer).toBeGreaterThanOrEqual(43 - 3);
-  expect(lines.slice(0, 10).every((l) => !l.trim())).toBe(true); // the space is above, not below
+  expect(welcome).toBeLessThanOrEqual(2);          // at the top, not pushed down
+  expect(footer).toBeLessThan(43 / 2);             // the prompt right under the welcome and tips
+  expect(lines.slice(footer + 2).every((l) => !l.trim())).toBe(true); // below: only the status line, then space
 }, T);
 
 test('start-up says what it waits for; a message typed meanwhile is sent when ready; the next start restores', async () => {

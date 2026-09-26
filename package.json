@@ -17,7 +17,7 @@
     "eval:verify": "zsh models/evals/tools/verify-tasks.sh",
     "docs": "node docs/sync-docs.mjs",
     "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/bonsai",
-    "install-cli": "bun run build && mkdir -p ~/.local/bin && cp dist/bonsai ~/.local/bin/bonsai && echo installed ~/.local/bin/bonsai",
+    "install-cli": "bun run build && mkdir -p ~/.bonsai-code/app ~/.local/bin && cp dist/bonsai ~/.bonsai-code/app/bonsai.new && mv -f ~/.bonsai-code/app/bonsai.new ~/.bonsai-code/app/bonsai && sed \"s|__REPO__|$PWD|\" terminal/app/bonsai-launcher.sh > ~/.local/bin/bonsai.new && chmod +x ~/.local/bin/bonsai.new && mv -f ~/.local/bin/bonsai.new ~/.local/bin/bonsai && echo \"installed ~/.local/bin/bonsai: it rebuilds itself from $PWD when the code changes\"",
     "test:binary": "bun run build && BONSAI_BIN=$PWD/dist/bonsai bun test ./terminal/test/app.test.mjs"
   },
   "dependencies": {

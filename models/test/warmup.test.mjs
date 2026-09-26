@@ -84,7 +84,28 @@ test('the first start reads the shared instructions and saves them; the next sta
   expect(out.secondReadHasSession).toBe(true);
   expect(out.restoredThenOnlySession).toBe(true);
   expect(out.slotsUsed).toEqual([0]);
-  expect(out.files).toEqual([out.r1.file]);
+  // the shared part once, plus each start's whole first read
+  expect(out.files.filter((f) => f.startsWith('warm-'))).toEqual([out.r1.file]);
+  expect(out.files.filter((f) => f.startsWith('warmw-')).length).toBe(2);
+});
+
+test('the same instructions again (same folder, day and git state) restore in one step, with nothing read', () => {
+  const out = inChild(`
+    const f = await fake();
+    const system = systemPrompt({ cwd: '/tmp/a', git: 'x', date: new Date('2026-09-25') });
+    const r1 = await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system, tools: [], thinking: false, slot: 0 });
+    f.calls.length = 0;
+    const phases = [];
+    const r2 = await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system, tools: [], thinking: false, slot: 0, onPhase: (p) => phases.push(p) });
+    Object.assign(out, { r1, r2, phases, reads: f.calls.filter((c) => c.path === '/completion').length, restores: f.calls.filter((c) => /restore/.test(c.path)).map((c) => c.body.filename) });
+    f.close();
+  `);
+  expect(out.r1.whole).toBeUndefined();
+  expect(out.r2).toEqual({ restored: true, whole: true, file: out.restores[0] });
+  expect(out.restores).toHaveLength(1);
+  expect(out.restores[0]).toMatch(/^warmw-[0-9a-f]{16}\.bin$/);
+  expect(out.phases).toEqual(['restoring']);
+  expect(out.reads).toBe(0);
 });
 
 test('a server without the template endpoint falls back to a plain first read', () => {

@@ -84,3 +84,33 @@ test('text and enter arriving together (a busy app) still send the message', asy
     expect(await t.screen()).toContain('> explain the tests');
   } finally { await t.close(); await fake.close(); }
 }, T);
+
+test('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"', async () => {
+  const { footerRight } = await import('../src/app/screen.jsx');
+  expect(footerRight('edits', 'Classic', 200)).toEqual({ cycle: true, layout: 'ctrl+l  layout: Classic' });
+  expect(footerRight('edits', 'Classic', 59)).toEqual({ cycle: false, layout: 'ctrl+l  layout: Classic' });
+  expect(footerRight('plan', 'Live thinking', 30)).toEqual({ cycle: false, layout: '' });
+  expect(footerRight('ask', 'Classic', 59)).toEqual({ cycle: true, layout: 'ctrl+l  layout: Classic' });
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const t = openTerm({ cwd, cols: 80, rows: 24, env, args: ['--url', fake.url, '--mode', 'edits'] });
+  try {
+    await t.waitFor('? for shortcuts'); await t.idle();
+    const footer = (await t.lines()).map((l) => l.text).find((l) => l.includes('? for shortcuts'));
+    expect(footer).toContain('⏵⏵ accept edits on');
+    expect(footer).not.toContain('…');
+    await settle(t, 155, 43);
+    expect((await t.lines()).map((l) => l.text).find((l) => l.includes('? for shortcuts'))).toContain('(shift+tab to cycle)');
+  } finally { await t.close(); await fake.close(); }
+}, T);
+
+test('a reply being written is cut to the lines it takes on screen, not its source lines', async () => {
+  const { tailToFit } = await import('../src/app/screen.jsx');
+  const long = 'word '.repeat(40).trim(); // 199 chars: 3 lines at 77 columns
+  const text = Array.from({ length: 10 }, (_, i) => `- ${i} ${long}`).join('\n');
+  const shown = tailToFit(text, 8, 77);
+  expect(shown.split('\n').length).toBe(2); // 2 × 3 lines = 6 ≤ 8; a third would make 9
+  expect(shown.endsWith(`- 9 ${long}`)).toBe(true);
+  expect(tailToFit('short\nlines', 8, 77)).toBe('short\nlines');
+  expect(tailToFit('x'.repeat(2000), 3, 50).length).toBeLessThanOrEqual(150);
+});

@@ -10,9 +10,15 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   const agent = new Agent({
     url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots,
     // approve(req) → false says no to one request even when auto-approving.
-    // answers(question, req) → the reply to one of Bonsai's questions (null = no answer).
+    // answers(question, req) → the reply to one of Bonsai's questions (null = no answer);
+    // set answers.steers = true to also answer its plans (req.kind 'plan') and check-ins ('checkin').
     ask: async (req) => {
       if (req.name === 'Ask') {
+        // A plan to confirm or a check-in goes to answers only when it steers
+        // (answers.steers = true); otherwise the plan is approved and the
+        // check-in carries on, as when no one is watching.
+        const steering = req.kind === 'plan' || req.kind === 'checkin';
+        if (steering && !answers?.steers) return autoApprove ? { choice: 'answer', text: req.kind === 'plan' ? 'yes' : 'keep going' } : { choice: 'no' };
         const text = answers ? await answers(req.args.question, req) : null;
         if (text != null) return { choice: 'answer', text: String(text) };
         return autoApprove ? { choice: 'answer', text: 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.' } : { choice: 'no' };

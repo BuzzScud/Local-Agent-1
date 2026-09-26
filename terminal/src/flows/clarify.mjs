@@ -5,12 +5,15 @@
 //     question, no model needed. With failing tests the fix path is the answer.
 //   - one to four words that name no file or code: the model decides whether
 //     the files make it clear; if not, it writes one question.
+//   - any other fix that names no file, no check and no failing tests
+//     ("the dropdown is hidden behind the legend"): where you see it, so
+//     the search starts in the right place.
 // Later questions, mid-task, come from the model's own Ask tool.
 import { walk } from '../tools/fs.mjs';
 import { complete } from './llm.mjs';
 import { Scratch } from './scratch.mjs';
 import { readResults } from './results.mjs';
-import { isSmallTalk, isCodeProject } from './index.mjs';
+import { isSmallTalk, isCodeProject, routeByRules } from './index.mjs';
 
 const VAGUE_FIX = /^\W*(?:please\s+|can you\s+|could you\s+)?(?:fix|repair|debug|solve)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:bug|bugs|test|tests|issue|error|problem|code|it|this|that)?\s*[.!?]*\s*$/i;
 // Plain instructions that are clear on their own.
@@ -19,6 +22,9 @@ const CODE_ISH = /[\w-]+\.[a-z]{1,5}\b|\b[a-z]+[A-Z]\w*\b|\b\w+_\w+\b|\(\)|--\w+
 
 export const FIX_QUESTION = 'The tests pass today. What is wrong, or what should a test check?';
 export const FIX_QUESTION_NO_TESTS = 'What is wrong? Tell me what you see and what you expect instead.';
+export const WHERE_QUESTION = 'Where do you see it: which screen, page or file? And what should happen instead?';
+// A request that already points somewhere: failing tests, a check to run, a file.
+const POINTS = /\b(?:tests?|checks?|specs?)\b[^.!?]{0,40}?\b(?:fail|fails|failing|failed|break|breaks|broke|red)\b|\bfailing (?:tests?|checks?)\b|`[^`]+`|\berror:|\bat\s+\S+:\d+/i;
 
 // null (clear enough), 'fix' (a bare "fix it") or 'model' (let the model judge).
 export function needsClarifying(text) {
@@ -35,6 +41,7 @@ async function testsFail(ctx) {
   const scratch = new Scratch(ctx.cwd);
   try {
     const r = await scratch.run(ctx.testCmd, { signal: ctx.signal, timeoutMs: 60_000 });
+    if (r.timedOut) return false; // cut off: not known to fail
     return !readResults(r.out, r.code).ok;
   } catch { return false; } finally { scratch.dispose(); }
 }
@@ -48,7 +55,7 @@ export function fileList(cwd, max = 60) {
 // The question to ask for this request, or null.
 export async function questionFor(ctx, text) {
   const kind = needsClarifying(text);
-  if (!kind) return null;
+  if (!kind) return wantsWhere(text) ? WHERE_QUESTION : null;
   if (kind === 'fix') {
     if (await testsFail(ctx)) return null; // failing tests say what is wrong
     return ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS;
@@ -60,6 +67,12 @@ export async function questionFor(ctx, text) {
     schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' } }, required: ['clear', 'question'] } });
   if (!r.json || r.json.clear || !r.json.question?.trim()) return null;
   return r.json.question.trim().slice(0, 300);
+}
+
+// A fix described only by what it looks like: nothing in it says where to look.
+export function wantsWhere(text) {
+  const t = text.trim();
+  return routeByRules(t)?.kind === 'fix' && !CODE_ISH.test(t) && !POINTS.test(t);
 }
 
 // Asks (through the usual prompt) and returns { question, answer }, or

@@ -8,7 +8,7 @@
 import React from 'react';
 import { Box, Text, Static } from 'ink';
 import { C, spinGlyph, fmtSecs, fmtTok } from '../ui/theme.mjs';
-import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel } from '../ui/parts.jsx';
+import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 
@@ -26,22 +26,29 @@ const Tip = ({ n, children }) => (
   </Box>
 );
 
+const TIPS = [
+  'Run /init to write an AGENTS.md with notes about this project',
+  'Ask for a change: Bonsai reads, edits and tests, and asks before it touches anything',
+  'Everything runs on this Mac; nothing is sent anywhere',
+];
+
+// Like Claude Code: a welcome box as wide as its words, then the tips.
 export function Welcome({ model, cwd, width }) {
-  const boxW = Math.min(width, 70);
+  const lines = [`  /help for help · /layout or ctrl+l to switch layouts`, `  ${model}, on this Mac`, `  cwd: ${cwd}`];
+  const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Bonsai Code!'.length + 6));
   return (
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column">
-        <Text><Text color={C.accent}>✻</Text> Welcome to <Text bold>Bonsai Code</Text><Text color={C.dim}>  ·  {model}, on this Mac</Text></Text>
+        <Text><Text color={C.accent}>✻</Text> Welcome to <Text bold>Bonsai Code</Text>!</Text>
         <Text> </Text>
         <Text color={C.dim}>  /help for help · /layout or ctrl+l to switch layouts</Text>
         <Text> </Text>
+        <Text color={C.dim}>  {model}, on this Mac</Text>
         <Text color={C.dim}>  cwd: {fitPath(cwd, boxW - 11)}</Text>
       </Box>
       <Box flexDirection="column" marginTop={1}>
         <Text color={C.dim}> Tips for getting started:</Text>
-        <Tip n={1}>Run /init to write an AGENTS.md with notes about this project</Tip>
-        <Tip n={2}>Ask for a change: Bonsai reads, edits and tests, and asks before it touches anything</Tip>
-        <Tip n={3}>Everything runs on this Mac; nothing is sent anywhere</Tip>
+        {TIPS.map((t, i) => <Tip key={i} n={i + 1}>{t}</Tip>)}
       </Box>
     </Box>
   );
@@ -168,15 +175,23 @@ function bar(frac, cells = 10) {
   return '▰'.repeat(n) + '▱'.repeat(cells - n);
 }
 
-function Meters({ app }) {
-  const { live, stats, modelName, ctx, ramGb, layout } = app;
-  if (layout !== 'live') return null;
+// What the status line says now: idle, reading, writing, running, waiting.
+function speedOf(app) {
+  const { live, stats } = app;
   let speed = <Text color={C.dim}>idle</Text>;
+  if (app.waitingForYou) return <Text color={C.ask}>waiting for you</Text>;
   if (live.phase === 'working') {
     if (live.running) speed = <Text color={C.dim}>running {live.running.label}</Text>;
     else if (live.firstTokenAt && !live.waiting) speed = <Text color={C.accent}>↓ {live.liveTps ? live.liveTps.toFixed(1) : '…'} tok/s writing</Text>;
     else speed = <Text color={C.accent}>↑ {stats.pps ? Math.round(stats.pps) : '…'} tok/s reading</Text>;
   } else if (app.waitingForYou) speed = <Text color={C.ask}>waiting for you</Text>;
+  return speed;
+}
+
+// The status line under the footer, in both layouts.
+function Meters({ app }) {
+  const { stats, modelName, ctx, ramGb } = app;
+  const speed = speedOf(app);
   const used = stats.ctxUsed ?? 0;
   return (
     <Box paddingX={2} width={app.width}>
@@ -210,6 +225,28 @@ function partialArg(name, args) {
   return m ? m[1].replace(/\\"/g, '"') : '';
 }
 
+// The end of a reply still being written, cut to at most `maxLines` lines
+// AS SHOWN (long lines wrap at `width`): counting source lines let a few long
+// ones fill a small window, and a live area taller than the window makes Ink
+// clear and redraw the whole screen on every frame.
+export function tailToFit(text, maxLines, width) {
+  const w = Math.max(10, width);
+  const src = text.split('\n');
+  const out = [];
+  let used = 0;
+  for (let i = src.length - 1; i >= 0; i--) {
+    const n = Math.max(1, wrap(src[i], w).length, Math.ceil(src[i].length / w));
+    if (used + n > maxLines) {
+      // Not even this line fits whole: keep its last part.
+      if (!out.length) out.unshift(`…${src[i].slice(-(maxLines * w - 1))}`);
+      break;
+    }
+    out.unshift(src[i]);
+    used += n;
+  }
+  return out.join('\n');
+}
+
 function LiveArea({ app }) {
   const { live, layout, width, rows } = app;
   if (live.phase !== 'working') return null;
@@ -227,8 +264,7 @@ function LiveArea({ app }) {
     );
   }
   if (live.text) {
-    const lines = live.text.split('\n');
-    const shown = lines.length > maxLines ? lines.slice(-maxLines).join('\n') : live.text;
+    const shown = tailToFit(live.text, maxLines, width - 3);
     blocks.push(<Box key="text" marginBottom={1}><Row><Markdown text={shown} /></Row></Box>);
   }
   if (layout === 'live' && live.writing && live.writing.name) {
@@ -279,12 +315,13 @@ function PermissionPrompt({ app }) {
   const hunk = req.prepared?.hunk ?? [];
   // The whole prompt fits the window with a line to spare: a live area as
   // tall as the window makes Ink clear and redraw the screen on every frame.
-  const fixed = 2 + 1 + 1 + perm.options.length + (app.layout === 'live' ? 1 : 0) + 1;
+  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1; // …, the status line, a spare line
   const room = Math.max(3, app.rows - fixed);
   const cap = Math.max(2, room - 4); // the diff box: its border, file name and "more lines"
   const files = req.prepared?.files ?? [];
   const nFiles = Math.max(1, Math.min(6, files.length, Math.floor((room - 1) / 5)));
-  const perFile = Math.max(1, Math.floor((room - 1 - 3 * nFiles) / nFiles));
+  // Two lines more slack than the sum suggests: at 22 of 24 rows Ink still cleared the whole screen.
+  const perFile = Math.max(1, Math.floor((room - 3 - 3 * nFiles) / nFiles));
   const cmdLines = String(req.args?.command ?? '').split('\n');
   return (
     <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
@@ -357,17 +394,34 @@ const SHORTCUTS = [
   ['↑ ↓ for earlier prompts', 'ctrl+c twice to quit'],
 ];
 
+// The footer's right side, longest first, down to what fits in `room`
+// columns: a narrow window drops the shift+tab hint, then "ctrl+l", then the
+// layout, so the two sides never run into each other.
+export function footerRight(mode, layoutName, room) {
+  const m = MODE_TEXT[mode] ?? '';
+  const tries = [
+    { cycle: true, layout: `ctrl+l  layout: ${layoutName}` },
+    { cycle: false, layout: `ctrl+l  layout: ${layoutName}` },
+    { cycle: false, layout: `layout: ${layoutName}` },
+    { cycle: false, layout: '' },
+  ];
+  const len = (t) => (m ? m.length + (t.cycle ? CYCLE_HINT.length : 0) + (t.layout ? 5 : 0) : 0) + t.layout.length;
+  return tries.find((t) => len(t) <= room) ?? tries.at(-1);
+}
+
 function Footer({ app }) {
   const { mode, layout, notice, width } = app;
   // An open menu takes the footer's place, as in Claude Code.
   if (app.menu?.items?.length) return null;
   const layoutName = layout === 'live' ? 'Live thinking' : 'Classic';
+  const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts');
+  const pick = footerRight(mode, layoutName, width - 4 - Math.min(left.length, 15) - 2);
   return (
     <Box flexDirection="column">
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
-        <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts')}</Text>
+        <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text>
         <Text wrap="truncate-start">
-          {modeLabel(mode)}{mode !== 'ask' ? <Text color={C.dim}>  ·  </Text> : null}<Text color={C.dim}>ctrl+l  layout: {layoutName}</Text>
+          {modeLabel(mode, { cycle: pick.cycle })}{MODE_TEXT[mode] && pick.layout ? <Text color={C.dim}>  ·  </Text> : null}{pick.layout ? <Text color={C.dim}>{pick.layout}</Text> : null}
         </Text>
       </Box>
       {app.showShortcuts ? (
@@ -468,12 +522,12 @@ export function Screen({ app }) {
   // full clear, so the old (wider) conversation is not printed into the small window.
   if (app.tooSmall) return <Box flexDirection="column"><Static key={`small${app.redraw}`} items={[]}>{() => null}</Static><TooSmall app={app} /></Box>;
   // After a resize the conversation is printed again from the top of a clear
-  // window, after enough blank lines that it ends at the bottom.
-  const items = app.redraw ? [{ key: `pad${app.redraw}`, type: 'pad', rows: app.rows }, ...app.items] : app.items;
+  // window, like the first time: the prompt box follows what is on screen.
+  const items = app.items;
   return (
     <Box flexDirection="column" width={width}>
       <Static key={app.redraw} items={items}>
-        {(it) => it.type === 'pad' ? <Text key={it.key}>{'\n'.repeat(Math.max(0, it.rows - 2))}</Text> : (
+        {(it) => (
           // Static lines are laid out on their own, so they need the width
           // too; without it long lines are wrapped by the terminal mid-word.
           <Box key={it.key} flexDirection="column" marginBottom={1} width={width}>

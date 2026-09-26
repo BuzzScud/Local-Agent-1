@@ -1,6 +1,6 @@
 // The focused paths (src/flows) against the scripted model.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,15 +8,20 @@ import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { routeByRules, isCodeProject } from '../src/flows/index.mjs';
+import { fileHints, isTestFile } from '../src/flows/localize.mjs';
+import { checkInText } from '../src/flows/fix.mjs';
+import { Scratch } from '../src/flows/scratch.mjs';
+import { excerpts } from '../src/flows/excerpts.mjs';
+import { spawnSync } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const copy = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project'); cpSync(join(import.meta.dir, name), d, { recursive: true }); return d; };
 
-async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots } = {}) {
+async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots, testTimeoutMs } = {}) {
   const fake = await startFakeServer(replies);
   const events = [];
-  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode, maxTries: 4, slots,
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode, maxTries: 4, slots, testTimeoutMs,
     ask: async (req) => { events.push({ type: 'ask', name: req.name, req }); return { choice: typeof answer === 'function' ? answer(req) : answer }; } });
   for (const t of ['assistant', 'tool', 'note', 'tries-done', 'route']) agent.on(t, (e) => events.push({ type: t, ...e }));
   const reason = await agent.send(prompt);
@@ -239,4 +244,161 @@ test('change: two tests that cannot even load the code stop the test step early'
   const tries = events.find((e) => e.type === 'tries-done' && e.label === 'Writing tests');
   expect(tries.marks).toEqual(['✗', '✗']); // not all 5
   expect(events.some((e) => e.type === 'note' && /working step by step instead/.test(e.text))).toBe(true);
+});
+
+// What kept Bonsai off a real bug (the chart test, 2026-09-25): a stopped test
+// run read as failures, git missing from the scratch copy, a file list cut A to
+// Z before ranking, and the named check taken as the file to fix.
+
+test('fix: a check named in the request scores the tries, and is not the file to fix', async () => {
+  const cwd = copy('fixture-fix');
+  writeFileSync(join(cwd, 'check.mjs'), "import assert from 'node:assert/strict';\nimport { median } from './stats.mjs';\nassert.equal(median([4, 1, 3, 2]), 2.5);\n");
+  const right = '```js\n' + statsWith('  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;') + '```';
+  const { reason, events } = await run(cwd, 'the median is wrong for an even count, fix it. This check fails now and must pass when you are done: `node check.mjs`', [{ text: right }, { text: 'Fixed.' }]);
+  expect(reason).toBe('done');
+  const tools = events.filter((e) => e.type === 'tool');
+  expect(tools.find((e) => e.name === 'Bash').arg).toBe('node check.mjs');
+  expect(tools.find((e) => e.name === 'Read').arg).toBe('stats.mjs');
+  expect(readFileSync(join(cwd, 'check.mjs'), 'utf8')).toContain('2.5');
+  expect(readFileSync(join(cwd, 'stats.mjs'), 'utf8')).toContain('sorted.length % 2');
+  expect(events.find((e) => e.type === 'assistant').text).toMatch(/node check\.mjs passes/);
+});
+
+test('fix: a test run stopped by the time limit is not read as a list of failures', async () => {
+  const cwd = copy('fixture-fix');
+  writeFileSync(join(cwd, 'package.json'), JSON.stringify({ name: 'slow', scripts: { test: "node -e \"console.log(' × docs/README.md 12ms'); setTimeout(() => {}, 60000)\"" } }));
+  const { events } = await run(cwd, 'The tests fail. Find the bug in stats.mjs and fix it.', [{ text: 'I will look at stats.mjs step by step.' }], { testTimeoutMs: 1500 });
+  expect(events.find((e) => e.type === 'tool' && e.name === 'Bash').view.lines.at(-1)).toMatch(/stopped after \d+ s, before it finished/);
+  expect(events.some((e) => e.type === 'note' && /did not finish in \d+ s, so it cannot show what is wrong; working step by step instead/.test(e.text))).toBe(true);
+  expect(events.some((e) => e.type === 'tries-done')).toBe(false);
+});
+
+test('checks named in a request, and e2e checks count as tests', () => {
+  expect(checkInText('the list is hidden, fix it\n\nThis check fails now and must pass: `node desks/chart/tools/e2e/symmenu-layer.mjs` (it starts its own server)')).toBe('node desks/chart/tools/e2e/symmenu-layer.mjs');
+  expect(checkInText('make sure `pytest tests/test_io.py` passes')).toBe('pytest tests/test_io.py');
+  expect(checkInText('run `npm install` then fix the crash')).toBe(null); // not framed as a check
+  expect(checkInText('rename `total` to `sum`; the tests must pass')).toBe(null); // not a command
+  expect(isTestFile('desks/chart/tools/e2e/symmenu-layer.mjs')).toBe(true);
+  expect(isTestFile('desks/chart/tv/legend.js')).toBe(false);
+});
+
+test('the file list is ranked before it is cut, so folders early in A to Z cannot crowd out the right one', () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'big');
+  const files = [];
+  for (let i = 0; i < 200; i++) { const rel = `archive/old${String(i).padStart(3, '0')}.js`; mkdirSync(join(cwd, 'archive'), { recursive: true }); writeFileSync(join(cwd, rel), `export const price${i} = ${i};\n`); files.push(rel); }
+  mkdirSync(join(cwd, 'desks', 'chart'), { recursive: true });
+  writeFileSync(join(cwd, 'desks/chart/legend.js'), 'export function drawLegend() { /* EMA rows over the chart */ }\n');
+  files.push('desks/chart/legend.js');
+  const { code } = fileHints(cwd, 'the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it', files);
+  expect(code.length).toBe(150);
+  expect(code[0]).toBe('desks/chart/legend.js');
+});
+
+test('tests in the scratch copy see the project\'s git, but cannot change it', async () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'repo');
+  mkdirSync(cwd);
+  const git = (...a) => spawnSync('git', a, { cwd, encoding: 'utf8' });
+  git('init', '-q');
+  writeFileSync(join(cwd, '.gitignore'), 'secrets/\n');
+  writeFileSync(join(cwd, 'a.mjs'), 'export const a = 1;\n');
+  git('add', '.');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'one');
+  const head = git('rev-parse', 'HEAD').stdout;
+  const s = new Scratch(cwd);
+  try {
+    const r = await s.run('git ls-files; git check-ignore -q --no-index secrets/x && echo ignored');
+    expect(r.out.split('\n')).toEqual(expect.arrayContaining(['.gitignore', 'a.mjs', 'ignored']));
+    s.write('b.mjs', 'export const b = 2;\n');
+    await s.run('git add b.mjs; git -c user.name=t -c user.email=t@t commit -qm two');
+  } finally { s.dispose(); }
+  expect(git('rev-parse', 'HEAD').stdout).toBe(head);
+  expect(git('ls-files').stdout.trim().split('\n')).toEqual(['.gitignore', 'a.mjs']);
+});
+
+// A page and its stylesheet: no functions to rewrite, so the model names
+// strings to look for and fixes the lines shown with edit blocks.
+const PAGE = `<!doctype html>
+<link rel="stylesheet" href="legend.css">
+<style>
+  body{margin:0}
+  .hud{position:absolute;top:0;z-index:4}
+  #menu{position:fixed;z-index:80}
+</style>
+<div class="hud"><input id="sym"><div id="menu">matches</div></div>
+<div class="lg">EMA 13 · 21</div>
+`;
+const CHECK = `import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const z = (file, sel) => Number(new RegExp(sel.replace('.', '\\\\.') + '\\\\{[^}]*z-index:(\\\\d+)').exec(readFileSync(file, 'utf8'))[1]);
+assert.ok(z('page.html', '.hud') > z('legend.css', '.lg'), 'the menu (inside .hud) must paint above the legend');
+`;
+const pageProject = () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'page');
+  mkdirSync(cwd);
+  writeFileSync(join(cwd, 'page.html'), PAGE);
+  writeFileSync(join(cwd, 'legend.css'), '.lg{position:absolute;top:40px;z-index:4}\n');
+  writeFileSync(join(cwd, 'check.mjs'), CHECK);
+  return cwd;
+};
+
+test('fix in a page or stylesheet: search terms, the lines that hold them, edit blocks', async () => {
+  const cwd = pageProject();
+  const bad = '### page.html\n<<<<<<< OLD\n  #menu{position:fixed;z-index:80}\n=======\n  #menu{position:fixed;z-index:999}\n>>>>>>> NEW'; // applies, but the menu is still trapped in .hud
+  const good = '### page.html\n<<<<<<< OLD\n  .hud{position:absolute;top:0;z-index:4}\n=======\n  .hud{position:absolute;top:0;z-index:5}\n>>>>>>> NEW';
+  const replies = [{ text: '{"file": "page.html"}' }, { text: '{"terms": [".hud", ".lg", "z-index"]}' }, { text: bad }, { text: good }, { text: 'The header strip now sits one layer above the legend.' }];
+  const { reason, events, fake } = await run(cwd, 'the dropdown is hidden behind the legend, fix it. This check fails now and must pass: `node check.mjs`', replies);
+  expect(reason).toBe('done');
+  expect(events.find((e) => e.type === 'tool' && e.name === 'Search').arg).toBe('.hud, .lg, z-index');
+  // the model saw the rule in the page and the one in the stylesheet it loads
+  const prompt = fake.requests.map((r) => r.messages.at(-1).content).find((c) => c.includes('The parts of the project'));
+  expect(prompt).toContain('page.html (lines');
+  expect(prompt).toContain('legend.css (lines 1-1)');
+  expect(prompt).toContain('.lg{position:absolute;top:40px;z-index:4}');
+  expect(events.find((e) => e.type === 'tries-done').marks).toEqual(['✗', '✓']);
+  expect(readFileSync(join(cwd, 'page.html'), 'utf8')).toContain('.hud{position:absolute;top:0;z-index:5}');
+  expect(readFileSync(join(cwd, 'check.mjs'), 'utf8')).toBe(CHECK);
+  expect(events.find((e) => e.type === 'assistant').text).toMatch(/Fixed page\.html; node check\.mjs passes/);
+});
+
+test('fix in a page: when no try passes, nothing is changed', async () => {
+  const cwd = pageProject();
+  const bad = '### page.html\n<<<<<<< OLD\n  #menu{position:fixed;z-index:80}\n=======\n  #menu{position:fixed;z-index:999}\n>>>>>>> NEW';
+  const { events } = await run(cwd, 'the dropdown is hidden behind the legend, fix it. This check fails now and must pass: `node check.mjs`', [{ text: '{"file": "page.html"}' }, { text: '{"terms": ["#menu"]}' }, { text: bad }, { text: bad }, { text: bad }, { text: bad }]);
+  expect(events.find((e) => e.type === 'tries-done').marks).toEqual(['✗', '✗', '✗', '✗']);
+  expect(events.some((e) => e.type === 'ask')).toBe(false);
+  expect(readFileSync(join(cwd, 'page.html'), 'utf8')).toBe(PAGE);
+});
+
+test('excerpts: the lines with the most terms first, a little around each, long lines left out', () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'ex');
+  mkdirSync(cwd);
+  const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`);
+  lines[10] = '.hud{z-index:4}';
+  lines[30] = `.hud{${'x'.repeat(3000)}}`;
+  writeFileSync(join(cwd, 'a.css'), lines.join('\n'));
+  const ex = excerpts(cwd, ['a.css'], ['.hud'], { around: 1 });
+  expect(ex.text).toBe('a.css (lines 10-12):\n```\nline 9\n.hud{z-index:4}\nline 11\n```');
+});
+
+test('tools can write their caches in node_modules of the scratch copy; your node_modules is untouched', async () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'app');
+  mkdirSync(join(cwd, 'node_modules', 'pkg'), { recursive: true });
+  mkdirSync(join(cwd, 'node_modules', '.vite-temp'));
+  writeFileSync(join(cwd, 'node_modules', 'pkg', 'index.js'), 'module.exports = 42;\n');
+  writeFileSync(join(cwd, 'package.json'), '{"name":"app"}');
+  const s = new Scratch(cwd);
+  try {
+    const r = await s.run("mkdir -p node_modules/.vite-temp && echo x > node_modules/.vite-temp/config.mjs && node -e \"console.log(require('pkg'))\"");
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('42');
+  } finally { s.dispose(); }
+  expect(readdirSync(join(cwd, 'node_modules', '.vite-temp'))).toEqual([]);
+});
+
+test('a fix described only by what it looks like asks where first; one that points somewhere does not', async () => {
+  const { wantsWhere, questionFor, WHERE_QUESTION } = await import('../src/flows/clarify.mjs');
+  expect(wantsWhere('the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it')).toBe(true);
+  expect(await questionFor({ cwd: tmpdir() }, 'the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it')).toBe(WHERE_QUESTION);
+  for (const t of ['The tests fail. Find the bug and fix it.', 'The tests in this project fail. Find the bug and fix it (fix the code, not the tests).', 'Fix the crash when the summary is empty in report.mjs', 'the list is hidden, fix it. This check must pass: `node check.mjs`', 'add a --json flag to export.mjs'])
+    expect([t, wantsWhere(t)]).toEqual([t, false]);
 });

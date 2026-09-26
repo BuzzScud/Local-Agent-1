@@ -29,7 +29,8 @@ test('the whole --json task: real edits, real test run', async () => {
   const { reason, events, cwd } = await run(demoReplies);
   expect(reason).toBe('done');
   const tools = events.filter((e) => e.type === 'tool');
-  expect(tools.map((t) => t.label)).toEqual(['Read', 'Update Todos', 'Update', 'Read', 'Update', 'Bash']);
+  // On auto-accept the first edit is shown as a plan question first (answered yes).
+  expect(tools.map((t) => t.label)).toEqual(['Read', 'Update Todos', 'Ask', 'Update', 'Read', 'Update', 'Bash']);
   expect(tools.every((t) => !t.error)).toBe(true);
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
   expect(tools.at(-1).view.lines.join('\n')).toMatch(/ℹ pass 3/);
@@ -133,6 +134,9 @@ test('announcing the next step is spotted even with file names in the sentence',
   expect(announcesNextStep('First, I will add the flag:')).toBe(true);
   expect(announcesNextStep('Done. All 3 tests pass.')).toBe(false);
   expect(announcesNextStep('It listens on port 8790, set in src/config.mjs.')).toBe(false);
+  // An offer that waits for the user is where the answer ends (it once went on to search the home folder).
+  expect(announcesNextStep('1035. If you actually meant "how is multiplication implemented here" rather than the general concept, tell me and I\'ll dig into the specific file(s).')).toBe(false);
+  expect(announcesNextStep('It listens on port 8790. Let me know if you want it changed.')).toBe(false);
 });
 
 test('done after an edit without testing: the tests run, and a failure sends it back', async () => {
@@ -222,4 +226,52 @@ test('a created file is not "already in place": the model is sent back once', as
 test('claimsAlreadyThere', () => {
   for (const t of ['The --json flag is already in place and verified', 'It already exists.', 'export.mjs already has a --json flag']) expect([t, claimsAlreadyThere(t)]).toEqual([t, true]);
   for (const t of ['I created export.mjs with a --json flag; node export.mjs --json prints valid JSON.', 'Added the flag; all 3 tests pass.']) expect([t, claimsAlreadyThere(t)]).toEqual([t, false]);
+});
+
+// Steering: check-ins while it explores, and the plan before the first edit.
+async function steered(replies, ask, { mode = 'edits' } = {}) {
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode, flows: false,
+    ask: async (req) => { events.push({ type: 'ask', name: req.name, kind: req.kind, question: req.args?.question }); return ask(req); } });
+  for (const t of ['tool', 'note']) agent.on(t, (e) => events.push({ type: t, ...e }));
+  const reason = await agent.send('add a --json flag to export.mjs');
+  await fake.close();
+  return { reason, events, cwd, fake };
+}
+const looks = (n) => Array.from({ length: n }, (_, i) => ({ tool: { name: 'Read', args: { path: i % 2 ? 'export.test.mjs' : 'export.mjs' } } }));
+const lastUser = (req) => [...req.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+
+test('after 8 looks with no change it checks in, and the answer steers the next step', async () => {
+  const { reason, events, fake } = await steered([...looks(8), { text: 'I will look at trades.json next.' }],
+    (req) => (req.kind === 'checkin' ? { choice: 'answer', text: 'look at trades.json' } : { choice: 'yes' }));
+  expect(reason).toBe('done');
+  const checkins = events.filter((e) => e.type === 'ask' && e.kind === 'checkin');
+  expect(checkins.length).toBe(1);
+  expect(checkins[0].question).toMatch(/looked at 2 things .* Read export\.mjs; Read export\.test\.mjs\. Am I on the right track\?/);
+  expect(lastUser(fake.requests[8])).toMatch(/\[Check-in\].*The user answered: look at trades\.json/);
+});
+
+test('a check-in answered "keep going" adds nothing; "Stop here" ends the turn', async () => {
+  const go = await steered([...looks(8), { text: 'Done looking.' }], (req) => (req.kind === 'checkin' ? { choice: 'answer', text: 'Keep going' } : { choice: 'yes' }));
+  expect(go.reason).toBe('done');
+  expect(lastUser(go.fake.requests[8])).toBe('add a --json flag to export.mjs');
+  const stop = await steered([...looks(8), { text: 'never reached' }], (req) => (req.kind === 'checkin' ? { choice: 'no' } : { choice: 'yes' }));
+  expect(stop.reason).toBe('declined');
+  expect(stop.fake.requests.length).toBe(8);
+});
+
+test('on auto-accept the first edit is a plan question; an answer other than yes steers instead', async () => {
+  const edit = { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: "  if (argv.includes('--json')) return JSON.stringify(rows);\n  return toCsv(rows);" } } };
+  const { events, cwd, fake } = await steered([{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, edit, { text: 'OK, I will ask first.' }],
+    (req) => (req.kind === 'plan' ? { choice: 'answer', text: 'add a test for it first' } : { choice: 'yes' }));
+  const plan = events.find((e) => e.type === 'ask' && e.kind === 'plan');
+  expect(plan.question).toMatch(/^Before I change anything: in export\.mjs, change "return toCsv\(rows\);" to "if \(argv\.includes/);
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).not.toContain('--json');
+  expect(fake.requests[2].messages.at(-1).content).toContain('the user wrote: add a test for it first');
+  // yes lets this message's edits through, asked once
+  const ok = await steered([{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, edit, { text: 'Done.' }], () => ({ choice: 'yes' }));
+  expect(ok.events.filter((e) => e.type === 'ask').map((e) => e.kind)).toEqual(['plan']);
+  expect(readFileSync(join(ok.cwd, 'export.mjs'), 'utf8')).toContain('--json');
 });

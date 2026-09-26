@@ -148,10 +148,12 @@ export function InputBox({ text, width, placeholder = 'Try "write a test for mai
   );
 }
 
-export function modeLabel(mode) {
-  if (mode === 'edits') return <Text color={C.edits}>⏵⏵ accept edits on <Text color={C.dim}>(shift+tab to cycle)</Text></Text>;
-  if (mode === 'plan') return <Text color={C.plan}>⏸ plan mode on <Text color={C.dim}>(shift+tab to cycle)</Text></Text>;
-  return null;
+export const MODE_TEXT = { edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on' };
+export const CYCLE_HINT = ' (shift+tab to cycle)';
+// cycle: false leaves out the hint, for a narrow footer.
+export function modeLabel(mode, { cycle = true } = {}) {
+  if (!MODE_TEXT[mode]) return null;
+  return <Text color={mode === 'edits' ? C.edits : C.plan}>{MODE_TEXT[mode]}{cycle ? <Text color={C.dim}>{CYCLE_HINT}</Text> : null}</Text>;
 }
 
 export function Footer({ width, right }) {

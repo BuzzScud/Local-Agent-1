@@ -8,10 +8,12 @@ import { resolvePath, didYouMean } from '../agent/tools.mjs';
 import { complete } from './llm.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 
-export const isTestFile = (rel) => /(^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[mc]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/.test(rel);
+export const isTestFile = (rel) => /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[mc]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/.test(rel);
 export const CODE = /\.(m?[jt]sx?|cjs|py)$/;
+// What a fix may change: code, and the pages and stylesheets a bug may sit in.
+export const EDITABLE = /\.(m?[jt]sx?|cjs|py|html?|css|scss|less|vue|svelte)$/;
 
-export function projectFiles(cwd, max = 4000) {
+export function projectFiles(cwd, max = 20000) {
   const out = [];
   for (const f of walk(cwd)) { if (!f.dir) out.push(f.path); if (out.length >= max) break; }
   return out;
@@ -68,17 +70,25 @@ export function sourcesFromFailure(cwd, out, files) {
 
 // The code files a task could be about, each with its size, its top-level
 // names (from the project map) and how many words of the task it mentions;
-// the likeliest first. What the model chooses from.
-export function fileHints(cwd, task, files, { max = 150, named = 60 } = {}) {
-  const code = files.filter((f) => CODE.test(f) && !isTestFile(f)).slice(0, max);
-  const words = [...new Set((task.match(/[A-Za-z_]\w{3,}/g) ?? []).map((w) => w.toLowerCase()))].slice(0, 8);
+// the likeliest first. What the model chooses from. Every code file is
+// ranked before the list is cut, so a big project's first folders A to Z
+// do not crowd out the one the task is about.
+const STOP = new Set(['the', 'and', 'for', 'fix', 'bug', 'not', 'but', 'are', 'was', 'can', 'you', 'its', 'has', 'had', 'did', 'does', 'when', 'with', 'this', 'that', 'from', 'into', 'then', 'than', 'what', 'where', 'which', 'there', 'their', 'they', 'them', 'have', 'should', 'would', 'could', 'must', 'make', 'please', 'also', 'just', 'some', 'every', 'any', 'all', 'now', 'done', 'fails', 'check', 'pass', 'passes', 'work', 'works']);
+export function taskWords(task, max = 12) {
+  return [...new Set((task.match(/[A-Za-z_]\w{2,}/g) ?? []).map((w) => w.toLowerCase()))].filter((w) => !STOP.has(w)).slice(0, max);
+}
+export function fileHints(cwd, task, files, { max = 150, named = 60, exts = CODE } = {}) {
+  const code = files.filter((f) => exts.test(f) && !isTestFile(f));
+  const words = taskWords(task);
   let byRel = new Map();
   try { byRel = new Map(repoMap(cwd).entries.map((e) => [e.rel, e])); } catch {}
+  // A word in the file's path counts twice: "chart" in desks/chart/… says more than one use inside.
   const scored = code.map((f) => {
     let text = '';
     try { text = readFileSync(join(cwd, f), 'utf8').slice(0, 20000).toLowerCase(); } catch {}
-    return { f, n: words.filter((w) => text.includes(w)).length };
-  }).sort((a, b) => b.n - a.n);
+    const path = f.toLowerCase();
+    return { f, n: words.filter((w) => text.includes(w)).length, p: words.filter((w) => path.includes(w)).length };
+  }).sort((a, b) => (b.n + 2 * b.p) - (a.n + 2 * a.p) || b.n - a.n).slice(0, max);
   const lines = scored.map(({ f, n }, i) => {
     const e = byRel.get(f);
     const names = e && i < named && e.names.length ? `: ${e.names.slice(0, 8).join(', ')}${e.names.length > 8 ? ', …' : ''}` : '';
@@ -89,8 +99,8 @@ export function fileHints(cwd, task, files, { max = 150, named = 60 } = {}) {
 
 // The model chooses the file from the project's list (forced JSON, so the
 // answer is always one of the real files).
-export async function pickFile({ url, model, slot, cwd, task, files, signal }) {
-  const { code, text: hints } = fileHints(cwd, task, files);
+export async function pickFile({ url, model, slot, cwd, task, files, signal, exts }) {
+  const { code, text: hints } = fileHints(cwd, task, files, { exts });
   if (!code.length) return null;
   if (code.length === 1) return code[0];
   const r = await complete({

@@ -79,6 +79,8 @@ async function tour() {
     { reasoning: 'Read the file first.', tool: { name: 'Read', args: { path: 'export.mjs' } } },
     { text: REPLY },
     ...demoReplies,
+    // After "Done" with changes, Bonsai checks the work against the request (verifyDone).
+    { text: '{"done": true, "missing": ""}' },
     { reasoning: THINK.repeat(14), text: 'Done thinking: keep the header in toCsv.' },
     { text: 'Second answer, sent after the first finished.' },
     { reasoning: THINK + THINK },
@@ -173,9 +175,52 @@ async function flows() {
   }
 }
 
+// The three questions that let you steer: "where do you see it?" before a fix
+// that points nowhere, a check-in after 8 looks with no change, and the plan
+// before the first edit on auto-accept.
+async function steer() {
+  const run = async (name, args, replies, body) => {
+    const { cwd, env } = setup();
+    const fake = await startFakeServer(replies, { delayMs: 6 });
+    const t = openTerm({ cwd, cols: COLS, rows: ROWS, env, args: ['--url', fake.url, ...args] });
+    try { await t.waitFor('? for shortcuts'); await t.idle(); await body(t); } catch (e) {
+      console.log(`✗ ${name} stopped: ${e.message.split('\n')[0]}`);
+      await shot(t, `${name} stopped here`, { note: e.message.split('\n')[0] });
+    } finally { await t.close(); await fake.close(); }
+  };
+  await run('ask where', [], [], async (t) => {
+    await t.type('the csv header is shown twice when the list is empty, fix it'); t.key('enter');
+    await t.waitFor('Where do you see it'); await t.idle();
+    await shot(t, 'ask where first', { must: ['Bonsai asks', 'Type an answer', 'Stop here'] });
+    await resizes(t, 'ask where first');
+    t.key('esc'); await t.idle();
+    await shot(t, 'ask where: esc stops', { anchored: false, mustNot: ['Type an answer'] });
+  });
+  const looks = Array.from({ length: 8 }, (_, i) => ({ tool: { name: 'Read', args: { path: i % 2 ? 'export.test.mjs' : 'export.mjs' } } }));
+  await run('check-in', ['--no-flows'], [...looks, { text: 'It reads trades.json and prints CSV.' }], async (t) => {
+    await t.type('what does export.mjs do?'); t.key('enter');
+    await t.waitFor('Am I on the right track', 30_000); await t.idle();
+    await shot(t, 'check-in while exploring', { must: ['Keep going', 'Type an answer', 'Stop here'] });
+    await resizes(t, 'check-in');
+    t.key('enter'); await t.waitFor('prints CSV'); await t.idle();
+    await shot(t, 'after "keep going"', { anchored: false, must: ['prints CSV'] });
+  });
+  const edit = { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: "  if (argv.includes('--json')) return JSON.stringify(rows, null, 2);\n  return toCsv(rows);" } } };
+  await run('plan', ['--no-flows', '--mode', 'edits'], [{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, edit, { text: 'Added --json.' }, { text: '{"done": true, "missing": ""}' }], async (t) => {
+    await t.type('add a --json flag to export.mjs'); t.key('enter');
+    await t.waitFor('Before I change anything', 30_000); await t.idle();
+    await shot(t, 'plan before the first edit (auto-accept)', { must: ['Before I change anything', 'Say yes', 'Type an answer'] });
+    await resizes(t, 'plan question');
+    t.key('enter');
+    await t.waitFor('Added --json', 60_000); await t.idle();
+    await shot(t, 'after the plan: edited and checked', { anchored: false, must: ['Added --json'] });
+  });
+}
+
 const t0 = Date.now();
 if (!only || only.includes('tour')) await tour();
 if (!only || only.includes('flows')) await flows();
+if (!only || only.includes('steer')) await steer();
 const failed = shots.filter((s) => s.checks.some((c) => !c.ok)).length;
 console.log(`${shots.length} screens at ${COLS}×${ROWS}, ${shots.length - failed} clean, ${failed} with problems · ${Math.round((Date.now() - t0) / 1000)}s`);
 const out = opt('out', join(root, 'scripts', `ui-walk-${COLS}x${ROWS}.json`));

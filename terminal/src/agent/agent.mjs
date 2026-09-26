@@ -8,7 +8,11 @@ import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { decide, commandPrefix } from './permissions.mjs';
-import { testCommand } from './prompt.mjs';
+import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
+import { sortBug, kindText } from './rules.mjs';
+import { findProjects, projectsNamed } from './projects.mjs';
+import { homedir } from 'node:os';
+import { basename } from 'node:path';
 import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { readResults } from '../flows/results.mjs';
@@ -66,6 +70,9 @@ export function isLooping(text) {
 // median function in stats.mjs.") instead of doing it.
 export function announcesNextStep(text) {
   const last = text.trim().split(/(?<=[.!?:])\s+(?=[A-Z])/).pop() ?? '';
+  // An offer that waits for the user ("tell me and I'll dig in", "If you want,
+  // I can…", "Let me know…") or a question is not a step it is about to take.
+  if (/\?\s*$|\b(if you|tell me|let me know|would you like|do you want|want me to|shall I)\b/i.test(last)) return false;
   return /\b(I will|I'll|I am going to|I'm going to|Let me|Let's|I need to|I should|First,? I|Next,? I|Now,? I)\b/i.test(last);
 }
 
@@ -112,10 +119,21 @@ export function safeArgs(args) {
   } catch { return '{}'; }
 }
 
+// Check-ins while exploring: every this many looks, or seconds, without a change.
+export const CHECK_INS = { steps: 8, secs: 300 };
+const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash']);
+
+// One line saying what an edit will do, for the plan question.
+export function planLine(name, args, prepared) {
+  const cut = (x) => { const l = String(x ?? '').trim().split('\n'); const f = l[0].trim().slice(0, 100); return l.length > 1 || l[0].length > 100 ? `${f}…` : f; };
+  if (name === 'Write') return `${prepared.created ? 'create' : 'rewrite'} ${prepared.rel ?? args.path}`;
+  return `in ${prepared.rel ?? args.path}, change "${cut(args.old_text)}" to "${cut(args.new_text)}"`;
+}
+
 export class Agent extends EventEmitter {
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, slots, trimAt = TRIM_AT }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, trimAt });
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt });
     // When Bonsai Code started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
     this.slots = slots ?? null;
@@ -131,6 +149,54 @@ export class Agent extends EventEmitter {
   }
 
   setSystem(system) { this.messages[0] = { role: 'system', content: system }; }
+  // Work in another folder from now on: its tests, its AGENTS.md, and the fence
+  // around commands, which is always the folder Bonsai works in.
+  moveTo(dir) {
+    const before = tokensOf(this.messages[0].content);
+    this.cwd = dir;
+    this.testCmd = this.verify ? testCommand(dir) : null;
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir).text, git: gitSummary(dir) }));
+    this.ctxUsed += tokensOf(this.messages[0].content) - before;
+    this.readFiles = new Set();
+    this.mapGiven = false;
+    this.lastRoute = null;
+    this.emit('cwd', { cwd: dir });
+  }
+
+  // Outside a project, a request naming one ("the chart bug in MAIN2026") asks
+  // once whether to work there. Each project is offered once a session.
+  async offerProject(text, signal) {
+    const home = homedir();
+    // Only from the home folder or its Desktop, Documents and Downloads.
+    if (!isHomeFolder(this.cwd)) return null;
+    this.projects ??= findProjects(home);
+    this.offered ??= new Set();
+    const found = projectsNamed(text, this.projects, this.cwd).filter((d) => !this.offered.has(d));
+    if (!found.length || found.length > 4) return null;
+    for (const d of found) this.offered.add(d);
+    const tilde = (p) => (p === home ? '~' : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
+    const one = found.length === 1;
+    const question = `${one ? `Work in ${tilde(found[0])}?` : 'Work in which project?'} Bonsai then uses its tests and its AGENTS.md, and its commands can only change files there.`;
+    const options = [...found.map((d) => (one ? `Yes, work in ${basename(d)}` : tilde(d))), `No, stay in ${tilde(this.cwd)}`];
+    const id = `project_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', args: { question, options }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return { stop: 'interrupted' };
+    const said = (answer.text ?? answer.feedback ?? '').trim();
+    if (answer.choice === 'no' && !said) return { stop: 'declined' };
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: said } });
+    const pick = one ? (/^(yes|y|ok|okay|sure|yep|go)\b/i.test(said) ? found[0] : null) : found.find((d) => said === tilde(d) || said === d);
+    if (!pick) return null;
+    this.moveTo(pick);
+    this.emit('note', { text: `Working in ${tilde(pick)} now: its tests and AGENTS.md, and commands can only change files there.`, tone: 'dim' });
+    return { moved: pick };
+  }
+
+  // This turn's request with the steps for its kind of bug added (see send()).
+  withBugSteps(messages) {
+    const bug = this.turn?.bug;
+    return bug ? messages.map((m) => (m === bug.request ? { ...m, content: `${m.content}\n\n(${bug.steps})` } : m)) : messages;
+  }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
   reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
 
@@ -141,11 +207,12 @@ export class Agent extends EventEmitter {
     let seq = 0;
     const tool = (label, arg, view, error) => this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
     return {
-      url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), signal, maxTries: this.maxTries,
+      url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
       // Code and tests are written at the chat's thinking level (Off by default).
       thinking: this.thinking, effort: this.effort,
       emit: (name, ev) => { if (name === 'route') this.lastRoute = ev; this.emit(name, ev); },
       ask: (req) => this.ask(req),
+      confirm: (plan) => (this.confirmPlan ? this.confirm(plan, signal) : { ok: true }),
       mode: () => this.mode,
       setMode: (m) => this.setMode(m),
       tool,
@@ -191,6 +258,10 @@ export class Agent extends EventEmitter {
       this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
       return reason;
     };
+    // Started outside a project (the home folder, say): a request that names
+    // one goes into it once you say yes (src/agent/projects.mjs).
+    const into = await this.offerProject(text, signal);
+    if (into?.stop) return stopNow(into.stop);
     // An unclear request gets one question first (src/flows/clarify.mjs); the
     // answer joins the conversation and travels with the request.
     if (this.flows && this.mode !== 'plan') {
@@ -233,9 +304,13 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `The focused path failed (${e.message}); working step by step instead.`, tone: 'warn' });
       }
     }
+    const kind = this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
+    // go with this turn's requests to the model, not into the conversation.
+    const bug = kind === 'fix' ? sortBug(text) : null;
+    const request = this.messages.at(-1);
     // A question about named files: read them now, in one go, instead of
     // letting the model find, list and read them a piece at a time.
-    const kind = this.lastRoute?.kind ?? routeByRules(text)?.kind;
     this.prefetchMap();
     if (kind === 'question' || (!kind && EXPLAIN.test(text))) this.prefetch(text);
     let reason = 'done';
@@ -244,7 +319,8 @@ export class Agent extends EventEmitter {
     let errorsInRow = 0;
     let nudges = 0;
     let checks = 0;
-    this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '' };
+    this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false };
+    if (bug && request?.role === 'user' && typeof request.content === 'string') this.turn.bug = { request, steps: kindText(bug) };
     let verified = false;
     let correctedAlready = false;
     let blankRetry = false;
@@ -343,6 +419,9 @@ export class Agent extends EventEmitter {
         const out = await this.runTool(call, signal);
         this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text });
         if (out.stop) { reason = out.stop; break; }
+        const steer = await this.checkIn(call, signal);
+        if (steer?.stop) { reason = steer.stop; break; }
+        if (steer?.text) this.messages.push({ role: 'user', content: steer.text });
         const key = `${call.name}:${call.args}`;
         repeats = key === repeatKey ? repeats + 1 : 0;
         repeatKey = key;
@@ -372,7 +451,9 @@ export class Agent extends EventEmitter {
   // map (each file with its names) as if it had listed the project itself:
   // one read instead of a List → Read → List round at ~60 tokens a second.
   prefetchMap() {
-    if (this.mapGiven) return;
+    // No map of the home folder: it lists whatever code it meets first, and the
+    // model took that as "your codebase" (src/agent/prompt.mjs, isHomeFolder).
+    if (this.mapGiven || isHomeFolder(this.cwd)) return;
     this.mapGiven = true;
     let map;
     try { map = repoMap(this.cwd, { maxChars: 4500 }); } catch { return; }
@@ -456,7 +537,7 @@ export class Agent extends EventEmitter {
     this.emit('waiting');
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.messages, tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
+      const stream = streamChat({ url: this.url, messages: this.withBugSteps(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -545,6 +626,16 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: d.reason }, error: true });
       return { text: `Not allowed: ${d.reason}. Do something else.`, error: true };
     }
+    // Edits on auto-accept: the first one of a message is shown as a plan first.
+    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan) {
+      const plan = planLine(call.name, args, prepared);
+      const r = await this.confirm(plan, signal);
+      if (r.stop) return { text: 'Interrupted.', stop: r.stop };
+      if (!r.ok) {
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'declined', feedback: r.feedback }, error: true });
+        return { text: r.feedback ? `Not done: before this change the user wrote: ${r.feedback}\nDo that instead.` : 'The user said no to this change. Wait for their next message.', error: true, stop: r.feedback ? null : 'declined' };
+      }
+    }
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
       const answer = await this.ask({ id, name: call.name, args, prepared, ...shown });
@@ -557,6 +648,8 @@ export class Agent extends EventEmitter {
         if (call.name === 'Bash') this.allowedPrefixes.add(commandPrefix(args.command));
         else this.setMode('edits');
       }
+      // You saw this change and said yes: that was the plan question.
+      if ((call.name === 'Edit' || call.name === 'Write') && this.turn) this.turn.planOk = true;
     }
     const t0 = Date.now();
     this.emit('tool-running', { id, name: call.name, ...shown });
@@ -590,6 +683,54 @@ export class Agent extends EventEmitter {
       if (!r.json || r.json.done || !r.json.missing?.trim()) return null;
       return r.json.missing.trim().slice(0, 200);
     } catch { return null; }
+  }
+
+  // A check-in while it explores: after CHECK_INS.steps looks (Read, Search,
+  // List, Bash) or CHECK_INS.secs seconds with no change made, it says what
+  // it has looked at and asks where to look. The answer steers the next step.
+  async checkIn(call, signal) {
+    const t = this.turn;
+    if (!t || !this.checkIns || t.changed || !LOOKS.has(call.name)) return null;
+    const shown = display(call.name, parseArgs(call.name, call.args).args ?? {});
+    t.looked.push(`${call.name} ${shown.arg ?? ''}`.trim());
+    const secs = (Date.now() - t.since) / 1000;
+    if (t.looked.length < this.checkIns.steps && secs < this.checkIns.secs) return null;
+    const seen = [...new Set(t.looked)];
+    const list = seen.slice(-8).join('; ');
+    const question = `I have looked at ${seen.length} thing${seen.length === 1 ? '' : 's'} (${Math.round(secs / 60)} min) and not changed anything yet. Latest: ${list}. Am I on the right track? Tell me where to look, or say "keep going".`;
+    t.looked = [];
+    t.since = Date.now();
+    const id = `checkin_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'checkin', args: { question, options: ['Keep going'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return { stop: 'interrupted' };
+    if (answer.choice === 'no' && !answer.feedback) return { stop: 'declined' }; // "Stop here"
+    const text = (answer.text ?? answer.feedback ?? '').trim();
+    if (!text) return null; // no answer: carry on
+    t.asked.push(question);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
+    if (/^(keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return null;
+    return { text: `[Check-in] You asked whether you are on the right track. The user answered: ${text}\nFollow that.` };
+  }
+
+  // One yes-or-steer question before changing files; yes (or "ok", "go")
+  // allows the rest of this message's changes.
+  async confirm(plan, signal) {
+    const question = `Before I change anything: ${plan}. Go ahead? Say yes, or tell me what to do instead.`;
+    const id = `plan_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'plan', args: { question, options: ['Yes'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return { stop: 'interrupted' };
+    const text = (answer.text ?? '').trim();
+    const yes = answer.choice === 'yes' || answer.choice === 'always' || /^(yes|y|ok|okay|go|go ahead|sure|do it|yep|👍)\W*$/i.test(text);
+    if (yes) {
+      if (this.turn) this.turn.planOk = true;
+      this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'yes' } });
+      return { ok: true };
+    }
+    if (answer.choice === 'no' && !answer.feedback && !text) return { ok: false, stop: 'declined' };
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || answer.feedback } });
+    return { ok: false, feedback: text || answer.feedback };
   }
 
   // The model's Ask tool: the question goes through the same prompt as a

@@ -35,3 +35,67 @@ test('a second window shares a live server; a left-over one is stopped', () => {
   const out = JSON.parse(r.stdout.trim().split('\n').pop());
   expect(out).toEqual({ live: [17600], sig: 'SIGTERM', left: [false, false] });
 });
+
+// Staying loaded after you quit: a stand-in llama-server, a window that starts
+// it and quits, a second window that finds it at once, then the watcher
+// stopping it when no window has used it for the linger time.
+test('the model stays loaded after the window quits, the next start takes it over, and it stops once idle', () => {
+  const home = mkdtempSync(join(tmpdir(), 'bonsai-linger-'));
+  const mod = (p) => JSON.stringify(join(import.meta.dir, '..', p));
+  const script = `
+    import { spawnSync } from 'node:child_process';
+    import { mkdirSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+    import { join, dirname } from 'node:path';
+    const { HOME, SERVER_BIN, MODELS, DEFAULT_MODEL, modelPath } = await import(${mod('registry.mjs')});
+    if (HOME !== process.env.BONSAI_HOME) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
+    const model = MODELS[DEFAULT_MODEL];
+    mkdirSync(dirname(SERVER_BIN), { recursive: true });
+    writeFileSync(SERVER_BIN, '#!/usr/bin/env bun\\nconst i = process.argv.indexOf("--port"); Bun.serve({ port: Number(process.argv[i + 1]), hostname: "127.0.0.1", fetch: () => new Response("{}") });\\n');
+    chmodSync(SERVER_BIN, 0o755);
+    mkdirSync(dirname(modelPath(model)), { recursive: true });
+    writeFileSync(modelPath(model), '');
+    // One "window": its own process, starts (or takes over) the server, then quits keeping it.
+    const winRun = () => spawnSync('bun', ['-e', \`
+      const { ModelServer, MODELS, DEFAULT_MODEL } = await import(${mod('index.mjs')});
+      const s = new ModelServer(MODELS[DEFAULT_MODEL]);
+      const st = await s.start({ ctx: 4096, lingerSecs: 3 });
+      const pid = s.child?.pid ?? s.shared.pid;
+      await s.stop({ keep: true });
+      console.log(JSON.stringify({ ...st, pid }));
+      process.exit(0);
+    \`], { env: process.env, encoding: 'utf8', timeout: 20000 });
+    const winOut = (r) => { const l = r.stdout.trim().split('\\n').pop(); if (!l) { console.log(JSON.stringify({ error: r.stderr.slice(-800) })); process.exit(1); } return JSON.parse(l); };
+    const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const a = winOut(winRun());
+    await sleep(300);
+    const afterQuit = alive(a.pid);
+    const b = winOut(winRun());
+    const { runningServer, stopIdleServers } = await import(${mod('index.mjs')});
+    const seen = runningServer(model);
+    let stoppedAfter = null;
+    for (let i = 0; i < 40; i++) { await sleep(250); if (!alive(a.pid)) { stoppedAfter = (i + 1) * 250; break; } }
+    let regLeft = true;
+    for (let i = 0; i < 20 && regLeft; i++) { regLeft = existsSync(join(HOME, 'servers', a.port + '.json')); if (regLeft) await sleep(100); }
+    // bonsai stop: a kept server with no window stops at once
+    const c = winOut(winRun());
+    const stopped = stopIdleServers();
+    await sleep(300);
+    console.log(JSON.stringify({ a, b, afterQuit, seen: seen && { port: seen.port, linger: seen.linger }, stoppedAfter, regLeft, c: { shared: c.shared }, stoppedNow: stopped.stopped.length, cGone: !alive(c.pid) }));
+    process.exit(0);
+  `;
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, BONSAI_HOME: home }, encoding: 'utf8', timeout: 40000 });
+  const line = r.stdout.trim().split('\n').pop();
+  if (!line) throw new Error(r.stderr);
+  const out = JSON.parse(line);
+  if (out.error) throw new Error(out.error);
+  expect(out.a.shared).toBeUndefined();          // the first window started it
+  expect(out.afterQuit).toBe(true);              // still loaded after that window quit
+  expect(out.b).toMatchObject({ shared: true, idle: true, port: out.a.port, pid: out.a.pid }); // the next start took it over
+  expect(out.seen).toEqual({ port: out.a.port, linger: 3 });
+  expect(out.stoppedAfter).toBeGreaterThan(0);   // stopped by its watcher once idle
+  expect(out.regLeft).toBe(false);
+  expect(out.c.shared).toBeUndefined();          // a fresh one after that
+  expect(out.stoppedNow).toBe(1);
+  expect(out.cGone).toBe(true);
+}, 45000);

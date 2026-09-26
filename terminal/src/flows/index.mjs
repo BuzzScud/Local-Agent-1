@@ -124,7 +124,8 @@ export async function runFlows(ctx, text) {
   if (r.kind === 'fix') {
     const out = await fixFlow(ctx, text);
     if (out.handled) return out;
-    if (out.next === 'change' || !ctx.testCmd) {
+    // A kind the tests cannot see (a layout bug, say) goes step by step, never test-first.
+    if (out.next === 'change' || (!ctx.testCmd && !out.stepByStep)) {
       ctx.note(ctx.testCmd ? 'The tests pass today, so first a test that shows the problem.' : 'This project has no tests, so first a small check that shows the problem.', 'dim');
       return changeOrMulti(ctx, text);
     }

@@ -12,7 +12,7 @@ import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS } from '../../../models/index.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
@@ -65,9 +65,11 @@ export function App({ opts, win }) {
   }, [win]);
   // The text a menu was closed for with esc (typing again opens it).
   const [menuClosedFor, setMenuClosedFor] = useState(null);
-  const cwd = opts.cwd;
+  // Where Bonsai works; it can move into a project named from the home folder.
+  const [cwd, setCwd] = useState(opts.cwd);
   const model = MODELS[opts.modelId ?? DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
   const settings = useRef(loadSettings()).current;
+  const memoryNote = useRef(null);
 
   const [items, setItems] = useState(() => [{ key: 'welcome', type: 'welcome' }]);
   const [live, setLive] = useState(IDLE);
@@ -218,6 +220,7 @@ export function App({ opts, win }) {
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
       on('note', ({ text, tone }) => push({ type: 'note', text, tone })),
+      on('cwd', ({ cwd: dir }) => setCwd(dir)),
       // Focused paths: the live try counter, its finished line, the current step.
       on('tries', (t) => setLive((l) => ({ ...l, tries: t, waiting: false }))),
       on('tries-done', (t) => { push({ type: 'tries', ...t }); setLive((l) => ({ ...l, tries: null })); }),
@@ -245,10 +248,14 @@ export function App({ opts, win }) {
     (async () => {
       if (opts.url) { setStarting(false); return; }
       let size = opts.ctx;
+      // A model still loaded from an earlier start (or another window) is used
+      // as it is; otherwise the memory size is chosen from what is free now.
+      const running = runningServer(model);
+      if (!size && running) size = running.ctx;
       if (!size) {
         const c = chooseContext(model);
         size = c.ctx;
-        if (c.reason) push({ type: 'note', text: `Memory: ${c.reason}.`, tone: 'warn' });
+        memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
       }
       agent.ctx = size;
       setCtx(size);
@@ -261,11 +268,11 @@ export function App({ opts, win }) {
       });
       let st;
       try {
-        st = await srv.start({ ctx: size });
+        st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS });
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
-          push({ type: 'note', text: `Sharing the model with another Bonsai Code window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
+          if (!st.idle) push({ type: 'note', text: `Sharing the model with another Bonsai Code window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
         }
       } catch (e) {
         if (alive) { setStarting(false); push({ type: 'note', text: `Could not start the model: ${e.message}`, tone: 'error' }); }
@@ -277,7 +284,9 @@ export function App({ opts, win }) {
       // disk after the first time), so the first reply starts fast. A server
       // shared with another window is already warm.
       if (alive) setStartPhase('reading');
-      if (!st.shared) try {
+      // A model kept loaded from an earlier start is ours now: warm it for
+      // this folder too (instant when nothing changed). Another window's is left alone.
+      if (!st.shared || st.idle) try {
         await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: (p) => { if (alive) setStartPhase(p); } });
       } catch {}
       if (!alive) return;
@@ -285,7 +294,7 @@ export function App({ opts, win }) {
       const q = queuedRef.current;
       if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
     })();
-    return () => { alive = false; serverRef.current?.stop(); };
+    return () => { alive = false; serverRef.current?.stop({ keep: true }); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Continue or resume a saved session given on the command line.
@@ -415,7 +424,8 @@ export function App({ opts, win }) {
           ['writing speed', stats.tps ? `${stats.tps.toFixed(1)} tokens/s (last reply)` : '—'],
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
           ['written so far', `${(stats.outTokens ?? 0).toLocaleString()} tokens in ${stats.requests ?? 0} replies`],
-          ['memory', ramGb ? `${ramGb.toFixed(1)} GB` : '—'],
+          ['memory', `${ramGb ? `${ramGb.toFixed(1)} GB` : '—'}${memoryNote.current ? ` · ${memoryNote.current}` : ''}`],
+          ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · bonsai stop frees it now`],
           ['server', serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
         ] });
         break;
