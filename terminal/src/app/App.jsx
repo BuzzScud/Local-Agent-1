@@ -12,7 +12,7 @@ import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord } from '../../../models/index.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
@@ -627,6 +627,13 @@ export function App({ opts, win, onRestart }) {
       case 'doctor':
         doctor();
         break;
+      case 'tests': {
+        // The hub on its Tests tab: the record every test run adds a line to.
+        const hub = openHub('tests'); if (!hub) break;
+        const runs = readRecord();
+        push({ type: 'note', text: runs.length ? `Tests opened in the browser at ${hub.url} · ${runs.length} run${runs.length === 1 ? '' : 's'} recorded, the latest: ${runs[0].name} (${runs[0].total != null ? `${runs[0].passed} of ${runs[0].total}` : runs[0].result}) · it stays up while this window is open` : `Tests opened in the browser at ${hub.url} · no test has been recorded yet`, tone: 'dim' });
+        break;
+      }
       case 'weights':
       case 'docs': {
         // The hub in the browser: the same server as `bonsai weights` / `bonsai docs`,

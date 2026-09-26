@@ -1,0 +1,93 @@
+// The test record: one line per test run, kept on this Mac in
+// ~/.bonsai-code/tests/record.jsonl (BONSAI_HOME moves it, BONSAI_TEST_RECORD
+// names the file outright). Every runner adds its result with recordTest();
+// the hub's Tests tab reads the file live, and a snapshot page goes into the
+// DOCS folder (tests/bonsai-test-record.html) so the record reaches GitHub
+// with the other pages.
+//
+// A line:
+//   { id, at, kind, name, code, effort, ctx, passed, total, secs, result, part, note, raw, page }
+//   kind    tasks · requests · bug · suite · other            (KINDS below)
+//   result  pass · fail · stopped
+//   part    true for a run of only some of the set (a rerun of two tasks): kept, never shown as "the latest full run"
+//   code    the commit under test ("7595055", "7595055+" with uncommitted changes)
+//   raw     where the raw results are, from the repo's top
+//   page    its results page in the DOCS folder ("tests/bonsai-….html"), if one was made
+// A later line with the same id replaces the earlier one.
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { join, dirname, basename, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+
+export const KINDS = {
+  tasks: ['Practice tasks', 'the 28 practice tasks, each with its own check'],
+  requests: ['Real requests', 'trigger words and blocked commands in throwaway folders'],
+  bug: ['Real bugs', 'a bug from a real project, judged in the browser'],
+  suite: ['Unit tests', 'bun test over both parts'],
+  other: ['Other', 'probes and one-off checks'],
+};
+export const SNAPSHOT = 'tests/bonsai-test-record.html';
+
+const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const recordFile = () => process.env.BONSAI_TEST_RECORD ?? join(process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code'), 'tests', 'record.jsonl');
+
+// The commit a folder of code is at. A frozen copy has no git of its own (and
+// may sit inside another repo), so it is named by its folder: "main-7595055".
+export function codeLabel(dir = repo) {
+  const git = (...a) => spawnSync('git', ['-C', dir, ...a], { encoding: 'utf8' });
+  const top = git('rev-parse', '--show-toplevel');
+  if (top.status !== 0 || resolve(top.stdout.trim()) !== resolve(dir)) return basename(resolve(dir));
+  return git('rev-parse', '--short', 'HEAD').stdout.trim() + (git('status', '--porcelain', '--untracked-files=no').stdout.trim() ? '+' : '');
+}
+
+// Every line of the record, newest first. A line that does not parse is skipped.
+export function readRecord(file = recordFile()) {
+  if (!existsSync(file)) return [];
+  const byId = new Map();
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    try { const r = JSON.parse(line); if (r && r.id && KINDS[r.kind]) byId.set(r.id, r); } catch { /* a cut-off line */ }
+  }
+  return [...byId.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+
+// Adds one run to the record. It never throws: a test must not fail because
+// its result could not be written down. Returns the line, or null.
+export function recordTest(row, { file = recordFile(), snapshot = true, quiet = false } = {}) {
+  try {
+    if (!KINDS[row?.kind] || !row.name) throw new Error('a line needs a kind (tasks, requests, bug, suite, other) and a name');
+    const at = row.at ?? new Date().toISOString();
+    const result = row.result ?? (row.total != null && row.passed != null ? (row.passed === row.total && row.total > 0 ? 'pass' : 'fail') : 'fail');
+    const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), effort: row.effort ?? null, ctx: row.ctx ?? null,
+      passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: row.raw ?? '', page: row.page ?? '' };
+    mkdirSync(dirname(file), { recursive: true });
+    appendFileSync(file, `${JSON.stringify(line)}\n`);
+    if (!quiet) console.log(`recorded in the test record: ${line.name} — ${line.total != null ? `${line.passed} of ${line.total}` : line.result}${line.secs != null ? `, ${line.secs.toLocaleString()} s` : ''}`);
+    if (snapshot) writeSnapshot({ file });
+    return line;
+  } catch (e) {
+    if (!quiet) console.log(`not recorded in the test record: ${e.message}`);
+    return null;
+  }
+}
+
+// What the Tests tab and the snapshot page both show.
+export function recordData(file = recordFile()) {
+  return { rows: readRecord(file), kinds: KINDS, file: file.replace(homedir(), '~'), made: new Date().toISOString() };
+}
+
+// The same page the hub shows, with the record written into it, saved into
+// the DOCS folder. Skipped quietly when the folder or the page's source is
+// not here (a worktree, a frozen copy): the hub still reads the record live.
+export function writeSnapshot({ file = recordFile(), docsDir = process.env.BONSAI_DOCS ?? join(repo, 'bonsai-code DOCS'), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
+  try {
+    if (process.env.BONSAI_NO_DOCS || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
+    const html = readFileSync(template, 'utf8');
+    if (!html.includes('<!--DATA-->')) return null;
+    const out = join(docsDir, SNAPSHOT);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, html.replace('<!--DATA-->', () => `<script id="data" type="application/json">${JSON.stringify(recordData(file)).replace(/</g, '\\u003c')}</script>`));
+    return out;
+  } catch { return null; }
+}

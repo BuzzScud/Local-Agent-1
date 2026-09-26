@@ -416,6 +416,27 @@ test('/docs opens the hub on the harness page and says how many pages the DOCS f
   expect(served.hub).toContain('<title>Bonsai Hub</title>');
 }, T);
 
+test('/tests opens the hub on the test record and says how many runs it holds and the latest', async () => {
+  const { cwd, env, base } = setup();
+  mkdirSync(join(base, 'home', 'tests'), { recursive: true });
+  writeFileSync(join(base, 'home', 'tests', 'record.jsonl'), [
+    { id: 'a', at: '2026-09-25T21:09:27.000Z', kind: 'tasks', name: 'The 28 practice tasks', code: 'abc1234', passed: 28, total: 28, secs: 1974, result: 'pass' },
+    { id: 'b', at: '2026-09-26T22:57:43.000Z', kind: 'bug', name: 'The chart bug', code: 'def5678', effort: 'high', passed: 0, total: 1, secs: 1500, result: 'fail' },
+  ].map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const fake = await startFakeServer([]);
+  let served = null;
+  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome to Bonsai Code' }, { type: '/tests' }, { key: 'enter' },
+    { wait: 'Tests opened in the browser at http://127.0.0.1:' },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'tests.json')).json(), page: await (await fetch(url + 'tests')).text() }; } },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.text).toContain('?tab=tests · 2 runs recorded, the latest: The chart bug (0 of 1)');
+  expect(served.data.rows.map((x) => x.id)).toEqual(['b', 'a']);
+  expect(served.page).toContain('<title>Bonsai test record</title>');
+}, T);
+
 test('shift + arrows select text in the prompt: copied at once, delete removes it, typing replaces it, esc keeps the text', async () => {
   const { cwd, env, base } = setup();
   const clip = join(base, 'clipboard.txt'); // stands in for the Mac clipboard

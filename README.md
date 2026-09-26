@@ -48,7 +48,7 @@ bonsai-code/
 
 ```
 bun run start              # run from source (bun terminal/src/cli.jsx)
-bun run test               # all 124 tests: terminal/test and models/test
+bun run test               # every unit test: terminal/test and models/test (a full run is added to the test record)
 bun run test:terminal      # only the terminal's
 bun run test:models        # only the models part's
 bun run eval               # the 28 practice tasks against the real model (models/evals/bench/run.mjs)
@@ -56,7 +56,11 @@ bun run eval:words         # the 28 real requests
 bun run eval:verify        # prove every practice task's check can fail and pass
 bun run install-cli        # build one file and put it at ~/.local/bin/bonsai
 bun run docs               # mirror bonsai-code DOCS/ into docs/ (run before a commit)
+bun run test:record        # add test runs that are on this Mac but not yet in the test record
 ```
+
+Every test run adds a line to the test record (`~/.bonsai-code/tests/record.jsonl`); the hub shows it on its
+Tests tab: `/tests` in Bonsai, or `bonsai tests`.
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 

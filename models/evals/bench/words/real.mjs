@@ -14,6 +14,7 @@ import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../../index.
 import { runHeadless } from '../../../../terminal/src/headless.mjs';
 import { outsidePath } from '../../../../terminal/src/agent/permissions.mjs';
 import { claimsAlreadyThere } from '../../../../terminal/src/agent/agent.mjs';
+import { recordTest, codeLabel } from '../../record.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..', '..'); // the repo
@@ -136,3 +137,5 @@ const file = opt('out', join(modelFolder(model), 'results', 'words', `real-${out
 mkdirSync(dirname(file), { recursive: true });
 writeFileSync(file, JSON.stringify(out, null, 1));
 console.log(`${out.ok} of ${out.total} OK · saved ${file}`);
+recordTest({ kind: 'requests', name: `The ${out.total} real requests`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only'), secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
+  note: out.ok < out.total ? `failed: ${rows.filter((r) => !r.ok).map((r) => `#${r.n}`).join(', ')}` : '', raw: file.replace(`${root}/`, '') });

@@ -19,7 +19,7 @@ test('the pages, the model facts and exact byte ranges come back; bad ranges are
   const s = startWeightsServer({ path, docsDir: null });
   try {
     expect(s.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
-    const hub = await (await fetch(s.url)).text(); for (const t of ['<title>Bonsai Hub</title>', 'data-tab="harness"', 'data-tab="structure"', 'data-tab="docs"', "fetch('/docs.json')"]) expect(hub).toContain(t);
+    const hub = await (await fetch(s.url)).text(); for (const t of ['<title>Bonsai Hub</title>', 'data-tab="harness"', 'data-tab="structure"', 'data-tab="tests"', 'data-tab="docs"', "fetch('/docs.json')"]) expect(hub).toContain(t);
     const page = await fetch(s.url + 'weights'); expect(page.headers.get('content-type')).toContain('text/html'); const html = await page.text();
     for (const t of ['<title>Bonsai Weights</title>', '<meta charset="utf-8">', "fetch('/model.json')", 'id="core"']) expect(html).toContain(t);
     expect(await (await fetch(s.url + 'model.json')).json()).toEqual({ name: 'stand-in.gguf', size: 1000 });
@@ -127,4 +127,23 @@ test('edits: save builds the copy + manifest and tells the app; a bad edit chang
   expect(out.revertStatus).toBe(200);
   expect(out.after).toEqual({ manifest: null, copyThere: false, originalIntact: true });
   expect(out.told).toEqual(['save', 'revert']);
+});
+
+test('the Tests tab: the page is built in, and /tests.json is the test record read live, newest first', async () => {
+  const { dir, path } = standIn();
+  const was = process.env.BONSAI_TEST_RECORD;
+  process.env.BONSAI_TEST_RECORD = join(dir, 'tests', 'record.jsonl');
+  const s = startWeightsServer({ path, docsDir: null, port: 0 });
+  try {
+    const page = await fetch(s.url + 'tests'); expect(page.headers.get('content-type')).toContain('text/html');
+    const html = await page.text(); for (const t of ['<title>Bonsai test record</title>', '<meta charset="utf-8">', "fetch('/tests.json'", '<!--DATA-->']) expect(html).toContain(t);
+    expect((await (await fetch(s.url + 'tests.json')).json()).rows).toEqual([]); // nothing recorded yet
+    const { recordTest } = await import('../../models/index.mjs');
+    recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-25T21:09:27.000Z', code: 'abc1234', passed: 28, total: 28, secs: 1974 }, { snapshot: false, quiet: true });
+    recordTest({ kind: 'bug', name: 'The chart bug', at: '2026-09-26T22:57:43.000Z', code: 'def5678', effort: 'high', passed: 0, total: 1, secs: 1500, page: 'tests/a page.html' }, { snapshot: false, quiet: true });
+    const d = await (await fetch(s.url + 'tests.json')).json();
+    expect(d.rows.map((r) => [r.kind, r.result, r.passed, r.total])).toEqual([['bug', 'fail', 0, 1], ['tasks', 'pass', 28, 28]]);
+    expect(d.rows[0].page).toBe('tests/a page.html');
+    expect(d.kinds.tasks[0]).toBe('Practice tasks');
+  } finally { s.stop(); if (was == null) delete process.env.BONSAI_TEST_RECORD; else process.env.BONSAI_TEST_RECORD = was; }
 });

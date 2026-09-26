@@ -68,6 +68,7 @@ export function cliRows(lingerMins = 30) {
       ['bonsai stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
       ['bonsai weights', "the hub in the browser, on the model's weights (ctrl+c here closes it)"],
       ['bonsai docs', 'the hub on the harness and structure diagrams and every Bonsai page'],
+      ['bonsai tests', 'the hub on the test record: every test run and its result'],
     ],
     options: [
       ['--effort low|medium|high', 'how much the model thinks before it acts (default: low = answers straight away)'],

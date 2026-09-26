@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai test record</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--best:#f3d9cc;--bestInk:#8a3a1c;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--c-before:#2a78d6;--c-after:#eb6834}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--c-before:#3987e5;--c-after:#d95926}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--c-before:#3987e5;--c-after:#d95926}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:28px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}h2{font-size:20px;letter-spacing:-.01em;margin:40px 0 4px}h3{font-size:16px;margin:0 0 2px}p{margin:0 0 10px}a{color:inherit;text-underline-offset:3px}
+.lede{color:var(--mute);max-width:780px}.sub{color:var(--mute);font-size:14px;margin-bottom:12px;max-width:840px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}
+.filters button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.filters button:hover{color:var(--ink);border-color:var(--faint)}.filters button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
+.filters button span{color:var(--faint);font-weight:400;margin-left:5px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
+.card .k{color:var(--mute);font-size:13px}.card .v{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
+.card .n{font-size:13.5px}.card .m{color:var(--mute);font-size:12.5px;margin-top:4px}
+.ok{color:var(--up)}.bad{color:var(--down)}.stop{color:var(--warn)}
+.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}tr:last-child td{border-bottom:none}
+thead th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft)}
+td.t{white-space:normal;min-width:240px}td.t b{display:block;font-weight:600}td.t span{display:block;color:var(--mute);font-size:13px;max-width:520px}
+td .q{display:block;color:var(--mute);font-size:12px}td.r{font-weight:600}td.p{font-size:13.5px}td.t code{display:block;margin-top:3px}
+code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px;margin-top:12px}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 12px;min-width:0}figcaption{color:var(--mute);font-size:13px;margin-top:8px}
+.scroll{overflow-x:auto}.scroll svg{min-width:440px}
+svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin:0 auto}svg text{fill:var(--mute);font-size:11px;font-family:inherit}svg .grid{stroke:var(--line);stroke-width:1}svg .axis{stroke:var(--faint);stroke-width:1}svg .lbl{fill:var(--ink);font-weight:600}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);margin-top:18px;max-width:780px}
+.foot{margin-top:40px;color:var(--mute);font-size:13px;max-width:860px}.foot li{margin:3px 0}
+@media (max-width:600px){h1{font-size:24px}th,td{padding:8px 10px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Bonsai test record</h1>
+<p class="lede" id="lede">Reading the record…</p>
+<div class="filters" id="filters" role="group" aria-label="Which tests to show"></div>
+<div class="cards" id="cards"></div>
+<section id="trend"></section>
+<div id="tables"></div>
+<section class="foot" id="foot"></section>
+</main>
+<script id="data" type="application/json">{"rows":[{"id":"suite:2026-09-26T23:56:59.472Z","at":"2026-09-26T23:56:59.472Z","kind":"suite","name":"Unit tests, both parts","code":"1e0ddd3+","effort":null,"ctx":null,"passed":243,"total":243,"secs":139,"result":"pass","part":false,"note":"30 files","raw":"","page":""},{"id":"suite:2026-09-26T23:56:09.548Z","at":"2026-09-26T23:56:09.548Z","kind":"suite","name":"Unit tests, both parts","code":"250764b+","effort":null,"ctx":null,"passed":243,"total":243,"secs":138,"result":"pass","part":false,"note":"30 files","raw":"","page":""},{"id":"tasks:chart-bug-round3-2026-09-26/bench-off-main-7595055:off","at":"2026-09-26T23:45:18.742Z","kind":"tasks","name":"The 28 practice tasks","code":"7595055","effort":"low","ctx":32768,"passed":28,"total":28,"secs":1929,"result":"pass","part":false,"note":"the 28-task check of round 3","raw":"models/bonsai-2-27b/results/chart-bug-round3-2026-09-26/bench-off-main-7595055","page":""},{"id":"bug:chart-bug-round3-2026-09-26:result-A-high-new-r2.json","at":"2026-09-26T22:57:43.048Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"c5c4172","effort":"high","ctx":32768,"passed":0,"total":1,"secs":1500,"result":"fail","part":false,"note":"round 3 · words only · ran into the 25 min limit, no change","raw":"models/bonsai-2-27b/results/chart-bug-round3-2026-09-26","page":""},{"id":"tasks:accuracy-round-baseline-2026-09-26","at":"2026-09-26T19:05:00.000Z","kind":"tasks","name":"The 28 practice tasks","code":"f310a1f","effort":"low","ctx":32768,"passed":17,"total":18,"secs":1250,"result":"stopped","part":false,"note":"the accuracy round's first run, stopped after 18 tasks · failed: 25-bigproject-question (wrote a scratch file inside the project) · numbers from its report, the raw files were not kept","raw":"","page":"bonsai-accuracy-round-2026-09-26.html"},{"id":"bug:chart-bug-round3-2026-09-26:result-A-high-new.json","at":"2026-09-26T16:04:20.728Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"c5c4172","effort":"high","ctx":32768,"passed":0,"total":1,"secs":1204,"result":"stopped","part":false,"note":"round 3 · words only · stopped by hand, no change","raw":"models/bonsai-2-27b/results/chart-bug-round3-2026-09-26","page":""},{"id":"bug:chart-bug-round3-2026-09-26:result-B-off-main.json","at":"2026-09-26T14:42:08.127Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"9efa9bc","effort":"low","ctx":32768,"passed":1,"total":1,"secs":352,"result":"pass","part":false,"note":"round 3 · words + the failing check · fixed: changed desks/chart/tv/legend.js","raw":"models/bonsai-2-27b/results/chart-bug-round3-2026-09-26","page":""},{"id":"bug:chart-r2-high","at":"2026-09-26T07:01:06.896Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"round-2 build","effort":"high","ctx":16384,"passed":0,"total":1,"secs":1500,"result":"fail","part":false,"note":"round 2 · words only · named the cause at 8:10, memory filled at 8:40 and the summary lost it; no change","raw":"models/bonsai-2-27b/results/chart-bug-round2-2026-09-25","page":"tests/bonsai-chart-bug-round-2-2026-09-25.html"},{"id":"bug:chart-r2-medium","at":"2026-09-26T01:58:29.092Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"round-2 build","effort":"medium","ctx":32768,"passed":0,"total":1,"secs":1355,"result":"stopped","part":false,"note":"round 2 · words only · reached the symbol list in index.html, no change; stopped at about 22 min","raw":"models/bonsai-2-27b/results/chart-bug-round2-2026-09-25","page":"tests/bonsai-chart-bug-round-2-2026-09-25.html"},{"id":"bug:chart-r2-off","at":"2026-09-26T01:35:46.444Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"round-2 build","effort":"low","ctx":32768,"passed":0,"total":1,"secs":1350,"result":"stopped","part":false,"note":"round 2 · words only · reached the legend's code, no change; stopped at about 22 min","raw":"models/bonsai-2-27b/results/chart-bug-round2-2026-09-25","page":"tests/bonsai-chart-bug-round-2-2026-09-25.html"},{"id":"bug:chart-r1-A","at":"2026-09-25T22:57:49.119Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"","effort":"low","ctx":32768,"passed":0,"total":1,"secs":707,"result":"fail","part":false,"note":"round 1 · words only · chased the project's test suite, which cannot see a layout bug; no change","raw":"models/bonsai-2-27b/results/chart-bug-2026-09-25","page":"tests/bonsai-chart-bug-test-2026-09-25.html"},{"id":"bug:chart-r1-B","at":"2026-09-25T22:57:49.119Z","kind":"bug","name":"The chart bug: the symbol list hidden behind the EMA legend","code":"","effort":"low","ctx":32768,"passed":0,"total":1,"secs":1500,"result":"fail","part":false,"note":"round 1 · words + the failing check · ran into the 25 min limit; no change","raw":"models/bonsai-2-27b/results/chart-bug-2026-09-25","page":"tests/bonsai-chart-bug-test-2026-09-25.html"},{"id":"tasks:runs/2026-09-25-fast/after:off","at":"2026-09-25T21:09:27.730Z","kind":"tasks","name":"The 28 practice tasks","code":"","effort":"low","ctx":32768,"passed":28,"total":28,"secs":1974,"result":"pass","part":false,"note":"the faster round, after: the bar for later runs","raw":"models/bonsai-2-27b/results/runs/2026-09-25-fast/after","page":"tests/bonsai-faster-2026-09-25.html"},{"id":"tasks:runs/2026-09-25-fast/before:off","at":"2026-09-25T20:34:43.688Z","kind":"tasks","name":"The 28 practice tasks","code":"","effort":"low","ctx":32768,"passed":27,"total":28,"secs":2277,"result":"fail","part":false,"note":"the faster round, before · failed: 25-bigproject-question","raw":"models/bonsai-2-27b/results/runs/2026-09-25-fast/before","page":"tests/bonsai-faster-2026-09-25.html"},{"id":"tasks:night/2026-09-25-smart/practice-off:off","at":"2026-09-25T16:31:55.866Z","kind":"tasks","name":"The 28 practice tasks","code":"","effort":"low","ctx":32768,"passed":26,"total":28,"secs":2645,"result":"fail","part":false,"note":"the smarter-and-faster round, first run with the ten harder tasks · failed: 16-writing-story, 28-python-multifile","raw":"models/bonsai-2-27b/results/night/2026-09-25-smart/practice-off","page":"tests/bonsai-smart-2026-09-25.html"},{"id":"tasks:night/2026-09-25-smart/practice-rerun:off","at":"2026-09-25T16:31:55.863Z","kind":"tasks","name":"Two practice tasks, run again on the fixed code","code":"","effort":"low","ctx":32768,"passed":1,"total":2,"secs":730,"result":"fail","part":true,"note":"the smarter-and-faster round · failed: 28-python-multifile","raw":"models/bonsai-2-27b/results/night/2026-09-25-smart/practice-rerun","page":"tests/bonsai-smart-2026-09-25.html"},{"id":"requests:night/2026-09-25-smart/words-real-rerun.json","at":"2026-09-25T15:41:12.782Z","kind":"requests","name":"The 3 real requests","code":"","effort":"low","ctx":null,"passed":3,"total":3,"secs":213,"result":"pass","part":true,"note":"the smarter-and-faster round, three requests run again on the fixed code","raw":"models/bonsai-2-27b/results/night/2026-09-25-smart/words-real-rerun.json","page":"tests/bonsai-smart-2026-09-25.html"},{"id":"requests:night/2026-09-25-smart/words-real.json","at":"2026-09-25T15:23:16.169Z","kind":"requests","name":"The 28 real requests","code":"","effort":"low","ctx":null,"passed":26,"total":28,"secs":2131,"result":"fail","part":false,"note":"the smarter-and-faster round · failed: #8, #26","raw":"models/bonsai-2-27b/results/night/2026-09-25-smart/words-real.json","page":"tests/bonsai-smart-2026-09-25.html"},{"id":"requests:night/2026-09-25-open9/words-real.json","at":"2026-09-25T13:47:30.317Z","kind":"requests","name":"The 28 real requests","code":"","effort":"low","ctx":null,"passed":28,"total":28,"secs":1597,"result":"pass","part":false,"note":"after the nine open items","raw":"models/bonsai-2-27b/results/night/2026-09-25-open9/words-real.json","page":"tests/bonsai-night-double-check-2026-09-25.html"},{"id":"tasks:night/2026-09-25-rerun/practice-off:off","at":"2026-09-25T13:00:23.160Z","kind":"tasks","name":"The 18 practice tasks, 2 runs each","code":"","effort":"low","ctx":32768,"passed":36,"total":36,"secs":1599,"result":"pass","part":false,"note":"the morning double-check","raw":"models/bonsai-2-27b/results/night/2026-09-25-rerun/practice-off","page":"tests/bonsai-night-double-check-2026-09-25.html"},{"id":"requests:night/2026-09-25-rerun/words-real.json","at":"2026-09-25T12:32:08.461Z","kind":"requests","name":"The 28 real requests","code":"","effort":"low","ctx":null,"passed":26,"total":28,"secs":1986,"result":"fail","part":false,"note":"the morning double-check · failed: #16, #24","raw":"models/bonsai-2-27b/results/night/2026-09-25-rerun/words-real.json","page":"tests/bonsai-night-double-check-2026-09-25.html"},{"id":"tasks:night/2026-09-25/practice-high:on","at":"2026-09-25T07:28:37.176Z","kind":"tasks","name":"The 18 practice tasks","code":"","effort":"high","ctx":32768,"passed":18,"total":18,"secs":886,"result":"pass","part":false,"note":"the night run","raw":"models/bonsai-2-27b/results/night/2026-09-25/practice-high","page":"tests/bonsai-night-2026-09-25.html"},{"id":"tasks:night/2026-09-25/practice-medium:on","at":"2026-09-25T07:12:39.604Z","kind":"tasks","name":"The 18 practice tasks, 2 runs each","code":"","effort":"medium","ctx":32768,"passed":36,"total":36,"secs":1772,"result":"pass","part":false,"note":"the night run","raw":"models/bonsai-2-27b/results/night/2026-09-25/practice-medium","page":"tests/bonsai-night-2026-09-25.html"},{"id":"tasks:night/2026-09-25/practice-off:off","at":"2026-09-25T06:41:33.096Z","kind":"tasks","name":"The 18 practice tasks, 2 runs each","code":"","effort":"low","ctx":32768,"passed":36,"total":36,"secs":1513,"result":"pass","part":false,"note":"the night run","raw":"models/bonsai-2-27b/results/night/2026-09-25/practice-off","page":"tests/bonsai-night-2026-09-25.html"},{"id":"requests:night/2026-09-25/words-real.json","at":"2026-09-25T06:14:46.384Z","kind":"requests","name":"The 28 real requests","code":"","effort":"low","ctx":null,"passed":22,"total":28,"secs":3361,"result":"fail","part":false,"note":"the night run · failed: #8, #15, #16, #17, #24, #27","raw":"models/bonsai-2-27b/results/night/2026-09-25/words-real.json","page":"tests/bonsai-night-2026-09-25.html"}],"kinds":{"tasks":["Practice tasks","the 28 practice tasks, each with its own check"],"requests":["Real requests","trigger words and blocked commands in throwaway folders"],"bug":["Real bugs","a bug from a real project, judged in the browser"],"suite":["Unit tests","bun test over both parts"],"other":["Other","probes and one-off checks"]},"file":"~/.bonsai-code/tests/record.jsonl","made":"2026-09-26T23:56:59.482Z"}</script>
+<script>
+(async function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const built = $('data');
+  let data;
+  try { data = built ? JSON.parse(built.textContent) : await (await fetch('/tests.json', { cache: 'no-store' })).json(); }
+  catch { $('lede').textContent = 'The test record could not be read. Open this page from Bonsai with /docs, then the Tests tab.'; return; }
+  const live = !built;
+  const rows = data.rows ?? [], KINDS = data.kinds ?? {};
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = (iso) => { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+  const clock = (iso) => { const d = new Date(iso); const h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+  const secs = (s) => (s == null ? '—' : `${s.toLocaleString()} s`);
+  const mins = (s) => (s == null || s < 90 ? '' : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`);
+  const mark = (r) => (r.result === 'pass' ? ['ok', '✓'] : r.result === 'stopped' ? ['stop', '■'] : ['bad', '✗']);
+  const words = (r) => (r.total != null ? `${r.passed} of ${r.total}${r.result === 'stopped' ? ' · stopped' : ''}` : r.result === 'pass' ? 'passed' : r.result === 'stopped' ? 'stopped' : 'failed');
+  const result = (r) => { const [c, m] = mark(r); return `<span class="${c}">${m} ${esc(words(r))}</span>`; };
+  // In the hub a results page opens in the hub; in the saved copy it is a file beside this one.
+  const href = (page) => (live ? `/?tab=docs&page=${encodeURIComponent(page)}` : `../${page.split('/').map(encodeURIComponent).join('/')}`);
+  const settings = (r) => [r.effort ? `effort ${r.effort}` : '', r.ctx ? `${Math.round(r.ctx / 1024)}k memory` : ''].filter(Boolean).join(' · ') || '—';
+
+  if (!rows.length) {
+    $('lede').textContent = 'Every test run on this Mac, newest first.';
+    $('cards').outerHTML = '<div class="empty">No test has been recorded yet. The 28-task check (<code>bun run eval</code>), the real requests (<code>bun run eval:words</code>) and the unit tests (<code>bun run test</code>) each add a line here when they finish.</div>';
+    return;
+  }
+  const order = Object.keys(KINDS).filter((k) => rows.some((r) => r.kind === k));
+  const first = rows[rows.length - 1];
+  $('lede').textContent = `Every test run on this Mac, newest first: ${rows.length} run${rows.length === 1 ? '' : 's'} since ${day(first.at)}. A run adds its own line when it finishes.`;
+
+  let shown = 'all';
+  try { const s = new URL(location.href).searchParams.get('kind') ?? localStorage.getItem('bonsai-tests-kind'); if (s && (s === 'all' || order.includes(s))) shown = s; } catch { /* no storage */ }
+  function filters() {
+    $('filters').innerHTML = [['all', 'All', rows.length], ...order.map((k) => [k, KINDS[k][0], rows.filter((r) => r.kind === k).length])]
+      .map(([k, name, n]) => `<button type="button" data-kind="${k}" aria-pressed="${k === shown}">${esc(name)}<span>${n}</span></button>`).join('');
+  }
+  $('filters').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; shown = b.dataset.kind; try { localStorage.setItem('bonsai-tests-kind', shown); } catch { /* no storage */ } draw(); };
+
+  function cards() {
+    $('cards').innerHTML = order.filter((k) => shown === 'all' || shown === k).map((k) => {
+      const mine = rows.filter((x) => x.kind === k);
+      const r = mine.find((x) => !x.part && x.result !== 'stopped') ?? mine[0]; const [c] = mark(r);
+      return `<div class="card"><div class="k">${esc(KINDS[k][0])} · latest${k === 'bug' ? '' : ' full run'}</div><div class="v ${c}">${esc(mark(r)[1])} ${esc(words(r))}</div><div class="n">${esc(r.name)}</div><div class="m">${day(r.at)} · ${clock(r.at)}${r.secs != null ? ` · ${secs(r.secs)}` : ''}${r.code ? ` · code ${esc(r.code)}` : ''}</div></div>`;
+    }).join('');
+  }
+
+  // The full 28-task runs at effort Off, oldest first: tasks passed, and seconds in all.
+  function line({ title, pts, get, fmt, floor, top, cap }) {
+    const W = 560, H = 262, L = 52, R = 22, T = 22, B = 46;
+    const vals = pts.map(get), lo = floor ?? Math.min(...vals), hi = Math.max(...vals);
+    const raw = (hi - lo || 1) / 4, pow = 10 ** Math.floor(Math.log10(raw)), f = raw / pow, step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * pow;
+    const y0 = Math.floor(lo / step) * step, y1 = Math.max(top ?? 0, Math.ceil(hi / step) * step + (top ? 0 : step * 0.5));
+    const X = (i) => L + (pts.length === 1 ? 0.5 : i / (pts.length - 1)) * (W - L - R);
+    const Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`;
+    for (let v = y0; v <= y1 + 1e-9; v += step) { s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 8}" y="${Y(v) + 3.5}" text-anchor="end">${Math.round(v).toLocaleString()}</text>`; }
+    s += `<line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>`;
+    const every = Math.ceil(pts.length / 7);
+    pts.forEach((p, i) => { if (i % every === 0 || i === pts.length - 1) { const a = i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle'; s += `<text x="${X(i)}" y="${H - B + 15}" text-anchor="${a}">${day(p.at)}</text><text x="${X(i)}" y="${H - B + 28}" text-anchor="${a}" style="font-size:10px">${clock(p.at)}</text>`; } });
+    s += `<polyline fill="none" stroke="var(--c-before)" stroke-width="2" stroke-linejoin="round" points="${pts.map((p, i) => `${X(i)},${Y(get(p))}`).join(' ')}"/>`;
+    pts.forEach((p, i) => {
+      s += `<g><circle cx="${X(i)}" cy="${Y(get(p))}" r="4.5" fill="var(--c-before)" stroke="var(--card)" stroke-width="2"/><circle cx="${X(i)}" cy="${Y(get(p))}" r="13" fill="transparent"><title>${esc(p.name)} · ${day(p.at)} ${clock(p.at)} · ${esc(fmt(get(p)))}${p.code ? ` · code ${esc(p.code)}` : ''}</title></circle></g>`;
+      if (i === 0 || i === pts.length - 1) s += `<text class="lbl" x="${X(i)}" y="${Y(get(p)) - 10}" text-anchor="${i === 0 ? 'start' : 'end'}">${esc(fmt(get(p)))}</text>`;
+    });
+    return `<figure><h3>${esc(title)}</h3><div class="scroll">${s}</svg></div><figcaption>${cap}</figcaption></figure>`;
+  }
+  function trend() {
+    const pts = rows.filter((r) => r.kind === 'tasks' && r.total === 28 && !r.part && r.result !== 'stopped' && (!r.effort || /^(off|low)$/i.test(r.effort))).reverse();
+    if (pts.length < 2 || (shown !== 'all' && shown !== 'tasks')) { $('trend').innerHTML = ''; return; }
+    $('trend').innerHTML = `<h2>The 28-task check over time</h2><p class="sub">Each full run of the 28 practice tasks at the default effort, oldest on the left. Point at a dot for the run behind it; every run is in the table below.</p><div class="charts">${
+      line({ title: 'Tasks passed, of 28', pts, get: (p) => p.passed, fmt: (v) => `${v} of 28`, floor: Math.min(20, ...pts.map((p) => p.passed)), top: 28, cap: 'Higher is better; 28 is every task.' })}${
+      line({ title: 'Seconds for all 28', pts, get: (p) => p.secs, fmt: (v) => `${v.toLocaleString()} s`, cap: 'Lower is better. One run each, so a few percent either way is run-to-run noise.' })}</div>`;
+  }
+
+  const KEEP = 30; // unit test runs shown; the rest stay in the record
+  function tables() {
+    $('tables').innerHTML = order.filter((k) => shown === 'all' || shown === k).map((k) => {
+      const all = rows.filter((r) => r.kind === k), list = k === 'suite' ? all.slice(0, KEEP) : all;
+      return `<h2>${esc(KINDS[k][0])}</h2><p class="sub">${esc(KINDS[k][1][0].toUpperCase() + KINDS[k][1].slice(1))}. ${all.length} run${all.length === 1 ? '' : 's'}${all.length > list.length ? `, the newest ${list.length} shown` : ''}.</p>
+<div class="wrap"><table><thead><tr><th>When</th><th>Test</th><th>Code</th><th>Settings</th><th>Result</th><th>Time</th><th>Results page</th></tr></thead><tbody>${list.map((r) => `<tr>
+<td>${day(r.at)}<span class="q">${clock(r.at)}</span></td>
+<td class="t"><b>${esc(r.name)}</b>${r.note ? `<span>${esc(r.note)}</span>` : ''}${r.raw ? `<code>${esc(r.raw)}</code>` : ''}</td>
+<td>${r.code ? `<code>${esc(r.code)}</code>` : '—'}</td>
+<td>${esc(settings(r))}</td>
+<td class="r">${result(r)}</td>
+<td>${secs(r.secs)}${mins(r.secs) ? `<span class="q">${mins(r.secs)}</span>` : ''}</td>
+<td class="p">${r.page ? `<a href="${href(r.page)}"${live ? ' target="_top"' : ''}>open the page</a>` : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+    }).join('');
+  }
+  function draw() { filters(); cards(); trend(); tables(); }
+  draw();
+  $('foot').innerHTML = `<h3 style="color:var(--ink)">How this record is kept</h3><ul>
+<li>The record is one file on this Mac, <code>${esc(data.file ?? '')}</code>, one line per run. The 28-task check, the real requests, a real-bug run and the unit tests each add their line when they finish; any other check adds one with <code>recordTest()</code> from <code>models/evals/record.mjs</code>.</li>
+<li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Bonsai, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
+<li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li></ul>
+<p>Nothing on this page loads from the internet.</p>`;
+})();
+</script>
+</body>
+</html>

@@ -1,11 +1,12 @@
 // The Bonsai hub: `/weights`, `/docs`, `bonsai weights` and `bonsai docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · All docs
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Tests · All docs
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned harness and structure pages
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
+//   /tests, /tests.json   the test record: every test run and its result, read live from ~/.bonsai-code/tests/record.jsonl
 // The DOCS folder is `bonsai-code DOCS/` at the top of the repo on this Mac:
 // BONSAI_DOCS names it outright, else BONSAI_REPO (the launcher passes it),
 // else the repo this source runs from.
@@ -14,8 +15,9 @@ import { basename, join, resolve } from 'node:path';
 import html from './weights.html' with { type: 'text' };
 import hubHtml from './hub.html' with { type: 'text' };
 import helpHtml from './help.html' with { type: 'text' };
+import testsHtml from './tests.html' with { type: 'text' };
 import { helpData, VERSION } from './help.mjs';
-import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 
 export function findDocsDir() {
@@ -97,6 +99,8 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/') return page(hubHtml);
       if (url.pathname === '/weights') return page(html);
       if (url.pathname === '/help') return page(helpHtml);
+      if (url.pathname === '/tests') return page(testsHtml);
+      if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });
       if (url.pathname === '/model') {

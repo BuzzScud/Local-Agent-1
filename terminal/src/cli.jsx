@@ -100,13 +100,13 @@ if (process.argv[2] === 'stop') {
   if (!r.stopped.length && !r.inUse.length) process.stdout.write('No model is loaded.\n');
   process.exit(0);
 }
-if (process.argv[2] === 'weights' || process.argv[2] === 'docs') {
+if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests') {
   const { existsSync } = await import('node:fs');
   const path = modelPath(MODELS[DEFAULT_MODEL]);
   if (!existsSync(path)) { process.stderr.write(`bonsai weights: the model file is not here yet (${path}). Run bonsai setup first.\n`); process.exit(1); }
   const { startWeightsServer } = await import('./app/weights.mjs');
   const s = startWeightsServer({ path });
-  const url = `${s.url}?tab=${process.argv[2] === 'docs' ? 'harness' : 'weights'}`;
+  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests' }[process.argv[2]] ?? 'weights'}`;
   process.stdout.write(`Bonsai hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
   if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
   process.on('SIGINT', () => { s.stop(); process.exit(0); });
