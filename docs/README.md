@@ -8,6 +8,8 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [bonsai-vs-claude-code-ui.html](bonsai-vs-claude-code-ui.html) | page | Bonsai vs Claude Code | 645 KB | 2026-09-26 |
+| [bonsai-report-2026-09-26.html](bonsai-report-2026-09-26.html) | page | Bonsai — 26 Sep | 12 KB | 2026-09-26 |
 | [bonsai-why-it-kept-asking-2026-09-26.html](bonsai-why-it-kept-asking-2026-09-26.html) | page | Why Bonsai kept asking | 16 KB | 2026-09-26 |
 | [bonsai-terminal-2-designs-2026-09-25.html](bonsai-terminal-2-designs-2026-09-25.html) | page | Bonsai terminal: 2 designs | 56 KB | 2026-09-26 |
 | [bonsai-chart-bug-round-2-2026-09-25.html](bonsai-chart-bug-round-2-2026-09-25.html) | page | Bonsai vs the chart bug, round 2 | 178 KB | 2026-09-26 |
