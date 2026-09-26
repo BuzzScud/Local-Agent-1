@@ -12,6 +12,10 @@ results folded (`⏺ Read(file)` / `⎿ Read 28 lines (ctrl+o to expand)`); and 
 ends, the time it took: `⠿ Worked for 41s · done 12:58 PM`. Nothing sits under the prompt
 but the footer; from 70% memory a line says what happens next, `/stats` has every number,
 and `/meters on` adds the old status bar (model, speed, memory, effort) for those who want it.
+When a commit that changes Bonsai's code lands on main while it runs, the lower right says
+`↻ Update available · restart bonsai to use it` (the next `bonsai` builds it); pushed to GitHub's
+main from a worktree but not in this folder yet, it says `↻ Update on GitHub · git pull, then restart`
+(`src/app/update.mjs`, checked every 20 s; `BONSAI_NO_UPDATE=1` turns it off).
 
 ## Keys
 

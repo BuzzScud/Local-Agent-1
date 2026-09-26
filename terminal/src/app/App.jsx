@@ -26,6 +26,7 @@ import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
 import { spinStyle } from '../ui/theme.mjs';
+import { watchUpdates, updateText } from './update.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -86,6 +87,9 @@ export function App({ opts, win }) {
   // What the Weights tab last saved (the edited copy's manifest): feeds the
   // weights badge in the lower right.
   const [editedSaved, setEditedSaved] = useState(readEdited);
+  // New Bonsai code on main since this start: the "Update available" badge.
+  const [update, setUpdate] = useState(null);
+  useEffect(() => watchUpdates(setUpdate), []);
   const memoryNote = useRef(null);
   const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
   const itemsRef = useRef([]);
@@ -865,6 +869,7 @@ export function App({ opts, win }) {
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
+    updateBadge: updateText(update),
     weightsBadge: model.edited
       ? (editedSaved && editedSaved.saved !== model.edited.saved ? '✱ newer edits saved · /model to reload'
         : `✱ on edited weights (${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'})`)

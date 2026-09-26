@@ -3,7 +3,8 @@
 # changed since the last build, it rebuilds the one-file app first (about
 # 0.2 s), then runs it. A build that fails leaves the last good app in place.
 #   Installed as ~/.local/bin/bonsai by `bun run install-cli`.
-#   BONSAI_NO_UPDATE=1 bonsai   starts without checking.
+#   BONSAI_NO_UPDATE=1 bonsai   starts without checking (and without the app's
+#   "Update available" badge, terminal/src/app/update.mjs, which uses the same file list).
 REPO="${BONSAI_REPO:-__REPO__}"
 APP="$HOME/.bonsai-code/app/bonsai"
 LOG="$HOME/.bonsai-code/logs/update.log"
@@ -15,7 +16,7 @@ if [ "${BONSAI_NO_UPDATE:-0}" != 1 ] && [ -f "$REPO/terminal/src/cli.jsx" ] && [
     changed="no app yet"
   else
     changed="$(find "$REPO/terminal/src" "$REPO/terminal/rules" "$REPO/models" "$REPO/package.json" \
-      -newer "$APP" -type f \( -name '*.mjs' -o -name '*.js' -o -name '*.jsx' -o -name '*.json' -o -name '*.md' \) \
+      -newer "$APP" -type f \( -name '*.mjs' -o -name '*.js' -o -name '*.jsx' -o -name '*.json' -o -name '*.md' -o -name '*.html' \) \
       -not -path '*/node_modules/*' -not -path '*/results/*' -not -path '*/evals/*' -not -path '*/test/*' \
       -not -name 'README.md' -print -quit 2>/dev/null)"
   fi

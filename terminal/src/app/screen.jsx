@@ -404,10 +404,12 @@ function Footer({ app }) {
   // An open menu takes the footer's place, as in Claude Code.
   if (app.menu?.items?.length) return null;
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts');
-  const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2);
-  // The weights badge shares the lower right with the mode label.
+  // The update and weights badges share the lower right with the mode label,
+  // which drops its "(shift+tab to cycle)" hint first when room runs short.
+  const badges = [app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
+  const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2 - (badges ? badges.length + 3 : 0));
   const ml = modeLabel(mode, { cycle: pick.cycle });
-  const badge = app.weightsBadge ? <Text color={C.accent}>{app.weightsBadge}</Text> : null;
+  const badge = badges ? <Text color={C.accent}>{badges}</Text> : null;
   return (
     <Box flexDirection="column">
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
