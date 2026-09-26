@@ -32,7 +32,10 @@ done
 rm -rf "$U" "$R"`;
 function watch(pid, port, secs) {
   const step = Math.max(1, Math.min(10, Math.floor(secs / 3)));
-  spawn('/bin/sh', ['-c', WATCH, 'bonsai-watch', String(pid), usersDir(port), regFile(port), String(secs), String(step)], { detached: true, stdio: 'ignore' }).unref();
+  // Started through a shell that leaves at once, so the watcher is nobody's
+  // child: it outlives Bonsai and Terminal's title does not show its `sleep`.
+  const args = [String(pid), usersDir(port), regFile(port), String(secs), String(step)];
+  spawn('/bin/sh', ['-c', '/bin/sh -c "$0" bonsai-watch "$@" </dev/null >/dev/null 2>&1 &', WATCH, ...args], { detached: true, stdio: 'ignore' }).unref();
 }
 
 const portFree = (port) => new Promise((resolve) => {

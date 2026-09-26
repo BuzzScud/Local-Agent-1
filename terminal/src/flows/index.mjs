@@ -22,9 +22,14 @@ const CODE_FILE = /\b[\w-]+\.(m?[jt]sx?|cjs|py|rb|go|rs|java|kt|swift|c|cc|cpp|h
 const CODE_WORDS = /\b(function|method|class|helper|bug|crash(es)?|flag|field|option|parameter|argument|variable|property|endpoint|generator|parser|stdout|stderr|exception)\b/i;
 
 // Greetings and thanks: answered in a sentence, with no tools (a "hello" once
-// read the project and asked to run the tests).
+// read the project and asked to run the tests). Also a greeting with a
+// general offer of work and nothing to do yet ("hello, can you help me with
+// something?", "hi, I need some help"): once answered, Bonsai waits.
+const GREETING = String.raw`(?:hi|hello|hey|yo|hiya|howdy|good (?:morning|afternoon|evening))`;
+const HELP = String.raw`(?:(?:can|could|would|will) you (?:please )?(?:help|assist)(?: me)?(?: out)?(?: with (?:something|a (?:quick )?(?:thing|question|task)|some(?:thing| stuff)))?(?: please)?|i (?:need|could use|want) (?:some |a little |your )?help(?: with something)?|how are you(?: doing)?(?: today)?|are you there|what'?s up|i have a (?:quick )?question)`;
+const SMALL_TALK = new RegExp(String.raw`^(?:(?:hi|hello|hey|yo|hiya|howdy|thanks|thank you|thx|ty|ok|okay|cool|great|nice|good (?:morning|afternoon|evening)|who are you|what can you do)\b[\s!.?,]*(?:bonsai|there)?[\s!.?]*|(?:${GREETING}[\s!.,]*(?:bonsai|there)?[\s!.,]*)?${HELP}[\s!.?]*)$`, 'i');
 export function isSmallTalk(text) {
-  return /^(hi|hello|hey|yo|hiya|howdy|thanks|thank you|thx|ty|ok|okay|cool|great|nice|good (morning|afternoon|evening)|who are you|what can you do)\b[\s!.?,]*(bonsai|there)?[\s!.?]*$/i.test(text.trim());
+  return SMALL_TALK.test(text.trim());
 }
 
 export function routeByRules(text) {

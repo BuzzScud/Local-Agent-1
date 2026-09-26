@@ -1,10 +1,10 @@
 // What "looks right" means for one screen, as checks a test can run:
 // nothing wider than the window, no leftover copies of the live area, box
-// borders whole, the prompt box right after the conversation when Bonsai is idle.
+// borders whole, the prompt box on the last lines when Bonsai is idle.
 const BORDER = /^[\s─│╭╮╰╯┃]*$/;
 // anchored: a fresh screen (the start, or just after a resize), where the
-// prompt box must come right after what is on screen (the screen starts at
-// the top, like Claude Code): below it only the footer lines, then blank.
+// conversation starts on the top line and the prompt box sits on the last
+// lines, with blank space in between until the conversation fills it.
 
 export function checkScreen(lines, { cols, rows, anchored = false, scrollback = null, expectBox = true } = {}) {
   const out = [];
@@ -27,7 +27,7 @@ export function checkScreen(lines, { cols, rows, anchored = false, scrollback = 
     let last = text.length - 1;
     while (last > 0 && !text[last].trim()) last--;
     const boxEnd = text.map((l, i) => (/^╰/.test(l) ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
-    add('prompt box right after the conversation', boxEnd >= 0 && last - boxEnd <= 3, `box ends on row ${boxEnd + 1}, last text on row ${last + 1} of ${rows}`);
+    add('prompt box on the last lines', boxEnd >= rows - 4 && last >= rows - 3, `box ends on row ${boxEnd + 1} of ${rows}`);
   }
   return out;
 }

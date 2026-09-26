@@ -3,7 +3,8 @@
 import React from 'react';
 import { render } from 'ink';
 import { App } from './app/App.jsx';
-import { TerminalWindow } from './app/window.mjs';
+import { primeRows } from './app/screen.jsx';
+import { TerminalWindow, MIN_COLS } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -122,8 +123,18 @@ if (opts.print) {
   }
 } else {
   if (!process.stdin.isTTY) { process.stderr.write('bonsai needs a terminal. For scripts use: bonsai -p "…"\n'); process.exit(2); }
-  // Like Claude Code: the welcome starts where the cursor is (the top of a
-  // new window) and the prompt box follows what is on screen.
+  // A clear window, as `clear` leaves it (what was on screen moves up into
+  // the scrollback): the welcome starts on the top line, the prompt box sits
+  // on the last lines, with space in between.
+  if (process.stdout.isTTY) process.stdout.write(`${'\n'.repeat(process.stdout.rows || 24)}\x1b[H`);
+  // Measure the welcome before the first frame, so the space above the
+  // prompt box is right from the start (App measures everything after it).
+  try {
+    const { homedir } = await import('node:os');
+    const layout = opts.layout ?? loadSettings().layout ?? 'classic';
+    const cwdShort = opts.cwd.startsWith(homedir()) ? `~${opts.cwd.slice(homedir().length)}` : opts.cwd;
+    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), layout, modelName: MODELS[opts.modelId ?? DEFAULT_MODEL].name, cwdShort });
+  } catch {}
   const win = new TerminalWindow(process.stdout);
   const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
   const bye = () => { try { instance.unmount(); } catch {} };

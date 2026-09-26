@@ -5,8 +5,8 @@
 //             context and memory.
 // Finished lines go in <Static> (printed once, so the terminal's own
 // scrollback keeps working); the live area below them is redrawn.
-import React from 'react';
-import { Box, Text, Static } from 'ink';
+import React, { useRef, useLayoutEffect } from 'react';
+import { Box, Text, Static, renderToString, measureElement } from 'ink';
 import { C, spinGlyph, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
@@ -265,7 +265,14 @@ function LiveArea({ app }) {
   }
   if (live.text) {
     const shown = tailToFit(live.text, maxLines, width - 3);
-    blocks.push(<Box key="text" marginBottom={1}><Row><Markdown text={shown} /></Row></Box>);
+    // Clipped to maxLines rows, keeping the end: however the text renders
+    // (lists and paragraphs add lines), it cannot be taller than the window.
+    // Taller once spilled its first line into the scrollback 249 times.
+    blocks.push(
+      <Box key="text" marginBottom={1} maxHeight={maxLines} overflow="hidden" flexDirection="column" justifyContent="flex-end">
+        <Box flexDirection="column" flexShrink={0}><Row><Markdown text={shown} /></Row></Box>
+      </Box>,
+    );
   }
   if (layout === 'live' && live.writing && live.writing.name) {
     const w = live.writing;
@@ -516,14 +523,70 @@ function TooSmall({ app }) {
   );
 }
 
+// Rows each printed item takes at a width (a printed item never changes),
+// so the space between the conversation and the prompt box can be worked
+// out. Measured OUTSIDE rendering (when an item is added, after a resize,
+// before the first frame): measuring inside a render makes React print a
+// warning into the terminal. Only thinking items look different per layout.
+const itemHeights = new Map();
+const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}\0${it.type === 'thinking' ? ctx.layout : ''}`;
+export function primeRows(items, ctx) {
+  let added = false;
+  for (const it of items) {
+    const k = rowsKey(it, ctx);
+    if (itemHeights.has(k)) continue;
+    if (itemHeights.size > 5000) itemHeights.clear();
+    const out = renderToString(
+      <Box flexDirection="column" marginBottom={1} width={ctx.width}>
+        <Item it={it} layout={ctx.layout} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} />
+      </Box>, { columns: ctx.width });
+    itemHeights.set(k, out.split('\n').length); // the margin under it is the last line
+    added = true;
+  }
+  return added;
+}
+const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
+// Rows the conversation fills from the top of the window (at most the
+// window). An item not measured yet counts as a full window: no space, never
+// a prompt box pushed below the window.
+export function usedRows(app) {
+  let n = 0;
+  for (const it of app.items) {
+    const h = heightOf(it, app);
+    if (h === undefined) return app.rows;
+    n += h;
+    if (n >= app.rows) break;
+  }
+  return Math.min(n, app.rows);
+}
+
 export function Screen({ app }) {
   const { layout, width, modelName, cwd } = app;
+  // The live part's height as last drawn, and how many items were printed then.
+  const liveRef = useRef(null);
+  const drawn = useRef({ redraw: null, height: 0, count: 0 });
+  useLayoutEffect(() => {
+    if (!liveRef.current) return;
+    drawn.current = { redraw: app.redraw, height: measureElement(liveRef.current).height, count: app.items.length };
+  });
   // An empty <Static> of its own resets what Ink keeps to print again on a
   // full clear, so the old (wider) conversation is not printed into the small window.
   if (app.tooSmall) return <Box flexDirection="column"><Static key={`small${app.redraw}`} items={[]}>{() => null}</Static><TooSmall app={app} /></Box>;
-  // After a resize the conversation is printed again from the top of a clear
-  // window, like the first time: the prompt box follows what is on screen.
+  // The conversation is printed from the top of the window (at the start and
+  // again after a resize); the prompt box, footer and status line sit on the
+  // last lines, with blank space in between until the conversation fills it.
+  // The last line stays free for the cursor, so nothing scrolls.
   const items = app.items;
+  let fill = Math.max(0, app.rows - 1 - usedRows(app));
+  // Once the window has scrolled (a long reply), keep the live part as tall as
+  // it was, less the lines printed above it now: shrinking it would leave
+  // blank lines under the prompt box instead of above it.
+  const d = drawn.current;
+  if (d.redraw === app.redraw && d.height) {
+    let added = 0;
+    for (const it of items.slice(d.count)) added += heightOf(it, app) ?? app.rows;
+    fill = Math.max(fill, Math.min(app.rows - 1, d.height - added));
+  }
   return (
     <Box flexDirection="column" width={width}>
       <Static key={app.redraw} items={items}>
@@ -535,11 +598,16 @@ export function Screen({ app }) {
           </Box>
         )}
       </Static>
+      <Box ref={liveRef} flexDirection="column" minHeight={fill} maxHeight={Math.max(fill, app.rows - 1)} overflow="hidden" justifyContent="flex-end">
+      <Box flexDirection="column" flexShrink={0}>
       {app.starting ? (
         <Box marginBottom={1}><Text><Text color={C.accent}>{spinGlyph((app.now - app.startedAt) / 1000)} Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text></Box>
       ) : null}
       <LiveArea app={app} />
       {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : ''}</Text></Box> : null}
+      </Box>
+      <Box flexGrow={1} />
+      <Box flexDirection="column" flexShrink={0}>
       {app.picker?.kind === 'model' ? (
         <ModelPicker app={app} />
       ) : app.picker ? (
@@ -560,6 +628,8 @@ export function Screen({ app }) {
         </Box>
       )}
       <Meters app={app} />
+      </Box>
+      </Box>
     </Box>
   );
 }

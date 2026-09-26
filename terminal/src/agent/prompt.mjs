@@ -12,7 +12,7 @@ export function isHomeFolder(cwd, home = homedir()) {
   return [home, join(home, 'Desktop'), join(home, 'Documents'), join(home, 'Downloads')].includes(cwd);
 }
 
-const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools: a few sentences and a small example, then one short line offering more detail. Search, Read or List files only when the user asks about their own files, code or notes, or names a file.`;
+const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools: a few sentences and a small example, then one short line offering more detail. Search, Read or List files only when the user asks about their own files, code or notes, or names a file. When the user asks you to make, change or look at a file or folder ("make a file on my Desktop"), do it straight away with the tools; Desktop, Documents and Downloads are folders here.`;
 
 // AGENTS.md (or CLAUDE.md) from the project folder up to the home folder.
 export function projectNotes(cwd, maxChars = 6000) {

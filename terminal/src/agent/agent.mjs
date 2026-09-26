@@ -66,6 +66,31 @@ export function isLooping(text) {
   return false;
 }
 
+// A reply that asks the user something: a question anywhere (outside code)
+// or a request for input ("Give me a little detail and I'll dig in"). Such a
+// reply ends the turn and waits: no "go ahead", no follow-up checks.
+// Bonsai's own notes go into the conversation where the user's words go, so
+// each one says it is automatic: once, a note ("the story is cut off") was
+// taken as the user's report and the model spent 20 minutes on it.
+export const AUTO = '[Automatic note from Bonsai, not from the user]';
+const CUT_MARK = '[… cut here by Bonsai for this check; the rest is in the file]';
+const auto = (text) => `${AUTO} ${text}`;
+
+// A question put to the user: a sentence ending in "?" that speaks to them
+// ("Are you seeing it in TextEdit?", "Should I…?"), or a request for input.
+// "Why does it fail? Let me read the test." is thinking aloud, not this.
+export function asksTheUserDirectly(text) {
+  const prose = String(text ?? '').replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
+  if (prose.split(/(?<=[.!?])\s+/).some((q) => /\?\s*["'”’)*_]*$/.test(q.trim()) && /\b(you|your|yours|should I|shall I|do I|would I)\b/i.test(q))) return true;
+  return /\b(give me|point me|tell me|let me know|could you|would you|can you|do you want|would you like|want me to|which (?:one|file|folder|project) do you|what would you like|up to you|your call)\b/i.test(prose);
+}
+
+export function asksTheUser(text) {
+  const prose = String(text ?? '').replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
+  if (/\?(\s|$|["'”’)*_])/.test(prose)) return true;
+  return /\b(give me|point me|tell me|let me know|could you|would you|can you|do you want|would you like|want me to|shall I|which (?:one|file|folder|project) do you|what would you like|up to you|your call)\b/i.test(prose);
+}
+
 // A reply whose last sentence says what it is about to do ("Let me fix the
 // median function in stats.mjs.") instead of doing it.
 export function announcesNextStep(text) {
@@ -319,6 +344,7 @@ export class Agent extends EventEmitter {
     let errorsInRow = 0;
     let nudges = 0;
     let checks = 0;
+    let toolsUsed = 0; // tool calls run for this message: a nudge is only for work already under way
     this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false };
     if (bug && request?.role === 'user' && typeof request.content === 'string') this.turn.bug = { request, steps: kindText(bug) };
     let verified = false;
@@ -337,7 +363,7 @@ export class Agent extends EventEmitter {
         }
         if (turn.looping) {
           this.messages.push({ role: 'assistant', content: turn.text.slice(0, 200) });
-          this.messages.push({ role: 'user', content: 'Your last reply started repeating itself. Try again, briefly.' });
+          this.messages.push({ role: 'user', content: auto('Your last reply started repeating itself. Try again, briefly.') });
           this.emit('note', { text: 'The model started repeating itself; asked it to try again.', tone: 'warn' });
           continue;
         }
@@ -351,16 +377,22 @@ export class Agent extends EventEmitter {
         // Only the first call runs, so only the first is kept in the history
         // (otherwise the model waits for results that never come).
         calls = calls.slice(0, 1);
+        // A reply that puts a question to you ends the turn, even with a tool
+        // call in it: the call is dropped and Bonsai waits for your answer.
+        if (calls.length && text.trim() && asksTheUserDirectly(text)) calls = [];
         const assistant = { role: 'assistant', content: text };
         if (calls.length) assistant.tool_calls = calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: safeArgs(c.args) } }));
         this.messages.push(assistant);
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: !calls.length });
         if (!calls.length) {
-          // Small models often announce the next step ("First, I will…") and
-          // stop. Tell them to go ahead, at most twice per message.
-          if (nudges < 2 && announcesNextStep(text)) {
+          // A reply that asks you something ends the turn: it waits for you.
+          if (asksTheUser(text)) break;
+          // Small models often announce the next step mid-task ("Now I will
+          // update main().") and stop. Tell them to go ahead, at most twice per
+          // message, and only once work is under way (a tool already ran).
+          if (nudges < 2 && toolsUsed > 0 && announcesNextStep(text)) {
             nudges++;
-            this.messages.push({ role: 'user', content: 'Go ahead and do that now, using the tools.' });
+            this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
             continue;
           }
           // It created a file this turn, then says the work was already there.
@@ -368,7 +400,7 @@ export class Agent extends EventEmitter {
             const files = this.turn.created.join(', ');
             if (!correctedAlready) {
               correctedAlready = true;
-              this.messages.push({ role: 'user', content: `You created ${files} in this turn; it did not exist before. Answer again in 1-3 sentences: say that you created it, what it does, and how you checked it. Do not say it was already there.` });
+              this.messages.push({ role: 'user', content: auto(`You created ${files} in this turn; it did not exist before. Answer again in 1-3 sentences: say that you created it, what it does, and how you checked it. Do not say it was already there.`) });
               continue;
             }
             this.emit('note', { text: `Note: ${files} did not exist before; Bonsai created it just now.`, tone: 'warn' });
@@ -377,11 +409,11 @@ export class Agent extends EventEmitter {
           if (!text.trim() && turn.finish !== 'length' && !blankRetry) {
             blankRetry = true;
             this.emit('note', { text: 'The model gave an empty answer; asked it to reply.', tone: 'dim' });
-            this.messages.push({ role: 'user', content: 'Reply to the user now, in one to three sentences.' });
+            this.messages.push({ role: 'user', content: auto('Reply to the user now, in one to three sentences.') });
             continue;
           }
           if (!text.trim() && turn.finish === 'length') {
-            this.messages.push({ role: 'user', content: 'You ran out of room while thinking. Think less and take the next step.' });
+            this.messages.push({ role: 'user', content: auto('You ran out of room while thinking. Think less and take the next step.') });
             this.emit('note', { text: 'The model ran out of room while thinking; asked it to act.', tone: 'warn' });
             continue;
           }
@@ -397,7 +429,7 @@ export class Agent extends EventEmitter {
             this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text });
             if (out.stop) { reason = out.stop; break; }
             if (out.error) {
-              this.messages.push({ role: 'user', content: 'The tests fail (output above). Find what is wrong in your change, fix it with Edit, then run the tests again.' });
+              this.messages.push({ role: 'user', content: auto('The tests fail (output above). Find what is wrong in your change, fix it with Edit, then run the tests again.') });
               continue;
             }
           }
@@ -408,7 +440,7 @@ export class Agent extends EventEmitter {
             const miss = await this.verifyDone(text, signal);
             if (miss) {
               this.emit('note', { text: `Not finished: ${miss}`, tone: 'warn' });
-              this.messages.push({ role: 'user', content: `Not done yet: ${miss}. Do that now with the tools, run the tests again if there are any, then report.` });
+              this.messages.push({ role: 'user', content: auto(`A quick check (it can be wrong) thinks this may be missing: ${miss}. Look once. If it is actually fine, say so in one sentence and stop; otherwise fix it with the tools, run the tests if there are any, then report.`) });
               continue;
             }
           }
@@ -416,6 +448,7 @@ export class Agent extends EventEmitter {
         }
         // One call at a time (the prompt asks for it; extra calls are ignored).
         const call = calls[0];
+        toolsUsed++;
         const out = await this.runTool(call, signal);
         this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text });
         if (out.stop) { reason = out.stop; break; }
@@ -431,7 +464,7 @@ export class Agent extends EventEmitter {
           this.emit('note', { text: repeats >= 3 ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
           break;
         }
-        if (repeats === 2) this.messages.push({ role: 'user', content: 'You already did exactly this step. Do something different, or finish.' });
+        if (repeats === 2) this.messages.push({ role: 'user', content: auto('You already did exactly this step. Do something different, or finish.') });
         if (step === MAX_STEPS - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${MAX_STEPS} steps.`, tone: 'warn' }); }
       }
     } catch (e) {
@@ -498,7 +531,8 @@ export class Agent extends EventEmitter {
     let reason = 'done';
     try {
       await this.fitContext(signal);
-      const turn = await this.generate(signal, { textOnly: true, maxTokens: 200 });
+      // Room to think first (at your effort level), then a short answer, then stop.
+      const turn = await this.generate(signal, { textOnly: true, maxTokens: 900 });
       if (turn.aborted) {
         reason = 'interrupted';
         // Keep what it had written so far on screen, as the loop does.
@@ -508,7 +542,7 @@ export class Agent extends EventEmitter {
         // nothing at all, keep a plain greeting instead.
         // (With tools off it once wrote "Hello!…" and then a Read call as text.)
         let text = turn.text.split('<tool_call>')[0].trim();
-        if (turn.calls.length || toolCallInText(text) || !text) text = /\b(thanks|thank you|thx|ty)\b/i.test(said) ? 'You’re welcome.' : 'Hello! What would you like to work on in this project?';
+        if (turn.calls.length || toolCallInText(text) || !text) text = /\b(thanks|thank you|thx|ty)\b/i.test(said) ? 'You’re welcome.' : 'Hello! What would you like to work on?';
         this.messages.push({ role: 'assistant', content: text });
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: true });
       }
@@ -662,7 +696,11 @@ export class Agent extends EventEmitter {
       this.turn.testedAfterChange = false;
       // What changed this turn, for the check at the end (verifyDone).
       const hunk = (out.view?.hunk ?? []).filter((l) => l.type !== ' ').map((l) => `${l.type}${l.text}`).join('\n');
-      if (this.turn.diffs.length < 6000) this.turn.diffs += `${prepared.rel}:\n${hunk.slice(0, 1500)}\n`;
+      // Up to 6,000 characters a file, 16,000 in all; anything longer is
+      // marked as cut here, so the check never takes the cut for the file's end
+      // (a 1,500-character cut once made a finished story look "cut off at 'sti'").
+      const piece = hunk.length > 6000 ? `${hunk.slice(0, 6000)}\n${CUT_MARK}` : hunk;
+      if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
@@ -678,7 +716,7 @@ export class Agent extends EventEmitter {
     try {
       const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 120,
         system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
-        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed):\n${this.turn.diffs.slice(0, 5000)}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nIs every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
+        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Bonsai shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nIs every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
         schema: { type: 'object', properties: { done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['done', 'missing'] } });
       if (!r.json || r.json.done || !r.json.missing?.trim()) return null;
       return r.json.missing.trim().slice(0, 200);

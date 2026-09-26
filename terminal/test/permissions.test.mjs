@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { blockedReason, decide, commandPrefix, outsidePath } from '../src/agent/permissions.mjs';
+import { blockedReason, decide, commandPrefix, outsidePath, isReadOnly } from '../src/agent/permissions.mjs';
 import { homedir } from 'node:os';
 
 const cases = {
@@ -52,4 +52,17 @@ test('commands stay inside the project folder', () => {
   expect(decide('Bash', { command: 'git status' }, { mode: 'ask', cwd }).decision).toBe('allow');
   expect(decide('Read', { path: '/x' }, { mode: 'ask', inside: false }).decision).toBe('deny');
   expect(decide('Search', { pattern: 'x' }, { mode: 'ask', inside: false }).decision).toBe('deny');
+});
+
+test('the story test: read-only checks run without asking, a quoted "/" is text, writing still asks', () => {
+  const cwd = homedir();
+  const incident = 'echo "=== exact last 45 bytes (raw) ==="; tail -c 45 "Desktop/HELLO TEST 26 SEP.txt" | od -c; echo; echo "=== byte count / line count ==="; wc -c -l "Desktop/HELLO TEST 26 SEP.txt"; echo; grep -n "alive\\|still," "Desktop/HELLO TEST 26 SEP.txt"; ls -la Desktop/ | grep -i "hello\\|test\\|26 sep"';
+  expect(outsidePath(incident, cwd)).toBe(null);                  // was: "/ is outside the project folder"
+  expect(decide('Bash', { command: incident }, { mode: 'ask', cwd }).decision).toBe('allow');
+  for (const c of ['tail -c 60 "Desktop/a b.txt" | od -c | tail -8', `sed -n '24p' Desktop/"a b.txt" | od -c`, 'wc -l f; tail -n1 f; ls -la Desktop/ | head -40', 'git log --oneline -3 2>&1 | head'])
+    expect([c, isReadOnly(c)]).toEqual([c, true]);
+  for (const c of ['cat a > b', 'echo x >> notes.md', 'sed -i s/a/b/ f', 'find . -delete', 'ls $(pwd)', 'node x.mjs | head', 'ls; rm -f x', 'cat a & rm b'])
+    expect([c, decide('Bash', { command: c }, { mode: 'ask', cwd }).decision]).toEqual([c, 'ask']);
+  expect(outsidePath('ls /', cwd)).toBe('/');                     // a bare / outside quotes is still the disk
+  expect(outsidePath(`node -e "require('fs').readFileSync('/Users/x/a')"`, `${cwd}/p`)).toBe('/Users/x/a');
 });

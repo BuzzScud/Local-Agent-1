@@ -201,17 +201,20 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   expect(r.snapshots.tab).toMatch(/> \/model/);
 }, T);
 
-test('like Claude Code: the welcome starts at the top and the prompt box follows it', async () => {
+test('the welcome on the top line, the prompt box on the last lines, space in between', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, rows: 43, args: ['--url', fake.url], steps: [{ wait: '? for shortcuts' }, { sleep: 400 }, { snapshot: 'start' }, ...quit] });
   await fake.close();
   const lines = r.snapshots.start.split('\n');
+  while (lines.length < 43) lines.push('');
   const welcome = lines.findIndex((l) => l.includes('Welcome to Bonsai Code'));
+  const tipsEnd = lines.findIndex((l) => l.includes('nothing is sent anywhere'));
   const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
-  expect(welcome).toBeLessThanOrEqual(2);          // at the top, not pushed down
-  expect(footer).toBeLessThan(43 / 2);             // the prompt right under the welcome and tips
-  expect(lines.slice(footer + 2).every((l) => !l.trim())).toBe(true); // below: only the status line, then space
+  expect(welcome).toBeLessThanOrEqual(2);          // at the top (this harness may show one line above)
+  expect(footer).toBeGreaterThanOrEqual(43 - 3);   // the prompt box and footer at the bottom
+  expect(lines.slice(tipsEnd + 1, footer - 3).every((l) => !l.trim())).toBe(true); // space in between
+  expect(footer - 3 - tipsEnd).toBeGreaterThan(10);
 }, T);
 
 test('start-up says what it waits for; a message typed meanwhile is sent when ready; the next start restores', async () => {

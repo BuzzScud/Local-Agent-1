@@ -114,3 +114,18 @@ test('a reply being written is cut to the lines it takes on screen, not its sour
   expect(tailToFit('short\nlines', 8, 77)).toBe('short\nlines');
   expect(tailToFit('x'.repeat(2000), 3, 50).length).toBeLessThanOrEqual(150);
 });
+
+test('a long reply being written never spills into the scrollback (it once printed its first line 249 times)', async () => {
+  const { cwd, env } = setup();
+  // Paragraphs with blank lines between them: rendered taller than their source lines.
+  const reply = ['FIRST-LINE-MARKER: I checked the file four ways.', ...Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1} of the answer, long enough to wrap once at eighty columns in a small window like this one.`)].join('\n\n');
+  const fake = await startFakeServer([{ text: reply }], { delayMs: 3 });
+  const t = openTerm({ cwd, cols: 80, rows: 24, env, args: ['--url', fake.url, '--no-flows'] });
+  try {
+    await t.waitFor('? for shortcuts'); await t.idle();
+    await t.type('explain it'); t.key('enter');
+    await t.waitFor('Paragraph 30', 30_000); await t.waitGone('esc to stop', 30_000); await t.idle();
+    const all = (await t.lines({ all: true })).map((l) => l.text).join('\n');
+    expect(all.split('FIRST-LINE-MARKER').length - 1).toBe(1);
+  } finally { await t.close(); await fake.close(); }
+}, T);

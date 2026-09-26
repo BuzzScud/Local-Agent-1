@@ -2,7 +2,9 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Agent, safeArgs, claimsAlreadyThere } from '../src/agent/agent.mjs';
+import { Agent, safeArgs, claimsAlreadyThere, AUTO } from '../src/agent/agent.mjs';
+// Bonsai's "go ahead" nudge, as it reads now (labelled as automatic).
+const isNudge = (c) => c.startsWith(AUTO) && c.includes('did not do it');
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
@@ -101,17 +103,58 @@ test('blocked commands never run, even in auto mode', async () => {
   expect(t.view.message).toContain('rm -rf');
 });
 
-test('a reply that only announces the next step gets a "go ahead"', async () => {
-  const replies = [{ text: 'I need to change main(). First, I will add the flag:' }, { tool: { name: 'Read', args: { path: 'export.mjs' } } }, { text: 'Done: it prints JSON now.' }];
+test('mid-task, a reply that only announces the next step gets a "go ahead"', async () => {
+  const replies = [{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, { text: 'main() returns the CSV. Now I will add the flag:' }, { tool: { name: 'Read', args: { path: 'export.test.mjs' } } }, { text: 'Done: it prints JSON now.' }];
   const { reason, agent, events } = await run(replies);
   expect(reason).toBe('done');
-  expect(agent.messages.some((m) => m.role === 'user' && m.content.startsWith('Go ahead'))).toBe(true);
-  expect(events.filter((e) => e.type === 'tool').length).toBe(1);
+  expect(agent.messages.filter((m) => m.role === 'user' && isNudge(m.content)).length).toBe(1);
+  expect(events.filter((e) => e.type === 'tool').length).toBe(2);
+});
+
+test('before any tool has run, an announcement is not nudged: the turn ends', async () => {
+  const { reason, agent, fake } = await run([{ text: 'I need to change main(). First, I will add the flag:' }, { text: 'never sent' }]);
+  expect(reason).toBe('done');
+  expect(agent.messages.some((m) => m.role === 'user' && isNudge(m.content))).toBe(false);
+  expect(fake.remaining()).toBe(1);
+});
+
+test('a reply that asks you something ends the turn, even mid-task and after "I\'ll"', async () => {
+  const replies = [{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, { text: 'Should --json print one line or pretty-print? Give me a hint and I\'ll add it.' }, { text: 'never sent' }];
+  const { reason, agent, fake } = await run(replies);
+  expect(reason).toBe('done');
+  expect(agent.messages.some((m) => m.role === 'user' && isNudge(m.content))).toBe(false);
+  expect(fake.remaining()).toBe(1);
+});
+
+test('the screenshot of 2026-09-26: "hello, can you help me with something?" gets one answer, then Bonsai waits', async () => {
+  const cwd = project();
+  const answer = "Hello! Of course — I can help. What are you working on or trying to figure out? Give me a little detail and I'll dig in.";
+  const fake = await startFakeServer([{ reasoning: 'The user is greeting me and asking for help.', text: answer }, { text: 'never sent' }]);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: true, mode: 'ask', flows: true, ask: async () => ({ choice: 'yes' }) });
+  for (const t of ['assistant', 'tool']) agent.on(t, (e) => events.push({ type: t, ...e }));
+  const reason = await agent.send('hello , can you help me with something?');
+  await fake.close();
+  expect(reason).toBe('done');
+  expect(fake.requests.length).toBe(1);                      // one reply, no second round
+  expect(fake.requests[0].tool_choice).toBe('none');         // tools listed (warm cache) but not allowed
+  expect(events.filter((e) => e.type === 'tool')).toEqual([]);
+  expect(events.find((e) => e.type === 'assistant').text).toBe(answer);
+  expect(agent.messages.some((m) => m.role === 'user' && isNudge(m.content))).toBe(false);
+});
+
+test('asksTheUser: a question or a request for input, not code', async () => {
+  const { asksTheUser } = await import('../src/agent/agent.mjs');
+  expect(asksTheUser("What are you working on? Give me a little detail and I'll dig in.")).toBe(true);
+  expect(asksTheUser('Point me to the folder and I will look.')).toBe(true);
+  expect(asksTheUser('Now I will update main() to add the flag.')).toBe(false);
+  expect(asksTheUser('It uses a ternary, `a ? b : c`, then returns.')).toBe(false);
+  expect(asksTheUser('```js\nconst x = y ? 1 : 2;\n```\nDone.')).toBe(false);
 });
 
 test('a finished answer is not nudged', async () => {
   const { agent } = await run([{ text: 'Done. All 3 tests pass.' }]);
-  expect(agent.messages.some((m) => m.role === 'user' && m.content.startsWith('Go ahead'))).toBe(false);
+  expect(agent.messages.some((m) => m.role === 'user' && isNudge(m.content))).toBe(false);
 });
 
 test('a tool error never ends the turn (Edit on a folder)', async () => {
@@ -153,7 +196,7 @@ test('done after an edit without testing: the tests run, and a failure sends it 
   expect(bash.length).toBe(2);
   expect(bash[0].error).toBe(true);
   expect(bash[1].error).toBeFalsy();
-  expect(agent.messages.some((m) => m.role === 'user' && m.content.startsWith('The tests fail'))).toBe(true);
+  expect(agent.messages.some((m) => m.role === 'user' && m.content.startsWith(`${AUTO} The tests fail`))).toBe(true);
 });
 
 test('an edit repeated after it was applied is recognised', () => {
@@ -274,4 +317,44 @@ test('on auto-accept the first edit is a plan question; an answer other than yes
   const ok = await steered([{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, edit, { text: 'Done.' }], () => ({ choice: 'yes' }));
   expect(ok.events.filter((e) => e.type === 'ask').map((e) => e.kind)).toEqual(['plan']);
   expect(readFileSync(join(ok.cwd, 'export.mjs'), 'utf8')).toContain('--json');
+});
+
+// The test of 2026-09-26: "make a txt file on my Desktop with a short story,
+// report back". The file was done, then a check shown the story cut at 1,500
+// characters said it was "cut off at 'sti'", the note came as the user's, and
+// 20 minutes of read-only checks followed, each asking first.
+const STORY = `The lake had always been still.\n\n${'The water remembered what the land forgot, and the reeds kept the secret. '.repeat(20)}\n\nLike something that was still, somehow, alive.\n`;
+
+test('the story test: the check sees the whole file, its note is labelled automatic, and "it is fine" ends the turn', async () => {
+  const cwd = project();
+  const replies = [
+    { tool: { name: 'Write', args: { path: 'HELLO TEST 26 SEP.txt', content: STORY } } },
+    { text: 'Done. I created HELLO TEST 26 SEP.txt with a short story about a monster in a lake.' },
+    { text: '{"done": false, "missing": "the story may end mid-word"}' },   // the check (it can be wrong)
+    { text: 'I looked: the file ends "…still, somehow, alive." It is complete.' },
+    { text: 'never sent' },
+  ];
+  const fake = await startFakeServer(replies);
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  const reason = await agent.send('make a txt file titled "HELLO TEST 26 SEP" with a short story about a monster in a lake, report back when done');
+  await fake.close();
+  expect(STORY.length).toBeGreaterThan(1500);
+  expect(reason).toBe('done');
+  const check = fake.requests.find((r) => r.messages.some((m) => /Is every part of the request done/.test(m.content ?? '')));
+  expect(check.messages.at(-1).content).toContain('Like something that was still, somehow, alive.'); // the whole story, not cut at 1,500
+  const note = agent.messages.find((m) => m.role === 'user' && m.content.startsWith(AUTO));
+  expect(note.content).toMatch(/can be wrong.*If it is actually fine, say so in one sentence and stop/);
+  expect(fake.remaining()).toBe(1); // it said it was fine and stopped: no more steps
+});
+
+test('a reply that asks you a question does not run the command that came with it', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { text: 'The file looks complete. Are you seeing it cut off in a specific app?', tool: { name: 'Bash', args: { command: 'tail -c 45 export.mjs | od -c' } } },
+    { text: 'never sent' },
+  ];
+  const { reason, events, fake } = await run(replies);
+  expect(reason).toBe('done');
+  expect(events.filter((e) => e.type === 'tool').map((e) => e.name)).toEqual(['Read']); // the tail|od never ran
+  expect(fake.remaining()).toBe(1);
 });

@@ -6,7 +6,7 @@ import { useApp, useInput, usePaste, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
 import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions } from './screen.jsx';
+import { Screen, permissionOptions, primeRows } from './screen.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
@@ -59,7 +59,10 @@ export function App({ opts, win }) {
   const [redraw, setRedraw] = useState(0);
   useEffect(() => {
     if (!win) return;
-    const on = (size) => { setWinSize(size); setRedraw((n) => n + 1); };
+    const on = (size) => {
+      try { primeRows(itemsRef.current, { ...measure.current, width: Math.max(MIN_COLS, size.columns ?? 100) }); } catch {}
+      setWinSize(size); setRedraw((n) => n + 1);
+    };
     win.on('redraw', on);
     return () => win.off('redraw', on);
   }, [win]);
@@ -70,6 +73,9 @@ export function App({ opts, win }) {
   const model = MODELS[opts.modelId ?? DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
   const settings = useRef(loadSettings()).current;
   const memoryNote = useRef(null);
+  const measure = useRef({ width: 100, layout: 'classic', modelName: '', cwdShort: '' });
+  const itemsRef = useRef([]);
+  const [, bumpRows] = useState(0);
 
   const [items, setItems] = useState(() => [{ key: 'welcome', type: 'welcome' }]);
   const [live, setLive] = useState(IDLE);
@@ -93,7 +99,17 @@ export function App({ opts, win }) {
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   const [ramGb, setRamGb] = useState(null);
 
-  const push = useCallback((...its) => setItems((xs) => [...xs, ...its.map((it) => ({ key: `i${++seq}`, ...it }))]), []);
+  // Each new item is measured before it is shown (see primeRows), so the
+  // space above the prompt box is right on the first frame; measured just
+  // after the current step, never inside a render or an effect (a second
+  // Ink render in there breaks the first one's layout).
+  const push = useCallback((...its) => {
+    const made = its.map((it) => ({ key: `i${++seq}`, ...it }));
+    queueMicrotask(() => {
+      try { primeRows(made, measure.current); } catch {}
+      setItems((xs) => [...xs, ...made]);
+    });
+  }, []);
   const serverRef = useRef(null);
   const restartRef = useRef(null);
   const abortRef = useRef(null);
@@ -648,6 +664,16 @@ export function App({ opts, win }) {
     setInput((s) => editInput(s, ch, key));
   });
 
+  // Items added some other way (a resumed conversation, /clear) or a layout
+  // switch: measure after the frame, then draw once more with the space right.
+  useEffect(() => {
+    let on = true;
+    queueMicrotask(() => { try { if (on && primeRows(itemsRef.current, measure.current)) bumpRows((n) => n + 1); } catch {} });
+    return () => { on = false; };
+  }, [items, width, layout]);
+  // What primeRows needs to measure items as they are printed.
+  measure.current = { width, layout, modelName: model.name, cwdShort: short(cwd) };
+  itemsRef.current = items;
   const app = {
     items, live, perm, picker, input, mode, layout, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd),
     modelName: model.name, now, stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, starting, startedAt, notice, queued, showShortcuts, placeholder,

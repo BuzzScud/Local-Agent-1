@@ -105,7 +105,7 @@ async function tour() {
     await t.type('explain export.mjs'); t.key('enter');
     await t.waitFor('esc to stop'); await shot(t, 'working (spinner)');
     await t.waitFor('node export.mjs trades.json', 20_000); await t.waitGone('esc to stop'); await t.idle();
-    await shot(t, 'markdown reply', { anchored: false });
+    await shot(t, 'markdown reply', { anchored: true });
     await resizes(t, 'idle after a reply', { anchored: false });
     await t.type('/stats'); t.key('enter'); await t.idle(); await shot(t, '/stats', { anchored: false });
     await t.type('/help'); t.key('enter'); await t.idle(); await shot(t, '/help', { anchored: false });
@@ -118,9 +118,9 @@ async function tour() {
     await t.waitFor('Do you want to proceed?'); await t.idle(); await shot(t, 'permission: bash command');
     t.key('enter');
     await t.waitFor('tests pass', 20_000); await t.waitGone('esc to stop'); await t.idle();
-    await shot(t, 'task done (diffs, bash output)', { anchored: false });
+    await shot(t, 'task done (diffs, bash output)', { anchored: true });
     await t.type('!ls'); await t.idle(); await shot(t, 'shell mode (!)', { anchored: false });
-    t.key('enter'); await t.waitFor('export.mjs'); await t.idle(); await shot(t, 'shell output', { anchored: false });
+    t.key('enter'); await t.waitFor('export.mjs'); await t.idle(); await shot(t, 'shell output', { anchored: true });
     t.key('ctrlL'); await t.idle();
     await t.type('think it over'); t.key('enter');
     await t.waitFor('Thinking…'); await sleep(800); await shot(t, 'live layout: thinking window');
@@ -132,7 +132,7 @@ async function tour() {
     await t.type('a second question'); t.key('enter'); await sleep(400);
     await shot(t, 'queued message', { must: ['Queued: a second question'] });
     await t.waitFor('Second answer', 60_000); await t.waitGone('esc to stop', 30_000); await t.idle();
-    await shot(t, 'live layout: after (meters)', { anchored: false });
+    await shot(t, 'live layout: after (meters)', { anchored: true });
     t.key('ctrlL'); await t.idle();
     await t.type('keep going'); t.key('enter'); await t.waitFor('esc to stop'); await sleep(500);
     t.key('esc'); await t.waitGone('esc to stop'); await t.idle();
@@ -166,7 +166,7 @@ async function flows() {
     await t.waitFor('files?'); await t.idle(); await shot(t, 'rename prompt');
     await resizes(t, 'rename prompt');
     t.key('enter'); await t.waitFor('Renamed median to middleValue'); await t.idle();
-    await shot(t, 'after fix + rename', { anchored: false });
+    await shot(t, 'after fix + rename', { anchored: true });
   } catch (e) {
     console.log(`✗ flows stopped: ${e.message.split('\n')[0]}`);
     await shot(t, 'flows stopped here', { note: e.message.split('\n')[0] });
@@ -203,7 +203,7 @@ async function steer() {
     await shot(t, 'check-in while exploring', { must: ['Keep going', 'Type an answer', 'Stop here'] });
     await resizes(t, 'check-in');
     t.key('enter'); await t.waitFor('prints CSV'); await t.idle();
-    await shot(t, 'after "keep going"', { anchored: false, must: ['prints CSV'] });
+    await shot(t, 'after "keep going"', { anchored: true, must: ['prints CSV'] });
   });
   const edit = { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: "  if (argv.includes('--json')) return JSON.stringify(rows, null, 2);\n  return toCsv(rows);" } } };
   await run('plan', ['--no-flows', '--mode', 'edits'], [{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, edit, { text: 'Added --json.' }, { text: '{"done": true, "missing": ""}' }], async (t) => {
@@ -213,7 +213,7 @@ async function steer() {
     await resizes(t, 'plan question');
     t.key('enter');
     await t.waitFor('Added --json', 60_000); await t.idle();
-    await shot(t, 'after the plan: edited and checked', { anchored: false, must: ['Added --json'] });
+    await shot(t, 'after the plan: edited and checked', { anchored: true, must: ['Added --json'] });
   });
 }
 
