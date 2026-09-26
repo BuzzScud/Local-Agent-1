@@ -8,6 +8,12 @@
   self-contained HTML file where it is a page. The report builders write their pages
   there directly (`docsPath` in `docs/to-docs.mjs`); a page made by hand is saved there too.
   Pages are not kept anywhere else in the repo, and capture outputs stay out of git.
+  The folder has six groups, each a subfolder: `diagrams/` (how Bonsai is built),
+  `reports/` (what got built, by day), `tests/` (measured runs and checks), `design rounds/`,
+  `other/`, and `older versions/` (a page replaced by a newer one moves there; nothing is
+  deleted). A builder names its group in the path it gives `docsPath` (`tests/bonsai-night-….html`).
+  `/docs` in Bonsai (the hub) lists the folder live by these groups; a file left at the top
+  level shows as unsorted until it is filed.
 - **Before a commit, run `bun run docs`.** It mirrors that folder into `docs/` (and
   rewrites `docs/README.md`, the index); commit `docs/` with the rest. It stops if the
   folder is missing or looks emptied, and changes nothing then.

@@ -178,6 +178,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = process.env.REPORT_OUT ?? docsPath('bonsai-code-report-2026-09-25.html');
+const target = process.env.REPORT_OUT ?? docsPath('reports/bonsai-code-report-2026-09-25.html');
 writeFileSync(target, html);
 console.log(`wrote ${target}`);

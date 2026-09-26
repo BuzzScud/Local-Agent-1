@@ -316,6 +316,6 @@ const budgetLabel = (b) => (b < 60 ? b + 's' : (b / 60) + 'm');
 })();
 </script></body></html>`;
 
-const out = docsPath('bonsai-faster-2026-09-25.html');
+const out = docsPath('tests/bonsai-faster-2026-09-25.html');
 writeFileSync(out, html);
 console.log(`wrote ${out} (${(html.length / 1024).toFixed(0)} KB)`);

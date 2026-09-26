@@ -183,6 +183,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = process.env.REPORT_OUT ?? docsPath('bonsai-code-built.html');
+const target = process.env.REPORT_OUT ?? docsPath('reports/bonsai-code-built.html');
 writeFileSync(target, html);
 console.log(`wrote ${target} (${(html.length / 1024).toFixed(0)} KB)`);

@@ -184,6 +184,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = process.env.REPORT_OUT ?? docsPath('bonsai-code-27b-report.html');
+const target = process.env.REPORT_OUT ?? docsPath('reports/bonsai-code-27b-report.html');
 writeFileSync(target, html);
 console.log(`wrote ${target}`);

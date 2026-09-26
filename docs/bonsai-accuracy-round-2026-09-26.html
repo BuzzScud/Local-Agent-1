@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai accuracy round</title>
+<style>
+:root{
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;
+  --t:#2a78d6;--m:#eb6834;--t-soft:rgba(42,120,214,.07);--m-soft:rgba(235,104,52,.07);--ok:#2e7d43;--bad:#c23b2a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;
+    --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.10);--m-soft:rgba(232,116,63,.09);--ok:#4caf6d;--bad:#e05d4b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;
+  --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.10);--m-soft:rgba(232,116,63,.09);--ok:#4caf6d;--bad:#e05d4b;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:980px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:20px;letter-spacing:-.01em;margin:38px 0 10px}
+p{margin:0 0 10px}
+.lede{color:var(--mute);max-width:800px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:22px 0 8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.tile b{font-size:17px}
+.tile .ok{color:var(--ok)} .tile .bad{color:var(--bad)}
+.tile span{display:block;color:var(--mute);font-size:13px;margin-top:4px}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13.5px}
+th,td{padding:8px 12px;text-align:left;border-top:1px solid var(--line);vertical-align:top}
+thead th{background:var(--inner);border-top:none;color:var(--mute);font-weight:600}
+td.ok{color:var(--ok);font-weight:600} td.bad{color:var(--bad);font-weight:600}
+code{background:var(--inner);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+pre{background:var(--inner);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-x:auto;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+ol,ul{margin:0 0 10px;padding-left:22px}
+li{margin:4px 0}
+.note{background:var(--m-soft);border:1px solid var(--m);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:14px 0}
+.foot{color:var(--faint);font-size:12.5px;margin-top:40px}
+.mute{color:var(--mute)}
+</style>
+</head>
+<body>
+<main>
+<h1>Bonsai accuracy round — stopped on your word</h1>
+<p class="lede">26 Sep 2026, ~3:15 PM. You asked for accuracy and robustness improvements, picked all three recommended options, and ended the testing early. Here is what was done, what the tests said before the stop, and exactly what is left. Nothing was committed or pushed.</p>
+
+<div class="tiles">
+  <div class="tile"><b>3 fixes built</b><span>rescue round · part-by-part done check · request-matched Read</span></div>
+  <div class="tile"><b class="ok">102 tests pass</b><span>the 5 affected test files, incl. 6 new — full suite not yet run</span></div>
+  <div class="tile"><b>17 / 18 <span class="bad">1 fail</span></b><span>baseline bench when stopped (18 of 28 judged)</span></div>
+  <div class="tile"><b>0 commits</b><span>your call comes after the after-bench holds the bar</span></div>
+</div>
+
+<h2>1 · What the baseline bench found before the stop</h2>
+<p>The 28-task bench ran on today's merged main (frozen at <code>f310a1f</code>), before my fixes. 18 tasks were judged when you stopped it: 17 passed, 1 failed. The 25 Sep run was 28 of 28, so this is the first regression the validation caught.</p>
+<table>
+<thead><tr><th>Task</th><th>Result</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>Tasks 1–24 (17 judged)</td><td class="ok">pass</td><td>All green, ~1,250 s together. Task 1 ran 86 s against 146 s on 25 Sep.</td></tr>
+<tr><td>25 · a question on a big project</td><td class="bad">fail</td><td>The answer itself was right. On the way it tested an idea by writing a scratch file <em>inside the project</em> (<code>.pyproj-test/pyproject.toml</code>), tried to remove it with a blocked command, then cleaned up. The judge counts any file change on a question as a fail — 218 s, 20 steps.</td></tr>
+<tr><td>26–28</td><td class="mute">not run</td><td>Stopped before them.</td></tr>
+</tbody>
+</table>
+<p class="note"><b>The lead this gives us:</b> a question turn should not write inside the project at all. Its little experiments belong in the scratch copy or a temp folder. That is a small, buildable fix and it is on the list below.</p>
+
+<h2>2 · The three fixes, built and green</h2>
+<table>
+<thead><tr><th>Fix</th><th>Where</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Stale tests updated, with your OK</td><td><code>flows/rescue.mjs</code> (new), <code>change.mjs</code>, <code>multi.mjs</code></td><td>When every try passes its new test and only OLD tests fail (task 28's class), one rescue round updates the stale expected values — test files only, no test may disappear, the approved new test must survive, and each edited file still asks you before it is written.</td></tr>
+<tr><td>Done check, part by part</td><td><code>agent.mjs</code></td><td>The end-of-turn check now breaks the request into its distinct asks and judges each one, so a multi-part request fails on the part not done instead of slipping through.</td></tr>
+<tr><td>Read shows the matching lines</td><td><code>agent/tools.mjs</code></td><td>A long file's outline now also shows the lines matching the request's words. On a real repo the loop once re-read one stylesheet four times hunting for a rule; now the right lines arrive with the first Read.</td></tr>
+</tbody>
+</table>
+<p>New tests: 6 in <code>terminal/test/rescue.test.mjs</code>, including a full scripted change-flow run of the rescue and a decline path that changes nothing. 102 tests pass across the five affected files. My changed files: <code>agent.mjs</code>, <code>agent/tools.mjs</code>, <code>flows/change.mjs</code>, <code>flows/multi.mjs</code>, plus the two new files.</p>
+
+<h2>3 · The machine right now</h2>
+<ul>
+<li>The model server is stopped — bonsai is yours again.</li>
+<li>Nothing committed, nothing pushed. Main is still <code>f310a1f</code>.</li>
+<li><b>Another session is mid-edit in the same repo</b> (App.jsx, cli.jsx, commands.mjs, the launcher, plus new hub/weights files). My changes are in different files; any commit should pick files, not <code>git add -A</code>.</li>
+<li>Ready and waiting in the round-3 folder: the frozen code copy <code>main-f310a1f</code> and a clean <code>tryA</code> clone for the chart-bug runs.</li>
+<li>Partial bench results: session scratchpad only (they die with the session); the numbers above are the record.</li>
+</ul>
+
+<h2>4 · What is next, in order</h2>
+<ol>
+<li><b>Full unit suite</b> (~4 min): <code>bun run test</code> in <code>~/Desktop/bonsai-code</code>. Note the peer session's uncommitted files will be in the run.</li>
+<li><b>Baseline bench to the end</b> (~35 min, model busy): from a frozen copy of main —<br><code>node models/evals/bench/run.mjs --think off</code></li>
+<li><b>Fix the task-25 lead</b>: keep a question turn's experiments out of the project folder, then re-check task 25.</li>
+<li><b>High chart-bug run + Low control</b> (~25 min each), in <code>models/bonsai-2-27b/results/chart-bug-round3-2026-09-26</code>:<br>
+<pre>git -C tryA checkout -- .
+CODE=main-f310a1f EFFORT=high CTX=32768 LABEL=f310 node run-tries.mjs A
+git -C tryA checkout -- .
+CODE=main-f310a1f EFFORT=off  CTX=32768 LABEL=f310 node run-tries.mjs A</pre></li>
+<li><b>After-bench with the fixes</b> (~35 min): the bar is 28 of 28 and not slower overall.</li>
+<li><b>Then commit and push</b>, on your word: <code>bun run docs</code> first, this session's files only, secret scan, push to Local-Agent-1.</li>
+</ol>
+
+<p class="foot">bonsai-accuracy-round-2026-09-26.html · saved on the Desktop and in bonsai-code DOCS · model server stopped at ~3:12 PM</p>
+</main>
+</body>
+</html>

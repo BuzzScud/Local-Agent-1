@@ -475,8 +475,8 @@ slope('chart-lines', { from: 'models/evals/bench/words/real.mjs', title: 'The re
 
 </script></body></html>`;
 
-const out = docsPath('bonsai-smart-2026-09-25.html');
-const v1 = docsPath('bonsai-smart-2026-09-25-v1.html');
+const out = docsPath('tests/bonsai-smart-2026-09-25.html');
+const v1 = docsPath('older versions/bonsai-smart-2026-09-25-v1.html');
 if (existsSync(out) && !existsSync(v1) && !readFileSync(out, 'utf8').includes('the full stats')) copyFileSync(out, v1);
 writeFileSync(out, html);
 console.log(`wrote ${out} (${(html.length / 1024).toFixed(0)} KB)`);

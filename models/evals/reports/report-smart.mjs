@@ -163,6 +163,6 @@ html += `<h2>Honest notes</h2><ul>
 <p class="dim">Results: <code>${esc(dir.replace(root + '/', ''))}</code> · practice checks: <code>zsh models/evals/tools/verify-tasks.sh</code> · tests: <code>bun test</code></p>
 </main></body></html>`;
 
-const out = docsPath('bonsai-smart-2026-09-25-v1.html');
+const out = docsPath('older versions/bonsai-smart-2026-09-25-v1.html');
 writeFileSync(out, html);
 console.log(`wrote ${out}`);

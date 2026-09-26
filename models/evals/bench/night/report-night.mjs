@@ -178,6 +178,6 @@ const html = `<!doctype html>
 </body>
 </html>
 `;
-const target = docsPath(`bonsai-night-${day}.html`);
+const target = docsPath(`tests/bonsai-night-${day}.html`);
 writeFileSync(target, html);
 console.log(`wrote ${target} (${problems.length} problems listed)`);
