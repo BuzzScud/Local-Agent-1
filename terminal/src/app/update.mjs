@@ -1,12 +1,13 @@
 // "Update available" in the lower right, as in Claude Code: while Bonsai runs,
 // it looks at its own repo every 20 s. When a commit lands on main (or is
 // pushed to GitHub's main from this Mac) that changes Bonsai's code, a restart
-// would run something new, and the badge says so. The launcher builds the new
-// version at the next `bonsai`.
+// would run something new, and the badge says so. /update restarts Bonsai on
+// it through the launcher (which builds the new version first) and picks the
+// conversation back up.
 //   BONSAI_NO_UPDATE=1 turns the check off (as it turns off the launcher's rebuild);
 //   BONSAI_UPDATE_EVERY=<ms> looks more often (the tests).
 import { execFile } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const EVERY_MS = 20_000;
@@ -63,24 +64,56 @@ export async function checkUpdate(repo, start, built) {
   return null;
 }
 
-export const updateText = (u) => (!u ? null : u.kind === 'pull' ? '↻ Update on GitHub · git pull, then restart' : '↻ Update available · restart bonsai to use it');
+export const updateText = (u) => (!u ? null : u.kind === 'pull' ? '↻ Update on GitHub · /update to get it' : '↻ Update available · /update to use it');
 
 // Watches until stopped; calls onChange with the new state when it changes.
+// Returns { stop, check }: check() looks right away (for /update).
 export function watchUpdates(onChange, { repo = findRepo(), every = Number(process.env.BONSAI_UPDATE_EVERY) || EVERY_MS } = {}) {
-  if (!repo || process.env.BONSAI_NO_UPDATE === '1') return () => {};
+  if (!repo || process.env.BONSAI_NO_UPDATE === '1') return { repo: null, stop: () => {}, check: async () => null };
   const built = builtAt();
   let start = null;
   let last = null;
+  let now = null;
   let stopped = false;
+  const begin = (async () => { start = { main: await rev(repo, 'refs/heads/main'), origin: await rev(repo, 'refs/remotes/origin/main') }; })();
   const look = async () => {
-    if (stopped) return;
-    if (!start) { start = { main: await rev(repo, 'refs/heads/main'), origin: await rev(repo, 'refs/remotes/origin/main') }; return; }
-    const u = await checkUpdate(repo, start, built);
-    const key = u ? `${u.kind}:${u.commit}` : null;
-    if (!stopped && key !== last) { last = key; onChange(u); }
+    await begin;
+    if (stopped) return now;
+    now = await checkUpdate(repo, start, built);
+    const key = now ? `${now.kind}:${now.commit}` : null;
+    if (!stopped && key !== last) { last = key; onChange(now); }
+    return now;
   };
-  look();
   const id = setInterval(look, every);
   id.unref?.();
-  return () => { stopped = true; clearInterval(id); };
+  return { repo, stop: () => { stopped = true; clearInterval(id); }, check: look };
+}
+
+// /update, for an update that is on GitHub's main but not in this folder:
+// fast-forward the folder's main to it. Git refuses (and changes nothing)
+// when the folder is on another branch, main has commits of its own, or a
+// file with uncommitted changes would be overwritten.
+export async function bringIn(repo) {
+  const branch = await git(repo, ['symbolic-ref', '--short', 'HEAD']);
+  if (branch !== 'main') return { ok: false, why: `${short(repo)} is on ${branch ? `the branch ${branch}` : 'no branch'}, not main` };
+  return new Promise((res) => {
+    execFile('git', ['-C', repo, 'merge', '--ff-only', 'refs/remotes/origin/main'], { timeout: 20_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (err, out, errOut) => {
+      if (!err) { res({ ok: true }); return; }
+      const why = String(errOut || err.message).split('\n').map((l) => l.replace(/^(fatal|error): /, '').trim()).find(Boolean) ?? 'git said no';
+      res({ ok: false, why });
+    });
+  });
+}
+const short = (p) => (process.env.HOME && p.startsWith(process.env.HOME) ? `~${p.slice(process.env.HOME.length)}` : p);
+
+// Restarting is the launcher's job (terminal/app/bonsai-launcher.sh): it runs
+// the app and waits, so when this app exits with RESTART_CODE it rebuilds and
+// starts the new version with the arguments left in BONSAI_RESTART_FILE (one
+// per line). This window has fully let go of the keyboard by then; a restart
+// from inside the app (it waiting on the new one) lost typed keys to the old
+// process and left one more of them behind at each /update.
+export const RESTART_CODE = 75;
+export const canRestart = () => Boolean(process.env.BONSAI_RESTART_FILE);
+export function leaveRestart(args) {
+  writeFileSync(process.env.BONSAI_RESTART_FILE, args.map((a) => `${String(a).replace(/\n/g, ' ')}\n`).join(''));
 }

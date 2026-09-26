@@ -26,7 +26,7 @@ import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
 import { spinStyle } from '../ui/theme.mjs';
-import { watchUpdates, updateText } from './update.mjs';
+import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -56,7 +56,7 @@ function expandMentions(value, cwd, maxChars) {
   return { text: value + extra, attached };
 }
 
-export function App({ opts, win }) {
+export function App({ opts, win, onRestart }) {
   const { exit } = useApp();
   const inkSize = useWindowSize();
   // With the resize-aware window (the terminal app), the size changes only
@@ -87,9 +87,11 @@ export function App({ opts, win }) {
   // What the Weights tab last saved (the edited copy's manifest): feeds the
   // weights badge in the lower right.
   const [editedSaved, setEditedSaved] = useState(readEdited);
-  // New Bonsai code on main since this start: the "Update available" badge.
+  // New Bonsai code on main since this start: the "Update available" badge,
+  // and /update, which restarts this window on it.
   const [update, setUpdate] = useState(null);
-  useEffect(() => watchUpdates(setUpdate), []);
+  const updateRef = useRef(null);
+  useEffect(() => { const w = watchUpdates(setUpdate); updateRef.current = w; return w.stop; }, []);
   const memoryNote = useRef(null);
   const measure = useRef({ width: 100, modelName: '', cwdShort: '' });
   const itemsRef = useRef([]);
@@ -455,6 +457,37 @@ export function App({ opts, win }) {
     exit();
   }, [exit, saveNow]);
 
+  // /update: Bonsai starts again on the new code (the launcher builds it) and
+  // picks this conversation back up; the model stays loaded in between. An
+  // update only on GitHub is brought into the repo's main first, if git can
+  // do that without touching anything uncommitted.
+  const updateNow = useCallback(async () => {
+    const w = updateRef.current;
+    if (!w?.repo) { push({ type: 'note', text: 'Updates are looked for when Bonsai runs from its repo (the bonsai command); BONSAI_NO_UPDATE=1 turns them off.', tone: 'dim' }); return; }
+    if (S.current.live.phase === 'working' || S.current.perm) { push({ type: 'note', text: 'Bonsai is busy. Let it finish (or press esc), then /update.', tone: 'warn' }); return; }
+    const u = await w.check();
+    if (!u) { push({ type: 'note', text: 'Bonsai is up to date: no new code on main since this window started.', tone: 'dim' }); return; }
+    if (u.kind === 'pull') {
+      const r = await bringIn(w.repo);
+      if (!r.ok) { push({ type: 'note', text: `Could not bring the update in: ${r.why}. Pull it into the repo yourself, then /update.`, tone: 'warn' }); return; }
+    }
+    if (!canRestart()) { push({ type: 'note', text: `The update is ${u.kind === 'pull' ? 'in the repo now' : 'on main'}. This window was not started by the bonsai command, so quit and start it again to use it.`, tone: 'warn' }); return; }
+    push({ type: 'note', text: '↻ Restarting on the update…', tone: 'dim' });
+    abortRef.current?.abort();
+    saveNow();
+    const s = sessionRef.current;
+    const level = thinkingLevel(model, thinking, effort).id;
+    onRestart?.([
+      ...(s.title ? ['--resume', s.id] : []),
+      ...(opts.url ? ['--url', opts.url] : []),
+      ...(opts.flows === false ? ['--no-flows'] : []),
+      ...(opts.ctx ? ['--ctx', String(opts.ctx)] : []),
+      ...(['low', 'medium', 'high'].includes(level) ? ['--effort', level] : []),
+    ]);
+    await serverRef.current?.stop({ keep: true });
+    exit();
+  }, [effort, exit, model, onRestart, opts.ctx, opts.flows, opts.url, push, saveNow, thinking]);
+
   const interrupt = useCallback(() => {
     abortRef.current?.abort();
     const p = S.current.perm;
@@ -614,6 +647,9 @@ export function App({ opts, win }) {
         applyChoice('meters', /^(on|show|yes)$/i.test(arg) ? 'on' : 'off');
         break;
       }
+      case 'update':
+        await updateNow();
+        break;
       case 'exit':
       case 'quit':
         await quit();
@@ -621,7 +657,7 @@ export function App({ opts, win }) {
       default:
         push({ type: 'note', text: `Unknown command /${cmd}. Type /help for the list.`, tone: 'warn' });
     }
-  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats]);
+  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, updateNow]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');

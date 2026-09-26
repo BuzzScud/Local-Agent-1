@@ -188,11 +188,20 @@ if (opts.print) {
     primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name, cwdShort, loaded: opts.loaded ?? '' });
   } catch {}
   const win = new TerminalWindow(process.stdout);
-  const instance = render(<App opts={opts} win={win} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
+  // /update asks for a restart: set here, run once this window has closed.
+  let restartArgs = null;
+  const instance = render(<App opts={opts} win={win} onRestart={(a) => { restartArgs = a; }} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
   const bye = () => { try { instance.unmount(); } catch {} };
   process.on('SIGTERM', bye);
   process.on('SIGHUP', bye);
   await instance.waitUntilExit();
+  if (restartArgs) {
+    // The launcher waiting on this app starts the new version (see update.mjs).
+    const { leaveRestart, RESTART_CODE } = await import('./app/update.mjs');
+    leaveRestart(restartArgs);
+    process.stdout.write('\x1b[2m  ↻ Restarting on the update…\x1b[0m\n');
+    process.exit(RESTART_CODE);
+  }
   process.stdout.write('\x1b[2m  Saved. Continue this conversation with: bonsai -c\x1b[0m\n');
   process.exit(0);
 }

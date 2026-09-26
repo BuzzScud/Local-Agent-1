@@ -13,9 +13,13 @@ ends, the time it took: `⠿ Worked for 41s · done 12:58 PM`. Nothing sits unde
 but the footer; from 70% memory a line says what happens next, `/stats` has every number,
 and `/meters on` adds the old status bar (model, speed, memory, effort) for those who want it.
 When a commit that changes Bonsai's code lands on main while it runs, the lower right says
-`↻ Update available · restart bonsai to use it` (the next `bonsai` builds it); pushed to GitHub's
-main from a worktree but not in this folder yet, it says `↻ Update on GitHub · git pull, then restart`
-(`src/app/update.mjs`, checked every 20 s; `BONSAI_NO_UPDATE=1` turns it off).
+`↻ Update available · /update to use it`; pushed to GitHub's main from a worktree but not in this
+folder yet, `↻ Update on GitHub · /update to get it` (`src/app/update.mjs`, checked every 20 s;
+`BONSAI_NO_UPDATE=1` turns it off). `/update` restarts Bonsai in the same window on the new code,
+the conversation picked back up and the model kept loaded: the app exits with code 75 and the
+`bonsai` launcher, which waits on it, rebuilds and starts it again (an update only on GitHub is
+fast-forwarded into this folder's main first, when git can do that without touching anything
+uncommitted).
 
 ## Keys
 
