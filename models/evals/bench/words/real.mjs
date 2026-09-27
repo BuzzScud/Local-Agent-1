@@ -11,9 +11,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../../index.mjs';
-import { runHeadless } from '../../../../terminal/src/headless.mjs';
-import { outsidePath } from '../../../../terminal/src/agent/permissions.mjs';
-import { claimsAlreadyThere } from '../../../../terminal/src/agent/agent.mjs';
+import { runHeadless, outsidePath, claimsAlreadyThere } from '../../../../terminal/index.mjs';
 import { recordTest, codeLabel } from '../../record.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));

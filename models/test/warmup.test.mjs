@@ -16,7 +16,7 @@ function inChild(body) {
     const { MODELS, DEFAULT_MODEL, SLOT_DIR, HOME } = await import(${src('models/registry.mjs')});
     if (HOME !== process.env.BONSAI_HOME) { console.log(JSON.stringify({ error: 'wrong home' })); process.exit(1); }
     const { warmUp, pruneSaved } = await import(${src('models/runtime/warmup.mjs')});
-    const { systemPrompt, SESSION_MARK } = await import(${src('terminal/src/agent/prompt.mjs')});
+    const { systemPrompt, SESSION_MARK } = await import(${src('terminal/index.mjs')});
     const model = MODELS[DEFAULT_MODEL];
     // A stand-in llama-server: renders a simple template, "reads" prompts and saves slot files.
     function fake({ template = true } = {}) {

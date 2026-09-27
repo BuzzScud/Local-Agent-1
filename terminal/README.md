@@ -2,6 +2,8 @@
 
 The coding agent you talk to. It gets its model from the models part through
 one file, `../models/index.mjs`, and never reads a model's settings directly.
+The other way round the same: the bench and the probes of the models part get
+the agent through one file, `index.mjs` here.
 
 ## Screen
 

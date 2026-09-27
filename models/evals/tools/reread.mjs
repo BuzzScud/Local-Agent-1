@@ -12,9 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL, thinkingKwargs, modelFolder } from '../../index.mjs';
 import { ModelServer } from '../../index.mjs';
 import { warmUp } from '../../index.mjs';
-import { Agent } from '../../../terminal/src/agent/agent.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../../terminal/src/agent/prompt.mjs';
-import { toolSchemas } from '../../../terminal/src/agent/tools.mjs';
+import { Agent, systemPrompt, projectNotes, gitSummary, SESSION_MARK, toolSchemas } from '../../../terminal/index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo

@@ -5,7 +5,7 @@ the agent with each one.
 
 | | |
 |---|---|
-| `index.mjs` | The one file the terminal imports: the registry, the runtime and setup. |
+| `index.mjs` | The one file the terminal imports: the registry, the runtime and setup. This part in turn imports the terminal only through `../terminal/index.mjs`. |
 | `registry.mjs` | The list of models (one folder each), where their files live on this Mac (`~/.bonsai-code`), and how to ask a model to think. |
 | `runtime/` | `server.mjs` starts, shares and stops llama-server; `memory.mjs` picks a context that fits the Mac; `warmup.mjs` saves and restores the read-in instructions; `setup.mjs` downloads the runtime and a model. |
 | `bonsai-2-27b/` | The model in use: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |

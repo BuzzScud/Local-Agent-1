@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const R = new URL('../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
-const { runHeadless } = await import(`${R}/terminal/src/headless.mjs`);
+const { runHeadless } = await import(`${R}/terminal/index.mjs`);
 const { MODELS, DEFAULT_MODEL } = await import(`${R}/models/registry.mjs`);
 const only = process.argv[2]?.split(',');
 for (const task of readdirSync(`${R}/models/evals/bench/tasks`).sort().filter((t) => !only || only.some((o) => t.startsWith(o)))) {

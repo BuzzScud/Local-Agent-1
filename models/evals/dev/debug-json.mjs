@@ -3,8 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const R = new URL('../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
 const { MODELS, DEFAULT_MODEL } = await import(`${R}/models/registry.mjs`);
-const { changeFlow } = await import(`${R}/terminal/src/flows/change.mjs`);
-const { Scratch } = await import(`${R}/terminal/src/flows/scratch.mjs`);
+const { changeFlow, Scratch } = await import(`${R}/terminal/index.mjs`);
 const work = join(mkdtempSync(join(tmpdir(), 'dbgj-')), 'project');
 cpSync(`${R}/models/evals/bench/tasks/1-json-flag/project`, work, { recursive: true });
 let n = 0;

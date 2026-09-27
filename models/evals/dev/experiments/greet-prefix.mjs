@@ -9,9 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../../index.mjs';
 import { ModelServer } from '../../../index.mjs';
 import { warmUp } from '../../../index.mjs';
-import { streamChat } from '../../../../terminal/src/agent/client.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../../../terminal/src/agent/prompt.mjs';
-import { toolSchemas } from '../../../../terminal/src/agent/tools.mjs';
+import { streamChat, systemPrompt, projectNotes, gitSummary, SESSION_MARK, toolSchemas } from '../../../../terminal/index.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'); // the repo
 const model = MODELS[DEFAULT_MODEL];

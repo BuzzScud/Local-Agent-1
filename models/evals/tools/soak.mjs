@@ -17,10 +17,7 @@ import { MODELS, DEFAULT_MODEL, modelFolder } from '../../index.mjs';
 import { ModelServer } from '../../index.mjs';
 import { needBytes, availableBytes } from '../../index.mjs';
 import { warmUp } from '../../index.mjs';
-import { runHeadless } from '../../../terminal/src/headless.mjs';
-import { Agent } from '../../../terminal/src/agent/agent.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../../../terminal/src/agent/prompt.mjs';
-import { toolSchemas } from '../../../terminal/src/agent/tools.mjs';
+import { runHeadless, Agent, systemPrompt, projectNotes, gitSummary, SESSION_MARK, toolSchemas, complete } from '../../../terminal/index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
@@ -121,7 +118,6 @@ if (fill) {
   const f = out.conversation.fill;
   f.reached = peakCtx;
   sample();
-  const { complete } = await import('../../../terminal/src/flows/llm.mjs');
   const t1 = Date.now();
   try {
     const r = await complete({ url: srv.url, model, slot: st.slots > 1 ? 1 : undefined, system: 'You answer in one word.', user: 'Say ok.', maxTokens: 8 });

@@ -4,8 +4,7 @@ import { mkdirSync, statSync, openSync } from 'node:fs';
 const R = new URL('../../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
 const { MODELS, DEFAULT_MODEL, thinkingKwargs } = await import(`${R}/models/registry.mjs`);
 const { serverArgs } = await import(`${R}/models/runtime/server.mjs`);
-const { systemPrompt } = await import(`${R}/terminal/src/agent/prompt.mjs`);
-const { toolSchemas } = await import(`${R}/terminal/src/agent/tools.mjs`);
+const { systemPrompt, toolSchemas } = await import(`${R}/terminal/index.mjs`);
 const m = MODELS[DEFAULT_MODEL];
 const dir = new URL('./slots/', import.meta.url).pathname; mkdirSync(dir, { recursive: true });
 const PORT = 17654, URL0 = `http://127.0.0.1:${PORT}`;
