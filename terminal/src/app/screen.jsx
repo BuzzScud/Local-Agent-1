@@ -503,6 +503,25 @@ function ChoicePicker({ app }) {
   );
 }
 
+// A box in the middle of the window (/help): a title, a line or two, and the
+// address it opened. Any key closes it.
+function Popup({ app }) {
+  const pp = app.popup;
+  const boxW = Math.min(app.width - 4, 60);
+  return (
+    <Box width={app.width} justifyContent="center" flexShrink={0}>
+      <Box flexDirection="column" alignItems="center" borderStyle="round" borderColor={C.accent} paddingX={2} paddingY={1} width={boxW}>
+        <Text><Text color={C.accent}>{MARK}</Text> <Text bold>{pp.title}</Text></Text>
+        <Text> </Text>
+        {wrap(pp.text, boxW - 6).map((l, i) => <Text key={i}>{l}</Text>)}
+        {pp.url ? <><Text> </Text><Text color={C.accent} wrap="truncate-middle">{pp.url}</Text></> : null}
+        <Text> </Text>
+        <Text color={C.dim}>esc or enter to close</Text>
+      </Box>
+    </Box>
+  );
+}
+
 // /model: the model list and the effort level in one picker.
 function ModelPicker({ app }) {
   const pk = app.picker;
@@ -639,6 +658,7 @@ export function Screen({ app }) {
       {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : ''}</Text></Box> : null}
       </Box>
       <Box flexGrow={1} />
+      {app.popup ? <><Popup app={app} /><Box flexGrow={1} /></> : null}
       <Box flexDirection="column" flexShrink={0}>
       {app.picker?.kind === 'model' ? (
         <ModelPicker app={app} />

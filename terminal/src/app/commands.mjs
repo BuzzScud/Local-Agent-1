@@ -1,6 +1,6 @@
 // Slash commands shown in the menu when you type "/".
 export const COMMANDS = [
-  { name: 'help', desc: 'Commands and keys here, and the full Help page in the browser' },
+  { name: 'help', desc: 'Open the Help page in the browser: every command, key and setting' },
   { name: 'clear', desc: 'Start a new conversation (the screen keeps its history)' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)

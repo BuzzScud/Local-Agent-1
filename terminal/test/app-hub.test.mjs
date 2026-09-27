@@ -72,18 +72,35 @@ test('/tests opens the hub on the test record and says how many runs it holds an
   expect(served.page).toContain('<title>Bonsai test record</title>');
 }, T);
 
-test('/help: the command list here, and the Help page with every key and setting in the hub', async () => {
+test('/help: a box in the middle says the Help page opened in the browser; the page has every command, key and setting', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: '/help' }, { key: 'enter' }, { wait: 'opened in the browser at http://127.0.0.1:' },
+    { wait: 'Welcome' }, { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { snapshot: 'box' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'help.json')).json(), page: await (await fetch(url + 'help')).text(), hub: await (await fetch(url + '?tab=help')).text() }; } },
+    { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
+    // any other key closes it too, and still reaches the prompt
+    { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { type: 'x' }, { sleep: 300 }, { snapshot: 'typed' },
     ...quit,
   ] });
   await fake.close();
-  expect(r.text).toContain('/effort');
-  expect(r.text).toContain('?tab=help');
+  const box = r.snapshots.box.split('\n');
+  const title = box.findIndex((l) => l.includes('Bonsai Code help'));
+  expect(title).toBeGreaterThan(0);
+  expect(r.snapshots.box).toContain('Opened a help page in your browser');
+  expect(r.snapshots.box).toMatch(/http:\/\/127\.0\.0\.1:\d+\/\?tab=help/);
+  expect(r.snapshots.box).not.toContain('/compact'); // no command list in the terminal any more
+  // in the middle: centred across, and between the conversation and the prompt box
+  const top = box.findIndex((l) => l.indexOf('╭') > 4); // the welcome and prompt boxes start at the left edge
+  expect(top).toBeGreaterThan(box.findIndex((l) => l.includes('Tips for getting started')));
+  expect(top).toBeLessThan(title);
+  expect(top).toBeLessThan(box.findLastIndex((l) => l.startsWith('╭'))); // above the prompt box
+  const left = box[top].indexOf('╭'), right = 155 - 1 - box[top].lastIndexOf('╮'); // the pty is 155 wide; the snapshot drops trailing spaces
+  expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
+  expect(r.snapshots.closed).not.toContain('esc or enter to close');
+  expect(r.snapshots.typed).not.toContain('esc or enter to close');
+  expect(r.snapshots.typed).toMatch(/> x/);
   const { COMMANDS } = await import('../src/app/commands.mjs');
   expect(served.data.commands.map((c) => c.name)).toEqual(COMMANDS.map((c) => c.name)); // every command, from the same list
   expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'meters']);

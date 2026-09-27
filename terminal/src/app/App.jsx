@@ -18,7 +18,7 @@ import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, mentionAt, selectedText } from './edit-input.mjs';
 import { copyToClipboard } from './clipboard.mjs';
-import { COMMANDS, matchCommands } from './commands.mjs';
+import { matchCommands } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
 import { MODE_OPTIONS } from './help.mjs';
 import { memoryFile, readMemory } from '../agent/memory.mjs';
@@ -117,6 +117,7 @@ export function App({ opts, win, onRestart }) {
   const [notice, setNotice] = useState(null);
   const [queued, setQueued] = useState(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [popup, setPopup] = useState(null); // a box in the middle of the window (/help); any key closes it
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
@@ -166,7 +167,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, menuIndex, mode, starting, live, queued, tooSmall, meters };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -533,11 +534,10 @@ export function App({ opts, win, onRestart }) {
     const busy = agent.busy;
     switch (cmd) {
       case 'help': {
-        // The list here, and the whole Help page (keys, modes, effort, where
-        // things live) in the hub's Help tab.
-        push({ type: 'panel', title: 'Commands', pad: 12, rows: [...COMMANDS.map((c) => [`/${c.name}`, c.desc]), ['Keys: shift+tab mode · ctrl+o expand · esc interrupt · ctrl+c twice quit · \\+enter new line · @ file · ! shell']] });
+        // The whole Help page (commands, keys, modes, effort, where things
+        // live) opens in the hub's Help tab; here, a box in the middle says so.
         const hub = openHub('help');
-        if (hub) push({ type: 'note', text: `The full help, with every key and setting, opened in the browser at ${hub.url}`, tone: 'dim' });
+        if (hub) setPopup({ title: 'Bonsai Code help', text: 'Opened a help page in your browser, with every command, key and setting.', url: hub.url });
         break;
       }
       case 'clear':
@@ -759,6 +759,12 @@ export function App({ opts, win, onRestart }) {
     // A window too small to show the screen takes no keys (enter could answer
     // a question you cannot see), except ctrl+c.
     if (cur.tooSmall && !(key.ctrl && ch === 'c')) return;
+    // The box in the middle (/help): esc, enter or ctrl+c close it; any other
+    // key closes it and does what it always does, so typing goes on as usual.
+    if (cur.popup) {
+      setPopup(null);
+      if (key.escape || key.return || (key.ctrl && ch === 'c')) return;
+    }
     // Permission prompt
     if (cur.perm) {
       const p = cur.perm;
@@ -935,7 +941,7 @@ export function App({ opts, win, onRestart }) {
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '' };
   itemsRef.current = items;
   const app = {
-    items, live, perm, picker, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
+    items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
     modelName: model.name, now, spinner: spinStyle(process.env.BONSAI_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,

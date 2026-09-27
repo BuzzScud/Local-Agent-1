@@ -12,7 +12,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
   const fake = await startFakeServer([{ text: 'Hi there.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' },
-    { type: '/' }, { wait: 'Commands and keys here' }, { type: 'he' }, { key: 'enter' }, { wait: 'Commands' },
+    { type: '/' }, { wait: 'Open the Help page in the browser' }, { type: 'he' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { key: 'esc' },
     { type: '?' }, { wait: '\\ + enter for a new line' }, { key: 'esc' },
     { type: '!echo shell-ok' }, { key: 'enter' }, { wait: 'shell-ok' },
     { type: 'say hi' }, { key: 'enter' }, { wait: 'Hi there.' },
@@ -23,7 +23,7 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
     ...quitTyped,
   ] });
   await fake.close();
-  expect(r.text).toContain('/help       Commands and keys here, and the full Help page in the browser');
+  expect(r.text).not.toContain('esc or enter to close'); // esc closed the /help box
   expect(r.text).toContain('! echo shell-ok');
   expect(r.text).toContain('Hi there.');
   expect(r.text).toContain('plan mode on');
@@ -127,7 +127,7 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Commands and keys here' }, { sleep: 200 }, { snapshot: 'all' },
+    { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 200 }, { snapshot: 'all' },
     { type: 'model' }, { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'mo' },
     { key: 'tab' }, { sleep: 300 }, { snapshot: 'tab' },
     ...quitTyped,
