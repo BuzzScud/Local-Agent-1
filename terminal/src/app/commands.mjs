@@ -17,6 +17,7 @@ export const COMMANDS = [
   { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
   { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Bonsai page' },
   { name: 'tests', desc: 'Open the hub on the test record: every test run and its result' },
+  { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
   { name: 'update', desc: 'Restart on new Bonsai code from main, keeping this conversation' },
   { name: 'exit', desc: 'Quit Bonsai Code' },
 ];

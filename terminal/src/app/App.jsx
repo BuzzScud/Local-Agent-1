@@ -27,6 +27,8 @@ import { loadSettings, saveSettings, saveSession, listSessions, loadSession, new
 import { saveTrust } from './trust.mjs';
 import { spinStyle } from '../ui/theme.mjs';
 import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
+import { runMorning, summary as morningSummary } from '../morning/index.mjs';
+import { complete } from '../flows/llm.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -544,6 +546,33 @@ export function App({ opts, win, onRestart }) {
         sessionRef.current = { id: newSessionId(), title: null, items: [] };
         push({ type: 'divider', text: 'new conversation' });
         break;
+      case 'morning': {
+        // The morning brief: the repos read, the words written by the model on
+        // its side slot and checked against the facts, and the page (with every
+        // earlier morning in its calendar) opened in the browser.
+        if (busy || S.current.live.phase === 'working') { flash('Wait for Bonsai to finish, or press esc first'); break; }
+        const day = arg.toLowerCase() || 'auto';
+        if (!/^(auto|today|yesterday|\d{4}-\d{2}-\d{2})$/.test(day)) { push({ type: 'note', text: 'Use /morning, or /morning today, yesterday or a date (2026-09-26).', tone: 'warn' }); break; }
+        const ac = new AbortController();
+        abortRef.current = ac;
+        setLive({ phase: 'working', turnStart: Date.now(), verb: 'Reading the repos', tokens: 0 });
+        try {
+          const r = await runMorning({
+            day, complete: agent.url ? complete : undefined, url: agent.url, model: agent.model, slot: agent.slots?.side, signal: ac.signal,
+            onToken: (n) => setLive((l) => ({ ...l, tokens: n, lastTokenAt: Date.now() })),
+            onStep: (kind, text) => {
+              if (kind === 'gather' && text.startsWith('Read ')) push({ type: 'note', text, tone: 'dim' });
+              if (kind === 'words') setLive((l) => ({ ...l, verb: 'Writing the brief' }));
+            },
+          });
+          push({ type: 'note', text: `${morningSummary(r)}${agent.url ? '' : ' · the model was still starting, so the words are plain'}`, tone: r.error ? 'warn' : 'dim' });
+        } catch (e) {
+          push({ type: 'note', text: ac.signal.aborted ? 'Morning brief stopped.' : `Morning brief: ${e.message}`, tone: ac.signal.aborted ? 'dim' : 'error' });
+        } finally {
+          setLive(IDLE);
+        }
+        break;
+      }
       case 'compact':
         if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
         setLive({ phase: 'working', turnStart: Date.now(), verb: 'Compacting', tokens: 0 });

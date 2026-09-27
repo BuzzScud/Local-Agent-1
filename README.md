@@ -29,7 +29,7 @@ the result, so a new model is tested the same way the 27B was.
 ```
 bonsai-code/
 ├─ terminal/            part 1 · the agent terminal
-│  ├─ src/              cli, app (the screen), agent (the loop), flows, tools, ui
+│  ├─ src/              cli, app (the screen), agent (the loop), flows, tools, ui, morning (the brief)
 │  ├─ test/             unit tests and the app driven by keys in a real terminal
 │  ├─ scripts/          captures, report builders, design previews (demo/), the devtools shim
 │  ├─ app/              the Bonsai Code.app launcher and its icon

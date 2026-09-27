@@ -86,6 +86,13 @@ refused, and macOS's own sandbox fences what a command can reach.
   what files are chosen from and the first thing the loop sees in a bigger project.
 - **A check before "done"**: when the loop changed files, one forced-JSON check compares
   the diff with the request and sends it back once if a part is missing.
+- **The morning brief** (`src/morning`, `/morning` or `bonsai morning`): every repo under
+  the home folder read (the day's commits, what is not live, CI, the test record, old
+  uncommitted work), what earns a line picked by rules, the words written by the model in
+  one forced-JSON call and checked against the facts (a time or number it made up is
+  swapped for plain wording), and one page with a calendar of every earlier morning
+  (`~/.repo-morning/history`). Your name, emails and deploy check live in
+  `~/.repo-morning/config.json`; Claude's /repo-morning uses the same code through `cli.mjs`.
 - **The screen** (`src/app`) is Ink (React for the terminal, the library Claude Code uses),
   in 256 colours for Apple Terminal, redrawn cleanly on every resize.
 

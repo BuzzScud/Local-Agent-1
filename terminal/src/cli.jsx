@@ -112,6 +112,38 @@ if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[
   process.on('SIGINT', () => { s.stop(); process.exit(0); });
   await new Promise(() => {});
 }
+// bonsai morning [today|yesterday|YYYY-MM-DD] [--plain]: the morning brief from
+// any shell. It joins a loaded model (on its side slot) or starts one just for
+// this and stops it after; --plain skips the model and writes plain words.
+if (process.argv[2] === 'morning') {
+  const { runMorning } = await import('./morning/index.mjs');
+  const { complete } = await import('./flows/llm.mjs');
+  const a = process.argv.slice(3);
+  const day = a.find((x) => /^(today|yesterday|\d{4}-\d{2}-\d{2})$/.test(x)) ?? 'auto';
+  const say = (t) => process.stderr.write(`${t}\n`);
+  const model = modelById(loadSettings(process.cwd()).model) ?? MODELS[DEFAULT_MODEL];
+  let server = null, url = null, slot;
+  if (!a.includes('--plain')) {
+    try {
+      server = new ModelServer(model);
+      const st = await server.start({ ctx: chooseContext(model, { want: 16_384 }).ctx, helper: false });
+      slot = st.shared && st.slots > 1 ? 1 : 0;
+      url = server.url;
+      say(st.shared ? '· Using the model already loaded' : '· Loaded the model for this brief');
+    } catch (e) { say(`· The model could not start (${e.message}), so the words will be plain`); server = null; }
+  }
+  const stop = async () => { await server?.stop(); };
+  process.on('SIGINT', async () => { await stop(); process.exit(130); });
+  try {
+    await runMorning({ day, complete: url ? complete : undefined, url, model, slot, onStep: (kind, text) => say(kind === 'done' ? text : `· ${text}`) });
+    await stop();
+    process.exit(0);
+  } catch (e) {
+    say(`bonsai morning: ${e.message}`);
+    await stop();
+    process.exit(1);
+  }
+}
 if (process.argv[2] === 'setup') {
   try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\nbonsai setup: ${e.message}\n`); process.exit(1); }
 }
