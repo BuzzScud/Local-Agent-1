@@ -30,6 +30,9 @@ export const KINDS = {
 export const SNAPSHOT = 'tests/bonsai-test-record.html';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// The record's real place. A record anywhere else (a test's, a scratch run's) is never
+// written into the DOCS folder: the saved copy there is of the real record only.
+export const REAL_RECORD = join(homedir(), '.bonsai-code', 'tests', 'record.jsonl');
 export const recordFile = () => process.env.BONSAI_TEST_RECORD ?? join(process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code'), 'tests', 'record.jsonl');
 
 // The commit a folder of code is at. A frozen copy has no git of its own (and
@@ -74,15 +77,17 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
 
 // What the Tests tab and the snapshot page both show.
 export function recordData(file = recordFile()) {
-  return { rows: readRecord(file), kinds: KINDS, file: file.replace(homedir(), '~'), made: new Date().toISOString() };
+  return { rows: readRecord(file), kinds: KINDS, file: file.startsWith(homedir()) ? file.replace(homedir(), '~') : basename(file), made: new Date().toISOString() };
 }
 
 // The same page the hub shows, with the record written into it, saved into
 // the DOCS folder. Skipped quietly when the folder or the page's source is
 // not here (a worktree, a frozen copy): the hub still reads the record live.
-export function writeSnapshot({ file = recordFile(), docsDir = process.env.BONSAI_DOCS ?? join(repo, 'bonsai-code DOCS'), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
+// Only the real record goes to the repo's DOCS folder; any other record needs
+// the folder named (docsDir, or BONSAI_DOCS).
+export function writeSnapshot({ file = recordFile(), docsDir = process.env.BONSAI_DOCS ?? (resolve(file) === REAL_RECORD ? join(repo, 'bonsai-code DOCS') : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
   try {
-    if (process.env.BONSAI_NO_DOCS || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
+    if (process.env.BONSAI_NO_DOCS || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
     const html = readFileSync(template, 'utf8');
     if (!html.includes('<!--DATA-->')) return null;
     const out = join(docsDir, SNAPSHOT);

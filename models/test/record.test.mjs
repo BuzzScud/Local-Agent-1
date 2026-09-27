@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, SNAPSHOT } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'bonsai-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
 const quiet = (file) => ({ file, snapshot: false, quiet: true });
@@ -59,6 +59,24 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
   expect(Object.keys(data.kinds)).toEqual(['tasks', 'requests', 'bug', 'suite', 'other']);
   expect(writeSnapshot({ file, docsDir: join(dir, 'not-there') })).toBe(null);
   expect(recordData(file).rows).toHaveLength(1);
+});
+
+test('a record that is not the real one never reaches the DOCS folder by itself, and its folder path is not shown', () => {
+  const { dir, file } = scratch();
+  const was = { docs: process.env.BONSAI_DOCS, home: process.env.BONSAI_HOME, rec: process.env.BONSAI_TEST_RECORD };
+  delete process.env.BONSAI_DOCS; delete process.env.BONSAI_TEST_RECORD;
+  process.env.BONSAI_HOME = dir; // what a test or a scratch run sets
+  try {
+    expect(recordFile()).toBe(file);
+    expect(recordFile()).not.toBe(REAL_RECORD);
+    recordTest({ kind: 'suite', name: 'Unit tests', passed: 3, total: 3 }, { quiet: true }); // snapshot left on, as a runner does
+    expect(readRecord(file)).toHaveLength(1);
+    expect(writeSnapshot()).toBe(null);
+    expect(writeSnapshot({ file })).toBe(null);
+    expect(recordData(file).file).toBe('record.jsonl'); // no folder of a scratch run in a page
+  } finally {
+    for (const [k, v] of [['BONSAI_DOCS', was.docs], ['BONSAI_HOME', was.home], ['BONSAI_TEST_RECORD', was.rec]]) { if (v == null) delete process.env[k]; else process.env[k] = v; }
+  }
 });
 
 test('the code under test is named by its commit, and a frozen copy inside another repo by its folder', () => {
