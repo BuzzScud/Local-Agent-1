@@ -6,3 +6,5 @@ timeout = 30000
 # their own tests, which must not run here, so the root is terminal/test and
 # models/test is passed as a path.
 root = "./terminal/test"
+# Runs before every test file: a test's hub never takes the real hub's port.
+preload = ["./terminal/test/test-env.mjs"]

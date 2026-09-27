@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startWeightsServer, listDocs } from '../src/app/weights.mjs';
+import { startWeightsServer, listDocs, HUB_PORT } from '../src/app/weights.mjs';
 
 function standIn() {
   const dir = mkdtempSync(join(tmpdir(), 'bonsai-weights-'));
@@ -79,6 +79,18 @@ test('the hub keeps its usual address when it is free, and a second hub on the s
     expect(b.port).not.toBe(a.port);
     for (const s of [a, b]) expect((await fetch(s.url + 'model.json')).status).toBe(200);
   } finally { a.stop(); b.stop(); }
+});
+
+test('a test never takes the real hub\'s port 8757; a normal start does, and BONSAI_HUB_PORT=0 means any free port', () => {
+  expect(HUB_PORT).toBe(0); // test-env.mjs, before every test file
+  const s = startWeightsServer({ path: null, docsDir: null });
+  try { expect(s.port).not.toBe(8757); } finally { s.stop(); }
+  const portWith = (v) => {
+    const env = { ...process.env }; delete env.BONSAI_HUB_PORT; if (v !== undefined) env.BONSAI_HUB_PORT = v;
+    const r = Bun.spawnSync([process.execPath, '-e', `const { HUB_PORT } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'app', 'weights.mjs'))}); console.log(HUB_PORT);`], { env });
+    return Number(r.stdout.toString().trim());
+  };
+  expect([portWith(undefined), portWith('0'), portWith('9001'), portWith('nope'), portWith('')]).toEqual([8757, 0, 9001, 8757, 8757]);
 });
 
 // The editing endpoints write a manifest and a copy under BONSAI_HOME, so

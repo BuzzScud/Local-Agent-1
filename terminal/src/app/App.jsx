@@ -750,6 +750,7 @@ export function App({ opts, win, onRestart }) {
   };
 
   usePaste((text) => {
+    setPopup(null); // a paste closes the /help box, like any key
     if (S.current.perm || S.current.picker) return;
     setInput((s) => insertText(s, text.replace(/\r\n?/g, '\n')));
   });

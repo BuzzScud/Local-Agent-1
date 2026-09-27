@@ -82,6 +82,8 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
     { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
     // any other key closes it too, and still reaches the prompt
     { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { type: 'x' }, { sleep: 300 }, { snapshot: 'typed' },
+    // and so does a paste (a bracketed paste, as the terminal sends it)
+    { key: 'backspace' }, { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { key: '\x1b[200~pasted words\x1b[201~' }, { sleep: 300 }, { snapshot: 'pasted' },
     ...quit,
   ] });
   await fake.close();
@@ -91,6 +93,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(r.snapshots.box).toContain('Opened a help page in your browser');
   expect(r.snapshots.box).toMatch(/http:\/\/127\.0\.0\.1:\d+\/\?tab=help/);
   expect(r.snapshots.box).not.toContain('/compact'); // no command list in the terminal any more
+  expect(r.snapshots.box).not.toContain(':8757/'); // a test's hub never takes the real hub's address
   // in the middle: centred across, and between the conversation and the prompt box
   const top = box.findIndex((l) => l.indexOf('╭') > 4); // the welcome and prompt boxes start at the left edge
   expect(top).toBeGreaterThan(box.findIndex((l) => l.includes('Tips for getting started')));
@@ -101,6 +104,8 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(r.snapshots.closed).not.toContain('esc or enter to close');
   expect(r.snapshots.typed).not.toContain('esc or enter to close');
   expect(r.snapshots.typed).toMatch(/> x/);
+  expect(r.snapshots.pasted).not.toContain('esc or enter to close');
+  expect(r.snapshots.pasted).toMatch(/> pasted words/);
   const { COMMANDS } = await import('../src/app/commands.mjs');
   expect(served.data.commands.map((c) => c.name)).toEqual(COMMANDS.map((c) => c.name)); // every command, from the same list
   expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'meters']);

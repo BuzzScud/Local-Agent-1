@@ -55,8 +55,11 @@ export function listDocs(dir) {
 // The hub's usual address. A fixed port keeps the page's saved place (the
 // open tensor, the Channels and Layers results) from one start to the next,
 // since the browser keeps those per address. Taken already (a second Bonsai
-// window) → any free port. BONSAI_HUB_PORT overrides.
-export const HUB_PORT = Number(process.env.BONSAI_HUB_PORT) || 8757;
+// window) → any free port. BONSAI_HUB_PORT overrides; 0 = any free port, which
+// every test run uses: a test's hub (no model file) on 8757 answered the tab
+// the real hub had opened, and Weights said the model was missing (27 Sep).
+const envPort = Number(process.env.BONSAI_HUB_PORT || NaN);
+export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 8757;
 
 // onEdits: called after a save or revert of the edited copy (the app shows a
 // note and lights the weights badge). Editing endpoints:
