@@ -5,7 +5,7 @@ import { render } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
@@ -125,6 +125,21 @@ if (process.argv[2] === 'morning') {
   let server = null, url = null, slot;
   if (!a.includes('--plain')) {
     try {
+      // Only one copy of the 27B fits the GPU (two made a Compute error on 26 Sep):
+      // a copy another window is still loading is waited for and then shared, and
+      // a copy running outside Bonsai's list means plain words, not a second copy.
+      const loading = scanServers().find((e) => e.model === model.file);
+      if (loading) {
+        const t0 = Date.now();
+        let said = false;
+        while (Date.now() - t0 < 180_000) {
+          try { if ((await fetch(`http://127.0.0.1:${loading.port}/health`)).ok) break; } catch {}
+          if (!said) { say('· Waiting for the model another window is loading'); said = true; }
+          await Bun.sleep(1000);
+        }
+      } else if (Bun.spawnSync(['pgrep', '-f', `llama-server.*${model.file}`]).stdout.toString().trim()) {
+        throw new Error('another copy of the model is running outside Bonsai, and two do not fit');
+      }
       server = new ModelServer(model);
       const st = await server.start({ ctx: chooseContext(model, { want: 16_384 }).ctx, helper: false });
       slot = st.shared && st.slots > 1 ? 1 : 0;

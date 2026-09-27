@@ -42,7 +42,8 @@ export async function runMorning({ day = 'auto', fetch = true, complete, url, mo
 export function summary(r) {
   const home = process.env.HOME ?? '';
   const where = r.out.startsWith(home) ? `~${r.out.slice(home.length)}` : r.out;
-  const who = r.error ? `plain words (the model's reply was not used: ${r.error})`
+  const oom = /compute error|out of memory/i.test(r.error ?? '') ? ' — the GPU ran out of memory, most likely beside another copy of the model' : '';
+  const who = r.error ? `plain words (the model's reply was not used: ${r.error}${oom})`
     : r.by === 'bonsai' ? `Bonsai wrote the words${r.swaps.length ? ` (${r.swaps.length} swapped for plain wording: ${r.swaps.map((x) => `${x.field}, ${x.why}`).join('; ')})` : ', all checked against the facts'}`
       : 'plain words';
   return `Morning brief for ${r.day.label} · ${r.picks.attention.length} need attention, ${r.picks.resolved.length} resolved · ${who} · ${r.days.length} day${r.days.length === 1 ? '' : 's'} in the calendar · ${where} · ${Math.round(r.secs)} s`;
