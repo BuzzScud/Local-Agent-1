@@ -1,7 +1,7 @@
 // The seven tools the model can call: definitions it sees, argument checks,
 // what the terminal shows for each, and the code that runs them.
 import { resolve, relative, isAbsolute, dirname, sep, extname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync, realpathSync } from 'node:fs';
 import { readFile } from '../tools/read.mjs';
@@ -171,6 +171,13 @@ export function didYouMean(cwd, p) {
 }
 
 export function resolvePath(cwd, p) {
+  // "~" and "~/…" mean the home folder, as in the shell: a Write to
+  // "~/Desktop/notes.html" once made a folder named "~" in the home folder,
+  // and Bash's "ls ~/Desktop/notes.html" then could not find the page.
+  // Such a path is exact, so the retyped-path guesses below leave it alone
+  // (from home, a new ~/Desktop/notes.html was once taken for ~/notes.html).
+  const fromHome = p === '~' || p?.startsWith('~/');
+  if (fromHome) p = homedir() + p.slice(1);
   // "MATH/…" is the user's math notes folder (src/agent/expertise.mjs),
   // read-only, unless the project really has a MATH folder of its own.
   if ((p === 'MATH' || p.startsWith('MATH/')) && !existsSync(resolve(cwd, p))) {
@@ -184,7 +191,8 @@ export function resolvePath(cwd, p) {
   // Small models retype the project's full path and get it slightly wrong.
   // A parent of the project folder means the project folder; otherwise try
   // the end of the path inside the project.
-  if (isAbsolute(p) && abs !== cwd && `${cwd}${sep}`.startsWith(`${abs}${sep}`)) abs = cwd;
+  if (fromHome) { /* exact: no guessing */ }
+  else if (isAbsolute(p) && abs !== cwd && `${cwd}${sep}`.startsWith(`${abs}${sep}`)) abs = cwd;
   else if (isAbsolute(p) && !existsSync(abs)) {
     {
       const parts = abs.split(sep).filter(Boolean);

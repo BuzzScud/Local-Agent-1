@@ -252,8 +252,10 @@ test('the walk-out: commands and reads outside the project are refused, even aut
   ];
   const { events } = await run(replies);
   const tools = events.filter((e) => e.type === 'tool');
-  expect(tools.slice(0, 4).map((t) => [t.view.kind, t.error])).toEqual([['denied', true], ['denied', true], ['error', true], ['denied', true]]);
+  // ~/.ssh/config is the real home file now (it was a missing "~" folder in the project), so it is refused as outside.
+  expect(tools.slice(0, 4).map((t) => [t.view.kind, t.error])).toEqual([['denied', true], ['denied', true], ['denied', true], ['denied', true]]);
   expect(tools[0].view.message).toContain('outside the project folder');
+  expect(tools[2].view.message).toContain('outside the project folder');
   expect(tools[4].error).toBeFalsy(); // inside still works
 });
 

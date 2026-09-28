@@ -1,6 +1,6 @@
 import { test, expect, beforeAll } from 'bun:test';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { findEdit, parseArgs, prepare, execute, display, resolvePath } from '../src/agent/tools.mjs';
 import { diffLines } from '../src/tools/edit.mjs';
@@ -165,6 +165,19 @@ test('near-copies with a typo match, and the lines meant to stay are restored ex
   expect(r.after).not.toContain("g, ');");
   // too different → no match
   expect(findEdit(file, 'export function other(x) {\n  return x * 2;\n}', 'y').ok).toBe(false);
+});
+
+// 28 Sep: Gemma wrote "~/Desktop/notes.html" from the home folder; the path was
+// read as a folder named "~" inside it, so the page landed in ~/~/Desktop and
+// Bash's "ls ~/Desktop/notes.html" could not find it.
+test('a path starting with ~ means the home folder, as in the shell', () => {
+  const home = homedir();
+  expect(resolvePath(home, '~/Desktop/notes.html').abs).toBe(join(home, 'Desktop/notes.html'));
+  expect(resolvePath(home, '~/Desktop/notes.html').inside).toBe(true);
+  expect(resolvePath(home, '~').abs).toBe(home);
+  expect(resolvePath(dir, '~/Desktop/notes.html').abs).toBe(join(home, 'Desktop/notes.html'));
+  expect(resolvePath(dir, '~/Desktop/notes.html').inside).toBe(false);
+  expect(resolvePath(dir, '~notes.js').abs).toBe(join(dir, '~notes.js'));
 });
 
 test("Read's header line copied into content is taken off", async () => {
