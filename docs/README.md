@@ -8,5 +8,8 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 68 KB | 2026-09-28 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 71 KB | 2026-09-28 |
+| [reports/agentic-coder-mac-memory-built-2026-09-28.html](reports/agentic-coder-mac-memory-built-2026-09-28.html) | page | Mac memory · built | 14 KB | 2026-09-28 |
+| [tests/gemma-test-2-low-vs-high-2026-09-28.html](tests/gemma-test-2-low-vs-high-2026-09-28.html) | page | Gemma Test 2: Low vs High | 11 KB | 2026-09-28 |
+| [design rounds/agentic-coder-mac-memory-3-designs-2026-09-28.html](design%20rounds/agentic-coder-mac-memory-3-designs-2026-09-28.html) | page | Mac memory · 3 designs | 54 KB | 2026-09-28 |
 | [older versions/btw-side-question-plan-2026-09-28.html](older%20versions/btw-side-question-plan-2026-09-28.html) | page | /btw plan | 19 KB | 2026-09-28 |

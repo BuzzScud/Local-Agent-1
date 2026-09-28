@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Test 2: Low vs High</title>
+<style>
+:root { --bg:#fbfbfa; --card:#ffffff; --ink:#1d1d1f; --dim:#6b6b70; --line:#e4e4e2; --soft:#f3f3f1; --ok:#1f7a3d; --okbg:#e6f4ea; --bad:#b3261e; --badbg:#fce8e6; --warn:#8a5a00; --warnbg:#fdf1d8; --best:#eef4ff; --bestink:#1f4fbf; --add:#e6f4ea; --del:#fce8e6; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#161617; --card:#1f1f21; --ink:#ececee; --dim:#9a9aa0; --line:#333336; --soft:#26262a; --ok:#6fd08c; --okbg:#1c3324; --bad:#ff8a80; --badbg:#3a1f1d; --warn:#f0c060; --warnbg:#3a2f16; --best:#1d2a44; --bestink:#9dbaff; --add:#1c3324; --del:#3a1f1d; } }
+:root[data-theme="dark"] { --bg:#161617; --card:#1f1f21; --ink:#ececee; --dim:#9a9aa0; --line:#333336; --soft:#26262a; --ok:#6fd08c; --okbg:#1c3324; --bad:#ff8a80; --badbg:#3a1f1d; --warn:#f0c060; --warnbg:#3a2f16; --best:#1d2a44; --bestink:#9dbaff; --add:#1c3324; --del:#3a1f1d; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+main { max-width:780px; margin:0 auto; padding:40px 16px 64px; }
+h1 { font-size:30px; line-height:1.2; margin:0 0 6px; letter-spacing:-0.01em; }
+.kicker { color:var(--dim); font-size:14px; margin:0 0 18px; }
+h2 { font-size:19px; margin:40px 0 12px; }
+p { margin:0 0 14px; }
+.lead { font-size:18px; }
+.dim { color:var(--dim); }
+code, pre, .diff { font:13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background:var(--soft); padding:1px 5px; border-radius:5px; overflow-wrap:anywhere; }
+.cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin:24px 0 8px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.card .k { font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color:var(--dim); white-space:nowrap; }
+.card .v { font-size:24px; font-weight:650; margin-top:4px; }
+.card .s { font-size:13.5px; color:var(--dim); }
+table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+th, td { text-align:left; padding:11px 14px; border-top:1px solid var(--line); vertical-align:top; }
+thead th { border-top:0; font-size:14px; color:var(--dim); font-weight:600; }
+thead th small { display:block; font-weight:400; font-size:12.5px; }
+td:first-child { width:44%; }
+td .m { font-weight:600; display:block; }
+td .f { font-size:13px; color:var(--dim); }
+td.best { background:var(--best); color:var(--bestink); font-weight:600; }
+td.tag-ok { color:var(--ok); font-weight:650; }
+td.tag-bad { color:var(--bad); font-weight:650; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.col { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; min-width:0; }
+.col h3 { margin:0 0 8px; font-size:16px; }
+ol.steps { margin:0; padding-left:22px; font-size:15px; }
+ol.steps li { margin:3px 0; }
+.sl { font-weight:600; }
+.tg { font-size:12px; padding:1px 7px; border-radius:99px; white-space:nowrap; }
+.tg-ok { background:var(--okbg); color:var(--ok); }
+.tg-warn { background:var(--warnbg); color:var(--warn); }
+.diff { border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-top:8px; }
+.dh { background:var(--soft); padding:6px 10px; color:var(--dim); }
+.dl { padding:0 10px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.dl.add { background:var(--add); }
+.dl.del { background:var(--del); }
+.dm { display:inline-block; width:14px; color:var(--dim); }
+.said { font-size:15px; border-left:3px solid var(--line); padding:2px 0 2px 12px; margin:10px 0 14px; }
+ul.notes { padding-left:20px; margin:0; }
+ul.notes li { margin:6px 0; }
+.paths { font:12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--dim); overflow-wrap:anywhere; margin-top:40px; border-top:1px solid var(--line); padding-top:14px; }
+@media (max-width: 620px) {
+  .cards { grid-template-columns:1fr; }
+  .two { grid-template-columns:1fr; }
+  h1 { font-size:25px; }
+  td:first-child { width:40%; }
+  th, td { padding:10px; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Test 2 on Gemma: Low vs High</h1>
+<p class="kicker">Practice test 2 (“fix the bug”) · Gemma 4 12B on this Mac · 32k context · one run each · Sep 28, 2026</p>
+<p class="lead">Both passed. Low was 8.4× faster (23 s against 3 min 14 s), and both made the same fix. On this test, thinking cost time and bought nothing.</p>
+
+<div class="cards">
+  <div class="card"><div class="k">Passed</div><div class="v">2 of 2</div><div class="s">Low ✓ · High ✓</div></div>
+  <div class="card"><div class="k">Time</div><div class="v">23 s / 3 min 14 s</div><div class="s">Low / High</div></div>
+  <div class="card"><div class="k">Tokens written</div><div class="v">185 / 2,247</div><div class="s">Low / High</div></div>
+</div>
+
+<h2>The test</h2>
+<p>A tiny project with a statistics file and its tests. One test fails because <code>median()</code> is wrong for an even number of values: it returns one middle value instead of the average of the two. The request Gemma gets:</p>
+<p class="said">The tests in this project fail. Find the bug and fix it (fix the code, not the tests).</p>
+<p class="dim">It passes when every test passes and the test file is unchanged.</p>
+
+<h2>Side by side</h2>
+<table>
+<thead><tr><th>Measure</th><th>Low<small>thinking off</small></th><th>High<small>thinking on, up to 2,048 thinking tokens a call</small></th></tr></thead>
+<tbody>
+<tr><td><span class="m">Result</span><span class="f">the task's own check: all tests pass, test file untouched</span></td><td class=" tag-ok">Passed</td><td class=" tag-ok">Passed</td></tr>
+<tr><td><span class="m">Time</span><span class="f">from the request to the answer</span></td><td class="best">23 s</td><td class="">3 min 14 s</td></tr>
+<tr><td><span class="m">Tokens written</span><span class="f">thinking and answer, every model call</span></td><td class="best">185</td><td class="">2,247</td></tr>
+<tr><td><span class="m">Of those, thinking</span><span class="f">High stops thinking at 2,048</span></td><td class="">none</td><td class="">≈ 2,048 (the cap)</td></tr>
+<tr><td><span class="m">Model calls</span><span class="f">the fix, then the closing line</span></td><td class="">2</td><td class="">2</td></tr>
+<tr><td><span class="m">Writing speed</span><span class="f">tokens a second</span></td><td class="">12.1</td><td class="">12.1</td></tr>
+<tr><td><span class="m">Tool steps</span><span class="f">plan, tests, reads, the change</span></td><td class="">6</td><td class="">6</td></tr>
+<tr><td><span class="m">Path</span><span class="f">how Agentic Coder sorted the request</span></td><td class="">fix</td><td class="">fix</td></tr>
+<tr><td><span class="m">Fix tries</span><span class="f">✓ passed, ✗ failed</span></td><td class="">✓</td><td class="">✓</td></tr>
+</tbody>
+</table>
+<p class="dim" style="margin-top:8px;font-size:14px">Blue = the better of the two, where one is better.</p>
+
+<h2>What each one did</h2>
+<div class="two">
+<div class="col"><h3>Low</h3><ol class="steps"><li><span class="sl">Plan</span></li><li><span class="sl">Bash</span> <code>node --test</code> <span class="tg tg-warn">tests fail, as expected</span></li><li><span class="sl">Read</span> <code>stats.mjs</code></li><li><span class="sl">Ask</span> <code>Before I change anything: change stats.mjs (+3 −0). Go ahead? Say yes,…</code></li><li><span class="sl">Update</span> <code>stats.mjs</code></li><li><span class="sl">Bash</span> <code>node --test</code> <span class="tg tg-ok">tests pass</span></li></ol><div class="diff"><div class="dh">stats.mjs</div><div class="dl "><span class="dm"> </span>  const sorted = [...values].sort((a, b) =&gt; a - b);</div><div class="dl "><span class="dm"> </span>  const mid = Math.floor(sorted.length / 2);</div><div class="dl add"><span class="dm">+</span>  if (sorted.length % 2 === 0) {</div><div class="dl add"><span class="dm">+</span>    return (sorted[mid - 1] + sorted[mid]) / 2;</div><div class="dl add"><span class="dm">+</span>  }</div><div class="dl "><span class="dm"> </span>  return sorted[mid];</div><div class="dl "><span class="dm"> </span>}</div></div><p class="said">It calculates the average of the two middle elements when the sorted list has an even number of items. Fixed stats.mjs; all 4 tests pass.</p></div>
+<div class="col"><h3>High</h3><ol class="steps"><li><span class="sl">Plan</span></li><li><span class="sl">Bash</span> <code>node --test</code> <span class="tg tg-warn">tests fail, as expected</span></li><li><span class="sl">Read</span> <code>stats.mjs</code></li><li><span class="sl">Ask</span> <code>Before I change anything: change stats.mjs (+3 −0). Go ahead? Say yes,…</code></li><li><span class="sl">Update</span> <code>stats.mjs</code></li><li><span class="sl">Bash</span> <code>node --test</code> <span class="tg tg-ok">tests pass</span></li></ol><div class="diff"><div class="dh">stats.mjs</div><div class="dl "><span class="dm"> </span>  const sorted = [...values].sort((a, b) =&gt; a - b);</div><div class="dl "><span class="dm"> </span>  const mid = Math.floor(sorted.length / 2);</div><div class="dl add"><span class="dm">+</span>  if (sorted.length % 2 === 0) {</div><div class="dl add"><span class="dm">+</span>    return (sorted[mid - 1] + sorted[mid]) / 2;</div><div class="dl add"><span class="dm">+</span>  }</div><div class="dl "><span class="dm"> </span>  return sorted[mid];</div><div class="dl "><span class="dm"> </span>}</div></div><p class="said">It calculates the average of the two middle elements when the sorted array has an even number of items. Fixed stats.mjs; all 4 tests pass.</p></div>
+</div>
+
+<h2>What this shows, and what it does not</h2>
+<ul class="notes">
+<li>It is <b>one test, run once each</b>. It says how Low and High behave on an easy, clear bug. It does not say which is better in general. The plan's rule needs all 28 tests: High must pass at least 2 more than Low.</li>
+<li>The first test run failing is the point of the test (the bug is real), not a mistake.</li>
+<li>Both made the same change, line for line.</li>
+<li>High's fix call wrote 2,226 tokens. Thinking stops at 2,048, and the fix itself is about the size of Low's (164 tokens), so High thought up to its cap: about 3 minutes at 12 tokens a second, for the same three lines.</li>
+<li>The bench's own summary says 0 tokens for both runs: it counts only the chat's stream, not the fix tries (the same gap the Musing line had). The counts here come from the model server's log.</li>
+</ul>
+
+<div class="paths">
+Raw results: ~/Desktop/agentic-coder/models/gemma-4-12b/results/test2-low-high-2026-09-28/<br>
+Page builder: ~/Desktop/agentic-coder/models/gemma-4-12b/results/test2-low-high-2026-09-28/build-page.mjs<br>
+Command: node models/evals/bench/run.mjs --model gemma --think both --effort high --only 2
+</div>
+</main>
+</body>
+</html>
