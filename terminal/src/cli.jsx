@@ -29,6 +29,7 @@ async function askOnTerminal(question, req) {
   return line.trim() || null;
 }
 import { loadSettings } from './app/store.mjs';
+import { helpersFrom } from './app/helpers.mjs';
 import { memoryOn } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
@@ -221,6 +222,8 @@ if (opts.print) {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots, limits,
+      // The context helpers: as /helpers left them (AGENTIC_HELPERS wins).
+      helpers: helpersFrom(settings),
       // The memory: facts brought back, and what the run taught saved before it ends.
       memory: memoryOn(settings) ? { save: (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.

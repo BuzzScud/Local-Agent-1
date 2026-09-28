@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout } from './screen.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
+import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
@@ -182,9 +183,16 @@ export function App({ opts, win, onRestart }) {
     const remembers = memoryOn(settings);
     if (remembers) { try { openMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
     const notes = projectNotes(cwd, 6000, { memory: remembers });
+    // The context helpers (agent/helpers.mjs): all on unless /helpers (in
+    // settings.json) or AGENTIC_HELPERS says otherwise. The small model that
+    // compares meanings serves both the memory and the code search.
+    const helpers = helpersFrom(settings);
+    const embedder = (remembers || helpers.has('rag')) && embedderReady() ? new Embedder() : null;
     agentRef.current = new Agent({
       // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
-      memory: remembers ? { embedder: embedderReady() ? new Embedder() : null, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
+      memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
+      // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
+      helpers, embedder, ranker: embedder,
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
@@ -577,7 +585,7 @@ export function App({ opts, win, onRestart }) {
     // What the memory has not saved yet is handed to a process of its own,
     // which needs the model a little longer and stops it when it is done.
     const handed = autoRef.current.leave({ stopAfter: Boolean(serverRef.current?.child) });
-    await agent.memory?.embedder?.stop({ keep: true }).catch(() => {});
+    await agent.embedder?.stop({ keep: true }).catch(() => {});
     await serverRef.current?.stop({ keep: handed });
     exit();
   }, [exit, saveNow, agent]);
@@ -825,6 +833,25 @@ export function App({ opts, win, onRestart }) {
         const plain = (f) => ({ n: f.n, text: f.text.replace(/\s+/g, ' '), event: looksLikeEvent(f.text) });
         const tilde = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
         push({ type: 'rules', always: list.always.map(plain), other: list.other.map(plain), off: list.off.map(plain), tokens: list.tokens, max: ALWAYS_MAX, where: tilde(dirs.you) });
+        break;
+      }
+      case 'helpers': {
+        // The context helpers, numbered, on or off; "/helpers off 3" switches one.
+        const [what = '', ...rest] = arg.trim().split(/\s+/);
+        if (what) {
+          if (busy) { flash('Wait for Agentic Coder to finish first'); break; }
+          const r = changeHelpers(agent.helpers, what.toLowerCase(), rest.join(' '));
+          if (r.changed) {
+            agent.helpers = r.on;
+            saveSettings({ helpers: [...r.on] });
+            // The code search needs the small model, which the memory may not have started.
+            if (r.on.has('rag') && !agent.embedder && embedderReady()) agent.embedder = new Embedder();
+          }
+          push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
+          break;
+        }
+        const set = helpersEnv();
+        push({ type: 'panel', title: `Helpers · ${agent.helpers.size} of 4 on · what comes along with a request before the first step${set !== undefined ? ` · AGENTIC_HELPERS=${set} decides` : ''}`, pad: 27, rows: helperRows(agent.helpers, agent.lastHelpers ?? []) });
         break;
       }
       case 'init':
