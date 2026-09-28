@@ -66,6 +66,24 @@ export function excerpts(cwd, files, terms, { around = 3, maxLines = 220, maxLin
   return { text: parts.join('\n\n'), hits: hits.length, lines: count, files: [...keep.keys()] };
 }
 
+// The lines of one file around the given line numbers (from 0), in the same
+// form as excerpts(): each run with its line range, ready to copy into an edit.
+export function linesAround(rel, lines, hits, { around = 3, maxLines = 80, maxLineLen = 1500 } = {}) {
+  const keep = new Set();
+  for (const h of hits) {
+    if (keep.size >= maxLines) break;
+    for (let i = Math.max(0, h - around); i <= Math.min(lines.length - 1, h + around); i++) if (lines[i].length <= maxLineLen) keep.add(i);
+  }
+  const nums = [...keep].sort((a, b) => a - b);
+  if (!nums.length) return '';
+  const parts = [];
+  let run = [nums[0]];
+  const flush = () => parts.push(`${rel} (lines ${run[0] + 1}-${run.at(-1) + 1}):\n\`\`\`\n${run.map((i) => lines[i]).join('\n')}\n\`\`\``);
+  for (const i of nums.slice(1)) { if (i === run.at(-1) + 1) run.push(i); else { flush(); run = [i]; } }
+  flush();
+  return parts.join('\n\n');
+}
+
 // The strings to look for, from the model (forced JSON).
 export async function searchTerms(ctx, { task, digest, files }) {
   const r = await complete({

@@ -61,13 +61,25 @@ refused, and macOS's own sandbox fences what a command can reach.
   at a time and feeds the result back. Eight tools: Read, List, Search, Edit, Write,
   Bash, TodoWrite and Ask. Built for small local models, from what the practice runs showed:
   - Read returns plain text (numbered lines got copied into edits); small files come
-    back whole, long ones as an outline first.
+    back whole, long ones as an outline first, with the lines that match the request and
+    this message's searches. `find` shows the lines around a word or name, so a long file
+    is never walked part by part. A part asked for twice is pointed back to; a third time
+    it is given again.
   - Edits match despite indentation slips and one-character typos (one clear place only);
     `replace_all` for renames. An edit that would break a file that parsed before is refused.
   - Write only creates files; existing files change through Edit.
   - Guards: repeated steps, looping output, a tool call written as text or inside the
-    thinking, and "announce then stop"; old output trimmed and the conversation
-    summarized when memory fills.
+    thinking, and "announce then stop".
+  - When memory fills, the model writes its notes in the conversation it already holds
+    and carries on from the request and the notes (plus Bonsai's own list of what was read
+    and changed). Emptying old output, the way before, made it read everything after it
+    again: three to four minutes each time. That way is still the fallback, and
+    `BONSAI_MEMORY=trim` brings it back.
+  - A question changes nothing: Edit and Write are turned away, and a command that is not
+    plain reading runs in a throwaway copy of the project.
+  - A question starts with the code it is about already read (`src/flows/explain.mjs`):
+    the files it names, the definitions of the names it uses ("the test command" finds
+    `testCommand`), or all of a very small project. No model call, no search.
 - **Asking** (`src/flows/clarify.mjs` and the Ask tool): a bare "fix the bug" when nothing
   fails, or a lone word such as "api", gets a question before anything runs; the model
   can ask again mid-task as often as it needs. The model's question comes with two or
@@ -88,11 +100,22 @@ refused, and macOS's own sandbox fences what a command can reach.
   - Rename: every whole-word use in code, one diff, one question; no model.
   - Fix: run the tests, find the file, tries in a scratch copy, each told what the last
     one got wrong. Three tries on one function, then three wider tries as edit blocks.
+  - Fix, check first (`src/flows/pagecheck.mjs`): a bug the tests cannot see on a page
+    (something covered) gets a check made before any fix. Bonsai opens the page in the
+    browser the project already has (Playwright), the way the project's own page checks
+    do; the model picks the steps from what is on the page; the browser finds what covers
+    what, and why (the two layers that are compared, and the lines that set them). The
+    check must fail today, you approve it, the tries are scored by it, and it stays in
+    the project. A fix that hides the covering thing does not pass. With no browser, or
+    no passing try, the work goes step by step, with the check and the findings in hand.
+    `BONSAI_CHECK_FIRST=off` turns it off; a `page` entry in `.bonsai/settings.json`
+    (`serve`, `in`, `port`, `url`) says how to open a page when Bonsai cannot tell.
   - Change: a test first (cross-checked against drafts, then approved by you), then
     tries. Two tests and two drafts; more only when they disagree.
   - Several files: the files are planned from the project map, one test, then edit
     blocks across all of them (`src/flows/multi.mjs`), with guards: only the planned
-    files change and nothing is quietly removed.
+    files change and nothing is quietly removed. A draft that also touches the tests
+    keeps its changes to the source; the test comes from its own step.
   - Anything a focused path cannot finish goes step by step. `--no-flows` always does.
 - **The project map** (`src/tools/repomap.mjs`, cached under `~/.bonsai-code/maps`) is
   what files are chosen from and the first thing the loop sees in a bigger project.

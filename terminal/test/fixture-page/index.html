@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shop</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <input id="search" placeholder="Search products">
+    <ul id="results" class="menu" hidden></ul>
+  </header>
+  <div class="chart"></div>
+  <aside class="legend">
+    <div class="legend-row">Price 12.00</div>
+    <div class="legend-row">Stock 4</div>
+  </aside>
+</div>
+<script>
+const box = document.getElementById('search');
+const list = document.getElementById('results');
+box.addEventListener('input', () => {
+  list.hidden = !box.value;
+  list.innerHTML = ['Apple', 'Apricot', 'Avocado'].map((n) => '<li>' + n + '</li>').join('');
+});
+</script>
+</body>
+</html>

@@ -54,7 +54,7 @@ const ok = (label, cond) => results.push([label, Boolean(cond)]);
   ok("project: reads MAIN2026's AGENTS.md and home's", a.messages[0].content.includes('MARKER-PROJECT-RULES') && a.messages[0].content.includes('MARKER-HOME-RULES'));
   ok('project: the home-folder note is gone', !a.messages[0].content.includes('not a project'));
   ok('project: sorted as a Layout bug', notes.some((n) => /This looks like a Layout bug/.test(n)));
-  ok('project: skipped the test suite, went step by step', notes.some((n) => /can't see a Layout bug.*step by step/.test(n)));
+  ok('project: skipped the test suite, went step by step', notes.some((n) => /(can't see a Layout bug|no page to open in a browser|no browser to check).*step by step/.test(n)));
   const chat = fake.requests.filter((r) => r.stream).at(-1);
   const sent = chat?.messages.filter((m) => m.role === 'user').map((m) => m.content).join('\n') ?? '';
   ok('project: the Layout steps went with the request to the model', sent.includes('How to fix a Layout bug'));

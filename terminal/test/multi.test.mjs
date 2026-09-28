@@ -166,7 +166,10 @@ test('multi-file change: a draft that adds a file on the side, or deletes a func
   const { reason, events } = await run(cwd, task, replies);
   expect(reason).toBe('done');
   const drafts = events.filter((e) => e.type === 'tries-done' && e.label === 'Drafting changes').map((e) => e.marks.join(''));
-  expect(drafts).toEqual(['✗✗', '✓✓']);
+  // The draft with a test file on the side keeps its changes to the source
+  // (since 2026-09-27; the file itself never reaches the project, below);
+  // the one that deletes a function is refused.
+  expect(drafts[0]).toBe('✓✗');
   expect(readFileSync(join(cwd, 'format.mjs'), 'utf8')).toContain('export function formatMoney');
   expect(existsSync(join(cwd, 'test.mjs'))).toBe(false);
 }, 30_000);

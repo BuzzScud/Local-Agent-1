@@ -9,6 +9,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   const system = systemPrompt({ cwd, notes: projectNotes(cwd).text, git: gitSummary(cwd) });
   const agent = new Agent({
     url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots,
+    // Starting over from its notes: the instructions come back from their saved reading.
+    rewarm: warm && slots ? (sig) => warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal: sig }) : undefined,
     // approve(req) → false says no to one request even when auto-approving.
     // answers(question, req) → the reply to one of Bonsai's questions (null = no answer);
     // set answers.steers = true to also answer its plans (req.kind 'plan') and check-ins ('checkin').

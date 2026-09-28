@@ -162,6 +162,13 @@ export function App({ opts, win, onRestart }) {
         setPerm({ req, selected: 0, options: permissionOptions(req, prefix), resolve });
       }),
       waitForServer: async () => { if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },
+      // A conversation that starts over from its notes: the instructions come
+      // back from their saved reading (a server Bonsai started itself).
+      rewarm: async (signal) => {
+        const a = agentRef.current;
+        if (!serverRef.current || !a?.warmed || a.slots?.main === undefined) return;
+        await warmUp({ sessionMark: SESSION_MARK, url: a.url, model: a.model, system: a.messages[0].content, tools: toolSchemas(), thinking: a.thinking, effort: a.effort, slot: a.slots.main, helper: serverRef.current.draft, signal });
+      },
     });
   }
   const agent = agentRef.current;
@@ -425,6 +432,7 @@ export function App({ opts, win, onRestart }) {
       // A model kept loaded from an earlier start is ours now: warm it for
       // this folder too (instant when nothing changed). Another window's is left alone.
       if (!st.shared || st.idle) try {
+        agent.warmed = true; // this window's own reading of the instructions: a restart from notes restores it
         await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (alive) setStartPhase(p); } });
       } catch {}
       if (!alive) return;

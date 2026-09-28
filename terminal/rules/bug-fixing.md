@@ -6,7 +6,8 @@ Bonsai follows this file. It is the only copy: change it here and Bonsai changes
 - When a request is about a bug, Bonsai sorts it into one of the kinds below by its
   **Words**, and that kind's steps go with the request.
 - **Tests see it: no** means the project's whole test suite can't show that kind of bug. Bonsai's
-  fix mode then skips the suite and works step by step, unless the request names a check.
+  fix mode then skips the suite and works step by step, unless the request names a check, or
+  the main tool is a browser check and the project has a browser: then Bonsai makes the check first.
 - **Runs of the check** is how many runs in a row the named check must pass.
 - Bonsai rebuilds with this file inside it: after editing, run `bun run install-cli`.
 

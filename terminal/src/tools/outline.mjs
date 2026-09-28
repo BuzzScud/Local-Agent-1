@@ -78,5 +78,8 @@ export function outlineText(text, path, { max = 80 } = {}) {
   const rows = parts.slice(0, max).map((p) => `  ${`${p.line}-${p.end}`.padEnd(width * 2 + 2)} ${p.top ? '' : '  '}${p.name ?? `lines ${p.line}-${p.end}`}`);
   const more = parts.length > max ? `\n  … and ${parts.length - max} more parts` : '';
   const big = parts.filter((p) => p.top).sort((a, b) => (b.end - b.line) - (a.end - a.line))[0];
-  return `${path} is ${total} lines, too long to show at once. Its parts (lines, name):\n${rows.join('\n')}${more}\nRead only the part you need: Read again with offset (first line) and limit (number of lines)${big ? `, e.g. offset ${big.line} and limit ${Math.min(200, big.end - big.line + 1)} for ${big.name ?? 'the largest part'}` : ''}.`;
+  // A long page or stylesheet has no functions to list: blocks of 60 lines say
+  // nothing (a 27,000-line page gave 450 of them), so only the way in is given.
+  if (parts.length > 12 && parts.every((p) => !p.name)) return `${path} is ${total} lines, too long to show at once, and it has no functions to list. Read only the part you need: Read again with find (a word or a name, such as an id or a class) to see the lines around it, or with offset (first line) and limit (number of lines).`;
+  return `${path} is ${total} lines, too long to show at once. Its parts (lines, name):\n${rows.join('\n')}${more}\nRead only the part you need: Read again with find (a word or a name) to see the lines around it, or with offset (first line) and limit (number of lines)${big ? `, e.g. offset ${big.line} and limit ${Math.min(200, big.end - big.line + 1)} for ${big.name ?? 'the largest part'}` : ''}.`;
 }

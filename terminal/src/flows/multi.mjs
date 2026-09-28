@@ -78,11 +78,19 @@ export async function multiFlow(ctx, task, targets) {
     // is quietly removed. (A draft once added a stray test.mjs on the side.)
     const allowed = new Set([...targets, ...filesInText(cwd, task)]);
     const namedNew = new Set((task.match(/[\w./-]+\.[A-Za-z]{1,5}\b/g) ?? []).map((f) => f.replace(/^\.\//, '')));
+    const isTest = (rel) => isTestFile(rel) || /(^|\/)tests?\.[mc]?[jt]sx?$/.test(rel);
     const fromBlocks = (reply) => {
-      const r = applyBlocks(parseBlocks(reply), (rel) => scratch.read(rel));
+      // The test is written in its own step. A reply that also touches the
+      // tests keeps its changes to the source: a request that says "add a
+      // test for it" made every draft touch the test file, all of them were
+      // thrown away whole, and with no draft to compare the tests against a
+      // broken test was picked (practice task 28, 1 run in 5).
+      const all = parseBlocks(reply);
+      const blocks = all.filter((b) => !isTest(b.path));
+      if (all.length && !blocks.length) return { error: 'the reply changed only the tests; the source files must change' };
+      const r = applyBlocks(blocks, (rel) => scratch.read(rel));
       if (r.error) return { error: r.error };
       for (const [rel, text] of r.files) {
-        if (isTestFile(rel) || /(^|\/)tests?\.[mc]?[jt]sx?$/.test(rel)) return { error: 'the tests may not be changed' };
         if (!allowed.has(rel) && !namedNew.has(rel)) return { error: `${rel} is not one of the files to change (${targets.join(', ')})` };
         const g = guardChange(rel, scratch.read(rel), text, task);
         if (g) return { error: g };

@@ -21,8 +21,8 @@ const PART_MAX = 400;
 export const TOOL_DEFS = [
   {
     name: 'Read',
-    description: 'Read a text file. Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass offset (first line, from 1) and limit (number of lines) to read the part you need.',
-    parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), offset: { type: 'integer' }, limit: { type: 'integer' } }, required: ['path'] },
+    description: 'Read a text file. Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass find (a word or name) to see the lines around it, or offset (first line, from 1) and limit (number of lines) to read the part you need.',
+    parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), find: str('A word or name: shows the lines of the file around each place it appears'), offset: { type: 'integer' }, limit: { type: 'integer' } }, required: ['path'] },
   },
   {
     name: 'List',
@@ -383,6 +383,16 @@ function projectFiles(cwd, max = 40) {
   return `\nFiles in the project${r.total > max ? ` (first ${max} of ${r.total})` : ''}:\n${r.lines.join('\n')}`;
 }
 
+// The lines (from 0) of a file that hold a word or name: as plain text
+// first, whatever its case; then as a pattern. regex: a Search pattern, so
+// the pattern comes first.
+export function matchLines(lines, want, { regex = false } = {}) {
+  const asText = () => { const low = want.toLowerCase(); return lines.flatMap((l, i) => (l.length <= 1500 && l.toLowerCase().includes(low) ? [i] : [])); };
+  const asPattern = () => { try { const re = new RegExp(want, regex ? '' : 'i'); return lines.flatMap((l, i) => (l.length <= 1500 && re.test(l) ? [i] : [])); } catch { return []; } };
+  const first = regex ? asPattern() : asText();
+  return first.length ? first : regex ? asText() : asPattern();
+}
+
 export async function execute(name, args, prepared, env) {
   const max = env.maxResultChars ?? 12000;
   switch (name) {
@@ -404,6 +414,23 @@ export async function execute(name, args, prepared, env) {
       const full = readFileSync(p.abs, 'utf8');
       const total = full.split('\n').length;
       const whole = total <= WHOLE_MAX;
+      // find: the lines around a word or name, so a long file is never walked
+      // part by part. (On a 27,000-line page the model never once passed an
+      // offset; it read outlines again and again.)
+      const want = typeof args.find === 'string' ? args.find.trim() : '';
+      if (!whole && want && args.offset === undefined && !full.includes('\u0000')) {
+        const { linesAround } = await import('../flows/excerpts.mjs');
+        const lines = full.replace(/\n$/, '').split('\n');
+        const hits = matchLines(lines, want);
+        if (hits.length) {
+          const shown = linesAround(args.path, lines, hits, { around: 6, maxLines: 120 });
+          const count = shown.split('\n').filter((l) => !l.startsWith('```') && !/ \(lines \d+-\d+\):$/.test(l) && l !== '').length;
+          const where = hits.slice(0, 12).map((h) => h + 1).join(', ');
+          const head = `"${want}" is on ${hits.length} line${hits.length === 1 ? '' : 's'} of ${args.path} (${total} lines): ${where}${hits.length > 12 ? ', …' : ''}. The lines around ${hits.length > 12 ? 'the first of them' : 'them'}:`;
+          return { text: `${note}${head}\n\n${cut(shown, max)}`, view: { kind: 'read', lines: count, total, content: `${head}\n\n${shown}` } };
+        }
+        note += `"${want}" does not appear in ${args.path}. `;
+      }
       if (!whole && args.offset === undefined && args.limit === undefined && !full.includes('\u0000')) {
         const o = outlineText(full, args.path);
         // Lines matching the request's words go with the outline, so the model
@@ -418,6 +445,14 @@ export async function execute(name, args, prepared, env) {
           const terms = taskWords(env.request, 12).filter((t) => !/^(m?[jt]sx?|cjs|py|css|s?html?|file|line|lines)$/.test(t)).slice(0, 10);
           const ex = terms.length ? excerpts(env.cwd, [p.rel], terms, { around: 2, maxLines: 24 }) : { hits: 0 };
           if (ex.hits) hits = `\n\nLines matching the request (pass offset and limit to read around them):\n${ex.text}`;
+        }
+        // What this message's searches found in this file: the search gave one
+        // line each, here they are with the lines around them.
+        for (const pattern of (env.searches ?? []).slice(0, 3)) {
+          const { linesAround } = await import('../flows/excerpts.mjs');
+          const lines = full.replace(/\n$/, '').split('\n');
+          const found = matchLines(lines, pattern, { regex: true });
+          if (found.length) hits += `\n\nLines matching your search "${pattern}" (${found.length} in this file):\n${linesAround(args.path, lines, found, { around: 3, maxLines: 40 })}`;
         }
         return { text: `${note}${o}${hits}`, view: { kind: 'read', outline: true, parts: o.split('\n').length - 2, lines: 0, total, content: `${o}${hits}` } };
       }

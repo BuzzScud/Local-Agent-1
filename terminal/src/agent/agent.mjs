@@ -7,7 +7,7 @@ import { toolSchemas, parseArgs, display, prepare, execute, resolvePath, didYouM
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
-import { decide, commandPrefix } from './permissions.mjs';
+import { decide, commandPrefix, isReadOnly } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
@@ -18,6 +18,8 @@ import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp, sortLine } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
+import { Scratch } from '../flows/scratch.mjs';
+import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete } from '../flows/llm.mjs';
@@ -32,6 +34,7 @@ const FULL = 0.85; // past this share (with the reply room counted) trimming was
 // plus the answer. At 16k, a trim at 78% left too little, and a High reply
 // ran into the end of the memory (chart bug, 25 Sep).
 const replyRoom = (thinking) => (thinking ? 4096 : 2048);
+const NOTES_ROOM = 700; // tokens for its notes when memory fills (about 200 words, with room to spare)
 // Its own thinking goes back with each step: the model's chat template shows
 // every earlier step's thinking, and without it each step looked as if it had
 // thought nothing, so it worked the cause out again (or lost it). The newest
@@ -202,9 +205,16 @@ export function planLine(name, args, prepared) {
 }
 
 export class Agent extends EventEmitter {
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT }) {
+  // memory: what happens when the conversation fills the model's memory.
+  // 'notes' (the default): it writes down where it is and carries on from
+  // its notes. 'trim': old tool output is emptied first (the way before
+  // 2026-09-27; BONSAI_MEMORY=trim).
+  // rewarm: puts the saved reading of the instructions back in the model's
+  // memory (the app and `bonsai -p` pass it), so a conversation that starts
+  // over from its notes does not read the instructions again.
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, memory = process.env.BONSAI_MEMORY === 'trim' ? 'trim' : 'notes', rewarm }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt });
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, memory, rewarm });
     // When Bonsai Code started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
     this.slots = slots ?? null;
@@ -267,7 +277,7 @@ export class Agent extends EventEmitter {
   // for its kind of bug, and the user's own math notes when the topic came up.
   withTurnNotes(messages) {
     const t = this.turn;
-    const extras = [t?.bug, t?.math].filter(Boolean);
+    const extras = [t?.bug, t?.math, t?.carried].filter(Boolean);
     if (!extras.length) return messages;
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
@@ -291,6 +301,9 @@ export class Agent extends EventEmitter {
       setMode: (m) => this.setMode(m),
       tool,
       note: (text, tone = 'dim') => this.emit('note', { text, tone }),
+      // What a path found before handing over to the step-by-step way: a check
+      // to run after the change, and a note that goes with the request.
+      carry: (found) => { this.carried = found; },
       plan: (steps) => {
         const items = steps.map((text) => ({ text, status: 'pending' }));
         tool('Plan', '', { kind: 'todos', items: items.map((i) => ({ ...i })) });
@@ -364,6 +377,7 @@ export class Agent extends EventEmitter {
       }
     }
     // First the focused paths (rename / fix / change); the loop handles the rest.
+    this.carried = null;
     if (!follow && this.flows && this.mode !== 'plan') {
       try {
         const r = await runFlows(this.flowContext(signal), text);
@@ -407,10 +421,6 @@ export class Agent extends EventEmitter {
     }
     this.mathForce = false;
     const request = this.messages.at(-1);
-    // A question about named files: read them now, in one go, instead of
-    // letting the model find, list and read them a piece at a time.
-    this.prefetchMap();
-    if (kind === 'question' || (!kind && EXPLAIN.test(text))) this.prefetch(text);
     let reason = 'done';
     let repeatKey = null;
     let repeats = 0;
@@ -424,7 +434,7 @@ export class Agent extends EventEmitter {
       request: typeof request?.content === 'string' ? request.content : '',
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
-      fixing: kind === 'fix', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
+      fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
     if (bug && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.bug = { request, steps: kindText(bug), kind: bug };
       // A check the request names scores the change instead of the whole suite
@@ -432,12 +442,22 @@ export class Agent extends EventEmitter {
       // check named, the suite is not run at all — it would only mislead.
       this.turn.check = checkInText(text);
     }
+    // A check the fix path made and what the browser found (flows/pagecheck.mjs).
+    if (this.carried && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.carried = { request, notes: this.carried.note };
+      this.turn.check = this.carried.check;
+      this.carried = null;
+    }
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
         this.turn.math = { request, notes: mathNotes(math, text) };
         this.emit('note', { text: math.browse ? 'Using the math notes (~/Desktop/MATH).' : `Using the math notes: ${math.area.name} (~/Desktop/MATH).`, tone: 'dim' });
       } catch {}
     }
+    // A question about code: what it is about is read now, in one go, instead
+    // of letting the model find, list and read it a piece at a time.
+    this.prefetchMap();
+    if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
     let verified = false;
     let correctedAlready = false;
     let blankRetry = false;
@@ -603,6 +623,7 @@ export class Agent extends EventEmitter {
       else { reason = 'error'; this.emit('note', { text: e.message, tone: 'error' }); }
     } finally {
       this.busy = false;
+      this.turn?.scratch?.dispose();
     }
     if (reason === 'interrupted') {
       this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
@@ -637,11 +658,27 @@ export class Agent extends EventEmitter {
     this.emit('tool', { id, name: 'List', label: 'List', arg: 'the project map', view: { kind: 'list', count: map.entries.length, content: map.text } });
   }
 
-  // Puts the files a question names into the conversation as if the model
-  // had read them: whole when they fit, otherwise their outline.
-  prefetch(text) {
+  // "Explain this code" (flows/explain.mjs). Puts the code a question is
+  // about into the conversation as if the model had read it: the files it
+  // names (whole when they fit, otherwise their parts and the lines that
+  // match the question), then the definitions of the names it uses.
+  async prefetch(text) {
     let budget = PREFETCH_MAX_CHARS;
-    for (const f of filesNamed(this.cwd, text)) {
+    const given = (rel, args, body, view) => {
+      budget -= body.length;
+      const id = `read_${Date.now()}_${this.messages.length}`;
+      const result = { role: 'tool', tool_call_id: id, content: body };
+      this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Read', arguments: JSON.stringify(args) } }] });
+      this.messages.push(result);
+      // Asked for again, it is pointed back to (runTool), like any part already read.
+      const abs = resolvePath(this.cwd, rel).abs;
+      let mtime = null;
+      try { mtime = statSync(abs).mtimeMs; } catch {}
+      this.turn?.reads?.set(`${abs}|${args.offset ?? ''}|${args.limit ?? ''}|`, { msg: result, mtime });
+      this.emit('tool', { id, name: 'Read', label: 'Read', arg: rel, view });
+    };
+    const named = filesNamed(this.cwd, text);
+    for (const f of named) {
       if (this.readFiles.has(f.abs) || budget <= 0) continue;
       let body;
       let view;
@@ -654,15 +691,28 @@ export class Agent extends EventEmitter {
           view = { kind: 'read', lines, total: lines, content: full };
           this.readFiles.add(f.abs);
         } else {
-          body = outlineText(full, f.rel);
-          view = { kind: 'read', outline: true, parts: body.split('\n').length - 2, lines: 0, total: lines, content: body };
+          // As the Read tool gives a long file: its parts, and the lines that match the question.
+          const r = await execute('Read', { path: f.rel }, {}, { cwd: this.cwd, request: text, maxResultChars: this.maxResultChars });
+          if (r.error) continue;
+          body = r.text;
+          view = r.view;
         }
       } catch { continue; }
-      budget -= body.length;
-      const id = `read_${Date.now()}_${f.rel.length}`;
-      this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Read', arguments: JSON.stringify({ path: f.rel }) } }] });
-      this.messages.push({ role: 'tool', tool_call_id: id, content: body });
-      this.emit('tool', { id, name: 'Read', label: 'Read', arg: f.rel, view });
+      given(f.rel, { path: f.rel }, body, view);
+    }
+    // The names the question uses: the part of the file that defines each.
+    if (isHomeFolder(this.cwd)) return;
+    let parts = [];
+    const skip = named.filter((f) => this.readFiles.has(f.abs)).map((f) => f.rel);
+    // A question that names its files has said where to look: the rest of a
+    // small project is not read on top.
+    try { parts = named.length ? [] : wholeSmallProject(this.cwd, { skip }); if (!parts.length) parts = partsFor(this.cwd, text, { skip }); } catch {}
+    for (const p of parts) {
+      if (budget <= 0) break;
+      const whole = p.from === 1 && p.to >= p.total;
+      const head = whole ? `${p.rel} (${p.total} lines):` : `${p.rel} (lines ${p.from}-${p.to} of ${p.total}; pass offset to read more):`;
+      given(p.rel, whole ? { path: p.rel } : { path: p.rel, offset: p.from, limit: p.to - p.from + 1 }, `${head}\n${p.text}`, { kind: 'read', lines: p.to - p.from + 1, total: p.total, content: p.text });
+      this.readFiles.add(resolvePath(this.cwd, p.rel).abs);
     }
   }
 
@@ -816,7 +866,15 @@ export class Agent extends EventEmitter {
     }
     const args = parsed.args;
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, request: this.turn?.request ?? '', setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    // A question changes nothing. (A practice question once tested an idea by
+    // writing a scratch file inside the project, 2026-09-26.) Edit and Write
+    // are turned away; a command that is not plain reading runs in a
+    // throwaway copy of the project (below).
+    if (this.turn?.question && (call.name === 'Edit' || call.name === 'Write')) {
+      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'A question changes no files' }, error: true });
+      return { text: 'This is a question, so no file is changed. Answer it from what you have read. If a change is needed, say which one, and the user can ask for it.', error: true };
+    }
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -868,20 +926,27 @@ export class Agent extends EventEmitter {
     let mtime = null;
     if (call.name === 'Read' && this.turn?.reads) {
       const abs = resolvePath(this.cwd, args.path).abs;
-      readKey = `${abs}|${args.offset ?? ''}|${args.limit ?? ''}`;
+      readKey = `${abs}|${args.offset ?? ''}|${args.limit ?? ''}|${args.find ?? ''}`;
       try { mtime = statSync(abs).mtimeMs; } catch {}
       const seen = this.turn.reads.get(readKey);
-      if (seen && seen.mtime === mtime && this.messages.includes(seen.msg) && !String(seen.msg.content).startsWith('[older output removed')) {
+      // Asked a second time, it is pointed back; asked a third time, it gets
+      // the text again: at Low the model once asked four times in 20 seconds,
+      // was pointed back each time, and stopped as stuck.
+      if (seen && seen.mtime === mtime && this.messages.includes(seen.msg) && !String(seen.msg.content).startsWith('[older output removed') && !seen.pointed) {
+        seen.pointed = true;
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'same' } });
-        return { text: `You already read this part of ${shown.arg ?? args.path} and it has not changed since; it is above. Use it, or read a different part.` };
+        return { text: `You already read this part of ${shown.arg ?? args.path} and it has not changed since; it is above. Use it, or read a different part${args.find ? '' : ' (pass find with a word or name to see the lines around it)'}.` };
       }
     }
     const t0 = Date.now();
     this.emit('tool-running', { id, name: call.name, ...shown });
     let out;
-    try { out = await execute(call.name, args, prepared, env); } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
+    const aside = call.name === 'Bash' && this.turn?.question && !isReadOnly(args.command);
+    try { out = aside ? await this.runAside(args.command, signal) : await execute(call.name, args, prepared, env); } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
     if (readKey && !out.error) Object.assign(out, { readKey, mtime });
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
+    // This message's searches, newest first: a Read of a long file shows what they found in it.
+    if (this.turn && !out.error && call.name === 'Search' && args.pattern) this.turn.searches = [args.pattern, ...(this.turn.searches ?? []).filter((p) => p !== args.pattern)].slice(0, 3);
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs);
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
       this.turn.changed = true;
@@ -898,6 +963,19 @@ export class Agent extends EventEmitter {
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
+  }
+
+  // A command in a question turn that may write: it runs in a throwaway copy
+  // of the project (made once per message), so whatever it writes, your files
+  // stay as they are.
+  async runAside(command, signal) {
+    this.turn.scratch ??= new Scratch(this.cwd);
+    const r = await this.turn.scratch.run(command, { timeoutMs: 120_000, signal });
+    const all = r.out.replace(/\n$/, '').split('\n');
+    const lines = all.length > 80 ? [...all.slice(0, 40), `… ${all.length - 80} lines cut …`, ...all.slice(-40)] : all;
+    const status = r.timedOut ? '\n(stopped after 2 minutes)' : r.code === 0 ? '' : `\n(exit code ${r.code})`;
+    const text = `(This ran in a throwaway copy of the project: a question changes no files.)\n${(lines.join('\n') || '(no output)').slice(0, this.maxResultChars)}${status}`;
+    return { text, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines, ms: r.ms, timedOut: r.timedOut } };
   }
 
   // A forced-JSON check of the finished work against the request: null when
@@ -1014,6 +1092,11 @@ export class Agent extends EventEmitter {
     const room = replyRoom(this.thinking);
     let est = this.ctxUsed + pending;
     if (est + room < this.ctx * this.trimAt) return;
+    // Notes first. Emptying old output makes the model read again everything
+    // after it (measured: 186 to 261 s each time, up to half of a long try).
+    // Its notes are written in the conversation it already holds, so only
+    // the notes themselves are read afterwards.
+    if (this.memory === 'notes' && est + NOTES_ROOM < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
     let freed = 0;
     // Old thinking first: every step before the newest KEEP_THOUGHTS keeps
     // only its cause/fix lines (keyLines); the rest served its step already.
@@ -1041,6 +1124,104 @@ export class Agent extends EventEmitter {
     if (est + room >= this.ctx * FULL) await this.compact(signal);
   }
 
+  // Its notes, written by the model in the conversation it already holds
+  // (nothing to read but the request for them), then the conversation starts
+  // over from the request and the notes. False when no usable notes came.
+  async notesInPlace(signal) {
+    if (this.messages.length <= 3) return false;
+    this.emit('note', { text: 'Memory is filling up: writing down where I am, then carrying on from my notes…', tone: 'dim' });
+    const t0 = Date.now();
+    const ask = auto(`Your memory is nearly full. Write your notes now, in plain words and under 200 words, with no tool call: what you have done so far, the files and line numbers that matter, any cause you have already worked out (word for word), and the single next step.`);
+    // The newest tool output came after the model's last reply: it has not
+    // read it yet. Reading it only to summarize it away costs a whole step
+    // (70 s for 130 lines of a page, measured), so it is held back from the
+    // notes and follows them, as it is.
+    const held = this.heldBack();
+    const asked = held ? [...this.messages.slice(0, -held.length), held[0], { ...held[1], content: '(This output is kept for you: it comes back, whole, right after your notes.)' }] : this.messages;
+    let summary = '';
+    try {
+      const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
+      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: toolSchemas(), toolChoice: 'none', extra: { stop: ['<tool_call>'] }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM, slot: this.slots?.main, signal })) {
+        if (ev.type === 'text') summary += ev.text;
+      }
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      return false;
+    }
+    summary = summary.split('<tool_call>')[0].trim();
+    if (summary.length < 40) return false;
+    const before = this.ctxUsed;
+    if (!this.restartFrom(summary, held)) return false;
+    // The instructions are read from their saved state, not again from the start.
+    try { await this.rewarm?.(signal); } catch (e) { if (signal?.aborted) throw e; }
+    this.emit('compacted', { summary, inPlace: true, secs: (Date.now() - t0) / 1000, freed: Math.max(0, before - this.ctxUsed) });
+    return true;
+  }
+
+  // The newest tool call and its output, when the model has not read the
+  // output yet: [the assistant's call, the tool's result], or null.
+  heldBack() {
+    const [call, result] = this.messages.slice(-2);
+    if (result?.role !== 'tool' || call?.role !== 'assistant' || !call.tool_calls?.some((c) => c.id === result.tool_call_id)) return null;
+    // A short output costs nothing to read; holding it back would only add a step.
+    return tokensOf(String(result.content)) > 400 ? [call, result] : null;
+  }
+
+  // What it looked at and changed in this message, from Bonsai's own record:
+  // a summary can forget a file, this list cannot.
+  seenSoFar() {
+    const t = this.turn;
+    if (!t) return '';
+    const tilde = (abs) => (abs.startsWith(`${this.cwd}/`) ? abs.slice(this.cwd.length + 1) : abs);
+    const reads = new Map();
+    for (const key of t.reads?.keys() ?? []) {
+      const [abs, offset, limit, find] = key.split('|');
+      const what = find ? `around "${find}"` : offset ? `lines ${offset}-${Number(offset) + Number(limit || 150) - 1}` : 'from the top';
+      reads.set(tilde(abs), [...(reads.get(tilde(abs)) ?? []), what]);
+    }
+    const lines = [];
+    if (reads.size) lines.push(`Files I have read: ${[...reads].slice(-12).map(([f, w]) => `${f} (${[...new Set(w)].slice(0, 4).join('; ')})`).join(', ')}.`);
+    if (t.searches?.length) lines.push(`Searches I ran: ${t.searches.map((s) => `"${s}"`).join(', ')}.`);
+    const changed = [...new Set((t.diffs.match(/^(\S[^\n]*):$/gm) ?? []).map((l) => l.slice(0, -1)))];
+    if (changed.length) lines.push(`Files I have changed: ${changed.join(', ')}.`);
+    return lines.length ? `\n\nFrom Bonsai's record of this message:\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
+  }
+
+  // The conversation starts over from the request (word for word) and the
+  // notes; `held` (heldBack) follows them.
+  restartFrom(summary, held = null) {
+    // The request stays word for word (the summary once became "the task" and
+    // the model started the investigation over, in a folder it made up). The
+    // notes are Bonsai's own, in its own mouth, not a message from the user.
+    const capped = (s) => (s.length > 6000 ? `${s.slice(0, 6000)}\n${CUT_MARK}` : s);
+    const opening = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).map((m) => ({ role: m.role, content: capped(String(m.content)) }));
+    if (!opening.some((m) => m.role === 'user')) {
+      const req = [...this.messages].reverse().find((m) => m.role === 'user' && typeof m.content === 'string' && !m.content.startsWith('[') && !m.content.startsWith(AUTO));
+      if (req) opening.push({ role: 'user', content: capped(req.content) });
+      else return false; // nothing to anchor on: leave the conversation as it is
+    }
+    const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
+    // The notes that go with the request (the steps for its kind of bug, a
+    // check the fix path made) follow the request into the new conversation.
+    for (const x of [this.turn?.bug, this.turn?.math, this.turn?.carried].filter(Boolean)) {
+      const i = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).indexOf(x.request);
+      if (i >= 0) x.request = opening[i];
+    }
+    this.messages = [this.messages[0], ...opening,
+      // "Nothing is saved anywhere else": after its notes the model once went
+      // looking for them on disk (ls ~/.claude/sessions, chart bug, 27 Sep).
+      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes (all of them are here; nothing is saved anywhere else):\n${summary.trim()}${facts}${this.seenSoFar()}` },
+      { role: 'user', content: auto(held
+        ? 'Those are your own notes, and they may be imperfect. Pick up from them. The output of your last step follows; read it, then take the next step with the tools. Do not start the investigation over and do not re-read what the notes already answer.'
+        : 'Those are your own notes, and they may be imperfect. Pick up from them: take the single next step now with the tools. Do not start the investigation over and do not re-read what the notes already answer.') },
+      ...(held ?? []),
+    ];
+    if (this.turn) this.turn.opening = opening;
+    this.mapGiven = false;
+    this.ctxUsed = this.messages.reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : '') + tokensOf(m.reasoning_content ?? ''), 0) + 1300;
+    return true;
+  }
+
   async compact(signal, { instructions } = {}) {
     if (this.messages.length <= 3) return;
     this.emit('note', { text: 'Summarizing the conversation to free memory…', tone: 'dim' });
@@ -1057,23 +1238,6 @@ export class Agent extends EventEmitter {
     for await (const ev of streamChat({ url: this.url, messages: ask, thinking: false, sampling: this.model.sampling, maxTokens: 600, slot: this.slots?.side, signal })) {
       if (ev.type === 'text') summary += ev.text;
     }
-    // The request stays word for word (the summary once became "the task" and
-    // the model started the investigation over, in a folder it made up). The
-    // notes are Bonsai's own, in its own mouth, not a message from the user.
-    const capped = (s) => (s.length > 6000 ? `${s.slice(0, 6000)}\n${CUT_MARK}` : s);
-    const opening = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).map((m) => ({ role: m.role, content: capped(String(m.content)) }));
-    if (!opening.some((m) => m.role === 'user')) {
-      const req = [...this.messages].reverse().find((m) => m.role === 'user' && typeof m.content === 'string' && !m.content.startsWith('[') && !m.content.startsWith(AUTO));
-      if (req) opening.push({ role: 'user', content: capped(req.content) });
-      else return; // nothing to anchor on: leave the conversation as it is
-    }
-    const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
-    this.messages = [this.messages[0], ...opening,
-      { role: 'assistant', content: `My memory filled up, so I wrote down where I am. My notes:\n${summary.trim()}${facts}` },
-      { role: 'user', content: auto('Those are your own notes, and they may be imperfect. Pick up from them: take the single next step now with the tools. Do not start the investigation over and do not re-read what the notes already answer.') },
-    ];
-    this.mapGiven = false;
-    this.ctxUsed = this.messages.reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : '') + tokensOf(m.reasoning_content ?? ''), 0) + 1300;
-    this.emit('compacted', { summary: summary.trim() });
+    if (this.restartFrom(summary)) this.emit('compacted', { summary: summary.trim() });
   }
 }
