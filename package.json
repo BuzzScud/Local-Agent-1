@@ -20,7 +20,7 @@
     "eval:verify": "zsh models/evals/tools/verify-tasks.sh",
     "eval:notes": "node models/evals/bench/memory/claude-notes.mjs",
     "eval:recall": "node models/evals/bench/memory/recall.mjs",
-    "docs": "node docs/sync-docs.mjs",
+    "docs": "node docs/tools/sync-docs.mjs",
     "check": "node models/evals/tools/check.mjs",
     "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/agentic-coder && chmod 755 dist/agentic-coder",
     "install-cli": "bun run build && mkdir -p ~/.agentic-coder/app ~/.local/bin && cp dist/agentic-coder ~/.agentic-coder/app/agentic-coder.new && chmod 755 ~/.agentic-coder/app/agentic-coder.new && mv -f ~/.agentic-coder/app/agentic-coder.new ~/.agentic-coder/app/agentic-coder && sed \"s|__REPO__|$PWD|\" terminal/app/agentic-coder-launcher.sh > ~/.local/bin/coding.new && chmod +x ~/.local/bin/coding.new && mv -f ~/.local/bin/coding.new ~/.local/bin/coding && echo \"installed ~/.local/bin/coding: it rebuilds itself from $PWD when the code changes\"",

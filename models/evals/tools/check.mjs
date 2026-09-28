@@ -352,8 +352,8 @@ function pagesMirrored() {
   const src = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(root, n)).find((p) => existsSync(p)) ?? join(root, 'agentic-coder DOCS')), dst = join(root, 'docs');
   if (!existsSync(src)) return skipped('the DOCS folder is not here');
   const skip = (rel) => /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/.test(rel);
-  const own = new Set(['README.md', 'sync-docs.mjs', 'to-docs.mjs']);
-  const pages = filesUnder(src, skip), copies = filesUnder(dst, skip).filter((f) => !own.has(f));
+  const own = (f) => f === 'README.md' || f.startsWith('tools/'); // the index and the mirror's own scripts
+  const pages = filesUnder(src, skip), copies = filesUnder(dst, skip).filter((f) => !own(f));
   const open = [...pages.filter((f) => !copies.includes(f)).map((f) => `${f}  not in docs/ yet`),
     ...pages.filter((f) => copies.includes(f) && !readFileSync(join(src, f)).equals(readFileSync(join(dst, f)))).map((f) => `${f}  changed since it was copied`),
     ...copies.filter((f) => !pages.includes(f)).map((f) => `${f}  in docs/ but gone from the DOCS folder`)];

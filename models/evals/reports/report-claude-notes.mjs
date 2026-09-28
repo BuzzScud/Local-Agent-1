@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { docsPath } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/tools/to-docs.mjs';
 import { CLAUDE_RULES, notesCount, notesDir, readNotes, leftOut } from '../../../terminal/index.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');

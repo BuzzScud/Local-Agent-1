@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
-import { docsPath } from '../../docs/to-docs.mjs';
+import { docsPath } from '../../docs/tools/to-docs.mjs';
 const MODEL_NAME = MODELS[DEFAULT_MODEL].name;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');

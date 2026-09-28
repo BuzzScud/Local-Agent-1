@@ -7,8 +7,8 @@ import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const docsRoot = dirname(fileURLToPath(import.meta.url));
-const named = ['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(docsRoot, '..', n));
+const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..'); // this file is in <repo>/docs/tools/
+const named = ['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(repo, n));
 export const DOCS_DIR = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (named.find((p) => existsSync(p)) ?? named[0]);
 
 // Where a builder writes its page: into the DOCS folder (the pages' one

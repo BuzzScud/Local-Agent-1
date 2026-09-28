@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODELS, DEFAULT_MODEL } from '../../index.mjs';
-import { docsPath } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'); // the repo
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

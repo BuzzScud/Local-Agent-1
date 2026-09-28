@@ -92,7 +92,7 @@ writeFileSync(jsonPath, JSON.stringify(results, null, 2));
 log(`wrote ${jsonPath}`);
 
 // ---------- the page ----------
-const { docsPath } = await import(join(here, '..', '..', '..', 'docs', 'to-docs.mjs'));
+const { docsPath } = await import(join(here, '..', '..', '..', 'docs', 'tools', 'to-docs.mjs'));
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const [o, e] = results.sides;
 const editLine = (ed) => ed.op === 'scale' ? `${ed.tensor} · row ${ed.row} ${ed.k === 0 ? 'off' : '×' + ed.k}` : ed.op === 'copy' ? `${ed.tensor} · row ${ed.from} → ${ed.to}` : `${ed.tensor} · rows ${ed.a} ⇄ ${ed.b}`;

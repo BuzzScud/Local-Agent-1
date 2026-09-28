@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 import { Item, LiveArea } from '../../src/app/screen.jsx';
 import { SPINNERS, spinFrame } from '../../src/ui/theme.mjs';
 import { TURN, TOTAL, turnAt } from './spin.jsx';
-import { docsPath } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/tools/to-docs.mjs';
 
 if (process.env.FORCE_COLOR !== '2') throw new Error('run with FORCE_COLOR=2 (Apple Terminal = 256 colours)');
 const COLS = 64;

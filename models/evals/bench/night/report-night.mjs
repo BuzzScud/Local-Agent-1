@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { docsPath } from '../../../../docs/to-docs.mjs';
+import { docsPath } from '../../../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..'); // the repo
 const dir = process.argv[2];

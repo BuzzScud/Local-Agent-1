@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync } fr
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { docsPath } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/tools/to-docs.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..');

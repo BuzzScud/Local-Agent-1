@@ -1,6 +1,7 @@
 // Mirrors the folder "agentic-coder DOCS" at the top of the repo (where every Agentic Coder
 // diagram, preview, report and test page is saved) into this repo's docs/,
-// and writes docs/README.md, an index GitHub shows.
+// and writes docs/README.md, an index GitHub shows. It lives in docs/tools/ with
+// to-docs.mjs, so that docs/ itself holds only pages.
 //   bun run docs              copy new and changed files, remove files gone from the Desktop folder
 //   bun run docs --dry        say what would change, change nothing
 //   bun run docs --force      go ahead even if the Desktop folder looks mostly empty
@@ -10,9 +11,9 @@ import { join, dirname, relative, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url)); // <repo>/docs
+const here = dirname(dirname(fileURLToPath(import.meta.url))); // <repo>/docs (this file is in docs/tools/)
 const SRC = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? join(here, '..', 'agentic-coder DOCS');
-const KEEP = new Set(['README.md', 'sync-docs.mjs', 'to-docs.mjs']); // this folder's own files
+const own = (f) => f === 'README.md' || f.startsWith('tools/'); // this folder's own files: the index and these tools
 const SKIP = /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/;
 const dry = process.argv.includes('--dry');
 const force = process.argv.includes('--force');
@@ -34,7 +35,7 @@ const list = (root, dir = root, out = []) => {
 };
 
 const src = list(SRC);
-const dst = list(here).filter((f) => !KEEP.has(f));
+const dst = list(here).filter((f) => !own(f));
 // A folder that suddenly holds far fewer files than the repo copy was more
 // likely emptied or swapped by accident than cleaned on purpose.
 if (!force && dst.length >= 4 && src.length < dst.length / 2) {

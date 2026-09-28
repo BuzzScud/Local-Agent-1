@@ -9,7 +9,7 @@ import { readFileSync, writeFileSync, existsSync, copyFileSync, readdirSync } fr
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { docsPath } from '../../../docs/to-docs.mjs';
+import { docsPath } from '../../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const here = join(root, 'models/bonsai-2-27b/results');

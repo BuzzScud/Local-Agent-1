@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { DOCS_DIR } from '../../docs/to-docs.mjs';
+import { DOCS_DIR } from '../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Straight into the DOCS folder (the page is 1-2 MB of captured screens).

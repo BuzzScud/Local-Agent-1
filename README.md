@@ -40,13 +40,18 @@ agentic-coder/
 ├─ models/              part 2 · the models we use and test
 │  ├─ index.mjs         the one entry the terminal imports
 │  ├─ registry.mjs      the list of models and where their files live
-│  ├─ runtime/          llama-server, memory, warm-up, coding setup; engine/ = our build of it
+│  ├─ runtime/          llama-server, memory, warm-up, coding setup; engine/ = how llama.cpp is built (Prism's, or the official)
 │  ├─ gemma-4-12b/      the model in use: settings (results/ stays local)
+│  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
 │  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), reports, tools, dev
 │  └─ test/             unit tests of the models part
-└─ docs/                every diagram, preview and report page, the one home (mirrors agentic-coder DOCS/, which is on the Mac only)
+└─ docs/                every diagram, preview and report page, the one home (mirrors agentic-coder DOCS/, which is on the Mac only); tools/ = the mirror's two scripts
 ```
+
+Only on this Mac, not in git: each model's `results/`, `models/evals/dev/experiments/julia-recall/`
+(the memory-matcher experiment and its results), `agentic-coder DOCS/`, and `~/.agentic-coder`
+(the engines, the model files, settings, logs and the test record).
 
 ## Commands
 
@@ -69,8 +74,8 @@ Tests tab: `/tests` in Agentic Coder, or `coding tests`.
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 
-Setup on a new Mac: `bun install`, `bun run install-cli`, then `coding setup` builds the model server (Prism's
-llama.cpp with our Metal patch, a few minutes; needs cmake and Apple's command line
+Setup on a new Mac: `bun install`, `bun run install-cli`, then `coding setup` builds the model server (llama.cpp
+on the model's engine: Prism's with our Metal patch today, a few minutes; needs cmake and Apple's command line
 tools, see [`models/runtime/engine`](models/runtime/engine/README.md)) and downloads the model
 into `~/.agentic-coder`. Environment switches are `AGENTIC_*` (the old `BONSAI_*` names still work).
 

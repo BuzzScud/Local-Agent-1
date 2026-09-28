@@ -29,5 +29,5 @@ the processor. The bar was 27 right and at most 3 wrong; nothing reached both.
 
 The test is small, written by hand and run once: it shows the order of the
 methods more than their exact scores. Its files are in
-`models/evals/dev/experiments/julia-recall/`; raw results stay on the Mac in
-`models/embed-test/results/`.
+`models/evals/dev/experiments/julia-recall/`; raw results stay on the Mac beside them, in
+`results-embed-test/` (and the 27B picker's in `results-julia-1/`).

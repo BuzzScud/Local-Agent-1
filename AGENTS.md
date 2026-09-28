@@ -8,7 +8,7 @@
 - **Every page goes in `agentic-coder DOCS/`** (at the top of this repo, on the Mac only, not in git). Diagrams, previews, reports,
   test and result pages, PDFs: anything made about Agentic Coder is saved there, as one
   self-contained HTML file where it is a page. The report builders write their pages
-  there directly (`docsPath` in `docs/to-docs.mjs`); a page made by hand is saved there too.
+  there directly (`docsPath` in `docs/tools/to-docs.mjs`); a page made by hand is saved there too.
   Pages are not kept anywhere else in the repo, and capture outputs stay out of git.
   The folder has six groups, each a subfolder: `diagrams/` (how Agentic Coder is built),
   `reports/` (what got built, by day), `tests/` (measured runs and checks), `design rounds/`,
