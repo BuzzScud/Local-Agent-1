@@ -2,7 +2,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync, statSync, openSync } from 'node:fs';
 const R = new URL('../../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
-const { MODELS, DEFAULT_MODEL, thinkingKwargs } = await import(`${R}/models/registry.mjs`);
+const { MODELS, DEFAULT_MODEL, thinkingKwargs, SERVER_BIN } = await import(`${R}/models/registry.mjs`);
 const { serverArgs } = await import(`${R}/models/runtime/server.mjs`);
 const { systemPrompt, toolSchemas } = await import(`${R}/terminal/index.mjs`);
 const m = MODELS[DEFAULT_MODEL];
@@ -13,7 +13,7 @@ let srv;
 const log = openSync(new URL('./server.log', import.meta.url).pathname, 'a');
 async function start() {
   const t0 = Date.now();
-  srv = spawn(`${process.env.HOME}/.bonsai-code/bin/llama-server`, args(), { stdio: ['ignore', log, log] });
+  srv = spawn(SERVER_BIN, args(), { stdio: ['ignore', log, log] });
   for (;;) { try { if ((await fetch(`${URL0}/health`)).ok) break; } catch {} await new Promise((r) => setTimeout(r, 200)); }
   return (Date.now() - t0) / 1000;
 }

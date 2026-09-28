@@ -21,7 +21,7 @@ const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[DEFAULT_MODEL];
-const BENCH = join(HOME, 'bin', 'llama-bench');
+const BENCH = join(dirname(SERVER_BIN), 'llama-bench'); // built beside the server, see models/runtime/engine
 const out = { at: new Date().toISOString(), bench: [], reread: [], ptq1: null };
 const log = (s) => console.log(`[${new Date().toTimeString().slice(0, 8)}] ${s}`);
 

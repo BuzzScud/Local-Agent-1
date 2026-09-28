@@ -3,12 +3,12 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { openSync, readFileSync, readdirSync } from 'node:fs';
 const R = new URL('../../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
-const { MODELS, DEFAULT_MODEL } = await import(`${R}/models/registry.mjs`);
+const { MODELS, DEFAULT_MODEL, SERVER_BIN } = await import(`${R}/models/registry.mjs`);
 const { serverArgs } = await import(`${R}/models/runtime/server.mjs`);
 const [label, ...extra] = process.argv.slice(2);
 const logf = `./cache-${label}.log`;
 const log = openSync(logf, 'w');
-const srv = spawn(`${process.env.HOME}/.bonsai-code/bin/llama-server`, [...serverArgs(MODELS[DEFAULT_MODEL], { ctx: Number(process.env.CTX ?? 16384), port: 17652 }), '-lv', '4', ...extra], { stdio: ['ignore', log, log] });
+const srv = spawn(SERVER_BIN, [...serverArgs(MODELS[DEFAULT_MODEL], { ctx: Number(process.env.CTX ?? 16384), port: 17652 }), '-lv', '4', ...extra], { stdio: ['ignore', log, log] });
 process.on('exit', () => srv.kill());
 for (let i = 0; i < 120; i++) { try { if ((await fetch('http://127.0.0.1:17652/health')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 500)); }
 const fp = () => { const t = execFileSync('footprint', ['-p', String(srv.pid)], { encoding: 'utf8' }); return Number(/phys_footprint:\s*([\d.]+)\s*MB/.exec(t)?.[1] ?? /phys_footprint:\s*([\d.]+)\s*GB/.exec(t)?.[1] * 1000) / 1000; };

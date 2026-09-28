@@ -25,3 +25,5 @@ terminal/ui-walk/
 models/*/results/
 models/evals/dev/experiments/slots/
 models/evals/dev/experiments/*.log
+# The matcher experiment for memory (rejected): its files stay on this Mac
+models/evals/dev/experiments/julia-recall/

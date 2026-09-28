@@ -1,10 +1,10 @@
 // Does the server's thinking budget cut the 27B's thinking? Budget 40 on a throwaway server.
 import { spawn } from 'node:child_process';
 const R = new URL('../../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
-const { MODELS, DEFAULT_MODEL, thinkingKwargs } = await import(`${R}/models/registry.mjs`);
+const { MODELS, DEFAULT_MODEL, thinkingKwargs, SERVER_BIN } = await import(`${R}/models/registry.mjs`);
 const { serverArgs } = await import(`${R}/models/runtime/server.mjs`);
 const m = { ...MODELS[DEFAULT_MODEL], thinkingBudget: 40 };
-const srv = spawn(`${process.env.HOME}/.bonsai-code/bin/llama-server`, serverArgs(m, { ctx: 8192, port: 17651 }), { stdio: 'ignore' });
+const srv = spawn(SERVER_BIN, serverArgs(m, { ctx: 8192, port: 17651 }), { stdio: 'ignore' });
 process.on('exit', () => srv.kill());
 for (let i = 0; i < 120; i++) { try { if ((await fetch('http://127.0.0.1:17651/health')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 500)); }
 const t0 = Date.now();
