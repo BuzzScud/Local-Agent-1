@@ -312,7 +312,8 @@ function newerThanApp(app) {
     const hit = filesUnder(join(root, dir), skip).find((f) => statSync(join(root, dir, f)).mtimeMs > since);
     if (hit) return `${dir}/${hit}`;
   }
-  return statSync(join(root, 'package.json')).mtimeMs > since ? 'package.json' : null;
+  // and the two single files: package.json, and the test record (the one file under evals/ the app holds)
+  return ['package.json', join('models', 'evals', 'record.mjs')].find((f) => existsSync(join(root, f)) && statSync(join(root, f)).mtimeMs > since) ?? null;
 }
 
 async function installedApp() {
@@ -354,7 +355,7 @@ function pagesMirrored() {
   const open = [...pages.filter((f) => !copies.includes(f)).map((f) => `${f}  not in docs/ yet`),
     ...pages.filter((f) => copies.includes(f) && !readFileSync(join(src, f)).equals(readFileSync(join(dst, f)))).map((f) => `${f}  changed since it was copied`),
     ...copies.filter((f) => !pages.includes(f)).map((f) => `${f}  in docs/ but gone from the DOCS folder`)];
-  return open.length ? look(`${open.length} page${open.length > 1 ? 's' : ''} differ between the DOCS folder and docs/ (bun run docs copies them)`, few(open, 6)) : fine(`${pages.length} pages, all copied into docs/`);
+  return open.length ? look(`${open.length} page${open.length > 1 ? 's differ' : ' differs'} between the DOCS folder and docs/ (bun run docs copies them)`, few(open, 6)) : fine(`${pages.length} pages, all copied into docs/`);
 }
 
 async function onlyOnThisMac() {

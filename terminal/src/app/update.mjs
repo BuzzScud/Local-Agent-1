@@ -20,7 +20,8 @@ export const FETCH_FIRST_MS = 30_000;
 // The files a rebuild picks up: the same list the launcher checks
 // (terminal/app/bonsai-launcher.sh), so the badge and the rebuild agree.
 export function isAppCode(path) {
-  if (path === 'package.json') return true;
+  // package.json, and the one file under evals/ that is part of the app (the test record)
+  if (path === 'package.json' || path === 'models/evals/record.mjs') return true;
   if (!/^(terminal\/src|terminal\/rules|models)\//.test(path)) return false;
   if (/(^|\/)(node_modules|results|evals|test)\//.test(path)) return false;
   if (/(^|\/)README\.md$/.test(path)) return false;
