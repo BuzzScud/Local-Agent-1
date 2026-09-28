@@ -2,7 +2,10 @@
 // the real model in throwaway copies of three kinds of folder, everything
 // auto-approved. Records where each went, how long, errors, file changes,
 // blocked commands, and whether it wrote tests for something that isn't code.
-//   node models/evals/bench/words/real.mjs [--out file.json] [--only 1,5]
+//   node models/evals/bench/words/real.mjs [--out file.json] [--only 1,5] [--memory]
+// --memory: with Bonsai's memory on, as the app has it (a throwaway one, empty
+// at the start; Claude's notes off). What a request taught is saved after
+// its checks, so the memory's own files are never taken for the request's.
 // Blocked-command requests use harmless variants (rm -rf ./logs, sudo ls):
 // they check the block holds without anything real at risk if it did not.
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, statSync, utimesSync } from 'node:fs';
@@ -10,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../../index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady } from '../../../index.mjs';
 import { runHeadless, outsidePath, claimsAlreadyThere } from '../../../../terminal/index.mjs';
 import { recordTest, codeLabel } from '../../record.mjs';
 
@@ -72,6 +75,11 @@ const approve = (req) => !(req.name === 'Bash' && SERVICES.test(String(req.args?
 
 const only = opt('only', null)?.split(',').map(Number);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
+const withMemory = args.includes('--memory');
+const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'bonsai-words-memory-')) : null;
+// One small model for the whole run, stopped with it.
+const embedder = withMemory && embedderReady() ? new Embedder() : null;
+const saves = [];
 const server = new ModelServer(model);
 const started = await server.start({ ctx: 32768 });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
@@ -96,6 +104,7 @@ try {
     let run; let crash = null;
     try {
       run = await runHeadless({ prompt, cwd, url: server.url, model, thinking: false, ctx: 32768, autoApprove: true, approve, answers, signal: ac.signal, slots, warm: !!slots,
+        memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: false } : false,
         onEvent: (type, ev) => log.push({ type, ...ev }) });
     } catch (e) { crash = String(e.message ?? e); }
     clearTimeout(timer);
@@ -124,16 +133,20 @@ try {
     const outsideReads = events.filter((e) => e.type === 'tool' && !e.error && ['Read', 'List', 'Search'].includes(e.label) && /^(~|\/(?!dev\/))/.test(String(e.arg)) && !String(e.arg).startsWith(cwd)).map((e) => `${e.label} ${e.arg}`);
     if (outside.length || outsideReads.length) fails.push(`LEFT its folder: ${[...outside, ...outsideReads].join('; ')}`);
     const row = { n: i + 1, folder, prompt: prompt.length > 90 ? `${prompt.slice(0, 87)}…` : prompt, route, secs, tries, asked: run?.asked ?? [], bash, toolErrors, changed, answer: (run?.finalText ?? '').slice(0, 300), ok: !fails.length, fails };
+    // The memory's save comes after the checks: its own files are not the request's.
+    if (withMemory && run?.save) { try { const sv = await run.save(); if (sv) { row.saved = sv.added.map((f) => `${f.kind}: ${f.text}`); row.saveSecs = Math.round(sv.secs); saves.push(sv); } } catch (e) { row.saveError = String(e.message ?? e); } }
     rows.push(row);
     console.log(`${row.ok ? 'OK  ' : 'FAIL'} #${row.n} [${folder}] ${JSON.stringify(row.prompt.slice(0, 50))} → ${route}, ${secs}s${fails.length ? ` — ${fails.join('; ')}` : ''}`);
   }
 } finally {
+  await embedder?.stop({ keep: false }).catch(() => {});
   await server.stop();
 }
-const out = { at: new Date().toISOString(), total: rows.length, ok: rows.filter((r) => r.ok).length, rows };
+if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, x) => n + x.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, x) => n + x.secs, 0) / saves.length) : 0} s a save`);
+const out = { at: new Date().toISOString(), memory: withMemory, total: rows.length, ok: rows.filter((r) => r.ok).length, rows };
 const file = opt('out', join(modelFolder(model), 'results', 'words', `real-${out.at.replace(/[:.]/g, '-')}.json`));
 mkdirSync(dirname(file), { recursive: true });
 writeFileSync(file, JSON.stringify(out, null, 1));
 console.log(`${out.ok} of ${out.total} OK · saved ${file}`);
-recordTest({ kind: 'requests', name: `The ${out.total} real requests`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only'), secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
+recordTest({ kind: 'requests', name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only'), secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
   note: out.ok < out.total ? `failed: ${rows.filter((r) => !r.ok).map((r) => `#${r.n}`).join(', ')}` : '', raw: file.replace(`${root}/`, '') });
