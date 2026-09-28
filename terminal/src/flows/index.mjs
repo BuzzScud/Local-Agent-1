@@ -68,14 +68,20 @@ function byWords(t) {
   if (!code && /\b(story|stories|poem|essay|letter|e-?mail|blog|article|notes?|summary|recipe|journal|diary)\b/i.test(t) && !/\btests?\b/i.test(t)) return { kind: 'other' }; // "notes about the API" is writing; "a notes field" is code
   if (/\b(create|make|add|write)\s+(?:(?:a|an|the)\s+)?(?:new\s+)?(?:\w+\s+)?file\b|\bname it\b|\bcall it\s+["'\u201c]|\bcall it\s+[\w.-]+\s*[.!]?\s*$/i.test(t)) return { kind: 'other' };
   const asks = /\b(add|fix|change|make|implement|create|rename|remove|delete|update|refactor|write)\b/i.test(t);
-  if (/\?\s*$/.test(t) && !(/\b(can|could|would|will) you\b/i.test(t) && asks)) return { kind: 'question' };
+  // "Can you …?" asks for something to be done, whatever the verb ("can you
+  // use clouds and sun for the icons?" was once sorted as a question, so the
+  // edits it needed were turned away, 2026-09-28). "Can you explain …?" and
+  // the like still only want an answer.
+  const pleaseDo = /\b(can|could|would|will) you\b/i.test(t) && !/\b(can|could|would|will) you\s+(?:please\s+|just\s+)?(explain|tell|describe|show me|summari[sz]e|clarify|walk me|help)\b/i.test(t);
+  if (/\?\s*$/.test(t) && !pleaseDo) return { kind: 'question' };
   // A question on the first line with pasted output under it ("Here is a log,
   // what went wrong?" + the log) is still a question, whatever the log says.
   const first = t.split('\n')[0];
-  if (first !== t && /\?\s*$/.test(first) && !/\b(fix|change|add|update|make|solve|repair)\b/i.test(first)) return { kind: 'question' };
+  if (first !== t && /\?\s*$/.test(first) && !pleaseDo && !/\b(fix|change|add|update|make|solve|repair)\b/i.test(first)) return { kind: 'question' };
   if (/^(?:(?:just|please|can you|could you|hey|hi|ok)[,\s]+)?(what|which|where|why|how|who|when|explain|describe|show me|list|tell me|does|is|are|summari[sz]e)\b/i.test(t) && !asks) return { kind: 'question' };
   if (/\b(fix|failing|fails|broken|bug|crash(es)?|doesn'?t work|does not work|wrong result)\b/i.test(t)) return { kind: 'fix' };
   if (/\b(add|implement|create|make|change|update|support|remove|delete|refactor|write|rename)\b/i.test(t)) return { kind: 'change' };
+  if (pleaseDo) return { kind: 'other' }; // done step by step, where a file can change
   return null;
 }
 

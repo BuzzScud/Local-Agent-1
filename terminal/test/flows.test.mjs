@@ -40,6 +40,9 @@ test('requests are sorted into paths', () => {
   expect(routeByRules('hello').kind).toBe('question');
   expect(routeByRules('Thanks!').kind).toBe('question');
   expect(routeByRules('hello, can you fix the tests?').kind).toBe('fix');
+  // "Can you …?" asks for work whatever the verb; "can you explain …?" only wants an answer (2026-09-28).
+  for (const d of ['can you use clouds and sun for the weather icons? on the page?', 'could you swap the icons for SVGs?', 'can you put the chart on my desktop?']) expect([d, routeByRules(d).kind]).toEqual([d, 'other']);
+  for (const q of ['can you explain how the export works?', 'could you tell me why it is slow?', 'what can you do?']) expect([q, routeByRules(q).kind]).toEqual([q, 'question']);
   expect(routeByRules('tidy up')).toBe(null); // unclear: the model sorts it
   // Code requests that mention a writing word stay on the code paths…
   for (const c of ['Add a helper that formats prices and call it from main.mjs', 'Make the export write to a file instead of stdout', 'Add an option to export the trades to .csv in export.mjs', 'Add a notes field to each trade']) expect([c, routeByRules(c).kind]).toEqual([c, 'change']);
