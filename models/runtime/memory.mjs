@@ -44,14 +44,22 @@ export const kvBytesPerToken = (m) => m.attnLayers * m.kvHeads * m.headDim * 2 *
 // checkpoints + ~0.15; 1.53 GB at 16k.
 export const OVERHEAD = 0.15e9;
 
+// How much of a model's files a start takes out of the free memory
+// (availableBytes): macOS keeps only part of a running model's file pages in
+// active use, and the rest stay on its inactive list, which counts as free.
+// fileInUse in model.mjs is that share, measured; a model not measured counts
+// its whole file.
+const filePart = (m, bytes) => bytes * (m.fileInUse ?? 1);
+
 // The guessing helper (model.draft): its file, its working space, and per slot
 // nMax extra copies of the running state so a wrong guess can be taken back.
-export const draftBytes = (m) => (m.draft ? m.draft.bytes + m.draft.computeBytes + (m.slots ?? 1) * m.draft.nMax * (m.fixedStateBytes ?? 0) : 0);
+export const draftBytes = (m) => (m.draft ? filePart(m, m.draft.bytes) + m.draft.computeBytes + (m.slots ?? 1) * m.draft.nMax * (m.fixedStateBytes ?? 0) : 0);
 
-// Each slot has its own running state and checkpoints; the cache is shared.
-// The helper is counted whenever the model has one (coding setup fetches it)
-// unless it is switched off with AGENTIC_HELPER=off.
-export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => m.bytes + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
+// What starting the model takes out of the free memory: its files (the share
+// in use), the cache, each slot's running state and checkpoints (the cache is
+// shared), the helper, the working space. The helper is counted whenever the
+// model has one (coding setup fetches it) unless it is switched off with AGENTIC_HELPER=off.
+export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
 
 // effort 'high': the model mostly thinks, which the guessing helper barely
 // speeds up, so when memory is short the helper (1.84 GB) goes before the

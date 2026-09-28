@@ -22,6 +22,16 @@ export default {
   // back, so the server keeps a few checkpoints to reuse a shared start.
   checkpoints: 3, checkpointBytes: 0.18e9,
   slots: 2,
+  // The share of its files a start takes out of the free memory (needBytes).
+  // Measured on this Mac 28 Sep 2026 with the app's flags, both slots used, the
+  // MTP helper on (models/gemma-4-12b/results/memory-calibration-2026-09-28):
+  // Gemma's own total was 9.2 GB at 32k and 9.6 at 64k (7.2 of it the files),
+  // but the free memory dropped only 4.5 and 5.3 GB: macOS kept 35-51% of the
+  // file pages in active use (the most right after loading), the rest counted
+  // as free. With 7.3 GB free the start caused no memory pressure and no swap.
+  // 0.55 = the most seen plus a margin; the working parts stay as estimated
+  // (0.2-0.3 GB above what was measured).
+  fileInUse: 0.55,
   // Speed helpers (speculative decoding), measured on this Mac 28 Sep 2026
   // (models/gemma-4-12b/results/speed-probe-2026-09-28). Checking 2 words at
   // once costs Gemma 1.19× one word (4 words: 2.4×), so guesses stay short.

@@ -44,6 +44,21 @@ test('a context you picked is checked: it fits, or the note says by how much and
   expect(contextCheck(gemma, 65536, { draft: true, available: 0, users: [] }).need).toBeGreaterThan(need);
 });
 
+test('what a start takes: the share of the model files macOS keeps in use (measured for Gemma), all of an unmeasured model\'s', () => {
+  expect(gemma.fileInUse).toBe(0.55);
+  const whole = { ...gemma, fileInUse: undefined };
+  expect(needBytes(whole, 65536, { draft: true }) - needBytes(gemma, 65536, { draft: true })).toBeCloseTo((gemma.bytes + gemma.draft.bytes) * 0.45, -6);
+  // Measured 28 Sep with the app's flags and both slots: the free memory dropped
+  // 5.3 GB at 64k and 4.5 GB at 32k (the helper on). The estimate stays above
+  // that, and well under the whole files' 9.8 GB, which warned with 8 GB free
+  // while the start caused no memory pressure.
+  expect(needBytes(gemma, 65536, { draft: true }) / 1e9).toBeGreaterThan(5.3);
+  expect(needBytes(gemma, 32768, { draft: true }) / 1e9).toBeGreaterThan(4.5);
+  expect(needBytes(gemma, 65536, { draft: true }) / 1e9).toBeLessThan(7);
+  // a model not measured counts its whole file, as before
+  expect(needBytes(bonsai, 32768, { draft: false })).toBe(needBytes({ ...bonsai, fileInUse: 1 }, 32768, { draft: false }));
+});
+
 test("what uses the most memory, by app: a browser's helpers count as the browser", () => {
   expect(appName('/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)')).toBe('Google Chrome');
   expect(appName('/usr/local/bin/node')).toBe('node');
