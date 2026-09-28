@@ -11,6 +11,14 @@ import { homedir } from 'node:os';
 import { memoryDirs, readFacts, markUsed, namesMissingFile } from './facts.mjs';
 
 export const TOP = 3; // at most this many facts travel with a request
+
+// A note that only says what happened ("Created notes.html on the Desktop…")
+// rather than how to work. Sent along, it told the model a page it was asked
+// for already existed (28 Sep: it came with a profile card and a weather
+// widget request), so it is skipped, and the screen says so.
+const DID = /^(?:created|made|wrote|added|fixed|built|ran|updated|deleted|removed|moved|saved|changed|renamed|installed|opened|started|finished|generated|implemented)\b/i;
+const HOW = /\b(?:always|never|should|must|use|prefer|avoid|when|before|after|instead|do not|don'?t|make sure|ask)\b/i;
+export const looksLikeEvent = (text) => DID.test(String(text).trim()) && !HOW.test(text);
 // Trust moves a fact a little closer or further: three passed tasks weigh
 // as much as 0.03 of closeness, where the cut-off is 0.56.
 const TRUST_WEIGHT = 0.01;
@@ -76,7 +84,7 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   // What is always read is in the instructions already; a fact about a file
   // that is gone is left where it is (tidy retires it).
   const facts = [...readFacts(dirs.you), ...readFacts(dirs.project)].filter((f) => !f.always && !namesMissingFile(f, root));
-  if (!facts.length || !String(text).trim()) return { facts: [], how: 'none', ms: Date.now() - t0 };
+  if (!facts.length || !String(text).trim()) return { facts: [], skipped: [], how: 'none', ms: Date.now() - t0 };
   let scored = null;
   let how = 'words';
   let note = null;
@@ -103,10 +111,14 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   const weight = how === 'meaning' ? TRUST_WEIGHT : TRUST_WEIGHT * 10;
   for (const s of scored) s.score = s.close + weight * clamp(s.fact.trust, -3, 3);
   scored.sort((a, b) => b.score - a.score);
-  const best = scored[0]?.score ?? 0;
-  const picked = scored.filter((s) => s.score >= cut && s.score >= best - margin).slice(0, top);
+  const event = (s) => looksLikeEvent(s.fact.text);
+  const real = scored.filter((s) => !event(s));
+  const best = real[0]?.score ?? 0;
+  const picked = real.filter((s) => s.score >= cut && s.score >= best - margin).slice(0, top);
+  const skipped = scored.filter((s) => event(s) && s.score >= cut).slice(0, top);
   if (mark && picked.length) for (const dir of new Set(picked.map((s) => s.fact.dir))) markUsed(dir, picked.filter((s) => s.fact.dir === dir).map((s) => s.fact.id), today);
-  return { facts: picked.map((s) => ({ ...s.fact, close: Math.round(s.close * 1000) / 1000 })), how, ms: Date.now() - t0, ...(note ? { note } : {}) };
+  const plain = (s) => ({ ...s.fact, close: Math.round(s.close * 1000) / 1000 });
+  return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, ...(note ? { note } : {}) };
 }
 
 const LABEL = { you: 'about you', project: 'this project', worked: 'this worked', failed: 'this failed before: do not try it again', mistake: 'a mistake to avoid', recipe: 'steps that worked before' };

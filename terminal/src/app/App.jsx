@@ -161,7 +161,11 @@ export function App({ opts, win, onRestart }) {
   const histIdx = useRef(null);
   const draftRef = useRef('');
   const pendingContext = useRef([]);
-  const lastFold = useRef(null);
+  // What ctrl+o can open, newest last: a thought, a tool's full output, what
+  // came along with a request. ctrl+o opens the newest; pressed again, the one
+  // before it, so a line further up that says "ctrl+o to expand" can be reached.
+  const folds = useRef({ list: [], back: 0 });
+  const fold = (f) => { const s = folds.current; s.list.push(f); if (s.list.length > 50) s.list.shift(); s.back = 0; };
   const exitArmed = useRef(0);
   const escArmed = useRef(0);
   const sessionRef = useRef({ id: newSessionId(), title: null, items: [] });
@@ -425,7 +429,7 @@ export function App({ opts, win, onRestart }) {
         const add = [];
         if (reasoning?.trim()) {
           add.push({ type: 'thinking', text: reasoning.trim(), secs: thinkSecs || 0.1, tokens: Math.ceil(reasoning.length / 3.6) });
-          lastFold.current = { title: `Thinking (${Math.round(thinkSecs)}s)`, text: reasoning.trim() };
+          fold({ title: `Thinking (${Math.round(thinkSecs)}s)`, text: reasoning.trim() });
         }
         if (text?.trim()) add.push({ type: 'text', text: text.trim() });
         if (add.length) push(...add);
@@ -435,11 +439,13 @@ export function App({ opts, win, onRestart }) {
       on('tool', (ev) => {
         push({ type: 'tool', label: ev.label, arg: ev.arg, view: ev.view, error: ev.error });
         const v = ev.view ?? {};
-        if (v.content) lastFold.current = { title: `${ev.label}(${ev.arg})`, text: v.content };
-        if (v.kind === 'bash') lastFold.current = { title: `Bash(${ev.arg})`, text: v.lines.join('\n') };
+        if (v.kind === 'bash') fold({ title: `Bash(${ev.arg})`, text: v.lines.join('\n') });
+        else if (v.content) fold({ title: `${ev.label}(${ev.arg})`, text: v.content });
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
       on('note', ({ text, tone }) => push({ type: 'note', text, tone })),
+      // What came along with the request (memory, Claude's notes): one line; ctrl+o lists it.
+      on('context', (c) => { push({ type: 'context', ...c }); fold({ context: c }); }),
       // Which path the request took, under the request.
       on('sorted', ({ text }) => push({ type: 'sorted', text })),
       // Saying yes to "Work in <project>?" counts as trusting that folder.
@@ -451,7 +457,7 @@ export function App({ opts, win, onRestart }) {
       on('stats', (st) => setStats(st)),
       on('mode', (m) => setModeState(m)),
       on('settled', () => autoRef.current.schedule()),
-      on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); lastFold.current = { title: 'Summary', text: summary }; }),
+      on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
       on('turn-end', ({ reason, secs }) => {
         const past = S.current.live?.past ?? 'Worked';
         setLive(IDLE);
@@ -646,7 +652,7 @@ export function App({ opts, win, onRestart }) {
     const r = await runCommand(command, { cwd, maxLines: 200, sandbox: false }); // you typed it: no fence
     setLive(IDLE);
     push({ type: 'bash', command, lines: r.lines, code: r.code });
-    lastFold.current = { title: `! ${command}`, text: r.lines.join('\n') };
+    fold({ title: `! ${command}`, text: r.lines.join('\n') });
     pendingContext.current.push(`[The user ran \`${command}\` in the terminal (exit ${r.code}). Output:\n${r.lines.slice(-60).join('\n')}]`);
   }, [cwd, push]);
 
@@ -1122,8 +1128,14 @@ export function App({ opts, win, onRestart }) {
     }
     if (key.tab && key.shift) { const m = MODES[(MODES.indexOf(cur.mode) + 1) % MODES.length]; setMode(m); return; }
     if (key.ctrl && ch === 'o') {
-      if (lastFold.current) push({ type: 'expand', title: lastFold.current.title, text: lastFold.current.text });
-      else flash('Nothing to expand yet');
+      const s = folds.current;
+      if (!s.list.length) { flash('Nothing to expand yet'); return; }
+      if (s.back >= s.list.length) { flash('That was the first one'); return; }
+      const f = s.list[s.list.length - 1 - s.back];
+      s.back += 1;
+      if (f.context) push({ type: 'context', ...f.context, open: true });
+      else push({ type: 'expand', title: f.title, text: f.text });
+      if (s.back < s.list.length) flash('ctrl+o again opens the one before', 2000);
       return;
     }
     // Keys typed while the app was busy can arrive together ("on\r"): the

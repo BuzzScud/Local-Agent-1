@@ -146,13 +146,13 @@ async function converse(prompt, memory) {
   const fake = await startFakeServer([{ text: 'Print it from a headless browser, in A4.' }]);
   const events = [];
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, memory, ask: async () => ({ choice: 'yes' }) });
-  for (const t of ['note', 'memory']) agent.on(t, (e) => events.push({ type: t, ...e }));
+  for (const t of ['note', 'memory', 'context']) agent.on(t, (e) => events.push({ type: t, ...e }));
   await agent.send(prompt);
   await fake.close();
   return { agent, fake, events };
 }
 
-test('in a conversation the note goes into the request itself, with one dim line on the screen', async () => {
+test('in a conversation the note goes into the request itself, with one Context line on the screen', async () => {
   const dir = folder();
   const home = mkdtempSync(join(tmpdir(), 'bonsai-claude-you-'));
   const { agent, fake, events } = await converse('how do I turn this html report into a pdf?', { embedder: new FakeEmbedder(), home, save: false, claude: { dir, store: store() } });
@@ -161,7 +161,7 @@ test('in a conversation the note goes into the request itself, with one dim line
   expect(sent).toContain('[pdf from html] (how something is done on this Mac)');
   expect(sent).not.toContain('sk-abc');
   expect(agent.messages[1].content).toBe(sent); // written into the request, so what was read stays read
-  expect(events.filter((e) => e.type === 'note').map((e) => e.text)).toContain("From Claude's notes: pdf from html");
+  expect(events.find((e) => e.type === 'context').items).toMatchObject([{ from: 'Claude', text: 'pdf from html' }]);
   expect(events.find((e) => e.type === 'memory' && e.claude)).toMatchObject({ how: 'meaning', of: 4, claude: [{ id: 'pdf-from-html', type: 'reference' }] });
 });
 

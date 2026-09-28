@@ -37,7 +37,7 @@ uncommitted).
 | enter | send · `\` + enter for a new line |
 | esc | interrupt Bonsai · twice to clear the prompt |
 | shift+tab | ask first → accept edits → plan (read-only) |
-| ctrl+o | show the last thinking or output in full |
+| ctrl+o | show the last thinking, output or Context line in full; again for the one before |
 | ↑ ↓ | earlier prompts |
 | `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
 | ctrl+c twice | quit (the conversation is saved) |

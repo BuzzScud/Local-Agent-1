@@ -21,13 +21,17 @@ test('facts come back with the request that fits them; /memory shows both memori
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome to Agentic Coder' }, { snapshot: 'welcome' },
     { type: 'where are the flags read in export.mjs?' }, { key: 'enter' }, { wait: 'In main(), from argv.' }, { sleep: 200 }, { snapshot: 'asked' },
+    { key: 'ctrlO' }, { wait: 'ctrl+o again opens the one before' }, { key: 'ctrlO' }, { wait: 'The flags are read in export.mjs' }, { sleep: 200 }, { snapshot: 'listed' },
     { type: '/memory' }, { key: 'enter' }, { wait: 'This project · 2 facts' }, { sleep: 200 }, { snapshot: 'panel' },
     { type: '/memory undo' }, { key: 'enter' }, { wait: 'the last save taken back' }, { sleep: 200 }, { snapshot: 'undone' },
     ...quit,
   ] });
   await fake.close();
   expect(r.snapshots.welcome).toMatch(/memory/); // the welcome names what the start read
-  expect(r.snapshots.asked).toContain('From memory: "The flags are read in export.mjs, in main()."');
+  expect(r.snapshots.asked).toMatch(/⏺ Context · 1 brought along · \+\d+ tokens/);
+  expect(r.snapshots.asked).toContain('(ctrl+o to expand)');
+  // ctrl+o opens the newest fold (the file read); again, the one before: what came along, where from, how close and its size
+  expect(r.snapshots.listed).toMatch(/memory\s+The flags are read in export\.mjs, in main\(\)\.\s+(fit \d\.\d\d · )?\d+ tokens/);
   // the model read the fact with the request, and the two rules in its instructions
   const sent = fake.requests.find((q) => q.messages?.some((x) => x.role === 'user' && String(x.content).startsWith('where are the flags read')));
   expect(sent.messages.find((x) => x.role === 'user').content).toContain('(From your memory, saved in earlier conversations here.');
@@ -150,5 +154,5 @@ test('"remember that …" saves at once into the new memory, and "memory": false
   const last = fake.requests.filter((q) => q.messages?.some((x) => x.role === 'user' && String(x.content).startsWith('what is a self-contained'))).at(-1);
   expect(last.messages[0].content).not.toContain('Memory\n');
   expect(last.messages.find((x) => x.role === 'user').content).toBe('what is a self-contained HTML file?');
-  expect(off.text).not.toContain('From memory:');
+  expect(off.text).not.toContain('Context ·');
 }, T * 2);

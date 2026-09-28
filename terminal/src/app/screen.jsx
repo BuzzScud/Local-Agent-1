@@ -106,6 +106,32 @@ function ToolView({ it, width }) {
 // The clock time a turn ended, as Claude Code writes it: "12:58 PM".
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+// What came along with a request (agent.remember): one folded line, like a
+// tool's result; ctrl+o prints the list, each item with its fit and size.
+function Context({ it, width }) {
+  const sent = it.items.filter((x) => !x.skipped);
+  const skipped = it.items.length - sent.length;
+  const secs = it.ms >= 100 ? ` · ${(it.ms / 1000).toFixed(1)} s` : '';
+  const head = `· ${sent.length} brought along${skipped ? ` · ${skipped} skipped` : ''}${it.tokens ? ` · +${it.tokens} tokens` : ''}${secs}`;
+  const textW = Math.max(20, Math.min(width, 110) - 40);
+  return (
+    <Box flexDirection="column">
+      <Row mark="⏺" markColor={C.accent}><Text><Text bold>Context</Text> <Text color={C.dim}>{head}</Text>{it.open ? null : <Text color={C.faint}>  (ctrl+o to expand)</Text>}</Text></Row>
+      {it.open ? (
+        <Result>
+          {it.items.map((x, i) => (
+            <Box key={i}>
+              <Box width={9} flexShrink={0}><Text color={C.accentDim}>{x.from}</Text></Box>
+              <Box width={textW} flexShrink={1}><Text wrap="truncate-end">{x.text}</Text></Box>
+              <Box flexShrink={0} paddingLeft={2}>{x.skipped ? <Text color={C.warn}>⚠ {x.skipped}</Text> : <Text color={C.dim}>{x.close != null && it.how === 'meaning' ? `fit ${Number(x.close).toFixed(2)} · ` : ''}{x.tokens} tokens</Text>}</Box>
+            </Box>
+          ))}
+        </Result>
+      ) : null}
+    </Box>
+  );
+}
+
 // /rules (app/rules.mjs): what the model reads at every start, numbered, so
 // "/rules off 16" names a line you can see. Long rules wrap under their words.
 function RuleLines({ list, width, event }) {
@@ -178,6 +204,7 @@ export function Item({ it, width, model, cwd, loaded }) {
       </Box>
     );
     case 'rules': return <Rules it={it} width={width} model={model} />;
+    case 'context': return <Context it={it} width={width} />;
     case 'panel': return (
       <Box flexDirection="column">
         {it.title ? <Text bold>{it.title}</Text> : null}

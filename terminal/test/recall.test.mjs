@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { recall, recallNotes, wordsOf } from '../src/agent/recall.mjs';
+import { recall, recallNotes, wordsOf, looksLikeEvent } from '../src/agent/recall.mjs';
 import { memoryDirs, applyChanges, readFacts, changeTrust, openMemory } from '../src/agent/facts.mjs';
 import { digest } from '../src/agent/memory.mjs';
 import { Agent } from '../src/agent/agent.mjs';
@@ -32,6 +32,21 @@ function place() {
   return { home, repo, ...dirs };
 }
 const texts = (r) => r.facts.map((f) => f.text);
+
+// 28 Sep: "Created a self-contained notes.html on the Desktop…" came along with
+// a profile card and a weather widget request, telling the model a page existed.
+test('a note that only says what happened is skipped, and said so; a note on how to work still comes', async () => {
+  expect(looksLikeEvent('Created a self-contained notes.html on the Desktop with local storage and modal functionality.')).toBe(true);
+  expect(looksLikeEvent('Fixed the chart legend by raising the header z-index.')).toBe(true);
+  expect(looksLikeEvent('Run the tests with `node --test`.')).toBe(false);
+  expect(looksLikeEvent('Created pages go on the Desktop: always say the full path.')).toBe(false);
+  const { home, repo, project } = place();
+  applyChanges(project, { add: [{ kind: 'project', text: 'Created the tests for export.mjs and ran the suite with node --test.' }] }, { today: '2026-09-26' });
+  const r = await recall(repo, 'run the tests for export.mjs with node --test', { home, today: '2026-09-27', mark: false });
+  expect(texts(r)).toContain('Run the tests with `node --test`.');
+  expect(texts(r)).not.toContain('Created the tests for export.mjs and ran the suite with node --test.');
+  expect(r.skipped.map((f) => f.text)).toEqual(['Created the tests for export.mjs and ran the suite with node --test.']);
+});
 
 test('by meaning: the fact comes back for a request in other words; nothing for a request about something else', async () => {
   const { home, repo, project } = place();
@@ -99,7 +114,7 @@ async function converse(replies, said, { answer = 'yes', embedder = new FakeEmbe
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd: repo, system: systemPrompt({ cwd: repo, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, confirmPlan: false,
     ask: async () => ({ choice: answer }), memory: { embedder, home } });
   const events = [];
-  for (const t of ['note', 'memory', 'settled']) agent.on(t, (e) => events.push({ type: t, ...e }));
+  for (const t of ['note', 'memory', 'context', 'settled']) agent.on(t, (e) => events.push({ type: t, ...e }));
   const reasons = [];
   for (const s of said) {
     const ac = new AbortController();
@@ -117,7 +132,9 @@ test('in a conversation: the fact goes into the request the model reads, stays t
   expect(first).toBe('can you check the suite still passes\n\n(From your memory, saved in earlier conversations here. Use what fits; the files are right where a memory and a file disagree.\n- (this project) Run the tests with `node --test`.)');
   // the next turn: the first request reads exactly as before, so nothing already read is read again
   expect(fake.requests.at(-1).messages.filter((m) => m.role === 'user')[0].content).toBe(first);
-  expect(events.find((e) => e.type === 'note' && e.text.startsWith('From memory:')).text).toBe('From memory: "Run the tests with `node --test`."');
+  // on the screen: one Context line, the fact in its list
+  expect(events.find((e) => e.type === 'context').items).toMatchObject([{ from: 'memory', text: 'Run the tests with `node --test`.' }]);
+  expect(events.some((e) => e.type === 'note' && /^From memory/.test(e.text))).toBe(false);
   expect(digest(agent.messages)).toContain('User: can you check the suite still passes\nAgentic Coder: They pass.');
   expect(digest(agent.messages)).not.toContain('From your memory');
 });

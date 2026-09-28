@@ -41,7 +41,7 @@ export const KEYS = [
   ] },
   { group: 'While Agentic Coder works', rows: [
     ['esc', 'stop Agentic Coder; then say what to do instead'],
-    ['ctrl+o', 'expand the last long output or summary'],
+    ['ctrl+o', 'expand the last long output, summary or Context line; press again for the one before'],
     ['type and enter', 'queue your next message; it sends when Agentic Coder is free'],
     ['/btw question', 'a quick side question: answered in a panel from the conversation so far, never added to it'],
   ] },

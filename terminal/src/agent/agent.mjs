@@ -707,23 +707,33 @@ export class Agent extends EventEmitter {
 
   // The facts that fit this request, found by meaning (or by words when the
   // small model is not here). They go into the request itself.
+  // What came along is shown as one "Context" line (ctrl+o lists it): each
+  // item with how close it was and what it costs the model to read.
   async remember(text, at, signal) {
     if (!this.memory || this.memory.recall === false) return;
+    const t0 = Date.now();
     const r = await recall(this.cwd, text, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal });
     if (r.note && !this.memory.told) { this.memory.told = true; this.emit('note', { text: r.note, tone: 'dim' }); }
     const request = this.messages[at];
+    let added = 0;
     const goesAlong = (notes) => {
       if (request?.role === 'user' && typeof request.content === 'string') request.content = `${request.content}\n\n(${notes})`;
       this.ctxUsed += tokensOf(notes);
+      added += tokensOf(notes);
     };
+    const items = [];
+    const one = (f) => f.text.replace(/\s+/g, ' ');
     if (r.facts.length) {
       const notes = recallNotes(r.facts);
       goesAlong(notes);
       Object.assign(this.happened, { recalled: r.facts.map((f) => ({ id: f.id, dir: f.dir, text: f.text })), notes });
       this.emit('memory', { facts: r.facts, how: r.how, ms: r.ms });
-      this.emit('note', { text: `From memory: ${r.facts.map((f) => `"${f.text.replace(/\s+/g, ' ').slice(0, 60)}${f.text.length > 60 ? '…' : ''}"`).join(' · ')}`, tone: 'dim' });
+      for (const f of r.facts) items.push({ from: 'memory', text: one(f), close: f.close, tokens: tokensOf(recallNotes([f])) });
     }
-    await this.rememberClaude(text, goesAlong, signal);
+    for (const f of r.skipped ?? []) items.push({ from: 'memory', text: one(f), close: f.close, skipped: 'an event, skipped' });
+    const c = await this.rememberClaude(text, goesAlong, signal);
+    for (const n of c?.notes ?? []) items.push({ from: 'Claude', text: n.name.replace(/-/g, ' '), close: n.close, tokens: tokensOf(n.part) });
+    if (items.length) this.emit('context', { items, tokens: added, ms: Date.now() - t0, how: r.how });
   }
 
   // Claude's notes (claude-notes.mjs): what Claude Code wrote down about the
@@ -742,7 +752,7 @@ export class Agent extends EventEmitter {
     if (this.happened) this.happened.claude = r.notes.map((n) => n.id);
     this.claudeCame = true; // for this message: a step that is turned away points back at the note (runTool)
     this.emit('memory', { claude: r.notes.map((n) => ({ id: n.id, name: n.name, type: n.type, close: n.close, chars: n.part.length })), how: r.how, ms: r.ms, of: r.of });
-    this.emit('note', { text: `From Claude's notes: ${r.notes.map((n) => n.name.replace(/-/g, ' ')).join(' · ')}`, tone: 'dim' });
+    return r;
   }
 
   // A message that corrects Agentic Coder ("no, that is wrong", "undo that") counts

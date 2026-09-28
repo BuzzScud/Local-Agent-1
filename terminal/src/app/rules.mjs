@@ -6,6 +6,7 @@
 //   Off          switched off with /rules off: kept in retired/, /rules on brings one back
 // The numbers are the order shown, so "/rules off 16" means the 16th line.
 import { readFacts, applyChanges, restoreFact, setAlways } from '../agent/facts.mjs';
+import { looksLikeEvent } from '../agent/recall.mjs';
 
 // A small model follows a short list of rules better than a long one: past
 // this many, a new "always" rule asks for one to be switched off first.
@@ -13,11 +14,8 @@ export const ALWAYS_MAX = 20;
 const OFF = 'switched off with /rules off';
 const tokensOf = (text) => Math.round(text.length / 4);
 
-// A note that only says what happened ("Created notes.html on the Desktop…")
-// rather than how to work: worth little at the next start.
-const DID = /^(?:created|made|wrote|added|fixed|built|ran|updated|deleted|removed|moved|saved|changed|renamed|installed|opened|started|finished|generated|implemented)\b/i;
-const HOW = /\b(?:always|never|should|must|use|prefer|avoid|when|before|after|instead|do not|don'?t|make sure|ask)\b/i;
-export const looksLikeEvent = (text) => DID.test(String(text).trim()) && !HOW.test(text);
+// A note that only says what happened: marked, and skipped by recall.
+export { looksLikeEvent };
 
 // The list in the order shown, numbered from 1, from the memory about you and
 // the one about this project.
