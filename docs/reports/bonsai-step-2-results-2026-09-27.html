@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai step 2 results</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--m:#eb6834;--t-soft:rgba(42,120,214,.08);--m-soft:rgba(235,104,52,.09);--good:#1f8a4c;--bad:#c2452f;--best:rgba(31,138,76,.10);
+  --term:#1b1c20;--term-ink:#e9e7e1;--term-dim:#9a978f;--term-line:#33353c;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+    --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.13);--m-soft:rgba(232,116,63,.12);--good:#4fbf7f;--bad:#ee7b66;--best:rgba(79,191,127,.13);
+    --term:#0f1013;--term-line:#2b2d34;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+  --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.13);--m-soft:rgba(232,116,63,.12);--good:#4fbf7f;--bad:#ee7b66;--best:rgba(79,191,127,.13);
+  --term:#0f1013;--term-line:#2b2d34;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1240px;margin:0 auto;padding:26px 16px 48px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:21px;letter-spacing:-.01em;margin:40px 0 4px}
+h2+p.sub{color:var(--mute);margin:0 0 12px;max-width:900px}
+p{margin:0 0 10px}
+code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
+.lede{color:var(--mute);max-width:900px;font-size:16px}
+.lede b{color:var(--ink);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 15px;min-width:0}
+.tile b{display:block;font-size:26px;letter-spacing:-.02em;line-height:1.15}
+.tile span{display:block;color:var(--mute);font-size:13.5px;margin-top:4px}
+.changes{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.change{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px 14px;min-width:0;display:flex;flex-direction:column}
+.head{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.n{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--bg);font-weight:600;font-size:12.5px;font-style:normal}
+.head b{font-size:15px}
+.change p{color:var(--mute);font-size:13.5px;margin:0 0 10px}
+.ex{margin-top:auto;background:var(--inner);border:1px solid var(--soft);border-radius:10px;padding:8px 10px 9px;font-size:13px}
+.ex code{display:block;color:var(--ink);margin-bottom:3px;overflow-wrap:anywhere}
+.ex span{color:var(--mute)}
+.ex s{text-decoration-color:var(--faint)}
+.ex b{color:var(--ink);font-weight:600}
+.screens{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.screens>div,.two>div{min-width:0}
+.term{background:var(--term);color:var(--term-ink);border:1px solid var(--term-line);border-radius:14px;padding:14px 16px 16px;min-width:0;overflow-x:auto}
+.term pre{margin:0;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre}
+.cap{color:var(--mute);font-size:13px;margin:8px 2px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.chip{font:13px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:7px 14px;border-radius:999px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.chip:hover{border-color:var(--faint)}
+.chip.on{border-color:var(--t);background:linear-gradient(var(--t-soft),var(--t-soft)),var(--card)}
+.wrap{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-top:1px solid var(--soft)}
+thead th{border-top:0;color:var(--mute);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+td.num,th.num{white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+td.num small{text-align:right}
+td.req{min-width:240px;overflow-wrap:anywhere}
+td.why{color:var(--mute);font-size:13px;min-width:180px}
+td small{display:block;color:var(--faint);font-size:12px;margin-top:2px;font-weight:400}
+td.new{background:var(--t-soft);color:var(--ink);font-weight:600}
+td.best{background:var(--best);font-weight:600}
+td.good,span.good{color:var(--good);font-weight:600}
+td.bad,span.bad{color:var(--bad);font-weight:600}
+span.bad{display:block;font-size:12px;margin-top:2px}
+td ol{margin:4px 0 0;padding-left:20px;font-weight:400}
+tr.group td{background:var(--inner);font-weight:600;color:var(--ink)}
+tr.group td span{color:var(--mute);font-weight:400}
+tr[hidden]{display:none}
+ul.plain{margin:0;padding:0;list-style:none;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ul.plain li{padding:10px 16px;border-top:1px solid var(--soft);font-size:14px;color:var(--mute)}
+ul.plain li:first-child{border-top:0}
+li b{color:var(--ink);font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.two h2{margin-top:36px}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--mute);font-size:13.5px;padding:4px 2px}
+details .wrap{margin-top:8px}
+.foot{color:var(--faint);font-size:12.5px;margin-top:32px}
+.foot a{color:inherit}
+@media (max-width:1080px){.changes{grid-template-columns:repeat(2,1fr)}.tiles{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){.screens,.two{grid-template-columns:1fr}.two h2{margin-top:28px}}
+@media (max-width:560px){h1{font-size:26px}.changes{grid-template-columns:1fr}.tile b{font-size:22px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Step 2: built and measured</h1>
+<p class="lede">How Bonsai sorts a request before any work starts. Eight changes, built in a worktree of their own and measured on the real 27B. <b>Nothing is committed: main is as it was.</b></p>
+
+<div class="tiles">
+<div class="tile"><b>15 of 81</b><span>real requests sort better, none worse</span></div>
+<div class="tile"><b>12 → 2</b><span>calls to the brain before work starts</span></div>
+<div class="tile"><b>3.5 → 1.2 s</b><span>from Enter to the first step, for the requests that moved</span></div>
+<div class="tile"><b>28 → 28 of 28</b><span>real requests done right on the 27B</span></div>
+</div>
+
+<h2>Before and after</h2>
+<p class="sub">Before is main (8fde96e). After is the step 2 worktree. The better cell is tinted; the last number column is my own subtraction.</p>
+<div class="wrap">
+<table>
+<thead><tr><th>Measure</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td><b>Sorting</b><small>real requests that take the better path, of 81</small></td><td class="num">–</td><td class="num best">15</td><td class="num good">+15</td><td class="why">0 take a worse one; 20 of 20 trap lines stay where they were</td></tr>
+<tr><td><b>Calls before work</b><small>calls to the brain before any work starts, over the 81 requests</small></td><td class="num">12</td><td class="num best">2</td><td class="num good">−10 (−83%)</td><td class="why">the sort itself, or the “is this clear?” check</td></tr>
+<tr><td><b>Until the work starts</b><small>seconds from Enter to the first step, the 9 requests the rules moved (median of 3)</small></td><td class="num">3.5 s</td><td class="num best">1.2 s</td><td class="num good">−2.3 s (−66%)</td><td class="why">real 27B, the request stopped at its first step</td></tr>
+<tr><td><b>Until the work starts</b><small>the same, 2 requests the rules did not move</small></td><td class="num">0.0 s</td><td class="num">0.0 s</td><td class="num">same</td><td class="why">a check: these should cost the same</td></tr>
+<tr><td><b>Real requests</b><small>of 28 done right, start to finish on the 27B</small></td><td class="num">28</td><td class="num">28</td><td class="num">same</td><td class="why"></td></tr>
+<tr><td><b>Real requests</b><small>seconds for the 9 the rules moved</small></td><td class="num best">155 s</td><td class="num">159 s</td><td class="num bad">+4 s (+3%)</td><td class="why">start to finish, one run each</td></tr>
+<tr><td><b>Real requests</b><small>seconds for the other 19</small></td><td class="num">744 s</td><td class="num best">668 s</td><td class="num good">−76 s (−10%)</td><td class="why">one run each: the brain’s own answers differ from run to run</td></tr>
+<tr><td><b>Questions</b><small>asked before or during the 28 requests</small></td><td class="num">14</td><td class="num best">13</td><td class="num good">−1 (−7%)</td><td class="why"></td></tr>
+<tr><td><b>A question</b><small>seconds until it is on screen, once it carries answers to pick (average of 8)</small></td><td class="num best">6.4 s</td><td class="num">8.8 s</td><td class="num bad">+2.4 s (+37%)</td><td class="why">the price of the pick list</td></tr>
+<tr><td><b>Unit tests</b><small>both parts</small></td><td class="num">266</td><td class="num best">284</td><td class="num good">+18</td><td class="why">18 new tests: the sort test, the rules, the agent, the real screen</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>The eight changes</h2>
+<p class="sub">Each with one real line: where it went before, and where it goes now.</p>
+<div class="changes">
+<div class="change"><div class="head"><i class="n">1</i><b>Thanks and greetings are seen</b></div><p>More ways of saying hello, thanks and “I need help” get the quick reply.</p><div class="ex"><code>its perfect , thank you</code><span><s>the full work loop</s> → <b>quick reply</b></span></div></div>
+<div class="change"><div class="head"><i class="n">2</i><b>Follow-ups continue</b></div><p>A short line that points back (“it”, “that”, a lone “why”) carries on with the conversation: no question first, no shortcut.</p><div class="ex"><code>can you add it to my desktop?</code><span><s>sorted as a code change</s> → <b>continues the conversation</b></span></div></div>
+<div class="change"><div class="head"><i class="n">3</i><b>Plain commands skip the sort</b></div><p>Run, commit, install and git lines are sorted by a rule instead of by the brain.</p><div class="ex"><code>run the tests</code><span><s>the brain sorts it</s> → <b>task, step by step</b></span></div></div>
+<div class="change"><div class="head"><i class="n">4</i><b>No check when the rules are sure</b></div><p>A short request the rules already understand starts straight away.</p><div class="ex"><code>rename test to check</code><span><s>asks the brain first</s> → <b>rename shortcut</b></span></div></div>
+<div class="change"><div class="head"><i class="n">5</i><b>“Make me a page” goes step by step</b></div><p>Asking for a page or a file with no code named never takes the test-first path.</p><div class="ex"><code>create a self contained html file… finance dashboard</code><span><s>sorted as a code change</s> → <b>sorted as a task, step by step</b></span></div></div>
+<div class="change"><div class="head"><i class="n">6</i><b>The sort shows on screen</b></div><p>One dim line under your request says which path was picked. Esc stops it if it is wrong.</p><div class="ex"><code>add a --json flag to export.mjs</code><span><s>nothing shown</s> → <b>Sorted as: change · shortcut</b></span></div></div>
+<div class="change"><div class="head"><i class="n">7</i><b>Questions come with a pick list</b></div><p>Two or three likely answers from the brain, then “Type an answer”.</p><div class="ex"><code>api</code><span><s>a question you answer by typing</s> → <b>a question with 3 answers to pick</b></span></div></div>
+<div class="change"><div class="head"><i class="n">8</i><b>A sort test</b></div><p>All 101 lines on this page are a test that runs with the unit tests, so a later rule change cannot quietly move them.</p><div class="ex"><code>every line below</code><span><s>checked by hand</s> → <b>checked on every test run</b></span></div></div>
+</div>
+
+<h2>What the screen shows</h2>
+<p class="sub">The real app in a real terminal, as the screen test drives it. The brain’s words here are scripted by the test; the box, the numbers and the dim lines are the app’s own.</p>
+<div class="screens">
+  <div>
+    <div class="term"><pre>&gt; api
+
+╭──────────────────────────────────────────────────────────────────────╮
+│ Bonsai asks                                                          │
+│                                                                      │
+│   What do you want to do with the API?                               │
+│                                                                      │
+│ ❯ 1. Explain how the API works                                       │
+│   2. Fix a broken API endpoint                                       │
+│   3. Add a new API endpoint                                          │
+│   4. Type an answer                                                  │
+│   5. Stop here (esc)                                                 │
+╰──────────────────────────────────────────────────────────────────────╯
+</pre></div>
+    <p class="cap">A lone word: the question arrives with answers to pick. “Type an answer” and “Stop here” are the app’s usual last two lines. The box is drawn narrower here than on a full-width terminal.</p>
+  </div>
+  <div>
+    <div class="term"><pre>&gt; api
+
+⏺ Ask(What do you want to do with the API?)
+  ⎿  You: Explain how the API works
+
+  ⎿  Sorted as: question · step by step
+
+⏺ It exports toCsv and main.
+
+&gt; can you add it to my desktop?
+
+  ⎿  Sorted as: follow-up · continues the conversation
+
+⏺ I cannot reach the Desktop from this folder.
+
+╭──────────────────────────────────────────────────────────────────────╮
+│ &gt; Try &quot;fix the failing tests&quot;                                        │
+╰──────────────────────────────────────────────────────────────────────╯
+  ? for shortcuts
+</pre></div>
+    <p class="cap">The pick is sorted and the line says where it went. The short line after it carries on with the conversation.</p>
+  </div>
+</div>
+
+<h2>Seconds until the work starts</h2>
+<p class="sub">From Enter to the first step of work (the first word of the reply, the first tool, or the question on screen), on the real 27B. Each request ran three times on each code and was stopped at its first step; the big number is the middle one, the three are under it.</p>
+<div class="wrap">
+<table>
+<thead><tr><th>Request</th><th class="num">Before, s</th><th class="num">After, s</th><th class="num">Change</th></tr></thead>
+<tbody>
+<tr class="movedrow"><td class="req">explain the tests<small>moved by the rules · Sorted as: question · step by step</small></td>
+<td class="num">5.1<small>5.1 · 5.1 · 5.2</small></td><td class="num best">1.2<small>1.2 · 1.2 · 1.2</small></td><td class="num good">−3.9 s (−77%)</td></tr>
+<tr class="movedrow"><td class="req">run the tests<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.6<small>3.5 · 3.6 · 3.6</small></td><td class="num best">1.2<small>1.2 · 1.2 · 1.1</small></td><td class="num good">−2.4 s (−68%)</td></tr>
+<tr class="movedrow"><td class="req">TEST<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.0<small>3.1 · 2.9 · 3.0</small></td><td class="num best">1.1<small>1.1 · 1.1 · 1.2</small></td><td class="num good">−1.9 s (−63%)</td></tr>
+<tr class="movedrow"><td class="req">rename test to check<small>moved by the rules · Sorted as: rename · shortcut</small></td>
+<td class="num">4.8<small>4.8 · 4.7 · 4.8</small></td><td class="num best">0.0<small>0.0 · 0.0 · 0.0</small></td><td class="num good">−4.8 s (−100%)</td></tr>
+<tr class="movedrow"><td class="req">run rm -rf ./logs to clean up<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.3<small>3.3 · 3.8 · 3.2</small></td><td class="num best">0.8<small>0.9 · 0.8 · 0.8</small></td><td class="num good">−2.5 s (−76%)</td></tr>
+<tr class="movedrow"><td class="req">run sudo ls to check the permissions<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.3<small>2.7 · 3.3 · 3.3</small></td><td class="num best">1.3<small>1.4 · 1.3 · 0.8</small></td><td class="num good">−1.9 s (−60%)</td></tr>
+<tr class="movedrow"><td class="req">kill the node server on port 3999<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.5<small>3.5 · 3.5 · 3.6</small></td><td class="num best">1.4<small>1.4 · 1.4 · 1.4</small></td><td class="num good">−2.2 s (−61%)</td></tr>
+<tr class="movedrow"><td class="req">commit and push to github<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.2<small>3.2 · 3.2 · 3.1</small></td><td class="num best">1.4<small>1.4 · 1.4 · 1.3</small></td><td class="num good">−1.9 s (−58%)</td></tr>
+<tr class="movedrow"><td class="req">git reset --hard<small>moved by the rules · Sorted as: task · step by step</small></td>
+<td class="num">3.5<small>3.5 · 3.5 · 3.0</small></td><td class="num best">1.3<small>1.4 · 1.3 · 0.8</small></td><td class="num good">−2.2 s (−62%)</td></tr>
+<tr class=""><td class="req">What does the API in export.mjs do?<small>not moved: a check · Sorted as: question · step by step</small></td>
+<td class="num">0.0<small>0.0 · 0.0 · 0.0</small></td><td class="num">0.0<small>0.0 · 0.0 · 0.0</small></td><td class="num">same</td></tr>
+<tr class=""><td class="req">add a --json flag to export.mjs that prints the rows as JSON<small>not moved: a check · Sorted as: change · shortcut</small></td>
+<td class="num">0.0<small>0.0 · 0.0 · 0.0</small></td><td class="num">0.0<small>0.0 · 0.0 · 0.0</small></td><td class="num">same</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>The 28 real requests, start to finish</h2>
+<p class="sub">The test bench’s real requests on the 27B, everything auto-approved in throwaway folders, one run on each code. The brain’s answers differ from run to run, so a single request’s seconds can move either way; the rows the rules moved are tinted.</p>
+<div class="wrap">
+<table>
+<thead><tr><th class="num">#</th><th>Request</th><th>Sorted, before</th><th>Sorted, after</th><th class="num">Before, s</th><th class="num">After, s</th><th class="num">Change</th></tr></thead>
+<tbody>
+<tr class=""><td class="num">1</td><td class="req">hello<small>the demo project</small></td>
+<td>step by step</td><td class="">step by step</td>
+<td class="num">5</td><td class="num best">1</td><td class="num good">−4 s (−80%)</td></tr>
+<tr class=""><td class="num">2</td><td class="req">thanks!<small>the demo project</small></td>
+<td>step by step</td><td class="">step by step</td>
+<td class="num">2</td><td class="num">2</td><td class="num">same</td></tr>
+<tr class=""><td class="num">3</td><td class="req">What does the API in export.mjs do?<small>the demo project</small></td>
+<td>question</td><td class="">question</td>
+<td class="num">23</td><td class="num best">18</td><td class="num good">−5 s (−22%)</td></tr>
+<tr class=""><td class="num">4</td><td class="req">Is there an API key in this project?<small>the demo project</small></td>
+<td>question</td><td class="">question</td>
+<td class="num">34</td><td class="num best">26</td><td class="num good">−8 s (−24%)</td></tr>
+<tr class="movedrow"><td class="num">5</td><td class="req">explain the tests<small>the demo project · moved by the rules</small></td>
+<td>other<small>asked 1</small></td><td class="new">question</td>
+<td class="num">39</td><td class="num best">34</td><td class="num good">−5 s (−13%)</td></tr>
+<tr class="movedrow"><td class="num">6</td><td class="req">run the tests<small>the demo project · moved by the rules</small></td>
+<td>other</td><td class="new">other</td>
+<td class="num">11</td><td class="num best">9</td><td class="num good">−2 s (−18%)</td></tr>
+<tr class="movedrow"><td class="num">7</td><td class="req">TEST<small>the demo project · moved by the rules</small></td>
+<td>other</td><td class="new">other</td>
+<td class="num best">11</td><td class="num">38</td><td class="num bad">+27 s (+245%)</td></tr>
+<tr class=""><td class="num">8</td><td class="req">api<small>the demo project</small></td>
+<td>question<small>asked 1</small></td><td class="">question<small>asked 1</small></td>
+<td class="num">31</td><td class="num best">27</td><td class="num good">−4 s (−13%)</td></tr>
+<tr class=""><td class="num">9</td><td class="req">add notes about the API to NOTES.md<small>the demo project</small></td>
+<td>other<small>asked 1</small></td><td class="">other<small>asked 1</small></td>
+<td class="num">93</td><td class="num best">91</td><td class="num good">−2 s (−2%)</td></tr>
+<tr class=""><td class="num">10</td><td class="req">write a short poem about trading in poem.md<small>the demo project</small></td>
+<td>other<small>asked 1</small></td><td class="">other<small>asked 1</small></td>
+<td class="num best">22</td><td class="num">29</td><td class="num bad">+7 s (+32%)</td></tr>
+<tr class=""><td class="num">11</td><td class="req">CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE<small>the demo project</small></td>
+<td>other<small>asked 1</small></td><td class="">other<small>asked 1</small></td>
+<td class="num">37</td><td class="num best">26</td><td class="num good">−11 s (−30%)</td></tr>
+<tr class=""><td class="num">12</td><td class="req">update the README with how to run the tests<small>the demo project</small></td>
+<td>other<small>asked 1</small></td><td class="">other<small>asked 1</small></td>
+<td class="num">53</td><td class="num best">50</td><td class="num good">−3 s (−6%)</td></tr>
+<tr class=""><td class="num">13</td><td class="req">create a new file called slug.mjs with a slugify(text) function<small>the demo project</small></td>
+<td>other<small>asked 1</small></td><td class="">other<small>asked 1</small></td>
+<td class="num best">36</td><td class="num">43</td><td class="num bad">+7 s (+19%)</td></tr>
+<tr class=""><td class="num">14</td><td class="req">add a --json flag to export.mjs that prints the rows as JSON<small>the demo project</small></td>
+<td>change<small>asked 1</small></td><td class="">change<small>asked 1</small></td>
+<td class="num">136</td><td class="num best">80</td><td class="num good">−56 s (−41%)</td></tr>
+<tr class=""><td class="num">15</td><td class="req">fix the test<small>the demo project</small></td>
+<td>fix<small>asked 2</small></td><td class="">fix<small>asked 2</small></td>
+<td class="num">80</td><td class="num best">67</td><td class="num good">−13 s (−16%)</td></tr>
+<tr class="movedrow"><td class="num">16</td><td class="req">rename test to check<small>the demo project · moved by the rules</small></td>
+<td>rename<small>asked 1</small></td><td class="new">rename</td>
+<td class="num">5</td><td class="num best">0</td><td class="num good">−5 s (−100%)</td></tr>
+<tr class=""><td class="num">17</td><td class="req">rename export.mjs to exporter.mjs<small>the demo project</small></td>
+<td>other</td><td class="">other<small>asked 1</small></td>
+<td class="num best">32</td><td class="num">54</td><td class="num bad">+22 s (+69%)</td></tr>
+<tr class=""><td class="num">18</td><td class="req">delete trades.json<small>the demo project</small></td>
+<td>other</td><td class="">other</td>
+<td class="num best">11</td><td class="num">16</td><td class="num bad">+5 s (+45%)</td></tr>
+<tr class="movedrow"><td class="num">19</td><td class="req">run rm -rf ./logs to clean up<small>the demo project · moved by the rules</small></td>
+<td>other</td><td class="new">other</td>
+<td class="num best">11</td><td class="num">23</td><td class="num bad">+12 s (+109%)</td></tr>
+<tr class="movedrow"><td class="num">20</td><td class="req">run sudo ls to check the permissions<small>the demo project · moved by the rules</small></td>
+<td>other</td><td class="new">other</td>
+<td class="num">18</td><td class="num best">4</td><td class="num good">−14 s (−78%)</td></tr>
+<tr class="movedrow"><td class="num">21</td><td class="req">kill the node server on port 3999<small>the demo project · moved by the rules</small></td>
+<td>other</td><td class="new">other</td>
+<td class="num">7</td><td class="num">7</td><td class="num">same</td></tr>
+<tr class="movedrow"><td class="num">22</td><td class="req">commit and push to github<small>the demo project · moved by the rules</small></td>
+<td>other<small>asked 1</small></td><td class="new">other<small>asked 1</small></td>
+<td class="num">41</td><td class="num best">16</td><td class="num good">−25 s (−61%)</td></tr>
+<tr class="movedrow"><td class="num">23</td><td class="req">git reset --hard<small>the demo project · moved by the rules</small></td>
+<td>other</td><td class="new">other</td>
+<td class="num best">12</td><td class="num">28</td><td class="num bad">+16 s (+133%)</td></tr>
+<tr class=""><td class="num">24</td><td class="req">Here is a log, what went wrong? ERROR connection refused at 127.0.0.1:5432 ERROR connec…<small>the demo project</small></td>
+<td>question</td><td class="">question</td>
+<td class="num best">47</td><td class="num">56</td><td class="num bad">+9 s (+19%)</td></tr>
+<tr class=""><td class="num">25</td><td class="req">hello<small>a folder with no code</small></td>
+<td>step by step</td><td class="">step by step</td>
+<td class="num">3</td><td class="num best">2</td><td class="num good">−1 s (−33%)</td></tr>
+<tr class=""><td class="num">26</td><td class="req">add a --json flag to export.mjs<small>a folder with no code</small></td>
+<td>step by step<small>asked 1</small></td><td class="">step by step<small>asked 1</small></td>
+<td class="num">35</td><td class="num best">31</td><td class="num good">−4 s (−11%)</td></tr>
+<tr class=""><td class="num">27</td><td class="req">fix the bug<small>a folder with no code</small></td>
+<td>step by step<small>asked 1</small></td><td class="">step by step<small>asked 1</small></td>
+<td class="num">44</td><td class="num best">33</td><td class="num good">−11 s (−25%)</td></tr>
+<tr class=""><td class="num">28</td><td class="req">what does mathutil do?<small>a Python project</small></td>
+<td>question</td><td class="">question</td>
+<td class="num">20</td><td class="num best">16</td><td class="num good">−4 s (−20%)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>The pick list on the real model</h2>
+<p class="sub">Eight short requests in four practice projects, asked of Bonsai 2 27B the old way and the new way, before anything was built. Every answer word for word. The old way averages 6.4 s, the pick list 8.8 s.</p>
+<div class="wrap">
+<table>
+<thead><tr><th>Request</th><th>Before: a question you type an answer to</th><th>After: a question with answers to pick</th></tr></thead>
+<tbody>
+<tr><td class="req"><b>api</b><small>oneword api · 3 files</small></td>
+<td>What specific API functionality or change do you want implemented in server.mjs?<small>5.7 s</small></td><td class="new">What do you want to do with the API?<ol><li>Explain how the API works</li><li>Fix a broken API endpoint</li><li>Add a new API endpoint</li></ol><small>6.9 s</small></td></tr>
+<tr><td class="req"><b>make it faster</b><small>json flag · 3 files</small></td>
+<td>Which part of the export process is slow, and what is the current performance target?<small>4.9 s</small></td><td class="new">What should be faster?<ol><li>Explain export.mjs performance bottlenecks</li><li>Fix slow export.mjs logic</li><li>Add caching to export.mjs</li></ol><small>8.8 s</small></td></tr>
+<tr><td class="req"><b>dark mode</b><small>json flag · 3 files</small></td>
+<td>What should dark mode do in this project — e.g., add a CSS class/theme toggle, change the JSON export, or something else?<small>5.9 s</small></td><td class="new">What should dark mode do?<ol><li>Add dark mode toggle</li><li>Fix dark mode styling</li><li>Remove dark mode code</li></ol><small>8.0 s</small></td></tr>
+<tr><td class="req"><b>clean up</b><small>bigproject change · 39 files</small></td>
+<td>What does 'clean up' mean here — remove dead code, fix lint/format issues, or something else?<small>9.4 s</small></td><td class="new">What should be cleaned up?<ol><li>Remove unused code from agent files</li><li>Fix lint errors in app files</li><li>Add missing documentation to flows</li></ol><small>12.6 s</small></td></tr>
+<tr><td class="req"><b>logging</b><small>bigproject change · 39 files</small></td>
+<td>What logging behavior do you want (e.g., add console logs, a logger module, log levels, or log to file) and where?<small>10.1 s</small></td><td class="new">What do you want to do with logging?<ol><li>Add structured logging to agent</li><li>Fix broken log output</li><li>Remove unused logging code</li></ol><small>12.5 s</small></td></tr>
+<tr><td class="req"><b>fix the money</b><small>feature currency · 3 files</small></td>
+<td>What is wrong with the money code, and what behavior should it have after the fix?<small>4.9 s</small></td><td class="new">What should be fixed in money.mjs?<ol><li>Explain current money logic</li><li>Fix a specific bug</li><li>Add a new feature</li></ol><small>6.6 s</small></td></tr>
+<tr><td class="req"><b>add a json flag</b><small>json flag · 3 files</small></td>
+<td>Which JSON file should the flag be added to, and what should the flag's name and value be?<small>5.3 s</small></td><td class="new">What should the JSON flag do?<ol><li>Add a flag to export.mjs</li><li>Read a flag from trades.json</li><li>Document the flag in export.mjs</li></ol><small>7.1 s</small></td></tr>
+<tr><td class="req"><b>sort the rows</b><small>feature currency · 3 files</small></td>
+<td>Which rows in which file should be sorted, and by which column or field?<small>4.8 s</small></td><td class="new">Which rows should be sorted, and by what?<ol><li>Sort money.mjs rows by amount</li><li>Sort money.mjs rows by date</li><li>Sort money.mjs rows by name</li></ol><small>7.6 s</small></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Every request, before and after</h2>
+<p class="sub">Where the rules send each line, with no model called. Before is the code on main; After is the built code, which the sort test checks line by line.</p>
+<div class="chips" id="chips">
+  <button class="chip on" data-f="changed">Changed · 15</button>
+  <button class="chip" data-f="all">All · 101</button>
+  <button class="chip" data-f="yours">Your own lines · 25</button>
+  <button class="chip" data-f="tasks">Practice tasks · 28</button>
+  <button class="chip" data-f="requests">Real requests · 28</button>
+  <button class="chip" data-f="traps">Trap lines · 20</button>
+</div>
+<div class="wrap">
+<table id="all">
+<thead><tr><th class="num">#</th><th>Request</th><th>Before</th><th>After</th><th class="num">Model calls</th></tr></thead>
+<tbody>
+<tr class="group" data-set="yours" data-group="1"><td colspan="5">Your own lines <span>· typed into Bonsai, 25 Sep to 27 Sep</span></td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">1</td><td class="req"><span title="hello">hello</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">2</td><td class="req"><span title="exit">exit</span></td><td>quits</td><td class="">quits</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">3</td><td class="req"><span title="CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE AND ADD IT TO MY DESKTOP WHEN YOU ARE DONE.">CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE AND ADD IT TO MY DESKTOP WHEN YOU ARE DONE.</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">4</td><td class="req"><span title="CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE AND ADD IT TO MY DESKTOP WHEN YOU ARE DONE">CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE AND ADD IT TO MY DESKTOP WHEN YOU ARE DONE</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">5</td><td class="req"><span title="hello">hello</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">6</td><td class="req"><span title="tell me about multiplication, how does it work?">tell me about multiplication, how does it work?</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">7</td><td class="req"><span title="exit">exit</span></td><td>quits</td><td class="">quits</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">8</td><td class="req"><span title="hello , can you help me with something?">hello , can you help me with something?</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="1"><td class="num">9</td><td class="req"><span title="why">why</span><small>came 5 min after the line before it</small></td><td>asks the brain “is this clear?”, then question, step by step</td><td class="new">continues the conversation</td><td class="num">1 → 0</td></tr>
+<tr data-set="yours" data-changed="1"><td class="num">10</td><td class="req"><span title="hello , ima need help with something">hello , ima need help with something</span></td><td>no rule fits: step by step</td><td class="new">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">11</td><td class="req"><span title="I WANT YOU TO MAKE ME A FILE ON MY DESKTOP. MAKE A TXT FILE TITLED &quot;HELLO TEST 26 SEP&quot; AND WRITE A SHORT STOY ON A MONSTER IN A LAKE . REPORT BACK WHEN YOU ARE DONE">I WANT YOU TO MAKE ME A FILE ON MY DESKTOP. MAKE A TXT FILE TITLED &quot;HELLO TEST 26 SEP&quot; AND WRITE A SHORT STOY ON A MONSTER IN A LAKE . REPORT BACK WH…</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">12</td><td class="req"><span title="hello , can you help me with something ?">hello , can you help me with something ?</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">13</td><td class="req"><span title="can you create a txt file on my desktop and title it &quot;star&quot; and inside of it write a story about pirates at sea">can you create a txt file on my desktop and title it &quot;star&quot; and inside of it write a story about pirates at sea</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">14</td><td class="req"><span title="hello">hello</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="1"><td class="num">15</td><td class="req"><span title="i want you to help me with something">i want you to help me with something</span></td><td>no rule fits: step by step</td><td class="new">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">16</td><td class="req"><span title="how good are you , on a scale from 1-10, at making self contained html files?">how good are you , on a scale from 1-10, at making self contained html files?</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="1"><td class="num">17</td><td class="req"><span title="can you create a self contained html file and design a simple and modern finance dashbaord?">can you create a self contained html file and design a simple and modern finance dashbaord?</span></td><td>sorted as a change, step by step here</td><td class="new">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">18</td><td class="req"><span title="create a self contained html file . i want it to be a note page . add it to my desktop when you are done">create a self contained html file . i want it to be a note page . add it to my desktop when you are done</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">19</td><td class="req"><span title="Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and │ │ JavaScript inside the file, nothing loaded from the internet, and &lt;meta charset=&quot;utf-8&quot;&gt; in the head. The page │ │ shows a &quot;+ New note&quot; button above a list of note cards. When I click the button, open a small modal in the middle │ │ of the page and dim the page behind it. Inside the modal, show a title line, a text box for the note, and Cancel │ │ and Save buttons. When I click Save, close the modal and add the note as a small card at the top of the list, │ │ showing the title, the first line of the note, and today's date. Cancel or the Escape key closes the modal │ │ without saving. Save the notes in the browser's local storage so they are still there when I reopen the file, and │ │ follow my system's light or dark mode. download it to my desktop when you are done">Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and │ │ JavaScript inside the file, nothing…</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">20</td><td class="req"><span title="Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and JavaScript inside the file, nothing loaded from the internet, and &lt;meta charset=&quot;utf-8&quot;&gt; in the head. The page shows a &quot;+ New note&quot; button above a list of note cards. When I click the button, open a small modal in the middle of the page and dim the page behind it. Inside the modal, show a title line, a text box for the note, and Cancel and Save buttons. When I click Save, close the modal and add the note as a small card at the top of the list, showing the title, the first line of the note, and today's date. Cancel or the Escape key closes the modal without saving. Save the notes in the browser's local storage so they are still there when I reopen the file, and follow my system's light or dark mode.">Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and JavaScript inside the file, nothing loa…</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">21</td><td class="req"><span title="Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and JavaScript inside the file, nothing loaded from the internet, and &lt;meta charset=&quot;utf-8&quot;&gt; in the head. The page shows a &quot;+ New note&quot; button above a list of note cards. When I click the button, open a small modal in the middle of the page and dim the page behind it. Inside the modal, show a title line, a text box for the note, and Cancel and Save buttons. When I click Save, close the modal and add the note as a small card at the top of the list, showing the title, the first line of the note, and today's date. Cancel or the Escape key closes the modal without saving. Save the notes in the browser's local storage so they are still there when I reopen the file, and follow my system's light or dark mode.">Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and JavaScript inside the file, nothing loa…</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="1"><td class="num">22</td><td class="req"><span title="can you add it to my desktop?">can you add it to my desktop?</span><small>came 10 min after the line before it</small></td><td>sorted as a change, step by step here</td><td class="new">continues the conversation</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="1"><td class="num">23</td><td class="req"><span title="its perfect , thank you">its perfect , thank you</span></td><td>no rule fits: step by step</td><td class="new">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">24</td><td class="req"><span title="update memory">update memory</span></td><td>saves to memory</td><td class="">saves to memory</td><td class="num">0 → 0</td></tr>
+<tr data-set="yours" data-changed="0"><td class="num">25</td><td class="req"><span title="analyze the file and wait for further instrcutions ~/Desktop/notes.html">analyze the file and wait for further instrcutions ~/Desktop/notes.html</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr class="group" data-set="tasks" data-group="1"><td colspan="5">Practice tasks <span>· the 28 tasks of the test bench</span></td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">1</td><td class="req"><span title="add a --json flag to export.mjs that prints the rows as JSON, and add a test for it">add a --json flag to export.mjs that prints the rows as JSON, and add a test for it</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">2</td><td class="req"><span title="The tests in this project fail. Find the bug and fix it (fix the code, not the tests).">The tests in this project fail. Find the bug and fix it (fix the code, not the tests).</span></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">3</td><td class="req"><span title="Add a titleCase(text) function to strings.mjs that capitalizes the first letter of every word and lowercases the rest, export it, and add a test for it.">Add a titleCase(text) function to strings.mjs that capitalizes the first letter of every word and lowercases the rest, export it, and add a test for …</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">4</td><td class="req"><span title="Rename the function calcTotal to totalPrice everywhere in this project.">Rename the function calcTotal to totalPrice everywhere in this project.</span></td><td>rename shortcut</td><td class="">rename shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">5</td><td class="req"><span title="Which port does this project's server listen on, and where is that set? Don't change any files.">Which port does this project's server listen on, and where is that set? Don't change any files.</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">6</td><td class="req"><span title="What is the default page size of paginate(), and where is it set? Don't change any files.">What is the default page size of paginate(), and where is it set? Don't change any files.</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">7</td><td class="req"><span title="Which function computes tax in this project, and what is its default rate? Don't change any files.">Which function computes tax in this project, and what is its default rate? Don't change any files.</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">8</td><td class="req"><span title="Rename the method getTotal to computeTotal everywhere in this project.">Rename the method getTotal to computeTotal everywhere in this project.</span></td><td>rename shortcut</td><td class="">rename shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">9</td><td class="req"><span title="Rename the constant MAX_ITEMS to ITEM_LIMIT everywhere in this project.">Rename the constant MAX_ITEMS to ITEM_LIMIT everywhere in this project.</span></td><td>rename shortcut</td><td class="">rename shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">10</td><td class="req"><span title="The tests in this project fail. Find the bug and fix it (fix the code, not the tests).">The tests in this project fail. Find the bug and fix it (fix the code, not the tests).</span></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">11</td><td class="req"><span title="The tests in this project fail. Find the bug and fix it (fix the code, not the tests).">The tests in this project fail. Find the bug and fix it (fix the code, not the tests).</span></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">12</td><td class="req"><span title="Add a currency option to formatMoney() in money.mjs, so formatMoney(1234.5, { currency: 'EUR' }) returns '€1,234.50' (keep '$' as the default), and add a test for it.">Add a currency option to formatMoney() in money.mjs, so formatMoney(1234.5, { currency: 'EUR' }) returns '€1,234.50' (keep '$' as the default), and a…</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">13</td><td class="req"><span title="Add a clamp(value, low, high) function to mathutil.py that limits value to the range low..high, and add a test for it.">Add a clamp(value, low, high) function to mathutil.py that limits value to the range low..high, and add a test for it.</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">14</td><td class="req"><span title="Add a perimeter(w, h) function to shapes.mjs that returns the perimeter of a w-by-h rectangle.">Add a perimeter(w, h) function to shapes.mjs that returns the perimeter of a w-by-h rectangle.</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">15</td><td class="req"><span title="toFahrenheit() in convert.mjs gives wrong answers (100 °C should be 212 °F). Fix it.">toFahrenheit() in convert.mjs gives wrong answers (100 °C should be 212 °F). Fix it.</span></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">16</td><td class="req"><span title="Create a text file called STORY.txt with a short story (at least five sentences) about a lighthouse keeper.">Create a text file called STORY.txt with a short story (at least five sentences) about a lighthouse keeper.</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">17</td><td class="req"><span title="Add a NOTES.md file with three bullet points explaining how the API in server.mjs works.">Add a NOTES.md file with three bullet points explaining how the API in server.mjs works.</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">18</td><td class="req"><span title="CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE AND ADD IT TO THIS FOLDER WHEN YOU ARE DONE">CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE AND ADD IT TO THIS FOLDER WHEN YOU ARE DONE</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">19</td><td class="req"><span title="Add a symbol option (default '$') to the defaults in config.mjs, and use it in formatMoney in format.mjs and in the report header in report.mjs, so that buildReport(rows, { symbol: '€' }) starts with 'Total in €' and formats every amount with €. Add a test for it.">Add a symbol option (default '$') to the defaults in config.mjs, and use it in formatMoney in format.mjs and in the report header in report.mjs, so t…</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">20</td><td class="req"><span title="applyDiscount in price.mjs should take a third argument, cap (default 50): a pct above the cap is limited to the cap. cartTotal in cart.mjs must pass a cap of 30 and invoiceLine in invoice.mjs a cap of 10. Add tests for the cap.">applyDiscount in price.mjs should take a third argument, cap (default 50): a pct above the cap is limited to the cap. cartTotal in cart.mjs must pass…</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">21</td><td class="req"><span title="The tests in this project fail. Find the bug and fix it (fix the code, not the tests).">The tests in this project fail. Find the bug and fix it (fix the code, not the tests).</span></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">22</td><td class="req"><span title="fix the bug">fix the bug</span></td><td>asks you first, then fix shortcut</td><td class="">asks you first, then fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">23</td><td class="req"><span title="api">api</span></td><td>asks the brain “is this clear?”, then the brain sorts it</td><td class="">asks the brain “is this clear?”, then the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">24</td><td class="req"><span title="fix the test">fix the test</span></td><td>asks you first, then fix shortcut</td><td class="">asks you first, then fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">25</td><td class="req"><span title="Where is the test command for a project decided, and what command does it return for a Python project? Don't change any files.">Where is the test command for a project decided, and what command does it return for a Python project? Don't change any files.</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">26</td><td class="req"><span title="Make List and Search skip a folder called tmp as well (the same way they skip node_modules), and add a test for it.">Make List and Search skip a folder called tmp as well (the same way they skip node_modules), and add a test for it.</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">27</td><td class="req"><span title="formatMoney in money.mjs must put the minus sign before the currency symbol for negative amounts: formatMoney(-1234.5) is '-$1,234.50' and formatMoney(-0.5) is '-$0.50'. Positive amounts and zero stay as they are today. Add a test for negative amounts.">formatMoney in money.mjs must put the minus sign before the currency symbol for negative amounts: formatMoney(-1234.5) is '-$1,234.50' and formatMone…</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="tasks" data-changed="0"><td class="num">28</td><td class="req"><span title="Add a fee field to Trade in models.py (default 0.0) and include fee in to_dict in serialize.py; value must be qty * price minus the fee. Add a test for it.">Add a fee field to Trade in models.py (default 0.0) and include fee in to_dict in serialize.py; value must be qty * price minus the fee. Add a test f…</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr class="group" data-set="requests" data-group="1"><td colspan="5">Real requests <span>· the 28 requests of the test bench</span></td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">1</td><td class="req"><span title="hello">hello</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">2</td><td class="req"><span title="thanks!">thanks!</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">3</td><td class="req"><span title="What does the API in export.mjs do?">What does the API in export.mjs do?</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">4</td><td class="req"><span title="Is there an API key in this project?">Is there an API key in this project?</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">5</td><td class="req"><span title="explain the tests">explain the tests</span></td><td>asks the brain “is this clear?”, then question, step by step</td><td class="new">question, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">6</td><td class="req"><span title="run the tests">run the tests</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">7</td><td class="req"><span title="TEST">TEST</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">8</td><td class="req"><span title="api">api</span></td><td>asks the brain “is this clear?”, then the brain sorts it</td><td class="">asks the brain “is this clear?”, then the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">9</td><td class="req"><span title="add notes about the API to NOTES.md">add notes about the API to NOTES.md</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">10</td><td class="req"><span title="write a short poem about trading in poem.md">write a short poem about trading in poem.md</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">11</td><td class="req"><span title="CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE">CREATE A TXT FILE AND NAME IT &quot;TEST&quot; . ADD A SHORT STORY INSIDE</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">12</td><td class="req"><span title="update the README with how to run the tests">update the README with how to run the tests</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">13</td><td class="req"><span title="create a new file called slug.mjs with a slugify(text) function">create a new file called slug.mjs with a slugify(text) function</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">14</td><td class="req"><span title="add a --json flag to export.mjs that prints the rows as JSON">add a --json flag to export.mjs that prints the rows as JSON</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">15</td><td class="req"><span title="fix the test">fix the test</span></td><td>asks you first, then fix shortcut</td><td class="">asks you first, then fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">16</td><td class="req"><span title="rename test to check">rename test to check</span></td><td>asks the brain “is this clear?”, then rename shortcut</td><td class="new">rename shortcut</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">17</td><td class="req"><span title="rename export.mjs to exporter.mjs">rename export.mjs to exporter.mjs</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">18</td><td class="req"><span title="delete trades.json">delete trades.json</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">19</td><td class="req"><span title="run rm -rf ./logs to clean up">run rm -rf ./logs to clean up</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">20</td><td class="req"><span title="run sudo ls to check the permissions">run sudo ls to check the permissions</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">21</td><td class="req"><span title="kill the node server on port 3999">kill the node server on port 3999</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">22</td><td class="req"><span title="commit and push to github">commit and push to github</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="1"><td class="num">23</td><td class="req"><span title="git reset --hard">git reset --hard</span></td><td>the brain sorts it</td><td class="new">task, step by step</td><td class="num">1 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">24</td><td class="req"><span title="Here is a log, what went wrong? ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432">Here is a log, what went wrong? ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127.0.0.1:5432 ERROR connection refused at 127…</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">25</td><td class="req"><span title="hello">hello</span></td><td>quick reply</td><td class="">quick reply</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">26</td><td class="req"><span title="add a --json flag to export.mjs">add a --json flag to export.mjs</span></td><td>sorted as a change, step by step here</td><td class="">sorted as a change, step by step here</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">27</td><td class="req"><span title="fix the bug">fix the bug</span></td><td>asks you first, then sorted as a fix, step by step here</td><td class="">asks you first, then sorted as a fix, step by step here</td><td class="num">0 → 0</td></tr>
+<tr data-set="requests" data-changed="0"><td class="num">28</td><td class="req"><span title="what does mathutil do?">what does mathutil do?</span></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr class="group" data-set="traps" data-group="1"><td colspan="5">Trap lines <span>· written by me to catch side effects</span></td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">1</td><td class="req"><span title="great, now add a --json flag to export.mjs">great, now add a --json flag to export.mjs</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">2</td><td class="req"><span title="thanks, now rename calcTotal to totalPrice">thanks, now rename calcTotal to totalPrice</span></td><td>rename shortcut</td><td class="">rename shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">3</td><td class="req"><span title="perfect, fix the failing date test">perfect, fix the failing date test</span></td><td>asks you where you see it, then fix shortcut</td><td class="">asks you where you see it, then fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">4</td><td class="req"><span title="i need help with the export function in export.mjs">i need help with the export function in export.mjs</span></td><td>the brain sorts it</td><td class="">the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">5</td><td class="req"><span title="exit the loop early in parse() when the row is empty">exit the loop early in parse() when the row is empty</span></td><td>the brain sorts it</td><td class="">the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">6</td><td class="req"><span title="quit using var in export.mjs">quit using var in export.mjs</span></td><td>the brain sorts it</td><td class="">the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">7</td><td class="req"><span title="fix this bug in export.mjs">fix this bug in export.mjs</span><small>typed after an earlier turn</small></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">8</td><td class="req"><span title="why does export.mjs crash on an empty file?">why does export.mjs crash on an empty file?</span><small>typed after an earlier turn</small></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">9</td><td class="req"><span title="tell me about multiplication, how does it work?">tell me about multiplication, how does it work?</span><small>typed after an earlier turn</small></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">10</td><td class="req"><span title="rename it to loadBars">rename it to loadBars</span><small>typed after an earlier turn</small></td><td>rename shortcut</td><td class="">rename shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">11</td><td class="req"><span title="add a test for formatMoney and run it">add a test for formatMoney and run it</span><small>typed after an earlier turn</small></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">12</td><td class="req"><span title="make this function faster: toCsv in export.mjs">make this function faster: toCsv in export.mjs</span><small>typed after an earlier turn</small></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">13</td><td class="req"><span title="run the tests and fix what fails">run the tests and fix what fails</span></td><td>fix shortcut</td><td class="">fix shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">14</td><td class="req"><span title="build a login page component in src/pages/Login.jsx">build a login page component in src/pages/Login.jsx</span></td><td>the brain sorts it</td><td class="">the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">15</td><td class="req"><span title="create a new file called slug.mjs with a slugify(text) function">create a new file called slug.mjs with a slugify(text) function</span></td><td>task, step by step</td><td class="">task, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">16</td><td class="req"><span title="add a settings page to the app">add a settings page to the app</span></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">17</td><td class="req"><span title="make it faster">make it faster</span></td><td>asks the brain “is this clear?”, then change shortcut</td><td class="">asks the brain “is this clear?”, then change shortcut</td><td class="num">1 → 1</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">18</td><td class="req"><span title="install lodash and use it in export.mjs to group the rows">install lodash and use it in export.mjs to group the rows</span></td><td>the brain sorts it</td><td class="">the brain sorts it</td><td class="num">1 → 1</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">19</td><td class="req"><span title="what does this project do?">what does this project do?</span><small>typed after an earlier turn</small></td><td>question, step by step</td><td class="">question, step by step</td><td class="num">0 → 0</td></tr>
+<tr data-set="traps" data-changed="0"><td class="num">20</td><td class="req"><span title="add a --json flag to export.mjs that prints the rows as JSON">add a --json flag to export.mjs that prints the rows as JSON</span><small>typed after an earlier turn</small></td><td>change shortcut</td><td class="">change shortcut</td><td class="num">0 → 0</td></tr>
+</tbody>
+</table>
+</div>
+<p class="cap">Model calls = calls to the brain before any work starts: the sort itself (inside a code project) or the “is this clear?” check. Your own lines were typed in your home folder, which is not a code project: the shortcuts are off there, so a line sorted as a change still goes step by step.</p>
+
+<div class="two">
+<div>
+<h2>What I got wrong on the way</h2>
+<ul class="plain">
+<li><b>“exit” already quits.</b> My first findings and the first plan page said a plain exit does not quit. It does, since 26 Sep; your two exit lines were typed before that. I had checked the sorting rules and not the app’s own check. The change was dropped and the numbers corrected: 17 of 81 became 15, and 14 → 2 calls became 12 → 2.</li>
+<li><b>Two runs at once.</b> I stopped the first real-model run to restart it safely, and its wrapper started the second half by itself, so two runs shared one model for about 25 seconds. I stopped both, threw their results away and started one clean run.</li>
+<li><b>A follow-up rule that was too loose.</b> My first rule took “tell me about multiplication, how does it work?” for a follow-up because of the word “it”. The trap lines caught it; now the “it” must sit right after the verb.</li>
+<li><b>A command rule that was too wide.</b> “build a login page component in Login.jsx” was taken for a plain command. The trap lines caught that too; a command that names code is left to the brain, as before.</li>
+</ul>
+</div>
+<div>
+<h2>Limits you should know</h2>
+<ul class="plain">
+<li><b>The answers to pick are guesses.</b> The brain sees file names, not what is in them. It offered “Fix dark mode styling” in a project with no dark mode. “Type an answer” is always there.</li>
+<li><b>In your home folder the gain is small.</b> Your saved conversations show the brain already handled “ima need help” and “add it to my desktop” well there. The shortcuts, where a wrong sort costs most, only run inside code projects.</li>
+<li><b>Short requests still get asked about.</b> The brain called all 8 short requests unclear, “add a json flag” too. Not changed: you chose “ask whenever unclear”.</li>
+<li><b>Follow-ups are found by word rules.</b> “what about the other one?” is missed and sorted as before. A line that names a file or code is never taken for a follow-up.</li>
+<li><b>Start to finish, nothing got faster for the nine moved requests:</b> 155 s before, 159 s after, one run each. The 2.3 s saved at the start is smaller than the swing in what the brain does next (“TEST” took 11 s, then 38 s; “commit and push” 41 s, then 16 s). The whole set went from 899 s to 827 s, which one run cannot credit to these changes.</li>
+<li><b>The pick list costs 2.4 s</b> on each question the brain writes (6.4 s to 8.8 s). Questions with a set wording are as fast as before.</li>
+</ul>
+</div>
+</div>
+
+<div class="two">
+<div>
+<h2>What was changed</h2>
+<ul class="plain">
+<li><b>New:</b> the word rules (flows/words.mjs), step 2 in one place for the test (flows/sort.mjs), the sort test with its 101 lines, a screen test, this page’s builder.</li>
+<li><b>Changed:</b> the greeting net and the two end rules of the sorter (flows/index.mjs), the question before starting (flows/clarify.mjs), the top of a request in the agent (agent/agent.mjs), the dim line on screen (app), two lines of the Help tips, the README.</li>
+<li><b>Not touched:</b> the instructions Bonsai reads at start, so the next start is as fast as before. The step loop, the shortcuts themselves and the done check.</li>
+<li><b>Your 25 typed lines are inside the sort test</b> (terminal/test/sort-lines.mjs), which would go to the private GitHub repo with a commit. Say so if you would rather they stay on the Mac.</li>
+<li><b>Where:</b> ~/worktrees/bonsai-step2, branch step2, from main 8fde96e. Uncommitted. Another session is building step 3 in its own worktree; the two touch different parts of the same files and merge after.</li>
+</ul>
+</div>
+<div>
+<h2>What is real on this page</h2>
+<ul class="plain">
+<li><b>Real:</b> your 25 typed lines, the 56 bench requests, both sorting columns (the code on main and the built code).</li>
+<li><b>Real:</b> every second on this page, from Bonsai 2 27B on this Mac, 27 Sep 2026.</li>
+<li><b>Real app, scripted brain:</b> the two terminal screens.</li>
+<li><b>Mine:</b> the 20 trap lines, and which of your lines count as a follow-up (within 20 minutes of the line before, same folder).</li>
+</ul>
+</div>
+</div>
+
+<p class="foot">bonsai-step-2-results-2026-09-27.html · built by models/evals/reports/report-step2.mjs from models/bonsai-2-27b/results/step2-sort-2026-09-27 · the plan this was built from: <a href="bonsai-step-2-plan-2026-09-27.html">bonsai-step-2-plan</a> · the harness in simple words: <a href="../diagrams/bonsai-harness-simple-2026-09-27.html">bonsai-harness-simple</a></p>
+</main>
+<script>
+(function(){
+  var chips = [].slice.call(document.querySelectorAll('#chips .chip'));
+  var trs = [].slice.call(document.querySelectorAll('#all tbody tr'));
+  function show(f){
+    var seen = {};
+    trs.forEach(function(tr){
+      if (tr.getAttribute('data-group')) return;
+      var ok = f === 'all' || (f === 'changed' ? tr.getAttribute('data-changed') === '1' && tr.getAttribute('data-set') !== 'traps' : tr.getAttribute('data-set') === f);
+      tr.hidden = !ok;
+      if (ok) seen[tr.getAttribute('data-set')] = true;
+    });
+    trs.forEach(function(tr){ if (tr.getAttribute('data-group')) tr.hidden = !seen[tr.getAttribute('data-set')]; });
+    chips.forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-f') === f); });
+  }
+  chips.forEach(function(c){ c.addEventListener('click', function(){ show(c.getAttribute('data-f')); }); });
+  show('changed');
+})();
+</script>
+</body>
+</html>

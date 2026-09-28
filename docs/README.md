@@ -8,7 +8,9 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/bonsai-test-record.html](tests/bonsai-test-record.html) | page | Bonsai test record | 42 KB | 2026-09-28 |
+| [tests/bonsai-test-record.html](tests/bonsai-test-record.html) | page | Bonsai test record | 46 KB | 2026-09-28 |
+| [reports/bonsai-step-2-results-2026-09-27.html](reports/bonsai-step-2-results-2026-09-27.html) | page | Bonsai step 2 results | 76 KB | 2026-09-28 |
+| [reports/bonsai-step-2-plan-2026-09-27.html](reports/bonsai-step-2-plan-2026-09-27.html) | page | Bonsai step 2 plan | 64 KB | 2026-09-28 |
 | [diagrams/bonsai-harness-simple-2026-09-27.html](diagrams/bonsai-harness-simple-2026-09-27.html) | page | Bonsai harness, simply | 10 KB | 2026-09-28 |
 | [reports/bonsai-fable-harness-2026-09-27.html](reports/bonsai-fable-harness-2026-09-27.html) | page | Bonsai, Fable-style harness | 145 KB | 2026-09-28 |
 | [diagrams/bonsai-flow-before-after-fable-2026-09-27.html](diagrams/bonsai-flow-before-after-fable-2026-09-27.html) | page | Bonsai flow, before and after | 26 KB | 2026-09-28 |
