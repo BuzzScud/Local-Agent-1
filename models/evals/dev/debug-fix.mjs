@@ -4,7 +4,6 @@ import { join } from 'node:path';
 const R = new URL('../../../', import.meta.url).pathname.replace(/\/$/, ''); // the repo
 const { MODELS, DEFAULT_MODEL } = await import(`${R}/models/registry.mjs`);
 const L = await import(`${R}/terminal/index.mjs`);
-const origComplete = L.complete;
 const work = join(mkdtempSync(join(tmpdir(), 'dbgfix-')), 'project');
 cpSync(`${R}/models/evals/bench/tasks/2-fix-bug/project`, work, { recursive: true });
 const { Scratch, readResults, fixFlow } = L;

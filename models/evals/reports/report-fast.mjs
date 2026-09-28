@@ -33,7 +33,6 @@ const rows = tasks.map((t) => ({ task: t, n: num(t), prompt: taskText(t), route:
 const both = rows.filter((r) => r.before && r.after);
 const sum = (list, k) => list.reduce((s, r) => s + (r[k]?.secs ?? 0), 0);
 const passes = (list, k) => list.filter((r) => r[k]?.pass).length;
-const modelTasks = both.filter((r) => r.before.secs > 0 || r.after.secs > 0); // renames never call the model
 const byRoute = (k, route) => { const xs = both.filter((r) => r.route === route).map((r) => r[k].secs); return xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null; };
 const pct = (b, a) => (b ? `${a - b > 0 ? '+' : ''}${Math.round(((a - b) / b) * 100)}%` : '');
 const req = Object.fromEntries(probes.requests.rows.map((r) => [r.setup, r]));

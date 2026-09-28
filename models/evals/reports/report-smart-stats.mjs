@@ -423,7 +423,6 @@ function slope(host, { from, title, rows, cap, unit = ' s' }) {
 // tasks done within that budget; one line per version, the lead one labelled.
 const CURVE_STYLE = { before_off: ['--c-before', false], before_med: ['--c-third', false], before_high: ['--c-fourth', false], after_off: ['--c-after', false], after_all: ['--c-after', true] };
 const budgetLabel = (b) => (b < 60 ? b + 's' : b % 60 ? (b / 60).toFixed(1) + 'm' : (b / 60) + 'm');
-function logTicks(lo, hi) { const out = []; for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) for (const m of [1, 2, 5]) { const v = m * Math.pow(10, e); if (v >= lo && v <= hi) out.push(v); } return out; }
 function curves(host, { from, title, series, cap, lead = 'after_off', x = 'Time budget per task (seconds, log scale)', y = 'Tasks done within the budget (%)' }) {
   const W = 560, H = 300, L = 46, R = 14, T = 12, B = 40;
   const x0 = DATA.budgets[0] / 1.3, x1 = DATA.budgets[DATA.budgets.length - 1] * 1.3;

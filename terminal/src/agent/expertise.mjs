@@ -241,19 +241,6 @@ export function mathNotes(match, text = '') {
   return `From the user's own math notes, MATH/${rel}${pick.i >= 0 ? ` ("${pick.file.sections[pick.i][2]}")` : ''}:\n${piece.trim()}\n[end of the notes]\n${HOW}`;
 }
 
-// The block in the system prompt: a short pointer, not a catalog. Matching
-// runs in code (sortMath) and a question about the notes themselves gets the
-// full area list with the request (mathNotes), so the model only needs to
-// know the folder exists — every line here is read again at first start
-// whenever the folder changes (models/runtime/warmup.mjs), so it stays small.
-export function mathMap(index = mathIndex()) {
-  if (!index?.areas?.length) return '';
-  const tops = [...new Set(index.areas.map((a) => a.key.split(sep)[0]).filter((k) => k !== '.' && !/^part_/i.test(k)))];
-  const parts = [...new Set(index.areas.map((a) => a.key.split(sep)[0]).filter((k) => /^part_/i.test(k)))];
-  const folders = [...tops.slice(0, 12), ...(tops.length > 12 ? ['…'] : []), ...(parts.length ? [`${parts.length} part_ chapter folder${parts.length === 1 ? '' : 's'}`] : [])].join('; ');
-  return `The user's own mathematics\nThe user keeps their own mathematical framework in a MATH folder (${folders}). When a request touches one of its topics, the matching notes come with the request: answer from them first, and when standard mathematics says something different, add one short line saying so. Read, List and Search work there with paths starting MATH/; nothing in it may be changed.`;
-}
-
 // Rows for the /math panel: each area and the words that reach it.
 export function mathTopics(index = mathIndex()) {
   if (!index?.areas?.length) return [];

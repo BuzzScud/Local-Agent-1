@@ -58,21 +58,3 @@ export async function* streamChat({ url, messages, tools, toolChoice = 'auto', t
   }
   yield { type: 'done', finish, usage, timings };
 }
-
-// Collects a whole streamed turn (used by tests and the non-interactive mode).
-export async function collectTurn(stream, onEvent = () => {}) {
-  const turn = { reasoning: '', text: '', calls: [], finish: null, usage: null, timings: null };
-  for await (const ev of stream) {
-    onEvent(ev);
-    if (ev.type === 'reasoning') turn.reasoning += ev.text;
-    else if (ev.type === 'text') turn.text += ev.text;
-    else if (ev.type === 'tool') {
-      const c = (turn.calls[ev.index] ??= { id: ev.id, name: '', args: '' });
-      if (ev.id) c.id = ev.id;
-      if (ev.name) c.name += ev.name;
-      c.args += ev.args;
-    } else if (ev.type === 'done') Object.assign(turn, { finish: ev.finish, usage: ev.usage, timings: ev.timings });
-  }
-  turn.calls = turn.calls.filter(Boolean);
-  return turn;
-}

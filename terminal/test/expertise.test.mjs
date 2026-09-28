@@ -73,13 +73,12 @@ test('the notes carry the matched section, how to treat them, and where more is'
 });
 
 test('a pointer, when one is passed, sits in the shared part of the prompt; no catalog (off by default since 2026-09-26)', () => {
-  const map = E.mathMap(fresh());
+  const map = "The user's own mathematics\nThe user keeps their own mathematical framework in a MATH folder (thesis). When a request touches one of its topics, the matching notes come with the request: answer from them first.";
   const p = systemPrompt({ cwd: '/tmp', git: 'test', tests: null, math: map });
   const shared = p.slice(0, p.indexOf(SESSION_MARK));
   expect(shared).toContain("The user's own mathematics");
   expect(shared).toContain('thesis');
   expect(shared).toContain('answer from them first');
-  expect(map.length).toBeLessThan(700); // the pointer stays small: it is read again whenever MATH changes
   expect(systemPrompt({ cwd: '/tmp', git: 'test', tests: null, math: '' })).not.toContain("The user's own mathematics");
 });
 
