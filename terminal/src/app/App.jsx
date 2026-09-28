@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows } from './screen.jsx';
@@ -12,7 +13,7 @@ import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME } from '../../../models/index.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
@@ -21,7 +22,10 @@ import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
 import { MODE_OPTIONS } from './help.mjs';
-import { memoryFile, readMemory } from '../agent/memory.mjs';
+import { memoryDirs, readFacts, readLog, undoSave, openMemory } from '../agent/facts.mjs';
+import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
+import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
+import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
@@ -152,8 +156,15 @@ export function App({ opts, win, onRestart }) {
   // The agent lives for the whole session.
   const agentRef = useRef(null);
   if (!agentRef.current) {
-    const notes = projectNotes(cwd);
+    // The memory: your two rules and an older notes file are carried in at
+    // the first start; the small model that finds the facts is started with
+    // the first request that needs it.
+    const remembers = memoryOn(settings);
+    if (remembers) { try { openMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
+    const notes = projectNotes(cwd, 6000, { memory: remembers });
     agentRef.current = new Agent({
+      // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
+      memory: remembers ? { embedder: embedderReady() ? new Embedder() : null, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
       url: opts.url ?? 'http://127.0.0.1:0', model, cwd,
       system: systemPrompt({ cwd, notes: notes.text, git: gitSummary(cwd) }),
       thinking, effort, ctx, mode, flows: opts.flows !== false,
@@ -172,6 +183,9 @@ export function App({ opts, win, onRestart }) {
     });
   }
   const agent = agentRef.current;
+  // Saving on its own (autosave.mjs): a little after a task, and on quit.
+  const autoRef = useRef(null);
+  autoRef.current ??= new AutoSave({ agent, say: (text) => push({ type: 'note', text, tone: 'dim' }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
 
   // Everything the key handler needs, always current.
   const S = useRef({});
@@ -218,7 +232,7 @@ export function App({ opts, win, onRestart }) {
         push({ type: 'note', text: `Saved 27B · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
       } else { setEditedSaved(null); push({ type: 'note', text: 'The edited copy was removed. The original was never touched.', tone: 'dim' }); }
     };
-    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
+    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits, cwd }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
     const url = `${weightsRef.current.url}?tab=${tab}`;
     if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
     return { server: weightsRef.current, url };
@@ -303,7 +317,8 @@ export function App({ opts, win, onRestart }) {
   const saveNow = useCallback(() => {
     const s = sessionRef.current;
     if (!s.title) return;
-    try { saveSession(cwd, s.id, { title: s.title, messages: agent.messages, items: s.items.slice(-300), mode: agent.mode }); } catch {}
+    // lessons: what happened in each turn, for the memory's review at night.
+    try { saveSession(cwd, s.id, { title: s.title, messages: agent.messages, items: s.items.slice(-300), mode: agent.mode, lessons: agent.lessons }); } catch {}
   }, [agent, cwd]);
 
   // Keep a copy of what was shown, for /resume.
@@ -319,6 +334,7 @@ export function App({ opts, win, onRestart }) {
     const ac = new AbortController();
     abortRef.current = ac;
     setPlaceholder(pick(PLACEHOLDERS));
+    autoRef.current.cancel(); // a save in the background steps aside
     agent.send(content, { signal: ac.signal });
   }, [agent, cwd, push]);
 
@@ -367,6 +383,7 @@ export function App({ opts, win, onRestart }) {
       on('flow-step', (st) => setLive((l) => ({ ...l, flowStep: st }))),
       on('stats', (st) => setStats(st)),
       on('mode', (m) => setModeState(m)),
+      on('settled', () => autoRef.current.schedule()),
       on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); lastFold.current = { title: 'Summary', text: summary }; }),
       on('turn-end', ({ reason, secs }) => {
         const past = S.current.live?.past ?? 'Worked';
@@ -439,8 +456,15 @@ export function App({ opts, win, onRestart }) {
       setStarting(false);
       const q = queuedRef.current;
       if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
+      // First use here: what is already written is read once, in the background.
+      else setTimeout(() => { autoRef.current.seed(); }, 3000).unref?.();
     })();
     return () => { alive = false; serverRef.current?.stop({ keep: true }); weightsRef.current?.stop(); weightsRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // What the memory saved after the last window here had closed, said once.
+  useEffect(() => {
+    if (!agent.memory) return;
+    for (const line of sinceLastTime(cwd)) push({ type: 'note', text: line, tone: 'dim' });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // /weights: the viewer's little server, started once per window and closed with it.
   const weightsRef = useRef(null);
@@ -467,9 +491,13 @@ export function App({ opts, win, onRestart }) {
   const quit = useCallback(async () => {
     abortRef.current?.abort();
     saveNow();
-    await serverRef.current?.stop();
+    // What the memory has not saved yet is handed to a process of its own,
+    // which needs the model a little longer and stops it when it is done.
+    const handed = autoRef.current.leave({ stopAfter: Boolean(serverRef.current?.child) });
+    await agent.memory?.embedder?.stop({ keep: true }).catch(() => {});
+    await serverRef.current?.stop({ keep: handed });
     exit();
-  }, [exit, saveNow]);
+  }, [exit, saveNow, agent]);
 
   // /update: Bonsai starts again on the new code (the launcher builds it) and
   // picks this conversation back up; the model stays loaded in between. An
@@ -613,12 +641,39 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'memory': {
-        // What "update memory" has saved for this folder, and where.
-        const file = memoryFile(cwd);
-        const where = file.startsWith(homedir()) ? `~${file.slice(homedir().length)}` : file;
-        const facts = readMemory(file);
-        if (!facts.length) { push({ type: 'note', text: `Nothing saved yet. Say "update memory" (or "remember that …") and Bonsai saves what matters to ${where}, read at every start.`, tone: 'dim' }); break; }
-        push({ type: 'panel', title: `Memory · ${where}`, pad: 0, rows: [...facts.map((f) => [`- ${f}`]), ['Say "update memory" to add to it; edit the file freely.']] });
+        // What Bonsai remembers: your own memory and this project's.
+        if (!agent.memory) { push({ type: 'note', text: 'The memory is off here ("memory": false in settings.json).', tone: 'dim' }); break; }
+        const dirs = memoryDirs(cwd);
+        const tilde = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+        if (/^open\b/i.test(arg.trim())) {
+          // The hub on its Memory tab: every fact, with its trust, to edit, pin, take out or bring back.
+          const hub = openHub('memory'); if (!hub) break;
+          push({ type: 'note', text: `Memory opened in the browser at ${hub.url}`, tone: 'dim' });
+          break;
+        }
+        if (/^undo\b/i.test(arg.trim())) {
+          const u = undoSave(dirs);
+          if (!u) { push({ type: 'note', text: 'Nothing to take back: no save in the log.', tone: 'dim' }); break; }
+          push({ type: 'panel', title: 'Memory · the last save taken back', pad: 14, rows: [...u.did.map((d) => [d.what, d.fact.text.replace(/\s+/g, ' ').slice(0, 110)]), ['/memory undo again takes back the save before it']] });
+          break;
+        }
+        const rows = [];
+        for (const [title, dir] of [['About you', dirs.you], ['This project', dirs.project]]) {
+          const facts = dir ? readFacts(dir).sort((x, y) => Number(y.always) - Number(x.always) || y.trust - x.trust || y.used - x.used) : [];
+          if (!facts.length) continue;
+          rows.push([`${title} · ${facts.length} fact${facts.length === 1 ? '' : 's'}`, tilde(dir)]);
+          for (const f of facts.slice(0, 8)) rows.push([`  ${f.always ? 'always' : f.kind}${f.pinned ? ' · pinned' : ''}`, `${f.text.replace(/\s+/g, ' ').slice(0, 96)}${f.text.length > 96 ? '…' : ''}${f.always ? '' : `  (trust ${f.trust}, used ${f.used})`}`]);
+          if (facts.length > 8) rows.push(['', `and ${facts.length - 8} more: /memory open shows them all in the browser`]);
+        }
+        // Claude's notes are not Bonsai's to change: only how many there are, and where.
+        if (agent.memory.claude) {
+          const c = notesCount(agent.memory.claude === true ? notesDir() : notesDir({ setting: agent.memory.claude }));
+          if (c.dir) rows.push([`Claude's notes · ${c.used}`, `${tilde(c.dir)}  (read only; ${c.leftOut.length} about sign-ins, servers or secrets are left out)`]);
+        }
+        if (!rows.length) { push({ type: 'note', text: 'Nothing saved yet. Bonsai saves what it learns after a task and when you quit; "remember that …" saves at once.', tone: 'dim' }); break; }
+        const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => l.what !== 'trust').sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];
+        rows.push([last ? `last change ${String(last.at).slice(0, 16).replace('T', ' ')}` : '', '/memory undo takes the last save back · /memory open shows it in the browser']);
+        push({ type: 'panel', title: `Memory · ${agent.memory.embedder ? 'facts are found by meaning' : 'facts are found by their words (bonsai setup adds the small model)'}`, pad: 22, rows });
         break;
       }
       case 'init':

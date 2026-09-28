@@ -27,3 +27,5 @@ models/evals/dev/experiments/slots/
 models/evals/dev/experiments/*.log
 # The matcher experiment for memory (rejected): its files stay on this Mac
 models/evals/dev/experiments/julia-recall/
+models/evals/dev/experiments/*/*.log
+__pycache__/

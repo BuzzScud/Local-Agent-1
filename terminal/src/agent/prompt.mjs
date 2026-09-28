@@ -4,6 +4,7 @@ import { join, dirname, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { RULES } from './rules.mjs';
+import { memoryNotes, readState } from './facts.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Bonsai answers from what it knows there, and goes into a
@@ -15,11 +16,14 @@ export function isHomeFolder(cwd, home = homedir()) {
 const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools. Search, Read or List files only when the user asks about their own files, code or notes, or names a file. When the user asks you to make, change or look at a file or folder ("make a file on my Desktop"), do it straight away with the tools; Desktop, Documents and Downloads are folders here.`;
 
 // AGENTS.md (or CLAUDE.md), and private .bonsai/notes.md files (kept out of
-// git), from the project folder up to the home folder.
-export function projectNotes(cwd, maxChars = 6000) {
+// git), from the project folder up to the home folder; then what the memory
+// holds (facts.mjs): the rules that always apply and one line per fact.
+// A notes file whose lines were carried over into the memory is not read
+// twice. memory: false leaves the memory out (practice runs, tests).
+export function projectNotes(cwd, maxChars = 6000, { memory = true, home: homeDir } = {}) {
   const found = [];
   let dir = cwd;
-  const home = homedir();
+  const home = homeDir ?? homedir();
   for (let i = 0; i < 8; i++) {
     for (const name of ['AGENTS.md', 'CLAUDE.md']) {
       const p = join(dir, name);
@@ -31,7 +35,7 @@ export function projectNotes(cwd, maxChars = 6000) {
       }
     }
     const own = join(dir, '.bonsai', 'notes.md');
-    if (existsSync(own)) {
+    if (existsSync(own) && !(memory && readState(join(dir, '.bonsai', 'memory')).notes)) {
       const text = readFileSync(own, 'utf8').trim();
       if (text && !found.some((f) => f.text === text)) found.push({ path: own, text });
     }
@@ -44,7 +48,13 @@ export function projectNotes(cwd, maxChars = 6000) {
     if (out.length + block.length > maxChars) { out += `(${f.path.replace(home, '~')} cut to fit)\n${f.text.slice(0, Math.max(0, maxChars - out.length - 80))}\n`; break; }
     out += block;
   }
-  return { text: out.trim(), files: found.map((f) => f.path) };
+  const files = found.map((f) => f.path);
+  if (memory) {
+    let m = null;
+    try { m = memoryNotes(cwd, { home }); } catch { /* a memory that cannot be read is left out, the start goes on */ }
+    if (m?.text) { out = `${out.trim()}${out.trim() ? '\n\n' : ''}Memory\n${m.text}`; files.push(...m.files); }
+  }
+  return { text: out.trim(), files };
 }
 
 export function gitSummary(cwd) {

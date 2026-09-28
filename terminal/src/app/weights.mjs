@@ -7,6 +7,7 @@
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.bonsai-code/tests/record.jsonl
+//   /memory, /memory.json the memory: what Bonsai remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `bonsai-code DOCS/` at the top of the repo on this Mac:
 // BONSAI_DOCS names it outright, else BONSAI_REPO (the launcher passes it),
 // else the repo this source runs from.
@@ -16,6 +17,8 @@ import html from './weights.html' with { type: 'text' };
 import hubHtml from './hub.html' with { type: 'text' };
 import helpHtml from './help.html' with { type: 'text' };
 import testsHtml from './tests.html' with { type: 'text' };
+import memoryHtml from './memory.html' with { type: 'text' };
+import { memoryRoute } from './memory-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
@@ -66,7 +69,8 @@ export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 87
 //   GET  /edits.json    what is saved: the manifest, or { saved: null }
 //   POST /edits/save    { edits } → a fresh clone of the original + all edits
 //   POST /edits/revert  deletes the copy and its manifest
-export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits }) {
+// cwd: the folder whose memory the Memory tab shows.
+export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits, cwd = process.cwd() }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
   const size = missing ? 0 : statSync(path).size;
@@ -103,6 +107,8 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/weights') return page(html);
       if (url.pathname === '/help') return page(helpHtml);
       if (url.pathname === '/tests') return page(testsHtml);
+      if (url.pathname === '/memory') return page(memoryHtml);
+      if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });

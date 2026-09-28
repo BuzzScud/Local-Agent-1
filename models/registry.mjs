@@ -23,6 +23,14 @@ export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
 export const DEFAULT_MODEL = '27b';
 
+// The small models that write nothing and only compare meanings (one folder
+// each, like the models above). The memory uses one to find the facts that
+// fit a request.
+import bgeM3 from './bge-m3/model.mjs';
+
+export const EMBEDDERS = Object.fromEntries([bgeM3].map((m) => [m.id, m]));
+export const DEFAULT_EMBEDDER = 'bge-m3';
+
 // The thinking level for on/off plus an effort id ('medium' | 'high').
 // Thinking off is the level without an effort (Low: answers straight away).
 export function thinkingLevel(model, thinking, effort) {

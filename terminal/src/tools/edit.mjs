@@ -19,6 +19,37 @@ export function applyEdit(plan) {
   return plan;
 }
 
+// Only the lines that really differ, in order ('-' gone, '+' new): what a
+// description of a change is written from. diffLines below shows one block
+// from the first changed line to the last, so a change in two places far
+// apart reads there as hundreds of lines removed and added again (a fix of
+// 3 lines was once described as "removes nine functions").
+export function changedLines(before, after, max = 4000) {
+  let a = before.split('\n');
+  let b = after.split('\n');
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let end = 0;
+  while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end++;
+  a = a.slice(start, a.length - end);
+  b = b.slice(start, b.length - end);
+  // Too large to compare line by line: everything between counts as changed.
+  if (a.length * b.length > max * max) return [...a.map((text) => ({ type: '-', text })), ...b.map((text) => ({ type: '+', text }))];
+  // The longest run of lines the two share, by the usual table.
+  const n = a.length; const m = b.length;
+  const t = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) t[i][j] = a[i] === b[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+  const out = [];
+  let i = 0; let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { i++; j++; } else if (t[i + 1][j] >= t[i][j + 1]) out.push({ type: '-', text: a[i++] });
+    else out.push({ type: '+', text: b[j++] });
+  }
+  while (i < n) out.push({ type: '-', text: a[i++] });
+  while (j < m) out.push({ type: '+', text: b[j++] });
+  return out;
+}
+
 // One hunk around the changed block: common prefix and suffix are context.
 export function diffLines(before, after) {
   const a = before.split('\n');

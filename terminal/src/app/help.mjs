@@ -69,6 +69,8 @@ export function cliRows(lingerMins = 30) {
       ['bonsai weights', "the hub in the browser, on the model's weights (ctrl+c here closes it)"],
       ['bonsai docs', 'the hub on the harness and structure diagrams and every Bonsai page'],
       ['bonsai tests', 'the hub on the test record: every test run and its result'],
+      ['bonsai memory', 'the hub on the memory: every fact, with its trust, to edit, pin, take out or bring back'],
+      ['bonsai memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
       ['bonsai morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],
     ],
     options: [
@@ -100,9 +102,10 @@ export const PLACES = [
   ['~/.bonsai-code/sessions', 'saved conversations, for bonsai -c and /resume'],
   ['~/.bonsai-code/logs', 'the model server and update logs'],
   ['AGENTS.md', "a project's notes for Bonsai, read at the start (/init writes one)"],
-  ['.bonsai/settings.json', 'this folder only: mode and effort'],
-  ['.bonsai/notes.md', 'Bonsai’s memory for this project: “update memory” writes it, read at every start, kept out of git'],
-  ['~/.bonsai/notes.md', 'Bonsai’s memory when started in your home folder: read everywhere under it'],
+  ['.bonsai/settings.json', 'this folder only: mode, effort, and "memory": false to turn the memory off here'],
+  ['.bonsai/memory', 'what Bonsai remembers about this project: one small file per fact in facts/, kept out of git; edit or delete them freely'],
+  ['~/.bonsai/memory', 'what Bonsai remembers about you: how you like to work; it follows you into every project'],
+  ['.bonsai/notes.md', 'the older notes file: its lines were carried over into the memory the first time'],
 ];
 
 // How Bonsai keeps you safe, in plain words.
@@ -120,7 +123,9 @@ export const TIPS = [
   'Under your request a dim line says where it went: “Sorted as: change · shortcut”. If that is not what you meant, press esc and say it differently.',
   'Low effort is fastest and fine for most work. Try Medium or High for a tricky bug.',
   'Use Plan mode to see a plan before anything changes, then switch mode and say go.',
-  'Say “update memory” (or “remember that …”) and Bonsai saves what matters, to the right file, without asking where. /memory shows what it keeps.',
+  'Bonsai remembers on its own: a little after a task and when you quit it saves what it learned, and a fact comes back when a request fits it. “remember that …” saves at once.',
+  '/memory shows what it keeps, /memory undo takes the last save back, /memory open shows every fact in the browser.',
+  'A fact earns trust when the task passed its check after it was used, and loses it when the task failed or you corrected Bonsai. One that keeps failing is taken out of use.',
   '/compact frees memory in a long conversation; /clear starts fresh.',
   'Your math notes in ~/Desktop/MATH are used only when you ask with /math.',
 ];

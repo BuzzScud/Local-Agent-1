@@ -74,6 +74,12 @@ export function scanServers() {
 export const hasDraft = (model) => Boolean(model?.draft && process.env.BONSAI_HELPER !== 'off' && existsSync(draftPath(model)));
 
 export function serverArgs(model, { ctx, port, draft = false }) {
+  // A model that only compares meanings: the engine's embedding mode, one
+  // slot, room for a few short texts at once.
+  if (model.kind === 'embedding') {
+    return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--embedding', '--pooling', model.pooling ?? 'cls',
+      '-c', String(ctx ?? model.ctx ?? 2048), '-ub', String(ctx ?? model.ctx ?? 2048), '-ngl', '99', '-np', '1', '--no-webui'];
+  }
   return [
     '-m', modelPath(model),
     '--host', '127.0.0.1', '--port', String(port),

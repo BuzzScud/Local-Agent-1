@@ -1,12 +1,15 @@
 // Plays the practice tasks against the real model and checks each result.
-//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM]
+//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory]
+// --memory: with Bonsai's memory on (a throwaway one, empty at the start):
+// the rules that are always read, facts brought back, and a save after each
+// task, once its files were checked. Does the memory make anything worse?
 import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder } from '../../index.mjs';
-import { runHeadless } from '../../../terminal/index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady } from '../../index.mjs';
+import { runHeadless, openMemory, CLAUDE_RULES } from '../../../terminal/index.mjs';
 import { recordTest, codeLabel } from '../record.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +35,13 @@ const model = { ...base,
   thinkingSampling: temp ? { ...base.thinkingSampling, temperature: Number(temp) } : base.thinkingSampling,
   thinkingBudget: budget ? Number(budget) : base.thinkingBudget };
 
+const withMemory = args.includes('--memory');
+// --claude (with --memory): Claude's notes are looked in as well, where they are.
+const withClaude = withMemory && args.includes('--claude');
+const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'bonsai-eval-memory-')) : null;
+const saves = [];
+// One small model for the whole run, stopped with it.
+const embedder = withMemory && embedderReady() ? new Embedder() : null;
 const tasks = readdirSync(join(here, 'tasks')).filter((t) => !only || only.some((o) => t.startsWith(`${o}-`))).sort();
 const server = new ModelServer(model);
 const started = await server.start({ ctx });
@@ -54,11 +64,14 @@ try {
       // answers.json: [{ match: regex, reply }] — what "the user" says to Bonsai's questions.
       const answerRows = existsSync(join(here, 'tasks', task, 'answers.json')) ? JSON.parse(readFileSync(join(here, 'tasks', task, 'answers.json'), 'utf8')) : [];
       const answers = (q) => { const hit = answerRows.find((r) => new RegExp(r.match, 'i').test(q)); process.stdout.write(`    ? ${q}\n      → ${hit ? hit.reply : '(no answer given)'}\n`); return hit ? hit.reply : 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.'; };
+      // With Claude's notes, the fifteen lines boiled down from them are in the instructions, as in the app.
+      if (withClaude) { try { openMemory(work, { home: memoryHome, rules: CLAUDE_RULES }); } catch {} }
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
         run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots,
+          memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
       clearTimeout(timer);
@@ -70,21 +83,27 @@ try {
       const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? 'step by step';
       const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
       const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
+      // The memory's save comes after the check: its own files are not the task's.
+      if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
       console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps  ${row.toolErrors} errors  ${row.why}`);
       rmSync(dir, { recursive: true, force: true });
     }
   }
 } finally {
+  await embedder?.stop({ keep: false }).catch(() => {});
   await server.stop();
 }
 const file = join(tdir, 'summary.json');
-writeFileSync(file, JSON.stringify({ ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, results }, null, 2));
+if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
+writeFileSync(file, JSON.stringify({ memory: withMemory, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length) recordTest({ kind: 'tasks', name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
+  if (rs.length) recordTest({ kind: 'tasks', name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);
+// Nothing is left to wait for (a connection kept open to a server would hold the run).
+process.exit(0);

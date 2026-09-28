@@ -87,7 +87,8 @@ export function digest(messages, maxChars = 9000) {
   for (const m of messages) {
     if (m.role !== 'user' && m.role !== 'assistant') continue;
     const text = typeof m.content === 'string' ? m.content : Array.isArray(m.content) ? m.content.map((c) => c.text ?? '').join(' ') : '';
-    const t = text.replace(/\s+/g, ' ').trim();
+    // Without the facts that were brought back for the request (recall.mjs).
+    const t = text.replace(/\n\n\(From your memory,[\s\S]*\)\s*$/, '').replace(/\s+/g, ' ').trim();
     if (!t || t.startsWith('[')) continue;
     lines.push(`${m.role === 'user' ? 'User' : 'Bonsai'}: ${t.slice(0, 700)}`);
   }

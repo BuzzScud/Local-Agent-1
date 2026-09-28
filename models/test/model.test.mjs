@@ -1,7 +1,7 @@
 // The models part on its own: the registry (Bonsai 2 27B's settings), the
 // thinking switch, the memory math and the server's flags.
 import { test, expect } from 'bun:test';
-import { MODELS, DEFAULT_MODEL, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
+import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
 
 const m = MODELS[DEFAULT_MODEL];
 
@@ -93,4 +93,18 @@ test('the engine patch travels inside the code: patch.mjs is byte for byte pq2-m
   // the routine and its switch are in it
   expect(PATCH).toContain('kernel_mul_mv_pq2_0_multicol');
   expect(PATCH).toContain('GGML_METAL_PQ2_MULTICOL');
+});
+
+test('the memory\'s matcher: BGE-M3, in the engine\'s embedding mode, beside the 27B', () => {
+  expect(Object.keys(EMBEDDERS)).toEqual(['bge-m3']);
+  const e = EMBEDDERS[DEFAULT_EMBEDDER];
+  expect([e.kind, e.file, e.bytes, e.pooling, e.cut, e.margin]).toEqual(['embedding', 'bge-m3-Q8_0.gguf', 634_553_760, 'cls', 0.56, 0.02]);
+  expect(e.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const a = serverArgs(e, { port: 17_605 });
+  expect(a.slice(0, 2)).toEqual(['-m', modelPath(e)]);
+  expect(a.join(' ')).toContain('--port 17605 --embedding --pooling cls -c 2048 -ub 2048 -ngl 99 -np 1');
+  // none of the chat model's flags
+  for (const f of ['--jinja', '--reasoning-budget', '-md', '--slot-save-path', '--spec-type']) expect(a).not.toContain(f);
+  // and it is not one of the models /model offers
+  expect(Object.keys(MODELS)).toEqual(['27b']);
 });

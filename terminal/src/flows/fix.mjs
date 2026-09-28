@@ -38,7 +38,9 @@ export async function fixFlow(ctx, task) {
   const unseen = Boolean(kind && !check && !kind.testsSeeIt);
   const checkFirst = unseen && canPageCheck(kind) && process.env.BONSAI_CHECK_FIRST !== 'off';
   if (unseen && !checkFirst) return { handled: false, stepByStep: true, why: `the test suite can't see a ${kind.name} bug (it needs ${kind.tool})` };
-  const how = kind ? `\n\n${kindText(kind)}` : '';
+  // With every try go the steps for its kind of bug, and what the memory
+  // holds about this request (what worked here, what did not).
+  const how = `${kind ? `\n\n${kindText(kind)}` : ''}${ctx.memory ? `\n\n(${ctx.memory})` : ''}`;
   if (!checkFirst && !(check ?? ctx.testCmd)) return { handled: false, why: 'no test command' };
   const first = checkFirst ? ['Open the page in a browser', 'See the bug there', 'Your OK on the check'] : [check ? `Run ${check}` : 'Run the tests'];
   const plan = ctx.plan([...first, 'Find the code', `Try fixes (up to ${ctx.maxTries})`, 'Apply the fix']);

@@ -38,6 +38,8 @@ export function testPlan(cwd, target, files, testCmd) {
 
 // hint: the file the planner (src/flows/multi.mjs) already chose, if any.
 export async function changeFlow(ctx, task, { hint } = {}) {
+  // What the memory holds about this request goes with every draft and try.
+  const known = ctx.memory ? `\n\n(${ctx.memory})` : '';
   const { cwd, testCmd } = ctx;
   const plan = ctx.plan(['Find the code', 'Write a test that defines "done"', 'Your OK on the test', `Try changes (up to ${ctx.maxTries})`, 'Apply the change']);
   plan.step(0);
@@ -99,7 +101,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     const versions = [];
     const draftVersions = (n, slot) => tryUntilPass(ctx, {
       label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1,
-      prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}\n\nReply with ${want}.${SOURCE_ONLY}`,
+      prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}${known}\n\nReply with ${want}.${SOURCE_ONLY}`,
       apply: (code) => { const text = build(code); return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },
       check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },
     });
@@ -170,7 +172,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     const digest = failureDigest(failRun.out);
     let result = chosen.passing.length ? { ok: true, code: chosen.passing[0].code, marks: ['✓'] } : await tryUntilPass(ctx, {
       label: 'Trying changes', max: ctx.maxTries, system: CODE_SYSTEM,
-      prompt: ({ last }) => `Task: ${task}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nChange ${target} so that every test passes (do not change the tests). Reply with ${want}.${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n\`\`\`\n${last.code.slice(0, 2500)}\n\`\`\`\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
+      prompt: ({ last }) => `Task: ${task}${known}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nChange ${target} so that every test passes (do not change the tests). Reply with ${want}.${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n\`\`\`\n${last.code.slice(0, 2500)}\n\`\`\`\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
       apply: (code) => {
         const text = build(code);
         scratch.write(target, text);

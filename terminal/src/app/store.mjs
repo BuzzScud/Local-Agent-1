@@ -10,7 +10,8 @@ const DEFAULTS = { thinking: null, model: '27b' };
 // A trusted folder may set these in <folder>/.bonsai/settings.json; they
 // win over the global file, and what you type on the command line wins
 // over both. Anything else in the file is ignored.
-const FOLDER_KEYS = ['mode', 'effort'];
+// memory: false turns the memory off (nothing brought back, nothing saved).
+const FOLDER_KEYS = ['mode', 'effort', 'memory'];
 
 function folderSettings(cwd) {
   if (!cwd || !isTrusted(cwd)) return {};
@@ -25,6 +26,7 @@ function folderSettings(cwd) {
     if (out.effort === 'low') delete out.effort;
   }
   if (out.mode && !['ask', 'edits', 'plan'].includes(out.mode)) delete out.mode;
+  if (out.memory !== undefined && typeof out.memory !== 'boolean') delete out.memory;
   if (Object.keys(out).length) out.fromFolder = Object.keys(out).filter((k) => k !== 'fromFolder');
   return out;
 }

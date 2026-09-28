@@ -72,7 +72,9 @@ export function riskyName(path) {
 
 // ---- where the code connects ---------------------------------------------------------------
 // The places Bonsai's own code names. A new one is looked at before it ships.
-export const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'host'];
+// www.apple.com: the first lines every scheduler file on a Mac carries (the
+// night review's, terminal/src/app/review.mjs). A name in a header: nothing connects to it.
+export const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host'];
 export const hostsIn = (text) => [...new Set([...text.matchAll(/\bhttps?:\/\/([A-Za-z0-9][A-Za-z0-9.-]*)/g)].map((m) => m[1].toLowerCase().replace(/\.$/, '')))];
 export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) => !known.includes(h));
 // A server open to the network instead of this Mac only.

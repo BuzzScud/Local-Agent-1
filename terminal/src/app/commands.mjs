@@ -8,7 +8,7 @@ export const COMMANDS = [
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
-  { name: 'memory', desc: 'What Bonsai remembers here and where; say "update memory" to add' },
+  { name: 'memory', desc: 'What Bonsai remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'stats', desc: 'Speed, memory and context used' },

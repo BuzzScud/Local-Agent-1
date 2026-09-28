@@ -28,6 +28,9 @@ async function askOnTerminal(question, req) {
   return line.trim() || null;
 }
 import { loadSettings } from './app/store.mjs';
+import { memoryOn } from './app/autosave.mjs';
+import { claudeOn } from './agent/claude-notes.mjs';
+import { openMemory } from './agent/facts.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';
 
 import { VERSION, cliHelpText } from './app/help.mjs';
@@ -100,13 +103,31 @@ if (process.argv[2] === 'stop') {
   if (!r.stopped.length && !r.inUse.length) process.stdout.write('No model is loaded.\n');
   process.exit(0);
 }
-if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests') {
+// The save a closed window handed over (app/autosave.mjs). Nobody watches it.
+if (process.argv[2] === 'memory-save') {
+  const { runJob } = await import('./app/autosave.mjs');
+  try { await runJob(process.argv[3]); process.exit(0); } catch { process.exit(1); }
+}
+// The memory's review at night (app/review.mjs), and its place in the Mac's scheduler.
+if (process.argv[2] === 'memory-review') {
+  const { review, install, uninstall, installed, look, whyNot, HOURS, IDLE_MINS } = await import('./app/review.mjs');
+  const flag = (f) => process.argv.includes(f);
+  try {
+    if (flag('--install')) { process.stdout.write(`The review is scheduled: once an hour between ${HOURS[0]} and ${HOURS.at(-1) + 1} in the morning, when the Mac is on power and was not used for ${IDLE_MINS} minutes.\n${install()}\nbonsai memory-review --uninstall removes it.\n`); process.exit(0); }
+    if (flag('--uninstall')) { process.stdout.write(uninstall() ? 'The review is no longer scheduled.\n' : 'The review was not scheduled.\n'); process.exit(0); }
+    if (flag('--status')) { const no = whyNot(look()); process.stdout.write(`${installed() ? 'Scheduled' : 'Not scheduled (bonsai memory-review --install)'}. Right now it would ${no ? `not run: ${no}` : 'run'}.\n`); process.exit(0); }
+    const r = await review({ now: flag('--now') });
+    if (process.stdout.isTTY) process.stdout.write(r.ran ? `Read ${r.read} conversation${r.read === 1 ? '' : 's'}: ${r.added} saved${r.stopped ? '; stopped, a Bonsai window opened' : ''}.\n` : `Not now: ${r.why}. (--now skips the clock, the power and the idle check.)\n`);
+    process.exit(0);
+  } catch (e) { process.stderr.write(`bonsai memory-review: ${e.message}\n`); process.exit(1); }
+}
+if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests' || process.argv[2] === 'memory') {
   const { existsSync } = await import('node:fs');
   const path = modelPath(MODELS[DEFAULT_MODEL]);
   if (!existsSync(path)) { process.stderr.write(`bonsai weights: the model file is not here yet (${path}). Run bonsai setup first.\n`); process.exit(1); }
   const { startWeightsServer } = await import('./app/weights.mjs');
-  const s = startWeightsServer({ path });
-  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests' }[process.argv[2]] ?? 'weights'}`;
+  const s = startWeightsServer({ path, cwd: process.cwd() });
+  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests', memory: 'memory' }[process.argv[2]] ?? 'weights'}`;
   process.stdout.write(`Bonsai hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
   if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
   process.on('SIGINT', () => { s.stop(); process.exit(0); });
@@ -194,6 +215,8 @@ if (opts.print) {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots,
+      // The memory: facts brought back, and what the run taught saved before it ends.
+      memory: memoryOn(settings) ? { save: process.env.BONSAI_MEMORY_SAVE !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Bonsai's questions: asked on the terminal when there is one; otherwise unanswered.
       answers: process.stdin.isTTY ? askOnTerminal : null,
       onEvent: (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
@@ -214,8 +237,9 @@ if (opts.print) {
   // model, settings a folder file set, and the git state.
   try {
     const { projectNotes, gitSummary } = await import('./agent/prompt.mjs');
-    const names = [...new Set(projectNotes(opts.cwd).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.split('/').pop())))];
     const st = loadSettings(opts.cwd);
+    if (memoryOn(st)) { try { openMemory(opts.cwd); } catch {} }
+    const names = [...new Set(projectNotes(opts.cwd, 6000, { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
     const git = gitSummary(opts.cwd);
     opts.loaded = [
       names.join(' + ') || 'no AGENTS.md',

@@ -273,8 +273,8 @@ test('no usable notes (an empty reply): old tool output is emptied instead, as b
   expect(agent.messages.some((m) => m.role === 'tool' && m.content.startsWith('[older output removed'))).toBe(true);
 });
 
-test('memory: "trim" keeps the way before: no notes are asked for', async () => {
-  const { fake, held, agent } = await filled(LOOKS, { memory: 'trim' });
+test('whenFull: "trim" keeps the way before: no notes are asked for', async () => {
+  const { fake, held, agent } = await filled(LOOKS, { whenFull: 'trim' });
   expect(fake.requests.filter((r) => r.stream).length).toBe(4);
   expect(agent.messages.length).toBe(held);
 });

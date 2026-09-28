@@ -34,6 +34,13 @@
   and its results page in the DOCS folder if one was made. `bun run test:record` adds runs
   that are on the Mac but not yet in the record. A saved copy of the Tests tab is written to
   `bonsai-code DOCS/tests/bonsai-test-record.html`, so it is mirrored with the other pages.
+- **The memory** (`terminal/src/agent/facts.mjs`, `recall.mjs`, `lessons.mjs`) keeps what Bonsai
+  learns as small files, on the Mac only: `~/.bonsai/memory` about the user, `<project>/.bonsai/memory`
+  about a project. A test never touches the real one: with `BONSAI_HOME` set the user's memory
+  is kept inside it, and the app tests run with `BONSAI_MEMORY_SAVE=off` unless they test saving.
+  A practice run (`bun run eval`) runs without the memory, so it measures the same thing every
+  time; `memory: true` in `runHeadless` turns it on. `bun run eval:recall` is the check that the
+  right fact comes back (20 facts, 30 requests, the real small model).
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is private. Nothing secret is committed:
   scan staged files before a push. `bun run check` does that scan and more (the history,
   the packages, where the code connects, the installed app, the unit tests); `--fast`
