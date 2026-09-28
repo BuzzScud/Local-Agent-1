@@ -7,22 +7,32 @@ import { toolSchemas } from './agent/tools.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
+import { helpersOn } from './agent/helpers.mjs';
+import { llmCalls } from './flows/llm.mjs';
 
 // memory: true uses the memory (facts brought back, lessons saved when the
 // run ends); { home, embedder, save } sets where it lives and how. Off by
 // default, so a practice run is the same every time. save: 'after' leaves
 // the save to the caller (the result's save()), for a run whose files are
 // checked first.
-export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true }) {
+// helpers: the context helpers (agent/helpers.mjs); by default what
+// AGENTIC_HELPERS says (unset: all). embedder: the small model for the code
+// search when the memory is off. prewarm: the code search is built before the
+// prompt (not timed), as the app has it built by the time you ask.
+export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
-  const mem = memory ? { embedder: embedderReady() ? new Embedder() : null, save: true, ...(memory === true ? {} : memory) } : null;
+  const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
   // Files ranked by meaning before the first step (agent/rank.mjs), as in the
-  // app with the memory on; rank: false leaves it to the request's words.
-  const ranker = rank && !mem?.embedder && embedderReady() ? new Embedder() : null;
+  // app with the memory on; rank: false leaves it to the request's words. The
+  // same small model serves the code search of the context helpers.
+  const on = helpersOn(helpers);
+  const own = !mem?.embedder && !embedder && (rank || on.has('rag')) && embedderReady() ? new Embedder() : null;
+  const ranker = rank && !mem?.embedder ? embedder ?? own : null;
   const system = systemPrompt({ cwd, notes: projectNotes(cwd, 6000, { memory: Boolean(mem), home: mem?.home }).text, git: gitSummary(cwd) });
   const agent = new Agent({
     url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots, memory: mem, ranker,
+    helpers: on, embedder: mem?.embedder ?? embedder ?? own,
     // Starting over from its notes: the instructions come back from their saved reading.
     rewarm: warm && slots ? (sig) => warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal: sig }) : undefined,
     // approve(req) → false says no to one request even when auto-approving.
@@ -61,6 +71,14 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   // The turn's own counts (steps, reads, thinking): the last turn-end wins.
   let counts = {};
   agent.on('turn-end', (ev) => { counts = ev; });
+  // The code search built before the clock starts (a first build of a
+  // 40-file project takes ~30 s; the app builds it in the background).
+  let indexed = null;
+  if (prewarm) {
+    const index = agent.codeSearch();
+    if (index) { const i0 = Date.now(); await index.build({ signal }); indexed = { parts: index.parts.length, secs: (Date.now() - i0) / 1000, state: index.state }; }
+  }
+  const calls0 = llmCalls.n;
   const t0 = Date.now();
   const reason = await agent.send(prompt, { signal });
   const secs = (Date.now() - t0) / 1000;
@@ -71,12 +89,19 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
     try { return await saveLessons({ url, model, slot: slots?.side, cwd, home: mem.home, lessons: agent.lessons, messages: agent.messages, embedder: mem.embedder }); } catch { return null; /* a save that fails never fails the run */ }
   };
   if (mem?.save === true && !signal?.aborted) { saved = await save(); if (saved) onEvent('saved', saved); }
-  if (mem?.embedder && !memory?.embedder) await mem.embedder.stop({ keep: true }).catch(() => {});
-  if (ranker) await ranker.stop({ keep: true }).catch(() => {});
+  if (mem?.embedder && !memory?.embedder && !embedder) await mem.embedder.stop({ keep: true }).catch(() => {});
+  await own?.stop({ keep: true }).catch(() => {});
+  const given = log.filter((e) => e.type === 'context' && e.title === 'Helpers').flatMap((e) => e.items.filter((x) => !x.skipped));
   return {
     saved, save, lessons: agent.lessons,
     reason, finalText, log, messages: agent.messages, secs,
     steps: log.filter((e) => e.type === 'tool').length,
+    // The model's own work: its steps (a helper's step is not one), and every
+    // call it answered (the steps, the focused paths' drafts, the checks).
+    // (Agentic Coder's own steps: a focused path's, the plan question, "Work in …?", the check it runs at the end.)
+    ownSteps: log.filter((e) => e.type === 'tool' && !e.given && !/^(flow|plan|project|check)_/.test(String(e.id ?? ''))).length,
+    modelCalls: agent.stats.requests + (llmCalls.n - calls0),
+    helpers: [...on], helperItems: given.length, helperTokens: given.reduce((s, x) => s + (x.tokens ?? 0), 0), indexed,
     asked: log.filter((e) => e.type === 'tool' && e.label === 'Ask').map((e) => ({ question: String(e.arg), answer: e.view?.text ?? null })),
     toolErrors: log.filter((e) => e.type === 'tool' && e.error).length,
     outTokens: agent.stats.outTokens, tps: agent.stats.tps, ctxUsed: agent.ctxUsed,

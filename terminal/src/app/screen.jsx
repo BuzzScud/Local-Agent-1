@@ -106,8 +106,9 @@ function ToolView({ it, width }) {
 // The clock time a turn ended, as Claude Code writes it: "12:58 PM".
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-// What came along with a request (agent.remember): one folded line, like a
-// tool's result; ctrl+o prints the list, each item with its fit and size.
+// What came along with a request (agent.remember), and what the context
+// helpers brought (agent.bringHelpers, titled "Helpers"): one folded line,
+// like a tool's result; ctrl+o prints the list, each item with its fit and size.
 function Context({ it, width }) {
   const sent = it.items.filter((x) => !x.skipped);
   const skipped = it.items.length - sent.length;
@@ -116,7 +117,7 @@ function Context({ it, width }) {
   const textW = Math.max(20, Math.min(width, 110) - 40);
   return (
     <Box flexDirection="column">
-      <Row mark="⏺" markColor={C.accent}><Text><Text bold>Context</Text> <Text color={C.dim}>{head}</Text>{it.open ? null : <Text color={C.faint}>  (ctrl+o to expand)</Text>}</Text></Row>
+      <Row mark="⏺" markColor={C.accent}><Text><Text bold>{it.title ?? 'Context'}</Text> <Text color={C.dim}>{head}</Text>{it.open ? null : <Text color={C.faint}>  (ctrl+o to expand)</Text>}</Text></Row>
       {it.open ? (
         <Result>
           {it.items.map((x, i) => (

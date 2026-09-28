@@ -350,20 +350,57 @@ export function stripLineNumbers(text) {
 
 // Does this text still parse? JavaScript via `node --check`, JSON, Python.
 // Returns the error, or null (also when the language or checker is unknown).
-export function syntaxError(path, text) {
+// more (the lsp helper, agent/helpers.mjs): also JSX and TypeScript (bun's
+// parser) and the scripts inside a page.
+export function syntaxError(path, text, { more = false } = {}) {
   const ext = extname(path).toLowerCase();
   if (ext === '.json') { try { JSON.parse(text); return null; } catch (e) { return e.message; } }
+  if (more && ['.jsx', '.ts', '.tsx', '.mts', '.cts'].includes(ext)) return checkWith(bunBin(), ['build', '--no-bundle'], ext, text, { bun: true });
+  if (more && (ext === '.html' || ext === '.htm')) return pageScriptError(text);
   const cmd = ['.js', '.mjs', '.cjs'].includes(ext) ? ['node', ['--check']] : ext === '.py' ? ['python3', ['-m', 'py_compile']] : null;
   if (!cmd) return null;
-  const tmp = join(tmpdir(), `agentic-check-${process.pid}-${Date.now()}${ext}`);
+  return checkWith(cmd[0], cmd[1], ext, text);
+}
+
+// One checker run on a copy of the text. null when it parses, or when the
+// checker is not on this Mac.
+function checkWith(bin, args, ext, text, { bun = false } = {}) {
+  const tmp = join(tmpdir(), `agentic-check-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`);
   writeFileSync(tmp, text);
-  const r = spawnSync(cmd[0], [...cmd[1], tmp], { encoding: 'utf8', timeout: 10_000 });
+  const r = spawnSync(bin, [...args, tmp], { encoding: 'utf8', timeout: 10_000, env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } });
   rmSync(tmp, { force: true });
   if (r.error || r.status === 0) return null;
   const out = `${r.stderr}${r.stdout}`;
   const line = new RegExp(`${tmp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:(\\d+)`).exec(out)?.[1];
-  const msg = out.split('\n').find((l) => /Error/.test(l))?.trim() ?? 'syntax error';
+  const msg = (bun ? out.split('\n').find((l) => /^error:/.test(l.trim()))?.trim().replace(/^error:\s*/, '') : out.split('\n').find((l) => /Error/.test(l))?.trim()) ?? 'syntax error';
   return line ? `${msg} (line ${line})` : msg;
+}
+
+// bun: the one that runs Agentic Coder (the app is built with it) or the usual place.
+function bunBin() {
+  if (/(^|\/)bun$/.test(process.execPath)) return process.execPath;
+  const home = join(homedir(), '.bun', 'bin', 'bun');
+  return existsSync(home) ? home : 'bun';
+}
+
+// A page's own scripts (not the ones it loads with src): the first that does
+// not parse, with its line in the page.
+export function pageScriptError(html) {
+  let n = 0;
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    const attrs = m[1];
+    const code = m[2];
+    if (/\bsrc\s*=/.test(attrs) || !code.trim()) continue;
+    const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(attrs)?.[1]?.toLowerCase() ?? '';
+    const at = html.slice(0, m.index + m[0].indexOf('>') + 1).split('\n').length - 1; // lines before the script's first line
+    let err = null;
+    if (/json/.test(type)) { try { JSON.parse(code); } catch (e) { err = e.message; } }
+    else if (!type || /javascript|ecmascript|module/.test(type)) err = checkWith('node', ['--check'], type === 'module' ? '.mjs' : '.js', code);
+    else continue;
+    if (err) return err.replace(/\(line (\d+)\)$/, (_, l) => `(line ${at + Number(l)} of the page)`) + (/\(line/.test(err) ? '' : ` (in the script that starts on line ${at + 1} of the page)`);
+    if (++n >= 8) break;
+  }
+  return null;
 }
 
 // Work out a change before asking permission, so the prompt can show the diff.
@@ -393,8 +430,8 @@ export function prepare(name, args, env) {
       if (!m.ok) return { error: m.error };
       if (m.after === before) return { error: 'old_text and new_text are the same, so nothing would change. new_text must be the corrected version: write the changed lines out in full.' };
       // Refuse an edit that breaks a file which parsed before.
-      const broken = syntaxError(p.abs, m.after);
-      if (broken && !syntaxError(p.abs, before)) return { error: `That edit would break ${p.rel}: ${broken}. Nothing was changed. Remember: new_text REPLACES old_text (it is not added after it), so new_text must contain the whole new version of those lines and nothing twice.` };
+      const broken = syntaxError(p.abs, m.after, { more: env.checks });
+      if (broken && !syntaxError(p.abs, before, { more: env.checks })) return { error: `That edit would break ${p.rel}: ${broken}. Nothing was changed. Remember: new_text REPLACES old_text (it is not added after it), so new_text must contain the whole new version of those lines and nothing twice.` };
       return { abs: p.abs, rel: p.rel, before, after: m.after, ...diffLines(before, m.after), created: false };
     }
     const before = exists ? readFileSync(p.abs, 'utf8') : '';

@@ -7,8 +7,18 @@ import { streamChat } from '../agent/client.mjs';
 // Whoever wants a count of every focused call's tokens (the agent, while a
 // focused path runs, for the "done" line and the practice bench).
 export const tallies = new Set();
+// Every call the focused paths and checks make, for a practice run's count
+// of the model's own calls (headless.mjs), and how many are answering now
+// (the code search waits for them, tools/codeindex.mjs).
+export const llmCalls = { n: 0, now: 0 };
 
 export async function complete({ url, model, slot, system, user, temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort }) {
+  llmCalls.n++;
+  llmCalls.now++;
+  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort }); } finally { llmCalls.now--; }
+}
+
+async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort }) {
   const t0 = Date.now();
   const think = Boolean(thinking) && !schema;
   const base = think ? model.thinkingSampling ?? model.sampling : model.sampling;

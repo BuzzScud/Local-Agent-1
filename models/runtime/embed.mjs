@@ -6,6 +6,8 @@ import { existsSync } from 'node:fs';
 import { SERVER_BIN, EMBEDDERS, DEFAULT_EMBEDDER, modelPath } from '../registry.mjs';
 import { ModelServer, LINGER_SECS } from './server.mjs';
 
+const CACHE = 256; // texts whose numbers are kept for the next ask
+
 // The engine is built and the model's file is here.
 export const embedderReady = (model = EMBEDDERS[DEFAULT_EMBEDDER]) => Boolean(model) && existsSync(SERVER_BIN) && existsSync(modelPath(model));
 
@@ -31,24 +33,32 @@ export class Embedder {
   }
 
   // One list of numbers per text, each of length 1 (so that the closeness of
-  // two texts is the sum of their numbers multiplied pair by pair).
+  // two texts is the sum of their numbers multiplied pair by pair). A text
+  // asked for again (one request: the memory, Claude's notes and the code
+  // search each look it up) is answered from the last CACHE texts.
   async embed(texts, { signal } = {}) {
     if (!texts.length) return [];
-    await this.start();
-    const out = [];
-    for (let i = 0; i < texts.length; i += 16) {
-      const res = await fetch(`${this.url}/v1/embeddings`, { method: 'POST', headers: { 'content-type': 'application/json' }, signal, body: JSON.stringify({ model: this.model.id, input: texts.slice(i, i + 16).map((t) => String(t).slice(0, 4000)) }) });
+    const cache = (this.cache ??= new Map());
+    const keys = texts.map((t) => String(t).slice(0, 4000));
+    const want = [...new Set(keys.filter((k) => !cache.has(k)))];
+    if (want.length) await this.start();
+    for (let i = 0; i < want.length; i += 16) {
+      const batch = want.slice(i, i + 16);
+      const res = await fetch(`${this.url}/v1/embeddings`, { method: 'POST', headers: { 'content-type': 'application/json' }, signal, body: JSON.stringify({ model: this.model.id, input: batch }) });
       if (!res.ok) throw new Error(`the embedder answered ${res.status}`);
       const rows = (await res.json()).data.sort((a, b) => a.index - b.index);
-      for (const r of rows) {
+      rows.forEach((r, k) => {
         const v = Float32Array.from(r.embedding);
         let n = 0;
         for (const x of v) n += x * x;
         n = Math.sqrt(n) || 1;
-        for (let k = 0; k < v.length; k++) v[k] /= n;
-        out.push(v);
-      }
+        for (let j = 0; j < v.length; j++) v[j] /= n;
+        cache.set(batch[k], v);
+      });
     }
+    const out = keys.map((k) => cache.get(k));
+    for (const k of keys) { const v = cache.get(k); cache.delete(k); cache.set(k, v); } // newest last
+    while (cache.size > CACHE) cache.delete(cache.keys().next().value);
     return out;
   }
 

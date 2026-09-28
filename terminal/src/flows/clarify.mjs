@@ -17,6 +17,7 @@ import { Scratch } from './scratch.mjs';
 import { readResults } from './results.mjs';
 import { isSmallTalk, isCodeProject, routeByRules } from './index.mjs';
 import { PLAIN, CODE_ISH } from './words.mjs';
+import { changedFiles } from '../agent/helpers.mjs';
 
 const VAGUE_FIX = /^\W*(?:please\s+|can you\s+|could you\s+)?(?:fix|repair|debug|solve)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:bug|bugs|test|tests|issue|error|problem|code|it|this|that)?\s*[.!?]*\s*$/i;
 
@@ -79,14 +80,17 @@ export function cleanOptions(list, question = '') {
 export async function questionFor(ctx, text) {
   const kind = needsClarifying(text);
   if (!kind) return wantsWhere(text) ? { question: WHERE_QUESTION, options: [] } : null;
+  // With the tests helper (agent/helpers.mjs), the files changed since the
+  // last commit: "fix the bug" is often about the work in progress.
+  const changed = ctx.helpers?.has?.('tests') ? changedFiles(ctx.cwd) : [];
   if (kind === 'fix') {
     if (await testsFail(ctx)) return null; // failing tests say what is wrong
-    return { question: ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS, options: [] };
+    return { question: `${ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS}${changed.length ? ` (Changed since the last commit: ${changed.join(', ')}.)` : ''}`, options: [] };
   }
   const files = fileList(ctx.cwd);
   const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 200,
     system: 'You decide whether a request to a coding assistant is clear enough to start on, given the project files. The assistant can read, search and change files; it asks only what the files cannot tell it.',
-    user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user and 2 or 3 short answers they might pick. Each answer is a different kind of work (explain something, fix something, add something, remove something), never the same work on three different files. Each answer is under 10 words and says what would be done. Name a file only when it is clearly the one meant; do not offer work on test files or data files unless the request is about them.`,
+    user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}${changed.length ? `\n\nChanged since the last commit: ${changed.join(', ')}` : ''}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user and 2 or 3 short answers they might pick. Each answer is a different kind of work (explain something, fix something, add something, remove something), never the same work on three different files. Each answer is under 10 words and says what would be done. Name a file only when it is clearly the one meant; do not offer work on test files or data files unless the request is about them.`,
     schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' }, options: { type: 'array', items: { type: 'string' }, maxItems: 3 } }, required: ['clear', 'question', 'options'] } });
   if (!r.json || r.json.clear || !r.json.question?.trim()) return null;
   const question = r.json.question.trim().slice(0, 300);

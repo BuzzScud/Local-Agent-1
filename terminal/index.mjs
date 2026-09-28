@@ -4,7 +4,8 @@
 //     instructions and tools it is given;
 //   - the client: one chat, or one short side request, against a server;
 //   - the flows and their scratch copy, for the probes that watch a flow work;
-//   - the memory: the facts, and bringing them back for a request.
+//   - the memory: the facts, and bringing them back for a request;
+//   - the context helpers: which are on, and the code search, for the bench.
 export { runHeadless } from './src/headless.mjs';
 export { Agent, claimsAlreadyThere } from './src/agent/agent.mjs';
 export { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './src/agent/prompt.mjs';
@@ -20,3 +21,5 @@ export { memoryDirs, readFacts, applyChanges, changeTrust, tidy, undoLast, openM
 export { recall, recallNotes } from './src/agent/recall.mjs';
 export { notesDir, readNotes, leftOut, holdsSecret, bestPart, recallClaude, claudeText, notesCount, CUT as NOTES_CUT, MARGIN as NOTES_MARGIN } from './src/agent/claude-notes.mjs';
 export { CLAUDE_RULES } from './src/agent/claude-rules.mjs';
+export { helpersOn, HELPER_NAMES } from './src/agent/helpers.mjs';
+export { CodeIndex } from './src/tools/codeindex.mjs';

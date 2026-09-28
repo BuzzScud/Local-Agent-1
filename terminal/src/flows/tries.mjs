@@ -36,7 +36,8 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
     if (!code) { marks.push('✗'); continue; }
     const applied = apply(code);
     if (applied?.error) { marks.push('✗'); applied.undo?.(); if (!best) best = { code, why: applied.error }; continue; }
-    const broken = applied.files?.map((f) => syntaxError(f.abs, f.text)).find(Boolean);
+    // The lsp helper (agent/helpers.mjs): JSX, TypeScript and a page's scripts are checked too.
+    const broken = applied.files?.map((f) => syntaxError(f.abs, f.text, { more: Boolean(ctx.helpers?.has?.('lsp')) })).find(Boolean);
     if (broken) { marks.push('✗'); applied.undo?.(); if (!best) best = { code, why: `does not parse: ${broken}` }; continue; }
     const res = await check(applied);
     if (res.ok) {

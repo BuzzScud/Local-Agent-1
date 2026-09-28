@@ -3,7 +3,7 @@
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
 import { streamChat } from './client.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX } from './tools.mjs';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -23,13 +23,15 @@ import { Scratch } from '../flows/scratch.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
-import { complete, tallies } from '../flows/llm.mjs';
+import { complete, tallies, llmCalls } from '../flows/llm.mjs';
 import { isMemoryRequest, memoryFile, readMemory, applyMemory, digest, memoryPrompt, MEMORY_SCHEMA } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
 import { recall, recallNotes } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
 import { saveLessons, knownAlready } from './lessons.mjs';
+import { helpersOn, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
+import { CodeIndex, sameAsIndexed, CUT, MARGIN } from '../tools/codeindex.mjs';
 
 const MAX_STEPS = 40;
 const TRIM_AT = 0.78; // share of the context that starts a trim
@@ -56,19 +58,23 @@ const MAP_MIN_FILES = 4; // fewer code files than this: no project map, the mode
 // ~2,950 tokens at 16k (about 20 s of reading), ~5,900 at 32k, at most 8,000.
 const RANK_SHARE = 0.18;
 const RANK_MAX_TOKENS = 8000;
+const TESTS_FIRST_MS = 60_000; // the tests helper's run before the first step
 // Asking about code even when the request was not sorted (plan mode, a folder that is not a project).
 const EXPLAIN = /\b(explain|describe|walk me through|summari[sz]e|what does|how does|what is in|tell me about)\b/i;
 // A message that says the last turn went wrong.
 const CORRECTS = /^(no[,.! ]|nope\b|wrong\b|that('?s| is| was) (not|wrong)|this is (not|wrong)|not what i\b|that('?s| is) not what\b|you (broke|missed|forgot|did ?n[o']t|should ?n[o']t have|were not supposed)|undo (that|this|it)\b|revert (that|this|it)\b|put it back\b|why did you\b|i (did ?n[o']t|never) (ask|say|want))/i;
 
 // Files a request names ("explain src/app/App.jsx", "what does export.mjs do?"):
-// existing files inside the project, at most three.
-export function filesNamed(cwd, text) {
+// existing files inside the project, at most three. A name that is not there
+// is matched to a look-alike, unless lookAlike is false or the request asks
+// to make that file (skip: names from helpers.mjs createdNames).
+export function filesNamed(cwd, text, { lookAlike = true, skip = null } = {}) {
   const out = [];
   for (const m of text.matchAll(/(?:^|[\s`'"(])((?:\.{0,2}\/)?[\w@.-]+(?:\/[\w@.-]+)*\.[A-Za-z]\w{0,5})(?=$|[\s`'",:;!?)]|\.(?:\s|$))/g)) {
     let rel = m[1];
     let p = resolvePath(cwd, rel);
     if (!existsSync(p.abs)) {
+      if (!lookAlike || skip?.has(basename(rel).toLowerCase())) continue;
       const alt = didYouMean(cwd, rel);
       if (alt.length !== 1) continue;
       rel = alt[0];
@@ -228,7 +234,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir }) {
     super();
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
@@ -237,6 +243,18 @@ export class Agent extends EventEmitter {
     // The memory (facts.mjs, recall.mjs): { embedder, home }. Without it
     // nothing is brought back and nothing is learned (tests, practice runs).
     this.memory = memory || null;
+    // The context helpers (helpers.mjs): none unless given; the app and
+    // `coding -p` pass them (/helpers, AGENTIC_HELPERS). Given, they also
+    // switch Read first (prefetchRanked): 1 the files a request names, 3 the
+    // files closest by meaning. Not given (tests, other callers), Read first
+    // works as it always has.
+    this.helpersGiven = helpers != null;
+    this.helpers = helpers == null ? new Set() : helpersOn(helpers);
+    // The small model that compares meanings: the memory's, shared with the
+    // file ranking and the code search.
+    this.embedder = embedder ?? memory?.embedder ?? ranker ?? null;
+    this.codeIndex = null;
+    this.indexDir = indexDir; // where the code search keeps its index (tests: a throwaway folder)
     this.lessons = []; // what happened in each turn, for the next save (lessons.mjs)
     // When Agentic Coder started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
@@ -271,7 +289,34 @@ export class Agent extends EventEmitter {
     this.readFiles = new Set();
     this.mapGiven = false;
     this.lastRoute = null;
+    this.codeIndex = null;
     this.emit('cwd', { cwd: dir });
+  }
+
+  // What Read first reads before the first step: the files a request names,
+  // and the files closest to it (rank.mjs). /helpers switches each.
+  get readFirst() {
+    if (!this.helpersGiven) return { named: true, ranked: true };
+    return { named: this.helpers.has('named'), ranked: this.helpers.has('rag') };
+  }
+
+  // The code search for this folder (tools/codeindex.mjs, the rag helper),
+  // built in the background from the first request on; none in the home folder.
+  codeSearch() {
+    if (!this.helpers.has('rag') || !this.embedder || isHomeFolder(this.cwd)) return null;
+    // It waits while the model answers (a step here, or a focused path's call).
+    if (this.codeIndex?.cwd !== this.cwd) this.codeIndex = new CodeIndex(this.cwd, this.embedder, { ...(this.indexDir ? { dir: this.indexDir } : {}), paused: () => this.answering > 0 || llmCalls.now > 0 });
+    return this.codeIndex;
+  }
+
+  // The parts closest to the request, once the index is built; a build (or a
+  // refresh of the files changed since) goes on in the background meanwhile.
+  async findCode(text, signal) {
+    const index = this.codeSearch();
+    if (!index) return null;
+    index.build(); // with everything already worked out, it is ready at once
+    if (!index.ready) return { waiting: true, done: index.done, total: index.total, off: index.state === 'off' };
+    return index.search(text, { signal });
   }
 
   // Outside a project, a request naming one ("the chart bug in MAIN2026") asks
@@ -334,11 +379,16 @@ export class Agent extends EventEmitter {
     let seq = 0;
     const tool = (label, arg, view, error) => {
       if (!error && (label === 'Update' || label === 'Write' || label === 'Create') && arg) this.happened?.files.add(String(arg));
+      // A test run a path made: if this message goes on step by step, the
+      // tests helper hands its result over instead of running them again.
+      if (label === 'Bash' && view?.kind === 'bash' && this.happened) this.happened.testRun = { cmd: String(arg), out: (view.lines ?? []).join('\n'), code: view.code, secs: (view.ms ?? 0) / 1000 };
       this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
     };
     return {
       // The facts brought back for this request (recall.mjs), for the paths' own prompts.
       memory: this.happened?.notes ?? '',
+      // The helpers on (helpers.mjs), for the paths that use one.
+      helpers: this.helpers,
       url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
       // Code and tests are written at the chat's thinking level (Off by default).
       thinking: this.thinking, effort: this.effort,
@@ -411,6 +461,7 @@ export class Agent extends EventEmitter {
     // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
     if (isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
     this.lastRoute = null;
+    this.lastHelpers = []; // what the helpers bring to this request (/helpers shows it)
     this.sortShown = this.mode === 'plan'; // a plan is never sorted: no line
     const stopNow = (reason) => {
       this.busy = false;
@@ -543,6 +594,12 @@ export class Agent extends EventEmitter {
     this.prefetchMap();
     if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
     else if (!follow && kind !== 'rename') await this.prefetchRanked(text, signal);
+    // What the other helpers bring (helpers.mjs): the failing tests and the
+    // changes, the closest parts of long files by meaning, where names are used.
+    try { await this.bringHelpers(text, kind, signal); } catch (e) {
+      if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted');
+      this.emit('note', { text: `The helpers could not bring what they found (${e.message}); starting without it.`, tone: 'dim' });
+    }
     let verified = false;
     let correctedAlready = false;
     let blankRetry = false;
@@ -852,7 +909,7 @@ export class Agent extends EventEmitter {
     const id = `map_${Date.now()}`;
     this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: '.', pattern: '**/*' }) } }] });
     this.messages.push({ role: 'tool', tool_call_id: id, content: `Code files in the project (lines: top-level names):\n${map.text}` });
-    this.emit('tool', { id, name: 'List', label: 'List', arg: 'the project map', view: { kind: 'list', count: map.entries.length, content: map.text } });
+    this.emit('tool', { id, name: 'List', label: 'List', arg: 'the project map', view: { kind: 'list', count: map.entries.length, content: map.text }, given: true });
   }
 
   // "Explain this code" (flows/explain.mjs). Puts the code a question is
@@ -871,7 +928,7 @@ export class Agent extends EventEmitter {
     try { mtime = statSync(abs).mtimeMs; } catch {}
     this.turn?.reads?.set(`${abs}|${args.offset ?? ''}|${args.limit ?? ''}|`, { msg: result, mtime });
     if (this.turn) this.turn.given = (this.turn.given ?? 0) + 1;
-    this.emit('tool', { id, name: 'Read', label: 'Read', arg: rel, view });
+    this.emit('tool', { id, name: 'Read', label: 'Read', arg: rel, view, given: true });
   }
 
   // A file read in one go: whole when it fits, otherwise as the Read tool
@@ -894,15 +951,16 @@ export class Agent extends EventEmitter {
   // is most likely about by meaning (rank.mjs), read before the first step
   // instead of found with List/Search/Read one reply at a time.
   async prefetchRanked(text, signal) {
-    if (isHomeFolder(this.cwd)) return;
+    const on = this.readFirst;
+    if (isHomeFolder(this.cwd) || (!on.named && !on.ranked)) return;
     let entries;
     try { entries = repoMap(this.cwd).entries; } catch { return; }
     if (entries.length < MAP_MIN_FILES) return;
     let budget = Math.min(RANK_MAX_TOKENS, Math.round(this.ctx * RANK_SHARE)) * 3.6;
     const want = [];
-    for (const f of filesNamed(this.cwd, text)) want.push(f);
+    if (on.named) for (const f of filesNamed(this.cwd, text, { skip: createdNames(text) })) want.push(f);
     let ranked = { files: [], how: 'none', ms: 0 };
-    try { ranked = await rankFiles(this.cwd, text, { embedder: this.ranker ?? this.memory?.embedder ?? null, entries, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
+    if (on.ranked) { try { ranked = await rankFiles(this.cwd, text, { embedder: this.ranker ?? this.memory?.embedder ?? null, entries, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; } }
     for (const r of ranked.files) {
       const abs = resolvePath(this.cwd, r.rel).abs;
       if (!want.some((w) => w.abs === abs)) want.push({ rel: r.rel, abs, ranked: true });
@@ -916,6 +974,8 @@ export class Agent extends EventEmitter {
       budget -= got.body.length;
       this.giveRead(f.rel, { path: f.rel }, got.body, got.view);
       read.push(f.rel);
+      // For /helpers: which helper brought it, and its size.
+      (this.lastHelpers ??= []).push({ from: f.ranked ? 'code' : 'file', text: f.rel, tokens: tokensOf(got.body) });
     }
     if (this.turn) this.turn.ranked = { how: ranked.how, ms: ranked.ms, files: read };
     if (read.length) this.emit('note', { text: `Read first${ranked.how === 'meaning' ? ', by meaning' : ranked.how === 'words' ? ', by the request’s words' : ''}: ${read.join(', ')}`, tone: 'dim' });
@@ -948,6 +1008,125 @@ export class Agent extends EventEmitter {
       given(p.rel, whole ? { path: p.rel } : { path: p.rel, offset: p.from, limit: p.to - p.from + 1 }, `${head}\n${p.text}`, { kind: 'read', lines: p.to - p.from + 1, total: p.total, content: p.text });
       this.readFiles.add(resolvePath(this.cwd, p.rel).abs);
     }
+  }
+
+  // What the context helpers bring before the first step, after Read first
+  // (prefetchRanked: the named files and the closest files, whole): the
+  // failing tests and the changes not yet committed, the closest functions
+  // of the files not read whole, and where the names the request uses are
+  // defined and used. Each goes in as a step the model took itself (a Bash,
+  // a Read, a Search), within CEILING tokens, and one "Helpers" line lists
+  // what came (ctrl+o: each with its fit and size).
+  async bringHelpers(text, kind, signal) {
+    const on = this.helpers;
+    if (!on?.size) return;
+    const t0 = Date.now();
+    const home = isHomeFolder(this.cwd);
+    const items = [];
+    const skipped = [];
+    // The tests, on a fix-type request: the run a focused path made for this
+    // message, or one now (in a throwaway copy, 60 s at most).
+    if (on.has('tests') && !home && this.testCmd && fixLike(kind, text)) {
+      const run = this.happened?.testRun?.cmd === this.testCmd ? this.happened.testRun : await this.runTestsFirst(signal);
+      if (run) {
+        const say = (maxChars) => `(Agentic Coder ran the tests before your first step; nothing has changed since.)\n${testReport(this.testCmd, run.out, run.code, { timedOut: run.timedOut, secs: run.secs, maxChars })}`;
+        const res = readResults(run.out, run.code);
+        const what = run.timedOut ? 'stopped after 60 s' : res.ok ? `all ${res.total ?? ''} pass`.replace('  ', ' ') : `${res.failed ?? 'some'} of ${res.total ?? '?'} fail`;
+        const bash = (body) => ({ helper: 'tests', from: 'tests', text: `${this.testCmd} · ${what}`, name: 'Bash', args: { command: this.testCmd, description: 'Run the tests' }, body, chars: body.length, view: { kind: 'bash', code: run.code, lines: body.split('\n'), ms: Math.round((run.secs ?? 0) * 1000) } });
+        items.push({ ...bash(say(chars(SHARES.tests))), small: bash(say(chars(SHARES.tests) / 3)) });
+      }
+    }
+    if (on.has('tests') && !home && (fixLike(kind, text) || talksAboutChanges(text))) {
+      const ch = gitChanges(this.cwd);
+      if (ch?.text) {
+        const body = `(The changes not yet committed, as git shows them.)\n${ch.text}`;
+        items.push({ helper: 'tests', from: 'changes', text: `git diff · ${ch.files.length + ch.more} changed file${ch.files.length + ch.more === 1 ? '' : 's'}${ch.fresh ? `, ${ch.fresh} new` : ''}`, name: 'Bash', args: { command: 'git diff HEAD', description: 'See what changed since the last commit' }, body, chars: body.length, view: { kind: 'bash', code: 0, lines: body.split('\n'), ms: 0 } });
+      }
+    }
+    // The closest functions by meaning (the code search): from the files
+    // Read first did not give whole, so a long file's outline is followed by
+    // the parts that matter, and a file its ranking missed can still come.
+    if (on.has('rag') && !home) {
+      let found = null;
+      try { found = await this.findCode(text, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
+      if (found?.parts?.length && found.parts[0].close >= CUT) {
+        const best = found.parts[0].close;
+        const byFile = new Map();
+        for (const p of found.parts.filter((x) => x.close >= Math.max(CUT, best - MARGIN)).slice(0, 8)) {
+          const abs = resolvePath(this.cwd, p.rel).abs;
+          if (this.readFiles.has(abs) || !sameAsIndexed(this.cwd, p)) continue;
+          if (!byFile.has(p.rel)) byFile.set(p.rel, []);
+          byFile.get(p.rel).push(p);
+        }
+        for (const [rel, parts] of [...byFile].slice(0, 3)) {
+          const abs = resolvePath(this.cwd, rel).abs;
+          let all;
+          try { all = readFileSync(abs, 'utf8').replace(/\n$/, '').split('\n'); } catch { continue; }
+          // Parts next to each other are given as one piece.
+          const ranges = [];
+          for (const p of [...parts].sort((a, b) => a.line - b.line)) {
+            const last = ranges.at(-1);
+            if (last && p.line <= last.end + 3) { last.end = Math.max(last.end, p.end); last.names.push(p.name); last.close = Math.max(last.close, p.close); } else ranges.push({ line: p.line, end: p.end, names: [p.name], close: p.close });
+          }
+          for (const r of ranges) {
+            const end = Math.min(r.end, all.length);
+            const piece = all.slice(r.line - 1, end).join('\n');
+            const body = `${rel} (lines ${r.line}-${end} of ${all.length}; pass offset to read more):\n${piece}`;
+            items.push({ helper: 'rag', from: 'code', text: `${rel} · ${r.names.join(', ')}`, close: r.close, name: 'Read', args: { path: rel, offset: r.line, limit: end - r.line + 1 }, abs, body, chars: body.length, view: { kind: 'read', lines: end - r.line + 1, total: all.length, content: piece } });
+          }
+        }
+      } else if (found?.waiting && !found.off && found.total) {
+        skipped.push({ from: 'code', text: 'code search', skipped: `still indexing: ${found.done} of ${found.total} parts` });
+      }
+    }
+    // Where the names the request uses are defined and used.
+    if (on.has('lsp') && !home) {
+      let map = null;
+      try { map = repoMap(this.cwd); } catch {}
+      const w = map?.entries?.length ? whoUses(this.cwd, text, map.entries) : null;
+      if (w) items.push({ helper: 'lsp', from: 'uses', text: w.names.join(', '), name: 'Search', args: { pattern: w.names.join('|') }, body: w.text, chars: w.text.length, view: { kind: 'search', count: w.names.length, content: w.text } });
+    }
+    if (!items.length && !skipped.length) return;
+    const take = shareOut(items);
+    for (const it of items) if (!take.includes(it) && !take.includes(it.small)) skipped.push({ from: it.from, text: it.text, skipped: `over the ${CEILING.toLocaleString('en-US')}-token limit` });
+    for (const it of take) this.pretend(it);
+    const tokens = take.reduce((s, it) => s + tokensOf(it.body), 0);
+    this.lastHelpers = [...(this.lastHelpers ?? []), ...take.map((it) => ({ from: it.from, text: it.text, tokens: tokensOf(it.body) }))];
+    if (this.happened) this.happened.helpers = this.lastHelpers;
+    this.emit('context', { title: 'Helpers', items: [...take.map((it) => ({ from: it.from, text: it.text, close: it.close ?? null, tokens: tokensOf(it.body) })), ...skipped], tokens, ms: Date.now() - t0, how: 'meaning' });
+  }
+
+  // A step the model did not have to take: the call and its result go into
+  // the conversation as if it had made them (as the project map does), and
+  // onto the screen like any step. A Read counts as read: asked for again,
+  // it is pointed back to, and the file may be edited.
+  pretend({ name, args, body, view, abs }) {
+    if (name === 'Read' && abs) {
+      this.giveRead(args.path, args, body, view);
+      this.readFiles.add(abs);
+      this.ctxUsed += tokensOf(body) + 30;
+      return;
+    }
+    const id = `${name.toLowerCase()}_${Date.now()}_${this.messages.length}`;
+    const result = { role: 'tool', tool_call_id: id, content: body };
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+    this.messages.push(result);
+    this.ctxUsed += tokensOf(body) + 30;
+    this.emit('tool', { id, name, ...display(name, args), view, given: true });
+  }
+
+  // The tests before the first step, in a throwaway copy of the project
+  // (a test may write files), stopped after a minute.
+  async runTestsFirst(signal) {
+    this.emit('note', { text: `Running ${this.testCmd} first, to see what fails (a minute at most).`, tone: 'dim' });
+    const scratch = new Scratch(this.cwd);
+    try {
+      const r = await scratch.run(this.testCmd, { signal, timeoutMs: TESTS_FIRST_MS });
+      return { cmd: this.testCmd, out: r.out ?? '', code: r.code, timedOut: r.timedOut, secs: (r.ms ?? 0) / 1000 };
+    } catch (e) {
+      if (signal?.aborted || e.name === 'AbortError') throw e;
+      return null;
+    } finally { scratch.dispose(); }
   }
 
   // A greeting or thanks: one short reply, no tools, no focused paths.
@@ -1057,6 +1236,7 @@ export class Agent extends EventEmitter {
     const onAbort = () => local.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
     this.emit('waiting');
+    this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
       const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
@@ -1107,6 +1287,7 @@ export class Agent extends EventEmitter {
       } else throw e;
     } finally {
       signal?.removeEventListener('abort', onAbort);
+      this.answering--;
     }
     turn.calls = turn.calls.filter(Boolean).filter((c) => c.name);
     turn.tokens ||= tokensOf(turn.reasoning + turn.text + turn.calls.map((c) => c.args).join(''));
@@ -1177,7 +1358,8 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'A question changes no files' }, error: true });
       return { text: 'This is a question, so no file is changed. Answer it from what you have read. If a change is needed, say which one, and the user can ask for it.', error: true };
     }
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -1266,6 +1448,15 @@ export class Agent extends EventEmitter {
       if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
+    // The lsp helper: a new file that does not parse is said in the same
+    // reply, not found a few steps later by a test run or the browser.
+    if (!out.error && call.name === 'Write' && prepared.abs && this.helpers.has('lsp')) {
+      const broken = syntaxError(prepared.abs, prepared.after, { more: true });
+      if (broken) {
+        out.text += ` But it does not parse yet: ${broken}. Fix that with Edit before going on.`;
+        this.emit('note', { text: `${prepared.rel} does not parse yet: ${broken}`, tone: 'warn' });
+      }
+    }
     // A Write that landed has used (or replaced) the kept content.
     if (!out.error && call.name === 'Write' && this.keptWrite) {
       if (parsed.fromKept) this.emit('note', { text: `Wrote the kept content to ${prepared.rel}; it was not written again.`, tone: 'dim' });
