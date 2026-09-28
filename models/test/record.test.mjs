@@ -2,9 +2,9 @@
 // first, never a throw, and the saved copy of the Tests page.
 import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'bonsai-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
 const quiet = (file) => ({ file, snapshot: false, quiet: true });
@@ -83,4 +83,20 @@ test('the code under test is named by its commit, and a frozen copy inside anoth
   expect(codeLabel()).toMatch(/^[0-9a-f]{7,}\+?$/);
   const frozen = join(mkdtempSync(join(tmpdir(), 'bonsai-frozen-')), 'main-7595055'); mkdirSync(frozen);
   expect(codeLabel(frozen)).toBe('main-7595055');
+});
+
+test('where the raw results are is kept from the repo\'s top, or from ~: never with your home folder\'s full path', () => {
+  const top = join(import.meta.dir, '..', '..');
+  expect(rawPlace(join(top, 'models', 'bonsai-2-27b', 'results', 'night'))).toBe('models/bonsai-2-27b/results/night');
+  expect(rawPlace(join(homedir(), 'elsewhere', 'runs'))).toBe('~/elsewhere/runs');
+  expect(rawPlace('models/bonsai-2-27b/results/runs')).toBe('models/bonsai-2-27b/results/runs');
+  expect([rawPlace(''), rawPlace(undefined), rawPlace('/opt/runs')]).toEqual(['', '', '/opt/runs']);
+  // a line written before this rule is shown by the rule when read
+  const { file } = scratch();
+  const full = join(top, 'models', 'bonsai-2-27b', 'results', 'old-run');
+  mkdirSync(join(file, '..'), { recursive: true });
+  appendFileSync(file, `${JSON.stringify({ id: 'tasks:old', at: '2026-09-27T20:55:00.000Z', kind: 'tasks', name: 'an older line', passed: 1, total: 1, raw: full })}\n`);
+  expect(recordTest({ kind: 'tasks', name: 'a new line', passed: 1, total: 1, raw: full }, quiet(file)).raw).toBe('models/bonsai-2-27b/results/old-run');
+  expect(readRecord(file).map((r) => r.raw)).toEqual(['models/bonsai-2-27b/results/old-run', 'models/bonsai-2-27b/results/old-run']);
+  expect(JSON.stringify(recordData(file))).not.toContain(homedir());
 });

@@ -15,7 +15,7 @@
 //   page    its results page in the DOCS folder ("tests/bonsai-….html"), if one was made
 // A later line with the same id replaces the earlier one.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
-import { join, dirname, basename, resolve } from 'node:path';
+import { join, dirname, basename, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -44,13 +44,24 @@ export function codeLabel(dir = repo) {
   return git('rev-parse', '--short', 'HEAD').stdout.trim() + (git('status', '--porcelain', '--untracked-files=no').stdout.trim() ? '+' : '');
 }
 
+// Where the raw results are, as the record shows it: from the repo's top when
+// they are inside the repo, from ~ when elsewhere in your home folder. The
+// record is mirrored to GitHub, so a full path (your account's name) stays out.
+export function rawPlace(raw, top = repo) {
+  const p = String(raw ?? '');
+  if (!p.startsWith('/')) return p;
+  const rel = relative(resolve(top), resolve(p));
+  if (rel && !rel.startsWith('..')) return rel;
+  return p === homedir() || p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p;
+}
+
 // Every line of the record, newest first. A line that does not parse is skipped.
 export function readRecord(file = recordFile()) {
   if (!existsSync(file)) return [];
   const byId = new Map();
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (!line.trim()) continue;
-    try { const r = JSON.parse(line); if (r && r.id && KINDS[r.kind]) byId.set(r.id, r); } catch { /* a cut-off line */ }
+    try { const r = JSON.parse(line); if (r && r.id && KINDS[r.kind]) byId.set(r.id, { ...r, raw: rawPlace(r.raw) }); } catch { /* a cut-off line */ }
   }
   return [...byId.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
@@ -63,7 +74,7 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
     const at = row.at ?? new Date().toISOString();
     const result = row.result ?? (row.total != null && row.passed != null ? (row.passed === row.total && row.total > 0 ? 'pass' : 'fail') : 'fail');
     const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), effort: row.effort ?? null, ctx: row.ctx ?? null,
-      passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: row.raw ?? '', page: row.page ?? '' };
+      passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: rawPlace(row.raw), page: row.page ?? '' };
     mkdirSync(dirname(file), { recursive: true });
     appendFileSync(file, `${JSON.stringify(line)}\n`);
     if (!quiet) console.log(`recorded in the test record: ${line.name} — ${line.total != null ? `${line.passed} of ${line.total}` : line.result}${line.secs != null ? `, ${line.secs.toLocaleString()} s` : ''}`);
