@@ -8,7 +8,7 @@
 //     log.jsonl     one line per change, so the last save can be undone
 // A fact is plain text you can edit: a few "name: value" lines, an empty
 // line, then the fact.
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, appendFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, appendFileSync, statSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { memoryFile } from './memory.mjs';
@@ -100,6 +100,45 @@ export function formatFact(f) {
   return `${head.join('\n')}\n\n${f.text.trim()}${steps}\n`;
 }
 
+// One change at a time in a memory folder. Two Bonsai windows in one project,
+// or a window and the save handed over when another one quit, can reach the
+// same folder in the same moment; each reads the facts, then writes. Without
+// this, a fact of one was written over by the other's (both picked the same
+// file name), and of two results for one fact only one was counted (measured
+// 28 Sep 2026, test/facts-at-once.test.mjs). The lock is a folder, .lock,
+// made in one step by whoever gets it; it holds the pid of its owner, so a
+// lock left by a window that was killed is taken over at once. A change never
+// waits longer than LOCK_WAIT: past it, it goes ahead as before.
+const LOCK_WAIT = 5000;
+const LOCK_OLD = 10_000;
+const held = new Set();
+const nap = (ms) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { const t = Date.now() + ms; while (Date.now() < t); } };
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+export function locked(dir, change) {
+  if (!dir || held.has(dir)) return change();
+  const lock = join(dir, '.lock');
+  let mine = false;
+  try {
+    mkdirSync(dir, { recursive: true });
+    for (const until = Date.now() + LOCK_WAIT; ;) {
+      try { mkdirSync(lock); mine = true; break; } catch (e) {
+        if (e.code !== 'EEXIST') break; // a folder we cannot write to: the change itself will say so
+      }
+      let owner = null; let age = 0;
+      try { age = Date.now() - statSync(lock).mtimeMs; owner = Number(readFileSync(join(lock, 'pid'), 'utf8')); } catch { /* made this instant, or gone again */ }
+      if ((owner && !alive(owner)) || (!owner && age > LOCK_OLD)) { try { rmSync(lock, { recursive: true, force: true }); } catch {} continue; }
+      if (Date.now() > until) break;
+      nap(8 + Math.floor(Math.random() * 12));
+    }
+    if (mine) { try { writeFileSync(join(lock, 'pid'), String(process.pid)); } catch {} }
+  } catch { /* no lock: the change is made all the same */ }
+  held.add(dir);
+  try { return change(); } finally {
+    held.delete(dir);
+    if (mine) { try { rmSync(lock, { recursive: true, force: true }); } catch {} }
+  }
+}
+
 const folder = (dir, retired) => join(dir, retired ? 'retired' : 'facts');
 export function readFacts(dir, { retired = false } = {}) {
   const at = dir && folder(dir, retired);
@@ -153,7 +192,7 @@ function keepOutOfGit(dir) {
 const byWorth = (a, b) => Number(b.always) - Number(a.always) || Number(b.pinned) - Number(a.pinned) || b.trust - a.trust || b.used - a.used || String(b.saved).localeCompare(String(a.saved));
 const short = (f) => { const t = `${f.kind === 'failed' && !/^failed\b/i.test(f.text) ? 'failed: ' : ''}${oneLine(f.text)}`; return t.length > LINE_CHARS ? `${t.slice(0, LINE_CHARS - 1).trimEnd()}…` : t; };
 
-export function rebuildIndex(dir) {
+function rebuildIndexNow(dir) {
   const facts = readFacts(dir).sort(byWorth);
   if (!existsSync(dir) && !facts.length) return '';
   const shown = facts.slice(0, INDEX_LINES);
@@ -168,7 +207,7 @@ export function rebuildIndex(dir) {
 //   replace  [{ id, by: { kind, text, … }, reason }]   a newer fact takes an older one's place
 //   retire   [{ id, reason }]
 // Answers what happened, with what was refused and why.
-export function applyChanges(dir, { add = [], replace = [], retire = [] } = {}, { batch = `save-${Date.now()}`, today = day(), why = 'save' } = {}) {
+function applyChangesNow(dir, { add = [], replace = [], retire = [] } = {}, { batch = `save-${Date.now()}`, today = day(), why = 'save' } = {}) {
   const out = { dir, batch, added: [], replaced: [], retired: [], refused: [] };
   const have = () => new Map(readFacts(dir).map((f) => [norm(f.text), f]));
   const make = (a) => {
@@ -217,7 +256,7 @@ function retireFact(dir, f, reason, batch, { quiet = false } = {}) {
   if (!quiet) logLine(dir, { batch, what: 'retire', id: f.id, reason });
 }
 
-export function restoreFact(dir, id, batch = `restore-${Date.now()}`) {
+function restoreFactNow(dir, id, batch = `restore-${Date.now()}`) {
   const f = readFacts(dir, { retired: true }).find((x) => x.id === id);
   if (!f) return null;
   const { retired: _r, ...back } = f;
@@ -233,7 +272,7 @@ export function restoreFact(dir, id, batch = `restore-${Date.now()}`) {
 // Takes back the last save (every change of its batch), newest change first.
 // Answers what was undone, or null when there is nothing to take back.
 // only: undo this batch (a save that wrote into both memories).
-export function undoLast(dir, only = null) {
+function undoLastNow(dir, only = null) {
   const log = readLog(dir);
   const undone = new Set(log.filter((l) => l.what === 'undo').map((l) => l.of));
   const last = [...log].reverse().find((l) => canUndo(l, undone) && (!only || l.batch === only));
@@ -289,7 +328,7 @@ export function undoSave(dirs) {
 }
 
 // A fact was brought back for a request.
-export function markUsed(dir, ids, today = day()) {
+function markUsedNow(dir, ids, today = day()) {
   for (const f of readFacts(dir)) if (ids.includes(f.id)) write(dir, { ...f, used: f.used + 1, last: today });
 }
 
@@ -297,7 +336,7 @@ export function markUsed(dir, ids, today = day()) {
 // passed its check, -1 when it failed or Agentic Coder got stuck, -2 when the user
 // corrected Agentic Coder or stopped it. A fact the user pinned, or one that is
 // always read, never goes out of use this way.
-export function changeTrust(dir, ids, delta, reason, { batch = `trust-${Date.now()}` } = {}) {
+function changeTrustNow(dir, ids, delta, reason, { batch = `trust-${Date.now()}` } = {}) {
   const out = { changed: [], retired: [] };
   if (!delta) return out;
   for (const f of readFacts(dir)) {
@@ -313,7 +352,7 @@ export function changeTrust(dir, ids, delta, reason, { batch = `trust-${Date.now
 }
 
 // You changed a fact's words by hand (the hub's Memory tab).
-export function editFact(dir, id, text) {
+function editFactNow(dir, id, text) {
   const f = readFacts(dir).find((x) => x.id === id);
   const next = String(text ?? '').replace(/[ \t]+/g, ' ').trim().slice(0, 400);
   if (!f) return { error: 'no such fact' };
@@ -326,7 +365,7 @@ export function editFact(dir, id, text) {
   return { fact: { ...f, text: next } };
 }
 
-export function pinFact(dir, id, pinned = true) {
+function pinFactNow(dir, id, pinned = true) {
   const f = readFacts(dir).find((x) => x.id === id);
   if (!f) return null;
   write(dir, { ...f, pinned });
@@ -363,7 +402,7 @@ function findByName(root, name, depth = 0, seen = { n: 0 }) {
 // Keeps the memory clean: repeats merge, a fact about a file that is gone
 // and one never brought back in UNUSED_DAYS days go out of use. Every change
 // is in the log, so it can be undone.
-export function tidy(dir, { today = day(), root = null } = {}) {
+function tidyNow(dir, { today = day(), root = null } = {}) {
   const batch = `tidy-${Date.now()}`;
   const out = { merged: [], retired: [] };
   const seen = new Map();
@@ -388,8 +427,20 @@ export function tidy(dir, { today = day(), root = null } = {}) {
   return out;
 }
 
+// What other code calls: the same changes, one at a time per folder (locked).
+export function rebuildIndex(...a) { return locked(a[0], () => rebuildIndexNow(...a)); }
+export function applyChanges(...a) { return locked(a[0], () => applyChangesNow(...a)); }
+export function restoreFact(...a) { return locked(a[0], () => restoreFactNow(...a)); }
+export function undoLast(...a) { return locked(a[0], () => undoLastNow(...a)); }
+export function markUsed(...a) { return locked(a[0], () => markUsedNow(...a)); }
+export function changeTrust(...a) { return locked(a[0], () => changeTrustNow(...a)); }
+export function editFact(...a) { return locked(a[0], () => editFactNow(...a)); }
+export function pinFact(...a) { return locked(a[0], () => pinFactNow(...a)); }
+export function tidy(...a) { return locked(a[0], () => tidyNow(...a)); }
+
 const readState = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')); } catch { return {}; } };
-const writeState = (dir, patch) => { mkdirSync(dir, { recursive: true }); const next = { ...readState(dir), ...patch }; writeFileSync(join(dir, 'state.json'), `${JSON.stringify(next, null, 1)}\n`); return next; };
+const writeState = (dir, patch) => locked(dir, () => writeStateNow(dir, patch));
+const writeStateNow = (dir, patch) => { mkdirSync(dir, { recursive: true }); const next = { ...readState(dir), ...patch }; writeFileSync(join(dir, 'state.json'), `${JSON.stringify(next, null, 1)}\n`); return next; };
 export { readState, writeState };
 
 // First use: the two rules go into your own memory, and the lines of an
@@ -400,20 +451,26 @@ export { readState, writeState };
 export function openMemory(cwd, { home = homedir(), today = day(), rules = null } = {}) {
   const dirs = memoryDirs(cwd, home);
   const did = { first: [], notes: [], rules: [] };
-  if (!readState(dirs.you).first) {
-    did.first = applyChanges(dirs.you, { add: FIRST_FACTS }, { batch: 'first-facts', today, why: 'first use' }).added;
-    writeState(dirs.you, { first: today });
-  }
-  if (rules?.length && !readState(dirs.you).rules) {
-    did.rules = applyChanges(dirs.you, { add: rules }, { batch: 'claude-rules', today, why: "from Claude's notes" }).added;
-    writeState(dirs.you, { rules: today });
-  }
+  // Looked at and saved in one go, so two windows opened together save them once.
+  locked(dirs.you, () => {
+    if (!readState(dirs.you).first) {
+      did.first = applyChanges(dirs.you, { add: FIRST_FACTS }, { batch: 'first-facts', today, why: 'first use' }).added;
+      writeState(dirs.you, { first: today });
+    }
+    if (rules?.length && !readState(dirs.you).rules) {
+      did.rules = applyChanges(dirs.you, { add: rules }, { batch: 'claude-rules', today, why: "from Claude's notes" }).added;
+      writeState(dirs.you, { rules: today });
+    }
+  });
   for (const [dir, kind, notes] of [[dirs.project, 'project', dirs.project && join(dirname(dirs.project), 'notes.md')], [dirs.you, 'you', join(dirname(dirs.you), 'notes.md')]]) {
     if (!dir || !notes || !existsSync(notes) || readState(dir).notes) continue;
-    const lines = readFileSync(notes, 'utf8').split('\n').filter((l) => /^\s*[-*•]\s+\S/.test(l)).map((l) => l.replace(/^\s*[-*•]\s+/, '').trim());
-    const r = applyChanges(dir, { add: lines.map((text) => ({ kind, text, from: 'your notes file (update memory)' })) }, { batch: `notes-${Date.now()}`, today, why: 'carried over from notes.md' });
-    writeState(dir, { notes: today });
-    did.notes.push(...r.added);
+    locked(dir, () => {
+      if (readState(dir).notes) return; // another window carried them over meanwhile
+      const lines = readFileSync(notes, 'utf8').split('\n').filter((l) => /^\s*[-*•]\s+\S/.test(l)).map((l) => l.replace(/^\s*[-*•]\s+/, '').trim());
+      const r = applyChanges(dir, { add: lines.map((text) => ({ kind, text, from: 'your notes file (update memory)' })) }, { batch: `notes-${Date.now()}`, today, why: 'carried over from notes.md' });
+      writeState(dir, { notes: today });
+      did.notes.push(...r.added);
+    });
   }
   return { dirs, ...did };
 }
