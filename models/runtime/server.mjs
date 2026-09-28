@@ -215,15 +215,20 @@ export class ModelServer extends EventEmitter {
 
   // Memory the server really uses (macOS "footprint", includes Metal buffers).
   footprintBytes() {
-    const pid = this.child?.pid ?? this.shared?.pid;
-    if (!pid) return 0;
-    try {
-      const out = spawnSyncText('/usr/bin/footprint', ['-p', String(pid)]);
-      const m = /phys_footprint:\s+([\d.]+)\s*([KMG])B/.exec(out) ?? /Footprint:\s+([\d.]+)\s*([KMG])B/.exec(out);
-      if (!m) return 0;
-      return Number(m[1]) * { K: 1e3, M: 1e6, G: 1e9 }[m[2]];
-    } catch { return 0; }
+    return footprintOf(this.child?.pid ?? this.shared?.pid);
   }
+}
+
+// A process's macOS footprint in bytes (0 when it can't be read). A model
+// server's own memory is this plus the model file it maps.
+export function footprintOf(pid) {
+  if (!pid) return 0;
+  try {
+    const out = spawnSyncText('/usr/bin/footprint', ['-p', String(pid)]);
+    const m = /phys_footprint:\s+([\d.]+)\s*([KMG])B/.exec(out) ?? /Footprint:\s+([\d.]+)\s*([KMG])B/.exec(out);
+    if (!m) return 0;
+    return Number(m[1]) * { K: 1e3, M: 1e6, G: 1e9 }[m[2]];
+  } catch { return 0; }
 }
 
 import { spawnSync } from 'node:child_process';

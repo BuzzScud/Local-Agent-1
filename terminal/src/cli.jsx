@@ -4,6 +4,7 @@ import React from 'react';
 import { render } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
+import { openingMemory } from './app/mac-memory.mjs';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
 import { runHeadless } from './headless.mjs';
@@ -254,12 +255,14 @@ if (opts.print) {
   // the scrollback): the welcome starts on the top line, the prompt box sits
   // on the last lines, with space in between.
   if (process.stdout.isTTY) process.stdout.write(`${'\n'.repeat(process.stdout.rows || 24)}\x1b[H`);
+  // The Mac's memory as the window opens, printed beside the welcome box.
+  try { opts.macMem = openingMemory(modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL], { ctx: opts.ctx ?? 32768, url: opts.url }); } catch { opts.macMem = null; }
   // Measure the welcome before the first frame, so the space above the
   // prompt box is right from the start (App measures everything after it).
   try {
     const { homedir } = await import('node:os');
     const cwdShort = opts.cwd.startsWith(homedir()) ? `~${opts.cwd.slice(homedir().length)}` : opts.cwd;
-    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name, cwdShort, loaded: opts.loaded ?? '' });
+    primeRows([{ key: 'welcome', type: 'welcome', mem: opts.macMem }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name, cwdShort, loaded: opts.loaded ?? '' });
   } catch {}
   const win = new TerminalWindow(process.stdout);
   // /update asks for a restart: set here, run once this window has closed.

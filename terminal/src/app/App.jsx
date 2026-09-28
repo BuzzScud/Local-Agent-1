@@ -13,7 +13,8 @@ import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
@@ -106,7 +107,8 @@ export function App({ opts, win, onRestart }) {
   const itemsRef = useRef([]);
   const [, bumpRows] = useState(0);
 
-  const [items, setItems] = useState(() => [{ key: 'welcome', type: 'welcome' }]);
+  // The welcome carries the Mac's memory as the window opened (cli.jsx measures it).
+  const [items, setItems] = useState(() => [{ key: 'welcome', type: 'welcome', mem: opts.macMem ?? null }]);
   const [live, setLive] = useState(IDLE);
   const [perm, setPerm] = useState(null);
   const [picker, setPicker] = useState(null);
@@ -332,6 +334,18 @@ export function App({ opts, win, onRestart }) {
     const id = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(id);
   }, [starting, live.phase, btwMoving]);
+
+  // The Mac's memory for the footer, read every 5 s (a few ms); the footer
+  // redraws only when what it says changes.
+  const [mac, setMac] = useState(opts.macMem ?? null);
+  useEffect(() => {
+    if (!opts.macMem) return;
+    const id = setInterval(() => {
+      const m = macMemory();
+      if (m) setMac((prev) => (prev && footerLabel(prev) === footerLabel(m) && prev.level === m.level ? prev : m));
+    }, 5000);
+    return () => clearInterval(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Memory the model really uses (for the Live thinking meter line).
   useEffect(() => {
@@ -1112,7 +1126,7 @@ export function App({ opts, win, onRestart }) {
   const app = {
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
-    modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
     // The weights badge, lower right: edited weights saved and waiting, in

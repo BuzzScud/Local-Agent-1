@@ -2,12 +2,39 @@
 // size fits: 32k by default, 16k when memory is short (and we say why).
 import { execFileSync } from 'node:child_process';
 
-export function availableBytes() {
+// vm_stat's counts, in bytes, by label ("Pages free").
+function vmStat() {
   const out = execFileSync('vm_stat', { encoding: 'utf8' });
   const page = Number(/page size of (\d+) bytes/.exec(out)?.[1] ?? 16384);
-  const get = (label) => Number(new RegExp(`${label}:\\s+(\\d+)`).exec(out)?.[1] ?? 0);
-  return (get('Pages free') + get('Pages inactive') + get('Pages speculative') + get('Pages purgeable')) * page;
+  return (label) => Number(new RegExp(`${label}:\\s+(\\d+)`).exec(out)?.[1] ?? 0) * page;
 }
+const freeOf = (get) => get('Pages free') + get('Pages inactive') + get('Pages speculative') + get('Pages purgeable');
+
+export function availableBytes() {
+  return freeOf(vmStat());
+}
+
+// The Mac's memory as Activity Monitor shows it, for the welcome box and the
+// footer: the whole of it, what is free for a model (as above), what macOS
+// has compressed, the swap in use, and the pressure (1 fine, 2 tight, 4
+// critical: Activity Monitor's green, yellow, red). null when it can't be read.
+export function macMemory() {
+  try {
+    const [total, swap, level] = execFileSync('sysctl', ['-n', 'hw.memsize', 'vm.swapusage', 'kern.memorystatus_vm_pressure_level'], { encoding: 'utf8' }).trim().split('\n');
+    const get = vmStat();
+    const s = /used = ([\d.]+)([KMG])/.exec(swap);
+    return {
+      total: Number(total),
+      avail: freeOf(get),
+      compressed: get('Pages occupied by compressor'),
+      swapUsed: s ? Number(s[1]) * { K: 2 ** 10, M: 2 ** 20, G: 2 ** 30 }[s[2]] : 0,
+      level: Number(level) || 1,
+    };
+  } catch { return null; }
+}
+
+// Activity Monitor's gigabytes (2^30 bytes), which is what "16 GB" means on a Mac.
+export const gib = (b) => b / 2 ** 30;
 
 // 8-bit KV cache (34 bytes per 32 values), only in the layers that keep one.
 export const kvBytesPerToken = (m) => m.attnLayers * m.kvHeads * m.headDim * 2 * (34 / 32);

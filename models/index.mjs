@@ -6,8 +6,8 @@
 //     that fits the Mac's memory, the saved warm-up, and coding setup;
 //   - the embedder: the small model that compares meanings, for the memory.
 export { HOME, ENGINE, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, thinkingLevel, thinkingKwargs, modelPath, draftPath, modelFolder } from './registry.mjs';
-export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, runningServer, liveUsers, LINGER_SECS } from './runtime/server.mjs';
-export { availableBytes, kvBytesPerToken, needBytes, draftBytes, chooseContext, OVERHEAD } from './runtime/memory.mjs';
+export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
+export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, chooseContext, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { setup, RUNTIME } from './runtime/setup.mjs';
 export { Embedder, embedderReady } from './runtime/embed.mjs';
