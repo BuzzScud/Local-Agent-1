@@ -28,6 +28,8 @@ rebuild() {
   mkdir -p "$(dirname "$APP")" "$(dirname "$LOG")"
   tmp="$APP.$$"
   if (cd "$REPO" && "$BUN" build --compile --minify terminal/src/cli.jsx --outfile "$tmp") >"$LOG" 2>&1; then
+    # bun leaves the file open to every account on the Mac; only you may change the app
+    chmod 755 "$tmp"
     mv -f "$tmp" "$APP"
     printf '\033[2m↻ Bonsai updated from %s\033[0m\n' "$(echo "$REPO" | sed "s|^$HOME|~|")" >&2
   else
