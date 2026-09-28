@@ -1,5 +1,5 @@
 // Plays the practice tasks against the real model and checks each result.
-//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory]
+//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank]
 // --memory: with Agentic Coder's memory on (a throwaway one, empty at the start):
 // the rules that are always read, facts brought back, and a save after each
 // task, once its files were checked. Does the memory make anything worse?
@@ -36,6 +36,8 @@ const model = { ...base,
   thinkingBudget: budget ? Number(budget) : base.thinkingBudget };
 
 const withMemory = args.includes('--memory');
+// --no-rank: no ranking of files by meaning before the first step (by words only).
+const withRank = !args.includes('--no-rank');
 // --claude (with --memory): Claude's notes are looked in as well, where they are.
 const withClaude = withMemory && args.includes('--claude');
 const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'agentic-eval-memory-')) : null;
@@ -70,7 +72,7 @@ try {
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank,
           memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
@@ -82,11 +84,11 @@ try {
       const pass = check.status === 0;
       const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? 'step by step';
       const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
-      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
+      const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, replies: run.replies ?? null, reads: run.reads ?? null, readFirst: run.readFirst ?? null, thinkTokens: run.thinkTokens ?? null, stuckAsks: run.stuckAsks ?? null, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300) };
       // The memory's save comes after the check: its own files are not the task's.
       if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
-      console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps  ${row.toolErrors} errors  ${row.why}`);
+      console.log(`${pass ? 'PASS' : 'FAIL'}  think=${thinking ? 'on ' : 'off'}${reps > 1 ? ` rep${rep}` : ''}  ${task.padEnd(16)} ${String(row.secs).padStart(4)}s  ${row.steps} steps  ${row.reads ?? '-'} reads  ~${row.thinkTokens ?? '-'} thinking  ${row.toolErrors} errors  ${row.why}`);
       rmSync(dir, { recursive: true, force: true });
     }
   }

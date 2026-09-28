@@ -45,7 +45,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
   plan.step(0);
   const files = projectFiles(cwd);
   const named = filesInText(cwd, task).filter((f) => !isTestFile(f) && langFor(f));
-  const target = named[0] ?? hint ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal });
+  const target = named[0] ?? hint ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal , embedder: ctx.embedder });
   if (!target || !langFor(target)) return { handled: false, why: 'could not tell which file to change' };
   const lang = langFor(target);
   const original = readFileSync(join(cwd, target), 'utf8');

@@ -458,7 +458,7 @@ export function App({ opts, win, onRestart }) {
       on('mode', (m) => setModeState(m)),
       on('settled', () => autoRef.current.schedule()),
       on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
-      on('turn-end', ({ reason, secs }) => {
+      on('turn-end', ({ reason, secs, steps, reads, thinkTokens }) => {
         const past = S.current.live?.past ?? 'Worked';
         setLive(IDLE);
         setPerm(null);
@@ -466,7 +466,8 @@ export function App({ opts, win, onRestart }) {
         setAnswerWait(false);
         if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Agentic Coder do instead?', tone: 'warn' }); setPlaceholder('Tell Agentic Coder what to do instead'); }
         // A finished turn leaves its time behind, as in Claude Code: "⠿ Worked for 41s · done 12:58 PM".
-        else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now() });
+        // With the counts that say where the time went: steps, reads, thinking.
+        else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now(), steps, reads, thinkTokens });
         if (reason === 'declined') setPlaceholder('Tell Agentic Coder what to do instead');
         saveNow();
         const q = queuedRef.current;

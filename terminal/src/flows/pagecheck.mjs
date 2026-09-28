@@ -299,7 +299,7 @@ export async function pageCheckFirst(ctx, task, { scratch, files, plan }) {
   if (!pages.length) return { ok: false, why: 'the project has no page to open in a browser' };
   plan?.step(0);
   const named = filesInText(cwd, task).find((f) => PAGE.test(f));
-  const pageRel = named ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files: pages, exts: PAGE, signal: ctx.signal });
+  const pageRel = named ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files: pages, exts: PAGE, signal: ctx.signal , embedder: ctx.embedder });
   if (!pageRel) return { ok: false, why: 'could not tell which page the request is about' };
   const browser = findBrowser(cwd, pageRel);
   if (browser === null) return { ok: false, why: `there is no browser to check ${pageRel} with (Playwright is not installed in this project)` };

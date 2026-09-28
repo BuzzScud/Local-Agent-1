@@ -4,6 +4,10 @@
 // code and tests. Sorting and choosing (JSON answers) never think.
 import { streamChat } from '../agent/client.mjs';
 
+// Whoever wants a count of every focused call's tokens (the agent, while a
+// focused path runs, for the "done" line and the practice bench).
+export const tallies = new Set();
+
 export async function complete({ url, model, slot, system, user, temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort }) {
   const t0 = Date.now();
   const think = Boolean(thinking) && !schema;
@@ -20,6 +24,7 @@ export async function complete({ url, model, slot, system, user, temperature, ma
   }
   let json = null;
   if (schema) { try { json = JSON.parse(text); } catch { json = null; } }
+  for (const t of tallies) { try { t({ tokens, thought }); } catch { /* a count never stops the work */ } }
   return { text, json, tokens, thought, secs: (Date.now() - t0) / 1000 };
 }
 

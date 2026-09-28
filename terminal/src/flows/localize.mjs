@@ -7,6 +7,7 @@ import { walk } from '../tools/fs.mjs';
 import { resolvePath, didYouMean } from '../agent/tools.mjs';
 import { complete } from './llm.mjs';
 import { repoMap } from '../tools/repomap.mjs';
+import { rankFiles, MIN_CLOSE } from '../agent/rank.mjs';
 
 export const isTestFile = (rel) => /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec)\.[mc]?[jt]sx?$|(^|\/)test_[^/]+\.py$|_test\.(py|go)$/.test(rel);
 export const CODE = /\.(m?[jt]sx?|cjs|py)$/;
@@ -77,7 +78,7 @@ const STOP = new Set(['the', 'and', 'for', 'fix', 'bug', 'not', 'but', 'are', 'w
 export function taskWords(task, max = 12) {
   return [...new Set((task.match(/[A-Za-z_]\w{2,}/g) ?? []).map((w) => w.toLowerCase()))].filter((w) => !STOP.has(w)).slice(0, max);
 }
-export function fileHints(cwd, task, files, { max = 150, named = 60, exts = CODE } = {}) {
+export function fileHints(cwd, task, files, { max = 150, named = 60, exts = CODE, keepOrder = 0 } = {}) {
   const code = files.filter((f) => exts.test(f) && !isTestFile(f));
   const words = taskWords(task);
   let byRel = new Map();
@@ -88,21 +89,42 @@ export function fileHints(cwd, task, files, { max = 150, named = 60, exts = CODE
     try { text = readFileSync(join(cwd, f), 'utf8').slice(0, 20000).toLowerCase(); } catch {}
     const path = f.toLowerCase();
     return { f, n: words.filter((w) => text.includes(w)).length, p: words.filter((w) => path.includes(w)).length };
-  }).sort((a, b) => (b.n + 2 * b.p) - (a.n + 2 * a.p) || b.n - a.n).slice(0, max);
-  const lines = scored.map(({ f, n }, i) => {
+  });
+  // keepOrder: the first files are already ranked (by meaning) and stay first.
+  const head = scored.slice(0, keepOrder);
+  const rest = scored.slice(keepOrder).sort((a, b) => (b.n + 2 * b.p) - (a.n + 2 * a.p) || b.n - a.n);
+  const ordered = [...head, ...rest].slice(0, max);
+  const lines = ordered.map(({ f, n }, i) => {
     const e = byRel.get(f);
     const names = e && i < named && e.names.length ? `: ${e.names.slice(0, 8).join(', ')}${e.names.length > 8 ? ', …' : ''}` : '';
     return `${f}${e ? ` (${e.lines} lines)` : ''}${names}${n ? `  · mentions ${n} word${n === 1 ? '' : 's'} from the task` : ''}`;
   });
-  return { code: scored.map((s) => s.f), text: lines.join('\n') };
+  return { code: ordered.map((s) => s.f), text: lines.join('\n') };
 }
 
 // The model chooses the file from the project's list (forced JSON, so the
-// answer is always one of the real files).
-export async function pickFile({ url, model, slot, cwd, task, files, signal, exts }) {
-  const { code, text: hints } = fileHints(cwd, task, files, { exts });
+// answer is always one of the real files). With the memory's small model
+// (embedder), the files are first ranked by meaning (agent/rank.mjs): a clear
+// winner is taken without asking the model (one reply saved), and otherwise
+// the closest files head the list it chooses from.
+export const CLEAR_LEAD = 0.05; // the best file's lead over the next that makes it a clear winner
+export async function pickFile({ url, model, slot, cwd, task, files, signal, exts, embedder = null }) {
+  let { code, text: hints } = fileHints(cwd, task, files, { exts });
   if (!code.length) return null;
   if (code.length === 1) return code[0];
+  if (embedder) {
+    let byRel = new Map();
+    try { byRel = new Map(repoMap(cwd).entries.map((e) => [e.rel, e])); } catch {}
+    const entries = code.map((rel) => byRel.get(rel) ?? { rel, lines: 0, names: [] });
+    let ranked = null;
+    try { ranked = await rankFiles(cwd, task, { embedder, entries, top: 5, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
+    const best = ranked?.how === 'meaning' ? ranked.best : null;
+    if (best?.length && best[0].score >= MIN_CLOSE && (best.length === 1 || best[0].score - best[1].score >= CLEAR_LEAD)) return best[0].rel;
+    if (best?.length) {
+      const first = best.map((b) => b.rel);
+      ({ code, text: hints } = fileHints(cwd, task, [...first, ...code.filter((c) => !first.includes(c))], { exts, keepOrder: first.length }));
+    }
+  }
   const r = await complete({
     url, model, slot, signal, temperature: 0, maxTokens: 120,
     system: 'You choose which file in a project a task is about.',

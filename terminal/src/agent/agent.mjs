@@ -7,6 +7,7 @@ import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute,
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
+import { rankFiles } from './rank.mjs';
 import { decide, commandPrefix, isReadOnly } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
@@ -22,7 +23,7 @@ import { Scratch } from '../flows/scratch.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
-import { complete } from '../flows/llm.mjs';
+import { complete, tallies } from '../flows/llm.mjs';
 import { isMemoryRequest, memoryFile, readMemory, applyMemory, digest, memoryPrompt, MEMORY_SCHEMA } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
@@ -50,6 +51,11 @@ const KEEP_THOUGHTS = 3;
 const PREFETCH_MAX_LINES = 1000;
 const PREFETCH_MAX_CHARS = 45000; // ~12,500 tokens, ~3½ minutes of reading
 const MAP_MIN_FILES = 4; // fewer code files than this: no project map, the model just reads them
+// Any other request in a project: the files it is most likely about
+// (rank.mjs), read before the first step. The budget follows the memory:
+// ~2,950 tokens at 16k (about 20 s of reading), ~5,900 at 32k, at most 8,000.
+const RANK_SHARE = 0.18;
+const RANK_MAX_TOKENS = 8000;
 // Asking about code even when the request was not sorted (plan mode, a folder that is not a project).
 const EXPLAIN = /\b(explain|describe|walk me through|summari[sz]e|what does|how does|what is in|tell me about)\b/i;
 // A message that says the last turn went wrong.
@@ -201,7 +207,9 @@ export function safeArgs(args) {
 }
 
 // Check-ins while exploring: every this many looks, or seconds, without a change.
-export const CHECK_INS = { steps: 8, secs: 300 };
+// 6 looks (was 8, 28 Sep): a task that has read six things and changed
+// nothing is usually lost, and a word from you costs less than more steps.
+export const CHECK_INS = { steps: 6, secs: 300 };
 const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash']);
 
 // One line saying what an edit will do, for the plan question.
@@ -220,9 +228,12 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null }) {
     super();
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm });
+    // The small model that ranks files by meaning (rank.mjs): the memory's,
+    // or one given on its own (the practice bench runs without the memory).
+    this.ranker = ranker;
     // The memory (facts.mjs, recall.mjs): { embedder, home }. Without it
     // nothing is brought back and nothing is learned (tests, practice runs).
     this.memory = memory || null;
@@ -331,6 +342,8 @@ export class Agent extends EventEmitter {
       url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
       // Code and tests are written at the chat's thinking level (Off by default).
       thinking: this.thinking, effort: this.effort,
+      // The memory's small model, which also ranks files by meaning (rank.mjs).
+      embedder: this.ranker ?? this.memory?.embedder ?? null,
       emit: (name, ev) => {
         if (name === 'route') { this.lastRoute = ev; this.sorted(ev.kind, { shortcut: true }); }
         if (name === 'tries-done') this.happened?.tries.push({ label: ev.label, marks: (ev.marks ?? []).join(''), summary: ev.summary, failed: Boolean(ev.failed) });
@@ -442,6 +455,10 @@ export class Agent extends EventEmitter {
     // First the focused paths (rename / fix / change); the loop handles the rest.
     this.carried = null;
     if (!follow && this.flows && this.mode !== 'plan') {
+      // Every focused call's tokens, for the done line (the loop counts its own).
+      const counted = { steps: 0, tokens: 0, thinkTokens: 0 };
+      const tally = ({ tokens, thought }) => { counted.steps++; counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
+      tallies.add(tally);
       try {
         const r = await runFlows(this.flowContext(signal), text);
         if (r) {
@@ -452,10 +469,13 @@ export class Agent extends EventEmitter {
           this.happened.flow = { done: r.done, summary: String(r.summary ?? '').slice(0, 300) };
           const reason = signal?.aborted ? 'interrupted' : r.declined ? 'declined' : 'done';
           if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
-          this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, flow: true, done: r.done });
+          tallies.delete(tally);
+          this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, flow: true, done: r.done, steps: counted.steps, reads: 0, thinkTokens: counted.thinkTokens, tokens: counted.tokens });
           return reason;
         }
+        tallies.delete(tally);
       } catch (e) {
+        tallies.delete(tally);
         this.emit('flow-step', null);
         if (signal?.aborted || e.name === 'AbortError') {
           this.busy = false;
@@ -522,6 +542,7 @@ export class Agent extends EventEmitter {
     // of letting the model find, list and read it a piece at a time.
     this.prefetchMap();
     if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
+    else if (!follow && kind !== 'rename') await this.prefetchRanked(text, signal);
     let verified = false;
     let correctedAlready = false;
     let blankRetry = false;
@@ -530,6 +551,14 @@ export class Agent extends EventEmitter {
         if (signal?.aborted) { reason = 'interrupted'; break; }
         await this.fitContext(signal);
         const turn = await this.generate(signal);
+        // Counted for the done line: each reply is a step; its thinking share
+        // of the tokens is estimated from the characters it wrote.
+        if (!turn.aborted) {
+          this.turn.steps = (this.turn.steps ?? 0) + 1;
+          this.turn.tokens = (this.turn.tokens ?? 0) + (turn.tokens ?? 0);
+          const all = turn.reasoning.length + turn.text.length + turn.calls.reduce((n, c) => n + (c.args?.length ?? 0), 0);
+          this.turn.thinkTokens = (this.turn.thinkTokens ?? 0) + (all ? Math.round((turn.tokens ?? 0) * turn.reasoning.length / all) : 0);
+        }
         if (turn.aborted) {
           // Keep what it had written so far on screen (not in the conversation).
           if (turn.reasoning || turn.text) this.emit('assistant', { text: turn.text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: false, partial: true });
@@ -655,12 +684,14 @@ export class Agent extends EventEmitter {
         const call = calls[0];
         toolsUsed++;
         const out = await this.runTool(call, signal);
+        if (call.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + 1;
         if (!out.error) cuts = 0; // a step landed: cut-off replies are no longer "in a row"
         const result = { role: 'tool', tool_call_id: call.id, content: out.text };
         this.messages.push(result);
         if (out.readKey) this.turn.reads.set(out.readKey, { msg: result, mtime: out.mtime });
         if (out.stop) { reason = out.stop; break; }
         const steer = await this.checkIn(call, signal);
+        const checkedIn = Boolean(steer?.asked);
         if (steer?.stop) { reason = steer.stop; break; }
         if (steer?.text) this.messages.push({ role: 'user', content: steer.text });
         else {
@@ -679,6 +710,16 @@ export class Agent extends EventEmitter {
           this.emit('note', { text: repeats >= 3 ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
           break;
         }
+        // Stuck, sooner: the same step twice, or three errors in a row, and it
+        // asks you for a hint instead of going round again. "Keep going"
+        // starts the counts over; with no one to answer (coding -p, the
+        // practice bench) it carries on and the old limits above still stop it.
+        if ((repeats === 1 || errorsInRow === 3) && this.checkIns && !checkedIn) {
+          const s2 = await this.stuckAsk(repeats === 1 ? 'repeat' : 'errors', call, out, signal);
+          if (s2?.stop) { reason = s2.stop; break; }
+          if (s2?.text) this.messages.push({ role: 'user', content: s2.text });
+          if (s2?.text || s2?.keepGoing) { repeats = 0; repeatKey = null; errorsInRow = 0; }
+        }
         if (repeats === 2) this.messages.push({ role: 'user', content: auto('You already did exactly this step. Do something different, or finish.') });
         if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/increase moves this).`, tone: 'warn' }); }
       }
@@ -692,7 +733,8 @@ export class Agent extends EventEmitter {
     if (reason === 'interrupted') {
       this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
     }
-    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
+    const t = this.turn ?? {};
+    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0 });
     return reason;
   }
 
@@ -817,43 +859,80 @@ export class Agent extends EventEmitter {
   // about into the conversation as if the model had read it: the files it
   // names (whole when they fit, otherwise their parts and the lines that
   // match the question), then the definitions of the names it uses.
+  // One read put into the conversation as if the model had made it.
+  giveRead(rel, args, body, view) {
+    const id = `read_${Date.now()}_${this.messages.length}`;
+    const result = { role: 'tool', tool_call_id: id, content: body };
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Read', arguments: JSON.stringify(args) } }] });
+    this.messages.push(result);
+    // Asked for again, it is pointed back to (runTool), like any part already read.
+    const abs = resolvePath(this.cwd, rel).abs;
+    let mtime = null;
+    try { mtime = statSync(abs).mtimeMs; } catch {}
+    this.turn?.reads?.set(`${abs}|${args.offset ?? ''}|${args.limit ?? ''}|`, { msg: result, mtime });
+    if (this.turn) this.turn.given = (this.turn.given ?? 0) + 1;
+    this.emit('tool', { id, name: 'Read', label: 'Read', arg: rel, view });
+  }
+
+  // A file read in one go: whole when it fits, otherwise as the Read tool
+  // gives a long file (its parts, and the lines that match the request).
+  async readForPrefetch(f, text, room) {
+    const full = readFileSync(f.abs, 'utf8');
+    if (full.includes('\u0000')) return null;
+    const lines = full.split('\n').length;
+    if (lines <= PREFETCH_MAX_LINES && full.length <= room) {
+      this.readFiles.add(f.abs);
+      return { body: `${f.rel} (${lines} lines):\n${full}`, view: { kind: 'read', lines, total: lines, content: full } };
+    }
+    const r = await execute('Read', { path: f.rel }, {}, { cwd: this.cwd, request: text, maxResultChars: this.maxResultChars });
+    if (r.error) return null;
+    return { body: r.text, view: r.view };
+  }
+
+  // Any other request in a project (a page, a change done step by step, a
+  // fix the focused path handed over): the files it names, then the ones it
+  // is most likely about by meaning (rank.mjs), read before the first step
+  // instead of found with List/Search/Read one reply at a time.
+  async prefetchRanked(text, signal) {
+    if (isHomeFolder(this.cwd)) return;
+    let entries;
+    try { entries = repoMap(this.cwd).entries; } catch { return; }
+    if (entries.length < MAP_MIN_FILES) return;
+    let budget = Math.min(RANK_MAX_TOKENS, Math.round(this.ctx * RANK_SHARE)) * 3.6;
+    const want = [];
+    for (const f of filesNamed(this.cwd, text)) want.push(f);
+    let ranked = { files: [], how: 'none', ms: 0 };
+    try { ranked = await rankFiles(this.cwd, text, { embedder: this.ranker ?? this.memory?.embedder ?? null, entries, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
+    for (const r of ranked.files) {
+      const abs = resolvePath(this.cwd, r.rel).abs;
+      if (!want.some((w) => w.abs === abs)) want.push({ rel: r.rel, abs, ranked: true });
+    }
+    const read = [];
+    for (const f of want) {
+      if (this.readFiles.has(f.abs) || budget <= 400) continue;
+      let got;
+      try { got = await this.readForPrefetch(f, text, budget); } catch { continue; }
+      if (!got || got.body.length > budget) continue;
+      budget -= got.body.length;
+      this.giveRead(f.rel, { path: f.rel }, got.body, got.view);
+      read.push(f.rel);
+    }
+    if (this.turn) this.turn.ranked = { how: ranked.how, ms: ranked.ms, files: read };
+    if (read.length) this.emit('note', { text: `Read first${ranked.how === 'meaning' ? ', by meaning' : ranked.how === 'words' ? ', by the request’s words' : ''}: ${read.join(', ')}`, tone: 'dim' });
+  }
+
   async prefetch(text) {
     let budget = PREFETCH_MAX_CHARS;
     const given = (rel, args, body, view) => {
       budget -= body.length;
-      const id = `read_${Date.now()}_${this.messages.length}`;
-      const result = { role: 'tool', tool_call_id: id, content: body };
-      this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'Read', arguments: JSON.stringify(args) } }] });
-      this.messages.push(result);
-      // Asked for again, it is pointed back to (runTool), like any part already read.
-      const abs = resolvePath(this.cwd, rel).abs;
-      let mtime = null;
-      try { mtime = statSync(abs).mtimeMs; } catch {}
-      this.turn?.reads?.set(`${abs}|${args.offset ?? ''}|${args.limit ?? ''}|`, { msg: result, mtime });
-      this.emit('tool', { id, name: 'Read', label: 'Read', arg: rel, view });
+      this.giveRead(rel, args, body, view);
     };
     const named = filesNamed(this.cwd, text);
     for (const f of named) {
       if (this.readFiles.has(f.abs) || budget <= 0) continue;
-      let body;
-      let view;
-      try {
-        const full = readFileSync(f.abs, 'utf8');
-        if (full.includes('\u0000')) continue;
-        const lines = full.split('\n').length;
-        if (lines <= PREFETCH_MAX_LINES && full.length <= budget) {
-          body = `${f.rel} (${lines} lines):\n${full}`;
-          view = { kind: 'read', lines, total: lines, content: full };
-          this.readFiles.add(f.abs);
-        } else {
-          // As the Read tool gives a long file: its parts, and the lines that match the question.
-          const r = await execute('Read', { path: f.rel }, {}, { cwd: this.cwd, request: text, maxResultChars: this.maxResultChars });
-          if (r.error) continue;
-          body = r.text;
-          view = r.view;
-        }
-      } catch { continue; }
-      given(f.rel, { path: f.rel }, body, view);
+      let got;
+      try { got = await this.readForPrefetch(f, text, budget); } catch { continue; }
+      if (got) given(f.rel, { path: f.rel }, got.body, got.view);
     }
     // The names the question uses: the part of the file that defines each.
     if (isHomeFolder(this.cwd)) return;
@@ -1270,8 +1349,33 @@ export class Agent extends EventEmitter {
     if (!text) return null; // no answer: carry on
     t.asked.push(question);
     this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
-    if (/^(keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return null;
-    return { text: `[Check-in] You asked whether you are on the right track. The user answered: ${text}\nFollow that.` };
+    if (/^(keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { asked: true };
+    return { asked: true, text: `[Check-in] You asked whether you are on the right track. The user answered: ${text}\nFollow that.` };
+  }
+
+  // Stuck: the same step twice, or three tool errors in a row. One question
+  // with what went wrong; a hint goes straight to the model.
+  async stuckAsk(why, call, out, signal) {
+    const t = this.turn;
+    const shown = display(call.name, parseArgs(call.name, call.args).args ?? {});
+    const step = `${call.name} ${shown.arg ?? ''}`.trim();
+    const err = String(out?.text ?? '').split('\n').find((l) => l.trim())?.trim().slice(0, 160) ?? '';
+    const question = why === 'repeat'
+      ? `I ran the same step twice (${step}) and I'm not getting further. Give me a hint, say "keep going", or stop here.`
+      : `Three steps in a row failed. The last one (${step}) said: ${err}. Give me a hint, say "keep going", or stop here.`;
+    const id = `stuck_${Date.now()}`;
+    if (t) t.stuckAsks = (t.stuckAsks ?? 0) + 1;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'stuck', args: { question, options: ['Keep going'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return { stop: 'interrupted' };
+    if (answer.choice === 'skip') return null; // no one to ask: carry on as before
+    if (answer.choice === 'no' && !answer.feedback) return { stop: 'declined' }; // "Stop here"
+    const text = (answer.text ?? answer.feedback ?? '').trim();
+    if (!text) return null;
+    t?.asked.push(question);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
+    if (/^(keep going|go on|continue|carry on|yes|ok|okay|y)\W*$/i.test(text)) return { keepGoing: true };
+    return { text: `[Stuck] You were going round in circles and asked the user for a hint. The user answered: ${text}\nFollow that.` };
   }
 
   // One yes-or-steer question before changing files; yes (or "ok", "go")

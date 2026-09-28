@@ -167,6 +167,13 @@ function Rules({ it, width, model }) {
   );
 }
 
+// The counts on the done line: " · 9 steps · 4 reads · ~1,820 thinking tokens"
+// (a count of 0 is left out; old saved sessions have none).
+export function doneCounts(it) {
+  const n = (x, one, many) => (x ? ` · ${x.toLocaleString('en-US')} ${x === 1 ? one : many}` : '');
+  return `${n(it.steps, 'step', 'steps')}${n(it.reads, 'read', 'reads')}${it.thinkTokens ? ` · ~${it.thinkTokens.toLocaleString('en-US')} thinking tokens` : ''}`;
+}
+
 export function Item({ it, width, model, cwd, loaded }) {
   switch (it.type) {
     case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} />;
@@ -178,7 +185,7 @@ export function Item({ it, width, model, cwd, loaded }) {
     );
     case 'thinking': return <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
     // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".
-    case 'done': return <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)} · done {clock(it.at)}</Text></Text>;
+    case 'done': return <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}</Text></Text>;
     case 'text': return <Row><Markdown text={it.text} /></Row>;
     case 'tool': return <ToolView it={it} width={width} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;

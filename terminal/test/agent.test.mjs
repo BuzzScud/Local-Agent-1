@@ -60,6 +60,34 @@ test('repeating the same call stops as stuck', async () => {
   expect(events.find((e) => e.type === 'note').text).toContain('kept repeating');
 });
 
+test('the same step twice: it asks you for a hint, and the hint goes to the model', async () => {
+  const same = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
+  const cwd = project();
+  const fake = await startFakeServer([same, same, { text: 'Done, the flags are read in export.mjs.' }]);
+  const asked = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
+    ask: async (req) => { asked.push(req); return req.kind === 'stuck' ? { choice: 'answer', text: 'Look at parseArgs instead' } : { choice: 'yes' }; } });
+  const reason = await agent.send('where are the flags read?');
+  await fake.close();
+  expect(reason).toBe('done');
+  const q = asked.find((r) => r.kind === 'stuck');
+  expect(q.args.question).toContain('same step twice');
+  expect(agent.messages.some((m) => m.role === 'user' && m.content.includes('[Stuck]') && m.content.includes('parseArgs'))).toBe(true);
+});
+
+test('three errors in a row: it asks; "Stop here" ends the turn', async () => {
+  const bad = (n) => ({ tool: { name: 'Read', args: { path: `missing-${n}.mjs` } } });
+  const cwd = project();
+  const fake = await startFakeServer([bad(1), bad(2), bad(3), bad(4)]);
+  const asked = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
+    ask: async (req) => { asked.push(req); return req.kind === 'stuck' ? { choice: 'no' } : { choice: 'yes' }; } });
+  const reason = await agent.send('where are the flags read?');
+  await fake.close();
+  expect(reason).toBe('declined');
+  expect(asked.find((r) => r.kind === 'stuck').args.question).toContain('Three steps in a row failed');
+});
+
 test('bad arguments come back as an error the model can fix', async () => {
   const replies = [{ tool: { name: 'Edit', args: { path: 'export.mjs' } } }, { text: 'Sorry, done.' }];
   const { reason, agent } = await run(replies);
