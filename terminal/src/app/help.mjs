@@ -83,7 +83,7 @@ export function cliRows(lingerMins = 30) {
     options: [
       ['--effort low|medium|high', 'how much the model thinks before it acts (default: low = answers straight away)'],
       ['--think / --no-think', 'the old names: --effort medium / --effort low'],
-      ['--ctx 16k|32k|64k', 'memory size (default: 32k, or 16k when memory is short)'],
+      ['--ctx 16k|32k|64k|128k', 'memory size (default: 32k, or 16k when memory is short; /increase saves one)'],
       ['--mode ask|edits|plan', 'start in this permission mode'],
       ['--yes', 'with -p: allow edits and commands without asking'],
       ['--url http://host:port', 'use a llama-server that is already running'],

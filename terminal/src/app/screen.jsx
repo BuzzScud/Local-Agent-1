@@ -11,6 +11,7 @@ import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEX
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { memoryParts, pressureWord, gb1, footerLabel } from './mac-memory.mjs';
+import { LIMITS, showLimit, limitNote, isDefault } from './limits.mjs';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -553,6 +554,48 @@ function ChoicePicker({ app }) {
   );
 }
 
+// /increase: every limit that can move, its value between ◀ ▶, and what that
+// value costs. ↻ marks the two that restart the model; • a value not saved yet.
+function LimitsPicker({ app }) {
+  const pk = app.picker;
+  const lw = Math.max(...LIMITS.map((l) => l.label.length)) + 2;
+  const vw = Math.max(...LIMITS.map((l) => showLimit(l.id, pk.values[l.id]).length)) + 1;
+  const env = { ...pk.env, values: pk.values };
+  const reset = pk.index === LIMITS.length;
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Limits</Text>
+      <Text color={C.dim} wrap="truncate-end">←→ moves a limit; its cost is on the right. Kept for next time.</Text>
+      <Text> </Text>
+      {LIMITS.map((l, i) => {
+        const on = i === pk.index;
+        const v = pk.values[l.id];
+        const steps = l.steps(pk.model);
+        const unsaved = v !== pk.saved[l.id];
+        const note = limitNote(l.id, env);
+        return (
+          <Text key={l.id} wrap="truncate-end">
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {l.label.padEnd(lw)}</Text>
+            <Text color={on && v !== steps[0] ? C.accent : C.faint}>◀ </Text>
+            <Text color={unsaved ? C.accent : undefined} bold={unsaved}>{showLimit(l.id, v).padEnd(vw)}</Text>
+            <Text color={on && v !== steps.at(-1) ? C.accent : C.faint}>▶ </Text>
+            <Text color={unsaved ? C.accent : C.faint}>{unsaved ? '•' : ' '}</Text>
+            <Text color={C.dim}>{l.restart ? '↻ ' : '  '}</Text>
+            <Text color={note.startsWith('⚠') ? C.warn : C.dim}>{isDefault(l.id, pk.values, pk.model) ? 'default · ' : ''}{note}</Text>
+          </Text>
+        );
+      })}
+      <Text> </Text>
+      <Text wrap="truncate-end">
+        <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {'Reset all'.padEnd(lw)}</Text>
+        <Text color={C.dim}>enter here: every limit back to its default</Text>
+      </Text>
+      <Text> </Text>
+      <Text color={C.dim} wrap="truncate-end">↑↓ choose · ←→ lower/raise · enter saves · esc cancels · ↻ restarts model</Text>
+    </Box>
+  );
+}
+
 // A box in the middle of the window (/help): a title, a line or two, and the
 // address it opened. Any key closes it.
 function Popup({ app }) {
@@ -813,6 +856,8 @@ export function Screen({ app }) {
         <ModelPicker app={app} />
       ) : app.picker?.kind === 'choice' ? (
         <ChoicePicker app={app} />
+      ) : app.picker?.kind === 'limits' ? (
+        <LimitsPicker app={app} />
       ) : app.picker ? (
         <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={width}>
           <Text bold>{app.picker.title}</Text>

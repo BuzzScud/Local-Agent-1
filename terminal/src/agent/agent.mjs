@@ -36,8 +36,9 @@ const TRIM_TO = 0.45; // …and where it stops
 const FULL = 0.85; // past this share (with the reply room counted) trimming was not enough: summarize
 // Room kept free for one reply: thinking (up to the server's reasoning budget)
 // plus the answer. At 16k, a trim at 78% left too little, and a High reply
-// ran into the end of the memory (chart bug, 25 Sep).
-const replyRoom = (thinking) => (thinking ? 4096 : 2048);
+// ran into the end of the memory (chart bug, 25 Sep). The thinking part is the
+// model's own budget, so raising it in model.mjs leaves the answer its 2,048.
+const replyRoom = (thinking, budget = 2048) => (thinking ? 2048 + budget : 2048);
 const NOTES_ROOM = 700; // tokens for its notes when memory fills (about 200 words, with room to spare)
 // Its own thinking goes back with each step: the model's chat template shows
 // every earlier step's thinking, and without it each step looked as if it had
@@ -219,9 +220,9 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, whenFull, rewarm });
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm });
     // The memory (facts.mjs, recall.mjs): { embedder, home }. Without it
     // nothing is brought back and nothing is learned (tests, practice runs).
     this.memory = memory || null;
@@ -518,7 +519,7 @@ export class Agent extends EventEmitter {
     let correctedAlready = false;
     let blankRetry = false;
     try {
-      for (let step = 0; step < MAX_STEPS; step++) {
+      for (let step = 0; step < this.maxSteps; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
         await this.fitContext(signal);
         const turn = await this.generate(signal);
@@ -672,7 +673,7 @@ export class Agent extends EventEmitter {
           break;
         }
         if (repeats === 2) this.messages.push({ role: 'user', content: auto('You already did exactly this step. Do something different, or finish.') });
-        if (step === MAX_STEPS - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${MAX_STEPS} steps.`, tone: 'warn' }); }
+        if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/increase moves this).`, tone: 'warn' }); }
       }
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
@@ -948,7 +949,7 @@ export class Agent extends EventEmitter {
   // One model reply, streamed.
   async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
     const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-    const maxTokens = cap ?? replyRoom(this.thinking); // fitContext keeps this much free
+    const maxTokens = cap ?? replyRoom(this.thinking, this.model?.thinkingBudget); // fitContext keeps this much free
     // High effort is for working the problem out. Once this turn has changed a
     // file, the steps left (run the tests, report) think briefly instead.
     const effort = this.effort === 'high' && this.turn?.changed ? 'medium' : this.effort;
@@ -1080,7 +1081,7 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'A question changes no files' }, error: true });
       return { text: 'This is a question, so no file is changed. Answer it from what you have read. If a change is needed, say which one, and the user can ask for it.', error: true };
     }
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -1303,7 +1304,7 @@ export class Agent extends EventEmitter {
     const pending = this.messages.slice(-2).reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : ''), 0);
     // The next reply needs its room too: at 16k, trimming without counting it
     // let a High reply run into the end of the memory mid-thought.
-    const room = replyRoom(this.thinking);
+    const room = replyRoom(this.thinking, this.model?.thinkingBudget);
     let est = this.ctxUsed + pending;
     if (est + room < this.ctx * this.trimAt) return;
     // Notes first. Emptying old output makes the model read again everything
@@ -1335,7 +1336,7 @@ export class Agent extends EventEmitter {
     est -= freed;
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);
     if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens).`, tone: 'dim' });
-    if (est + room >= this.ctx * FULL) await this.compact(signal);
+    if (est + room >= this.ctx * this.fullAt) await this.compact(signal);
   }
 
   // Its notes, written by the model in the conversation it already holds

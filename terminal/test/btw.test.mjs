@@ -38,6 +38,8 @@ test('room: the pool less the conversation, its reply room while it works, the a
   expect(roomFor({ ctx: 16384, ctxUsed: 4000, busy: false, thinking: false })).toBe(16384 - 4000 - ANSWER_TOKENS - 256);
   expect(roomFor({ ctx: 16384, ctxUsed: 4000, busy: true, thinking: false })).toBe(16384 - 4000 - 2048 - ANSWER_TOKENS - 256);
   expect(roomFor({ ctx: 16384, ctxUsed: 4000, busy: true, thinking: true })).toBe(16384 - 4000 - 4096 - ANSWER_TOKENS - 256);
+  // the thinking part follows the model's own budget (Gemma: 4,096 since 28 Sep)
+  expect(roomFor({ ctx: 16384, ctxUsed: 4000, busy: true, thinking: true, budget: 4096 })).toBe(16384 - 4000 - 6144 - ANSWER_TOKENS - 256);
   // the worst case (the conversation at 85% with its reply room) still leaves a question room at 16k
   expect(roomFor({ ctx: 16384, ctxUsed: Math.floor(16384 * 0.85) - 2048, busy: true, thinking: false })).toBeGreaterThan(MIN_ROOM);
 });

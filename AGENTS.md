@@ -16,6 +16,10 @@
   deleted). A builder names its group in the path it gives `docsPath` (`tests/bonsai-night-….html`).
   `/docs` in Agentic Coder (the hub) lists the folder live by these groups; a file left at the top
   level shows as unsorted until it is filed.
+- **Gemma pages go in `~/Desktop/gemma-docs/`, not the DOCS folder** (the user's rule, 28 Sep
+  2026). Any report, diagram, flow, test page or other file about Gemma (the model, its
+  tests, its thinking, its harness) is saved there; a replaced version moves to its
+  `older versions/`. Raw model results still stay in `models/gemma-4-12b/results/`.
 - **The Bonsai-era pages** (24–28 Sep 2026) left the DOCS folder on 28 Sep: they are in
   `models/bonsai-2-27b/Bonsai Docs/` (beside the retired model's recipe, on the Mac only,
   not in git), and in git history under `docs/`.
@@ -45,7 +49,7 @@
   time; `memory: true` in `runHeadless` turns it on. `bun run eval:recall` is the check that the
   right fact comes back (20 facts, 30 requests, the real small model).
   After a task it ASKS before saving (the user's pick, 28 Sep 2026); "update memory" and `/update memory` save at once.
-- **The GitHub repo** (BuzzScud/Local-Agent-1) is private. Nothing secret is committed:
+- **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
   scan staged files before a push. `bun run check` does that scan and more (the history,
   the packages, where the code connects, the installed app, the unit tests); `--fast`
   leaves out the model files and the tests. A place the code names for the first time

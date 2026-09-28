@@ -102,8 +102,8 @@ export function rightNow({ busy, live, todos, messages, now = Date.now() } = {})
 // holds (and the room for its reply while it is writing one), the answer and
 // a margin. Lane 1's other jobs never overlap it: the server runs one
 // request per lane and makes the next one wait.
-export function roomFor({ ctx, ctxUsed, busy, thinking }) {
-  return Math.floor(ctx - ctxUsed - (busy ? (thinking ? 4096 : 2048) : 0) - ANSWER_TOKENS - MARGIN);
+export function roomFor({ ctx, ctxUsed, busy, thinking, budget = 2048 }) {
+  return Math.floor(ctx - ctxUsed - (busy ? (thinking ? 2048 + budget : 2048) : 0) - ANSWER_TOKENS - MARGIN);
 }
 
 // The messages for the side question, cut to fit `room` tokens: the oldest
@@ -137,7 +137,7 @@ export function sideMessages({ messages, question, now, room }) {
 // Answers { text } or { noRoom: true }; throws on a server error; an abort
 // (esc closed the panel) ends it quietly with what was written.
 export async function askAside({ agent, question, live, signal, onText, now = Date.now() }) {
-  const room = roomFor({ ctx: agent.ctx, ctxUsed: agent.ctxUsed, busy: agent.busy, thinking: agent.thinking });
+  const room = roomFor({ ctx: agent.ctx, ctxUsed: agent.ctxUsed, busy: agent.busy, thinking: agent.thinking, budget: agent.model?.thinkingBudget });
   const messages = sideMessages({ messages: agent.messages, question, now: rightNow({ busy: agent.busy, live, todos: agent.todos, messages: agent.messages, now }), room });
   if (!messages) return { noRoom: true, room };
   let all = '';

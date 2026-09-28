@@ -3,12 +3,14 @@
 // start-up: it takes a moment to load, renders a simple chat template, "reads"
 // prompts slowly, saves and restores slot files, and streams a fixed reply.
 import { createServer } from 'node:http';
-import { writeFileSync, existsSync } from 'node:fs';
+import { writeFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 const arg = (n) => process.argv[process.argv.indexOf(n) + 1];
 const port = Number(arg('--port'));
 const slotDir = arg('--slot-save-path');
 const t0 = Date.now();
+// A test that checks how it was started names a file to note its arguments in.
+if (process.env.FAKE_LLAMA_ARGS) appendFileSync(process.env.FAKE_LLAMA_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 createServer(async (req, res) => {
   if (req.url === '/health') { const ok = Date.now() - t0 > 1500; res.statusCode = ok ? 200 : 503; res.end(ok ? '{"status":"ok"}' : '{"status":"loading"}'); return; }

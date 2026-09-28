@@ -12,6 +12,7 @@ export const COMMANDS = [
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
+  { name: 'increase', desc: 'See and move the limits up or down: context, thinking cap, tries, steps, command output, trim points' },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },

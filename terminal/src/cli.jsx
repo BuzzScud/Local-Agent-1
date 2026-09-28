@@ -7,6 +7,7 @@ import { primeRows } from './app/screen.jsx';
 import { openingMemory } from './app/mac-memory.mjs';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, ModelServer, chooseContext, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
+import { readLimits, modelWithLimits } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
@@ -198,11 +199,13 @@ opts.modelId = (modelById(opts.modelId) ?? modelById(loadSettings(opts.cwd).mode
 if (opts.print) {
   if (!opts.prompt) { process.stderr.write('coding -p needs a prompt\n'); process.exit(2); }
   if (!(await ensureTrusted(opts.cwd))) process.exit(2);
-  const model = modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL];
   const settings = loadSettings(opts.cwd);
+  // The limits /increase saved: the context and thinking cap for the server, the rest for the agent.
+  const limits = readLimits(settings, modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]);
+  const model = modelWithLimits(modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL], limits);
   let server = null;
   let url = opts.url;
-  let ctx = opts.ctx;
+  let ctx = opts.ctx ?? (limits.context || undefined);
   let slots = url && opts.slots > 1 ? { main: 0, side: 1 } : undefined;
   if (!url) {
     const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
@@ -218,7 +221,7 @@ if (opts.print) {
   try {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
-      thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots,
+      thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots, limits,
       // The memory: facts brought back, and what the run taught saved before it ends.
       memory: memoryOn(settings) ? { save: (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.

@@ -522,9 +522,12 @@ export async function execute(name, args, prepared, env) {
       };
     }
     case 'Bash': {
-      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs: 120_000, maxLines: 80, signal: env.signal });
+      // Output lines and the timeout move with /increase (env.bash).
+      const timeoutMs = env.bash?.timeoutMs ?? 120_000;
+      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal });
       const body = r.lines.join('\n');
-      const status = r.timedOut ? '\n(stopped after 2 minutes)' : r.code === 0 ? '' : `\n(exit code ${r.code})`;
+      const took = timeoutMs >= 90_000 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
+      const status = r.timedOut ? `\n(stopped after ${took})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
       return { text: cut(body || '(no output)', max) + status, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines: r.lines, ms: r.ms, timedOut: r.timedOut } };
     }
     case 'TodoWrite': {

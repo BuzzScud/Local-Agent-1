@@ -36,7 +36,9 @@ export default {
   // (reasoning_effort is ignored by its template; enable_thinking is what counts).
   thinkingLevels: [
     { id: 'low', label: 'Low', effort: null, note: 'answers straight away (fastest)' },
-    { id: 'high', label: 'High', effort: 'high', note: 'thinks first; stopped at 2,048 tokens' },
+    { id: 'high', label: 'High', effort: 'high', note: 'thinks first; stopped at 4,096 tokens' },
   ],
-  thinkingBudget: 2048,
+  // Raised from 2,048 on 28 Sep: in test 2 its thinking ran into 2,048 before
+  // it had finished. ~5 min at 13 tokens/s; the reply room follows it (agent.mjs).
+  thinkingBudget: 4096,
 };

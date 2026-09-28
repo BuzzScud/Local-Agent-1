@@ -36,6 +36,7 @@ import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
+import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, defaultLimits, showLimit } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -94,6 +95,10 @@ export function App({ opts, win, onRestart }) {
   // The model can change while the window is open (/model switches to the
   // edited copy and back), so it is state; the last pick is kept in settings.
   const [model, setModel] = useState(() => modelById(opts.modelId) ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL]);
+  // The limits /increase moves (limits.mjs), kept in settings.json. `model`
+  // stays the registry's; the agent and the server get it with the thinking cap.
+  const limitsRef = useRef(null);
+  limitsRef.current ??= readLimits(settings, model);
   // What the Weights tab last saved (the edited copy's manifest): feeds the
   // weights badge in the lower right.
   const [editedSaved, setEditedSaved] = useState(readEdited);
@@ -175,7 +180,7 @@ export function App({ opts, win, onRestart }) {
     agentRef.current = new Agent({
       // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
       memory: remembers ? { embedder: embedderReady() ? new Embedder() : null, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
-      url: opts.url ?? 'http://127.0.0.1:0', model, cwd,
+      url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
       system: systemPrompt({ cwd, notes: notes.text, git: gitSummary(cwd) }),
@@ -193,6 +198,7 @@ export function App({ opts, win, onRestart }) {
         await warmUp({ sessionMark: SESSION_MARK, url: a.url, model: a.model, system: a.messages[0].content, tools: toolSchemas(), thinking: a.thinking, effort: a.effort, slot: a.slots.main, helper: serverRef.current.draft, signal });
       },
     });
+    applyLimits(agentRef.current, limitsRef.current);
   }
   const agent = agentRef.current;
   // Saving on its own (autosave.mjs): a little after a task, and on quit.
@@ -259,7 +265,8 @@ export function App({ opts, win, onRestart }) {
   // /model picked a different set of weights: only the model server restarts;
   // the window, the conversation and the history all stay. About 40 s: the
   // new weights never reuse a saved warm-up, so the instructions are re-read.
-  const switchModel = async (next) => {
+  // /increase uses it too, to restart on a new context or thinking cap (`done` is its note).
+  const switchModel = async (next, done) => {
     if (S.current.live !== IDLE) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
     const cur = serverRef.current;
     // Only one 27B fits in memory, so nobody else may be on the old server.
@@ -273,9 +280,10 @@ export function App({ opts, win, onRestart }) {
       stopIdleServers(); // a server we only attached to (kept loaded earlier) is freed too
       // Wait for the old one to really exit: two 27Bs never fit side by side.
       if (oldPid) { const t0 = Date.now(); for (;;) { try { process.kill(oldPid, 0); } catch { break; } if (Date.now() - t0 > 15000) throw new Error('the old model server did not stop'); await new Promise((r) => setTimeout(r, 200)); } }
-      const c = chooseContext(next, { effort: agent.thinking ? agent.effort : undefined });
+      const fixed = limitsRef.current.context;
+      const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined });
       memoryNote.current = c.reason ?? null;
-      const srv = new ModelServer(next);
+      const srv = new ModelServer(modelWithLimits(next, limitsRef.current));
       serverRef.current = srv;
       srv.on('crash', ({ code, signal }) => {
         if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
@@ -284,14 +292,15 @@ export function App({ opts, win, onRestart }) {
       });
       const st = await srv.start({ ctx: c.ctx, lingerSecs: LINGER_SECS, helper: c.helper });
       agent.url = srv.url;
-      agent.model = next;
+      agent.model = modelWithLimits(next, limitsRef.current);
       agent.ctx = st.ctx ?? c.ctx; setCtx(agent.ctx);
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       setStartPhase('reading');
       await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase });
       const n = next.edited?.edits.length ?? 0;
-      push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
-    } catch (e) { push({ type: 'note', text: `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' }); }
+      if (done) push({ type: 'note', text: done(agent.ctx), tone: 'dim' });
+      else push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
+    } catch (e) { push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /increase to try again.` : `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' }); }
     setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
@@ -320,6 +329,22 @@ export function App({ opts, win, onRestart }) {
       saveSettings({ meters: on });
       push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
     }
+  };
+  // /increase saved: the agent's limits change at once; a new context or
+  // thinking cap restarts the model server (the window and conversation stay).
+  const saveLimits = (next) => {
+    const changes = limitChanges(limitsRef.current, next);
+    if (!changes.length) { push({ type: 'note', text: 'Limits unchanged.', tone: 'dim' }); return; }
+    const restart = changes.some((c) => c.restart);
+    if (restart && !opts.url && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then save the context or thinking cap again in /increase.', tone: 'warn' }); return; }
+    limitsRef.current = next;
+    applyLimits(agent, next);
+    saveSettings({ limits: limitsToSave(next, model) });
+    const list = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
+    if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.`, tone: 'dim' }); return; }
+    if (opts.url) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model server was given with --url, so restart it yourself for the context or thinking cap to take effect.`, tone: 'warn' }); return; }
+    push({ type: 'note', text: `Saved: ${list}. Restarting ${model.name} for it (about a minute); the conversation stays.`, tone: 'dim' });
+    switchModel(model, (ctx) => `${model.name} restarted: context ${Math.round(ctx / 1024)}k · thinking cap ${showLimit('thinking', next.thinking)}.`);
   };
   const setThinking = useCallback((on, eff) => {
     agent.thinking = on;
@@ -449,11 +474,16 @@ export function App({ opts, win, onRestart }) {
     let alive = true;
     (async () => {
       if (opts.url) { setStarting(false); return; }
-      let size = opts.ctx;
+      // --ctx wins; then the context /increase saved; then what fits (chooseContext).
+      let size = opts.ctx ?? (limitsRef.current.context || undefined);
       // A model still loaded from an earlier start (or another window) is used
       // as it is; otherwise the memory size is chosen from what is free now.
       const running = runningServer(model);
       if (!size && running) size = running.ctx;
+      // A context picked in /increase is used as asked; said when it does not fit (measured before loading).
+      if (!opts.ctx && limitsRef.current.context && !running && needBytes(model, size, { draft: false }) > availableBytes()) {
+        push({ type: 'note', text: `Context ${Math.round(size / 1024)}k (from /increase) needs ${(needBytes(model, size, { draft: false }) / 1e9).toFixed(1)} GB and ${(availableBytes() / 1e9).toFixed(1)} GB is free: the Mac may slow down. Close other apps, or lower it in /increase.`, tone: 'warn' });
+      }
       let helper;
       if (!size) {
         const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined });
@@ -463,7 +493,7 @@ export function App({ opts, win, onRestart }) {
       }
       agent.ctx = size;
       setCtx(size);
-      const srv = new ModelServer(model);
+      const srv = new ModelServer(modelWithLimits(model, limitsRef.current));
       serverRef.current = srv;
       srv.on('crash', ({ code, signal }) => {
         if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
@@ -473,6 +503,8 @@ export function App({ opts, win, onRestart }) {
       let st;
       try {
         st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
+        const want = !opts.ctx && limitsRef.current.context;
+        if (want && st.shared && st.ctx !== want) push({ type: 'note', text: `${model.name} was already loaded at ${Math.round(st.ctx / 1024)}k, so it runs at that. Your /increase context (${Math.round(want / 1024)}k) applies after coding stop, or save it again in /increase.`, tone: 'warn' });
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
@@ -795,6 +827,13 @@ export function App({ opts, win, onRestart }) {
         setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => m.id === model.id)), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
         break;
       }
+      case 'increase': {
+        // Every limit that can move, with what each value costs; ←→ moves, enter saves.
+        // The memory Gemma holds now counts as free: a restart hands it back first.
+        const freeBytes = availableBytes() + (serverRef.current?.port ? needBytes(model, agent.ctx, { draft: false }) : 0);
+        setPicker({ kind: 'limits', index: 0, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx } });
+        break;
+      }
       case 'stats':
         push({ type: 'panel', title: 'Stats', pad: 20, rows: [
           ['model', `${model.name}${model.edited ? ` · ${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(model.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`],
@@ -803,6 +842,7 @@ export function App({ opts, win, onRestart }) {
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
           ['written so far', `${(stats.outTokens ?? 0).toLocaleString()} tokens in ${stats.requests ?? 0} replies`],
           ['memory', `${ramGb ? `${ramGb.toFixed(1)} GB` : '—'}${memoryNote.current ? ` · ${memoryNote.current}` : ''}`],
+          ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /increase moves them`],
           ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
           ['server', serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
         ] });
@@ -994,6 +1034,17 @@ export function App({ opts, win, onRestart }) {
         if (changed) { saveSettings({ model: picked.id }); switchModel(picked); }
         else push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
       }
+      return;
+    }
+    // /increase: ↑↓ a limit, ←→ lower / raise it, enter saves (on the last row: every limit back to its default), esc keeps them
+    if (cur.picker?.kind === 'limits') {
+      const pk = cur.picker;
+      const rows = LIMITS.length + 1;
+      if (key.upArrow) setPicker({ ...pk, index: (pk.index + rows - 1) % rows });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % rows });
+      else if ((key.leftArrow || key.rightArrow) && pk.index < LIMITS.length) setPicker({ ...pk, values: moveLimit(pk.values, LIMITS[pk.index].id, key.rightArrow ? 1 : -1, model) });
+      else if (key.return) { setPicker(null); saveLimits(pk.index === LIMITS.length ? defaultLimits(model) : pk.values); }
+      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Limits kept as they were.', tone: 'dim' }); }
       return;
     }
     // A choice menu (/effort, /mode, /meters): ↑↓ or a number, enter picks, esc goes back unchanged

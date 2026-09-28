@@ -1,6 +1,7 @@
 // Runs one prompt start to finish without the terminal UI: used by the
 // practice-task runner and by `coding -p "…"`.
 import { Agent } from './agent/agent.mjs';
+import { applyLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './agent/prompt.mjs';
 import { toolSchemas } from './agent/tools.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
@@ -12,7 +13,7 @@ import { saveLessons, worthSaving } from './agent/lessons.mjs';
 // default, so a practice run is the same every time. save: 'after' leaves
 // the save to the caller (the result's save()), for a run whose files are
 // checked first.
-export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false }) {
+export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedderReady() ? new Embedder() : null, save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -38,6 +39,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
       return { choice: autoApprove && (!approve || approve(req)) ? 'yes' : 'no' };
     },
   });
+  // The limits /increase saved (coding -p passes them; the practice bench does not).
+  if (limits) applyLimits(agent, limits);
   // coding -p started the server itself: restore (or read) the instructions first.
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
   const log = [];
