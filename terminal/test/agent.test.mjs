@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent, safeArgs, claimsAlreadyThere, AUTO } from '../src/agent/agent.mjs';
-// Bonsai's "go ahead" nudge, as it reads now (labelled as automatic).
+// Agentic Coder's "go ahead" nudge, as it reads now (labelled as automatic).
 const isNudge = (c) => c.startsWith(AUTO) && c.includes('did not do it');
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
@@ -128,7 +128,7 @@ test('a reply that asks you something ends the turn, even mid-task and after "I\
   expect(fake.remaining()).toBe(1);
 });
 
-test('the screenshot of 2026-09-26: "hello, can you help me with something?" gets one answer, then Bonsai waits', async () => {
+test('the screenshot of 2026-09-26: "hello, can you help me with something?" gets one answer, then Agentic Coder waits', async () => {
   const cwd = project();
   const answer = "Hello! Of course — I can help. What are you working on or trying to figure out? Give me a little detail and I'll dig in.";
   const fake = await startFakeServer([{ reasoning: 'The user is greeting me and asking for help.', text: answer }, { text: 'never sent' }]);
@@ -238,7 +238,7 @@ test('a garbled tool call is kept as {} so later requests stay valid', () => {
 
 test('with thinking on, each request asks for "medium" thinking', async () => {
   const { fake } = await run([{ text: 'It prints CSV.' }]);
-  expect(fake.requests.find((r) => r.stream).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'medium' });
+  expect(fake.requests.find((r) => r.stream).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' }); // Gemma's only thinking level
 });
 
 test('the walk-out: commands and reads outside the project are refused, even auto-approved', async () => {

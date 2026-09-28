@@ -1,5 +1,5 @@
 // "Update available" in the lower right: a commit on main that changes
-// Bonsai's code while it runs lights the badge; docs-only commits, code that
+// Agentic Coder's code while it runs lights the badge; docs-only commits, code that
 // was already built in, and pushes not yet in this folder are told apart.
 // /update restarts the app on the new code with the conversation kept.
 import { test, expect } from 'bun:test';
@@ -129,7 +129,7 @@ test('/update without the launcher (run from the source): up to date says so; an
   try {
     await t.waitFor('? for shortcuts');
     await t.type('/update'); t.key('enter');
-    await t.waitFor('Bonsai is up to date');
+    await t.waitFor('Agentic Coder is up to date');
     commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 6;\n' }, 'an update');
     await t.waitFor('↻ Update available · /update to use it', 10_000);
     await t.type('/update'); t.key('enter');
@@ -142,14 +142,14 @@ test('/update without the launcher (run from the source): up to date says so; an
 test('/update through the bonsai launcher: rebuilt, restarted in the same window, conversation back, every key arrives', async () => {
   const src = join(import.meta.dir, '..', '..');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-update-repo-')));
-  const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/bonsai-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
+  const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
     .split('\n').filter(Boolean); // models/ whole: the app imports from evals/ too (the test record)
   for (const f of files) { mkdirSync(dirname(join(repo, f)), { recursive: true }); cpSync(join(src, f), join(repo, f)); }
   symlinkSync(join(src, 'node_modules'), join(repo, 'node_modules'));
   git(repo, 'init', '-q', '-b', 'main'); git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'this tree');
   const { base, cwd } = trustedProject();
   const launcher = join(base, 'bonsai');
-  writeFileSync(launcher, readFileSync(join(src, 'terminal/app/bonsai-launcher.sh'), 'utf8').replace('__REPO__', repo));
+  writeFileSync(launcher, readFileSync(join(src, 'terminal/app/agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo));
   chmodSync(launcher, 0o755);
   const fake = await startFakeServer([{ text: 'Hello from before the update.' }, { text: 'Hello from after.' }]);
   const env = { HOME: join(base, 'user'), BONSAI_HOME: join(base, 'home'), BONSAI_UPDATE_EVERY: '300', BONSAI_REPO: '' };
@@ -166,7 +166,7 @@ test('/update through the bonsai launcher: rebuilt, restarted in the same window
     await t.waitFor('resumed: hi', 60_000);
     await t.idle(600, 10_000);
     const after = t.raw().subarray(before).toString();
-    expect(after).toContain('Bonsai updated from'); // the launcher rebuilt it
+    expect(after).toContain('Agentic Coder updated from'); // the launcher rebuilt it
     const screen = await t.screen();
     expect(screen).toContain('Hello from before the update.');
     expect(screen).not.toContain('Update available');
@@ -177,14 +177,14 @@ test('/update through the bonsai launcher: rebuilt, restarted in the same window
     for (let i = 0; i < 16; i++) t.key('backspace');
     await t.type('again'); t.key('enter');
     await t.waitFor('Hello from after.');
-    const ps = execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8' }).split('\n').filter((l) => l.startsWith(join(env.HOME, '.bonsai-code/app/bonsai')));
+    const ps = execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8' }).split('\n').filter((l) => l.startsWith(join(env.HOME, '.agentic-coder/app/agentic-coder')));
     expect(ps.length).toBe(1); // one app, not a chain of them
   } finally { await t.close(); await fake.close(); }
 }, 120_000);
 
 // ── The GitHub check (git fetch) and what keeps it safe ─────────────────────
 
-// A stand-in GitHub: a bare repo; `local` is Bonsai's folder (a clone of it),
+// A stand-in GitHub: a bare repo; `local` is Agentic Coder's folder (a clone of it),
 // `other` is another machine pushing to it.
 function github() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-gh-')));
@@ -254,7 +254,7 @@ console.log('direct=' + direct + ' runGit=' + r.out);`);
     await t.waitFor(/runGit=\w/, 15_000);
     const line = (await t.screen()).split('\n').find((l) => l.includes('runGit='));
     expect(line).toContain('direct=HAS-TTY'); // the probe works: a plain child can reach the terminal
-    expect(line).toContain('runGit=NO-TTY'); // Bonsai's git calls cannot
+    expect(line).toContain('runGit=NO-TTY'); // Agentic Coder's git calls cannot
   } finally { await t.close(); }
 }, 30_000);
 
@@ -269,7 +269,7 @@ test('the restart file is written fresh for you only; a link planted in its plac
   writeFileSync(target, 'keep me\n');
   const file = join(dir, 'restart.123');
   symlinkSync(target, file);
-  const keep = process.env.BONSAI_RESTART_FILE;
+  const keep = (process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE);
   try {
     process.env.BONSAI_RESTART_FILE = file;
     leaveRestart(['--resume', 'abc', '--url', 'http://127.0.0.1:1\nevil']);
@@ -280,8 +280,8 @@ test('the restart file is written fresh for you only; a link planted in its plac
   expect(readFileSync(file, 'utf8')).toBe('--resume\nabc\n--url\nhttp://127.0.0.1:1 evil\n');
 });
 
-test("commands Bonsai runs do not see where the restart file goes", async () => {
-  const keep = process.env.BONSAI_RESTART_FILE;
+test("commands Agentic Coder runs do not see where the restart file goes", async () => {
+  const keep = (process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE);
   process.env.BONSAI_RESTART_FILE = '/tmp/x';
   try {
     const r = await runCommand('echo "file=${BONSAI_RESTART_FILE:-none}"', { cwd: tmpdir(), sandbox: false });

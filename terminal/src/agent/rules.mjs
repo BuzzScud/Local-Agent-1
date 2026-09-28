@@ -1,4 +1,4 @@
-// Bonsai's bug-fixing rules. terminal/rules/bug-fixing.md is the only copy:
+// Agentic Coder's bug-fixing rules. terminal/rules/bug-fixing.md is the only copy:
 // its "Every time" steps go into the system prompt, and a bug's kind (sorted
 // by the kind's Words) adds that kind's steps to the request.
 import { readFileSync } from 'node:fs';

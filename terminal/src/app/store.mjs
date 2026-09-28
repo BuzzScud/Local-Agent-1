@@ -1,21 +1,24 @@
-// Settings, saved sessions and prompt history, all under ~/.bonsai-code.
+// Settings, saved sessions and prompt history, all under ~/.agentic-coder.
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { thinking: null, model: '27b' };
+const DEFAULTS = { thinking: null, model: 'gemma' };
 
-// A trusted folder may set these in <folder>/.bonsai/settings.json; they
+// A trusted folder may set these in <folder>/.agentic/settings.json (the old
+// .bonsai/settings.json is still read); they
 // win over the global file, and what you type on the command line wins
 // over both. Anything else in the file is ignored.
-const FOLDER_KEYS = ['mode', 'effort'];
+// memory: false turns the memory off (nothing brought back, nothing saved).
+const FOLDER_KEYS = ['mode', 'effort', 'memory'];
 
 function folderSettings(cwd) {
   if (!cwd || !isTrusted(cwd)) return {};
   let raw;
-  try { raw = JSON.parse(readFileSync(join(cwd, '.bonsai', 'settings.json'), 'utf8')); } catch { return {}; }
+  try { raw = JSON.parse(readFileSync(join(cwd, '.agentic', 'settings.json'), 'utf8')); }
+  catch { try { raw = JSON.parse(readFileSync(join(cwd, '.bonsai', 'settings.json'), 'utf8')); } catch { return {}; } }
   const out = {};
   for (const k of FOLDER_KEYS) if (raw[k] !== undefined) out[k] = raw[k];
   if (typeof out.effort === 'string') {
@@ -25,6 +28,7 @@ function folderSettings(cwd) {
     if (out.effort === 'low') delete out.effort;
   }
   if (out.mode && !['ask', 'edits', 'plan'].includes(out.mode)) delete out.mode;
+  if (out.memory !== undefined && typeof out.memory !== 'boolean') delete out.memory;
   if (Object.keys(out).length) out.fromFolder = Object.keys(out).filter((k) => k !== 'fromFolder');
   return out;
 }

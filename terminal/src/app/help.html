@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bonsai Help</title>
+<title>Agentic Coder Help</title>
 <style>
 :root {
   --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
@@ -60,7 +60,7 @@ code { font-family: var(--mono); font-size: .92em; background: var(--panel); pad
 <div class="layout">
   <nav class="side" id="side"></nav>
   <main>
-    <h1>Bonsai Code help</h1>
+    <h1>Agentic Coder help</h1>
     <p class="lede" id="lede">A coding agent in your terminal that runs its model on this Mac.</p>
     <div class="find"><input id="q" type="search" placeholder="find a command, key or setting" autocomplete="off" aria-label="find"><span class="small" id="count"></span></div>
     <div id="content"></div>
@@ -75,28 +75,28 @@ code { font-family: var(--mono); font-size: .92em; background: var(--panel); pad
   const table = (rows) => `<div class="tbl">${rows.join('')}</div>`;
   const HUB = [
     ['Weights', 'the model’s weights: real values, Channels across all layers, Words, and more (/weights)'],
-    ['Harness', 'how a request travels through Bonsai, as a diagram'],
-    ['Structure', 'where every part of Bonsai Code lives'],
-    ['All docs', 'every Bonsai page in the DOCS folder, by group, read live (/docs)'],
+    ['Harness', 'how a request travels through Agentic Coder, as a diagram'],
+    ['Structure', 'where every part of Agentic Coder lives'],
+    ['All docs', 'every Agentic Coder page in the DOCS folder, by group, read live (/docs)'],
     ['Help', 'this page (/help)'],
   ];
 
   function render(h) {
-    $('#lede').textContent = `A coding agent in your terminal${h.modelName ? `, running ${h.modelName}` : ''} on this Mac.${h.version ? ` Version ${h.version}.` : ''} Type / in Bonsai for the command list; this page has everything in one place.`;
+    $('#lede').textContent = `A coding agent in your terminal${h.modelName ? `, running ${h.modelName}` : ''} on this Mac.${h.version ? ` Version ${h.version}.` : ''} Type / in Agentic Coder for the command list; this page has everything in one place.`;
     const S = [];
-    S.push(['commands', 'Commands', 'Type them in Bonsai’s prompt. The ones marked menu open a list to choose from when typed alone; add a word to set it straight away.',
+    S.push(['commands', 'Commands', 'Type them in Agentic Coder’s prompt. The ones marked menu open a list to choose from when typed alone; add a word to set it straight away.',
       table(h.commands.map((c) => row(`/${esc(c.name)}${c.arg ? ` <span class="arg">${esc(c.arg)}</span>` : ''}`, c.desc, c.menu ? '<span class="badge">menu</span>' : '')))]);
     S.push(['keys', 'Keys', 'What each key does, grouped by where you use it.',
       h.keys.map((g) => `<h3>${esc(g.group)}</h3>${table(g.rows.map(([k, d]) => row(esc(k), d)))}`).join('')]);
-    S.push(['modes', 'Modes', 'How Bonsai asks before it changes things. Pick with /mode or switch with shift+tab. It lasts for the conversation.',
+    S.push(['modes', 'Modes', 'How Agentic Coder asks before it changes things. Pick with /mode or switch with shift+tab. It lasts for the conversation.',
       `<div class="cards">${h.modes.map((m) => `<div class="card tr-card"><div class="t">${esc(m.label)}</div><div class="n">${esc(m.note)}</div><div class="h">/mode ${esc(m.id)}</div></div>`).join('')}</div>`]);
-    if (h.effort.length) S.push(['effort', 'Effort', 'How much Bonsai thinks before it acts. Pick with /effort; it is kept for next time.',
+    if (h.effort.length) S.push(['effort', 'Effort', 'How much Agentic Coder thinks before it acts. Pick with /effort; it is kept for next time.',
       `<div class="cards">${h.effort.map((l) => `<div class="card tr-card"><div class="t">${esc(l.label)}</div><div class="n">${esc(l.note)}</div><div class="h">/effort ${esc(l.id)}</div></div>`).join('')}</div>`]);
-    S.push(['start', 'Starting Bonsai', 'From any terminal.',
+    S.push(['start', 'Starting Agentic Coder', 'From any terminal.',
       `<h3>Ways to start</h3>${table(h.cli.usage.map(([k, d]) => row(esc(k), d)))}<h3>Options</h3>${table(h.cli.options.map(([k, d]) => row(esc(k), d)))}`]);
-    S.push(['safety', 'Staying safe', 'What Bonsai does before it touches anything.', `<ul class="plain">${h.safety.map((s) => `<li class="tr-li">${esc(s)}</li>`).join('')}</ul>`]);
-    S.push(['places', 'Where things live', 'The files Bonsai reads and keeps.', table(h.places.map(([k, d]) => row(esc(k), d)))]);
-    S.push(['hub', 'The hub', 'The browser page this help lives in. /weights, /docs and /help open it; it stays up while that Bonsai window is open.', table(HUB.map(([k, d]) => row(esc(k), d)))]);
+    S.push(['safety', 'Staying safe', 'What Agentic Coder does before it touches anything.', `<ul class="plain">${h.safety.map((s) => `<li class="tr-li">${esc(s)}</li>`).join('')}</ul>`]);
+    S.push(['places', 'Where things live', 'The files Agentic Coder reads and keeps.', table(h.places.map(([k, d]) => row(esc(k), d)))]);
+    S.push(['hub', 'The hub', 'The browser page this help lives in. /weights, /docs and /help open it; it stays up while that Agentic Coder window is open.', table(HUB.map(([k, d]) => row(esc(k), d)))]);
     S.push(['tips', 'Tips', 'Small things that help.', `<ul class="plain">${h.tips.map((s) => `<li class="tr-li">${esc(s)}</li>`).join('')}</ul>`]);
     $('#content').innerHTML = S.map(([id, t, sub, body]) => `<section id="${id}"><h2>${t}</h2><p class="sub">${sub}</p>${body}</section>`).join('');
     $('#side').innerHTML = S.map(([id, t]) => `<a href="#${id}" data-id="${id}">${t}</a>`).join('');
@@ -127,7 +127,7 @@ code { font-family: var(--mono); font-size: .92em; background: var(--panel); pad
   const watch = () => document.querySelectorAll('section').forEach((s) => io.observe(s));
 
   fetch('/help.json').then((r) => r.json()).then((h) => { render(h); watch(); if (location.hash) document.querySelector(location.hash)?.scrollIntoView(); })
-    .catch(() => { $('#content').innerHTML = '<p class="sub">Could not read the help from Bonsai. Is the Bonsai window that opened this page still running?</p>'; });
+    .catch(() => { $('#content').innerHTML = '<p class="sub">Could not read the help from Agentic Coder. Is the Agentic Coder window that opened this page still running?</p>'; });
 })();
 </script>
 </body>

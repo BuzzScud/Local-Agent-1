@@ -92,7 +92,7 @@ let usable = null;
 // sandbox-exec is on every Mac; BONSAI_SANDBOX=0 turns the fence off (for a
 // tool that needs more than it allows).
 export function sandboxAvailable() {
-  if (process.env.BONSAI_SANDBOX === '0') return false;
+  if ((process.env.AGENTIC_SANDBOX ?? process.env.BONSAI_SANDBOX) === '0') return false;
   if (usable === null) usable = process.platform === 'darwin' && existsSync(SANDBOX_EXEC) && spawnSync(SANDBOX_EXEC, ['-p', '(version 1)(allow default)', '/usr/bin/true']).status === 0;
   return usable;
 }

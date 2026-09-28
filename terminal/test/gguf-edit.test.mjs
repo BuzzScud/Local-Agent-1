@@ -80,7 +80,7 @@ test('edits apply in order: a copy after a scale carries the scaled row', async 
 test('refusals: the source itself, a registered model name, missing tensors, rows outside, F32, wild factors', async () => {
   const scale = (over) => [{ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: 0, k: 1, ...over }];
   await expect(applyEdits({ src: SRC, dest: SRC, edits: scale() })).rejects.toThrow('refusing to write the model being read');
-  await expect(applyEdits({ src: SRC, dest: out('Ternary-Bonsai-2-27B-PQ2_0.gguf'), edits: scale() })).rejects.toThrow('refusing to write over');
+  await expect(applyEdits({ src: SRC, dest: out('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), edits: scale() })).rejects.toThrow('refusing to write over');
   await expect(applyEdits({ src: SRC, dest: out('x.gguf'), edits: scale({ tensor: 'nope' }) })).rejects.toThrow('no tensor named nope');
   await expect(applyEdits({ src: SRC, dest: out('x.gguf'), edits: scale({ row: 5 }) })).rejects.toThrow('rows 0–4');
   await expect(applyEdits({ src: SRC, dest: out('x.gguf'), edits: scale({ tensor: 'blk.0.attn_norm.weight' }) })).rejects.toThrow('only PQ2_0');

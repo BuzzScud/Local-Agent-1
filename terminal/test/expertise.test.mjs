@@ -110,7 +110,7 @@ test('MATH/ paths read from the folder and are never writable', () => {
   rmSync(cwd, { recursive: true, force: true });
 });
 
-// Like Claude Code, Bonsai reads nothing beyond the project unless asked: the
+// Like Claude Code, Agentic Coder reads nothing beyond the project unless asked: the
 // math notes come only with /math. (Matching every request by its words sent
 // a notes.html request into the MATH folder on 2026-09-26.)
 test('the notes come only with /math: not named in the instructions, never attached to an ordinary request', async () => {

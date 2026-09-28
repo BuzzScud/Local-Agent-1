@@ -8,18 +8,18 @@ export const COMMANDS = [
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
-  { name: 'memory', desc: 'What Bonsai remembers here and where; say "update memory" to add' },
+  { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
   { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
-  { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Bonsai page' },
+  { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Agentic Coder page' },
   { name: 'tests', desc: 'Open the hub on the test record: every test run and its result' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
-  { name: 'update', desc: 'Restart on new Bonsai code from main, keeping this conversation' },
-  { name: 'exit', desc: 'Quit Bonsai Code' },
+  { name: 'update', desc: 'Restart on new Agentic Coder code, keeping this conversation · /update memory saves to memory now', arg: '[memory]' },
+  { name: 'exit', desc: 'Quit Agentic Coder' },
 ];
 
 export function matchCommands(value) {

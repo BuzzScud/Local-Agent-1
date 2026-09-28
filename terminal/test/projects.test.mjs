@@ -43,7 +43,7 @@ test('a folder named with an everyday word counts only when pointed at', () => {
   expect(named('open the prime folder')).toEqual(['Desktop/MATH/prime']);
 });
 
-test('in the home folder Bonsai answers from what it knows; in a project it does not get that note', async () => {
+test('in the home folder Agentic Coder answers from what it knows; in a project it does not get that note', async () => {
   const { systemPrompt, isHomeFolder, SESSION_MARK } = await import('../src/agent/prompt.mjs');
   const { homedir } = await import('node:os');
   expect(isHomeFolder(homedir())).toBe(true);

@@ -16,7 +16,7 @@ test('the welcome on the top line, the prompt box on the last lines, space in be
   await fake.close();
   const lines = r.snapshots.start.split('\n');
   while (lines.length < 43) lines.push('');
-  const welcome = lines.findIndex((l) => l.includes('Welcome to Bonsai Code'));
+  const welcome = lines.findIndex((l) => l.includes('Welcome to Agentic Coder'));
   const tipsEnd = lines.findIndex((l) => l.includes('nothing is sent anywhere'));
   const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
   expect(welcome).toBeLessThanOrEqual(2);          // at the top (this harness may show one line above)
@@ -31,13 +31,13 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
   const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
     { wait: 'reading its instructions', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
     { wait: 'sends as soon as the model is ready' }, { snapshot: 'queued' },
     { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
-  expect(first.snapshots.queued).toMatch(/Starting Bonsai 2 27B… reading its instructions, about 30 s the first time/);
+  expect(first.snapshots.queued).toMatch(/Starting Gemma 4 12B QAT… reading its instructions, about 30 s the first time/);
   expect(first.snapshots.queued).toContain('⏵ Queued: hello');
   expect(readdirSync(join(home, 'slots')).filter((f) => f.startsWith('warm-'))).toHaveLength(1);
   const second = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
@@ -57,7 +57,7 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Quick safety check' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'onNo' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
-    { wait: 'Welcome to Bonsai Code' }, ...quit,
+    { wait: 'Welcome to Agentic Coder' }, ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('Is this a folder you created or one you trust?');
@@ -87,10 +87,10 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
   const b = mk();
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const yes = await runInPty({ cwd: b.cwd, env: b.env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Welcome to Bonsai Code' }, ...quit,
+    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Welcome to Agentic Coder' }, ...quit,
   ] });
   await fake.close();
-  expect(yes.text).toContain('Welcome to Bonsai Code');
+  expect(yes.text).toContain('Welcome to Agentic Coder');
   expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
 }, T * 2);
 

@@ -236,7 +236,7 @@ export function TaskBoard({ session, s, width }) {
   const a = s.active;
   const head = (
     <Text>
-      <Text color={C.accent}>✻ </Text><Text bold>Bonsai Code</Text>
+      <Text color={C.accent}>✻ </Text><Text bold>Agentic Coder</Text>
       <Text color={C.dim}>  ·  {session.model}  ·  {session.cwd}  ·  /help  ·  shift+tab: ask first / auto-edit / plan</Text>
     </Text>
   );

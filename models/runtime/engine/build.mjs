@@ -1,6 +1,6 @@
 // Builds the model server Bonsai Code runs: Prism ML's llama.cpp (branch prism, the
 // commit in ENGINE) plus our Metal patch, as static llama-server and llama-bench in
-// ~/.bonsai-code/engine/<tag>/. Needs git, cmake and Apple's command line tools;
+// ~/.agentic-coder/engine/<tag>/. Needs git, cmake and Apple's command line tools;
 // about 3 minutes on the M4. `bonsai setup` calls it; by hand:
 //   node models/runtime/engine/build-now.mjs
 // (This module only defines the build: the one-file `bonsai` binary loads it on

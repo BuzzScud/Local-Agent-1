@@ -17,10 +17,13 @@ test('which messages ask to save to memory', () => {
 
 test('the right file: the home folder\'s, the git repo\'s top, or the folder itself', () => {
   const home = mkdtempSync(join(tmpdir(), 'bonsai-mem-home-'));
-  expect(memoryFile(home, home)).toBe(join(home, '.bonsai', 'notes.md'));
+  expect(memoryFile(home, home)).toBe(join(home, '.agentic', 'notes.md'));
   const repo = join(home, 'repo'); mkdirSync(join(repo, '.git'), { recursive: true }); mkdirSync(join(repo, 'src', 'deep'), { recursive: true });
-  expect(memoryFile(join(repo, 'src', 'deep'), home)).toBe(join(repo, '.bonsai', 'notes.md'));
+  expect(memoryFile(join(repo, 'src', 'deep'), home)).toBe(join(repo, '.agentic', 'notes.md'));
   const plain = join(home, 'plain'); mkdirSync(plain);
+  expect(memoryFile(plain, home)).toBe(join(plain, '.agentic', 'notes.md'));
+  // a project that already has the old .bonsai/notes.md keeps using it
+  mkdirSync(join(plain, '.bonsai')); writeFileSync(join(plain, '.bonsai', 'notes.md'), '# old\n');
   expect(memoryFile(plain, home)).toBe(join(plain, '.bonsai', 'notes.md'));
 });
 
@@ -29,7 +32,7 @@ test('merging: new facts added once, named lines dropped, the user\'s own text k
   const file = join(repo, '.bonsai', 'notes.md');
   let r = applyMemory(file, { add: ['Prefers tabs over spaces', 'Tests run with bun test'], drop: [] });
   expect(r.added).toHaveLength(2);
-  expect(readFileSync(file, 'utf8')).toContain('# Bonsai memory');
+  expect(readFileSync(file, 'utf8')).toContain('# Agentic Coder memory');
   writeFileSync(file, readFileSync(file, 'utf8') + '\nMy own line, not a fact.\n');
   r = applyMemory(file, { add: ['prefers TABS over spaces!', 'Deploys go through ssh orbit'], drop: ['Tests run with bun test'] });
   expect(r.added).toEqual(['Deploys go through ssh orbit']); // the repeat is skipped
@@ -37,7 +40,7 @@ test('merging: new facts added once, named lines dropped, the user\'s own text k
   expect(readMemory(file)).toEqual(['Prefers tabs over spaces', 'Deploys go through ssh orbit']);
   expect(readFileSync(file, 'utf8')).toContain('My own line, not a fact.');
   expect(readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8')).toContain('.bonsai/');
-  expect(digest([{ role: 'user', content: 'hi' }, { role: 'tool', content: 'x' }, { role: 'assistant', content: 'Hello' }])).toBe('User: hi\nBonsai: Hello');
+  expect(digest([{ role: 'user', content: 'hi' }, { role: 'tool', content: 'x' }, { role: 'assistant', content: 'Hello' }])).toBe('User: hi\nAgentic Coder: Hello');
 });
 
 test('"update memory" in a conversation saves straight to the file: no question about where', async () => {
@@ -53,7 +56,7 @@ test('"update memory" in a conversation saves straight to the file: no question 
   expect(asked).toHaveLength(0); // never asks where
   expect(fake.requests).toHaveLength(1); // one focused question to the model, nothing else
   expect(JSON.stringify(fake.requests[0])).toContain('make notes.html on my Desktop');
-  expect(readMemory(join(cwd, '.bonsai', 'notes.md'))).toEqual(['Likes self-contained HTML files on the Desktop']);
+  expect(readMemory(join(cwd, '.agentic', 'notes.md'))).toEqual(['Likes self-contained HTML files on the Desktop']);
   expect(said.at(-1)).toContain('Saved to memory');
-  expect(existsSync(join(cwd, '.bonsai', 'notes.md'))).toBe(true);
+  expect(existsSync(join(cwd, '.agentic', 'notes.md'))).toBe(true);
 });

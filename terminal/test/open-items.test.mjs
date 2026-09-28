@@ -231,7 +231,7 @@ test('code and tests are written at the chosen thinking level; sorting never thi
   await complete({ url: fake.url, model, system: 's', user: 'u' });
   await fake.close();
   const [code, sort, plain] = fake.requests;
-  expect(code.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
+  expect(code.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
   expect(code.max_tokens).toBe(100 + model.thinkingBudget);
   expect(code.temperature).toBe(model.thinkingSampling.temperature);
   expect(sort.chat_template_kwargs).toEqual({ enable_thinking: false });

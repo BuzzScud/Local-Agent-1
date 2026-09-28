@@ -201,7 +201,7 @@ test('the conversation keeps slot 0; sorting a request uses slot 1, so it never 
   expect(conversation.id_slot).toBe(0);
 });
 
-test('with a server Bonsai Code did not start (no slots), requests name no slot', async () => {
+test('with a server Agentic Coder did not start (no slots), requests name no slot', async () => {
   const cwd = copy('fixture-fix');
   const { fake } = await run(cwd, 'tidy up', [{ text: '{"kind": "question"}' }, { text: 'Done.' }]);
   expect(fake.requests.filter((r) => r.stream).every((r) => r.id_slot === undefined)).toBe(true);
@@ -246,7 +246,7 @@ test('change: two tests that cannot even load the code stop the test step early'
   expect(events.some((e) => e.type === 'note' && /working step by step instead/.test(e.text))).toBe(true);
 });
 
-// What kept Bonsai off a real bug (the chart test, 2026-09-25): a stopped test
+// What kept Agentic Coder off a real bug (the chart test, 2026-09-25): a stopped test
 // run read as failures, git missing from the scratch copy, a file list cut A to
 // Z before ranking, and the named check taken as the file to fix.
 

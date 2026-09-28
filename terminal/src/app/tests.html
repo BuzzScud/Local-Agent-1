@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bonsai test record</title>
+<title>Agentic Coder test record</title>
 <style>
 :root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--best:#f3d9cc;--bestInk:#8a3a1c;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--c-before:#2a78d6;--c-after:#eb6834}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--c-before:#3987e5;--c-after:#d95926}}
@@ -39,7 +39,7 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
 </head>
 <body>
 <main>
-<h1>Bonsai test record</h1>
+<h1>Agentic Coder test record</h1>
 <p class="lede" id="lede">Reading the record…</p>
 <div class="filters" id="filters" role="group" aria-label="Which tests to show"></div>
 <div class="cards" id="cards"></div>
@@ -55,7 +55,7 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   const built = $('data');
   let data;
   try { data = built ? JSON.parse(built.textContent) : await (await fetch('/tests.json', { cache: 'no-store' })).json(); }
-  catch { $('lede').textContent = 'The test record could not be read. Open this page from Bonsai with /docs, then the Tests tab.'; return; }
+  catch { $('lede').textContent = 'The test record could not be read. Open this page from Agentic Coder with /docs, then the Tests tab.'; return; }
   const live = !built;
   const rows = data.rows ?? [], KINDS = data.kinds ?? {};
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -142,7 +142,7 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   draw();
   $('foot').innerHTML = `<h3 style="color:var(--ink)">How this record is kept</h3><ul>
 <li>The record is one file on this Mac, <code>${esc(data.file ?? '')}</code>, one line per run. The 28-task check, the real requests, a real-bug run and the unit tests each add their line when they finish; any other check adds one with <code>recordTest()</code> from <code>models/evals/record.mjs</code>.</li>
-<li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Bonsai, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
+<li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;
 })();

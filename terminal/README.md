@@ -47,6 +47,31 @@ Commands: `/help /clear /compact /effort /mode /init /resume /model /stats /mete
 **Effort** is how much the model thinks before it acts: Off (the default), Medium or High,
 set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` still work.
 
+## Memory
+
+Bonsai remembers on its own. The model itself does not change; what it knows about you
+and the project does.
+
+| | |
+|---|---|
+| Where | `~/.bonsai/memory` about you (it follows you into every project) and `<project>/.bonsai/memory` about a project (kept out of git). One small file per fact in `facts/`, a short `index.md`, a `retired/` folder, and `log.jsonl`. |
+| Saving | A little after a task ends (in the background, on the side slot; it stops the moment you send a message) and when you quit (a small process finishes it after the window closed). At most 5 facts a save. A turn that went well on what the memory already held starts no save. "remember that …" saves at once. |
+| What | How you like to work · facts about the project · what worked and what failed, from a check · Bonsai's own mistakes · the steps of a job done twice (a recipe). A fact the turns do not bear out is refused, as is one naming a file that is not there, and anything that looks like a key or a password. |
+| Bringing back | The rules marked "always" and one short line per fact are read at every start. A fact comes back in full with a request it fits: by meaning, with the small model BGE-M3 (`models/bge-m3`), or by shared words when that model is not there. It is written into the request itself, so nothing already read is read again, and the focused paths (fix, change, several files) get it in their own prompts. |
+| Trust | +1 when the task passed its check after the fact was used, -1 when it failed or Bonsai got stuck, -2 when you corrected or stopped Bonsai. At -3 the fact is taken out of use, unless you pinned it. |
+| Keeping clean | Once a day: repeats merge, a fact about a file that is gone and one not used in 30 days are taken out of use. Nothing is deleted: `retired/` keeps it. |
+| Seeing it | `/memory` (both memories), `/memory undo` (takes the last save back), `/memory open` or `bonsai memory` (the hub's Memory tab: edit, pin, take out, bring back). |
+| At night | `bonsai memory-review` reads the day's conversations again and tidies. `--install` schedules it (1 to 6 in the morning, on power, the Mac idle for 30 minutes, no Bonsai window open); nothing is scheduled unless you run that. |
+| Claude's notes | What Claude Code has written down about your work (its memory folder, hundreds of notes) is a second place the memory looks. It is read where it is, every time, and never changed; Bonsai's own numbers for the notes are kept in `~/.bonsai-code/claude-notes`. The one or two notes that fit a request go along with it, cut to the part that fits (about 1,100 characters each), found by meaning and by the words they share. A note about sign-ins, servers or secrets is left out whole; in a note that is kept, a line that holds one is left out. Fifteen lines on how you like things done, boiled down from those notes, are read at every start (`src/agent/claude-rules.mjs`). `"claudeNotes": false` in `settings.json` leaves them out; a path names another folder (`BONSAI_CLAUDE_NOTES` does the same). |
+| Off | `"memory": false` in `settings.json` (yours or a folder's). `BONSAI_MEMORY_SAVE=off` keeps the memory but stops saving on its own. |
+
+Code: `src/agent/facts.mjs` (the store), `recall.mjs` (bringing back), `lessons.mjs` (saving),
+`src/app/autosave.mjs` (when), `review.mjs` (at night), `memory-hub.mjs` + `memory.html` (the hub's tab),
+`src/agent/claude-notes.mjs` (Claude's notes).
+How well it finds the right fact is measured by `bun run eval:recall` (see `models/bge-m3/README.md`);
+the right one of Claude's notes by `bun run eval:notes` (its 50 requests name your own notes, so they
+stay on the Mac, in the results folder).
+
 ## Permissions
 
 It asks before every edit and command (Yes · Yes for this session · No and say what
@@ -74,7 +99,7 @@ refused, and macOS's own sandbox fences what a command can reach.
     and carries on from the request and the notes (plus Bonsai's own list of what was read
     and changed). Emptying old output, the way before, made it read everything after it
     again: three to four minutes each time. That way is still the fallback, and
-    `BONSAI_MEMORY=trim` brings it back.
+    `BONSAI_WHEN_FULL=trim` brings it back.
   - A question changes nothing: Edit and Write are turned away, and a command that is not
     plain reading runs in a throwaway copy of the project.
   - A question starts with the code it is about already read (`src/flows/explain.mjs`):

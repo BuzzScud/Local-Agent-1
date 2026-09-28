@@ -1,18 +1,39 @@
-// The models part on its own: the registry (Bonsai 2 27B's settings), the
-// thinking switch, the memory math and the server's flags.
+// The models part on its own: the registry (Gemma 4 12B QAT, the model in use;
+// Bonsai 2 27B kept as a recipe), the thinking switch, the memory math and the
+// server's flags. The 27B's own tests still run against its recipe file.
 import { test, expect } from 'bun:test';
-import { MODELS, DEFAULT_MODEL, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
+import { existsSync } from 'node:fs';
+import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
+import bonsai27b from '../bonsai-2-27b/model.mjs';
 
-const m = MODELS[DEFAULT_MODEL];
+const m = bonsai27b; // the 27B's recipe: its settings are still exact
+const g = MODELS.gemma;
 
-test('Bonsai 2 27B is the only model', () => {
-  expect(Object.keys(MODELS)).toEqual(['27b']);
+test('Gemma 4 12B QAT is the only model and the default; the 27B stays as a recipe', () => {
+  expect(Object.keys(MODELS)).toEqual(['gemma']);
+  expect(DEFAULT_MODEL).toBe('gemma');
+  expect(g.file).toBe('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf');
+  expect(g.bytes).toBe(6_716_356_800);
+  expect(g.sha256).toBe('90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370');
+  expect(g.thinkingDefault).toBe(false);
+  expect(g.draft).toBeUndefined(); // no speed helper for Gemma (yet)
+  expect(modelFolder(g)).toMatch(/models\/gemma-4-12b\/$/);
+  // the retired 27B: still a complete recipe to bring back
   expect(m.file).toBe('Ternary-Bonsai-2-27B-PQ2_0.gguf');
   expect(m.bytes).toBe(7_206_168_928);
-  expect(m.thinkingDefault).toBe(false);
-  // each model has its own folder in models/ (settings, README, reports, results)
   expect(m.folder).toBe('bonsai-2-27b');
-  expect(modelFolder(m)).toMatch(/models\/bonsai-2-27b\/$/);
+  expect(existsSync(new URL('../bonsai-2-27b/README.md', import.meta.url))).toBe(true);
+});
+
+test('Gemma: Low answers straight away, High turns its thinking on (no Medium: it has no effort dial)', () => {
+  expect(g.thinkingLevels.map((l) => l.label)).toEqual(['Low', 'High']);
+  expect(thinkingKwargs(g, false)).toEqual({ enable_thinking: false });
+  expect(thinkingKwargs(g, true)).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
+  expect(thinkingLevel(g, true, 'medium').label).toBe('High'); // an old saved "medium" lands on High
+  expect(thinkingLevel(g, false).label).toBe('Low');
+  // 8 global layers, 1 kv head of 512: far less per token than the 27B
+  expect(kvBytesPerToken(g)).toBeLessThan(kvBytesPerToken(m) / 3);
+  expect(needBytes(g, 32_768)).toBeLessThan(10e9);
 });
 
 test('effort levels: low (no thinking, the default), medium or high', () => {
@@ -93,4 +114,18 @@ test('the engine patch travels inside the code: patch.mjs is byte for byte pq2-m
   // the routine and its switch are in it
   expect(PATCH).toContain('kernel_mul_mv_pq2_0_multicol');
   expect(PATCH).toContain('GGML_METAL_PQ2_MULTICOL');
+});
+
+test('the memory\'s matcher: BGE-M3, in the engine\'s embedding mode, beside the model in use', () => {
+  expect(Object.keys(EMBEDDERS)).toEqual(['bge-m3']);
+  const e = EMBEDDERS[DEFAULT_EMBEDDER];
+  expect([e.kind, e.file, e.bytes, e.pooling, e.cut, e.margin]).toEqual(['embedding', 'bge-m3-Q8_0.gguf', 634_553_760, 'cls', 0.56, 0.02]);
+  expect(e.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const a = serverArgs(e, { port: 17_605 });
+  expect(a.slice(0, 2)).toEqual(['-m', modelPath(e)]);
+  expect(a.join(' ')).toContain('--port 17605 --embedding --pooling cls -c 2048 -ub 2048 -ngl 99 -np 1');
+  // none of the chat model's flags
+  for (const f of ['--jinja', '--reasoning-budget', '-md', '--slot-save-path', '--spec-type']) expect(a).not.toContain(f);
+  // and it is not one of the models /model offers
+  expect(Object.keys(MODELS)).toEqual(['gemma']);
 });

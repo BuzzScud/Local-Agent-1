@@ -122,7 +122,7 @@ test('the words check: good words pass; a time or number not in the facts, a los
   };
   const ok = checkWords(good, f, p);
   expect(ok.swaps).toEqual([]);
-  expect(ok.words.by).toBe('bonsai');
+  expect(ok.words.by).toBe('coding');
   expect(ok.words.resolved[1].text).toBe('Each one is [[on GitHub]], the last from 3:45 PM.'); // the phrase got its brackets back
   expect(ok.words.resolved[0]).toMatchObject({ href: 'https://github.com/me/app/commit/aaaa1111', sourceHref: 'https://example.com' });
 
@@ -214,13 +214,13 @@ test('/morning today in the app: reads the repos, the model writes the words, th
   const reply = { headline: 'Two small commits in proj, Christian, just after midnight.', acts: ['Two changes to proj just after midnight.', 'Quiet all afternoon.', 'Quiet in the evening.'], attention: [], resolved: [] };
   const fake = await startFakeServer([{ text: JSON.stringify(reply) }]);
   const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1', REPO_MORNING_CONFIG: join(dir, 'config.json') }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Bonsai Code' }, { type: '/morning today' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/morning today' }, { key: 'enter' },
     { wait: 'Morning brief for' }, ...quit,
   ] });
   await fake.close();
   const flat = r.text.replace(/\s+/g, ' '); // the note is long enough to wrap
   expect(flat).toContain('Read 1 repo in');
-  expect(flat).toContain('Bonsai wrote the words, all checked against the facts');
+  expect(flat).toContain('Agentic Coder wrote the words, all checked against the facts');
   expect(flat).toContain('1 day in the calendar');
   const asked = fake.requests.find((x) => x.response_format);
   expect(asked.response_format.json_schema.schema.required).toEqual(['headline', 'acts', 'attention', 'resolved']);

@@ -1,4 +1,4 @@
-// Mirrors the folder "bonsai-code DOCS" at the top of the repo (where every Bonsai Code
+// Mirrors the folder "agentic-coder DOCS" at the top of the repo (where every Agentic Coder
 // diagram, preview, report and test page is saved) into this repo's docs/,
 // and writes docs/README.md, an index GitHub shows.
 //   bun run docs              copy new and changed files, remove files gone from the Desktop folder
@@ -11,7 +11,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url)); // <repo>/docs
-const SRC = process.env.BONSAI_DOCS ?? join(here, '..', 'bonsai-code DOCS');
+const SRC = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? join(here, '..', 'agentic-coder DOCS');
 const KEEP = new Set(['README.md', 'sync-docs.mjs', 'to-docs.mjs']); // this folder's own files
 const SKIP = /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/;
 const dry = process.argv.includes('--dry');
@@ -68,9 +68,9 @@ const rows = src
   .map((f) => ({ f, st: statSync(join(SRC, f)) }))
   .sort((a, b) => b.st.mtimeMs - a.st.mtimeMs)
   .map(({ f, st }) => `| [${f.replace(/\|/g, '\\|')}](${encodeURI(f)}) | ${kind(f)} | ${title(f).replace(/\|/g, '\\|')} | ${size(st.size)} | ${new Date(st.mtimeMs).toISOString().slice(0, 10)} |`);
-const readme = `# Bonsai Code docs
+const readme = `# Agentic Coder docs
 
-Every diagram, preview, report and test page about Bonsai Code, newest first. This
+Every diagram, preview, report and test page about Agentic Coder, newest first. This
 folder mirrors \`bonsai-code DOCS/\` at the top of the repo on the Mac: pages are saved there, and
 \`bun run docs\` copies them here before a commit. The pages are single HTML files
 with nothing loaded from outside; download one and open it in a browser to see it

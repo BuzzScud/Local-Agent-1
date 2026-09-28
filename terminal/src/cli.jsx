@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// bonsai — a Claude Code-style coding agent that runs a local Bonsai model.
+// coding — a Claude Code-style coding agent that runs a local Agentic Coder model.
 import React from 'react';
 import { render } from 'ink';
 import { App } from './app/App.jsx';
@@ -10,7 +10,7 @@ import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
 
-// bonsai -p: a question from Bonsai is printed and answered on the same
+// coding -p: a question from Agentic Coder is printed and answered on the same
 // terminal. Its choices are a menu like the app's (arrows, enter, or the
 // number), with "Type an answer" as the last row; esc skips the question.
 // A question with no choices takes a typed line.
@@ -28,6 +28,9 @@ async function askOnTerminal(question, req) {
   return line.trim() || null;
 }
 import { loadSettings } from './app/store.mjs';
+import { memoryOn } from './app/autosave.mjs';
+import { claudeOn } from './agent/claude-notes.mjs';
+import { openMemory } from './agent/facts.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';
 
 import { VERSION, cliHelpText } from './app/help.mjs';
@@ -39,7 +42,7 @@ export { VERSION };
 async function ensureTrusted(cwd) {
   if (isTrusted(cwd)) return true;
   if (!process.stdin.isTTY) {
-    process.stderr.write(`bonsai: ${cwd} is not a trusted folder yet. Start bonsai there once and say yes to the safety check.\n`);
+    process.stderr.write(`coding: ${cwd} is not a trusted folder yet. Start coding there once and say yes to the safety check.\n`);
     return false;
   }
   const b = (s) => `\x1b[1m${s}\x1b[0m`;
@@ -47,10 +50,10 @@ async function ensureTrusted(cwd) {
     '',
     `\x1b[33m${b('Quick safety check')}\x1b[0m`,
     '',
-    'Bonsai is about to work in:',
+    'Agentic Coder is about to work in:',
     `  ${b(cwd)}`,
     '',
-    'Is this a folder you created or one you trust? Bonsai reads its notes',
+    'Is this a folder you created or one you trust? Agentic Coder reads its notes',
     '(AGENTS.md) into the model, and can read, edit and run things here once',
     'you allow them. A yes covers this folder and everything inside it, and',
     'is remembered.',
@@ -60,7 +63,7 @@ async function ensureTrusted(cwd) {
   // A menu like the ones inside the app: arrows move ❯, enter picks, 1 or 2 pick at once.
   const pick = await pickOnTerminal(['Yes, I trust this folder', 'No, exit']);
   if (pick === 0) { saveTrust(cwd); return true; }
-  process.stderr.write('\x1b[2mNothing was read here. Start bonsai in a folder you trust.\x1b[0m\n');
+  process.stderr.write('\x1b[2mNothing was read here. Start coding in a folder you trust.\x1b[0m\n');
   return false;
 }
 
@@ -85,6 +88,9 @@ function parse(argv) {
     else if (a === '--mode') o.mode = val();
     else if (a === '--yes' || a === '-y') o.yes = true;
     else if (a === '--url') o.url = val();
+    // --slots 2: the server given with --url keeps two slots (llama-server -np 2), so
+    // side jobs (sorting, the memory's save) get their own and leave the conversation's alone.
+    else if (a === '--slots') o.slots = Number(val());
     else if (a === '--no-flows') o.flows = false;
     else rest.push(a);
   }
@@ -96,23 +102,41 @@ if (process.argv[2] === 'stop') {
   const r = stopIdleServers();
   const gb = (e) => `the model on port ${e.port}`;
   if (r.stopped.length) process.stdout.write(`Stopped ${r.stopped.map(gb).join(', ')}; its memory is free.\n`);
-  if (r.inUse.length) process.stdout.write(`Still in use by an open Bonsai window: ${r.inUse.map(gb).join(', ')}. Quit that window first.\n`);
+  if (r.inUse.length) process.stdout.write(`Still in use by an open Agentic Coder window: ${r.inUse.map(gb).join(', ')}. Quit that window first.\n`);
   if (!r.stopped.length && !r.inUse.length) process.stdout.write('No model is loaded.\n');
   process.exit(0);
 }
-if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests') {
+// The save a closed window handed over (app/autosave.mjs). Nobody watches it.
+if (process.argv[2] === 'memory-save') {
+  const { runJob } = await import('./app/autosave.mjs');
+  try { await runJob(process.argv[3]); process.exit(0); } catch { process.exit(1); }
+}
+// The memory's review at night (app/review.mjs), and its place in the Mac's scheduler.
+if (process.argv[2] === 'memory-review') {
+  const { review, install, uninstall, installed, look, whyNot, HOURS, IDLE_MINS } = await import('./app/review.mjs');
+  const flag = (f) => process.argv.includes(f);
+  try {
+    if (flag('--install')) { process.stdout.write(`The review is scheduled: once an hour between ${HOURS[0]} and ${HOURS.at(-1) + 1} in the morning, when the Mac is on power and was not used for ${IDLE_MINS} minutes.\n${install()}\nbonsai memory-review --uninstall removes it.\n`); process.exit(0); }
+    if (flag('--uninstall')) { process.stdout.write(uninstall() ? 'The review is no longer scheduled.\n' : 'The review was not scheduled.\n'); process.exit(0); }
+    if (flag('--status')) { const no = whyNot(look()); process.stdout.write(`${installed() ? 'Scheduled' : 'Not scheduled (coding memory-review --install)'}. Right now it would ${no ? `not run: ${no}` : 'run'}.\n`); process.exit(0); }
+    const r = await review({ now: flag('--now') });
+    if (process.stdout.isTTY) process.stdout.write(r.ran ? `Read ${r.read} conversation${r.read === 1 ? '' : 's'}: ${r.added} saved${r.stopped ? '; stopped, a Agentic Coder window opened' : ''}.\n` : `Not now: ${r.why}. (--now skips the clock, the power and the idle check.)\n`);
+    process.exit(0);
+  } catch (e) { process.stderr.write(`coding memory-review: ${e.message}\n`); process.exit(1); }
+}
+if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests' || process.argv[2] === 'memory') {
   const { existsSync } = await import('node:fs');
   const path = modelPath(MODELS[DEFAULT_MODEL]);
-  if (!existsSync(path)) { process.stderr.write(`bonsai weights: the model file is not here yet (${path}). Run bonsai setup first.\n`); process.exit(1); }
+  if (!existsSync(path)) { process.stderr.write(`coding weights: the model file is not here yet (${path}). Run coding setup first.\n`); process.exit(1); }
   const { startWeightsServer } = await import('./app/weights.mjs');
-  const s = startWeightsServer({ path });
-  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests' }[process.argv[2]] ?? 'weights'}`;
-  process.stdout.write(`Bonsai hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
-  if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+  const s = startWeightsServer({ path, cwd: process.cwd() });
+  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests', memory: 'memory' }[process.argv[2]] ?? 'weights'}`;
+  process.stdout.write(`Agentic Coder hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
+  if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
   process.on('SIGINT', () => { s.stop(); process.exit(0); });
   await new Promise(() => {});
 }
-// bonsai morning [today|yesterday|YYYY-MM-DD] [--plain]: the morning brief from
+// coding morning [today|yesterday|YYYY-MM-DD] [--plain]: the morning brief from
 // any shell. It joins a loaded model (on its side slot) or starts one just for
 // this and stops it after; --plain skips the model and writes plain words.
 if (process.argv[2] === 'morning') {
@@ -127,7 +151,7 @@ if (process.argv[2] === 'morning') {
     try {
       // Only one copy of the 27B fits the GPU (two made a Compute error on 26 Sep):
       // a copy another window is still loading is waited for and then shared, and
-      // a copy running outside Bonsai's list means plain words, not a second copy.
+      // a copy running outside Agentic Coder's list means plain words, not a second copy.
       const loading = scanServers().find((e) => e.model === model.file);
       if (loading) {
         const t0 = Date.now();
@@ -138,7 +162,7 @@ if (process.argv[2] === 'morning') {
           await Bun.sleep(1000);
         }
       } else if (Bun.spawnSync(['pgrep', '-f', `llama-server.*${model.file}`]).stdout.toString().trim()) {
-        throw new Error('another copy of the model is running outside Bonsai, and two do not fit');
+        throw new Error('another copy of the model is running outside Agentic Coder, and two do not fit');
       }
       server = new ModelServer(model);
       const st = await server.start({ ctx: chooseContext(model, { want: 16_384 }).ctx, helper: false });
@@ -154,13 +178,13 @@ if (process.argv[2] === 'morning') {
     await stop();
     process.exit(0);
   } catch (e) {
-    say(`bonsai morning: ${e.message}`);
+    say(`coding morning: ${e.message}`);
     await stop();
     process.exit(1);
   }
 }
 if (process.argv[2] === 'setup') {
-  try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\nbonsai setup: ${e.message}\n`); process.exit(1); }
+  try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\ncoding setup: ${e.message}\n`); process.exit(1); }
 }
 
 const opts = parse(process.argv.slice(2));
@@ -171,14 +195,14 @@ if (opts.version) { process.stdout.write(`${VERSION}\n`); process.exit(0); }
 opts.modelId = (modelById(opts.modelId) ?? modelById(loadSettings(opts.cwd).model) ?? MODELS[DEFAULT_MODEL]).id;
 
 if (opts.print) {
-  if (!opts.prompt) { process.stderr.write('bonsai -p needs a prompt\n'); process.exit(2); }
+  if (!opts.prompt) { process.stderr.write('coding -p needs a prompt\n'); process.exit(2); }
   if (!(await ensureTrusted(opts.cwd))) process.exit(2);
   const model = modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL];
   const settings = loadSettings(opts.cwd);
   let server = null;
   let url = opts.url;
   let ctx = opts.ctx;
-  let slots;
+  let slots = url && opts.slots > 1 ? { main: 0, side: 1 } : undefined;
   if (!url) {
     const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
     const c = chooseContext(model, { effort: thinkOn ? opts.effort ?? settings.effort : undefined });
@@ -194,7 +218,9 @@ if (opts.print) {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots,
-      // Bonsai's questions: asked on the terminal when there is one; otherwise unanswered.
+      // The memory: facts brought back, and what the run taught saved before it ends.
+      memory: memoryOn(settings) ? { save: (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
+      // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.
       answers: process.stdin.isTTY ? askOnTerminal : null,
       onEvent: (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });
@@ -202,20 +228,21 @@ if (opts.print) {
     await stop();
     process.exit(r.reason === 'done' ? 0 : 1);
   } catch (e) {
-    process.stderr.write(`bonsai: ${e.message}\n`);
+    process.stderr.write(`coding: ${e.message}\n`);
     await stop();
     process.exit(1);
   }
 } else {
-  if (!process.stdin.isTTY) { process.stderr.write('bonsai needs a terminal. For scripts use: bonsai -p "…"\n'); process.exit(2); }
+  if (!process.stdin.isTTY) { process.stderr.write('coding needs a terminal. For scripts use: coding -p "…"\n'); process.exit(2); }
   // Step 1, before anything in the folder is read: the safety check.
   if (!(await ensureTrusted(opts.cwd))) process.exit(0);
   // What the start loaded, for the welcome box: the notes read into the
   // model, settings a folder file set, and the git state.
   try {
     const { projectNotes, gitSummary } = await import('./agent/prompt.mjs');
-    const names = [...new Set(projectNotes(opts.cwd).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.split('/').pop())))];
     const st = loadSettings(opts.cwd);
+    if (memoryOn(st)) { try { openMemory(opts.cwd); } catch {} }
+    const names = [...new Set(projectNotes(opts.cwd, 6000, { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
     const git = gitSummary(opts.cwd);
     opts.loaded = [
       names.join(' + ') || 'no AGENTS.md',
@@ -249,6 +276,6 @@ if (opts.print) {
     process.stdout.write('\x1b[2m  ↻ Restarting on the update…\x1b[0m\n');
     process.exit(RESTART_CODE);
   }
-  process.stdout.write('\x1b[2m  Saved. Continue this conversation with: bonsai -c\x1b[0m\n');
+  process.stdout.write('\x1b[2m  Saved. Continue this conversation with: coding -c\x1b[0m\n');
   process.exit(0);
 }

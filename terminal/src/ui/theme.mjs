@@ -1,7 +1,7 @@
 // 256-colour palette: Apple Terminal on macOS 15 has no true colour, so every
 // colour here is an exact xterm-256 entry and looks the same everywhere.
 export const C = {
-  accent: 'ansi256(114)',   // bonsai green  #87d787
+  accent: 'ansi256(114)',   // coding green  #87d787
   accentDim: 'ansi256(71)', // #5faf5f
   dim: 'ansi256(245)',      // #8a8a8a
   faint: 'ansi256(240)',    // #585858

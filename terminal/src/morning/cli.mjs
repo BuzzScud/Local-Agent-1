@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // The morning brief's pieces from a shell, for Claude's /repo-morning and for
-// checks by hand (`bonsai morning` is the whole run with the model):
+// checks by hand (`coding morning` is the whole run with the model):
 //   bun cli.mjs gather [--day auto|today|yesterday|YYYY-MM-DD] [--no-fetch] [--out facts.json]
 //   bun cli.mjs picks  --facts facts.json          # what earns a line, in plain words
 //   bun cli.mjs render --facts facts.json [--words words.json] [--out page.html] [--no-save]

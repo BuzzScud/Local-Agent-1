@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A stand-in for Prism's llama-server binary, for testing Bonsai Code's own
+// A stand-in for Prism's llama-server binary, for testing Agentic Coder's own
 // start-up: it takes a moment to load, renders a simple chat template, "reads"
 // prompts slowly, saves and restores slot files, and streams a fixed reply.
 import { createServer } from 'node:http';

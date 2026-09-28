@@ -1,4 +1,4 @@
-// The Bonsai hub: `/weights`, `/docs`, `bonsai weights` and `bonsai docs`
+// The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
 //   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Tests · All docs
 //   /weights          the weights viewer (weights.html, built in)
@@ -6,7 +6,8 @@
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned harness and structure pages
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
-//   /tests, /tests.json   the test record: every test run and its result, read live from ~/.bonsai-code/tests/record.jsonl
+//   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
+//   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `bonsai-code DOCS/` at the top of the repo on this Mac:
 // BONSAI_DOCS names it outright, else BONSAI_REPO (the launcher passes it),
 // else the repo this source runs from.
@@ -16,12 +17,14 @@ import html from './weights.html' with { type: 'text' };
 import hubHtml from './hub.html' with { type: 'text' };
 import helpHtml from './help.html' with { type: 'text' };
 import testsHtml from './tests.html' with { type: 'text' };
+import memoryHtml from './memory.html' with { type: 'text' };
+import { memoryRoute } from './memory-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 
 export function findDocsDir() {
-  const tries = [process.env.BONSAI_DOCS, process.env.BONSAI_REPO && join(process.env.BONSAI_REPO, 'bonsai-code DOCS'), join(import.meta.dir, '..', '..', '..', 'bonsai-code DOCS')].filter(Boolean);
+  const tries = [(process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) && join((process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO), 'agentic-coder DOCS'), (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) && join((process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO), 'bonsai-code DOCS'), join(import.meta.dir, '..', '..', '..', 'agentic-coder DOCS'), join(import.meta.dir, '..', '..', '..', 'bonsai-code DOCS')].filter(Boolean);
   return tries.find((d) => { try { return statSync(d).isDirectory(); } catch { return false; } }) ?? null;
 }
 
@@ -54,11 +57,11 @@ export function listDocs(dir) {
 
 // The hub's usual address. A fixed port keeps the page's saved place (the
 // open tensor, the Channels and Layers results) from one start to the next,
-// since the browser keeps those per address. Taken already (a second Bonsai
+// since the browser keeps those per address. Taken already (a second Agentic Coder
 // window) → any free port. BONSAI_HUB_PORT overrides; 0 = any free port, which
 // every test run uses: a test's hub (no model file) on 8757 answered the tab
 // the real hub had opened, and Weights said the model was missing (27 Sep).
-const envPort = Number(process.env.BONSAI_HUB_PORT || NaN);
+const envPort = Number((process.env.AGENTIC_HUB_PORT ?? process.env.BONSAI_HUB_PORT) || NaN);
 export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 8757;
 
 // onEdits: called after a save or revert of the edited copy (the app shows a
@@ -66,7 +69,8 @@ export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 87
 //   GET  /edits.json    what is saved: the manifest, or { saved: null }
 //   POST /edits/save    { edits } → a fresh clone of the original + all edits
 //   POST /edits/revert  deletes the copy and its manifest
-export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits }) {
+// cwd: the folder whose memory the Memory tab shows.
+export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits, cwd = process.cwd() }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
   const size = missing ? 0 : statSync(path).size;
@@ -103,6 +107,8 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/weights') return page(html);
       if (url.pathname === '/help') return page(helpHtml);
       if (url.pathname === '/tests') return page(testsHtml);
+      if (url.pathname === '/memory') return page(memoryHtml);
+      if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });

@@ -20,7 +20,7 @@ const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const count = (text, word) => { const m = new RegExp(`^\\s*(\\d+) ${word}`, 'm').exec(text); return m ? Number(m[1]) : null; };
 
 function record({ pass, fail, files, code }) {
-  if (extra.length || process.env.CI || process.env.BONSAI_NO_RECORD || pass == null) return;
+  if (extra.length || process.env.CI || (process.env.AGENTIC_NO_RECORD ?? process.env.BONSAI_NO_RECORD) || pass == null) return;
   recordTest({ kind: 'suite', name: 'Unit tests, both parts', code: codeLabel(root), passed: pass, total: pass + fail, secs: (Date.now() - t0) / 1000,
     result: code === 0 && fail === 0 ? 'pass' : 'fail', note: [files ? `${files} files` : '', code !== 0 && fail === 0 ? `bun test ended with code ${code}` : ''].filter(Boolean).join(' · '), raw: '' });
 }
@@ -39,7 +39,7 @@ function bunTest(paths, { live }) {
   });
 }
 
-const jobs = Math.max(1, Number(process.env.BONSAI_TEST_JOBS) || Math.min(4, cpus().length));
+const jobs = Math.max(1, Number((process.env.AGENTIC_TEST_JOBS ?? process.env.BONSAI_TEST_JOBS)) || Math.min(4, cpus().length));
 if (extra.length || jobs === 1) {
   // A file or folder named on the command line is run alone; with only flags
   // (-t "name") both parts are searched.

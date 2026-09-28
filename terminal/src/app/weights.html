@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bonsai Weights</title>
+<title>Agentic Coder Weights</title>
 <style>
 :root {
   --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
@@ -164,8 +164,8 @@ progress { width: 200px; accent-color: var(--accent); }
 </head>
 <body>
 <header>
-  <h1>Bonsai weights</h1>
-  <span class="sub">The weights of the model Bonsai Code runs, read straight from the file on this Mac.</span>
+  <h1>Agentic Coder weights</h1>
+  <span class="sub">The weights of the model Agentic Coder runs, read straight from the file on this Mac.</span>
   <span class="spacer"></span>
   <span class="sub" id="fileinfo"></span>
   <button class="primary" id="pick">Open the model file…</button>
@@ -189,8 +189,8 @@ progress { width: 200px; accent-color: var(--accent); }
   <main>
     <div id="empty">
       <h2>Pick the model file</h2>
-      <p>Choose <code>Ternary-Bonsai-2-27B-PQ2_0.gguf</code> from <code>~/.bonsai-code/models</code>. The page reads only the bytes it needs, so the 7 GB file is never copied or loaded whole.</p>
-      <p class="hint">Nothing leaves this Mac. The file is read in place with the browser's file reader. To skip the picking, type <code>/weights</code> in Bonsai or run <code>bonsai weights</code>: it opens this page with the model already loaded.</p>
+      <p>Choose the model's <code>.gguf</code> file from <code>~/.agentic-coder/models</code>. The page reads only the bytes it needs, so the multi-GB file is never copied or loaded whole.</p>
+      <p class="hint">Nothing leaves this Mac. The file is read in place with the browser's file reader. To skip the picking, type <code>/weights</code> in Agentic Coder or run <code>coding weights</code>: it opens this page with the model already loaded.</p>
     </div>
     <section id="view" hidden>
       <nav class="tabs">
@@ -624,15 +624,15 @@ if (typeof module !== 'undefined') module.exports = Core;
   $('#file').onchange = async (e) => { const f = e.target.files[0]; if (f) await open(f); };
   window.__openFile = open; // for the checks
 
-  // Served by the hub (/weights, bonsai weights): the model is read through
+  // Served by the hub (/weights, coding weights): the model is read through
   // the server, no picking. Each slice becomes one HTTP range request.
   if (/^https?:/.test(location.protocol)) {
-    $('#empty').innerHTML = '<h2>Loading the model…</h2><p class="hint">Reading its header through the Bonsai hub.</p>';
+    $('#empty').innerHTML = '<h2>Loading the model…</h2><p class="hint">Reading its header through the Agentic Coder hub.</p>';
     $('#pick').hidden = true; // served: nothing to pick
-    fetch('/model.json').then((r) => r.ok ? r.json() : Promise.reject(new Error(`the server said ${r.status}`))).then((m) => m.missing ? Promise.reject(new Error('The model file is not on this Mac yet. Run bonsai setup to download it.')) : open({
+    fetch('/model.json').then((r) => r.ok ? r.json() : Promise.reject(new Error(`the server said ${r.status}`))).then((m) => m.missing ? Promise.reject(new Error('The model file is not on this Mac yet. Run coding setup to download it.')) : open({
       name: m.name, size: m.size,
       slice: (a, b) => ({ arrayBuffer: async () => { const r = await fetch('/model', { headers: { Range: `bytes=${a}-${b - 1}` } }); if (r.status !== 206 && r.status !== 200) throw new Error(`range read failed: ${r.status}`); return r.arrayBuffer(); } }),
-    })).catch((err) => { $('#empty').innerHTML = `<h2>Could not load the model</h2><p>${String(err.message)}</p><p class="hint">Is the Bonsai window that opened this page still running?</p>`; });
+    })).catch((err) => { $('#empty').innerHTML = `<h2>Could not load the model</h2><p>${String(err.message)}</p><p class="hint">Is the Agentic Coder window that opened this page still running?</p>`; });
   }
 
   async function open(f) {
@@ -1092,7 +1092,7 @@ if (typeof module !== 'undefined') module.exports = Core;
   // ---------- editing ----------
   // A queue of whole-row edits, kept per file in this browser. Saving sends
   // it to the hub, which writes an edited COPY of the model (the original is
-  // never written) and tells Bonsai; you then pick "27B · edited" in /model.
+  // never written) and tells Agentic Coder; you then pick "27B · edited" in /model.
   // Opened from disk (file://) there is no hub, so the queue only previews.
   const served = /^https?:/.test(location.protocol);
   let edits = [], savedManifest = null, lastPick = null;
@@ -1132,11 +1132,13 @@ if (typeof module !== 'undefined') module.exports = Core;
     $('#editlist').innerHTML = edits.map((e, i) => `<div class="edit-it"><b>${describeEdit(e)}</b><span class="x" data-i="${i}" title="remove this edit">✕</span></div>`).join('') || '<div class="small">Nothing queued.</div>';
     const same = savedManifest && JSON.stringify(edits) === JSON.stringify(savedManifest.edits);
     const save = $('#editsave');
-    save.disabled = !served || !edits.length || same;
-    save.textContent = 'Save to “27B · edited”';
+    const ternary = model.tensors.some((t) => t.type === 142); // edits are PQ2_0-row-local
+    save.disabled = !served || !edits.length || same || !ternary;
+    save.textContent = 'Save as an edited copy';
     $('#editrevert').hidden = !savedManifest;
-    $('#editnote').textContent = !served ? 'Open this page with /weights in Bonsai to save; here the queue only previews.'
-      : same ? `Saved ${new Date(savedManifest.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · pick 27B · edited in /model to run on it`
+    $('#editnote').textContent = !ternary ? 'Weight editing works on ternary (PQ2_0) model files only — not on this model.'
+      : !served ? 'Open this page with /weights in Agentic Coder to save; here the queue only previews.'
+      : same ? `Saved ${new Date(savedManifest.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · pick the edited copy in /model to run on it`
       : savedManifest ? 'Changed since the last save.' : edits.length ? 'Not saved yet. Saving writes a copy; the original is never touched.' : '';
   }
   $('#editlist').onclick = (e) => { const x = e.target.closest('.x'); if (!x) return; edits.splice(Number(x.dataset.i), 1); persistEdits(); renderEdits(); drawZoom(); };
@@ -1147,7 +1149,7 @@ if (typeof module !== 'undefined') module.exports = Core;
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || `the hub said ${r.status}`);
       savedManifest = j.saved;
-    } catch (err) { $('#editnote').textContent = `Could not save: ${err.message}`; btn.textContent = 'Save to “27B · edited”'; return; }
+    } catch (err) { $('#editnote').textContent = `Could not save: ${err.message}`; btn.textContent = 'Save as an edited copy'; return; }
     renderEdits();
   };
   $('#editrevert').onclick = async () => {

@@ -105,7 +105,7 @@ export function checkWords(json, facts, picks, text = digest(facts, picks)) {
     return why ? null : v;
   };
 
-  const words = { headline: good('headline', json?.headline, { max: 110 }) ?? plain.headline, by: 'bonsai' };
+  const words = { headline: good('headline', json?.headline, { max: 110 }) ?? plain.headline, by: 'coding' };
   words.acts = ACTS.map((_, i) => ({ text: good(`act ${i + 1}`, json?.acts?.[i], { max: 260 }) ?? plain.acts[i].text }));
   for (const list of ['attention', 'resolved']) {
     words[list] = plain[list].map((p) => {

@@ -13,7 +13,7 @@ import { docsPath } from '../../../docs/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const here = join(root, 'models/bonsai-2-27b/results');
-const RES = process.env.BONSAI_RESULTS ?? (existsSync(join(here, 'step3-2026-09-27')) ? here : join(homedir(), 'Desktop/bonsai-code/models/bonsai-2-27b/results'));
+const RES = (process.env.AGENTIC_RESULTS ?? process.env.BONSAI_RESULTS) ?? (existsSync(join(here, 'step3-2026-09-27')) ? here : join(homedir(), 'Desktop/bonsai-code/models/bonsai-2-27b/results'));
 const S3 = join(RES, 'step3-2026-09-27');
 const OLD = join(RES, 'fable-harness-2026-09-27');
 const load = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return null; } };
@@ -321,4 +321,4 @@ ${both.length ? `<tr><td class="bench"><b>The ${both.length} tasks run on both s
 const out = docsPath('reports/bonsai-step-3-results-2026-09-27.html');
 writeFileSync(out, html);
 console.log(`wrote ${out.replace(homedir(), '~')} (${(html.length / 1024).toFixed(0)} KB)`);
-if (!process.env.BONSAI_NO_DESKTOP) { const desk = join(homedir(), 'Desktop', 'bonsai-step-3-results-2026-09-27.html'); copyFileSync(out, desk); console.log(`copied to ${desk.replace(homedir(), '~')}`); }
+if (!(process.env.AGENTIC_NO_DESKTOP ?? process.env.BONSAI_NO_DESKTOP)) { const desk = join(homedir(), 'Desktop', 'bonsai-step-3-results-2026-09-27.html'); copyFileSync(out, desk); console.log(`copied to ${desk.replace(homedir(), '~')}`); }

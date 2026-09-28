@@ -1,5 +1,5 @@
 // A small menu for the plain terminal, before the Ink screen is up (the
-// safety check at start, questions under bonsai -p). It looks like the
+// safety check at start, questions under coding -p). It looks like the
 // dialogs inside the app: ❯ marks the row, up/down move it, enter picks
 // it. Typing a number picks that row at once, as in the app. Esc or
 // ctrl+c gives null. Answers the index of the row picked.

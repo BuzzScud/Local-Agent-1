@@ -14,7 +14,7 @@ test('a second window shares a live server; a left-over one is stopped', () => {
     import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
     import { join } from 'node:path';
     const { HOME } = await import(${JSON.stringify(join(import.meta.dir, '../registry.mjs'))});
-    if (HOME !== process.env.BONSAI_HOME) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
+    if (HOME !== (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME)) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
     const { scanServers } = await import(${JSON.stringify(join(import.meta.dir, '../runtime/server.mjs'))});
     const reg = join(HOME, 'servers');
     mkdirSync(reg, { recursive: true });
@@ -47,7 +47,7 @@ test('the model stays loaded after the window quits, the next start takes it ove
     import { mkdirSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
     import { join, dirname } from 'node:path';
     const { HOME, SERVER_BIN, MODELS, DEFAULT_MODEL, modelPath } = await import(${mod('registry.mjs')});
-    if (HOME !== process.env.BONSAI_HOME) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
+    if (HOME !== (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME)) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
     const model = MODELS[DEFAULT_MODEL];
     mkdirSync(dirname(SERVER_BIN), { recursive: true });
     writeFileSync(SERVER_BIN, '#!/usr/bin/env bun\\nconst i = process.argv.indexOf("--port"); Bun.serve({ port: Number(process.argv[i + 1]), hostname: "127.0.0.1", fetch: () => new Response("{}") });\\n');

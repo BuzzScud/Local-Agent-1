@@ -1,4 +1,4 @@
-// `bun run check`: is anything in Bonsai Code that should not be? One line per
+// `bun run check`: is anything in Agentic Coder that should not be? One line per
 // check, in plain words: ✓ fine, ! worth a look, ✗ wrong. It changes nothing in
 // the repo: it reads the files, git, what is installed on this Mac, and asks
 // GitHub and npm. Ends with code 1 when a check is wrong; the run goes in the
@@ -71,8 +71,10 @@ export function riskyName(path) {
 }
 
 // ---- where the code connects ---------------------------------------------------------------
-// The places Bonsai's own code names. A new one is looked at before it ships.
-export const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'host'];
+// The places Agentic Coder's own code names. A new one is looked at before it ships.
+// www.apple.com: the first lines every scheduler file on a Mac carries (the
+// night review's, terminal/src/app/review.mjs). A name in a header: nothing connects to it.
+export const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host'];
 export const hostsIn = (text) => [...new Set([...text.matchAll(/\bhttps?:\/\/([A-Za-z0-9][A-Za-z0-9.-]*)/g)].map((m) => m[1].toLowerCase().replace(/\.$/, '')))];
 export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) => !known.includes(h));
 // A server open to the network instead of this Mac only.
@@ -289,7 +291,7 @@ async function modelFiles({ fast }) {
   const m = MODELS[DEFAULT_MODEL];
   const want = [[m.name, modelPath(m), m.sha256], ...(m.draft ? [[`${m.name}'s guessing helper`, draftPath(m), m.draft.sha256]] : [])];
   const missing = want.filter(([, file]) => !existsSync(file));
-  if (missing.length === want.length) return look('the model is not on this Mac yet (bonsai setup)');
+  if (missing.length === want.length) return look('the model is not on this Mac yet (coding setup)');
   let edited = null; try { edited = readEdited?.()?.file ?? null; } catch { /* no edited copy */ }
   const known = new Set([...want.map(([, file]) => file.split('/').pop()), edited, 'edited.json'].filter(Boolean));
   const extra = existsSync(MODELS_DIR) ? readdirSync(MODELS_DIR).filter((f) => !f.startsWith('.') && !f.endsWith('.part') && !known.has(f)).map((f) => `${f} (${(statSync(join(MODELS_DIR, f)).size / 1e9).toFixed(2)} GB) is in ${tilde(MODELS_DIR)} but the code does not use it`) : [];
@@ -317,15 +319,15 @@ function newerThanApp(app) {
 }
 
 async function installedApp() {
-  const home = process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code');
-  const app = join(home, 'app', 'bonsai'), launcher = join(homedir(), '.local', 'bin', 'bonsai');
-  if (!existsSync(app) || !existsSync(launcher)) return look('bonsai is not installed on this Mac (bun run install-cli)');
+  const home = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');
+  const app = join(home, 'app', 'agentic-coder'), launcher = join(homedir(), '.local', 'bin', 'coding');
+  if (!existsSync(app) || !existsSync(launcher)) return look('coding is not installed on this Mac (bun run install-cli)');
   const bad = [], notes = [];
   for (const f of [app, launcher]) if (statSync(f).mode & 0o022) bad.push(`${tilde(f)} can be changed by other accounts on this Mac (chmod 755 "${tilde(f)}")`);
   const have = readFileSync(launcher, 'utf8');
-  const repo = /^REPO="\$\{BONSAI_REPO:-(.*)\}"$/m.exec(have)?.[1];
-  const source = join(root, 'terminal', 'app', 'bonsai-launcher.sh');
-  if (!repo) bad.push(`${tilde(launcher)} is not Bonsai's launcher`);
+  const repo = /^REPO="\$\{AGENTIC_REPO:-\$\{BONSAI_REPO:-(.*)\}\}"$/m.exec(have)?.[1] ?? /^REPO="\$\{BONSAI_REPO:-(.*)\}"$/m.exec(have)?.[1];
+  const source = join(root, 'terminal', 'app', 'agentic-coder-launcher.sh');
+  if (!repo) bad.push(`${tilde(launcher)} is not Agentic Coder's launcher`);
   else if (resolve(repo) !== resolve(root)) notes.push(`the installed bonsai is built from another folder: ${tilde(repo)}`);
   else if (have !== readFileSync(source, 'utf8').replace('__REPO__', repo)) notes.push('the launcher differs from the repo\'s (bun run install-cli installs the current one)');
   const changed = newerThanApp(app);
@@ -333,7 +335,7 @@ async function installedApp() {
   else if (repo && resolve(repo) === resolve(root)) {
     // The output's name is written into the file, so the fresh build gets the
     // same name; then the two files must be the same, byte for byte.
-    const name = /\/\$bunfs\/root\/(bonsai[A-Za-z0-9._-]*)/.exec(readFileSync(app).toString('latin1'))?.[1] ?? 'bonsai';
+    const name = /\/\$bunfs\/root\/((?:agentic-coder|bonsai)[A-Za-z0-9._-]*)/.exec(readFileSync(app).toString('latin1'))?.[1] ?? 'agentic-coder';
     const tmp = mkdtempSync(join(tmpdir(), 'bonsai-check-'));
     try {
       const bun = existsSync(join(homedir(), '.bun', 'bin', 'bun')) ? join(homedir(), '.bun', 'bin', 'bun') : 'bun';
@@ -347,7 +349,7 @@ async function installedApp() {
 }
 
 function pagesMirrored() {
-  const src = process.env.BONSAI_DOCS ?? join(root, 'bonsai-code DOCS'), dst = join(root, 'docs');
+  const src = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(root, n)).find((p) => existsSync(p)) ?? join(root, 'agentic-coder DOCS')), dst = join(root, 'docs');
   if (!existsSync(src)) return skipped('the DOCS folder is not here');
   const skip = (rel) => /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/.test(rel);
   const own = new Set(['README.md', 'sync-docs.mjs', 'to-docs.mjs']);
@@ -386,7 +388,7 @@ export async function check({ fast = false, tests = true, offline = false, say =
   const paint = (code, s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
   const files = (await git('ls-files', '-z', '--cached', '--others', '--exclude-standard')).out.split('\0').filter(Boolean);
   const opts = { files, fast, offline };
-  say(`\n${paint(1, 'Bonsai check')}  ${paint(2, `${codeLabel(root)} · ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)}\n`);
+  say(`\n${paint(1, 'Agentic Coder check')}  ${paint(2, `${codeLabel(root)} · ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`)}\n`);
   // Everything but the unit tests runs at once; the lines come in this order.
   const safe = (name, job) => [name, Promise.resolve().then(() => job(opts)).catch((e) => look('this check could not run', [String(e.message ?? e).slice(0, 200)]))];
   const list = [
@@ -415,7 +417,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const flags = new Set(process.argv.slice(2));
   const fast = flags.has('--fast');
   const r = await check({ fast, tests: !flags.has('--no-tests'), offline: flags.has('--offline') });
-  if (!process.env.CI && !process.env.BONSAI_NO_RECORD) {
+  if (!process.env.CI && !(process.env.AGENTIC_NO_RECORD ?? process.env.BONSAI_NO_RECORD)) {
     recordTest({ kind: 'other', name: `Repo check${fast ? ' (fast)' : ''}`, code: codeLabel(root), passed: r.done - r.wrong, total: r.done, secs: r.secs, result: r.wrong ? 'fail' : 'pass',
       note: [...r.results.filter((x) => x.mark === 'wrong').map((x) => `wrong: ${x.name}`), ...r.results.filter((x) => x.mark === 'look').map((x) => `to look at: ${x.name}`)].join(' · '), raw: '' });
   }

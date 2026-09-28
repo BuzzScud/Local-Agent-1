@@ -1,6 +1,6 @@
 // What "looks right" means for one screen, as checks a test can run:
 // nothing wider than the window, no leftover copies of the live area, box
-// borders whole, the prompt box on the last lines when Bonsai is idle.
+// borders whole, the prompt box on the last lines when Agentic Coder is idle.
 const BORDER = /^[\s─│╭╮╰╯┃]*$/;
 // anchored: a fresh screen (the start, or just after a resize), where the
 // conversation starts on the top line and the prompt box sits on the last

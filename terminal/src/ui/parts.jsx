@@ -16,7 +16,7 @@ export function wrap(text, width) {
 export function Welcome({ session, width = 64 }) {
   return (
     <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={width} flexDirection="column">
-      <Text><Text color={C.accent}>✻</Text> Welcome to <Text bold>Bonsai Code</Text><Text color={C.dim}>  ·  {session.model}, on this Mac</Text></Text>
+      <Text><Text color={C.accent}>✻</Text> Welcome to <Text bold>Agentic Coder</Text><Text color={C.dim}>  ·  {session.model}, on this Mac</Text></Text>
       <Text> </Text>
       <Text color={C.dim}>  /help for help · /model to switch models</Text>
       <Text> </Text>
@@ -30,7 +30,7 @@ export function Tips() {
     <Box flexDirection="column" marginTop={1}>
       <Text color={C.dim}> Tips for getting started:</Text>
       <Text color={C.dim}>  1. Run /init to write an AGENTS.md with notes about this project</Text>
-      <Text color={C.dim}>  2. Ask for a change: Bonsai reads, edits and tests, and asks before it touches anything</Text>
+      <Text color={C.dim}>  2. Ask for a change: Agentic Coder reads, edits and tests, and asks before it touches anything</Text>
       <Text color={C.dim}>  3. shift+tab switches between ask first, auto-edit and plan</Text>
     </Box>
   );
@@ -169,12 +169,12 @@ const PERM = {
   Update: {
     title: 'Edit file',
     question: (a) => <Text>Do you want to make this edit to <Text bold>{a}</Text>?</Text>,
-    options: ['Yes', 'Yes, allow all edits this session (shift+tab)', 'No, and tell Bonsai what to do differently (esc)'],
+    options: ['Yes', 'Yes, allow all edits this session (shift+tab)', 'No, and tell Agentic Coder what to do differently (esc)'],
   },
   Bash: {
     title: 'Bash command',
     question: () => <Text>Do you want to proceed?</Text>,
-    options: (a) => ['Yes', `Yes, and don't ask again for ${a} in this folder`, 'No, and tell Bonsai what to do differently (esc)'],
+    options: (a) => ['Yes', `Yes, and don't ask again for ${a} in this folder`, 'No, and tell Agentic Coder what to do differently (esc)'],
   },
 };
 

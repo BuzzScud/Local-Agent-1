@@ -2,7 +2,7 @@
 // ~/.bonsai-code/tests/record.jsonl (BONSAI_HOME moves it, BONSAI_TEST_RECORD
 // names the file outright). Every runner adds its result with recordTest();
 // the hub's Tests tab reads the file live, and a snapshot page goes into the
-// DOCS folder (tests/bonsai-test-record.html) so the record reaches GitHub
+// DOCS folder (tests/agentic-coder-test-record.html) so the record reaches GitHub
 // with the other pages.
 //
 // A line:
@@ -27,13 +27,13 @@ export const KINDS = {
   suite: ['Unit tests', 'bun test over both parts'],
   other: ['Other', 'probes and one-off checks'],
 };
-export const SNAPSHOT = 'tests/bonsai-test-record.html';
+export const SNAPSHOT = 'tests/agentic-coder-test-record.html';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // The record's real place. A record anywhere else (a test's, a scratch run's) is never
 // written into the DOCS folder: the saved copy there is of the real record only.
-export const REAL_RECORD = join(homedir(), '.bonsai-code', 'tests', 'record.jsonl');
-export const recordFile = () => process.env.BONSAI_TEST_RECORD ?? join(process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code'), 'tests', 'record.jsonl');
+export const REAL_RECORD = join(homedir(), '.agentic-coder', 'tests', 'record.jsonl');
+export const recordFile = () => (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD) ?? join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder'), 'tests', 'record.jsonl');
 
 // The commit a folder of code is at. A frozen copy has no git of its own (and
 // may sit inside another repo), so it is named by its folder: "main-7595055".
@@ -96,9 +96,9 @@ export function recordData(file = recordFile()) {
 // not here (a worktree, a frozen copy): the hub still reads the record live.
 // Only the real record goes to the repo's DOCS folder; any other record needs
 // the folder named (docsDir, or BONSAI_DOCS).
-export function writeSnapshot({ file = recordFile(), docsDir = process.env.BONSAI_DOCS ?? (resolve(file) === REAL_RECORD ? join(repo, 'bonsai-code DOCS') : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
+export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD ? (['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(repo, n)).find((p) => existsSync(p)) ?? join(repo, 'agentic-coder DOCS')) : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
   try {
-    if (process.env.BONSAI_NO_DOCS || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
+    if ((process.env.AGENTIC_NO_DOCS ?? process.env.BONSAI_NO_DOCS) || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
     const html = readFileSync(template, 'utf8');
     if (!html.includes('<!--DATA-->')) return null;
     const out = join(docsDir, SNAPSHOT);

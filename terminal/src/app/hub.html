@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bonsai Hub</title>
+<title>Agentic Coder Hub</title>
 <style>
 :root {
   --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
@@ -44,11 +44,12 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
 </head>
 <body>
 <header>
-  <h1>Bonsai hub</h1>
+  <h1>Agentic Coder hub</h1>
   <button data-tab="weights">Weights</button>
   <button data-tab="harness">Harness</button>
   <button data-tab="structure">Structure</button>
   <button data-tab="tests">Tests</button>
+  <button data-tab="memory">Memory</button>
   <button data-tab="docs">All docs</button>
   <button data-tab="help">Help</button>
   <span class="spacer"></span>
@@ -77,10 +78,10 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none';
     const q = new URL(location.href); q.searchParams.delete('page'); history.replaceState(null, '', q);
     if (!docs) { list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
-    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Bonsai looks for <code>${docs.dir || 'bonsai-code DOCS'}</code> at the top of the repo. Set <code>BONSAI_DOCS</code> to point somewhere else.</p>`; return; }
+    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Agentic Coder looks for <code>${docs.dir || 'bonsai-code DOCS'}</code> at the top of the repo. Set <code>BONSAI_DOCS</code> to point somewhere else.</p>`; return; }
     const row = (p, kind) => `<div class="row" data-file="${p.file}"><span><span class="t">${p.title || p.name}</span>${p.title ? `<span class="f">${p.name}</span>` : ''}</span><span class="k">${kind || p.kind}</span><span class="m">${p.saved} · ${kb(p.size)}</span></div>`;
     const pinned = [docs.pinned.harness, docs.pinned.structure].filter(Boolean);
-    const BLURB = { unsorted: 'at the top level, not filed yet', diagrams: 'how Bonsai is built and how a request moves through it', reports: 'what got built, day by day', tests: 'measured runs, checks and the chart-bug rounds', 'design rounds': 'looks that were tried and picked', other: 'kept here, not about Bonsai itself', 'older versions': 'replaced by a newer page, kept as the record' };
+    const BLURB = { unsorted: 'at the top level, not filed yet', diagrams: 'how Agentic Coder is built and how a request moves through it', reports: 'what got built, day by day', tests: 'measured runs, checks and the chart-bug rounds', 'design rounds': 'looks that were tried and picked', other: 'kept here, not about Agentic Coder itself', 'older versions': 'replaced by a newer page, kept as the record' };
     list.innerHTML = (pinned.length ? '<h2>Pinned</h2>' + pinned.map((p) => row(p, p === docs.pinned.harness ? 'harness' : 'structure')).join('') : '')
       + docs.groups.map((g) => { const ps = docs.pages.filter((p) => p.group === g); return `<h2>${g} · ${ps.length}${BLURB[g] ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400">— ${BLURB[g]}</span>` : ''}</h2>` + ps.map((p) => row(p)).join(''); }).join('')
       + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${docs.dir}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
@@ -90,6 +91,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
     if (tab === 'help') return show('/help', 'every command, key and setting');
     if (tab === 'tests' && !page) return show('/tests', 'every test run and its result');
+    if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
@@ -100,7 +102,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'tests';
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'tests' || t === 'memory';
   if (builtIn(tab) && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();

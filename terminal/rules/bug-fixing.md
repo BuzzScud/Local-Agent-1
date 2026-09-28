@@ -1,15 +1,15 @@
 # Fixing a bug
 
-Bonsai follows this file. It is the only copy: change it here and Bonsai changes.
+Agentic Coder follows this file. It is the only copy: change it here and Agentic Coder changes.
 
-- **Every time** goes into Bonsai's instructions for every request.
-- When a request is about a bug, Bonsai sorts it into one of the kinds below by its
+- **Every time** goes into Agentic Coder's instructions for every request.
+- When a request is about a bug, Agentic Coder sorts it into one of the kinds below by its
   **Words**, and that kind's steps go with the request.
-- **Tests see it: no** means the project's whole test suite can't show that kind of bug. Bonsai's
+- **Tests see it: no** means the project's whole test suite can't show that kind of bug. Agentic Coder's
   fix mode then skips the suite and works step by step, unless the request names a check, or
-  the main tool is a browser check and the project has a browser: then Bonsai makes the check first.
+  the main tool is a browser check and the project has a browser: then Agentic Coder makes the check first.
 - **Runs of the check** is how many runs in a row the named check must pass.
-- Bonsai rebuilds with this file inside it: after editing, run `bun run install-cli`.
+- Agentic Coder rebuilds with this file inside it: after editing, run `bun run install-cli`.
 
 ## Every time
 

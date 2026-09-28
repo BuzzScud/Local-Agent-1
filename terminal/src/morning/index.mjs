@@ -1,6 +1,6 @@
 // The morning brief, start to finish: read the repos, pick what earns a line,
 // have the model write the words (checked against the facts), draw the page
-// with every saved day, and open it. /morning in the app and `bonsai morning`
+// with every saved day, and open it. /morning in the app and `coding morning`
 // in a shell both land here; Claude's /repo-morning uses the same pieces
 // through cli.mjs.
 import { spawn } from 'node:child_process';
@@ -14,7 +14,7 @@ export { loadConfig, gather, pick, plainWords, writeWords, writeBrief };
 
 // complete + url + model (+ slot): write the words with the model; without them, plain words.
 // onStep(kind, text) reports progress: 'gather', 'words', 'done'.
-export async function runMorning({ day = 'auto', fetch = true, complete, url, model, slot, signal, onStep = () => {}, onToken, open = !process.env.BONSAI_NO_OPEN, config = loadConfig() } = {}) {
+export async function runMorning({ day = 'auto', fetch = true, complete, url, model, slot, signal, onStep = () => {}, onToken, open = !(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN), config = loadConfig() } = {}) {
   const t0 = Date.now();
   onStep('gather', 'Reading the repos');
   const facts = await gather({ config, day, fetch });
@@ -44,7 +44,7 @@ export function summary(r) {
   const where = r.out.startsWith(home) ? `~${r.out.slice(home.length)}` : r.out;
   const oom = /compute error|out of memory/i.test(r.error ?? '') ? ' — the GPU ran out of memory, most likely beside another copy of the model' : '';
   const who = r.error ? `plain words (the model's reply was not used: ${r.error}${oom})`
-    : r.by === 'bonsai' ? `Bonsai wrote the words${r.swaps.length ? ` (${r.swaps.length} swapped for plain wording: ${r.swaps.map((x) => `${x.field}, ${x.why}`).join('; ')})` : ', all checked against the facts'}`
+    : r.by === 'coding' || r.by === 'bonsai' ? `Agentic Coder wrote the words${r.swaps.length ? ` (${r.swaps.length} swapped for plain wording: ${r.swaps.map((x) => `${x.field}, ${x.why}`).join('; ')})` : ', all checked against the facts'}`
       : 'plain words';
   return `Morning brief for ${r.day.label} · ${r.picks.attention.length} need attention, ${r.picks.resolved.length} resolved · ${who} · ${r.days.length} day${r.days.length === 1 ? '' : 's'} in the calendar · ${where} · ${Math.round(r.secs)} s`;
 }

@@ -15,7 +15,10 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 
 // BONSAI_NO_OPEN: the app never opens a browser tab from a test (/help, /weights, /docs).
 // BONSAI_HUB_PORT=0: its hub takes any free port, never the real hub's 8757.
-export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = process.env.BONSAI_BIN }) {
+// BONSAI_MEMORY: what the memory holds about you is kept beside the test's
+// own files, never in the real ~/.bonsai; and nothing is saved on its own
+// unless the test asks for it (BONSAI_MEMORY_SAVE).
+export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN) }) {
   const out = join(cwd, '..', `pty-${Date.now()}.log`);
   const exe = bin ? `'${bin}'` : `bun ${join(root, 'src/cli.jsx')}`;
   const cmd = `stty cols ${cols} rows ${rows}; exec ${exe} ${args.map((a) => `'${a}'`).join(' ')}`;
@@ -24,7 +27,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   const fifo = `${out}.in`;
   execFileSync('mkfifo', [fifo]);
   const q = (x) => `'${x.replace(/'/g, `'\\''`)}'`;
-  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', BONSAI_NO_OPEN: '1', BONSAI_HUB_PORT: '0', BONSAI_FETCH_EVERY: '0', ...env }, stdio: 'ignore' });
+  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', BONSAI_NO_OPEN: '1', BONSAI_HUB_PORT: '0', BONSAI_FETCH_EVERY: '0', BONSAI_MEMORY: join(cwd, '..', 'memory-about-you'), BONSAI_MEMORY_SAVE: 'off', BONSAI_CLAUDE_NOTES: 'off', ...env }, stdio: 'ignore' });
   const fd = openSync(fifo, 'w');
   const stdin = { write: (s) => { try { writeSync(fd, s); } catch {} } };
   const done = new Promise((resolve) => child.on('exit', (code) => resolve(code)));

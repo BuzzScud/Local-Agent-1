@@ -43,7 +43,7 @@ test('a question changes nothing: Write and Edit are turned away, and a command 
   ], { flows: false });
   expect(reason).toBe('done');
   const tools = events.filter((e) => e.type === 'tool');
-  // (The first Read is Bonsai's own: a small project's code is put in front of a question.)
+  // (The first Read is Agentic Coder's own: a small project's code is put in front of a question.)
   expect(tools.map((e) => `${e.name}:${e.view.kind}${e.error ? ':error' : ''}`)).toEqual(['Read:read', 'Write:denied:error', 'Bash:bash', 'Bash:bash']);
   const results = agent.messages.filter((m) => m.role === 'tool').map((m) => m.content).slice(1);
   expect(results[0]).toBe('This is a question, so no file is changed. Answer it from what you have read. If a change is needed, say which one, and the user can ask for it.');
@@ -188,7 +188,7 @@ test('the same part asked for a second time is pointed back to; a third time it 
   const results = agent.messages.filter((m) => m.role === 'tool').map((m) => m.content);
   expect(results[1]).toContain('You already read this part of export.mjs');
   expect(results[2]).toBe(results[0]);
-  // What Bonsai put in front of a question counts as read: asked for, it is pointed back to.
+  // What Agentic Coder put in front of a question counts as read: asked for, it is pointed back to.
   const asked = await run(demo(), 'what does the export do?', [read, { text: 'It writes a CSV.' }], { flows: false });
   expect(asked.events.filter((e) => e.type === 'tool' && e.name === 'Read').map((e) => e.view.kind)).toEqual(['read', 'same']);
 });
@@ -229,8 +229,8 @@ test('when memory fills it writes its notes in the conversation it already holds
   expect(agent.messages.map((m) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
   expect(agent.messages[1].content).toBe('fix the bug: the total is wrong when the list is empty');
   expect(agent.messages[2].content).toStartWith(`My memory filled up, so I wrote down where I am. My notes (all of them are here; nothing is saved anywhere else):\n${NOTES}`);
-  // What it looked at comes from Bonsai's own record, whatever the notes forgot.
-  expect(agent.messages[2].content).toContain("From Bonsai's record of this message:\n- Files I have read: export.mjs (from the top), export.test.mjs (from the top).\n- Searches I ran: \"toCsv\".");
+  // What it looked at comes from Agentic Coder's own record, whatever the notes forgot.
+  expect(agent.messages[2].content).toContain("From Agentic Coder's record of this message:\n- Files I have read: export.mjs (from the top), export.test.mjs (from the top).\n- Searches I ran: \"toCsv\".");
   expect(agent.messages[3].content).toContain('Do not start the investigation over');
   expect(events.filter((e) => e.type === 'note').map((e) => e.text)).toEqual(['Memory is filling up: writing down where I am, then carrying on from my notes…']);
   expect(events.find((e) => e.type === 'compacted')).toMatchObject({ summary: NOTES, inPlace: true });
@@ -273,8 +273,8 @@ test('no usable notes (an empty reply): old tool output is emptied instead, as b
   expect(agent.messages.some((m) => m.role === 'tool' && m.content.startsWith('[older output removed'))).toBe(true);
 });
 
-test('memory: "trim" keeps the way before: no notes are asked for', async () => {
-  const { fake, held, agent } = await filled(LOOKS, { memory: 'trim' });
+test('whenFull: "trim" keeps the way before: no notes are asked for', async () => {
+  const { fake, held, agent } = await filled(LOOKS, { whenFull: 'trim' });
   expect(fake.requests.filter((r) => r.stream).length).toBe(4);
   expect(agent.messages.length).toBe(held);
 });
@@ -304,7 +304,7 @@ test('the four practice questions: the code each is about is found with no model
   // Two tiny projects: all of their code.
   expect(wholeSmallProject(at('5-question')).map((p) => `${p.rel} 1-${p.to}`)).toEqual(['src/config.mjs 1-5', 'src/server.mjs 1-6']);
   expect(wholeSmallProject(at('7-question-tax')).map((p) => p.rel)).toEqual(['billing.mjs', 'checkout.mjs']);
-  // A copy of Bonsai's own source: the one function the question is about, "Don't change any files" left out.
+  // A copy of Agentic Coder's own source: the one function the question is about, "Don't change any files" left out.
   expect(wholeSmallProject(at('25-bigproject-question'))).toEqual([]);
   const parts = partsFor(at('25-bigproject-question'), q('25-bigproject-question'));
   expect(parts.map((p) => `${p.rel} ${p.name}`)).toEqual(['src/agent/prompt.mjs testCommand']);

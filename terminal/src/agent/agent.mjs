@@ -24,7 +24,11 @@ import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete } from '../flows/llm.mjs';
 import { isMemoryRequest, memoryFile, readMemory, applyMemory, digest, memoryPrompt, MEMORY_SCHEMA } from './memory.mjs';
-import { diffLines } from '../tools/edit.mjs';
+import { changedLines } from '../tools/edit.mjs';
+import { changeTrust } from './facts.mjs';
+import { recall, recallNotes } from './recall.mjs';
+import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
+import { saveLessons, knownAlready } from './lessons.mjs';
 
 const MAX_STEPS = 40;
 const TRIM_AT = 0.78; // share of the context that starts a trim
@@ -47,6 +51,8 @@ const PREFETCH_MAX_CHARS = 45000; // ~12,500 tokens, ~3½ minutes of reading
 const MAP_MIN_FILES = 4; // fewer code files than this: no project map, the model just reads them
 // Asking about code even when the request was not sorted (plan mode, a folder that is not a project).
 const EXPLAIN = /\b(explain|describe|walk me through|summari[sz]e|what does|how does|what is in|tell me about)\b/i;
+// A message that says the last turn went wrong.
+const CORRECTS = /^(no[,.! ]|nope\b|wrong\b|that('?s| is| was) (not|wrong)|this is (not|wrong)|not what i\b|that('?s| is) not what\b|you (broke|missed|forgot|did ?n[o']t|should ?n[o']t have|were not supposed)|undo (that|this|it)\b|revert (that|this|it)\b|put it back\b|why did you\b|i (did ?n[o']t|never) (ask|say|want))/i;
 
 // Files a request names ("explain src/app/App.jsx", "what does export.mjs do?"):
 // existing files inside the project, at most three.
@@ -87,11 +93,11 @@ export function isLooping(text) {
 // A reply that asks the user something: a question anywhere (outside code)
 // or a request for input ("Give me a little detail and I'll dig in"). Such a
 // reply ends the turn and waits: no "go ahead", no follow-up checks.
-// Bonsai's own notes go into the conversation where the user's words go, so
+// Agentic Coder's own notes go into the conversation where the user's words go, so
 // each one says it is automatic: once, a note ("the story is cut off") was
 // taken as the user's report and the model spent 20 minutes on it.
-export const AUTO = '[Automatic note from Bonsai, not from the user]';
-const CUT_MARK = '[… cut here by Bonsai for this check; the rest is in the file]';
+export const AUTO = '[Automatic note from Agentic Coder, not from the user]';
+const CUT_MARK = '[… cut here by Agentic Coder for this check; the rest is in the file]';
 const auto = (text) => `${AUTO} ${text}`;
 
 // A question put to the user: a sentence ending in "?" that speaks to them
@@ -205,17 +211,22 @@ export function planLine(name, args, prepared) {
 }
 
 export class Agent extends EventEmitter {
-  // memory: what happens when the conversation fills the model's memory.
+  // whenFull: what happens when the conversation fills the model's memory.
   // 'notes' (the default): it writes down where it is and carries on from
   // its notes. 'trim': old tool output is emptied first (the way before
-  // 2026-09-27; BONSAI_MEMORY=trim).
+  // 2026-09-27; BONSAI_WHEN_FULL=trim).
+  // memory: what Agentic Coder remembers from one day to the next (facts.mjs).
   // rewarm: puts the saved reading of the instructions back in the model's
-  // memory (the app and `bonsai -p` pass it), so a conversation that starts
+  // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, memory = process.env.BONSAI_MEMORY === 'trim' ? 'trim' : 'notes', rewarm }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, memory, rewarm });
-    // When Bonsai Code started the server itself it has two slots: the
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, whenFull, rewarm });
+    // The memory (facts.mjs, recall.mjs): { embedder, home }. Without it
+    // nothing is brought back and nothing is learned (tests, practice runs).
+    this.memory = memory || null;
+    this.lessons = []; // what happened in each turn, for the next save (lessons.mjs)
+    // When Agentic Coder started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
     this.slots = slots ?? null;
     // How this project runs its tests; used to check a change before calling it done.
@@ -231,7 +242,7 @@ export class Agent extends EventEmitter {
 
   setSystem(system) { this.messages[0] = { role: 'system', content: system }; }
   // Work in another folder from now on: its tests, its AGENTS.md, and the fence
-  // around commands, which is always the folder Bonsai works in.
+  // around commands, which is always the folder Agentic Coder works in.
   moveTo(dir) {
     const before = tokensOf(this.messages[0].content);
     this.cwd = dir;
@@ -257,7 +268,7 @@ export class Agent extends EventEmitter {
     for (const d of found) this.offered.add(d);
     const tilde = (p) => (p === home ? '~' : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
     const one = found.length === 1;
-    const question = `${one ? `Work in ${tilde(found[0])}?` : 'Work in which project?'} Bonsai then uses its tests and its AGENTS.md, and its commands can only change files there.`;
+    const question = `${one ? `Work in ${tilde(found[0])}?` : 'Work in which project?'} Agentic Coder then uses its tests and its AGENTS.md, and its commands can only change files there.`;
     const options = [...found.map((d) => (one ? `Yes, work in ${basename(d)}` : tilde(d))), `No, stay in ${tilde(this.cwd)}`];
     const id = `project_${Date.now()}`;
     this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
@@ -289,12 +300,21 @@ export class Agent extends EventEmitter {
   // What the focused paths (src/flows) need from the agent.
   flowContext(signal) {
     let seq = 0;
-    const tool = (label, arg, view, error) => this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
+    const tool = (label, arg, view, error) => {
+      if (!error && (label === 'Update' || label === 'Write' || label === 'Create') && arg) this.happened?.files.add(String(arg));
+      this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
+    };
     return {
+      // The facts brought back for this request (recall.mjs), for the paths' own prompts.
+      memory: this.happened?.notes ?? '',
       url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
       // Code and tests are written at the chat's thinking level (Off by default).
       thinking: this.thinking, effort: this.effort,
-      emit: (name, ev) => { if (name === 'route') { this.lastRoute = ev; this.sorted(ev.kind, { shortcut: true }); } this.emit(name, ev); },
+      emit: (name, ev) => {
+        if (name === 'route') { this.lastRoute = ev; this.sorted(ev.kind, { shortcut: true }); }
+        if (name === 'tries-done') this.happened?.tries.push({ label: ev.label, marks: (ev.marks ?? []).join(''), summary: ev.summary, failed: Boolean(ev.failed) });
+        this.emit(name, ev);
+      },
       ask: (req) => this.ask(req),
       confirm: (plan) => (this.confirmPlan ? this.confirm(plan, signal) : { ok: true }),
       mode: () => this.mode,
@@ -321,7 +341,8 @@ export class Agent extends EventEmitter {
       // One short sentence on what a change does, for the summary.
       describe: async (rel, before, after) => {
         try {
-          const d = diffLines(before, after).hunk.map((l) => `${l.type}${l.text}`).join('\n').slice(0, 3000);
+          // Only the lines that really differ: a change in two places is not a rewrite.
+          const d = changedLines(before, after).map((l) => `${l.type}${l.text}`).join('\n').slice(0, 3000);
           const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0.2, maxTokens: 70, system: 'You describe code changes in one short plain sentence.', user: `The change to ${rel}:\n${d}\n\nIn one short sentence, what does this change do?` });
           const one = r.text.trim().split('\n')[0].replace(/^["']|["']$/g, '');
           return one ? `${one.replace(/\.?$/, '.')} ` : '';
@@ -330,16 +351,31 @@ export class Agent extends EventEmitter {
     };
   }
 
-  // One user message → as many model turns and tools as it takes.
+  // One user message → as many model turns and tools as it takes. Around the
+  // work itself, the memory: a message that corrects Agentic Coder counts against
+  // the facts the last turn used, and when the turn ends what happened is
+  // written down, for the facts' trust and for the next save.
   async send(text, { signal } = {}) {
+    this.corrected(text);
+    this.turn = null;
+    this.happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [] };
+    const warn = (ev) => { if (ev?.tone === 'warn' || ev?.tone === 'error') this.happened?.warnings.push(String(ev.text).slice(0, 200)); };
+    this.on('note', warn);
+    let reason;
+    try { reason = await this.work(text, { signal }); } finally { this.off('note', warn); }
+    this.settle(reason);
+    return reason;
+  }
+
+  async work(text, { signal } = {}) {
     this.busy = true;
     const started = Date.now();
     const turnStart = this.messages.length;
     this.messages.push({ role: 'user', content: text });
     this.emit('turn-start', { started });
-    if (isSmallTalk(text)) return this.chat(text, started, signal);
+    if (isSmallTalk(text)) { this.happened.small = true; return this.chat(text, started, signal); }
     // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
-    if (isMemoryRequest(text)) return this.updateMemory(text, started, signal);
+    if (isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
     this.lastRoute = null;
     this.sortShown = this.mode === 'plan'; // a plan is never sorted: no line
     const stopNow = (reason) => {
@@ -359,6 +395,12 @@ export class Agent extends EventEmitter {
     // read the line alone. It goes on step by step.
     const follow = isFollowUp(text, this.messages.slice(0, turnStart).some((m) => m.role === 'assistant'));
     if (follow) this.sorted('follow-up');
+    // The saved facts that fit the request come along with it. They are
+    // written into the request itself, so the conversation read so far stays
+    // as it was (a note that came and went would make the model read the
+    // last turn again).
+    this.claudeCame = false;
+    try { await this.remember(text, turnStart, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted'); }
     // An unclear request gets one question first (src/flows/clarify.mjs); the
     // answer joins the conversation and travels with the request.
     if (!follow && this.flows && this.mode !== 'plan') {
@@ -386,6 +428,7 @@ export class Agent extends EventEmitter {
           this.messages.push({ role: 'assistant', content: r.summary });
           this.emit('assistant', { text: r.summary, reasoning: '', secs: 0, thinkSecs: 0, tokens: 0, final: true });
           this.busy = false;
+          this.happened.flow = { done: r.done, summary: String(r.summary ?? '').slice(0, 300) };
           const reason = signal?.aborted ? 'interrupted' : r.declined ? 'declined' : 'done';
           if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
           this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, flow: true, done: r.done });
@@ -507,7 +550,7 @@ export class Agent extends EventEmitter {
           continue;
         }
         // A reply that puts a question to you ends the turn, even with a tool
-        // call in it: the call is dropped and Bonsai waits for your answer.
+        // call in it: the call is dropped and Agentic Coder waits for your answer.
         if (calls.length && text.trim() && asksTheUserDirectly(text)) calls = [];
         const assistant = { role: 'assistant', content: text };
         const thought = turn.reasoning.split('<tool_call>')[0].trim();
@@ -537,7 +580,7 @@ export class Agent extends EventEmitter {
               this.messages.push({ role: 'user', content: auto(`You created ${files} in this turn; it did not exist before. Answer again in 1-3 sentences: say that you created it, what it does, and how you checked it. Do not say it was already there.`) });
               continue;
             }
-            this.emit('note', { text: `Note: ${files} did not exist before; Bonsai created it just now.`, tone: 'warn' });
+            this.emit('note', { text: `Note: ${files} did not exist before; Agentic Coder created it just now.`, tone: 'warn' });
           }
           // A blank answer (seen once after "hello"): ask for one, once.
           if (!text.trim() && turn.finish !== 'length' && !blankRetry) {
@@ -639,6 +682,87 @@ export class Agent extends EventEmitter {
     if (this.sortShown) return;
     this.sortShown = true;
     this.emit('sorted', { kind: kind ?? 'other', text: sortLine(kind, opts) });
+  }
+
+  // The facts that fit this request, found by meaning (or by words when the
+  // small model is not here). They go into the request itself.
+  async remember(text, at, signal) {
+    if (!this.memory || this.memory.recall === false) return;
+    const r = await recall(this.cwd, text, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal });
+    if (r.note && !this.memory.told) { this.memory.told = true; this.emit('note', { text: r.note, tone: 'dim' }); }
+    const request = this.messages[at];
+    const goesAlong = (notes) => {
+      if (request?.role === 'user' && typeof request.content === 'string') request.content = `${request.content}\n\n(${notes})`;
+      this.ctxUsed += tokensOf(notes);
+    };
+    if (r.facts.length) {
+      const notes = recallNotes(r.facts);
+      goesAlong(notes);
+      Object.assign(this.happened, { recalled: r.facts.map((f) => ({ id: f.id, dir: f.dir, text: f.text })), notes });
+      this.emit('memory', { facts: r.facts, how: r.how, ms: r.ms });
+      this.emit('note', { text: `From memory: ${r.facts.map((f) => `"${f.text.replace(/\s+/g, ' ').slice(0, 60)}${f.text.length > 60 ? '…' : ''}"`).join(' · ')}`, tone: 'dim' });
+    }
+    await this.rememberClaude(text, goesAlong, signal);
+  }
+
+  // Claude's notes (claude-notes.mjs): what Claude Code wrote down about the
+  // user's work, read where it is. The one or two notes that fit the request
+  // go along with it, as the saved facts do. They are never counted for or
+  // against (no trust): Agentic Coder does not change them.
+  async rememberClaude(text, goesAlong, signal) {
+    const c = this.memory.claude;
+    if (!c) return;
+    const dir = c === true ? notesDir() : notesDir({ setting: c.dir ?? c });
+    if (!dir) return;
+    let r;
+    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
+    if (!r.notes.length) return;
+    goesAlong(claudeText(r.notes));
+    if (this.happened) this.happened.claude = r.notes.map((n) => n.id);
+    this.claudeCame = true; // for this message: a step that is turned away points back at the note (runTool)
+    this.emit('memory', { claude: r.notes.map((n) => ({ id: n.id, name: n.name, type: n.type, close: n.close, chars: n.part.length })), how: r.how, ms: r.ms, of: r.of });
+    this.emit('note', { text: `From Claude's notes: ${r.notes.map((n) => n.name.replace(/-/g, ' ')).join(' · ')}`, tone: 'dim' });
+  }
+
+  // A message that corrects Agentic Coder ("no, that is wrong", "undo that") counts
+  // against the facts the turn before it used, once.
+  corrected(text) {
+    const last = this.lessons.at(-1);
+    if (!last || last.corrected || !CORRECTS.test(String(text).trim())) return;
+    last.corrected = String(text).slice(0, 200);
+    last.known = false; // a turn that had to be corrected taught something
+    this.trust(last.recalled, -2, 'you corrected Agentic Coder');
+  }
+
+  trust(recalled, delta, reason) {
+    if (!this.memory || !delta || !recalled?.length) return;
+    try { for (const dir of new Set(recalled.map((f) => f.dir))) changeTrust(dir, recalled.filter((f) => f.dir === dir).map((f) => f.id), delta, reason); } catch { /* the memory never stops the work */ }
+  }
+
+  // The turn is over: what happened is written down. The facts it used gain
+  // trust when the work passed its check, and lose it when the work failed,
+  // when Agentic Coder got stuck, or when you stopped it.
+  settle(reason) {
+    const h = this.happened;
+    this.happened = null;
+    if (!h || h.small) return null;
+    const t = this.turn;
+    const checked = h.flow ? h.flow.done : t?.changed && t.testedAfterChange ? t.checkOk : undefined;
+    const outcome = reason === 'interrupted' ? 'stopped' : ['stuck', 'limit', 'error'].includes(reason) ? 'stuck' : checked === false ? 'failed' : checked === true ? 'passed' : reason === 'declined' ? 'declined' : 'done';
+    const lesson = {
+      at: h.at, request: h.request.slice(0, 600), kind: this.lastRoute?.kind ?? routeByRules(h.request)?.kind ?? null, reason, outcome,
+      files: [...h.files].slice(0, 12), check: h.check ?? null, tries: h.tries.slice(-6), findings: (t?.findings ?? []).slice(-4), asked: (t?.asked ?? []).slice(-3),
+      warnings: h.warnings.slice(-4), summary: h.flow?.summary ?? null, recalled: h.recalled,
+    };
+    // A turn that went well on what the memory already holds teaches nothing
+    // new: no save is started for it (the review at night still reads it).
+    if (this.memory) { try { lesson.known = knownAlready(lesson, { cwd: this.cwd, home: this.memory.home }); } catch { /* then it is saved as usual */ } }
+    this.lessons.push(lesson);
+    this.lessons = this.lessons.slice(-20);
+    const delta = { stopped: -2, stuck: -1, failed: -1, passed: +1 }[outcome] ?? 0;
+    this.trust(h.recalled, delta, { stopped: 'you stopped Agentic Coder', stuck: 'Agentic Coder got stuck', failed: 'the task failed its check', passed: 'the task passed its check' }[outcome]);
+    this.emit('settled', lesson);
+    return lesson;
   }
 
   // In a project with several code files, the loop starts from the project
@@ -747,9 +871,37 @@ export class Agent extends EventEmitter {
     return reason;
   }
 
+  // "update memory" with the memory on: the same save that runs on its own
+  // (lessons.mjs), now, with what you said to remember.
+  async updateFacts(request, started, signal) {
+    let reason = 'done';
+    try {
+      this.emit('flow-step', { index: 0, count: 1, text: 'Updating memory' });
+      const out = await saveLessons({ url: this.url, model: this.model, slot: this.slots?.side, cwd: this.cwd, home: this.memory.home, lessons: this.lessons, messages: this.messages.slice(0, -1), signal, embedder: this.memory.embedder, why: 'update memory', request });
+      const lines = [...out.added.map((f) => `- ${f.text}`), ...out.replaced.map((x) => `- ${x.fact.text} (in place of: ${x.old.text})`)];
+      const text = lines.length || out.retired.length
+        ? `Saved to memory:\n${lines.join('\n')}${out.retired.length ? `${lines.length ? '\n\n' : ''}Taken out of use:\n${out.retired.map((f) => `- ${f.text}`).join('\n')}` : ''}`
+        : `Nothing new to remember from this conversation.${out.refused.length ? ` (${out.refused.map((x) => x.why).join('; ')})` : ''}`;
+      this.emit('flow-step', null);
+      this.messages.push({ role: 'assistant', content: text });
+      this.emit('assistant', { text, reasoning: '', secs: out.secs, thinkSecs: 0, tokens: out.tokens, final: true });
+      this.emit('note', { text: '/memory shows what is saved · /memory undo takes the last save back', tone: 'dim' });
+    } catch (e) {
+      this.emit('flow-step', null);
+      if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
+      else { reason = 'error'; this.emit('note', { text: `Could not update the memory (${e.message}).`, tone: 'error' }); }
+    } finally {
+      this.busy = false;
+    }
+    if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
+    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
+    return reason;
+  }
+
   // "update memory": the facts worth keeping from this conversation go into
-  // the file Bonsai reads at every start here (memory.mjs), no question asked.
+  // the file Agentic Coder reads at every start here (memory.mjs), no question asked.
   async updateMemory(request, started, signal) {
+    if (this.memory) return this.updateFacts(request, started, signal);
     let reason = 'done';
     const home = homedir();
     const file = memoryFile(this.cwd);
@@ -767,7 +919,7 @@ export class Agent extends EventEmitter {
       this.emit('flow-step', null);
       this.messages.push({ role: 'assistant', content: text });
       this.emit('assistant', { text, reasoning: '', secs: r.secs, thinkSecs: 0, tokens: r.tokens, final: true });
-      this.emit('note', { text: `Memory: ${short} · read at every start ${short.startsWith('~/.bonsai/') ? 'anywhere in your home folder' : 'in this project'}${res.chars > 4500 ? ' · getting long: /memory shows it, edit it freely' : ''}.`, tone: 'dim' });
+      this.emit('note', { text: `Memory: ${short} · read at every start ${/^~\/\.(bonsai|agentic)\//.test(short) ? 'anywhere in your home folder' : 'in this project'}${res.chars > 4500 ? ' · getting long: /memory shows it, edit it freely' : ''}.`, tone: 'dim' });
     } catch (e) {
       this.emit('flow-step', null);
       if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
@@ -892,7 +1044,7 @@ export class Agent extends EventEmitter {
     const d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd });
     if (d.decision === 'deny') {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: d.reason }, error: true });
-      return { text: `Not allowed: ${d.reason}. Do something else.`, error: true };
+      return { text: `Not allowed: ${d.reason}. ${this.claudeCame ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
     }
     // Edits on auto-accept: the first one of a message is shown as a plan first.
     if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan) {
@@ -943,6 +1095,8 @@ export class Agent extends EventEmitter {
     let out;
     const aside = call.name === 'Bash' && this.turn?.question && !isReadOnly(args.command);
     try { out = aside ? await this.runAside(args.command, signal) : await execute(call.name, args, prepared, env); } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
+    // A command the fence stopped, in a message a note of Claude's came with: back to the note.
+    if (this.claudeCame && out.error && /outside the project folder/.test(String(out.text))) out.text += ' If the note that came with the request answers it, answer from the note now.';
     if (readKey && !out.error) Object.assign(out, { readKey, mtime });
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
     // This message's searches, newest first: a Read of a long file shows what they found in it.
@@ -951,6 +1105,7 @@ export class Agent extends EventEmitter {
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
       this.turn.changed = true;
       this.turn.testedAfterChange = false;
+      this.happened?.files.add(prepared.rel);
       // What changed this turn, for the check at the end (verifyDone).
       const hunk = (out.view?.hunk ?? []).filter((l) => l.type !== ' ').map((l) => `${l.type}${l.text}`).join('\n');
       // Up to 6,000 characters a file, 16,000 in all; anything longer is
@@ -960,7 +1115,7 @@ export class Agent extends EventEmitter {
       if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
-    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) this.turn.testedAfterChange = true;
+    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) { this.turn.testedAfterChange = true; this.turn.checkOk = !out.error; if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error }; }
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
   }
@@ -986,7 +1141,7 @@ export class Agent extends EventEmitter {
     try {
       const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 220,
         system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
-        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Bonsai shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
+        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Agentic Coder shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
         schema: { type: 'object', properties: { parts: { type: 'array', items: { type: 'object', properties: { part: { type: 'string' }, done: { type: 'boolean' } }, required: ['part', 'done'] }, maxItems: 6 }, done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['parts', 'done', 'missing'] } });
       if (!r.json) return null;
       // Parts first: a request with several asks fails on the ones not done
@@ -1096,7 +1251,7 @@ export class Agent extends EventEmitter {
     // after it (measured: 186 to 261 s each time, up to half of a long try).
     // Its notes are written in the conversation it already holds, so only
     // the notes themselves are read afterwards.
-    if (this.memory === 'notes' && est + NOTES_ROOM < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
+    if (this.whenFull === 'notes' && est + NOTES_ROOM < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
     let freed = 0;
     // Old thinking first: every step before the newest KEEP_THOUGHTS keeps
     // only its cause/fix lines (keyLines); the rest served its step already.
@@ -1167,7 +1322,7 @@ export class Agent extends EventEmitter {
     return tokensOf(String(result.content)) > 400 ? [call, result] : null;
   }
 
-  // What it looked at and changed in this message, from Bonsai's own record:
+  // What it looked at and changed in this message, from Agentic Coder's own record:
   // a summary can forget a file, this list cannot.
   seenSoFar() {
     const t = this.turn;
@@ -1184,7 +1339,7 @@ export class Agent extends EventEmitter {
     if (t.searches?.length) lines.push(`Searches I ran: ${t.searches.map((s) => `"${s}"`).join(', ')}.`);
     const changed = [...new Set((t.diffs.match(/^(\S[^\n]*):$/gm) ?? []).map((l) => l.slice(0, -1)))];
     if (changed.length) lines.push(`Files I have changed: ${changed.join(', ')}.`);
-    return lines.length ? `\n\nFrom Bonsai's record of this message:\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
+    return lines.length ? `\n\nFrom Agentic Coder's record of this message:\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
   }
 
   // The conversation starts over from the request (word for word) and the
@@ -1192,7 +1347,7 @@ export class Agent extends EventEmitter {
   restartFrom(summary, held = null) {
     // The request stays word for word (the summary once became "the task" and
     // the model started the investigation over, in a folder it made up). The
-    // notes are Bonsai's own, in its own mouth, not a message from the user.
+    // notes are Agentic Coder's own, in its own mouth, not a message from the user.
     const capped = (s) => (s.length > 6000 ? `${s.slice(0, 6000)}\n${CUT_MARK}` : s);
     const opening = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).map((m) => ({ role: m.role, content: capped(String(m.content)) }));
     if (!opening.some((m) => m.role === 'user')) {

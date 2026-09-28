@@ -1,9 +1,10 @@
-// Bonsai Code's terminal app: starts the model, runs the agent, and turns
+// Agentic Coder's terminal app: starts the model, runs the agent, and turns
 // its events into the screen; handles the prompt box, permission prompts,
 // slash commands, layouts, sessions and keys.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows } from './screen.jsx';
@@ -12,7 +13,7 @@ import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME } from '../../../models/index.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
@@ -21,7 +22,10 @@ import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
 import { MODE_OPTIONS } from './help.mjs';
-import { memoryFile, readMemory } from '../agent/memory.mjs';
+import { memoryDirs, readFacts, readLog, undoSave, openMemory } from '../agent/facts.mjs';
+import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
+import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
+import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
@@ -81,7 +85,7 @@ export function App({ opts, win, onRestart }) {
   }, [win]);
   // The text a menu was closed for with esc (typing again opens it).
   const [menuClosedFor, setMenuClosedFor] = useState(null);
-  // Where Bonsai works; it can move into a project named from the home folder.
+  // Where Agentic Coder works; it can move into a project named from the home folder.
   const [cwd, setCwd] = useState(opts.cwd);
   const settings = useRef(loadSettings(opts.cwd)).current;
   // The model can change while the window is open (/model switches to the
@@ -90,7 +94,7 @@ export function App({ opts, win, onRestart }) {
   // What the Weights tab last saved (the edited copy's manifest): feeds the
   // weights badge in the lower right.
   const [editedSaved, setEditedSaved] = useState(readEdited);
-  // New Bonsai code on main since this start: the "Update available" badge,
+  // New Agentic Coder code on main since this start: the "Update available" badge,
   // and /update, which restarts this window on it.
   const [update, setUpdate] = useState(null);
   const updateRef = useRef(null);
@@ -147,14 +151,23 @@ export function App({ opts, win, onRestart }) {
   const sessionRef = useRef({ id: newSessionId(), title: null, items: [] });
   const filesRef = useRef(null);
   const queuedRef = useRef(null);
-  const answerRef = useRef(null); // resolves Bonsai's question with what you type next
+  const answerRef = useRef(null); // resolves Agentic Coder's question with what you type next
 
   // The agent lives for the whole session.
   const agentRef = useRef(null);
   if (!agentRef.current) {
-    const notes = projectNotes(cwd);
+    // The memory: your two rules and an older notes file are carried in at
+    // the first start; the small model that finds the facts is started with
+    // the first request that needs it.
+    const remembers = memoryOn(settings);
+    if (remembers) { try { openMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
+    const notes = projectNotes(cwd, 6000, { memory: remembers });
     agentRef.current = new Agent({
+      // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
+      memory: remembers ? { embedder: embedderReady() ? new Embedder() : null, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
       url: opts.url ?? 'http://127.0.0.1:0', model, cwd,
+      // a server given with --url and --slots 2 has a side slot for the save and the sorting
+      ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
       system: systemPrompt({ cwd, notes: notes.text, git: gitSummary(cwd) }),
       thinking, effort, ctx, mode, flows: opts.flows !== false,
       ask: (req) => new Promise((resolve) => {
@@ -163,7 +176,7 @@ export function App({ opts, win, onRestart }) {
       }),
       waitForServer: async () => { if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },
       // A conversation that starts over from its notes: the instructions come
-      // back from their saved reading (a server Bonsai started itself).
+      // back from their saved reading (a server Agentic Coder started itself).
       rewarm: async (signal) => {
         const a = agentRef.current;
         if (!serverRef.current || !a?.warmed || a.slots?.main === undefined) return;
@@ -172,6 +185,15 @@ export function App({ opts, win, onRestart }) {
     });
   }
   const agent = agentRef.current;
+  // Saving on its own (autosave.mjs): a little after a task, and on quit.
+  const autoRef = useRef(null);
+  // Before a save, the facts are listed and a Save / Skip menu opens (the
+  // default, "memorySave": "ask"); "auto" in settings.json saves unasked.
+  const pendingSaveRef = useRef(null);
+  const askRef = useRef(null);
+  const saveEnv = process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE; // off · on/auto · ask
+  const saveMode = saveEnv === 'on' || saveEnv === 'auto' ? 'auto' : saveEnv === 'ask' ? 'ask' : (settings.memorySave ?? 'ask');
+  autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text) => push({ type: 'note', text, tone: 'dim' }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
 
   // Everything the key handler needs, always current.
   const S = useRef({});
@@ -200,9 +222,10 @@ export function App({ opts, win, onRestart }) {
   const choiceMenu = (id) => {
     if (id === 'effort') {
       const now = thinkingLevel(model, agent.thinking, agent.effort);
-      return { title: 'Effort', blurb: 'How much Bonsai thinks before it acts. Kept for next time.', what: 'effort', current: now.id, options: (model.thinkingLevels ?? []).map((l) => ({ id: l.id, label: l.label, note: l.note ?? '' })) };
+      return { title: 'Effort', blurb: 'How much Agentic Coder thinks before it acts. Kept for next time.', what: 'effort', current: now.id, options: (model.thinkingLevels ?? []).map((l) => ({ id: l.id, label: l.label, note: l.note ?? '' })) };
     }
-    if (id === 'mode') return { title: 'Mode', blurb: 'How Bonsai asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
+    if (id === 'memory-save') return { title: 'Remember for next time?', blurb: 'What Agentic Coder learned in that task is listed above. /memory undo takes a save back.', what: 'memory', current: 'save', options: [{ id: 'save', label: 'Save', note: 'read at every start from now on' }, { id: 'skip', label: 'Skip', note: 'nothing is saved; /update memory saves later' }] };
+    if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
   };
   // The hub in the browser (/weights, /docs, /help): one small server per
@@ -215,23 +238,23 @@ export function App({ opts, win, onRestart }) {
       if (e.kind === 'save') {
         setEditedSaved(e.saved);
         const n = e.saved.edits.length;
-        push({ type: 'note', text: `Saved 27B · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
+        push({ type: 'note', text: `Saved ${model.name} · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
       } else { setEditedSaved(null); push({ type: 'note', text: 'The edited copy was removed. The original was never touched.', tone: 'dim' }); }
     };
-    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
+    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits, cwd }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
     const url = `${weightsRef.current.url}?tab=${tab}`;
-    if (!process.env.BONSAI_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+    if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
     return { server: weightsRef.current, url };
   };
   // /model picked a different set of weights: only the model server restarts;
   // the window, the conversation and the history all stay. About 40 s: the
   // new weights never reuse a saved warm-up, so the instructions are re-read.
   const switchModel = async (next) => {
-    if (S.current.live !== IDLE) { push({ type: 'note', text: 'Bonsai is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+    if (S.current.live !== IDLE) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
     const cur = serverRef.current;
     // Only one 27B fits in memory, so nobody else may be on the old server.
     const others = cur?.port ? liveUsers(cur.port).filter((p) => p !== process.pid) : [];
-    if (others.length) { push({ type: 'note', text: `Another Bonsai window is using ${model.name}. Close it first, then switch.`, tone: 'warn' }); return; }
+    if (others.length) { push({ type: 'note', text: `Another Agentic Coder window is using ${model.name}. Close it first, then switch.`, tone: 'warn' }); return; }
     setModel(next);
     setStarting(true); setStartPhase('loading');
     try {
@@ -245,7 +268,7 @@ export function App({ opts, win, onRestart }) {
       const srv = new ModelServer(next);
       serverRef.current = srv;
       srv.on('crash', ({ code, signal }) => {
-        if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.bonsai-code/logs/server.log, then restart Bonsai Code.`, tone: 'error' }); return; }
+        if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
         push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
         restartRef.current = srv.restart().then(() => { push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { restartRef.current = null; });
       });
@@ -262,7 +285,16 @@ export function App({ opts, win, onRestart }) {
     setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
+  askRef.current = (p) => new Promise((resolve) => {
+    // Not over something you are doing: typing, or another menu open. Asked
+    // again at the next pause.
+    if (S.current.picker || S.current.input?.value?.trim() || pendingSaveRef.current) { resolve('later'); return; }
+    pendingSaveRef.current = { resolve };
+    push({ type: 'panel', title: `Learned in that task · ${p.add.length + p.drop.length} change${p.add.length + p.drop.length === 1 ? '' : 's'}`, pad: 0, rows: [...p.add.map((f) => [`+ ${f.text.replace(/\s+/g, ' ').slice(0, 140)}`]), ...p.drop.map((d) => [`− ${d.text.replace(/\s+/g, ' ').slice(0, 110)} (${d.why})`])] });
+    openChoice('memory-save');
+  });
   const applyChoice = (id, value) => {
+    if (id === 'memory-save') { const p = pendingSaveRef.current; pendingSaveRef.current = null; p?.resolve(value === 'save'); return; }
     if (id === 'effort') {
       const lv = (model.thinkingLevels ?? []).find((l) => l.id === value); if (!lv) return;
       const on = !!lv.effort;
@@ -271,7 +303,7 @@ export function App({ opts, win, onRestart }) {
     } else if (id === 'mode') {
       const o = MODE_OPTIONS.find((x) => x.id === value); if (!o) return;
       setMode(o.id);
-      push({ type: 'note', text: `Mode is ${o.label.toLowerCase()}: Bonsai ${o.note}.`, tone: 'dim' });
+      push({ type: 'note', text: `Mode is ${o.label.toLowerCase()}: Agentic Coder ${o.note}.`, tone: 'dim' });
     } else if (id === 'meters') {
       const on = value === 'on';
       setMeters(on);
@@ -303,7 +335,8 @@ export function App({ opts, win, onRestart }) {
   const saveNow = useCallback(() => {
     const s = sessionRef.current;
     if (!s.title) return;
-    try { saveSession(cwd, s.id, { title: s.title, messages: agent.messages, items: s.items.slice(-300), mode: agent.mode }); } catch {}
+    // lessons: what happened in each turn, for the memory's review at night.
+    try { saveSession(cwd, s.id, { title: s.title, messages: agent.messages, items: s.items.slice(-300), mode: agent.mode, lessons: agent.lessons }); } catch {}
   }, [agent, cwd]);
 
   // Keep a copy of what was shown, for /resume.
@@ -319,6 +352,7 @@ export function App({ opts, win, onRestart }) {
     const ac = new AbortController();
     abortRef.current = ac;
     setPlaceholder(pick(PLACEHOLDERS));
+    autoRef.current.cancel(); // a save in the background steps aside
     agent.send(content, { signal: ac.signal });
   }, [agent, cwd, push]);
 
@@ -367,16 +401,17 @@ export function App({ opts, win, onRestart }) {
       on('flow-step', (st) => setLive((l) => ({ ...l, flowStep: st }))),
       on('stats', (st) => setStats(st)),
       on('mode', (m) => setModeState(m)),
+      on('settled', () => autoRef.current.schedule()),
       on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); lastFold.current = { title: 'Summary', text: summary }; }),
       on('turn-end', ({ reason, secs }) => {
         const past = S.current.live?.past ?? 'Worked';
         setLive(IDLE);
         setPerm(null);
         answerRef.current = null;
-        if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Bonsai do instead?', tone: 'warn' }); setPlaceholder('Tell Bonsai what to do instead'); }
+        if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Agentic Coder do instead?', tone: 'warn' }); setPlaceholder('Tell Agentic Coder what to do instead'); }
         // A finished turn leaves its time behind, as in Claude Code: "⠿ Worked for 41s · done 12:58 PM".
         else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now() });
-        if (reason === 'declined') setPlaceholder('Tell Bonsai what to do instead');
+        if (reason === 'declined') setPlaceholder('Tell Agentic Coder what to do instead');
         saveNow();
         const q = queuedRef.current;
         if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => sendPrompt(q), 50); }
@@ -407,7 +442,7 @@ export function App({ opts, win, onRestart }) {
       const srv = new ModelServer(model);
       serverRef.current = srv;
       srv.on('crash', ({ code, signal }) => {
-        if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.bonsai-code/logs/server.log, then restart Bonsai Code.`, tone: 'error' }); return; }
+        if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
         push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
         restartRef.current = srv.restart().then(() => { push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { restartRef.current = null; });
       });
@@ -417,7 +452,7 @@ export function App({ opts, win, onRestart }) {
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
-          if (!st.idle) push({ type: 'note', text: `Sharing the model with another Bonsai Code window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
+          if (!st.idle) push({ type: 'note', text: `Sharing the model with another Agentic Coder window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
         }
       } catch (e) {
         if (alive) { setStarting(false); push({ type: 'note', text: `Could not start the model: ${e.message}`, tone: 'error' }); }
@@ -439,8 +474,15 @@ export function App({ opts, win, onRestart }) {
       setStarting(false);
       const q = queuedRef.current;
       if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
+      // First use here: what is already written is read once, in the background.
+      else setTimeout(() => { autoRef.current.seed(); }, 3000).unref?.();
     })();
     return () => { alive = false; serverRef.current?.stop({ keep: true }); weightsRef.current?.stop(); weightsRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // What the memory saved after the last window here had closed, said once.
+  useEffect(() => {
+    if (!agent.memory) return;
+    for (const line of sinceLastTime(cwd)) push({ type: 'note', text: line, tone: 'dim' });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // /weights: the viewer's little server, started once per window and closed with it.
   const weightsRef = useRef(null);
@@ -467,25 +509,29 @@ export function App({ opts, win, onRestart }) {
   const quit = useCallback(async () => {
     abortRef.current?.abort();
     saveNow();
-    await serverRef.current?.stop();
+    // What the memory has not saved yet is handed to a process of its own,
+    // which needs the model a little longer and stops it when it is done.
+    const handed = autoRef.current.leave({ stopAfter: Boolean(serverRef.current?.child) });
+    await agent.memory?.embedder?.stop({ keep: true }).catch(() => {});
+    await serverRef.current?.stop({ keep: handed });
     exit();
-  }, [exit, saveNow]);
+  }, [exit, saveNow, agent]);
 
-  // /update: Bonsai starts again on the new code (the launcher builds it) and
+  // /update: Agentic Coder starts again on the new code (the launcher builds it) and
   // picks this conversation back up; the model stays loaded in between. An
   // update only on GitHub is brought into the repo's main first, if git can
   // do that without touching anything uncommitted.
   const updateNow = useCallback(async () => {
     const w = updateRef.current;
-    if (!w?.repo) { push({ type: 'note', text: 'Updates are looked for when Bonsai runs from its repo (the bonsai command); BONSAI_NO_UPDATE=1 turns them off.', tone: 'dim' }); return; }
-    if (S.current.live.phase === 'working' || S.current.perm) { push({ type: 'note', text: 'Bonsai is busy. Let it finish (or press esc), then /update.', tone: 'warn' }); return; }
+    if (!w?.repo) { push({ type: 'note', text: 'Updates are looked for when Agentic Coder runs from its repo (the coding command); BONSAI_NO_UPDATE=1 turns them off.', tone: 'dim' }); return; }
+    if (S.current.live.phase === 'working' || S.current.perm) { push({ type: 'note', text: 'Agentic Coder is busy. Let it finish (or press esc), then /update.', tone: 'warn' }); return; }
     const u = await w.check();
-    if (!u) { push({ type: 'note', text: 'Bonsai is up to date: no new code on main since this window started.', tone: 'dim' }); return; }
+    if (!u) { push({ type: 'note', text: 'Agentic Coder is up to date: no new code on main since this window started.', tone: 'dim' }); return; }
     if (u.kind === 'pull') {
       const r = await bringIn(w.repo);
       if (!r.ok) { push({ type: 'note', text: `Could not bring the update in: ${r.why}. Pull it into the repo yourself, then /update.`, tone: 'warn' }); return; }
     }
-    if (!canRestart()) { push({ type: 'note', text: `The update is ${u.kind === 'pull' ? 'in the repo now' : 'on main'}. This window was not started by the bonsai command, so quit and start it again to use it.`, tone: 'warn' }); return; }
+    if (!canRestart()) { push({ type: 'note', text: `The update is ${u.kind === 'pull' ? 'in the repo now' : 'on main'}. This window was not started by the coding command, so quit and start it again to use it.`, tone: 'warn' }); return; }
     push({ type: 'note', text: '↻ Restarting on the update…', tone: 'dim' });
     abortRef.current?.abort();
     saveNow();
@@ -548,11 +594,11 @@ export function App({ opts, win, onRestart }) {
         // The whole Help page (commands, keys, modes, effort, where things
         // live) opens in the hub's Help tab; here, a box in the middle says so.
         const hub = openHub('help');
-        if (hub) setPopup({ title: 'Bonsai Code help', text: 'Opened a help page in your browser, with every command, key and setting.', url: hub.url });
+        if (hub) setPopup({ title: 'Agentic Coder help', text: 'Opened a help page in your browser, with every command, key and setting.', url: hub.url });
         break;
       }
       case 'clear':
-        if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
+        if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         agent.reset();
         sessionRef.current = { id: newSessionId(), title: null, items: [] };
         push({ type: 'divider', text: 'new conversation' });
@@ -561,7 +607,7 @@ export function App({ opts, win, onRestart }) {
         // The morning brief: the repos read, the words written by the model on
         // its side slot and checked against the facts, and the page (with every
         // earlier morning in its calendar) opened in the browser.
-        if (busy || S.current.live.phase === 'working') { flash('Wait for Bonsai to finish, or press esc first'); break; }
+        if (busy || S.current.live.phase === 'working') { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         const day = arg.toLowerCase() || 'auto';
         if (!/^(auto|today|yesterday|\d{4}-\d{2}-\d{2})$/.test(day)) { push({ type: 'note', text: 'Use /morning, or /morning today, yesterday or a date (2026-09-26).', tone: 'warn' }); break; }
         const ac = new AbortController();
@@ -585,7 +631,7 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'compact':
-        if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
+        if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         setLive({ phase: 'working', turnStart: Date.now(), verb: 'Compacting', tokens: 0 });
         try { await agent.compact(undefined, { instructions: arg || undefined }); } catch (e) { push({ type: 'note', text: e.message, tone: 'error' }); }
         setLive(IDLE);
@@ -599,6 +645,10 @@ export function App({ opts, win, onRestart }) {
         if (!arg.trim() && levels.length) { openChoice('effort'); break; }
         const a = arg.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
         const picked = levels.find((l) => l.id === a);
+        if (a && !picked && !/^(on|yes|true|1|no|false|0)$/i.test(a)) {
+          push({ type: 'note', text: `${model.name} has no ${a} effort: it has ${levels.map((l) => l.label).join(' and ')}. Effort stays ${thinkingLevel(model, agent.thinking, agent.effort).label.toLowerCase()}.`, tone: 'warn' });
+          break;
+        }
         const on = picked ? !!picked.effort : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
         const eff = on && picked?.effort ? picked.id : undefined;
         setThinking(on, eff);
@@ -613,16 +663,43 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'memory': {
-        // What "update memory" has saved for this folder, and where.
-        const file = memoryFile(cwd);
-        const where = file.startsWith(homedir()) ? `~${file.slice(homedir().length)}` : file;
-        const facts = readMemory(file);
-        if (!facts.length) { push({ type: 'note', text: `Nothing saved yet. Say "update memory" (or "remember that …") and Bonsai saves what matters to ${where}, read at every start.`, tone: 'dim' }); break; }
-        push({ type: 'panel', title: `Memory · ${where}`, pad: 0, rows: [...facts.map((f) => [`- ${f}`]), ['Say "update memory" to add to it; edit the file freely.']] });
+        // What Agentic Coder remembers: your own memory and this project's.
+        if (!agent.memory) { push({ type: 'note', text: 'The memory is off here ("memory": false in settings.json).', tone: 'dim' }); break; }
+        const dirs = memoryDirs(cwd);
+        const tilde = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+        if (/^open\b/i.test(arg.trim())) {
+          // The hub on its Memory tab: every fact, with its trust, to edit, pin, take out or bring back.
+          const hub = openHub('memory'); if (!hub) break;
+          push({ type: 'note', text: `Memory opened in the browser at ${hub.url}`, tone: 'dim' });
+          break;
+        }
+        if (/^undo\b/i.test(arg.trim())) {
+          const u = undoSave(dirs);
+          if (!u) { push({ type: 'note', text: 'Nothing to take back: no save in the log.', tone: 'dim' }); break; }
+          push({ type: 'panel', title: 'Memory · the last save taken back', pad: 14, rows: [...u.did.map((d) => [d.what, d.fact.text.replace(/\s+/g, ' ').slice(0, 110)]), ['/memory undo again takes back the save before it']] });
+          break;
+        }
+        const rows = [];
+        for (const [title, dir] of [['About you', dirs.you], ['This project', dirs.project]]) {
+          const facts = dir ? readFacts(dir).sort((x, y) => Number(y.always) - Number(x.always) || y.trust - x.trust || y.used - x.used) : [];
+          if (!facts.length) continue;
+          rows.push([`${title} · ${facts.length} fact${facts.length === 1 ? '' : 's'}`, tilde(dir)]);
+          for (const f of facts.slice(0, 8)) rows.push([`  ${f.always ? 'always' : f.kind}${f.pinned ? ' · pinned' : ''}`, `${f.text.replace(/\s+/g, ' ').slice(0, 96)}${f.text.length > 96 ? '…' : ''}${f.always ? '' : `  (trust ${f.trust}, used ${f.used})`}`]);
+          if (facts.length > 8) rows.push(['', `and ${facts.length - 8} more: /memory open shows them all in the browser`]);
+        }
+        // Claude's notes are not Agentic Coder's to change: only how many there are, and where.
+        if (agent.memory.claude) {
+          const c = notesCount(agent.memory.claude === true ? notesDir() : notesDir({ setting: agent.memory.claude }));
+          if (c.dir) rows.push([`Claude's notes · ${c.used}`, `${tilde(c.dir)}  (read only; ${c.leftOut.length} about sign-ins, servers or secrets are left out)`]);
+        }
+        if (!rows.length) { push({ type: 'note', text: 'Nothing saved yet. After a task Agentic Coder shows what it would remember and asks; "/update memory" or "remember that …" saves at once.', tone: 'dim' }); break; }
+        const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => l.what !== 'trust').sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];
+        rows.push([last ? `last change ${String(last.at).slice(0, 16).replace('T', ' ')}` : '', '/memory undo takes the last save back · /memory open shows it in the browser']);
+        push({ type: 'panel', title: `Memory · ${agent.memory.embedder ? 'facts are found by meaning' : 'facts are found by their words (coding setup adds the small model)'}`, pad: 22, rows });
         break;
       }
       case 'init':
-        if (busy) { flash('Wait for Bonsai to finish first'); break; }
+        if (busy) { flash('Wait for Agentic Coder to finish first'); break; }
         sendPrompt(INIT_PROMPT, '/init');
         break;
       case 'math': {
@@ -631,7 +708,7 @@ export function App({ opts, win, onRestart }) {
         const topics = mathTopics();
         if (!topics.length) { push({ type: 'note', text: 'No math notes found (~/Desktop/MATH is missing or has no .md files).', tone: 'warn' }); break; }
         if (!arg) { push({ type: 'panel', title: 'Math topics (~/Desktop/MATH)', pad: 28, rows: topics }); break; }
-        if (busy) { flash('Wait for Bonsai to finish, or press esc first'); break; }
+        if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         agent.mathForce = true;
         sendPrompt(arg, `/math ${arg}`);
         break;
@@ -660,7 +737,7 @@ export function App({ opts, win, onRestart }) {
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
           ['written so far', `${(stats.outTokens ?? 0).toLocaleString()} tokens in ${stats.requests ?? 0} replies`],
           ['memory', `${ramGb ? `${ramGb.toFixed(1)} GB` : '—'}${memoryNote.current ? ` · ${memoryNote.current}` : ''}`],
-          ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · bonsai stop frees it now`],
+          ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
           ['server', serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
         ] });
         break;
@@ -676,16 +753,16 @@ export function App({ opts, win, onRestart }) {
       }
       case 'weights':
       case 'docs': {
-        // The hub in the browser: the same server as `bonsai weights` / `bonsai docs`,
+        // The hub in the browser: the same server as `coding weights` / `coding docs`,
         // inside this window. /weights opens it on the model's weights, /docs on
         // the harness diagram with structure and every page one tab away.
         const path = modelPath(model);
-        if (cmd === 'weights' && !existsSync(path)) { push({ type: 'note', text: `The model file is not here yet (${path}). Run bonsai setup first.`, tone: 'warn' }); break; }
+        if (cmd === 'weights' && !existsSync(path)) { push({ type: 'note', text: `The model file is not here yet (${path}). Run coding setup first.`, tone: 'warn' }); break; }
         const hub = openHub(cmd === 'docs' ? 'harness' : 'weights'); if (!hub) break;
         const w = hub.server; const url = hub.url;
         if (cmd === 'docs') {
           const d = listDocs(w.docsDir);
-          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (bonsai-code DOCS at the top of the repo; set BONSAI_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
+          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (agentic-coder DOCS at the top of the repo; set AGENTIC_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
         } else push({ type: 'note', text: `Weights of ${w.name} (${(w.size / 1e9).toFixed(2)} GB) opened in the browser at ${url} · it stays up while this window is open`, tone: 'dim' });
         break;
       }
@@ -695,6 +772,8 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'update':
+        // /update memory [what]: save to memory now, like saying "update memory".
+        if (/^memory\b/i.test(arg.trim())) { const what = arg.trim().replace(/^memory\b[\s:]*/i, ''); sendPrompt(what ? `update memory: ${what}` : 'update memory'); break; }
         await updateNow();
         break;
       case 'exit':
@@ -713,7 +792,7 @@ export function App({ opts, win, onRestart }) {
     histIdx.current = null;
     if (!value.trim()) return;
     if (answerRef.current) {
-      // The answer to Bonsai's question, shown like a message of yours.
+      // The answer to Agentic Coder's question, shown like a message of yours.
       const resolve = answerRef.current;
       answerRef.current = null;
       push({ type: 'user', text: value });
@@ -785,11 +864,11 @@ export function App({ opts, win, onRestart }) {
         const o = p.options[i];
         const choice = o.choice;
         setPerm(null);
-        // Bonsai's question: a listed choice answers it; "type" takes the next line you enter.
-        if (choice === 'type') { answerRef.current = p.resolve; setPlaceholder('Type your answer to Bonsai, then enter'); return; }
+        // Agentic Coder's question: a listed choice answers it; "type" takes the next line you enter.
+        if (choice === 'type') { answerRef.current = p.resolve; setPlaceholder('Type your answer to Agentic Coder, then enter'); return; }
         if (choice === 'answer') { p.resolve({ choice, text: o.text }); return; }
         p.resolve({ choice });
-        if (choice === 'no') setPlaceholder('Tell Bonsai what to do instead');
+        if (choice === 'no') setPlaceholder('Tell Agentic Coder what to do instead');
       };
       const always = p.options.findIndex((o) => o.choice === 'always');
       const no = p.options.findIndex((o) => o.choice === 'no');
@@ -836,6 +915,7 @@ export function App({ opts, win, onRestart }) {
       else if (/^[1-9]$/.test(ch) && Number(ch) <= n) pick(Number(ch) - 1);
       else if (key.escape || (key.ctrl && ch === 'c')) {
         setPicker(null);
+        if (pk.id === 'memory-save') { applyChoice('memory-save', 'skip'); return; }
         const kept = pk.options.find((o) => o.id === pk.current);
         push({ type: 'note', text: `Kept ${pk.what} as ${kept ? kept.label.toLowerCase() : 'it was'}.`, tone: 'dim' });
       }
@@ -861,7 +941,7 @@ export function App({ opts, win, onRestart }) {
     }
     if (key.ctrl && ch === 'd' && !cur.input.value) { quit(); return; }
     if (key.escape) {
-      // An open menu or shortcut list closes first; the next esc stops Bonsai.
+      // An open menu or shortcut list closes first; the next esc stops Agentic Coder.
       if (menu) { setMenuClosedFor(cur.input.value); return; }
       if (showShortcuts) { setShowShortcuts(false); return; }
       if (selectedText(cur.input)) { setInput({ value: cur.input.value, cursor: cur.input.cursor }); return; } // drops the selection only
@@ -954,7 +1034,7 @@ export function App({ opts, win, onRestart }) {
   itemsRef.current = items;
   const app = {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
-    modelName: model.name, now, spinner: spinStyle(process.env.BONSAI_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
     // The weights badge, lower right: edited weights saved and waiting, in

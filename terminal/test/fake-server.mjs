@@ -1,9 +1,12 @@
 // A stand-in for llama-server that replays scripted replies over the same
 // streaming API, so the agent and the terminal app can be tested without the
 // real model. Each reply: { reasoning?, text?, tool?: { name, args } }.
+// route(request) may answer a request out of turn (the memory's save, which
+// comes whenever the app finds a pause): its reply is sent and the scripted
+// ones stay in line.
 import { createServer } from 'node:http';
 
-export function startFakeServer(replies, { delayMs = 2, chunk = 6 } = {}) {
+export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null } = {}) {
   const queue = [...replies];
   const requests = [];
   const server = createServer(async (req, res) => {
@@ -13,7 +16,7 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6 } = {}) {
     const json = body ? JSON.parse(body) : {};
     requests.push(json);
     if (json.max_tokens === 1 || !json.stream) { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: '' } }] })); return; }
-    const reply = queue.shift() ?? { text: 'Done.' };
+    const reply = route?.(json) ?? queue.shift() ?? { text: 'Done.' };
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const send = (delta, finish = null) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
     const pieces = (s) => s.match(new RegExp(`[\\s\\S]{1,${chunk}}`, 'g')) ?? [];

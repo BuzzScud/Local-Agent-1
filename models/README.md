@@ -1,14 +1,16 @@
 # Part 2 · The models
 
-The models Bonsai Code uses and tests, what runs them, and the bench that measures
+The models Agentic Coder uses and tests, what runs them, and the bench that measures
 the agent with each one.
 
 | | |
 |---|---|
 | `index.mjs` | The one file the terminal imports: the registry, the runtime and setup. This part in turn imports the terminal only through `../terminal/index.mjs`. |
-| `registry.mjs` | The list of models (one folder each), where their files live on this Mac (`~/.bonsai-code`), and how to ask a model to think. |
+| `registry.mjs` | The list of models (one folder each), where their files live on this Mac (`~/.agentic-coder`), and how to ask a model to think. |
 | `runtime/` | `server.mjs` starts, shares and stops llama-server; `memory.mjs` picks a context that fits the Mac; `warmup.mjs` saves and restores the read-in instructions; `setup.mjs` downloads the runtime and a model. |
-| `bonsai-2-27b/` | The model in use: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
+| `gemma-4-12b/` | The model in use: `model.mjs` (its settings), `results/` (raw runs, on this Mac only). |
+| `bge-m3/` | The small model that compares meanings, for the memory: it finds the saved facts that fit a request. `runtime/embed.mjs` runs it in the engine's embedding mode, beside the model in use. |
+| `bonsai-2-27b/` | The previous model, kept as a recipe: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
 | `evals/` | The test bench (below). |
 | `test/` | Unit tests of this part: the registry, memory math, server flags, warm-up, sharing a server. |
 
@@ -16,7 +18,8 @@ the agent with each one.
 
 | Model | Folder | Status |
 |---|---|---|
-| Bonsai 2 27B (Prism ML, ternary PQ2_0, 7.2 GB) | [`bonsai-2-27b/`](bonsai-2-27b/README.md) | In use, the default. Grade B+ as a coding agent on the M4. |
+| Gemma 4 12B it QAT (Google, 4-bit QAT, 6.7 GB) | [`gemma-4-12b/`](gemma-4-12b/model.mjs) | **In use, the default** since 28 Sep 2026. Live-checked on the M4: clean tool calls, reads 126–128 tok/s, writes 13.2. Not yet graded on the 28 tasks. |
+| Bonsai 2 27B (Prism ML, ternary PQ2_0, 7.2 GB) | [`bonsai-2-27b/`](bonsai-2-27b/README.md) | **Retired 28 Sep 2026**, file removed to free the disk; the folder is the recipe to bring it back (import it in `registry.mjs`, `coding setup`). Grade B+ as a coding agent on the M4. |
 
 Earlier, Ternary Bonsai 8B was used in round 1 and removed on 24 Sep 2026; its
 numbers live in the 27B's comparison pages.

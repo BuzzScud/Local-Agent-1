@@ -1,4 +1,4 @@
-// Every finished Bonsai Code page (report, preview, diagram, test page) is
+// Every finished Agentic Coder page (report, preview, diagram, test page) is
 // also saved into the folder "bonsai-code DOCS" at the top of this repo (on
 // this Mac only, not in git), the one place they are all kept; `bun run docs`
 // then mirrors that folder into this repo's docs/.
@@ -7,7 +7,9 @@ import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-export const DOCS_DIR = process.env.BONSAI_DOCS ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'bonsai-code DOCS');
+const docsRoot = dirname(fileURLToPath(import.meta.url));
+const named = ['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(docsRoot, '..', n));
+export const DOCS_DIR = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (named.find((p) => existsSync(p)) ?? named[0]);
 
 // Where a builder writes its page: into the DOCS folder (the pages' one
 // home), in one of its groups: diagrams/, reports/, tests/, design rounds/,

@@ -14,7 +14,7 @@ function inChild(body) {
     import { writeFileSync, existsSync, readdirSync, utimesSync, mkdirSync } from 'node:fs';
     import { join } from 'node:path';
     const { MODELS, DEFAULT_MODEL, SLOT_DIR, HOME } = await import(${src('models/registry.mjs')});
-    if (HOME !== process.env.BONSAI_HOME) { console.log(JSON.stringify({ error: 'wrong home' })); process.exit(1); }
+    if (HOME !== (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME)) { console.log(JSON.stringify({ error: 'wrong home' })); process.exit(1); }
     const { warmUp, pruneSaved } = await import(${src('models/runtime/warmup.mjs')});
     const { systemPrompt, SESSION_MARK } = await import(${src('terminal/index.mjs')});
     const model = MODELS[DEFAULT_MODEL];
@@ -120,7 +120,7 @@ test('a server without the template endpoint falls back to a plain first read', 
   expect(out.r.restored).toBe(false);
   expect(out.r.fallback).toBeTruthy();
   expect(out.phases).toEqual(['reading']);
-  expect(out.kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
+  expect(out.kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
   expect(out.slot).toBe(0);
 });
 

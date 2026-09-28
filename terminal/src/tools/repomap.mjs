@@ -1,6 +1,6 @@
 // A short map of the project for the model: each code file with its line
 // count and top-level names ("src/tools/fs.mjs (109): walk, listFiles, …").
-// Cached per project under ~/.bonsai-code/maps, keyed by each file's size and
+// Cached per project under ~/.agentic-coder/maps, keyed by each file's size and
 // time, so a big folder costs nothing after the first look. Used when
 // choosing which file a task is about, when deciding whether a request is
 // clear, and as the first thing the step-by-step loop sees in a project with

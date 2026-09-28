@@ -1,11 +1,11 @@
 // The two scripts the page check runs with node (src/flows/pagecheck.mjs):
-//   the probe   looks at a page for Bonsai (what can be clicked, what covers
+//   the probe   looks at a page for Agentic Coder (what can be clicked, what covers
 //               what, and why); it lives in the scratch copy only
 //   the check   the small script left in your project: exit 0 = pass,
 //               1 = the bug shows, 2 = the check could not run
 // Both open the page the same way and use the browser the project already
 // has (Playwright). They are kept as text, so the check reads the same in
-// your project whatever Bonsai was built with. No backticks inside them.
+// your project whatever Agentic Coder was built with. No backticks inside them.
 
 const IMPORTS = String.raw`import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';

@@ -1,10 +1,10 @@
-// `bonsai setup`: gets what Bonsai Code needs into ~/.bonsai-code — the model
+// `coding setup`: gets what Agentic Coder needs into ~/.agentic-coder — the model
 // server (Prism ML's llama.cpp built from source with our Metal patch, see
-// models/runtime/engine), the model and its guessing helper — and checks the
-// files' SHA-256. Safe to run again: finished parts are skipped.
+// models/runtime/engine), the model, its guessing helper and the memory's
+// matcher — and checks the files' SHA-256. Safe to run again: finished parts are skipped.
 import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { HOME, ENGINE, MODELS, DEFAULT_MODEL, MODELS_DIR, SERVER_BIN, modelPath, draftPath } from '../registry.mjs';
+import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, MODELS_DIR, SERVER_BIN, modelPath, draftPath } from '../registry.mjs';
 import { buildEngine } from './engine/build.mjs';
 
 export const RUNTIME = ENGINE;
@@ -43,7 +43,7 @@ async function fetchChecked({ name, url, file, bytes, sha }, say) {
   }
   say(`Checking ${name}…`);
   const sum = await sha256(file);
-  if (sum !== sha) throw new Error(`${name} is damaged (SHA-256 ${sum.slice(0, 12)}…); delete ${file} and run bonsai setup again`);
+  if (sum !== sha) throw new Error(`${name} is damaged (SHA-256 ${sum.slice(0, 12)}…); delete ${file} and run coding setup again`);
 }
 
 export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => process.stdout.write(sameLine ? `\r${s}   ` : `${s}\n`) } = {}) {
@@ -57,5 +57,8 @@ export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => pr
   const m = MODELS[modelId];
   await fetchChecked({ name: m.name, url: m.url, file: modelPath(m), bytes: m.bytes, sha: m.sha256 }, say);
   if (m.draft) await fetchChecked({ name: `${m.name}'s guessing helper`, url: m.draft.url, file: draftPath(m), bytes: m.draft.bytes, sha: m.draft.sha256 }, say);
-  say('✓ all checked. Run: bonsai');
+  // The memory's matcher. Without it the memory still works, by words.
+  const e = EMBEDDERS[DEFAULT_EMBEDDER];
+  if (e) await fetchChecked({ name: `${e.name}, the memory's matcher`, url: e.url, file: modelPath(e), bytes: e.bytes, sha: e.sha256 }, say);
+  say('✓ all checked. Run: coding');
 }

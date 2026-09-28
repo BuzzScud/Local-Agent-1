@@ -1,5 +1,5 @@
 // Everything /help shows, in one place: the terminal's /help panel, the Help
-// tab of the hub (help.html reads it as /help.json) and `bonsai --help` all
+// tab of the hub (help.html reads it as /help.json) and `coding --help` all
 // come from these lists, so they never disagree. Plain data, no screen code.
 import { COMMANDS } from './commands.mjs';
 
@@ -39,10 +39,10 @@ export const KEYS = [
     ['esc twice', 'clear the whole prompt'],
     ['ctrl+c', 'clear the whole prompt (on an empty prompt: press twice to quit)'],
   ] },
-  { group: 'While Bonsai works', rows: [
-    ['esc', 'stop Bonsai; then say what to do instead'],
+  { group: 'While Agentic Coder works', rows: [
+    ['esc', 'stop Agentic Coder; then say what to do instead'],
     ['ctrl+o', 'expand the last long output or summary'],
-    ['type and enter', 'queue your next message; it sends when Bonsai is free'],
+    ['type and enter', 'queue your next message; it sends when Agentic Coder is free'],
   ] },
   { group: 'Menus and questions', rows: [
     ['↑ ↓ · 1–9', 'choose · pick a numbered option at once'],
@@ -56,20 +56,22 @@ export const KEYS = [
   ] },
 ];
 
-// `bonsai …` from a terminal. lingerMins: how long the model stays loaded.
+// `coding …` from a terminal. lingerMins: how long the model stays loaded.
 export function cliRows(lingerMins = 30) {
   return {
     usage: [
-      ['bonsai', 'start in the current folder'],
-      ['bonsai "fix the tests"', 'start and send a first prompt'],
-      ['bonsai -p "question"', 'answer once and exit (changes are refused unless --yes)'],
-      ['bonsai -c', 'continue the last conversation in this folder'],
-      ['bonsai setup', 'download the model and runtime (if missing) and check them'],
-      ['bonsai stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
-      ['bonsai weights', "the hub in the browser, on the model's weights (ctrl+c here closes it)"],
-      ['bonsai docs', 'the hub on the harness and structure diagrams and every Bonsai page'],
-      ['bonsai tests', 'the hub on the test record: every test run and its result'],
-      ['bonsai morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],
+      ['coding', 'start in the current folder'],
+      ['coding "fix the tests"', 'start and send a first prompt'],
+      ['coding -p "question"', 'answer once and exit (changes are refused unless --yes)'],
+      ['coding -c', 'continue the last conversation in this folder'],
+      ['coding setup', 'download the model and runtime (if missing) and check them'],
+      ['coding stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
+      ['coding weights', "the hub in the browser, on the model's weights (ctrl+c here closes it)"],
+      ['coding docs', 'the hub on the harness and structure diagrams and every Agentic Coder page'],
+      ['coding tests', 'the hub on the test record: every test run and its result'],
+      ['coding memory', 'the hub on the memory: every fact, with its trust, to edit, pin, take out or bring back'],
+      ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
+      ['coding morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],
     ],
     options: [
       ['--effort low|medium|high', 'how much the model thinks before it acts (default: low = answers straight away)'],
@@ -85,29 +87,30 @@ export function cliRows(lingerMins = 30) {
   };
 }
 
-// The text `bonsai --help` prints.
+// The text `coding --help` prints.
 export function cliHelpText({ version, modelName, lingerMins }) {
   const { usage, options } = cliRows(lingerMins);
   const pad = (rows) => rows.map(([a, b]) => `  ${a.padEnd(26)}${b}`).join('\n');
-  return `bonsai ${version} — a coding agent in your terminal, running ${modelName} on this Mac\n\nUsage\n${pad(usage)}\n\nOptions\n${pad(options)}\n`;
+  return `coding ${version} — a coding agent in your terminal, running ${modelName} on this Mac\n\nUsage\n${pad(usage)}\n\nOptions\n${pad(options)}\n`;
 }
 
-// Where Bonsai keeps things. [where, what]
+// Where Agentic Coder keeps things. [where, what]
 export const PLACES = [
-  ['~/.bonsai-code/models', 'the model file and its guessing helper (bonsai setup puts them there)'],
-  ['~/.bonsai-code/settings.json', 'your choices that are kept: effort, the status bar, the model'],
-  ['~/.bonsai-code/trust.json', 'the folders you said yes to in the safety check'],
-  ['~/.bonsai-code/sessions', 'saved conversations, for bonsai -c and /resume'],
-  ['~/.bonsai-code/logs', 'the model server and update logs'],
-  ['AGENTS.md', "a project's notes for Bonsai, read at the start (/init writes one)"],
-  ['.bonsai/settings.json', 'this folder only: mode and effort'],
-  ['.bonsai/notes.md', 'Bonsai’s memory for this project: “update memory” writes it, read at every start, kept out of git'],
-  ['~/.bonsai/notes.md', 'Bonsai’s memory when started in your home folder: read everywhere under it'],
+  ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
+  ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the model'],
+  ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
+  ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
+  ['~/.agentic-coder/logs', 'the model server and update logs'],
+  ['AGENTS.md', "a project's notes for Agentic Coder, read at the start (/init writes one)"],
+  ['.agentic/settings.json', 'this folder only: mode, effort, and "memory": false to turn the memory off here (.bonsai/ still read)'],
+  ['.agentic/memory', 'what Agentic Coder remembers about this project: one small file per fact in facts/, kept out of git; edit or delete them freely'],
+  ['~/.agentic/memory', 'what Agentic Coder remembers about you: how you like to work; it follows you into every project'],
+  ['.agentic/notes.md', 'the older notes file (.bonsai/notes.md too): its lines are carried over into the memory the first time'],
 ];
 
-// How Bonsai keeps you safe, in plain words.
+// How Agentic Coder keeps you safe, in plain words.
 export const SAFETY = [
-  'The first time you start Bonsai in a folder it asks whether you trust it. Nothing there is read before you say yes.',
+  'The first time you start Agentic Coder in a folder it asks whether you trust it. Nothing there is read before you say yes.',
   'It asks before every edit and before commands that change things, unless you switch the mode.',
   'Some commands are always refused: deleting folders wholesale, sudo, git push, resetting git, stopping other programs or services.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, or reach services already running.',
@@ -116,11 +119,13 @@ export const SAFETY = [
 
 export const TIPS = [
   'Say what you want in one or two sentences, and name the file when you know it: “add a --json flag to export.mjs”.',
-  'Bonsai asks when something is unclear, often with answers to pick. Answer with the number, or type your own answer.',
+  'Agentic Coder asks when something is unclear, often with answers to pick. Answer with the number, or type your own answer.',
   'Under your request a dim line says where it went: “Sorted as: change · shortcut”. If that is not what you meant, press esc and say it differently.',
   'Low effort is fastest and fine for most work. Try Medium or High for a tricky bug.',
   'Use Plan mode to see a plan before anything changes, then switch mode and say go.',
-  'Say “update memory” (or “remember that …”) and Bonsai saves what matters, to the right file, without asking where. /memory shows what it keeps.',
+  'Agentic Coder learns as it works: after a task it shows what it would remember and asks (enter saves, esc skips), and a fact comes back when a request fits it. “/update memory” or “remember that …” saves at once.',
+  '/memory shows what it keeps, /memory undo takes the last save back, /memory open shows every fact in the browser.',
+  'A fact earns trust when the task passed its check after it was used, and loses it when the task failed or you corrected Agentic Coder. One that keeps failing is taken out of use.',
   '/compact frees memory in a long conversation; /clear starts fresh.',
   'Your math notes in ~/Desktop/MATH are used only when you ask with /math.',
 ];

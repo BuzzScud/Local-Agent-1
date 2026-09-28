@@ -1,12 +1,12 @@
 // Check first, for a bug the test suite cannot see on a page (a layout bug:
-// something covered, behind, underneath). Before any fix, Bonsai opens the
+// something covered, behind, underneath). Before any fix, Agentic Coder opens the
 // page in the browser the project already has (Playwright), does what the
 // request describes, finds what covers what and why, and writes a small
 // check that fails today. The fix is then tried against that check, and the
 // check stays in the project so the bug cannot come back (bug-fixing.md,
 // steps 1, 7 and 9).
 //   the page          named in the request, or the model's pick of the project's pages
-//   how to open it    a "page" entry in .bonsai/settings.json, the way the
+//   how to open it    a "page" entry in .agentic/settings.json (or the old .bonsai/), the way the
 //                     project's own page checks do it (their comments), a
 //                     script in package.json, or the folder as plain files
 //   what to do        the model picks steps from what is on the page
@@ -23,7 +23,7 @@ const PAGE = /\.html?$/;
 const STYLED = /\.(html?|css|scss|less|vue|svelte|m?[jt]sx?|cjs)$/;
 const SIZE = { width: 1440, height: 900 };
 const ENGINES = ['webkit', 'chromium'];
-const FOLDER = '.bonsai-check'; // in the scratch copy only
+const FOLDER = '.agentic-check'; // in the scratch copy only
 
 // A kind whose main tool is a browser check (terminal/rules/bug-fixing.md).
 export const canPageCheck = (kind) => /browser/i.test(kind?.tool ?? '');
@@ -109,8 +109,9 @@ export function serveFromPackage(cwd, pageRel) {
 export function waysToOpen(cwd, pageRel, files) {
   const ways = [];
   try {
-    const s = JSON.parse(readFileSync(join(cwd, '.bonsai', 'settings.json'), 'utf8')).page;
-    if (s?.serve) ways.push({ serve: { cmd: String(s.serve), dir: String(s.in ?? '.'), ...(typeof s.port === 'number' ? { port: s.port } : { portEnv: String(s.port ?? 'PORT') }) }, url: String(s.url ?? '/'), how: `${s.serve}, from .bonsai/settings.json` });
+    const where = ['.agentic', '.bonsai'].find((d) => existsSync(join(cwd, d, 'settings.json'))) ?? '.agentic';
+    const s = JSON.parse(readFileSync(join(cwd, where, 'settings.json'), 'utf8')).page;
+    if (s?.serve) ways.push({ serve: { cmd: String(s.serve), dir: String(s.in ?? '.'), ...(typeof s.port === 'number' ? { port: s.port } : { portEnv: String(s.port ?? 'PORT') }) }, url: String(s.url ?? '/'), how: `${s.serve}, from ${where}/settings.json` });
   } catch {}
   const fromChecks = serveFromChecks(cwd, pageChecks(cwd, pageRel, files));
   if (fromChecks) ways.push(fromChecks);
@@ -343,7 +344,7 @@ export async function pageCheckFirst(ctx, task, { scratch, files, plan }) {
   const write = () => checkScript({ spec, up: relative(dirname(rel), '.') || '.', head: [
     `After ${stepsText(steps)}: ${pair.covered} must be on top of ${pair.by}.`,
     `  node ${rel}        exit 0 = pass · 1 = the bug shows · 2 = the check could not run`,
-    `Made by Bonsai Code on ${new Date().toISOString().slice(0, 10)} from the request:`,
+    `Made by Agentic Coder on ${new Date().toISOString().slice(0, 10)} from the request:`,
     ...task.split('\n')[0].slice(0, 300).match(/.{1,96}(?:\s|$)/g).map((l) => `  ${l.trim()}`),
     `It opens ${pageRel} itself (${open.how}) in a headless browser, at ${SIZE.width}x${SIZE.height}, and reaches nothing outside this Mac.`,
   ] });
@@ -360,7 +361,7 @@ export async function pageCheckFirst(ctx, task, { scratch, files, plan }) {
   ctx.tool('Bash', cmd, { kind: 'bash', code: run.code, lines: run.out.trimEnd().split('\n').slice(-12), ms: run.ms }, run.code !== 0);
   if (run.code !== 1) {
     scratch.restore(rel);
-    return { ok: false, why: run.code === 0 ? 'the check Bonsai made passes today, so it does not show the bug' : `the check Bonsai made could not run (${/^ERROR (.+)$/m.exec(run.out)?.[1] ?? 'no result'})` };
+    return { ok: false, why: run.code === 0 ? 'the check Agentic Coder made passes today, so it does not show the bug' : `the check Agentic Coder made could not run (${/^ERROR (.+)$/m.exec(run.out)?.[1] ?? 'no result'})` };
   }
   const spots = findSpots(cwd, files, pageRel, pair);
   const report = [

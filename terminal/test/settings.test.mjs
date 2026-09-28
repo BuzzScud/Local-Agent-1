@@ -26,7 +26,7 @@ test('a trusted folder sets mode and effort; junk keys (layout is gone) and bad 
   expect(s.effort).toBe('high');
   expect(s.thinking).toBe(true);
   expect(s.layout).toBeUndefined(); // one layout now, like Claude Code: the key is ignored
-  expect(s.model).toBe('27b'); // a folder cannot switch the model
+  expect(s.model).toBe('gemma'); // a folder cannot switch the model
   expect(s.rm).toBeUndefined();
   const bad = project(JSON.stringify({ mode: 'anything-goes' }));
   saveTrust(bad);

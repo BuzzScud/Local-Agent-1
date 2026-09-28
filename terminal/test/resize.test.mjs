@@ -56,12 +56,12 @@ test('below 80×24 a note replaces the screen and keys wait; it all comes back',
     expect(fake.requests.length).toBe(0);
     await settle(t, 100, 30);
     await clean(t, 'back to 100×30');
-    expect(await t.screen()).toContain('Welcome to Bonsai Code');
+    expect(await t.screen()).toContain('Welcome to Agentic Coder');
     expect(await t.screen()).not.toContain('hello');
   } finally { await t.close(); await fake.close(); }
 }, T);
 
-test('esc closes the "/" menu first and keeps Bonsai working; the next esc stops it', async () => {
+test('esc closes the "/" menu first and keeps Agentic Coder working; the next esc stops it', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ reasoning: 'Thinking it over at length. '.repeat(400) }], { delayMs: 10 });
   const t = openTerm({ cwd, env, cols: 120, rows: 36, args: ['--url', fake.url, '--no-flows'] });

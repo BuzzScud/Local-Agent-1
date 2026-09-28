@@ -35,26 +35,27 @@ test('/effort alone opens a menu like Claude Code: arrows or a number pick, esc 
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: '/effort' }, { key: 'enter' },
-    { wait: 'How much Bonsai thinks before it acts' }, { sleep: 200 }, { snapshot: 'menu' },
-    { key: 'down' }, { sleep: 100 }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is medium' },
-    { type: '/effort' }, { key: 'enter' }, { wait: 'How much Bonsai thinks before it acts' }, { sleep: 200 }, { snapshot: 'again' },
-    { key: 'esc' }, { wait: 'Kept effort as medium' }, { sleep: 200 }, { snapshot: 'back' },
-    { type: '/eff' }, { key: 'enter' }, { wait: 'How much Bonsai thinks before it acts' }, { sleep: 200 }, { type: '3' }, { wait: 'Effort is high' },
+    { wait: '? for shortcuts' }, { type: '/effort' }, { key: 'enter' },
+    { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { snapshot: 'menu' },
+    { key: 'down' }, { sleep: 100 }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is high' },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { snapshot: 'again' },
+    { key: 'esc' }, { wait: 'Kept effort as high' }, { sleep: 200 }, { snapshot: 'back' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { type: '1' }, { wait: 'Effort is low' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { type: '2' }, { sleep: 300 },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
     ...quit,
   ] });
   await fake.close();
   expect(r.snapshots.menu).toMatch(/❯ 1\. Low\s+answers straight away \(fastest\)\s+✔ in use/);
-  expect(r.snapshots.menu).toMatch(/ 2\. Medium\s+thinks briefly first/);
-  expect(r.snapshots.menu).toMatch(/ 3\. High\s+thinks carefully first/);
+  expect(r.snapshots.menu).toMatch(/ 2\. High\s+thinks first/);
+  expect(r.snapshots.menu).not.toContain('Medium'); // Gemma has no effort dial
   expect(r.snapshots.menu).toContain('↑↓ to choose · enter to select · esc to go back');
-  expect(r.snapshots.moved).toMatch(/❯ 2\. Medium/);
-  expect(r.snapshots.again).toMatch(/❯ 2\. Medium\s+thinks briefly first[^\n]*✔ in use/); // opens on the level in use
-  expect(r.snapshots.back).not.toContain('How much Bonsai thinks before it acts'); // esc closed it
-  expect(r.text).toContain('Effort is high: it thinks carefully first');
+  expect(r.snapshots.moved).toMatch(/❯ 2\. High/);
+  expect(r.snapshots.again).toMatch(/❯ 2\. High\s+thinks first[^\n]*✔ in use/); // opens on the level in use
+  expect(r.snapshots.back).not.toContain('How much Agentic Coder thinks before it acts'); // esc closed it
+  expect(r.text).toContain('Effort is high: it thinks first');
   const sent = fake.requests.find((q) => q.stream && q.tools);
-  expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' }); // High reached the model
+  expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' }); // High reached the model
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
   expect([saved.thinking, saved.effort]).toEqual([true, 'high']); // and is kept for next time
 }, T);
@@ -63,10 +64,10 @@ test('/mode and /meters alone open the same kind of menu: the one in use marked,
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: '/mode' }, { key: 'enter' },
-    { wait: 'How Bonsai asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
+    { wait: '? for shortcuts' }, { type: '/mode' }, { key: 'enter' }, // the welcome box is drawn before the app takes keys
+    { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
     { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is auto-edit' }, { wait: 'accept edits on' },
-    { type: '/mo' }, { key: 'enter' }, { wait: 'How Bonsai asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as auto-edit' },
+    { type: '/mo' }, { key: 'enter' }, { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as auto-edit' },
     { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { sleep: 200 }, { snapshot: 'meters' },
     { type: '1' }, { wait: 'Status bar on' },
     { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { key: 'esc' }, { wait: 'Kept the status bar as on' },
@@ -89,38 +90,39 @@ test('/model: the model list and the effort in one picker; the choice is used an
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: '/model' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/model' }, { key: 'enter' },
     { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'picker' },
-    { key: 'right' }, { wait: 'Medium: thinks briefly first' },
-    { key: 'right' }, { wait: 'High: thinks carefully first' }, { sleep: 200 }, { key: 'enter' },
-    { wait: 'Bonsai 2 27B · effort high.' }, { sleep: 300 }, { snapshot: 'after' },
+    { key: 'right' }, { wait: 'High: thinks first' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'Gemma 4 12B QAT · effort high.' }, { sleep: 300 }, { snapshot: 'after' },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
     // the old names still work: /think, and "off" for low
-    { type: '/think medium' }, { key: 'enter' }, { wait: 'Effort is medium' },
+    // a level this model does not have is refused, and nothing changes
+    { type: '/think medium' }, { key: 'enter' }, { wait: 'has no medium effort' },
     { type: '/effort off' }, { key: 'enter' }, { wait: 'Effort is low' },
     ...quit,
   ] });
   await fake.close();
   const picker = r.snapshots.picker;
-  expect(picker).toMatch(/❯ Bonsai 2 27B\s+7\.2 GB · on this Mac\s+✔ in use/);
-  expect(picker).toMatch(/Effort\s+◀\s+Low\s+·\s+Medium\s+·\s+High\s+▶/);
+  expect(picker).toMatch(/❯ Gemma 4 12B QAT\s+6\.7 GB · on this Mac\s+✔ in use/);
+  expect(picker).toMatch(/Effort\s+◀\s+Low\s+·\s+High\s+▶/);
   expect(picker).not.toMatch(/Thinking\s+◀/);
   expect(picker).toContain('Low: answers straight away (fastest)');
   expect(picker).toContain('↑↓ model · ←→ effort · enter to save · esc to cancel');
-  expect(r.snapshots.after).toMatch(/Bonsai 2 27B · effort high\./); // the note; no status bar by default
+  expect(r.snapshots.after).toMatch(/Gemma 4 12B QAT · effort high\./); // the note; no status bar by default
   const sent = fake.requests.find((q) => q.stream && q.tools);
-  expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
+  expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
+  expect(r.text).toContain('Gemma 4 12B QAT has no medium effort: it has Low and High. Effort stays high.');
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
   expect(saved.thinking).toBe(false); // /effort off (the old name for low) came last
-  expect(saved.effort).toBe('medium'); // …and /effort on would bring back Medium
+  expect(saved.effort).toBe('high'); // …and /effort on would bring back High
   // --effort on the command line sets the level for this run
   const fake2 = await startFakeServer([{ text: 'Hello.' }]);
   const r2 = await runInPty({ cwd, env, args: ['--url', fake2.url, '--no-flows', '--effort', 'high'], steps: [
-    { wait: 'Welcome' }, { type: 'hi' }, { key: 'enter' }, { wait: 'Hello.' }, ...quit,
+    { wait: '? for shortcuts' }, { type: 'hi' }, { key: 'enter' }, { wait: 'Hello.' }, ...quit,
   ] });
   await fake2.close();
   expect(r2.text).not.toContain('tok/s'); // the status bar is off unless /meters on
-  expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'xhigh' });
+  expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
 }, T);
 
 test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab fills in', async () => {
@@ -146,7 +148,7 @@ test('shift + arrows select text in the prompt: copied at once, delete removes i
   const fake = await startFakeServer([]);
   const SL = '\x1b[1;2D', SU = '\x1b[1;2A'; // what Terminal.app sends for shift+← and shift+↑
   const r = await runInPty({ cwd, env: { ...env, BONSAI_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: 'hello world' }, { sleep: 150 },
+    { wait: '? for shortcuts' }, { type: 'hello world' }, { sleep: 150 },
     ...Array.from({ length: 5 }, () => [{ key: SL }, { sleep: 40 }]).flat(),
     { wait: 'copied 5 chars to clipboard' }, { snapshot: 'selected' },
     { key: 'backspace' }, { sleep: 200 }, { snapshot: 'deleted' },
@@ -168,13 +170,13 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Bonsai Code' }, { sleep: 300 }, { snapshot: 'off' },
+    { wait: 'Welcome to Agentic Coder' }, { sleep: 300 }, { snapshot: 'off' },
     { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' }, { sleep: 300 }, { snapshot: 'on' },
     { type: '/meters off' }, { key: 'enter' }, { wait: 'Status bar off' }, { sleep: 300 }, { snapshot: 'offAgain' },
     { type: 'exit' }, { key: 'enter' }, { sleep: 300 },
   ] });
   await fake.close();
   expect(r.snapshots.off).not.toMatch(/effort (low|medium|high)/);
-  expect(r.snapshots.on).toMatch(/Bonsai 2 27B\s+idle\s+ctx .* of 32k\s+effort/);
+  expect(r.snapshots.on).toMatch(/Gemma 4 12B QAT\s+idle\s+ctx .* of 32k\s+effort/);
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);

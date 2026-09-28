@@ -23,7 +23,7 @@ const THANKS = String.raw`(?:thanks?(?:\s+you)?(?:\s+(?:so much|a lot|very much|
 const PRAISE = String.raw`(?:(?:it'?s|its|that'?s|thats|this is|looks?|all)\s+)?(?:perfect|great|good|nice|awesome|amazing|excellent|cool|fine|beautiful|wonderful|love it|i love it|well done|good job|great job|nice work|great work)`;
 const NEED_HELP = String.raw`i(?:'?m|'?ma|ma)?\s*(?:a\s+)?(?:gonna\s+|going to\s+)?(?:need|want|would like|could use)\s+(?:you\s+to\s+(?:help|assist)(?:\s+me)?(?:\s+out)?|(?:some\s+|a little\s+|your\s+)?help)(?:\s+with\s+(?:something|a (?:quick )?(?:thing|question|task)|some(?:thing| stuff)))?`;
 const HI = String.raw`(?:hi|hello|hey|yo|hiya|howdy|good (?:morning|afternoon|evening))`;
-const MORE_TALK = new RegExp(String.raw`^\W*(?:(?:${PRAISE})[\s,!.]*(?:${THANKS})?|(?:ok(?:ay)?[\s,!.]*)?${THANKS}(?:[\s,]+bonsai)?|(?:${HI}[\s!.,]*(?:bonsai|there)?[\s!.,]*)?${NEED_HELP})[\s!.?]*$`, 'i');
+const MORE_TALK = new RegExp(String.raw`^\W*(?:(?:${PRAISE})[\s,!.]*(?:${THANKS})?|(?:ok(?:ay)?[\s,!.]*)?${THANKS}(?:[\s,]+(?:agentic coder|coder|coding|bonsai))?|(?:${HI}[\s!.,]*(?:agentic coder|coder|coding|bonsai|there)?[\s!.,]*)?${NEED_HELP})[\s!.?]*$`, 'i');
 export const isMoreTalk = (text) => MORE_TALK.test(String(text).trim());
 
 // A short line that continues the last turn: the thing to act on is a bare

@@ -1,5 +1,5 @@
 // The edited copy of a model: ONE slot, next to the original in
-// ~/.bonsai-code/models, described by edited.json there. Each save rebuilds
+// ~/.agentic-coder/models, described by edited.json there. Each save rebuilds
 // the copy from a fresh clone of the original plus the full edit list, so
 // the manifest always says exactly what is in the file. The original and
 // `bonsai setup`'s fingerprint check are never involved.

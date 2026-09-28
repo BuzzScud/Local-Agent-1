@@ -19,9 +19,9 @@ test('the pages, the model facts and exact byte ranges come back; bad ranges are
   const s = startWeightsServer({ path, docsDir: null });
   try {
     expect(s.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
-    const hub = await (await fetch(s.url)).text(); for (const t of ['<title>Bonsai Hub</title>', 'data-tab="harness"', 'data-tab="structure"', 'data-tab="tests"', 'data-tab="docs"', "fetch('/docs.json')"]) expect(hub).toContain(t);
+    const hub = await (await fetch(s.url)).text(); for (const t of ['<title>Agentic Coder Hub</title>', 'data-tab="harness"', 'data-tab="structure"', 'data-tab="tests"', 'data-tab="docs"', "fetch('/docs.json')"]) expect(hub).toContain(t);
     const page = await fetch(s.url + 'weights'); expect(page.headers.get('content-type')).toContain('text/html'); const html = await page.text();
-    for (const t of ['<title>Bonsai Weights</title>', '<meta charset="utf-8">', "fetch('/model.json')", 'id="core"']) expect(html).toContain(t);
+    for (const t of ['<title>Agentic Coder Weights</title>', '<meta charset="utf-8">', "fetch('/model.json')", 'id="core"']) expect(html).toContain(t);
     expect(await (await fetch(s.url + 'model.json')).json()).toEqual({ name: 'stand-in.gguf', size: 1000 });
     const r = await fetch(s.url + 'model', { headers: { Range: 'bytes=250-259' } });
     expect(r.status).toBe(206); expect(r.headers.get('content-range')).toBe('bytes 250-259/1000');
@@ -143,12 +143,12 @@ test('edits: save builds the copy + manifest and tells the app; a bad edit chang
 
 test('the Tests tab: the page is built in, and /tests.json is the test record read live, newest first', async () => {
   const { dir, path } = standIn();
-  const was = process.env.BONSAI_TEST_RECORD;
+  const was = (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD);
   process.env.BONSAI_TEST_RECORD = join(dir, 'tests', 'record.jsonl');
   const s = startWeightsServer({ path, docsDir: null, port: 0 });
   try {
     const page = await fetch(s.url + 'tests'); expect(page.headers.get('content-type')).toContain('text/html');
-    const html = await page.text(); for (const t of ['<title>Bonsai test record</title>', '<meta charset="utf-8">', "fetch('/tests.json'", '<!--DATA-->']) expect(html).toContain(t);
+    const html = await page.text(); for (const t of ['<title>Agentic Coder test record</title>', '<meta charset="utf-8">', "fetch('/tests.json'", '<!--DATA-->']) expect(html).toContain(t);
     expect((await (await fetch(s.url + 'tests.json')).json()).rows).toEqual([]); // nothing recorded yet
     const { recordTest } = await import('../../models/index.mjs');
     recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-25T21:09:27.000Z', code: 'abc1234', passed: 28, total: 28, secs: 1974 }, { snapshot: false, quiet: true });

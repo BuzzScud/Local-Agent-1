@@ -11,8 +11,8 @@ import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 // Read when used, not at import: tests point these at their own folders.
-export const mathDir = () => process.env.BONSAI_MATH ?? join(homedir(), 'Desktop', 'MATH');
-const indexFile = () => join(process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code'), 'expertise', 'math-index.json');
+export const mathDir = () => (process.env.AGENTIC_MATH ?? process.env.BONSAI_MATH) ?? join(homedir(), 'Desktop', 'MATH');
+const indexFile = () => join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder'), 'expertise', 'math-index.json');
 
 // Near-copies of the thesis kept in the folder as backups: not indexed.
 const SKIP_FILE = /backup|_complete\.md$/i;

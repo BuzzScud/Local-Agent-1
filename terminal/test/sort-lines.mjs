@@ -1,5 +1,5 @@
 // The lines of the sort test (sort.test.mjs): every request with the path step 2
-// must give it. 81 are real — the 25 lines typed into Bonsai between 25 and 27
+// must give it. 81 are real — the 25 lines typed into Agentic Coder between 25 and 27
 // Sep 2026, the 28 practice tasks and the 28 real requests of the test bench —
 // and 20 are traps written to catch side effects of a rule.
 //   prior: the line was typed after an earlier turn of the same conversation

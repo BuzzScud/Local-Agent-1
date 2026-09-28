@@ -10,45 +10,45 @@ import { T, setup, quit } from './app-setup.mjs';
 test('/weights starts the viewer inside the window: the note names the page, and it serves the model while the app runs', async () => {
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'models'), { recursive: true });
-  writeFileSync(join(base, 'home', 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in'); // 8 bytes
+  writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in'); // 8 bytes
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Bonsai Code' }, { type: '/wei' }, { sleep: 250 }, { snapshot: 'menu' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/wei' }, { sleep: 250 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
     ...quit,
   ] });
   await fake.close();
   expect(r.snapshots.menu).toContain('/weights');
-  expect(r.text).toContain('Weights of Ternary-Bonsai-2-27B-PQ2_0.gguf (0.00 GB) opened in the browser at http://127.0.0.1:');
-  expect(served.facts).toEqual({ name: 'Ternary-Bonsai-2-27B-PQ2_0.gguf', size: 8 });
-  expect(served.page).toContain('<title>Bonsai Weights</title>');
-  expect(served.hub).toContain('<title>Bonsai Hub</title>');
+  expect(r.text).toContain('Weights of gemma-4-12B-it-qat-UD-Q4_K_XL.gguf (0.00 GB) opened in the browser at http://127.0.0.1:');
+  expect(served.facts).toEqual({ name: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', size: 8 });
+  expect(served.page).toContain('<title>Agentic Coder Weights</title>');
+  expect(served.hub).toContain('<title>Agentic Coder Hub</title>');
   expect(served.bytes).toBe('stand');
 }, T);
 
 test('/docs opens the hub on the harness page and says how many pages the DOCS folder holds', async () => {
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'models'), { recursive: true });
-  writeFileSync(join(base, 'home', 'models', 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
+  writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
   const docs = join(base, 'bonsai-code DOCS'); mkdirSync(docs);
-  writeFileSync(join(docs, 'bonsai-harness-flow-v2.html'), '<!doctype html><title>Bonsai harness v2</title><p>flow');
-  writeFileSync(join(docs, 'bonsai-code-structure-v4.html'), '<!doctype html><title>Bonsai Code structure v4</title><p>tree');
+  writeFileSync(join(docs, 'bonsai-harness-flow-v2.html'), '<!doctype html><title>Agentic Coder harness v2</title><p>flow');
+  writeFileSync(join(docs, 'bonsai-code-structure-v4.html'), '<!doctype html><title>Agentic Coder structure v4</title><p>tree');
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1', BONSAI_DOCS: docs }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Bonsai Code' }, { type: '/docs' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/docs' }, { key: 'enter' },
     { wait: 'Docs opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { list: await (await fetch(url + 'docs.json')).json(), page: await (await fetch(url + 'docs/bonsai-harness-flow-v2.html')).text(), hub: await (await fetch(url + '?tab=harness')).text() }; } },
     ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('?tab=harness · 2 pages from');
-  expect(r.text).toContain('harness: Bonsai harness v2 · structure: Bonsai Code structure v4');
+  expect(r.text.replace(/\s+/g, ' ')).toContain('harness: Agentic Coder harness v2 · structure: Agentic Coder structure v4'); // the longer name wraps the note
   expect(served.list.pinned.harness.file).toBe('bonsai-harness-flow-v2.html');
   expect(served.page).toContain('flow');
-  expect(served.hub).toContain('<title>Bonsai Hub</title>');
+  expect(served.hub).toContain('<title>Agentic Coder Hub</title>');
 }, T);
 
 test('/tests opens the hub on the test record and says how many runs it holds and the latest', async () => {
@@ -61,7 +61,7 @@ test('/tests opens the hub on the test record and says how many runs it holds an
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Bonsai Code' }, { type: '/tests' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/tests' }, { key: 'enter' },
     { wait: 'Tests opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'tests.json')).json(), page: await (await fetch(url + 'tests')).text() }; } },
     ...quit,
@@ -69,7 +69,7 @@ test('/tests opens the hub on the test record and says how many runs it holds an
   await fake.close();
   expect(r.text).toContain('?tab=tests · 2 runs recorded, the latest: The chart bug (0 of 1)');
   expect(served.data.rows.map((x) => x.id)).toEqual(['b', 'a']);
-  expect(served.page).toContain('<title>Bonsai test record</title>');
+  expect(served.page).toContain('<title>Agentic Coder test record</title>');
 }, T);
 
 test('/help: a box in the middle says the Help page opened in the browser; the page has every command, key and setting', async () => {
@@ -77,7 +77,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome' }, { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { snapshot: 'box' },
+    { wait: '? for shortcuts' }, { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { snapshot: 'box' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'help.json')).json(), page: await (await fetch(url + 'help')).text(), hub: await (await fetch(url + '?tab=help')).text() }; } },
     { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
     // any other key closes it too, and still reaches the prompt
@@ -88,7 +88,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   ] });
   await fake.close();
   const box = r.snapshots.box.split('\n');
-  const title = box.findIndex((l) => l.includes('Bonsai Code help'));
+  const title = box.findIndex((l) => l.includes('Agentic Coder help'));
   expect(title).toBeGreaterThan(0);
   expect(r.snapshots.box).toContain('Opened a help page in your browser');
   expect(r.snapshots.box).toMatch(/http:\/\/127\.0\.0\.1:\d+\/\?tab=help/);
@@ -111,8 +111,8 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'meters']);
   expect(served.data.keys.flatMap((g) => g.rows.map(([k]) => k))).toContain('shift + ← →');
   expect(served.data.modes.map((m) => m.id)).toEqual(['ask', 'edits', 'plan']);
-  expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'medium', 'high']);
-  expect(served.page).toContain('<title>Bonsai Help</title>');
+  expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'high']); // Gemma: no Medium
+  expect(served.page).toContain('<title>Agentic Coder Help</title>');
   expect(served.hub).toContain('data-tab="help"');
 }, T);
 
@@ -120,12 +120,12 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   const { cwd, env, base } = setup();
   // A saved edited copy: its manifest and both stand-in files.
   const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
-  writeFileSync(join(models, 'Ternary-Bonsai-2-27B-PQ2_0.gguf'), 'stand-in');
-  writeFileSync(join(models, 'Ternary-Bonsai-2-27B-PQ2_0-edited.gguf'), 'stand-in-edited');
-  writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: '27b', file: 'Ternary-Bonsai-2-27B-PQ2_0-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
+  writeFileSync(join(models, 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(models, 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf'), 'stand-in-edited');
+  writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: 'gemma', file: 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Bonsai Code' }, { sleep: 400 }, { snapshot: 'badge' },
+    { wait: 'Welcome to Agentic Coder' }, { sleep: 400 }, { snapshot: 'badge' },
     { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
     { key: 'down' }, { sleep: 150 }, { key: 'enter' },
     { wait: 'Could not switch' }, { sleep: 300 }, { snapshot: 'after' },
@@ -133,7 +133,7 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   ] });
   await fake.close();
   expect(r.snapshots.badge).toContain('✱ edited weights ready · /model to switch');
-  expect(r.snapshots.picker).toContain('27B · edited');
+  expect(r.snapshots.picker).toContain('Gemma 4 12B QAT · edited');
   expect(r.snapshots.picker).toContain('1 edit · saved');
   expect(r.snapshots.picker).toContain('✔ in use'); // still on the original here
   // No llama-server in this stand-in home: the switch fails cleanly with a

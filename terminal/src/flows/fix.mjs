@@ -32,13 +32,15 @@ export async function fixFlow(ctx, task) {
   let check = checkInText(task);
   // The bug's kind (terminal/rules/bug-fixing.md): its steps go with every try,
   // and a kind the test suite cannot see needs a check: the one the request
-  // names, or (a bug on a page) one Bonsai makes first in a browser.
+  // names, or (a bug on a page) one Agentic Coder makes first in a browser.
   const kind = sortBug(task);
   if (kind) ctx.note(`This looks like a ${kind.name} bug (${kind.looks}), so it follows the ${kind.name} steps.`, 'dim');
   const unseen = Boolean(kind && !check && !kind.testsSeeIt);
-  const checkFirst = unseen && canPageCheck(kind) && process.env.BONSAI_CHECK_FIRST !== 'off';
+  const checkFirst = unseen && canPageCheck(kind) && (process.env.AGENTIC_CHECK_FIRST ?? process.env.BONSAI_CHECK_FIRST) !== 'off';
   if (unseen && !checkFirst) return { handled: false, stepByStep: true, why: `the test suite can't see a ${kind.name} bug (it needs ${kind.tool})` };
-  const how = kind ? `\n\n${kindText(kind)}` : '';
+  // With every try go the steps for its kind of bug, and what the memory
+  // holds about this request (what worked here, what did not).
+  const how = `${kind ? `\n\n${kindText(kind)}` : ''}${ctx.memory ? `\n\n(${ctx.memory})` : ''}`;
   if (!checkFirst && !(check ?? ctx.testCmd)) return { handled: false, why: 'no test command' };
   const first = checkFirst ? ['Open the page in a browser', 'See the bug there', 'Your OK on the check'] : [check ? `Run ${check}` : 'Run the tests'];
   const plan = ctx.plan([...first, 'Find the code', `Try fixes (up to ${ctx.maxTries})`, 'Apply the fix']);
@@ -88,7 +90,7 @@ export async function fixFlow(ctx, task) {
     const tests = [...files.filter((f) => checkWords.includes(f)), ...found.tests];
     const named = filesInText(cwd, task).filter((f) => !isCheck(f));
     const pickable = files.filter((f) => !isCheck(f));
-    // A check Bonsai made comes with the lines that set the layers: the first of them is where to look.
+    // A check Agentic Coder made comes with the lines that set the layers: the first of them is where to look.
     let target = named[0] ?? made?.files.find((f) => !isCheck(f)) ?? sources[0] ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task: made ? `${task}\n${made.report}` : task, files: pickable, exts: EDITABLE, signal: ctx.signal });
     if (!target || !EDITABLE.test(target)) return { handled: false, why: 'could not tell which file to fix' };
     const original = readFileSync(join(cwd, target), 'utf8');
@@ -113,7 +115,7 @@ export async function fixFlow(ctx, task) {
     const shown = showAll ? original : original.split('\n').slice(unit.start, unit.end + 1).join('\n');
     const focus = unit ? `\nOnly the function ${unit.name} (lines ${unit.start + 1}-${unit.end + 1}) needs to change.` : '';
     const merge = (code) => (unit && !isWholeFile(code, original, unit.name, lang) ? splice(original, unit, code) : code);
-    // A check Bonsai made is not shown to the tries: what it found is in the digest.
+    // A check Agentic Coder made is not shown to the tries: what it found is in the digest.
     const testText = made ? '' : tests.slice(0, 2).map((t) => fence(t, readFileSync(join(cwd, t), 'utf8').slice(0, 6000))).join('\n\n');
     const digest = made ? `${failureDigest(base.out)}\n\n${made.report}` : failureDigest(base.out);
     const want = unit ? `the complete corrected function ${unit.name}` : `the complete corrected ${target}`;
@@ -155,7 +157,7 @@ export async function fixFlow(ctx, task) {
       // The file, the stylesheets a page loads, and the next
       // likeliest files: searched for the strings the model names.
       const searchIn = [...new Set([...(made?.files ?? []), target, ...linkedFiles(cwd, target, files), ...fileHints(cwd, task, pickable, { exts: EDITABLE, max: 3 }).code])].filter((f) => !isCheck(f)).slice(0, 6);
-      // With a check Bonsai made, the browser already named the two layers and
+      // With a check Agentic Coder made, the browser already named the two layers and
       // the lines that set them: those lines are shown, nothing is guessed.
       const L = made?.pair.layers;
       const terms = made ? [...new Set([L?.a?.sel, L?.c?.sel, made.pair.covered, made.pair.by].filter(Boolean).map((t) => t.split(/\s+/).pop()))].slice(0, 6) : await searchTerms(ctx, { task, digest, files: searchIn });

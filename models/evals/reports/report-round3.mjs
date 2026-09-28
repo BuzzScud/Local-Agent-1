@@ -346,4 +346,4 @@ ${taskRows}
 const out = docsPath('tests/bonsai-round-3-results-2026-09-26.html');
 writeFileSync(out, html);
 console.log(`wrote ${out.replace(homedir(), '~')} (${(html.length / 1024).toFixed(0)} KB)`);
-if (!process.env.BONSAI_NO_DESKTOP) { const desk = join(homedir(), 'Desktop', 'bonsai-round-3-results-2026-09-26.html'); copyFileSync(out, desk); console.log(`copied to ${desk.replace(homedir(), '~')}`); }
+if (!(process.env.AGENTIC_NO_DESKTOP ?? process.env.BONSAI_NO_DESKTOP)) { const desk = join(homedir(), 'Desktop', 'bonsai-round-3-results-2026-09-26.html'); copyFileSync(out, desk); console.log(`copied to ${desk.replace(homedir(), '~')}`); }

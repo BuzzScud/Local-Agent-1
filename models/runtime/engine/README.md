@@ -3,7 +3,7 @@
 Bonsai Code runs Prism ML's llama.cpp (branch `prism`, commit `adfffbe`), built on this Mac
 with one change of ours, `pq2-multicol.patch`. `bonsai setup` runs `build.mjs`, which clones
 that commit, applies the patch and builds static `llama-server` and `llama-bench` into
-`~/.bonsai-code/engine/<tag>/` (tag and commit: `ENGINE` in `models/registry.mjs`). It takes
+`~/.agentic-coder/engine/<tag>/` (tag and commit: `ENGINE` in `models/registry.mjs`). It takes
 about 3 minutes on the M4 and needs git, cmake and Apple's command line tools. By hand:
 `node models/runtime/engine/build-now.mjs`.
 
@@ -34,4 +34,4 @@ Results match the CPU reference on all 151 PQ2_0 multiply checks in `test-backen
 `GGML_METAL_PQ2_MC_MAXC` (2 to 8) retune it for another chip.
 
 A new build gets a new tag, so an old build is never replaced while it is in use. Prism's
-release that Bonsai used before stays in `~/.bonsai-code/bin/` and can be removed.
+release that Bonsai used before stays in `~/.agentic-coder/bin/` and can be removed.

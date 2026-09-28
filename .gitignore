@@ -1,6 +1,7 @@
 node_modules/
 dist/
 backups/
+Agentic Coder.app/
 Bonsai Code.app/
 .DS_Store
 .env*
@@ -9,7 +10,10 @@ Bonsai Code.app/
 .split-map.json
 
 # The pages' working folder, on this Mac only: `bun run docs` mirrors it into docs/
+agentic-coder DOCS/
 bonsai-code DOCS/
+# The Bonsai-era pages (24-28 Sep 2026), beside the retired model's recipe: on this Mac only
+models/bonsai-2-27b/Bonsai Docs/
 # Reading material kept beside the repo, never committed
 CLAUDE MODEL DOCS/
 
@@ -27,3 +31,5 @@ models/evals/dev/experiments/slots/
 models/evals/dev/experiments/*.log
 # The matcher experiment for memory (rejected): its files stay on this Mac
 models/evals/dev/experiments/julia-recall/
+models/evals/dev/experiments/*/*.log
+__pycache__/

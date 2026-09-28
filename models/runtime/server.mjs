@@ -1,6 +1,6 @@
 // Starts and looks after Prism's llama-server for one model: picks a free
 // port, waits until it is healthy, restarts it once if it crashes, and stops
-// it when Bonsai Code exits.
+// it when Agentic Coder exits.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, openSync, closeSync, appendFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
@@ -33,7 +33,7 @@ rm -rf "$U" "$R"`;
 function watch(pid, port, secs) {
   const step = Math.max(1, Math.min(10, Math.floor(secs / 3)));
   // Started through a shell that leaves at once, so the watcher is nobody's
-  // child: it outlives Bonsai and Terminal's title does not show its `sleep`.
+  // child: it outlives Agentic Coder and Terminal's title does not show its `sleep`.
   const args = [String(pid), usersDir(port), regFile(port), String(secs), String(step)];
   spawn('/bin/sh', ['-c', '/bin/sh -c "$0" bonsai-watch "$@" </dev/null >/dev/null 2>&1 &', WATCH, ...args], { detached: true, stdio: 'ignore' }).unref();
 }
@@ -48,7 +48,7 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-// Servers other Bonsai Code windows started. A server whose window is gone is
+// Servers other Agentic Coder windows started. A server whose window is gone is
 // left over, so it is stopped; one whose window is still open can be shared.
 export function scanServers() {
   mkdirSync(REG_DIR, { recursive: true });
@@ -69,11 +69,17 @@ export function scanServers() {
   return live;
 }
 
-// Whether the model's guessing helper is used: it is on this Mac (bonsai setup
+// Whether the model's guessing helper is used: it is on this Mac (coding setup
 // downloads it) and not switched off with BONSAI_HELPER=off.
-export const hasDraft = (model) => Boolean(model?.draft && process.env.BONSAI_HELPER !== 'off' && existsSync(draftPath(model)));
+export const hasDraft = (model) => Boolean(model?.draft && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' && existsSync(draftPath(model)));
 
 export function serverArgs(model, { ctx, port, draft = false }) {
+  // A model that only compares meanings: the engine's embedding mode, one
+  // slot, room for a few short texts at once.
+  if (model.kind === 'embedding') {
+    return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--embedding', '--pooling', model.pooling ?? 'cls',
+      '-c', String(ctx ?? model.ctx ?? 2048), '-ub', String(ctx ?? model.ctx ?? 2048), '-ngl', '99', '-np', '1', '--no-webui'];
+  }
   return [
     '-m', modelPath(model),
     '--host', '127.0.0.1', '--port', String(port),
@@ -126,8 +132,8 @@ export class ModelServer extends EventEmitter {
   // there (chooseContext turns it off at High effort when memory is short).
   async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0, helper } = {}) {
     this.lingerSecs = lingerSecs;
-    if (!existsSync(SERVER_BIN)) throw new Error(`Prism's llama-server is missing at ${SERVER_BIN}. Run: bonsai setup`);
-    if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: bonsai setup`);
+    if (!existsSync(SERVER_BIN)) throw new Error(`Prism's llama-server is missing at ${SERVER_BIN}. Run: coding setup`);
+    if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: coding setup`);
     const live = scanServers();
     const same = share && live.find((e) => e.model === this.model.file);
     if (same) {
@@ -226,7 +232,7 @@ function spawnSyncText(cmd, args) {
   return `${r.stdout ?? ''}${r.stderr ?? ''}`;
 }
 
-// `bonsai stop`: stops servers kept loaded that no open window is using.
+// `coding stop`: stops servers kept loaded that no open window is using.
 export function stopIdleServers() {
   const out = { stopped: [], inUse: [] };
   for (const e of scanServers()) {

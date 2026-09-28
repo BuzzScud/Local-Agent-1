@@ -6,7 +6,7 @@ import { thinkingKwargs } from '../../../models/index.mjs';
 // the instructions still matches) but lets the model only write text.
 export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, slot, signal, extra }) {
   const body = {
-    model: 'bonsai',
+    model: 'coding',
     messages,
     stream: true,
     max_tokens: maxTokens,

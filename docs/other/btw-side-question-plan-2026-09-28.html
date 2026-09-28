@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/btw plan</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1d1d1f; --dim: #6e6e73; --line: #e3e1db; --card: #ffffff;
+    --term-bg: #1b1b1d; --term-fg: #e6e6e6; --term-dim: #8d8d93; --term-accent: #f2b441; --term-blue: #7fb2ff; --term-green: #7fd18b;
+    --done-bg: #e3f4e6; --done-fg: #1f6b2d; --todo-bg: #ecebe7; --todo-fg: #55555a; --warn-bg: #fbefd7; --warn-fg: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161618; --fg: #ececee; --dim: #9a9aa0; --line: #2e2e32; --card: #1f1f22;
+      --term-bg: #0f0f10; --done-bg: #1c3322; --done-fg: #8ad69a; --todo-bg: #2a2a2e; --todo-fg: #b4b4ba; --warn-bg: #3a2e14; --warn-fg: #f0c46a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161618; --fg: #ececee; --dim: #9a9aa0; --line: #2e2e32; --card: #1f1f22;
+    --term-bg: #0f0f10; --done-bg: #1c3322; --done-fg: #8ad69a; --todo-bg: #2a2a2e; --todo-fg: #b4b4ba; --warn-bg: #3a2e14; --warn-fg: #f0c46a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 780px; margin: 0 auto; padding: 48px 16px 80px; }
+  .eyebrow { color: var(--dim); font-size: 14px; letter-spacing: .02em; }
+  h1 { font-size: 32px; line-height: 1.2; margin: 6px 0 14px; }
+  h2 { font-size: 21px; margin: 44px 0 12px; }
+  p { margin: 0 0 12px; }
+  code, .mono { font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  .lead { font-size: 18px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 26px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card .n { font-size: 24px; font-weight: 650; }
+  .card .l { color: var(--dim); font-size: 14px; line-height: 1.35; }
+  table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  th { text-align: left; font-size: 13px; color: var(--dim); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+  td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.k { width: 210px; font-weight: 600; }
+  td.num { width: 34px; color: var(--dim); }
+  .tag { display: inline-block; font-size: 12px; font-weight: 650; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .tag.todo { background: var(--todo-bg); color: var(--todo-fg); }
+  .tag.done { background: var(--done-bg); color: var(--done-fg); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn-fg); }
+  ol.plain { padding-left: 22px; margin: 0; }
+  ol.plain li { margin-bottom: 8px; }
+  .term { background: var(--term-bg); color: var(--term-fg); border-radius: 10px; padding: 14px 16px; margin: 0 0 6px; overflow-x: auto; font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre; }
+  .term .d { color: var(--term-dim); } .term .a { color: var(--term-accent); } .term .b { color: var(--term-blue); } .term .g { color: var(--term-green); }
+  .cap { color: var(--dim); font-size: 14px; margin: 0 0 22px; }
+  .note { border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 14px 16px; margin: 14px 0; }
+  .paths { margin-top: 48px; color: var(--dim); font-size: 13px; }
+  .paths code { font-size: 12.5px; word-break: break-all; }
+  @media (max-width: 600px) {
+    h1 { font-size: 26px; }
+    .cards { grid-template-columns: 1fr; }
+    td.k { width: 120px; }
+    table.files td.k { width: auto; display: block; border-bottom: 0; padding-bottom: 0; }
+    table.files td { display: block; }
+    table.files thead tr { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Agentic Coder · plan · 28 Sep 2026 · nothing built yet</div>
+  <h1>/btw: ask a side question while Agentic Coder works</h1>
+  <p class="lead">You type <code>/btw eta?</code> while a task runs. A small panel takes the prompt box's place and answers. The main job keeps going the whole time. The answer stays in the panel and never enters the conversation, unless you press <b>f</b>. This is the full version you picked. It adds a third lane on the model just for side questions, and follow-up questions work inside the panel. Nothing changes in the app until you say build.</p>
+
+  <div class="cards">
+    <div class="card"><div class="n">+0.72 GB</div><div class="l">memory for the third lane (32k now needs 9.31 GB free instead of 8.59)</div></div>
+    <div class="card"><div class="n">~15–30 s</div><div class="l">per answer, estimated from the model's recorded speeds; not measured with /btw yet</div></div>
+    <div class="card"><div class="n">8 files</div><div class="l">5 changed, 3 new; the conversation code is untouched</div></div>
+  </div>
+
+  <h2>Your picks</h2>
+  <table>
+    <tr><td class="k">Scope</td><td>A · Full: its own lane, follow-ups in the panel, side answers kept in the session</td></tr>
+    <tr><td class="k">What it knows</td><td>A short summary of the work, about 1–2k tokens (not the whole conversation)</td></tr>
+    <tr><td class="k">The f key</td><td>Sends the side question and answer to the main job with your next message</td></tr>
+    <tr><td class="k">Where the panel sits</td><td>In place of the prompt box, like Claude Code. Esc brings the prompt box back</td></tr>
+  </table>
+
+  <h2>How it will look</h2>
+  <div class="term"><span class="d">❯</span> /btw
+  <span class="a">/btw</span>        <span class="d">Ask a quick side question without interrupting the main conversation</span></div>
+  <p class="cap">1 · Typing <code>/</code> lists it; the prompt shows a <code>[question]</code> hint after it.</p>
+
+  <div class="term"><span class="a">⠿ Baking…</span> <span class="d">(4m 12s · ↓ 3.1k tokens)</span>
+  <span class="d">⎿ Bash(bun test)</span>
+<span class="d">──────────────────────────────────────────────────</span>
+  <span class="a">/btw</span> eta?
+    <span class="b">✻ Answering…</span> <span class="d">(6s)</span>
+
+  <span class="d">Esc to close</span></div>
+  <p class="cap">2 · The main job's spinner keeps going above. Esc here stops only the side answer.</p>
+
+  <div class="term">  <span class="a">/btw</span> eta?
+    A guess: it is on step 4 of 5, running the
+    tests. The last two steps took about 2 minutes
+    each, so about 4–5 minutes more if they pass.
+
+  <span class="d">↑/↓ scroll · c copy · f send to main · r follow up · Esc close</span></div>
+  <p class="cap">3 · The answer. Long answers scroll inside the panel, so the panel never pushes the screen.</p>
+
+  <div class="term">  <span class="a">/btw</span> eta?
+    A guess: … about 4–5 minutes more if they pass.
+  <span class="a">↳</span> and if they fail?█
+
+  <span class="d">enter to ask · Esc to go back</span></div>
+  <p class="cap">4 · <b>r</b> opens a line for a follow-up. The side thread keeps its earlier question and answer, so a follow-up doesn't start from scratch.</p>
+
+  <div class="term">  <span class="a">/btw</span> eta?
+    No room for a side question right now: the
+    conversation fills the model's memory. Ask again
+    after this step, or /compact when it is done.
+
+  <span class="d">Esc to close</span></div>
+  <p class="cap">5 · When the model's memory is too full, it says so and sends nothing (see the room check below).</p>
+
+  <h2>How it works</h2>
+  <ol class="plain">
+    <li><b>Three lanes on one model.</b> Lane 0 holds the conversation. Lane 1 does the side jobs it does today: sorting a request, memory saves, /morning. Lane 2 is new and only answers /btw, so a side question never waits behind a memory save.</li>
+    <li><b>A short summary goes with your question.</b> It covers the request, the to-do list, the steps so far with outputs cut short, what is running and for how long, and the last thing it said. That's about 1–2k tokens, read in roughly 8–16 s at the model's recorded reading speed of about 127 tokens/s. Re-reading the whole conversation would take minutes and might not fit in memory.</li>
+    <li><b>One answer, no tools, no thinking.</b> The answer is capped at about 400 tokens. Its instructions ask for a few plain sentences, and for it to say "a guess" when it guesses, which it will for times.</li>
+    <li><b>The main job keeps going.</b> Both lanes run at the same time. The main job writes somewhat slower while the answer is being written. By how much hasn't been measured yet; that is step 1 of the build.</li>
+    <li><b>The main conversation never sees it</b> unless you press <b>f</b>. Every side thread is also kept in the session file, and <code>/btw</code> typed alone reopens the last one.</li>
+  </ol>
+
+  <h2>What the side question sees</h2>
+  <p>An example of the summary, with made-up task details and the real layout:</p>
+  <div class="term"><span class="d">You answer a quick side question while Agentic Coder keeps
+working. You cannot use tools or change anything. Answer in a
+few short sentences. If you have to guess (times especially),
+say it is a guess.</span>
+
+The work so far (4m 12s):
+- Request: "fix the failing date test in src/when.mjs"
+- Plan: 1 read the test ✓  2 find the cause ✓  3 fix it ✓
+        4 run the tests (now)  5 report
+- Steps: Read(test/when.test.mjs) · Grep(parseDay) ·
+         Read(src/when.mjs) · Edit(src/when.mjs, 3 lines) ·
+         Bash(bun test), running 48s
+- Last said: "The day was read in UTC; I switched it to local."
+- Earlier here: 2 requests (their first lines only)
+
+Question: eta?</div>
+  <p class="cap">It's built from what's already on your screen and the agent's to-do list, then cut to fit the room left.</p>
+
+  <h2>The room check</h2>
+  <p>All three lanes share one memory pool. The server already clears a lane that is sitting idle when the pool gets full. But if two <i>busy</i> lanes overflow the pool, the main job's request fails. So before sending, /btw works out the room left: the pool, minus the conversation, minus the room kept for the main job's reply, minus lane 1 if it's busy (it asks the server which lanes are busy). It cuts the summary to fit. If fewer than about 600 tokens are left, it shows panel 5 instead of sending.</p>
+  <table>
+    <thead><tr><th>Memory pool</th><th>Worst case left for /btw</th><th>Summary then gets</th></tr></thead>
+    <tr><td class="k">32k (when about 9.3 GB is free)</td><td>~4,900 tokens</td><td>up to ~4,200, so always the full summary</td></tr>
+    <tr><td class="k">16k (this Mac right now: 2.5 GB free at 12:33)</td><td>~2,450 tokens</td><td>up to ~1,800, so a shorter summary near the end of a long task</td></tr>
+  </table>
+  <p class="cap">Worst case means the conversation is right at its limit: 85% of the pool with the reply room counted, which is where it summarizes itself today.</p>
+
+  <h2>Keys, and what wins when two things happen</h2>
+  <table>
+    <tr><td class="k">Esc</td><td>Closes the panel (and stops the side answer if it is still writing). It never stops the main job. Once the panel is closed, Esc works as it does today.</td></tr>
+    <tr><td class="k">ctrl+c</td><td>Closes the panel first; the next ctrl+c works as it does today.</td></tr>
+    <tr><td class="k">↑/↓ · c · f · r</td><td>Scroll, copy the answer, send it to the main job, ask a follow-up. Other keys do nothing while the answer is shown: press Esc to type to the main job.</td></tr>
+    <tr><td class="k">The main job asks you something</td><td>Its question wins: an "Allow Bash?" or a question you type an answer to takes the panel's place. The side answer keeps writing, a line says "side answer ready · shows after you answer", and the panel comes back after you answer.</td></tr>
+    <tr><td class="k">"Remember for next time?"</td><td>The memory's Save / Skip menu waits until the panel is closed, as it already waits while you type.</td></tr>
+    <tr><td class="k">The main job finishes</td><td>Its "Worked for …" line prints above as usual and a queued message sends. The panel stays open.</td></tr>
+    <tr><td class="k">f, send to main</td><td>The side question and answer ride along with your next message to the main job, the same way <code>!command</code> output does today. A note says so. Nothing interrupts the current step.</td></tr>
+    <tr><td class="k">Model still starting</td><td>"The model is still starting; ask again in a moment." Nothing is queued.</td></tr>
+    <tr><td class="k">Fewer lanes</td><td>A model still loaded from before this change (2 lanes) or shared with another window: /btw uses lane 1 and waits behind a memory save if one is running. A server given with <code>--url</code> and 1 lane: /btw works only when idle and says so while busy.</td></tr>
+    <tr><td class="k">Small window</td><td>The panel is capped to the rows left, and the answer scrolls inside it (your "displays correctly at all times" rule). Too small: the usual "window too small" screen.</td></tr>
+    <tr><td class="k">Quit, /clear, /resume</td><td>Quitting stops a side answer. The others can't be typed while the panel is open (the prompt box is hidden); after Esc they work as today.</td></tr>
+  </table>
+
+  <h2>Build order</h2>
+  <table>
+    <thead><tr><th></th><th>Step</th><th>Check</th><th></th></tr></thead>
+    <tr><td class="num">1</td><td><b>Measure first</b> on the real model: a long main reply plus a /btw at the same time, and one run with the pool nearly full.</td><td>Main writing speed alone vs during; time to answer; no failed request. Added to the test record. If the main job slows by more than half, I stop and tell you.</td><td><span class="tag todo">not started</span></td></tr>
+    <tr><td class="num">2</td><td>Third lane on Gemma; the app names lane 2 for /btw.</td><td>Starts at 32k when 9.31 GB is free; the memory maths already counts a lane.</td><td><span class="tag todo">not started</span></td></tr>
+    <tr><td class="num">3</td><td>The summary, the room check, and the side thread (new file).</td><td>Unit tests: what goes in, cut to fit, too full means nothing sent.</td><td><span class="tag todo">not started</span></td></tr>
+    <tr><td class="num">4</td><td>The command, the panel, the keys and who wins.</td><td>Fits at small window sizes and at your usual size.</td><td><span class="tag todo">not started</span></td></tr>
+    <tr><td class="num">5</td><td>f sends to main, r follows up, side threads saved, /btw alone reopens.</td><td>The next main request carries the side Q&amp;A; the conversation is otherwise unchanged.</td><td><span class="tag todo">not started</span></td></tr>
+    <tr><td class="num">6</td><td>Tests on the stand-in model in a real terminal: /btw mid-task, Esc, f, r, no room, a permission prompt arriving while the panel is open.</td><td>Then the full suite with <code>bun run test</code> (recorded; 313 of 313 before).</td><td><span class="tag todo">not started</span></td></tr>
+    <tr><td class="num">7</td><td>One real run: /btw during a real Gemma task, captured as text.</td><td>A short results page in this folder; nothing committed.</td><td><span class="tag todo">not started</span></td></tr>
+  </table>
+
+  <h2>File by file</h2>
+  <table class="files">
+    <thead><tr><th>File</th><th>Change</th></tr></thead>
+    <tr><td class="k mono">models/gemma-4-12b/model.mjs</td><td>Lanes 2 → 3. Nothing else: the server flags and the memory maths already follow this number.</td></tr>
+    <tr><td class="k mono">terminal/src/agent/btw.mjs <span class="tag done">new</span></td><td>The summary, the room check, and one streamed answer on lane 2 (or 1), with no tools and no thinking. It also keeps the side thread for follow-ups.</td></tr>
+    <tr><td class="k mono">terminal/src/app/App.jsx</td><td>Names lane 2 when the server has 3 lanes (at start and after /model). Adds the /btw command, which also runs while busy, with its own stop so it never touches the main job's. Adds the panel's state and keys, who-wins, f into the next message, and side threads in the session file.</td></tr>
+    <tr><td class="k mono">terminal/src/app/screen.jsx</td><td>The panel in the prompt box's place, capped to the window, and counted in the height maths.</td></tr>
+    <tr><td class="k mono">terminal/src/app/commands.mjs</td><td>The /btw entry with its [question] hint. The Help page reads this list, so /btw shows there too.</td></tr>
+    <tr><td class="k mono">terminal/src/app/help.mjs</td><td>The panel's keys, in the keys section.</td></tr>
+    <tr><td class="k mono">terminal/test/btw.test.mjs <span class="tag done">new</span></td><td>The summary and the room check.</td></tr>
+    <tr><td class="k mono">terminal/test/app-btw.test.mjs <span class="tag done">new</span></td><td>The app end to end on the stand-in model: the side request is answered on its own lane while the main task keeps going.</td></tr>
+  </table>
+
+  <h2>What we don't know yet</h2>
+  <table>
+    <tr><td class="k"><span class="tag warn">unknown</span></td><td><b>How much the main job slows</b> while a side answer is written. Step 1 measures it before anything else is built.</td></tr>
+    <tr><td class="k"><span class="tag warn">cost</span></td><td><b>The extra 0.72 GB</b> can move a Mac that is on the edge from 32k down to 16k. Right now this Mac has 2.5 GB free and would start at 16k either way.</td></tr>
+    <tr><td class="k"><span class="tag warn">quality</span></td><td><b>"eta?" is a guess</b> for a small model. The summary gives it the elapsed time, the step it's on out of the total, and the tries, and it is told to label guesses. It can't know how long a test will run.</td></tr>
+    <tr><td class="k"><span class="tag warn">repo</span></td><td><b>The repo is busy.</b> The rename work is still uncommitted (about 120 files), and another session changed <code>AGENTS.md</code> at 12:33 while this plan was written. Building in the main tree mixes with both, so a separate worktree may be cleaner.</td></tr>
+  </table>
+
+  <div class="note">Not in this plan: giving /btw the whole conversation. This server version can reload a lane's older state from RAM, so a later round could try it, but a big conversation would still take minutes to read. You picked the short summary.</div>
+
+  <div class="paths">
+    This page: <code>~/Desktop/agentic-coder/agentic-coder DOCS/other/btw-side-question-plan-2026-09-28.html</code><br>
+    Model server: <code>~/.agentic-coder/engine/prism-adfffbe-pq2mc1/llama-server</code> (build 10743)<br>
+    Memory maths: <code>models/runtime/memory.mjs</code> (needBytes) · trim limits: <code>terminal/src/agent/agent.mjs</code> (TRIM_AT 0.78, FULL 0.85)
+  </div>
+</main>
+</body>
+</html>

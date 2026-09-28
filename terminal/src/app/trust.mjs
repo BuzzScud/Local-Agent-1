@@ -1,14 +1,14 @@
-// Folder trust, like Claude Code's first-visit safety check. Before Bonsai
+// Folder trust, like Claude Code's first-visit safety check. Before Agentic Coder
 // reads a folder's notes into the model or runs anything there, the user
 // says once that they trust it. A yes covers the folder and everything
-// inside it, and is kept in ~/.bonsai-code/trust.json. Saying yes to
+// inside it, and is kept in ~/.agentic-coder/trust.json. Saying yes to
 // "Work in <project>?" mid-session counts too (src/app/App.jsx).
 import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, resolve, sep, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 // Read when used, not at import, so tests can point it at their own home.
-const home = () => process.env.BONSAI_HOME ?? join(homedir(), '.bonsai-code');
+const home = () => (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');
 const file = () => join(home(), 'trust.json');
 
 // The path with links resolved ("/var/…" on this Mac really is

@@ -1,5 +1,5 @@
 // Folder trust (src/app/trust.mjs): remembered once, covering the folder
-// and everything inside it, in the Bonsai home's trust.json.
+// and everything inside it, in the Agentic Coder home's trust.json.
 import { test, expect } from 'bun:test';
 import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';

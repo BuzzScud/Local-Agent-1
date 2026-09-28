@@ -1,13 +1,15 @@
-// Part 2 of Bonsai Code: the models it runs and tests. The terminal (part 1)
+// Part 2 of Agentic Coder: the models it runs and tests. The terminal (part 1)
 // imports only this file. What it gets:
 //   - the registry: every model's settings (one folder each), where the files
 //     live on this Mac, and how to ask a model to think;
 //   - the runtime: starting and sharing llama-server, choosing a context size
-//     that fits the Mac's memory, the saved warm-up, and bonsai setup.
-export { HOME, ENGINE, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, thinkingLevel, thinkingKwargs, modelPath, draftPath, modelFolder } from './registry.mjs';
+//     that fits the Mac's memory, the saved warm-up, and coding setup;
+//   - the embedder: the small model that compares meanings, for the memory.
+export { HOME, ENGINE, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, thinkingLevel, thinkingKwargs, modelPath, draftPath, modelFolder } from './registry.mjs';
 export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, runningServer, liveUsers, LINGER_SECS } from './runtime/server.mjs';
 export { availableBytes, kvBytesPerToken, needBytes, draftBytes, chooseContext, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { setup, RUNTIME } from './runtime/setup.mjs';
+export { Embedder, embedderReady } from './runtime/embed.mjs';
 export { recordTest, readRecord, recordData, recordFile, writeSnapshot, codeLabel, KINDS as TEST_KINDS } from './evals/record.mjs';
 export { readEdited, writeEdited, removeEdited, editedModel, editedFileName, modelById, EDITED_MANIFEST } from './runtime/edited.mjs';

@@ -50,7 +50,7 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
   const out = writeSnapshot({ file, docsDir });
   expect(out).toBe(join(docsDir, SNAPSHOT));
   const html = readFileSync(out, 'utf8');
-  expect(html).toContain('<title>Bonsai test record</title>');
+  expect(html).toContain('<title>Agentic Coder test record</title>');
   expect(html).not.toContain('<!--DATA-->');
   const json = /<script id="data" type="application\/json">(.*?)<\/script>/s.exec(html)[1];
   expect(json).not.toContain('</script>'); // a name cannot close the data block
@@ -63,7 +63,7 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
 
 test('a record that is not the real one never reaches the DOCS folder by itself, and its folder path is not shown', () => {
   const { dir, file } = scratch();
-  const was = { docs: process.env.BONSAI_DOCS, home: process.env.BONSAI_HOME, rec: process.env.BONSAI_TEST_RECORD };
+  const was = { docs: (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), home: (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME), rec: (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD) };
   delete process.env.BONSAI_DOCS; delete process.env.BONSAI_TEST_RECORD;
   process.env.BONSAI_HOME = dir; // what a test or a scratch run sets
   try {

@@ -38,6 +38,8 @@ export async function planFiles(ctx, task, files) {
 }
 
 export async function multiFlow(ctx, task, targets) {
+  // What the memory holds about this request goes with every draft and try.
+  const known = ctx.memory ? `\n\n(${ctx.memory})` : '';
   const { cwd, testCmd } = ctx;
   const lang = langFor(targets[0]);
   if (!lang || !targets.every((t) => langFor(t) === lang)) return { handled: false, why: 'the files are not all the same language' };
@@ -101,7 +103,7 @@ export async function multiFlow(ctx, task, targets) {
     const restoreTexts = (texts) => { for (const rel of texts.keys()) scratch.restore(rel); };
     const draftVersions = (n, slot) => tryUntilPass(ctx, {
       label: 'Drafting changes', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, maxTokens: 3000, raw: true,
-      prompt: `${shownAll}${dataBlock}\n\nTask: ${task}\n\n${BLOCKS_FORMAT}${SOURCE_ONLY}`,
+      prompt: `${shownAll}${dataBlock}\n\nTask: ${task}${known}\n\n${BLOCKS_FORMAT}${SOURCE_ONLY}`,
       apply: fromBlocks,
       check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },
     });
@@ -166,7 +168,7 @@ export async function multiFlow(ctx, task, targets) {
     const digest = failureDigest(failRun.out);
     let result = chosen.passing.length ? { ok: true, texts: chosen.passing[0].texts, marks: ['✓'] } : await tryUntilPass(ctx, {
       label: 'Trying changes', max: ctx.maxTries, system: CODE_SYSTEM, maxTokens: 3000, raw: true,
-      prompt: ({ last }) => `Task: ${task}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${shownAll}${dataBlock}\n\nChange the source files so that every test passes (do not change the tests). ${BLOCKS_FORMAT}${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n${last.code.slice(0, 2500)}\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
+      prompt: ({ last }) => `Task: ${task}${known}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${shownAll}${dataBlock}\n\nChange the source files so that every test passes (do not change the tests). ${BLOCKS_FORMAT}${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n${last.code.slice(0, 2500)}\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
       apply: (reply) => { const a = fromBlocks(reply); if (a.error) return a; writeTexts(a.texts); return { ...a, undo: () => restoreTexts(a.texts) }; },
       check: async () => {
         const rs = await runAll();

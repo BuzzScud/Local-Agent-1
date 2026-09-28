@@ -27,18 +27,18 @@ const Tip = ({ n, children }) => (
 
 const TIPS = [
   'Run /init to write an AGENTS.md with notes about this project',
-  'Ask for a change: Bonsai reads, edits and tests, and asks before it touches anything',
+  'Ask for a change: Agentic Coder reads, edits and tests, and asks before it touches anything',
   'Everything runs on this Mac; nothing is sent anywhere',
 ];
 
 // Like Claude Code: a welcome box as wide as its words, then the tips.
 export function Welcome({ model, cwd, width, loaded }) {
   const lines = [`  /help for help · /stats for your current setup`, `  ${model}, on this Mac`, `  cwd: ${cwd}`, ...(loaded ? [`  loaded: ${loaded}`] : [])];
-  const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Bonsai Code!'.length + 6));
+  const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Agentic Coder!'.length + 6));
   return (
     <Box flexDirection="column">
       <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column">
-        <Text><Text color={C.accent}>{MARK}</Text> Welcome to <Text bold>Bonsai Code</Text>!</Text>
+        <Text><Text color={C.accent}>{MARK}</Text> Welcome to <Text bold>Agentic Coder</Text>!</Text>
         <Text> </Text>
         <Text color={C.dim}>  /help for help · /stats for your current setup</Text>
         <Text> </Text>
@@ -296,13 +296,13 @@ export function LiveArea({ app }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Bonsai asks' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks' };
 
 export function permissionOptions(req, prefix) {
-  const no = { label: 'No, and tell Bonsai what to do differently (esc)', choice: 'no' };
+  const no = { label: 'No, and tell Agentic Coder what to do differently (esc)', choice: 'no' };
   if (req.name === 'Ask') return [...(req.args.options ?? []).map((o) => ({ label: o, choice: 'answer', text: o })), { label: 'Type an answer', choice: 'type' }, { label: 'Stop here (esc)', choice: 'no' }];
   if (req.name === 'Bash') return [{ label: 'Yes', choice: 'yes' }, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, no];
-  if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Bonsai what the test should check (esc)', choice: 'no' }];
+  if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Agentic Coder what the test should check (esc)', choice: 'no' }];
   if (req.name === 'Rename') return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
   return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, allow all edits this session (shift+tab)', choice: 'always' }, no];
 }
@@ -388,7 +388,7 @@ function Menu({ app }) {
 const SHORTCUTS = [
   ['/ for commands', 'shift+tab to switch mode'],
   ['@ to attach a file', 'ctrl+o to expand the last output'],
-  ['! to run a shell command', 'esc to interrupt Bonsai'],
+  ['! to run a shell command', 'esc to interrupt Agentic Coder'],
   ['\\ + enter for a new line', 'ctrl+c twice to quit'],
   ['↑ ↓ for earlier prompts', 'shift+arrows to select and copy'],
 ];
@@ -569,8 +569,8 @@ function ModelPicker({ app }) {
 function TooSmall({ app }) {
   return (
     <Box flexDirection="column">
-      <Text color={C.warn} wrap="wrap">Make the window at least {MIN_COLS}×{MIN_ROWS} to see Bonsai</Text>
-      <Text color={C.dim} wrap="wrap">It is {app.columns}×{app.rows} now. {app.perm ? 'Bonsai is waiting for your answer.' : app.live.phase === 'working' ? 'Bonsai keeps working meanwhile.' : ''}</Text>
+      <Text color={C.warn} wrap="wrap">Make the window at least {MIN_COLS}×{MIN_ROWS} to see Agentic Coder</Text>
+      <Text color={C.dim} wrap="wrap">It is {app.columns}×{app.rows} now. {app.perm ? 'Agentic Coder is waiting for your answer.' : app.live.phase === 'working' ? 'Agentic Coder keeps working meanwhile.' : ''}</Text>
     </Box>
   );
 }
