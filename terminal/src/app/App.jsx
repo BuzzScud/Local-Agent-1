@@ -113,7 +113,7 @@ export function App({ opts, win, onRestart }) {
   const [, bumpRows] = useState(0);
 
   // The welcome carries the Mac's memory as the window opened (cli.jsx measures it).
-  const [items, setItems] = useState(() => [{ key: 'welcome', type: 'welcome', mem: opts.macMem ?? null }]);
+  const [items, setItems] = useState(() => [{ key: 'welcome', type: 'welcome' }]);
   const [live, setLive] = useState(IDLE);
   const [perm, setPerm] = useState(null);
   const [picker, setPicker] = useState(null);

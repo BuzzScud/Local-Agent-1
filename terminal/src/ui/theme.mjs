@@ -16,8 +16,6 @@ export const C = {
   delBg: 'ansi256(52)',     // #5f0000
   think: 'ansi256(246)',
   selBg: 'ansi256(24)',     // selected text in the prompt #005f87
-  memApps: 'ansi256(67)',   // Mac memory: other apps and the system #5f87af
-  memPacked: 'ansi256(179)', // Mac memory: compressed #d7af5f
 };
 
 export const SPIN = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];

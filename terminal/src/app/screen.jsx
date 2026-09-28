@@ -10,7 +10,7 @@ import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
-import { memoryParts, pressureWord, gb1, footerLabel } from './mac-memory.mjs';
+import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault } from './limits.mjs';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -33,63 +33,23 @@ const TIPS = [
   'Everything runs on this Mac; nothing is sent anywhere',
 ];
 
-// The Mac's memory as the window opened, drawn in parts like Activity
-// Monitor's: the model, other apps, compressed, free; when the model is not
-// loaded yet, ▒ marks the room it needs inside the free part. Seven lines,
-// so it sits beside the welcome box without making it taller.
+// The footer's live memory dot: Activity Monitor's green / yellow / red.
 const PRESSURE_COLOR = { fine: C.ok, tight: C.warn, critical: C.bad };
-export const MAC_W = 52;
-export function MacMemory({ m }) {
-  const N = MAC_W - 2;
-  const word = pressureWord(m);
-  const p = memoryParts(m, N);
-  const k = (ctx) => `${Math.round(ctx / 1024)}k`;
-  return (
-    <Box flexDirection="column" width={MAC_W} flexShrink={0}>
-      <Text> </Text>
-      <Box justifyContent="space-between" width={N}>
-        <Text bold>Mac memory <Text color={C.dim}>· {gb1(m.total)} GB</Text></Text>
-        <Text color={PRESSURE_COLOR[word]}>● {word}</Text>
-      </Box>
-      <Text> </Text>
-      <Text>
-        <Text color={C.accent}>{'█'.repeat(p.model)}</Text><Text color={C.memApps}>{'█'.repeat(p.apps)}</Text><Text color={C.memPacked}>{'█'.repeat(p.packed)}</Text><Text color={C.accentDim}>{'▒'.repeat(p.room)}</Text><Text color={C.faint}>{'░'.repeat(p.free)}</Text>
-      </Text>
-      <Text color={C.dim} wrap="truncate-end">
-        {m.loaded ? <><Text color={C.accent}>■</Text> {m.name} {gb1(m.loaded.bytes)}  </> : null}<Text color={C.memApps}>■</Text> apps {gb1(p.appsBytes)}  <Text color={C.memPacked}>■</Text> squeezed {gb1(m.compressed)}  <Text color={C.faint}>░</Text> free {gb1(m.avail)}
-      </Text>
-      <Text> </Text>
-      <Text color={C.dim} wrap="truncate-end">
-        {m.loaded ? <>{m.name} loaded at {k(m.loaded.ctx)}  ·  </> : m.need ? <><Text color={C.accentDim}>▒</Text> {m.name} at {k(m.need.ctx)}: <Text color={p.fits ? C.ok : C.warn}>{p.fits ? 'fits' : 'does not fit'}</Text>  ·  </> : null}swap {gb1(m.swapUsed)} GB
-      </Text>
-    </Box>
-  );
-}
 
-// Like Claude Code: a welcome box as wide as its words, then the tips. The
-// Mac's memory sits to its right when the window has room for both.
-export function Welcome({ model, cwd, width, loaded, mem }) {
+// Like Claude Code: a welcome box as wide as its words, then the tips.
+export function Welcome({ model, cwd, width, loaded }) {
   const lines = [`  /help for help · /stats for your current setup`, `  ${model}, on this Mac`, `  cwd: ${cwd}`, ...(loaded ? [`  loaded: ${loaded}`] : [])];
-  const natural = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Agentic Coder!'.length + 6));
-  // With the Mac's memory beside it, the box gives up width rather than push
-  // the memory out: the folder keeps its end and "loaded" is cut, as they are
-  // in a narrow window anyway. The help and model lines are never cut.
-  const least = Math.max(34, lines[0].length + 4, lines[1].length + 4);
-  const side = Boolean(mem) && width - 2 - MAC_W >= least;
-  const boxW = side ? Math.min(natural, width - 2 - MAC_W) : natural;
+  const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Agentic Coder!'.length + 6));
   return (
     <Box flexDirection="column">
-      <Box>
-        <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column" flexShrink={0}>
-          <Text><Text color={C.accent}>{MARK}</Text> Welcome to <Text bold>Agentic Coder</Text>!</Text>
-          <Text> </Text>
-          <Text color={C.dim}>  /help for help · /stats for your current setup</Text>
-          <Text> </Text>
-          <Text color={C.dim}>  {model}, on this Mac</Text>
-          <Text color={C.dim}>  cwd: {fitPath(cwd, boxW - 11)}</Text>
-          {loaded ? <Text color={C.dim} wrap="truncate-end">  loaded: {loaded}</Text> : null}
-        </Box>
-        {side ? <Box marginLeft={2}><MacMemory m={mem} /></Box> : null}
+      <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column">
+        <Text><Text color={C.accent}>{MARK}</Text> Welcome to <Text bold>Agentic Coder</Text>!</Text>
+        <Text> </Text>
+        <Text color={C.dim}>  /help for help · /stats for your current setup</Text>
+        <Text> </Text>
+        <Text color={C.dim}>  {model}, on this Mac</Text>
+        <Text color={C.dim}>  cwd: {fitPath(cwd, boxW - 11)}</Text>
+        {loaded ? <Text color={C.dim} wrap="truncate-end">  loaded: {loaded}</Text> : null}
       </Box>
       <Box flexDirection="column" marginTop={1}>
         <Text color={C.dim}> Tips for getting started:</Text>
@@ -148,7 +108,7 @@ const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', 
 
 export function Item({ it, width, model, cwd, loaded }) {
   switch (it.type) {
-    case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} mem={it.mem} />;
+    case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} />;
     case 'user': return (
       <Box flexDirection="column">
         <Row mark=">" markColor={C.dim}><Text color={C.dim}>{it.text}</Text></Row>
