@@ -43,6 +43,13 @@ export const KEYS = [
     ['esc', 'stop Agentic Coder; then say what to do instead'],
     ['ctrl+o', 'expand the last long output or summary'],
     ['type and enter', 'queue your next message; it sends when Agentic Coder is free'],
+    ['/btw question', 'a quick side question: answered in a panel from the conversation so far, never added to it'],
+  ] },
+  { group: 'The /btw panel', rows: [
+    ['↑ ↓', 'scroll a long answer'],
+    ['c', 'copy the answer'],
+    ['f', 'send the question and answer to Agentic Coder with your next message'],
+    ['esc · enter · space', 'close it (while it answers: stop the answer); Agentic Coder keeps working'],
   ] },
   { group: 'Menus and questions', rows: [
     ['↑ ↓ · 1–9', 'choose · pick a numbered option at once'],

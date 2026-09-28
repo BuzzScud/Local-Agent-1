@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions, primeRows } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, btwLayout } from './screen.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
@@ -19,7 +19,7 @@ import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, mentionAt, selectedText } from './edit-input.mjs';
 import { copyToClipboard } from './clipboard.mjs';
-import { matchCommands } from './commands.mjs';
+import { matchCommands, COMMANDS } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
 import { MODE_OPTIONS } from './help.mjs';
 import { memoryDirs, readFacts, readLog, undoSave, openMemory } from '../agent/facts.mjs';
@@ -33,6 +33,7 @@ import { spinStyle } from '../ui/theme.mjs';
 import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
+import { askAside, sendToMain } from '../agent/btw.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -126,6 +127,12 @@ export function App({ opts, win, onRestart }) {
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
+  // /btw: a side question and its answer, in a panel in the prompt box's place
+  // (Claude Code's /btw); gone when closed. The main job's own question wins
+  // the place while one is open: answerWait is "type your answer" to it.
+  const [btw, setBtw] = useState(null);
+  const btwRef = useRef(null);
+  const [answerWait, setAnswerWait] = useState(false);
 
   // Each new item is measured before it is shown (see primeRows), so the
   // space above the prompt box is right on the first frame; measured just
@@ -197,7 +204,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, btw, answerWait };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -288,7 +295,7 @@ export function App({ opts, win, onRestart }) {
   askRef.current = (p) => new Promise((resolve) => {
     // Not over something you are doing: typing, or another menu open. Asked
     // again at the next pause.
-    if (S.current.picker || S.current.input?.value?.trim() || pendingSaveRef.current) { resolve('later'); return; }
+    if (S.current.picker || S.current.input?.value?.trim() || pendingSaveRef.current || S.current.btw) { resolve('later'); return; }
     pendingSaveRef.current = { resolve };
     push({ type: 'panel', title: `Learned in that task · ${p.add.length + p.drop.length} change${p.add.length + p.drop.length === 1 ? '' : 's'}`, pad: 0, rows: [...p.add.map((f) => [`+ ${f.text.replace(/\s+/g, ' ').slice(0, 140)}`]), ...p.drop.map((d) => [`− ${d.text.replace(/\s+/g, ' ').slice(0, 110)} (${d.why})`])] });
     openChoice('memory-save');
@@ -318,11 +325,12 @@ export function App({ opts, win, onRestart }) {
     saveSettings(eff ? { thinking: on, effort: eff } : { thinking: on });
   }, [agent]);
   // Clock for spinners and timers, only while something is moving.
+  const btwMoving = btw?.phase === 'answering' || btw?.phase === 'writing';
   useEffect(() => {
-    if (!(starting || live.phase === 'working')) return;
+    if (!(starting || live.phase === 'working' || btwMoving)) return;
     const id = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(id);
-  }, [starting, live.phase]);
+  }, [starting, live.phase, btwMoving]);
 
   // Memory the model really uses (for the Live thinking meter line).
   useEffect(() => {
@@ -408,6 +416,7 @@ export function App({ opts, win, onRestart }) {
         setLive(IDLE);
         setPerm(null);
         answerRef.current = null;
+        setAnswerWait(false);
         if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Agentic Coder do instead?', tone: 'warn' }); setPlaceholder('Tell Agentic Coder what to do instead'); }
         // A finished turn leaves its time behind, as in Claude Code: "⠿ Worked for 41s · done 12:58 PM".
         else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now() });
@@ -508,6 +517,7 @@ export function App({ opts, win, onRestart }) {
 
   const quit = useCallback(async () => {
     abortRef.current?.abort();
+    btwRef.current?.ac.abort();
     saveNow();
     // What the memory has not saved yet is handed to a process of its own,
     // which needs the model a little longer and stops it when it is done.
@@ -552,8 +562,35 @@ export function App({ opts, win, onRestart }) {
     abortRef.current?.abort();
     const p = S.current.perm;
     if (p) { p.resolve({ choice: 'no' }); setPerm(null); }
-    if (answerRef.current) { answerRef.current({ choice: 'no' }); answerRef.current = null; }
+    if (answerRef.current) { answerRef.current({ choice: 'no' }); answerRef.current = null; setAnswerWait(false); }
   }, []);
+
+  // /btw: asked on the side lane with a copy of the conversation, while the
+  // main job goes on; its own stop, so closing it never touches the main job.
+  const closeBtw = useCallback(() => {
+    btwRef.current?.ac.abort();
+    btwRef.current = null;
+    setBtw(null);
+    // A memory save that stepped aside for the question may run now.
+    if (!agent.busy) autoRef.current?.schedule();
+  }, [agent]);
+  const askBtw = useCallback(async (question) => {
+    btwRef.current?.ac.abort();
+    const id = ++seq;
+    const ac = new AbortController();
+    btwRef.current = { id, ac };
+    const mine = (fn) => setBtw((b) => (b && b.id === id ? fn(b) : b));
+    setBtw({ id, question, text: '', phase: 'answering', startedAt: Date.now(), scroll: null });
+    autoRef.current.cancel(); // the side lane is the memory save's too
+    try {
+      const r = await askAside({ agent, question, live: S.current.live, signal: ac.signal, onText: (all) => mine((b) => ({ ...b, text: all, phase: 'writing' })) });
+      if (ac.signal.aborted) return;
+      if (r.noRoom) mine((b) => ({ ...b, phase: 'noroom', text: "No room for a side question right now: the conversation fills the model's memory. Ask again after this step, or /compact when it is done." }));
+      else mine((b) => ({ ...b, phase: r.text ? 'done' : 'error', text: r.text || 'No answer came back. Try asking again.' }));
+    } catch (e) {
+      if (!ac.signal.aborted) mine((b) => ({ ...b, phase: 'error', text: `Could not answer: ${e.message}` }));
+    }
+  }, [agent]);
 
   const runShell = useCallback(async (command) => {
     if (!command) return;
@@ -603,6 +640,16 @@ export function App({ opts, win, onRestart }) {
         sessionRef.current = { id: newSessionId(), title: null, items: [] };
         push({ type: 'divider', text: 'new conversation' });
         break;
+      case 'btw': {
+        // A quick side question, like Claude Code's: it runs while Agentic Coder works.
+        if (!arg) { push({ type: 'note', text: 'Ask the question after it: /btw what are you doing right now?', tone: 'dim' }); break; }
+        if (S.current.starting) { push({ type: 'note', text: 'The model is still starting; ask again in a moment.', tone: 'dim' }); break; }
+        // Without a side lane the question would take the conversation's lane
+        // and throw away its reading.
+        if (agent.slots?.side === undefined) { push({ type: 'note', text: '/btw needs the model server\'s side lane, and this one has a single lane (with --url, add --slots 2).', tone: 'warn' }); break; }
+        askBtw(arg);
+        break;
+      }
       case 'morning': {
         // The morning brief: the repos read, the words written by the model on
         // its side slot and checked against the facts, and the page (with every
@@ -783,7 +830,7 @@ export function App({ opts, win, onRestart }) {
       default:
         push({ type: 'note', text: `Unknown command /${cmd}. Type /help for the list.`, tone: 'warn' });
     }
-  }, [agent, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, updateNow]);
+  }, [agent, askBtw, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, updateNow]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');
@@ -795,6 +842,7 @@ export function App({ opts, win, onRestart }) {
       // The answer to Agentic Coder's question, shown like a message of yours.
       const resolve = answerRef.current;
       answerRef.current = null;
+      setAnswerWait(false);
       push({ type: 'user', text: value });
       addHistory(cwd, value);
       historyRef.current.push(value);
@@ -815,7 +863,8 @@ export function App({ opts, win, onRestart }) {
   // Menu under the prompt: slash commands or @files.
   const inputMode = input.value.startsWith('!') ? 'bash' : 'prompt';
   let menu = null;
-  if (!perm && !picker && input.value !== menuClosedFor) {
+  const btwShown = Boolean(btw && !perm && !answerWait);
+  if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
     const cmds = inputMode === 'prompt' ? matchCommands(input.value) : [];
     if (cmds.length) menu = { kind: 'slash', pad: 14, items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     const at = mentionAt(input);
@@ -841,7 +890,7 @@ export function App({ opts, win, onRestart }) {
 
   usePaste((text) => {
     setPopup(null); // a paste closes the /help box, like any key
-    if (S.current.perm || S.current.picker) return;
+    if (S.current.perm || S.current.picker || (S.current.btw && !S.current.answerWait)) return;
     setInput((s) => insertText(s, text.replace(/\r\n?/g, '\n')));
   });
 
@@ -865,7 +914,7 @@ export function App({ opts, win, onRestart }) {
         const choice = o.choice;
         setPerm(null);
         // Agentic Coder's question: a listed choice answers it; "type" takes the next line you enter.
-        if (choice === 'type') { answerRef.current = p.resolve; setPlaceholder('Type your answer to Agentic Coder, then enter'); return; }
+        if (choice === 'type') { answerRef.current = p.resolve; setAnswerWait(true); setPlaceholder('Type your answer to Agentic Coder, then enter'); return; }
         if (choice === 'answer') { p.resolve({ choice, text: o.text }); return; }
         p.resolve({ choice });
         if (choice === 'no') setPlaceholder('Tell Agentic Coder what to do instead');
@@ -879,6 +928,30 @@ export function App({ opts, win, onRestart }) {
       else if (key.tab && key.shift && always >= 0 && p.req.name !== 'Bash') choose(always);
       else if (/^[1-9]$/.test(ch) && Number(ch) <= n) choose(Number(ch) - 1);
       else if (key.ctrl && ch === 'c') interrupt();
+      return;
+    }
+    // The /btw panel: its keys only, and the main job goes on. esc, enter,
+    // space or ctrl+c close it (stopping an answer still being written).
+    if (cur.btw && !cur.answerWait) {
+      const b = cur.btw;
+      if (key.escape || key.return || ch === ' ' || (key.ctrl && ch === 'c')) { closeBtw(); return; }
+      const step = key.pageUp || key.pageDown ? 5 : 1;
+      if (key.upArrow || key.downArrow || key.pageUp || key.pageDown) {
+        const L = btwLayout({ btw: b, width, rows: rows ?? 40 });
+        const at = key.upArrow || key.pageUp ? L.offset - step : L.offset + step;
+        setBtw((x) => (x && x.id === b.id ? { ...x, scroll: Math.min(L.maxOffset, Math.max(0, at)) } : x));
+        return;
+      }
+      if (ch === 'c' && b.text && b.phase !== 'answering') {
+        if (copyToClipboard(b.text)) flash(`copied the answer (${b.text.length.toLocaleString()} chars) to clipboard`, 2500);
+        return;
+      }
+      if (ch === 'f' && b.phase === 'done') {
+        pendingContext.current.push(sendToMain(b.question, b.text));
+        closeBtw();
+        push({ type: 'note', text: 'The side question and its answer go to Agentic Coder with your next message.', tone: 'dim' });
+        return;
+      }
       return;
     }
     // Model picker: ↑↓ model, ←→ thinking, enter saves
@@ -1032,7 +1105,11 @@ export function App({ opts, win, onRestart }) {
   // What primeRows needs to measure items as they are printed.
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '' };
   itemsRef.current = items;
+  // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
+  const hintFor = /^\/(\S+) $/.exec(input.value);
+  const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
   const app = {
+    btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
     modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,

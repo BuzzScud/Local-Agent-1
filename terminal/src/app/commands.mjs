@@ -3,6 +3,7 @@ export const COMMANDS = [
   { name: 'help', desc: 'Open the Help page in the browser: every command, key and setting' },
   { name: 'clear', desc: 'Start a new conversation (the screen keeps its history)' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
+  { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
   { name: 'effort', desc: 'Pick the effort: low, medium or high (also in /model)', arg: '[low|medium|high]', picker: true },
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
