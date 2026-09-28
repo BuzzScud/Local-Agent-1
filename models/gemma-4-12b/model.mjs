@@ -22,8 +22,33 @@ export default {
   // back, so the server keeps a few checkpoints to reuse a shared start.
   checkpoints: 3, checkpointBytes: 0.18e9,
   slots: 2,
-  // No guessing helper (draft) for this model yet; no n-gram spec either
-  // until it is measured — the 27B's numbers do not carry over.
+  // Speed helpers (speculative decoding), measured on this Mac 28 Sep 2026
+  // (models/gemma-4-12b/results/speed-probe-2026-09-28). Checking 2 words at
+  // once costs Gemma 1.19× one word (4 words: 2.4×), so guesses stay short.
+  // Words/s, plain → helper (edit a function · new code · prose · thinking):
+  //   n-gram alone     12.6→25.0 · 13.3→13.3 · 13.2→13.3 · 12.8→11.7
+  //   MTP, 1 guess     12.6→12.5 · 13.3→15.7 · 13.2→13.6 · 12.8→15.4
+  //   both (this one)  12.6→24.3 · 13.3→16.2 · 13.2→14.0 · 12.8→14.2–15.4
+  // 2 or 3 guesses were slower on edits and prose. n-gram alone is the
+  // fallback when the helper file is missing or AGENTIC_HELPER=off.
+  spec: { type: 'ngram-simple', n: 12, m: 48 },
+  // Google's MTP drafter for Gemma 4 12B (works with any quant of it). It
+  // guesses the next word from Gemma's own state; Gemma checks it and keeps
+  // only what it agrees with, so the output is Gemma's. Unlike the 27B's
+  // helper it speeds up thinking too, so it stays on at High (helpsThinking).
+  // It shares Gemma's cache: no draft cache flags, default micro-batch.
+  // Footprint beside Gemma at 32k: +0.4–0.5 GB.
+  draft: {
+    file: 'mtp-gemma-4-12b-it.gguf',
+    url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/mtp-gemma-4-12b-it.gguf',
+    sha256: '145db9094bc0f85f1701e255a2ed216dcc9800fc8bc8631ad00905b456bd451b',
+    bytes: 465_109_248,
+    type: 'draft-mtp,ngram-simple',
+    nMax: 1,
+    ownCache: false,
+    helpsThinking: true,
+    computeBytes: 0.1e9,
+  },
   // Google's sampling for the Gemma line.
   sampling: { temperature: 1.0, top_p: 0.95, top_k: 64, min_p: 0 },
   thinkingSampling: { temperature: 1.0, top_p: 0.95, top_k: 64, min_p: 0 },

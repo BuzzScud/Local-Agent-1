@@ -96,9 +96,14 @@ export function serverArgs(model, { ctx, port, draft = false }) {
     // Speculative decoding. With the helper (model.draft): it guesses the next
     // words and the model checks them all in one pass (see draft in model.mjs).
     // Its working space is sized by the micro-batch, so -ub is set with it.
+    // A helper that shares the model's cache (Gemma's MTP) has no cache of
+    // its own to size; a type list ("draft-mtp,ngram-simple") also uses the
+    // n-gram lookup, with the model's spec sizes.
     ...(draft && model.draft ? [
-      '-md', draftPath(model), '--spec-type', model.draft.type, '--spec-draft-n-max', String(model.draft.nMax),
-      '-ngld', '99', '-ctkd', 'q8_0', '-ctvd', 'q8_0', '-ub', String(model.draft.ubatch),
+      '-md', draftPath(model), '--spec-type', model.draft.type, '--spec-draft-n-max', String(model.draft.nMax), '-ngld', '99',
+      ...(model.draft.ownCache === false ? [] : ['-ctkd', 'q8_0', '-ctvd', 'q8_0']),
+      ...(model.draft.ubatch ? ['-ub', String(model.draft.ubatch)] : []),
+      ...(model.spec && model.draft.type.includes('ngram-simple') ? ['--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
     ]
     // Without it: n-grams already in the prompt. When the answer copies its
     // input, as a rewritten function does, runs of tokens are accepted at

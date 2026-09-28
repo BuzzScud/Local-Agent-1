@@ -16,7 +16,7 @@ test('Gemma 4 12B QAT is the only model and the default; the 27B stays as a reci
   expect(g.bytes).toBe(6_716_356_800);
   expect(g.sha256).toBe('90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370');
   expect(g.thinkingDefault).toBe(false);
-  expect(g.draft).toBeUndefined(); // no speed helper for Gemma (yet)
+  expect(g.draft.file).toBe('mtp-gemma-4-12b-it.gguf'); // Google's MTP helper (speed probe, 28 Sep)
   expect(modelFolder(g)).toMatch(/models\/gemma-4-12b\/$/);
   // the retired 27B: still a complete recipe to bring back
   expect(m.file).toBe('Ternary-Bonsai-2-27B-PQ2_0.gguf');
@@ -105,6 +105,26 @@ test('with its helper the server guesses one word ahead and checks it in the sam
   expect(b).not.toContain('-md');
   expect(b[b.indexOf('--spec-type') + 1]).toBe('ngram-simple');
   expect(needBytes(m, 32_768, { draft: false })).toBeLessThan(needBytes(m, 32_768));
+});
+
+test('Gemma: MTP guesses one word ahead and n-grams copy what is on screen; without the helper, n-grams alone', () => {
+  expect(g.draft).toMatchObject({ type: 'draft-mtp,ngram-simple', nMax: 1, ownCache: false, helpsThinking: true, bytes: 465_109_248 });
+  expect(g.draft.sha256).toBe('145db9094bc0f85f1701e255a2ed216dcc9800fc8bc8631ad00905b456bd451b');
+  const a = serverArgs(g, { ctx: 32_768, port: 17_600, draft: true });
+  expect(a[a.indexOf('--spec-type') + 1]).toBe('draft-mtp,ngram-simple');
+  expect(a[a.indexOf('-md') + 1]).toMatch(/models\/mtp-gemma-4-12b-it\.gguf$/);
+  // 1 guess: checking 2 words costs 1.19× one, 4 words 2.4× (measured 28 Sep)
+  expect(a[a.indexOf('--spec-draft-n-max') + 1]).toBe('1');
+  // it shares Gemma's cache and its default micro-batch
+  for (const f of ['-ctkd', '-ctvd', '-ub']) expect(a).not.toContain(f);
+  expect(a[a.indexOf('--spec-ngram-simple-size-n') + 1]).toBe('12');
+  const b = serverArgs(g, { ctx: 32_768, port: 17_600, draft: false });
+  expect(b).not.toContain('-md');
+  expect(b[b.indexOf('--spec-type') + 1]).toBe('ngram-simple');
+  // it speeds up thinking too, so High keeps it when memory is short (the 27B's helper went first)
+  const short = needBytes(g, 16_384) + 0.2e9;
+  expect(chooseContext(g, { available: short, effort: 'high' }).helper).toBeUndefined();
+  expect(chooseContext(m, { available: needBytes(m, 32_768, { draft: false }) + 0.1e9, effort: 'high' }).helper).toBe(false);
 });
 
 test('the engine patch travels inside the code: patch.mjs is byte for byte pq2-multicol.patch', async () => {

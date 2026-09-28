@@ -58,11 +58,13 @@ export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGE
 // memory does — dropping 32k to 16k would only save ~0.6 GB (the per-token
 // cache is small; the model file and running state are not). Measured on the
 // chart bug 25 Sep: High at 16k lost its trail; the helper was idle.
+// A helper that speeds up thinking too (Gemma's MTP, helpsThinking) is
+// counted like any other part and stays on.
 export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes(), effort } = {}) {
   const gb = (b) => (b / 1e9).toFixed(1);
   const kb = (c) => `${Math.round(c / 1024)}k`;
   if (available >= needBytes(m, want)) return { ctx: want, available, reason: null };
-  if (effort === 'high' && m.draft && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off') {
+  if (effort === 'high' && m.draft && !m.draft.helpsThinking && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off') {
     if (available >= needBytes(m, want, { draft: false })) {
       return { ctx: want, helper: false, available, reason: `${gb(available)} GB free: High effort keeps ${kb(want)} of memory and leaves the speed helper off (with it, ${kb(want)} needs ${gb(needBytes(m, want))} GB)` };
     }
