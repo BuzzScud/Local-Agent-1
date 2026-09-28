@@ -106,6 +106,41 @@ function ToolView({ it, width }) {
 // The clock time a turn ended, as Claude Code writes it: "12:58 PM".
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+// /rules (app/rules.mjs): what the model reads at every start, numbered, so
+// "/rules off 16" names a line you can see. Long rules wrap under their words.
+function RuleLines({ list, width, event }) {
+  return list.map((f) => (
+    <Box key={f.n} paddingLeft={2} width={Math.min(width, 104)}>
+      <Box width={4} flexShrink={0}><Text color={C.dim}>{String(f.n).padStart(3)}</Text></Box>
+      <Box flexGrow={1} flexShrink={1} paddingLeft={1}><Text>{f.text}</Text></Box>
+      {event && f.event ? <Box flexShrink={0} paddingLeft={2}><Text color={C.warn}>⚠ an event, not a rule</Text></Box> : null}
+    </Box>
+  ));
+}
+function Rules({ it, width, model }) {
+  const line = '─'.repeat(Math.max(20, Math.min(width, 104) - 4));
+  const head = (title, note, right) => (
+    <Box flexDirection="column" marginTop={1}>
+      <Box paddingLeft={2} justifyContent="space-between" width={Math.min(width, 104)}>
+        <Text><Text bold>{title}</Text>  <Text color={C.dim}>{note}</Text></Text>
+        {right ? <Text color={C.faint}>{right}</Text> : null}
+      </Box>
+      <Box paddingLeft={2}><Text color={C.faint}>{line}</Text></Box>
+    </Box>
+  );
+  const name = String(model ?? 'the model').split(' ')[0];
+  return (
+    <Box flexDirection="column">
+      <Row mark="⏺" markColor={C.accent}><Text><Text bold>Rules</Text><Text color={C.dim}> · what {name} reads at the start of every conversation</Text></Text></Row>
+      {head('Always', `${it.always.length} of ${it.max} · about ${it.tokens} tokens`, it.where)}
+      {it.always.length ? <RuleLines list={it.always} width={width} /> : <Box paddingLeft={2}><Text color={C.dim}>  none yet: /rules add &lt;text&gt; adds one</Text></Box>}
+      {it.other.length ? <>{head('Other notes', `${it.other.length} · one line at the start, the whole note only when a request fits`)}<RuleLines list={it.other} width={width} event /></> : null}
+      {it.off.length ? <>{head('Off', `${it.off.length} · not read · /rules on <number> brings one back`)}<RuleLines list={it.off} width={width} /></> : null}
+      <Box paddingLeft={2} marginTop={1}><Text color={C.dim}>/rules add &lt;text&gt; · /rules off &lt;n&gt; · /rules on &lt;n&gt; · /rules remove &lt;n&gt; · /rules always &lt;n&gt; · /rules open</Text></Box>
+    </Box>
+  );
+}
+
 export function Item({ it, width, model, cwd, loaded }) {
   switch (it.type) {
     case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} />;
@@ -142,6 +177,7 @@ export function Item({ it, width, model, cwd, loaded }) {
         {it.text.split('\n').length > 300 ? <Text color={C.dim}>… cut at 300 lines</Text> : null}
       </Box>
     );
+    case 'rules': return <Rules it={it} width={width} model={model} />;
     case 'panel': return (
       <Box flexDirection="column">
         {it.title ? <Text bold>{it.title}</Text> : null}

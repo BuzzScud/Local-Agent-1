@@ -24,6 +24,7 @@ import { matchCommands, COMMANDS } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
 import { MODE_OPTIONS } from './help.mjs';
 import { memoryDirs, readFacts, readLog, undoSave, openMemory } from '../agent/facts.mjs';
+import { rulesList, changeRules, looksLikeEvent, ALWAYS_MAX } from './rules.mjs';
 import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
@@ -794,6 +795,29 @@ export function App({ opts, win, onRestart }) {
         const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => l.what !== 'trust').sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];
         rows.push([last ? `last change ${String(last.at).slice(0, 16).replace('T', ' ')}` : '', '/memory undo takes the last save back · /memory open shows it in the browser']);
         push({ type: 'panel', title: `Memory · ${agent.memory.embedder ? 'facts are found by meaning' : 'facts are found by their words (coding setup adds the small model)'}`, pad: 22, rows });
+        break;
+      }
+      case 'rules': {
+        // What the model reads at every start, numbered; short commands change it.
+        if (!agent.memory) { push({ type: 'note', text: 'The memory is off here ("memory": false in settings.json), so there are no rules to show.', tone: 'dim' }); break; }
+        const dirs = memoryDirs(cwd);
+        const [what = '', ...rest] = arg.trim().split(/\s+/);
+        if (/^open$/i.test(what)) {
+          const hub = openHub('memory'); if (!hub) break;
+          push({ type: 'note', text: `Memory opened in the browser at ${hub.url}`, tone: 'dim' });
+          break;
+        }
+        if (what) {
+          if (busy) { flash('Wait for Agentic Coder to finish first'); break; }
+          const r = changeRules(dirs, what.toLowerCase(), rest.join(' '));
+          if (r.changed) agent.refreshNotes();
+          push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
+          break;
+        }
+        const list = rulesList(dirs);
+        const plain = (f) => ({ n: f.n, text: f.text.replace(/\s+/g, ' '), event: looksLikeEvent(f.text) });
+        const tilde = (p) => (p?.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+        push({ type: 'rules', always: list.always.map(plain), other: list.other.map(plain), off: list.off.map(plain), tokens: list.tokens, max: ALWAYS_MAX, where: tilde(dirs.you) });
         break;
       }
       case 'init':

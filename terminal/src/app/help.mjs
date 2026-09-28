@@ -132,6 +132,7 @@ export const TIPS = [
   'Use Plan mode to see a plan before anything changes, then switch mode and say go.',
   'Agentic Coder learns as it works: after a task it shows what it would remember and asks (enter saves, esc skips), and a fact comes back when a request fits it. “/update memory” or “remember that …” saves at once.',
   '/memory shows what it keeps, /memory undo takes the last save back, /memory open shows every fact in the browser.',
+  '/rules lists what the model reads at every start, numbered: /rules add <text> adds a rule, /rules off 3 switches one off (/rules on 3 brings it back), /rules always 16 makes a note a rule. Up to 20 rules.',
   'A fact earns trust when the task passed its check after it was used, and loses it when the task failed or you corrected Agentic Coder. One that keeps failing is taken out of use.',
   '/compact frees memory in a long conversation; /clear starts fresh.',
   'Your math notes in ~/Desktop/MATH are used only when you ask with /math.',

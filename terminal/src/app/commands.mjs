@@ -10,6 +10,7 @@ export const COMMANDS = [
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
+  { name: 'rules', desc: 'What the model reads at every start, numbered; add, switch off or remove a rule', arg: '[add|off|on|remove|always|open]' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'increase', desc: 'See and move the limits up or down: context, thinking cap, tries, steps, command output, trim points' },

@@ -365,6 +365,16 @@ function editFactNow(dir, id, text) {
   return { fact: { ...f, text: next } };
 }
 
+// /rules always N: a fact read at every start, or back to only when a request fits it.
+function setAlwaysNow(dir, id, always = true) {
+  const f = readFacts(dir).find((x) => x.id === id);
+  if (!f) return null;
+  write(dir, { ...f, always });
+  logLine(dir, { batch: `always-${Date.now()}`, what: always ? 'always' : 'sometimes', id });
+  rebuildIndex(dir);
+  return { ...f, always };
+}
+
 function pinFactNow(dir, id, pinned = true) {
   const f = readFacts(dir).find((x) => x.id === id);
   if (!f) return null;
@@ -436,6 +446,7 @@ export function markUsed(...a) { return locked(a[0], () => markUsedNow(...a)); }
 export function changeTrust(...a) { return locked(a[0], () => changeTrustNow(...a)); }
 export function editFact(...a) { return locked(a[0], () => editFactNow(...a)); }
 export function pinFact(...a) { return locked(a[0], () => pinFactNow(...a)); }
+export function setAlways(...a) { return locked(a[0], () => setAlwaysNow(...a)); }
 export function tidy(...a) { return locked(a[0], () => tidyNow(...a)); }
 
 const readState = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8')); } catch { return {}; } };

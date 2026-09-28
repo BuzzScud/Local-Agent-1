@@ -242,6 +242,13 @@ export class Agent extends EventEmitter {
   }
 
   setSystem(system) { this.messages[0] = { role: 'system', content: system }; }
+  // The rules changed (/rules): the next message reads them. The instructions
+  // are read again once, as after a move to another folder.
+  refreshNotes() {
+    const before = tokensOf(this.messages[0].content);
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd).text, git: gitSummary(this.cwd) }));
+    this.ctxUsed += tokensOf(this.messages[0].content) - before;
+  }
   // Work in another folder from now on: its tests, its AGENTS.md, and the fence
   // around commands, which is always the folder Agentic Coder works in.
   moveTo(dir) {
