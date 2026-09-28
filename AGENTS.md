@@ -35,4 +35,7 @@
   that are on the Mac but not yet in the record. A saved copy of the Tests tab is written to
   `bonsai-code DOCS/tests/bonsai-test-record.html`, so it is mirrored with the other pages.
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is private. Nothing secret is committed:
-  scan staged files before a push.
+  scan staged files before a push. `bun run check` does that scan and more (the history,
+  the packages, where the code connects, the installed app, the unit tests); `--fast`
+  leaves out the model files and the tests. A place the code names for the first time
+  (`KNOWN_HOSTS` in `models/evals/tools/check.mjs`) is added there on purpose, never in passing.

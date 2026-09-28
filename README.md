@@ -57,6 +57,7 @@ bun run eval:verify        # prove every practice task's check can fail and pass
 bun run install-cli        # build one file and put it at ~/.local/bin/bonsai
 bun run docs               # mirror bonsai-code DOCS/ into docs/ (run before a commit)
 bun run test:record        # add test runs that are on this Mac but not yet in the test record
+bun run check              # is anything here that should not be? secrets, packages, where the code connects, the installed app, the tests
 ```
 
 Every test run adds a line to the test record (`~/.bonsai-code/tests/record.jsonl`); the hub shows it on its
