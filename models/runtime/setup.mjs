@@ -1,10 +1,10 @@
 // `coding setup`: gets what Agentic Coder needs into ~/.agentic-coder — the model
-// server (Prism ML's llama.cpp built from source with our Metal patch, see
+// server (llama.cpp built from source on the model's engine, see
 // models/runtime/engine), the model, its guessing helper and the memory's
 // matcher — and checks the files' SHA-256. Safe to run again: finished parts are skipped.
 import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, MODELS_DIR, SERVER_BIN, modelPath, draftPath } from '../registry.mjs';
+import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, MODELS_DIR, engineOf, serverBinOf, modelPath, draftPath } from '../registry.mjs';
 import { buildEngine } from './engine/build.mjs';
 
 export const RUNTIME = ENGINE;
@@ -48,13 +48,17 @@ async function fetchChecked({ name, url, file, bytes, sha }, say) {
 
 export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => process.stdout.write(sameLine ? `\r${s}   ` : `${s}\n`) } = {}) {
   mkdirSync(MODELS_DIR, { recursive: true });
-  if (existsSync(SERVER_BIN)) say(`✓ model server already built (${ENGINE.tag})`);
-  else {
-    say(`Building the model server (${ENGINE.tag}, a few minutes)…`);
-    await buildEngine({ ...ENGINE, home: HOME, say });
-    say('✓ model server built');
-  }
   const m = MODELS[modelId];
+  // The engines the model and the memory's matcher run on (usually the same one).
+  const engines = new Map([m, EMBEDDERS[DEFAULT_EMBEDDER]].filter(Boolean).map((x) => [engineOf(x).tag, x]));
+  for (const [tag, x] of engines) {
+    if (existsSync(serverBinOf(x))) say(`✓ model server already built (${tag})`);
+    else {
+      say(`Building the model server (${tag}, a few minutes)…`);
+      await buildEngine({ ...engineOf(x), home: HOME, say });
+      say('✓ model server built');
+    }
+  }
   await fetchChecked({ name: m.name, url: m.url, file: modelPath(m), bytes: m.bytes, sha: m.sha256 }, say);
   if (m.draft) await fetchChecked({ name: `${m.name}'s guessing helper`, url: m.draft.url, file: draftPath(m), bytes: m.draft.bytes, sha: m.draft.sha256 }, say);
   // The memory's matcher. Without it the memory still works, by words.

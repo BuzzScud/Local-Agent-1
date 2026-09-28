@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import { SLOT_DIR, ENGINE, thinkingKwargs, modelPath } from '../registry.mjs';
+import { SLOT_DIR, engineOf, thinkingKwargs, modelPath } from '../registry.mjs';
 import { hasDraft } from './server.mjs';
 
 export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a line)
@@ -55,7 +55,7 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     // older weights is never restored onto newer ones.
     const helper = (helperOn ?? hasDraft(model)) ? model.draft.file : '';
     let stamp = ''; try { stamp = String(Math.round(statSync(modelPath(model)).mtimeMs)); } catch {}
-    const key = (text) => createHash('sha256').update(`${model.file}\0${stamp}\0${ENGINE.tag}\0${helper}\0${text}`).digest('hex').slice(0, 16);
+    const key = (text) => createHash('sha256').update(`${model.file}\0${stamp}\0${engineOf(model).tag}\0${helper}\0${text}`).digest('hex').slice(0, 16);
     const file = `warm-${key(shared)}.bin`;
     // The same instructions as a start before (same folder, day, git state):
     // restore everything up to your first words at once.

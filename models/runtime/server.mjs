@@ -1,4 +1,4 @@
-// Starts and looks after Prism's llama-server for one model: picks a free
+// Starts and looks after llama-server for one model (on the model's engine): picks a free
 // port, waits until it is healthy, restarts it once if it crashes, and stops
 // it when Agentic Coder exits.
 import { spawn } from 'node:child_process';
@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { SERVER_BIN, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath } from '../registry.mjs';
+import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath } from '../registry.mjs';
 
 // One small file per running server: which process owns it, on which port.
 const REG_DIR = join(HOME, 'servers');
@@ -137,7 +137,8 @@ export class ModelServer extends EventEmitter {
   // there (chooseContext turns it off at High effort when memory is short).
   async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0, helper } = {}) {
     this.lingerSecs = lingerSecs;
-    if (!existsSync(SERVER_BIN)) throw new Error(`Prism's llama-server is missing at ${SERVER_BIN}. Run: coding setup`);
+    const bin = serverBinOf(this.model);
+    if (!existsSync(bin)) throw new Error(`The model server (${engineOf(this.model).tag}) is missing at ${bin}. Run: coding setup`);
     if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: coding setup`);
     const live = scanServers();
     const same = share && live.find((e) => e.model === this.model.file);
@@ -168,7 +169,7 @@ export class ModelServer extends EventEmitter {
     // The log is the server's own output file (not a pipe through this
     // process), so a server that stays loaded keeps writing after we exit.
     const logFd = openSync(logPath, 'a');
-    const child = spawn(SERVER_BIN, serverArgs(this.model, { ctx, port, draft }), { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
+    const child = spawn(bin, serverArgs(this.model, { ctx, port, draft }), { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
     closeSync(logFd);
     this.child = child;
     writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString(), ...(lingerSecs ? { linger: lingerSecs } : {}) }));
@@ -242,18 +243,51 @@ function spawnSyncText(cmd, args) {
   return `${r.stdout ?? ''}${r.stderr ?? ''}`;
 }
 
+// One server from the list stopped, with its files (its watcher then ends).
+export function stopServer(e) {
+  try { process.kill(e.pid, 'SIGTERM'); } catch {}
+  rmSync(regFile(e.port), { force: true });
+  rmSync(usersDir(e.port), { recursive: true, force: true });
+}
+
 // `coding stop`: stops servers kept loaded that no open window is using.
 export function stopIdleServers() {
   const out = { stopped: [], inUse: [] };
   for (const e of scanServers()) {
     if (!e.linger) continue;
     if (e.users.length) { out.inUse.push(e); continue; }
-    try { process.kill(e.pid, 'SIGTERM'); } catch {}
-    rmSync(regFile(e.port), { force: true });
-    rmSync(usersDir(e.port), { recursive: true, force: true });
+    stopServer(e);
     out.stopped.push(e);
   }
   return out;
+}
+
+// Other copies of this model's file already loaded, apart from the servers app
+// windows keep loaded (those are shared as before): a practice-test run, a
+// speed probe, a `coding -p` run, another program. Two copies of a 7 GB model
+// do not fit side by side on a 16 GB Mac. Each: { pid, port, who, bytes }.
+// psText: `ps -Ao pid=,ppid=,rss=,command=`; live: scanServers() (tests pass their own).
+export function otherCopies(model, { psText = null, live = null } = {}) {
+  const ps = psText ?? spawnSyncText('/bin/ps', ['-Ao', 'pid=,ppid=,rss=,command=']);
+  const rows = ps.split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter(Boolean)
+    .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), bytes: Number(m[3]) * 1024, cmd: m[4] }));
+  const shared = new Set((live ?? scanServers()).filter((e) => e.linger).map((e) => e.pid));
+  const byPid = new Map(rows.map((r) => [r.pid, r]));
+  // By the file's whole path: a copy in another home (a test's) is not this one.
+  const file = modelPath(model);
+  return rows
+    .filter((r) => /(^|\/)llama-server\s/.test(r.cmd) && r.cmd.includes(file) && !shared.has(r.pid))
+    .map((r) => ({ pid: r.pid, port: Number(/--port\s+(\d+)/.exec(r.cmd)?.[1]) || null, who: whoStarted(r, byPid), bytes: r.bytes }));
+}
+
+// Who a server belongs to, from the programs above it.
+function whoStarted(r, byPid) {
+  for (let p = byPid.get(r.ppid), i = 0; p && i < 8; p = byPid.get(p.ppid), i++) {
+    if (/evals\/bench\//.test(p.cmd)) return 'a practice-test run';
+    if (/probe|speed|compare/i.test(p.cmd)) return 'a speed test';
+    if (/(^|\s)(-p|--print)(\s|$)/.test(p.cmd) && /coding|agentic|cli\.jsx/.test(p.cmd)) return 'a coding -p run';
+  }
+  return /probe/i.test(r.cmd) ? 'a speed test' : 'another program';
 }
 
 // A server this model could use right away (kept loaded, or another window's).

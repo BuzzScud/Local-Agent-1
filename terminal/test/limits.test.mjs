@@ -59,8 +59,10 @@ test('←→ moves one step, stops at the ends, and trim stays below summarize',
 
 test('each value says what it costs; the changes read as from → to', () => {
   const v = { ...defaultLimits(model), context: 131072 };
-  const env = { model, freeBytes: 7.2e9, tps: 13, pps: 130, ctxNow: 16384, values: v };
+  const env = { model, freeBytes: 7.2e9, tps: 13, pps: 130, ctxNow: 16384, values: v, draft: false };
   expect(limitNote('context', env)).toMatch(/^⚠ needs 9\.\d GB of 7\.2 free · a full re-read ~13 min$/);
+  // the speed helper counts when it comes along, as the start's check counts it
+  expect(limitNote('context', { ...env, draft: true })).toMatch(/^⚠ needs 10\.\d GB of 7\.2 free/);
   expect(limitNote('context', { ...env, freeBytes: 12e9 })).not.toContain('⚠');
   expect(limitNote('context', { ...env, values: { ...v, context: 0 } })).toBe('32k, or 16k when memory is short');
   expect(limitNote('thinking', { ...env, values: { ...v, thinking: 8192 } })).toBe('up to ~11 min per think (High only)');

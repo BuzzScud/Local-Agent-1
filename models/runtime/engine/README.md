@@ -1,11 +1,23 @@
-# The model server Agentic Coder builds
+# The model servers Agentic Coder builds
 
-Agentic Coder runs Prism ML's llama.cpp (branch `prism`, commit `adfffbe`), built on this Mac
-with one change of ours, `pq2-multicol.patch`. `coding setup` runs `build.mjs`, which clones
-that commit, applies the patch and builds static `llama-server` and `llama-bench` into
-`~/.agentic-coder/engine/<tag>/` (tag and commit: `ENGINE` in `models/registry.mjs`). It takes
-about 3 minutes on the M4 and needs git, cmake and Apple's command line tools. By hand:
-`node models/runtime/engine/build-now.mjs`.
+Agentic Coder builds llama.cpp's `llama-server` from source, on this Mac, as one of two
+engines (`ENGINES` in `models/registry.mjs`). Each model names the engine it runs on
+(`engine` in its `model.mjs`); a model that names none runs on `DEFAULT_ENGINE`.
+
+| Engine | Source | Runs |
+|---|---|---|
+| `official` | llama.cpp's own release (`ggml-org/llama.cpp`, v0.5.0, commit `7fe450e`), as released | what Google's guide for Gemma 4 asks for |
+| `prism` | Prism ML's llama.cpp (branch `prism`, commit `adfffbe`) plus one change of ours, `pq2-multicol.patch` | the Bonsai 27B's ternary file (PQ2_0), which only Prism's build reads |
+
+`coding setup` runs `build.mjs` for the engines the model in use and the memory's matcher
+need: it clones the engine's commit, applies our patch when the engine has one, and builds
+static `llama-server` and `llama-bench` into `~/.agentic-coder/engine/<tag>/`. It takes about
+3 minutes on the M4 and needs git, cmake and Apple's command line tools. By hand:
+`node models/runtime/engine/build-now.mjs [official|prism]`.
+
+`AGENTIC_ENGINE=official` (or `prism`) runs everything on one engine: for a comparison, or
+as a way back. A saved warm-up belongs to the engine that saved it
+(`models/runtime/warmup.mjs`), so switching reads the instructions again once.
 
 `patch.mjs` holds the same patch as text so the one-file `agentic-coder` binary carries it; after
 changing the patch run `node models/runtime/engine/make-patch.mjs` (a test checks they match).

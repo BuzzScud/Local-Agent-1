@@ -557,6 +557,7 @@ const START_PHASE = {
   loading: 'loading the model ',
   reading: 'reading its instructions, about 30 s the first time ',
   restoring: 'restoring its instructions from last time ',
+  waiting: 'waiting for memory ',
 };
 
 // /effort, /mode, /meters alone: their choices as a menu, like Claude Code's.
@@ -874,7 +875,8 @@ export function Screen({ app }) {
       <Box ref={liveRef} flexDirection="column" minHeight={fill} maxHeight={Math.max(fill, app.rows - 1)} overflow="hidden" justifyContent="flex-end">
       <Box flexDirection="column" flexShrink={0}>
       {app.starting ? (
-        <Box marginBottom={1}><Text><StartIcon app={app} /><Text color={C.accent}> Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text></Box>
+        <Box marginBottom={1} flexDirection="column"><Text><StartIcon app={app} /><Text color={C.accent}> Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text>
+          {app.waiting ? <Text color={C.warn}>  {app.waiting} has {modelName} loaded, and two copies do not fit. It starts by itself when that is done · <Text bold>esc</Text> starts anyway</Text> : null}</Box>
       ) : null}
       <LiveArea app={app} />
       {app.btwWaiting ? <Box marginBottom={1}><Text color={C.dim}>⏵ Your /btw answer is kept: it shows again once you have answered</Text></Box> : null}

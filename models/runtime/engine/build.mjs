@@ -1,8 +1,9 @@
-// Builds the model server Agentic Coder runs: Prism ML's llama.cpp (branch prism, the
-// commit in ENGINE) plus our Metal patch, as static llama-server and llama-bench in
+// Builds a model server Agentic Coder runs (ENGINES in models/registry.mjs): the
+// official llama.cpp, or Prism ML's (branch prism) plus our Metal patch, at the
+// engine's commit, as static llama-server and llama-bench in
 // ~/.agentic-coder/engine/<tag>/. Needs git, cmake and Apple's command line tools;
 // about 3 minutes on the M4. `coding setup` calls it; by hand:
-//   node models/runtime/engine/build-now.mjs
+//   node models/runtime/engine/build-now.mjs [official|prism]
 // (This module only defines the build: the one-file `agentic-coder` binary loads it on
 // every start, so running anything at import time would rebuild each time.)
 // A new tag gets a new folder, so a build in use is never replaced.
@@ -23,7 +24,7 @@ function run(cmd, args) {
   });
 }
 
-export async function buildEngine({ tag, commit, home, say = () => {} }) {
+export async function buildEngine({ tag, commit, repo, patch = false, home, say = () => {} }) {
   for (const tool of ['git', 'cmake', 'xcrun']) {
     await run('/usr/bin/which', [tool]).catch(() => {
       throw new Error(`${tool} is missing: install Apple's command line tools (xcode-select --install) and cmake (brew install cmake)`);
@@ -34,10 +35,13 @@ export async function buildEngine({ tag, commit, home, say = () => {} }) {
   const tmp = `${out}.part`;
   rmSync(src, { recursive: true, force: true });
   say('  getting the source…');
-  await run('git', ['clone', '--quiet', '--filter=blob:none', 'https://github.com/PrismML-Eng/llama.cpp.git', src]);
+  await run('git', ['clone', '--quiet', '--filter=blob:none', repo, src]);
   await run('git', ['-C', src, 'checkout', '--quiet', commit]);
-  writeFileSync(join(src, 'agentic.patch'), PATCH);
-  await run('git', ['-C', src, 'apply', 'agentic.patch']);
+  // Our patch is for Prism's ternary format only; the official build is used as released.
+  if (patch) {
+    writeFileSync(join(src, 'agentic.patch'), PATCH);
+    await run('git', ['-C', src, 'apply', 'agentic.patch']);
+  }
   say('  configuring…');
   await run('cmake', ['-S', src, '-B', join(src, 'build'), '-DCMAKE_BUILD_TYPE=Release', '-DGGML_METAL=ON', '-DGGML_METAL_EMBED_LIBRARY=ON',
     // static and without SSL: the two programs need nothing outside macOS

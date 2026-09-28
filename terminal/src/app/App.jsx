@@ -14,7 +14,7 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, SERVER_BIN, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -53,6 +53,13 @@ let seq = 0;
 
 const home = homedir();
 const short = (p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+// A stopped server's process really gone (false after `ms`): two copies of the model never fit side by side.
+async function exited(pid, ms = 15000) {
+  for (const t0 = Date.now(); Date.now() - t0 < ms; await new Promise((r) => setTimeout(r, 200))) {
+    try { process.kill(pid, 0); } catch { return true; }
+  }
+  return false;
+}
 
 // "@path" in a prompt attaches that file for the model.
 function expandMentions(value, cwd, maxChars) {
@@ -125,6 +132,30 @@ export function App({ opts, win, onRestart }) {
   const [thinking, setThinkingState] = useState(opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true);
   const [effort, setEffortState] = useState(opts.effort ?? settings.effort ?? model.thinkingEffort);
   const [startPhase, setStartPhase] = useState('loading');
+  // Another copy of the model already loaded (a practice-test run, a speed
+  // test): the start says who has it and waits for it to go; esc starts anyway
+  // (the user's pick, 28 Sep). `waiting` is the line on the start screen.
+  const [waiting, setWaiting] = useState(null);
+  const waitRef = useRef(null);
+  const waitForOthers = async (m, stillOn = () => true) => {
+    let others = otherCopies(m);
+    if (!others.length) return;
+    const who = (list) => list.map((o) => `${o.who} (port ${o.port ?? '?'}, ${(o.bytes / 1e9).toFixed(1)} GB)`).join(' and ');
+    setWaiting(who(others));
+    setStartPhase('waiting');
+    await new Promise((resolve) => {
+      const done = () => { clearInterval(tick); waitRef.current = null; resolve(); };
+      const tick = setInterval(() => {
+        if (!stillOn()) return done();
+        others = otherCopies(m);
+        if (others.length) setWaiting(who(others));
+        else done();
+      }, 3000);
+      waitRef.current = { go: () => { push({ type: 'note', text: `Starting anyway: ${who(others)} still has ${m.name} loaded, so both may be slow.`, tone: 'warn' }); done(); } };
+    });
+    setWaiting(null);
+    setStartPhase('loading');
+  };
   const [stats, setStats] = useState({});
   const [ctx, setCtx] = useState(opts.ctx ?? 32768);
   const [starting, setStarting] = useState(!opts.url);
@@ -292,9 +323,16 @@ export function App({ opts, win, onRestart }) {
       await cur?.stop();
       stopIdleServers(); // a server we only attached to (kept loaded earlier) is freed too
       // Wait for the old one to really exit: two 27Bs never fit side by side.
-      if (oldPid) { const t0 = Date.now(); for (;;) { try { process.kill(oldPid, 0); } catch { break; } if (Date.now() - t0 > 15000) throw new Error('the old model server did not stop'); await new Promise((r) => setTimeout(r, 200)); } }
+      if (oldPid && !(await exited(oldPid))) throw new Error('the old model server did not stop');
+      await waitForOthers(next);
       const fixed = limitsRef.current.context;
       const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined });
+      // A context you picked is checked on a restart too: used as asked, said when it does not fit.
+      if (fixed) {
+        const chk = contextCheck(next, fixed, { draft: hasDraft(next) });
+        c.reason = chk.note;
+        if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
+      }
       memoryNote.current = c.reason ?? null;
       const srv = new ModelServer(modelWithLimits(next, limitsRef.current));
       serverRef.current = srv;
@@ -492,20 +530,34 @@ export function App({ opts, win, onRestart }) {
       if (opts.url) { setStarting(false); return; }
       // --ctx wins; then the context /increase saved; then what fits (chooseContext).
       let size = opts.ctx ?? (limitsRef.current.context || undefined);
+      const picked = !opts.ctx && limitsRef.current.context;
       // A model still loaded from an earlier start (or another window) is used
       // as it is; otherwise the memory size is chosen from what is free now.
-      const running = runningServer(model);
-      if (!size && running) size = running.ctx;
-      // A context picked in /increase is used as asked; said when it does not fit (measured before loading).
-      if (!opts.ctx && limitsRef.current.context && !running && needBytes(model, size, { draft: false }) > availableBytes()) {
-        push({ type: 'note', text: `Context ${Math.round(size / 1024)}k (from /increase) needs ${(needBytes(model, size, { draft: false }) / 1e9).toFixed(1)} GB and ${(availableBytes() / 1e9).toFixed(1)} GB is free: the Mac may slow down. Close other apps, or lower it in /increase.`, tone: 'warn' });
+      let running = runningServer(model);
+      // Kept loaded at another size than the one you picked, with no other
+      // window on it: it restarts at yours (before, it kept the old size until coding stop).
+      if (picked && running?.linger && running.ctx !== picked && !(running.users ?? []).some((p) => p !== process.pid)) {
+        stopServer(running);
+        await exited(running.pid);
+        running = null;
       }
+      if (!size && running) size = running.ctx;
+      // Another copy loaded outside the app windows: wait for it (esc starts anyway).
+      if (!running) await waitForOthers(model, () => alive);
+      if (!alive) return;
       let helper;
       if (!size) {
         const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined });
         size = c.ctx;
         helper = c.helper; // false: High keeps its memory, the speed helper stays off
         memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
+      }
+      // A context you picked is used as asked, checked against what is free now
+      // (before loading): said when it does not fit, and shown by /stats.
+      if (picked && !running) {
+        const chk = contextCheck(model, size, { draft: hasDraft(model) });
+        memoryNote.current = chk.note;
+        if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
       }
       agent.ctx = size;
       setCtx(size);
@@ -667,7 +719,8 @@ export function App({ opts, win, onRestart }) {
 
   const doctor = useCallback(() => {
     const ok = (b) => (b ? '✓' : '✗');
-    const ver = spawnSync(SERVER_BIN, ['--version'], { encoding: 'utf8' });
+    const bin = serverBinOf(model);
+    const ver = spawnSync(bin, ['--version'], { encoding: 'utf8' });
     const file = modelPath(model);
     const size = existsSync(file) ? statSync(file).size : 0;
     const avail = availableBytes();
@@ -675,7 +728,7 @@ export function App({ opts, win, onRestart }) {
     try { const f = statfsSync(home); disk = (f.bavail * f.bsize) / 1e9; } catch {}
     push({
       type: 'panel', title: 'Doctor', pad: 22, rows: [
-        [`${ok(ver.status === 0)} model server`, ver.status === 0 ? `${(ver.stderr + ver.stdout).match(/build \d+/)?.[0] ?? 'ok'} · ${short(SERVER_BIN)}` : `missing at ${short(SERVER_BIN)}`],
+        [`${ok(ver.status === 0)} model server`, ver.status === 0 ? `${engineOf(model).id} ${(ver.stderr + ver.stdout).match(/build \d+/)?.[0] ?? 'ok'} · ${short(bin)}` : `missing at ${short(bin)}`],
         [`${ok(size === model.bytes)} model file`, size ? `${(size / 1e9).toFixed(2)} GB · ${short(file)}` : `missing: download ${model.url}`],
         [`${ok(!!agent.url && !starting)} server running`, serverRef.current?.port ? `port ${serverRef.current.port}, context ${Math.round(agent.ctx / 1024)}k` : opts.url ? opts.url : 'not running'],
         [`${ok(avail > needBytes(model, 16384))} free memory`, `${(avail / 1e9).toFixed(1)} GB (32k needs ${(needBytes(model, 32768) / 1e9).toFixed(1)} GB, 16k ${(needBytes(model, 16384) / 1e9).toFixed(1)} GB)`],
@@ -1016,6 +1069,8 @@ export function App({ opts, win, onRestart }) {
     // A window too small to show the screen takes no keys (enter could answer
     // a question you cannot see), except ctrl+c.
     if (cur.tooSmall && !(key.ctrl && ch === 'c')) return;
+    // The start waits for another copy of the model to go: esc starts anyway.
+    if (waitRef.current && key.escape) { waitRef.current.go(); return; }
     // The box in the middle (/help): esc, enter or ctrl+c close it; any other
     // key closes it and does what it always does, so typing goes on as usual.
     if (cur.popup) {
@@ -1247,7 +1302,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
     modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

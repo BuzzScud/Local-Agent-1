@@ -3,13 +3,13 @@
 // 27B, in its embedding mode, as a server of its own: started at the first
 // use, shared between windows and kept loaded like the 27B's (server.mjs).
 import { existsSync } from 'node:fs';
-import { SERVER_BIN, EMBEDDERS, DEFAULT_EMBEDDER, modelPath } from '../registry.mjs';
+import { serverBinOf, EMBEDDERS, DEFAULT_EMBEDDER, modelPath } from '../registry.mjs';
 import { ModelServer, LINGER_SECS } from './server.mjs';
 
 const CACHE = 256; // texts whose numbers are kept for the next ask
 
 // The engine is built and the model's file is here.
-export const embedderReady = (model = EMBEDDERS[DEFAULT_EMBEDDER]) => Boolean(model) && existsSync(SERVER_BIN) && existsSync(modelPath(model));
+export const embedderReady = (model = EMBEDDERS[DEFAULT_EMBEDDER]) => Boolean(model) && existsSync(serverBinOf(model)) && existsSync(modelPath(model));
 
 export class Embedder {
   constructor(model = EMBEDDERS[DEFAULT_EMBEDDER], { url } = {}) {

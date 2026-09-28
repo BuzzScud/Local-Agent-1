@@ -60,6 +60,44 @@ export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGE
 // chart bug 25 Sep: High at 16k lost its trail; the helper was idle.
 // A helper that speeds up thinking too (Gemma's MTP, helpsThinking) is
 // counted like any other part and stays on.
+// The app a process belongs to, for the note below: a browser's helpers count
+// as the browser ("…/Google Chrome.app/…/Google Chrome Helper" → "Google
+// Chrome"); anything outside an app by its program's name.
+export function appName(comm) {
+  const app = /\/([^/]+)\.app\//.exec(comm)?.[1];
+  const name = app ?? comm.trim().split('/').pop();
+  return name === 'llama-server' ? 'model servers' : name;
+}
+
+// What uses the most memory right now, by app, biggest first: named in the
+// note when a model does not fit. psText: `ps -Ao rss=,comm=` (tests pass their own).
+export function topMemoryUsers(n = 3, psText = null) {
+  let out = psText;
+  if (out == null) { try { out = execFileSync('/bin/ps', ['-Ao', 'rss=,comm='], { encoding: 'utf8' }); } catch { return []; } }
+  const byApp = new Map();
+  for (const line of out.split('\n')) {
+    const m = /^\s*(\d+)\s+(.+)$/.exec(line);
+    if (!m) continue;
+    const name = appName(m[2]);
+    byApp.set(name, (byApp.get(name) ?? 0) + Number(m[1]) * 1024);
+  }
+  return [...byApp].map(([name, bytes]) => ({ name, bytes })).sort((a, b) => b.bytes - a.bytes).slice(0, n);
+}
+
+// The check for a context you picked (/increase or --ctx), at every start and
+// restart: it is used as asked, and when it does not fit the note says by how
+// much and what is using the memory (the user's pick, 28 Sep: start anyway,
+// say so). draft: whether the speed helper comes along (needBytes' own
+// default when left out).
+export function contextCheck(m, ctx, { draft, available = availableBytes(), users } = {}) {
+  const need = needBytes(m, ctx, { draft });
+  const gb = (b) => (b / 1e9).toFixed(1);
+  const size = `Context ${Math.round(ctx / 1024)}k`;
+  if (available >= need) return { fits: true, need, available, note: `${size}: needs ${gb(need)} GB, ${gb(available)} GB free.` };
+  const top = (users ?? topMemoryUsers(3)).map((u) => `${u.name} ${gb(u.bytes)} GB`).join(' · ');
+  return { fits: false, need, available, note: `${size} needs ${gb(need)} GB and ${gb(available)} GB is free: the Mac may slow down.${top ? ` Using the most: ${top}.` : ''} Close some, or lower it in /increase.` };
+}
+
 export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes(), effort } = {}) {
   const gb = (b) => (b / 1e9).toFixed(1);
   const kb = (c) => `${Math.round(c / 1024)}k`;

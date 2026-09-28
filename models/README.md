@@ -7,7 +7,7 @@ the agent with each one.
 |---|---|
 | `index.mjs` | The one file the terminal imports: the registry, the runtime and setup. This part in turn imports the terminal only through `../terminal/index.mjs`. |
 | `registry.mjs` | The list of models (one folder each), where their files live on this Mac (`~/.agentic-coder`), and how to ask a model to think. |
-| `runtime/` | `server.mjs` starts, shares and stops llama-server; `memory.mjs` picks a context that fits the Mac; `warmup.mjs` saves and restores the read-in instructions; `setup.mjs` downloads the runtime and a model. |
+| `runtime/` | `server.mjs` starts, shares and stops llama-server, and finds another copy of the model already loaded (a practice-test run, a speed test); `memory.mjs` picks a context that fits the Mac, and checks one you picked in `/increase`; `warmup.mjs` saves and restores the read-in instructions; `setup.mjs` builds the engine and downloads a model; `engine/` builds llama-server (the official release, or Prism's with our patch for the Bonsai 27B). |
 | `gemma-4-12b/` | The model in use: `model.mjs` (its settings), `results/` (raw runs, on this Mac only). |
 | `bge-m3/` | The small model that compares meanings, for the memory: it finds the saved facts that fit a request. `runtime/embed.mjs` runs it in the engine's embedding mode, beside the model in use. |
 | `bonsai-2-27b/` | The previous model, kept as a recipe: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
@@ -28,7 +28,8 @@ numbers live in the 27B's comparison pages.
 
 1. Make `models/<name>/model.mjs`, starting from `bonsai-2-27b/model.mjs`: the file, its
    download URL and checksum, its layout (for the memory estimate), sampling, effort levels,
-   and the server options it needs.
+   the server options it needs, and `engine` if it needs one other than the default
+   (`ENGINES` in `registry.mjs`).
 2. Import it in `registry.mjs` and add it to the list.
 3. `coding setup` fetches it; `/model` in the terminal lists it.
 4. Test it the way the 27B was: `node models/evals/bench/run.mjs --model <id>` and

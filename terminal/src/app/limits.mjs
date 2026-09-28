@@ -2,7 +2,7 @@
 // steps it moves through, its default, how it reads, and what a value costs
 // (said next to it in the panel). Saved as "limits" in settings.json; only the
 // ones moved off their default are kept, so a new default reaches you.
-import { needBytes } from '../../../models/index.mjs';
+import { needBytes, hasDraft } from '../../../models/index.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
 const mins = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`);
@@ -20,7 +20,8 @@ export const LIMITS = [
     show: (v) => (v ? k(v) : 'auto'),
     note: (v, e) => {
       if (!v) return '32k, or 16k when memory is short';
-      const need = needBytes(e.model, v, { draft: false }) / 1e9;
+      // With the speed helper when it comes along, as the start checks (a test says which).
+      const need = needBytes(e.model, v, { draft: e.draft ?? hasDraft(e.model) }) / 1e9;
       const free = e.freeBytes != null ? e.freeBytes / 1e9 : null;
       const short = free != null && need > free;
       return `${short ? '⚠ ' : ''}needs ${need.toFixed(1)} GB${free != null ? ` of ${free.toFixed(1)} free` : ''} · a full re-read ~${mins((v * 0.78) / (e.pps || READ_TPS))}`;

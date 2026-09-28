@@ -5,6 +5,8 @@
 // models/index.mjs for a model by id.
 export default {
   folder: 'bonsai-2-27b',
+  // Its ternary file (PQ2_0) runs only on Prism's llama.cpp with our patch.
+  engine: 'prism',
   id: '27b',
   name: 'Bonsai 2 27B',
   file: 'Ternary-Bonsai-2-27B-PQ2_0.gguf',

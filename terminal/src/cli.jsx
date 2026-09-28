@@ -5,7 +5,7 @@ import { render } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
 import { readLimits, modelWithLimits } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -211,6 +211,14 @@ if (opts.print) {
     const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
     const c = chooseContext(model, { effort: thinkOn ? opts.effort ?? settings.effort : undefined });
     ctx ??= c.ctx;
+    // Another copy of the model loaded (a practice-test run, a speed test): a
+    // script never waits, so it starts anyway and says so.
+    for (const o of otherCopies(model)) process.stderr.write(`· ${o.who} (port ${o.port ?? '?'}, ${(o.bytes / 1e9).toFixed(1)} GB) still has ${model.name} loaded, so both may be slow\n`);
+    // A context you picked is used as asked; said when it does not fit.
+    if (!opts.ctx && limits.context) {
+      const chk = contextCheck(model, ctx, { draft: hasDraft(model) });
+      if (!chk.fits) process.stderr.write(`· ${chk.note}\n`);
+    }
     server = new ModelServer(model);
     const st = await server.start({ ctx, helper: ctx === c.ctx ? c.helper : undefined });
     if (st.slots > 1) slots = { main: 0, side: 1 };
