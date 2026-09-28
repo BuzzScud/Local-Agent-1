@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Three ways into the brain</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--m:#eb6834;--t-soft:rgba(42,120,214,.08);--m-soft:rgba(235,104,52,.09);--good:#1f8a4c;--bad:#c2452f;--best:rgba(31,138,76,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+    --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.13);--m-soft:rgba(232,116,63,.12);--good:#4fbf7f;--bad:#ee7b66;--best:rgba(79,191,127,.13);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+  --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.13);--m-soft:rgba(232,116,63,.12);--good:#4fbf7f;--bad:#ee7b66;--best:rgba(79,191,127,.13);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1240px;margin:0 auto;padding:26px 16px 48px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:21px;letter-spacing:-.01em;margin:40px 0 4px}
+h2+p.sub{color:var(--mute);margin:0 0 12px;max-width:900px}
+p{margin:0 0 10px}
+code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
+.lede{color:var(--mute);max-width:900px;font-size:16px}
+.lede b{color:var(--ink);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 15px;min-width:0}
+.tile b{display:block;font-size:24px;letter-spacing:-.02em;line-height:1.15}
+.tile span{display:block;color:var(--mute);font-size:13.5px;margin-top:4px}
+figure{margin:18px 0 0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 12px}
+.scroll{overflow-x:auto}
+figure svg{display:block;width:100%;min-width:760px;height:auto}
+figcaption{color:var(--mute);font-size:13.5px;margin-top:8px;max-width:980px}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+svg .box{fill:var(--inner);stroke:var(--line);stroke-width:1.4}
+svg .layer{fill:var(--card);stroke:var(--line);stroke-width:1}
+svg .full{fill:var(--soft)}
+svg .t1{font-size:13px;font-weight:600;fill:var(--ink)}
+svg .t2{font-size:11.5px;fill:var(--mute)}
+svg .ar{stroke:var(--mute);stroke-width:1.6;fill:none}
+svg .ah{fill:var(--mute)}
+svg .pin{stroke:var(--ink);stroke-width:1.4;fill:none}
+svg .dot{fill:var(--ink)}
+svg .num{fill:var(--bg);font-size:12.5px;font-weight:600;text-anchor:middle}
+.ways{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.way{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 15px 14px;min-width:0;display:flex;flex-direction:column}
+.head{display:flex;align-items:center;gap:9px;margin-bottom:2px}
+.n{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--bg);font-weight:600;font-size:12.5px;font-style:normal}
+.head b{font-size:16px}
+.where{color:var(--faint);font-size:12px;letter-spacing:.05em;text-transform:uppercase;margin:0 0 6px 33px}
+.way p{color:var(--mute);font-size:13.5px;margin:0 0 10px}
+dl{margin:auto 0 0;display:grid;grid-template-columns:auto 1fr;gap:0;font-size:13.5px}
+dt,dd{margin:0;padding:6px 0;border-top:1px solid var(--soft)}
+dt{color:var(--faint);padding-right:14px;white-space:nowrap}
+dd{color:var(--ink)}
+.wrap{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-top:1px solid var(--soft)}
+thead th{border-top:0;color:var(--mute);font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;vertical-align:bottom}
+thead th small{display:block;text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint);font-size:11.5px}
+td.num,th.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+th.num{white-space:normal;min-width:92px}
+td.req{min-width:280px}
+td small{display:block;color:var(--faint);font-size:12px;margin-top:2px;font-weight:400}
+td.best{background:var(--best);font-weight:600}
+tr.sum td{background:var(--inner)}
+.good{color:var(--good);font-weight:600}
+.bad{color:var(--bad);font-weight:600}
+ul.plain{margin:0;padding:0;list-style:none;background:var(--card);border:1px solid var(--line);border-radius:14px}
+ul.plain li{padding:10px 16px;border-top:1px solid var(--soft);font-size:14px;color:var(--mute)}
+ul.plain li:first-child{border-top:0}
+li b{color:var(--ink);font-weight:600}
+ul.said{margin:6px 0 0;padding:0;list-style:none;font-size:13px;color:var(--mute)}
+ul.said li{padding:3px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.two>div{min-width:0}
+.two h2{margin-top:36px}
+.cap{color:var(--mute);font-size:13px;margin:8px 2px 0}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--mute);font-size:13.5px;padding:4px 2px}
+details .wrap{margin-top:8px}
+.foot{color:var(--faint);font-size:12.5px;margin-top:32px}
+.foot a{color:inherit}
+@media (max-width:1080px){.tiles{grid-template-columns:repeat(2,1fr)}.ways{grid-template-columns:1fr}}
+@media (max-width:760px){.two{grid-template-columns:1fr}.two h2{margin-top:28px}}
+@media (max-width:560px){h1{font-size:26px}.tile b{font-size:21px}}
+</style>
+</head>
+<body>
+<main>
+<h1>Three ways to add to the brain</h1>
+<p class="lede">Where something can be attached to Bonsai 2 27B, and what each did on real moments from your own conversations. <b>Nothing is committed.</b></p>
+
+<div class="tiles">
+
+</div>
+
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 1180 300" role="img" aria-label="A request goes through the brain's 64 layers and comes out as the next word. A side file sits beside the weights inside the layers, a steering vector is added to what flows between the layers, and a push acts on the chance of one word at the very end.">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0L10,5L0,10z"/></marker></defs>
+<rect class="box" x="20" y="96" width="150" height="76" rx="12"/>
+<text class="t1" x="95" y="128" text-anchor="middle">Your request</text>
+<text class="t2" x="95" y="147" text-anchor="middle">and the conversation</text>
+<line class="ar" x1="172" y1="134" x2="212" y2="134" marker-end="url(#a)"/>
+<rect class="box" x="218" y="60" width="700" height="148" rx="14"/>
+<text class="t1" x="236" y="84">The brain: 64 layers, 27 billion weights</text>
+<rect class="layer" x="236" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="246.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="256.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="267.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="277.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="288" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="298.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="308.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="319.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="329.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="340" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="350.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="360.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="371.20000000000005" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="381.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="392" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="402.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="412.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="423.20000000000005" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="433.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="444" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="454.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="464.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="475.20000000000005" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="485.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="496" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="506.40000000000003" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="516.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="527.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="537.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="548" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="558.4000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="568.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="579.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="589.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="600" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="610.4000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="620.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="631.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="641.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="652" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="662.4000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="672.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="683.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="693.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="704" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="714.4000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="724.8" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="735.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="745.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="756" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="766.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="776.8000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="787.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="797.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="808" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="818.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="828.8000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="839.2" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="849.6" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="860" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="870.4" y="98" width="7.4" height="72" rx="2"/><rect class="layer" x="880.8000000000001" y="98" width="7.4" height="72" rx="2"/><rect class="layer full" x="891.2" y="98" width="7.4" height="72" rx="2"/>
+<text class="t2" x="900" y="192" text-anchor="end">every 4th layer (darker) looks back over the whole conversation</text>
+<line class="ar" x1="920" y1="134" x2="960" y2="134" marker-end="url(#a)"/>
+<rect class="box" x="966" y="96" width="194" height="76" rx="12"/>
+<text class="t1" x="1063" y="128" text-anchor="middle">The next word</text>
+<text class="t2" x="1063" y="147" text-anchor="middle">a chance for each of 248,320</text>
+<path class="pin" d="M700,98 L700,38"/><circle class="dot" cx="700" cy="28" r="12"/><text class="num" x="700" y="32.5">3</text>
+<text class="t1" x="720" y="25">A side file</text><text class="t2" x="720" y="42">beside the weights, in every layer it names</text>
+<path class="pin" d="M430,170 L430,240"/><circle class="dot" cx="430" cy="252" r="12"/><text class="num" x="430" y="256.5">2</text>
+<text class="t1" x="450" y="249">A steering vector</text><text class="t2" x="450" y="266">added to what flows from one layer to the next</text>
+<path class="pin" d="M1063,172 L1063,240"/><circle class="dot" cx="1063" cy="252" r="12"/><text class="num" x="1063" y="256.5">1</text>
+<text class="t1" x="1043" y="249" text-anchor="end">A push</text><text class="t2" x="1043" y="266" text-anchor="end">on the chance of one word, at the very end</text>
+</svg>
+</div>
+<figcaption>The three places. The further left a thing attaches, the more it can change and the more it costs to make: a push is a number, a steering vector takes a few minutes of reading, a side file has to be trained.</figcaption>
+</figure>
+
+<div class="ways">
+<div class="way">
+<div class="head"><i class="n">1</i><b>A push</b></div>
+<small class="where">at the end</small>
+<p>One number added to the chance of one word, such as the word that starts a tool call. Set per request, so it can be on for work and off for a greeting.</p>
+<dl><dt>Needs</dt><dd>nothing: the server takes it with the request</dd><dt>Connects here?</dt><dd>not run</dd><dt>Helped?</dt><dd>not run</dd></dl>
+</div>
+<div class="way">
+<div class="head"><i class="n">2</i><b>A steering vector</b></div>
+<small class="where">in the middle</small>
+<p>A direction inside the brain, found by comparing how it reads two kinds of examples (“reports and stops” against “checks again”). Added at run time, at any strength.</p>
+<dl><dt>Needs</dt><dd>a few minutes of reading with the model loaded, and a restart to switch it on</dd><dt>Connects here?</dt><dd>not run</dd><dt>Helped?</dt><dd>not run</dd></dl>
+</div>
+<div class="way">
+<div class="head"><i class="n">3</i><b>A side file</b></div>
+<small class="where">beside the weights</small>
+<p>Small extra matrices that ride along with the big ones. The only way of the three that can hold something learned from examples.</p>
+<dl><dt>Needs</dt><dd>training, which this Mac cannot do for a model this size</dd><dt>Connects here?</dt><dd>not run</dd><dt>Helped?</dt><dd>not run</dd></dl>
+</div>
+</div>
+
+<h2>What your own conversations say</h2>
+<p class="sub">Your 12 saved conversations: 26 requests, 64 replies, 45 tool calls. This is where the time went, and it is what the tests below were aimed at.</p>
+<ul class="plain">
+
+</ul>
+
+<h2>Way 1 and steadier choices: real moments, replayed</h2>
+<p class="sub">Each moment is a saved conversation of yours up to one point. The brain makes its next move again, several times under each setting, on the real 27B. Counted: how many of those moves were good ones.</p>
+<p class="cap">not run</p>
+
+
+<h2>Way 2: the steering vector</h2>
+<p class="sub">Built from 12 pairs of examples: the same task answered by an assistant that trusts a finished file, and by one that checks it again and again.</p>
+<ul class="plain"><li>not run</li></ul>
+
+
+<h2>Way 3: the side file</h2>
+<p class="sub">A side file cannot be trained here, so this only tests the connection. Two hand-made files of one megabyte each tie the chance of “ Tokyo” to that of “ Paris”: one is built from the real row of the word, one from the row as the file stores it. The question is always the same: “The capital of France is”.</p>
+<p class="cap">not run</p>
+
+
+<div class="two">
+<div>
+<h2>The words the work depends on</h2>
+<p class="sub">Read straight from the model file, with no model loaded. Size is the length of the word’s row; an ordinary word is about 0.83 to read and 0.87 to say.</p>
+<div class="wrap"><table>
+<thead><tr><th>Word</th><th>In the brain</th><th class="num">Read</th><th class="num">Say</th></tr></thead>
+<tbody>
+<tr><td><code>&lt;tool_call&gt;</code></td><td>one word of its own <small>number 248,058</small></td><td class="num">0.85</td><td class="num">0.61</td></tr>
+<tr><td><code>&lt;/tool_call&gt;</code></td><td>one word of its own <small>number 248,059</small></td><td class="num">0.85</td><td class="num">1.02</td></tr>
+<tr><td><code>&lt;think&gt;</code></td><td>one word of its own <small>number 248,068</small></td><td class="num">0.81</td><td class="num">0.87</td></tr>
+<tr><td><code>&lt;|im_end|&gt;</code></td><td>one word of its own <small>number 248,046</small></td><td class="num">0.75</td><td class="num">0.67</td></tr>
+<tr><td><code>Read</code></td><td>one word of its own <small>number 4,274</small></td><td class="num">0.99</td><td class="num">0.82</td></tr>
+<tr><td><code>Edit</code></td><td>one word of its own <small>number 3,900</small></td><td class="num">0.98</td><td class="num">0.87</td></tr>
+<tr><td><code>Write</code></td><td>one word of its own <small>number 7,734</small></td><td class="num">0.99</td><td class="num">0.79</td></tr>
+<tr><td><code>Bash</code></td><td>spelled in pieces</td><td class="num">–</td><td class="num">–</td></tr>
+<tr><td><code>Search</code></td><td>one word of its own <small>number 5,708</small></td><td class="num">1.00</td><td class="num">0.83</td></tr>
+<tr><td><code>List</code></td><td>one word of its own <small>number 826</small></td><td class="num">0.99</td><td class="num">0.85</td></tr>
+<tr><td><code>Ask</code></td><td>one word of its own <small>number 25,337</small></td><td class="num">0.96</td><td class="num">0.87</td></tr>
+<tr><td><code>TodoWrite</code></td><td>spelled in pieces</td><td class="num">–</td><td class="num">–</td></tr>
+</tbody></table></div>
+</div>
+<div>
+<h2>What this says about step 3</h2>
+<ul class="plain">
+
+</ul>
+</div>
+</div>
+
+<div class="two">
+<div>
+<h2>Limits you should know</h2>
+<ul class="plain">
+
+</ul>
+</div>
+<div>
+<h2>What is real on this page</h2>
+<ul class="plain">
+
+</ul>
+</div>
+</div>
+
+<p class="foot">bonsai-three-ways-into-the-brain-2026-09-27.html · built by models/evals/reports/report-brain.mjs from models/bonsai-2-27b/results/step3-weights-2026-09-27 · the harness in simple words: <a href="../diagrams/bonsai-harness-simple-2026-09-27.html">bonsai-harness-simple</a> · step 2: <a href="bonsai-step-2-results-2026-09-27.html">results</a></p>
+</main>
+</body>
+</html>
