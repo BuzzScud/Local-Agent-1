@@ -29,6 +29,7 @@ import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
+import { countTries } from './live.mjs';
 import { spinStyle } from '../ui/theme.mjs';
 import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
@@ -404,7 +405,7 @@ export function App({ opts, win, onRestart }) {
       // Saying yes to "Work in <project>?" counts as trusting that folder.
       on('cwd', ({ cwd: dir }) => { setCwd(dir); try { saveTrust(dir); } catch {} }),
       // Focused paths: the live try counter, its finished line, the current step.
-      on('tries', (t) => setLive((l) => ({ ...l, tries: t, waiting: false }))),
+      on('tries', (t) => setLive((l) => countTries(l, t))),
       on('tries-done', (t) => { push({ type: 'tries', ...t }); setLive((l) => ({ ...l, tries: null })); }),
       on('flow-step', (st) => setLive((l) => ({ ...l, flowStep: st }))),
       on('stats', (st) => setStats(st)),
