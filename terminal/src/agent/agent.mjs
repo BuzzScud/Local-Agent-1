@@ -16,6 +16,7 @@ import { homedir } from 'node:os';
 import { basename } from 'node:path';
 import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { clarify } from '../flows/clarify.mjs';
+import { isFollowUp, sortLine } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -283,7 +284,7 @@ export class Agent extends EventEmitter {
       url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
       // Code and tests are written at the chat's thinking level (Off by default).
       thinking: this.thinking, effort: this.effort,
-      emit: (name, ev) => { if (name === 'route') this.lastRoute = ev; this.emit(name, ev); },
+      emit: (name, ev) => { if (name === 'route') { this.lastRoute = ev; this.sorted(ev.kind, { shortcut: true }); } this.emit(name, ev); },
       ask: (req) => this.ask(req),
       confirm: (plan) => (this.confirmPlan ? this.confirm(plan, signal) : { ok: true }),
       mode: () => this.mode,
@@ -327,6 +328,7 @@ export class Agent extends EventEmitter {
     // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
     if (isMemoryRequest(text)) return this.updateMemory(text, started, signal);
     this.lastRoute = null;
+    this.sortShown = this.mode === 'plan'; // a plan is never sorted: no line
     const stopNow = (reason) => {
       this.busy = false;
       this.emit('flow-step', null);
@@ -338,9 +340,15 @@ export class Agent extends EventEmitter {
     // one goes into it once you say yes (src/agent/projects.mjs).
     const into = await this.offerProject(text, signal);
     if (into?.stop) return stopNow(into.stop);
+    // A short line that continues the last turn ("can you add it to my
+    // desktop?", "why") is clear with the conversation in view and means
+    // little without it: no question first and no focused path, which both
+    // read the line alone. It goes on step by step.
+    const follow = isFollowUp(text, this.messages.slice(0, turnStart).some((m) => m.role === 'assistant'));
+    if (follow) this.sorted('follow-up');
     // An unclear request gets one question first (src/flows/clarify.mjs); the
     // answer joins the conversation and travels with the request.
-    if (this.flows && this.mode !== 'plan') {
+    if (!follow && this.flows && this.mode !== 'plan') {
       try {
         const c = await clarify(this.flowContext(signal), text);
         if (c?.stop) return stopNow(c.stop);
@@ -356,7 +364,7 @@ export class Agent extends EventEmitter {
       }
     }
     // First the focused paths (rename / fix / change); the loop handles the rest.
-    if (this.flows && this.mode !== 'plan') {
+    if (!follow && this.flows && this.mode !== 'plan') {
       try {
         const r = await runFlows(this.flowContext(signal), text);
         if (r) {
@@ -380,7 +388,8 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `The focused path failed (${e.message}); working step by step instead.`, tone: 'warn' });
       }
     }
-    const kind = this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    const kind = follow ? undefined : this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    this.sorted(kind); // no focused path ran (or none exists here): step by step
     // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
     // go with this turn's requests to the model, not into the conversation.
     const bug = kind === 'fix' ? sortBug(text) : null;
@@ -600,6 +609,15 @@ export class Agent extends EventEmitter {
     }
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
     return reason;
+  }
+
+  // The line under your request that says which path was picked, once a
+  // message: "Sorted as: change · shortcut". Greetings and "update memory"
+  // have none; their answer says it.
+  sorted(kind, opts) {
+    if (this.sortShown) return;
+    this.sortShown = true;
+    this.emit('sorted', { kind: kind ?? 'other', text: sortLine(kind, opts) });
   }
 
   // In a project with several code files, the loop starts from the project

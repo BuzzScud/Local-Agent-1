@@ -398,7 +398,7 @@ test('tools can write their caches in node_modules of the scratch copy; your nod
 test('a fix described only by what it looks like asks where first; one that points somewhere does not', async () => {
   const { wantsWhere, questionFor, WHERE_QUESTION } = await import('../src/flows/clarify.mjs');
   expect(wantsWhere('the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it')).toBe(true);
-  expect(await questionFor({ cwd: tmpdir() }, 'the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it')).toBe(WHERE_QUESTION);
+  expect(await questionFor({ cwd: tmpdir() }, 'the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it')).toEqual({ question: WHERE_QUESTION, options: [] }); // a set question: nothing to pick from
   for (const t of ['The tests fail. Find the bug and fix it.', 'The tests in this project fail. Find the bug and fix it (fix the code, not the tests).', 'Fix the crash when the summary is empty in report.mjs', 'the list is hidden, fix it. This check must pass: `node check.mjs`', 'add a --json flag to export.mjs'])
     expect([t, wantsWhere(t)]).toEqual([t, false]);
 });

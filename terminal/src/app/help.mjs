@@ -116,7 +116,8 @@ export const SAFETY = [
 
 export const TIPS = [
   'Say what you want in one or two sentences, and name the file when you know it: “add a --json flag to export.mjs”.',
-  'Bonsai asks when something is unclear. Answer with the number, or type your own answer.',
+  'Bonsai asks when something is unclear, often with answers to pick. Answer with the number, or type your own answer.',
+  'Under your request a dim line says where it went: “Sorted as: change · shortcut”. If that is not what you meant, press esc and say it differently.',
   'Low effort is fastest and fine for most work. Try Medium or High for a tricky bug.',
   'Use Plan mode to see a plan before anything changes, then switch mode and say go.',
   'Say “update memory” (or “remember that …”) and Bonsai saves what matters, to the right file, without asking where. /memory shows what it keeps.',

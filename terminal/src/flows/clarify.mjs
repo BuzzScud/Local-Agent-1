@@ -4,7 +4,9 @@
 //   - "fix the bug / the test / it" with passing tests (or no tests): a fixed
 //     question, no model needed. With failing tests the fix path is the answer.
 //   - one to four words that name no file or code: the model decides whether
-//     the files make it clear; if not, it writes one question.
+//     the files make it clear; if not, it writes one question and two or three
+//     answers to pick from. A short request the rules already sort ("rename
+//     test to check", "explain the tests") is not asked about.
 //   - any other fix that names no file, no check and no failing tests
 //     ("the dropdown is hidden behind the legend"): where you see it, so
 //     the search starts in the right place.
@@ -14,11 +16,9 @@ import { complete } from './llm.mjs';
 import { Scratch } from './scratch.mjs';
 import { readResults } from './results.mjs';
 import { isSmallTalk, isCodeProject, routeByRules } from './index.mjs';
+import { PLAIN, CODE_ISH } from './words.mjs';
 
 const VAGUE_FIX = /^\W*(?:please\s+|can you\s+|could you\s+)?(?:fix|repair|debug|solve)\s+(?:the\s+|this\s+|that\s+|my\s+)?(?:bug|bugs|test|tests|issue|error|problem|code|it|this|that)?\s*[.!?]*\s*$/i;
-// Plain instructions that are clear on their own.
-const PLAIN = /^\W*(?:please\s+)?(?:run|start|check|execute)?\s*(?:the\s+)?(?:tests?|build|lint|linter|typecheck|type ?check|test suite)\W*$/i;
-const CODE_ISH = /[\w-]+\.[a-z]{1,5}\b|\b[a-z]+[A-Z]\w*\b|\b\w+_\w+\b|\(\)|--\w+/; // a file, camelCase, snake_case, a call, a flag
 
 export const FIX_QUESTION = 'The tests pass today. What is wrong, or what should a test check?';
 export const FIX_QUESTION_NO_TESTS = 'What is wrong? Tell me what you see and what you expect instead.';
@@ -33,6 +33,10 @@ export function needsClarifying(text) {
   if (VAGUE_FIX.test(t)) return 'fix';
   const words = t.split(/\s+/);
   if (words.length > 4 || /\?\s*$/.test(t) || CODE_ISH.test(t)) return null;
+  // The rules already know what it is ("rename test to check", "explain the
+  // tests", "update the readme"): it starts, with no call to the model first.
+  // A lone word is still checked.
+  if (words.length >= 2 && ['rename', 'question', 'other'].includes(routeByRules(t)?.kind)) return null;
   return 'model';
 }
 
@@ -52,21 +56,41 @@ export function fileList(cwd, max = 60) {
   return out;
 }
 
-// The question to ask for this request, or null.
+// Up to three answers to pick from, as the model wrote them: short, different
+// from each other, none of them the question again.
+export function cleanOptions(list, question = '') {
+  const out = [];
+  for (const o of Array.isArray(list) ? list : []) {
+    const t = String(o ?? '').replace(/\s+/g, ' ').trim().replace(/^(?:\d+[.)]|[-*•])\s*/, '').slice(0, 80);
+    if (!t || t.toLowerCase() === question.trim().toLowerCase()) continue;
+    if (out.some((x) => x.toLowerCase() === t.toLowerCase())) continue;
+    out.push(t);
+    if (out.length === 3) break;
+  }
+  return out.length >= 2 ? out : [];
+}
+
+// The question to ask for this request ({ question, options }), or null. The
+// set questions have no answers to offer; the model's question comes with two
+// or three (measured on the 27B, 2026-09-27: asked for "different kinds of
+// work" the lists were usable on 8 of 8 short requests, 8.8 s against 6.4 s
+// for the question alone; asked only for "answers", 5 of 8 lists were the
+// same work on three files).
 export async function questionFor(ctx, text) {
   const kind = needsClarifying(text);
-  if (!kind) return wantsWhere(text) ? WHERE_QUESTION : null;
+  if (!kind) return wantsWhere(text) ? { question: WHERE_QUESTION, options: [] } : null;
   if (kind === 'fix') {
     if (await testsFail(ctx)) return null; // failing tests say what is wrong
-    return ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS;
+    return { question: ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS, options: [] };
   }
   const files = fileList(ctx.cwd);
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 120,
+  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 200,
     system: 'You decide whether a request to a coding assistant is clear enough to start on, given the project files. The assistant can read, search and change files; it asks only what the files cannot tell it.',
-    user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user.`,
-    schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' } }, required: ['clear', 'question'] } });
+    user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user and 2 or 3 short answers they might pick. Each answer is a different kind of work (explain something, fix something, add something, remove something), never the same work on three different files. Each answer is under 10 words and says what would be done. Name a file only when it is clearly the one meant; do not offer work on test files or data files unless the request is about them.`,
+    schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' }, options: { type: 'array', items: { type: 'string' }, maxItems: 3 } }, required: ['clear', 'question', 'options'] } });
   if (!r.json || r.json.clear || !r.json.question?.trim()) return null;
-  return r.json.question.trim().slice(0, 300);
+  const question = r.json.question.trim().slice(0, 300);
+  return { question, options: cleanOptions(r.json.options, question) };
 }
 
 // A fix described only by what it looks like: nothing in it says where to look.
@@ -78,9 +102,10 @@ export function wantsWhere(text) {
 // Asks (through the usual prompt) and returns { question, answer }, or
 // { stop: 'declined' } when you close the question, or null when nothing needs asking.
 export async function clarify(ctx, text) {
-  const question = await questionFor(ctx, text);
-  if (!question) return null;
-  const answer = await ctx.ask({ id: `ask_${Date.now()}`, name: 'Ask', args: { question }, prepared: {}, label: 'Ask', arg: question });
+  const q = await questionFor(ctx, text);
+  if (!q) return null;
+  const { question, options } = q;
+  const answer = await ctx.ask({ id: `ask_${Date.now()}`, name: 'Ask', args: options.length ? { question, options } : { question }, prepared: {}, label: 'Ask', arg: question });
   if (ctx.signal?.aborted) return { stop: 'interrupted' };
   if (answer.choice === 'no' || !answer.text?.trim()) {
     ctx.tool('Ask', question, { kind: 'declined', feedback: answer.feedback }, true);

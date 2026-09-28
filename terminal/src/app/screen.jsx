@@ -115,6 +115,7 @@ export function Item({ it, width, model, cwd, loaded }) {
     case 'done': return <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)} · done {clock(it.at)}</Text></Text>;
     case 'text': return <Row><Markdown text={it.text} /></Row>;
     case 'tool': return <ToolView it={it} width={width} />;
+    case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'note': {
       const color = it.tone === 'error' ? C.bad : it.tone === 'warn' ? C.warn : C.dim;
       return <Row mark={it.tone === 'error' ? '✗' : '·'} markColor={color}><Text color={color}>{it.text}</Text></Row>;

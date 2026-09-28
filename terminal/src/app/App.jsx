@@ -29,6 +29,7 @@ import { spinStyle } from '../ui/theme.mjs';
 import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
+import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -349,6 +350,8 @@ export function App({ opts, win, onRestart }) {
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
       on('note', ({ text, tone }) => push({ type: 'note', text, tone })),
+      // Which path the request took, under the request.
+      on('sorted', ({ text }) => push({ type: 'sorted', text })),
       // Saying yes to "Work in <project>?" counts as trusting that folder.
       on('cwd', ({ cwd: dir }) => { setCwd(dir); try { saveTrust(dir); } catch {} }),
       // Focused paths: the live try counter, its finished line, the current step.
@@ -715,7 +718,7 @@ export function App({ opts, win, onRestart }) {
     if (value.startsWith('/')) { runSlash(value); return; }
     if (value.startsWith('!')) { runShell(value.slice(1).trim()); return; }
     // "exit" or "quit" typed as a plain message quits, like /exit.
-    if (/^(exit|quit)[.!]?$/i.test(value.trim())) { quit(); return; }
+    if (isQuit(value)) { quit(); return; }
     addHistory(cwd, value);
     historyRef.current.push(value);
     if (agent.busy || S.current.starting) { queuedRef.current = value; setQueued(value); return; }

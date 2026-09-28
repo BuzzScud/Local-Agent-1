@@ -12,6 +12,7 @@ import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
 import { planFiles, multiFlow } from './multi.mjs';
 import { projectFiles } from './localize.mjs';
+import { isMoreTalk, isCommand, isPageRequest } from './words.mjs';
 
 const ID = '[`\'"]?([A-Za-z_$][\\w$]*)[`\'"]?';
 // A whole request that is one file operation: "delete trades.json",
@@ -29,11 +30,22 @@ const GREETING = String.raw`(?:hi|hello|hey|yo|hiya|howdy|good (?:morning|aftern
 const HELP = String.raw`(?:(?:can|could|would|will) you (?:please )?(?:help|assist)(?: me)?(?: out)?(?: with (?:something|a (?:quick )?(?:thing|question|task)|some(?:thing| stuff)))?(?: please)?|i (?:need|could use|want) (?:some |a little |your )?help(?: with something)?|how are you(?: doing)?(?: today)?|are you there|what'?s up|i have a (?:quick )?question)`;
 const SMALL_TALK = new RegExp(String.raw`^(?:(?:hi|hello|hey|yo|hiya|howdy|thanks|thank you|thx|ty|ok|okay|cool|great|nice|good (?:morning|afternoon|evening)|who are you|what can you do)\b[\s!.?,]*(?:bonsai|there)?[\s!.?]*|(?:${GREETING}[\s!.,]*(?:bonsai|there)?[\s!.,]*)?${HELP}[\s!.?]*)$`, 'i');
 export function isSmallTalk(text) {
-  return SMALL_TALK.test(text.trim());
+  return SMALL_TALK.test(text.trim()) || isMoreTalk(text);
 }
 
+// The two rules after the word rules only fill what those leave open, so a
+// request the word rules already sort keeps its path: a page or file with no
+// code named is no change for the test-first path, and a plain command with no
+// rule of its own goes step by step instead of to the model for sorting.
 export function routeByRules(text) {
   const t = text.trim();
+  const r = byWords(t);
+  if (r?.kind === 'change' && isPageRequest(t)) return { kind: 'other' };
+  if (!r && isCommand(t)) return { kind: 'other' };
+  return r;
+}
+
+function byWords(t) {
   const rn = new RegExp(`\\brename\\s+(?:the\\s+)?(?:function|method|variable|var|class|const(?:ant)?|symbol|field|property|type|name)?\\s*${ID}\\s+(?:to|as|into|→|->)\\s+${ID}`, 'i').exec(t);
   if (rn) return { kind: 'rename', from: rn[1], to: rn[2] };
   // Greetings and thanks go straight to the conversation: asking the model to

@@ -30,7 +30,7 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
   const log = [];
   let finalText = '';
-  for (const type of ['assistant', 'tool', 'note', 'todos', 'compacted', 'tries-done', 'route']) {
+  for (const type of ['assistant', 'tool', 'note', 'todos', 'compacted', 'tries-done', 'route', 'sorted']) {
     agent.on(type, (ev) => {
       log.push({ type, ...ev, at: Date.now() });
       if (type === 'assistant' && ev.final) finalText = ev.text;

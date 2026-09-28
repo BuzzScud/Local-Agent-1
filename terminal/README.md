@@ -70,9 +70,21 @@ refused, and macOS's own sandbox fences what a command can reach.
     summarized when memory fills.
 - **Asking** (`src/flows/clarify.mjs` and the Ask tool): a bare "fix the bug" when nothing
   fails, or a lone word such as "api", gets a question before anything runs; the model
-  can ask again mid-task as often as it needs. You answer by number or type a line.
+  can ask again mid-task as often as it needs. The model's question comes with two or
+  three answers to pick from (different kinds of work: explain, fix, add); you answer by
+  number or type a line. A short request the rules already understand ("rename test to
+  check", "explain the tests") starts without being asked about.
+- **Sorting** (`src/flows/words.mjs`, `index.mjs`; `sort.mjs` puts it in order): thanks,
+  praise and "I need help with something" get a short reply with no tools; a short line
+  that continues the last turn ("can you add it to my desktop?", "why") carries on with
+  the conversation, with no question and no focused path; plain commands ("run the
+  tests", "commit and push") and a page or file with no code named go step by step.
+  Under the request a dim line says where it went: `Sorted as: change · shortcut`.
+  `test/sort-lines.mjs` holds 101 requests (81 real, 20 traps) with the path each must
+  take; a rule change that moves one fails `test/sort.test.mjs`.
 - **Focused paths** (`src/flows`) handle most requests before the loop: a request is sorted
-  (rules, or the model with a forced JSON reply) into question / rename / fix / change.
+  (rules first; the model with a forced JSON reply only when no rule fits) into
+  question / rename / fix / change / other.
   - Rename: every whole-word use in code, one diff, one question; no model.
   - Fix: run the tests, find the file, tries in a scratch copy, each told what the last
     one got wrong. Three tries on one function, then three wider tries as edit blocks.
