@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Context Line Designs</title>
+<style>
+  :root { --bg:#f1efea; --card:#fff; --text:#1d1d1b; --muted:#6b6a65; --line:#e6e3dc; --soft:#f7f6f2;
+    --term:#1c1c1c; --t-line:#3a3a3a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#121210; --card:#1c1c1a; --text:#ecebe6; --muted:#a09e97; --line:#33322e; --soft:#232320; --term:#101010; --t-line:#333; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+  .box { max-width:1040px; margin:32px auto; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:26px 28px; }
+  h1 { font-size:24px; margin:0; }
+  .lead { margin:8px 0 0; }
+  h2 { font-size:18px; margin:30px 0 4px; }
+  .sub { color:var(--muted); margin:0 0 12px; }
+  .lbl { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 6px; }
+  .term { background:var(--term); border-radius:10px; overflow:hidden; border:1px solid var(--t-line); }
+  .bar { display:flex; align-items:center; gap:7px; padding:9px 12px; background:#2a2a2a; }
+  .bar i { width:11px; height:11px; border-radius:50%; display:block; }
+  .bar i:nth-child(1) { background:#ff5f57; } .bar i:nth-child(2) { background:#febc2e; } .bar i:nth-child(3) { background:#28c840; }
+  .bar span { flex:1; text-align:center; color:#9a9a9a; font-size:12px; margin-right:40px; }
+  pre { margin:0; padding:14px 16px 16px; color:#d7d7d7; overflow-x:auto; font:13px/1.5 ui-monospace,"SF Mono",Menlo,monospace; }
+  .d { color:#8a8a8a; } .f { color:#5a5a5a; } .a { color:#87d787; } .ad { color:#5faf5f; } .w { color:#ffaf5f; } .b { font-weight:700; color:#fff; }
+  .chipm { background:#3a2f1f; color:#ffcf8f; border-radius:3px; } .chipc { background:#243326; color:#a8e0a8; border-radius:3px; }
+  .two { display:grid; grid-template-columns:1fr; gap:10px; }
+  .notes { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:26px; }
+  .card { border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .card h3 { margin:0 0 6px; font-size:14px; }
+  .card ul { margin:0; padding-left:18px; color:var(--muted); font-size:14px; }
+  .foot { margin:24px 0 0; padding-top:12px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+  @media (max-width:760px) { .box { margin:16px; padding:18px 14px; } .notes { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>What was brought along: 3 designs</h1>
+  <p class="lead">All three show your real request from 4:50 PM (the profile card) and what recall really found for it, re-run just now. The numbers are real too: the fit scores, the sizes (+410 tokens) and the time (0.5 s). The "notes.html" note shows as skipped, as it would be once fix 1 is built.</p>
+
+  <h2>Today</h2>
+  <p class="sub">Two dim lines, and nothing about why each was picked or what it costs Gemma.</p>
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div><pre><span class="d">&gt; Create one self-contained HTML file that renders a compact user profile card. Include an avatar</span>
+<span class="d">  circle, name, role or handle, a short bio line, two or three small stat chips, and a primary …</span>
+
+<span class="d">·</span> <span class="d">From memory: &quot;Created a self-contained notes.html on the Desktop with loca…&quot;</span>
+
+<span class="d">·</span> <span class="d">From Claude&#x27;s notes: deliverables as one html file · simple html report style</span>
+
+<span class="d">  ⎿ Sorted as: task · step by step</span></pre></div>
+
+  <h2>Design 1 · One folded line</h2>
+  <p class="sub">One line says what came along and what it costs. ctrl+o opens it, the same way tool results open today.</p>
+  <div class="lbl">Closed (how it first appears)</div>
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div><pre><span class="d">&gt; Create one self-contained HTML file that renders a compact user profile card. Include an avatar</span>
+<span class="d">  circle, name, role or handle, a short bio line, two or three small stat chips, and a primary …</span>
+
+<span class="a">⏺</span> <span class="b">Context</span> <span class="d">· 3 brought along · +410 tokens · 0.5 s</span>  <span class="f">(ctrl+o to expand)</span>
+<span class="d">  ⎿ Sorted as: task · step by step</span></pre></div>
+  <div class="lbl">After ctrl+o</div>
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div><pre><span class="d">&gt; Create one self-contained HTML file that renders a compact user profile card. Include an avatar</span>
+<span class="d">  circle, name, role or handle, a short bio line, two or three small stat chips, and a primary …</span>
+
+<span class="a">⏺</span> <span class="b">Context</span> <span class="d">· 3 brought along · +410 tokens · 0.5 s</span>  <span class="f">(ctrl+o to collapse)</span>
+  <span class="d">⎿</span> <span class="ad">memory </span>  Created a self-contained notes.html on the Desktop…     <span class="w">⚠ an event, skipped</span>
+    <span class="ad">Claude </span>  deliverables as one html file                     <span class="d">fit 0.64 · 229 tokens</span>
+    <span class="ad">Claude </span>  simple html report style                          <span class="d">fit 0.63 · 160 tokens</span>
+<span class="d">  ⎿ Sorted as: task · step by step</span></pre></div>
+
+  <h2>Design 2 · Chips</h2>
+  <p class="sub">One line of small labels. Amber means your memory, green means Claude's notes. The ⚠ stays on the chip.</p>
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div><pre><span class="d">&gt; Create one self-contained HTML file that renders a compact user profile card. Include an avatar</span>
+<span class="d">  circle, name, role or handle, a short bio line, two or three small stat chips, and a primary …</span>
+
+  <span class="chipm"> ◆ memory · notes.html on the Desktop ⚠ </span> <span class="chipc"> ◇ one html file </span> <span class="chipc"> ◇ simple report style </span>  <span class="d">+410 tokens</span>
+<span class="d">  ⎿ Sorted as: task · step by step</span></pre></div>
+
+  <h2>Design 3 · The context card</h2>
+  <p class="sub">A small box under your request. Each item gets a fit bar and its size, so you can see what was close and what was a stretch.</p>
+  <div class="term"><div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div><pre><span class="d">&gt; Create one self-contained HTML file that renders a compact user profile card. Include an avatar</span>
+<span class="d">  circle, name, role or handle, a short bio line, two or three small stat chips, and a primary …</span>
+
+<span class="a">╭─ Brought along for this request </span><span class="a">───────────────────────────────────────</span><span class="d"> 3 · +410 tokens · 0.5 s </span><span class="a">─╮</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="b">Your memory</span>                                                                                     <span class="a">│</span>
+<span class="a">│</span>   <span class="w">⚠</span> Created a self-contained notes.html on the Desktop…   <span class="d">fit </span><span class="a">██</span><span class="f">░░░░░░</span>  <span class="w">event, skipped</span>           <span class="a">│</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="b">Claude&#x27;s notes</span>                                                                                  <span class="a">│</span>
+<span class="a">│</span>   <span class="ad">◇</span> deliverables as one html file                          <span class="d">fit </span><span class="a">████</span><span class="f">░░░░</span>  <span class="d">229 tokens</span>              <span class="a">│</span>
+<span class="a">│</span>   <span class="ad">◇</span> simple html report style                               <span class="d">fit </span><span class="a">███</span><span class="f">░░░░░</span>  <span class="d">160 tokens</span>              <span class="a">│</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">╰──────────────────────────────────────────────────────────────────────────────────────────────────╯</span>
+<span class="d">  ⎿ Sorted as: task · step by step</span></pre></div>
+
+  <div class="notes">
+    <div class="card"><h3>1 · One folded line</h3><ul><li>Takes the least room: 1 line.</li><li>Details only when you ask (ctrl+o).</li><li>Matches how tool results already look.</li></ul></div>
+    <div class="card"><h3>2 · Chips</h3><ul><li>Everything on 1 line, always visible.</li><li>Names are shortened to fit.</li><li>No fit scores or sizes.</li></ul></div>
+    <div class="card"><h3>3 · Context card</h3><ul><li>Shows the most: fit, size, what was skipped.</li><li>Takes 8–10 lines on every message.</li><li>Best while you are tuning the memory.</li></ul></div>
+  </div>
+
+  <p class="foot">Design round, 28 Sep 2026. Data: recall re-run (read only) on the request from 20:50 in ~/.agentic-coder/history.jsonl, with the search model on this Mac. The same line would also hold other things brought along: @files, the math notes and the project map. Nothing is built. You can pick one, or mix parts of them.</p>
+</div>
+</body>
+</html>

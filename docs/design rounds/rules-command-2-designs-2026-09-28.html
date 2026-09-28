@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules Command Designs</title>
+<style>
+  :root {
+    --bg: #f1efea; --card: #ffffff; --text: #1d1d1b; --muted: #6b6a65; --line: #e6e3dc; --soft: #f7f6f2;
+    --term: #1c1c1c; --t-text: #d7d7d7; --t-dim: #8a8a8a; --t-faint: #5a5a5a; --t-accent: #87d787; --t-accent-dim: #5faf5f;
+    --t-warn: #ffaf5f; --t-sel: #2b3a2c; --t-line: #3a3a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121210; --card: #1c1c1a; --text: #ecebe6; --muted: #a09e97; --line: #33322e; --soft: #232320; --term: #101010; --t-line: #333; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .box { max-width: 1040px; margin: 32px auto; background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 26px 28px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+  .lead { margin: 8px 0 0; }
+  h2 { font-size: 18px; margin: 30px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 12px; }
+  .term { background: var(--term); border-radius: 10px; overflow: hidden; border: 1px solid var(--t-line); }
+  .bar { display: flex; align-items: center; gap: 7px; padding: 9px 12px; background: #2a2a2a; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .bar i:nth-child(1) { background: #ff5f57; } .bar i:nth-child(2) { background: #febc2e; } .bar i:nth-child(3) { background: #28c840; }
+  .bar span { flex: 1; text-align: center; color: #9a9a9a; font-size: 12px; margin-right: 40px; }
+  pre { margin: 0; padding: 14px 16px 16px; color: var(--t-text); overflow-x: auto;
+    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  .d { color: var(--t-dim); } .f { color: var(--t-faint); } .a { color: var(--t-accent); } .ad { color: var(--t-accent-dim); }
+  .w { color: var(--t-warn); } .b { font-weight: 700; color: #fff; }
+  .sel { background: var(--t-sel); display: inline-block; width: 100%; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+  .card li { margin-bottom: 3px; }
+  code { font: 13px ui-monospace, Menlo, monospace; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+  .foot { margin: 24px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  @media (max-width: 700px) { .box { margin: 16px; padding: 18px 14px; } .keys { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="box">
+
+  <h1>A /rules command: 2 designs</h1>
+  <p class="lead">Both use your real memory, the 16 notes saved on this Mac today. Both show exactly what Gemma reads at the start of every conversation. Today, <code>/memory</code> lists only 8 notes per section and gives no way to switch one off.</p>
+
+  <h2>Design 1 · The list</h2>
+  <p class="sub">Typing <code>/rules</code> prints the whole list once, like <code>/memory</code>. You change things with short commands.</p>
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div>
+<pre><span class="d">&gt;</span> /rules
+
+<span class="a">⏺</span> <span class="b">Rules</span> <span class="d">· what Gemma reads at the start of every conversation</span>
+
+  <span class="b">Always</span>  <span class="d">15 of 20 · about 330 tokens</span>                                        <span class="f">~/.agentic/memory</span>
+  <span class="f">──────────────────────────────────────────────────────────────────────────────────────────</span>
+   <span class="d"> 1</span>  After you make a page or a file, say exactly where it is, with its full path.
+   <span class="d"> 2</span>  Before a job that takes more than a few minutes, say how long it will take.
+   <span class="d"> 3</span>  Before you change anything, say in one plain, simple sentence what you are going to do.
+   <span class="d"> 4</span>  Before you delete or move many files, make a backup first.
+   <span class="d"> 5</span>  Explain simply: the result first, then a few short steps. No file names or code unless
+       the user asks.
+   <span class="d"> 6</span>  A finished page or report is ONE self-contained .html file with &lt;meta charset="utf-8"&gt;,
+       on the Desktop unless told otherwise.
+   <span class="d"> 7</span>  If a file the user named is missing, say so at once and ask where it went.
+   <span class="d"> 8</span>  In a design: no thin coloured stripe on the edge of a card, and nothing that scrolls sideways.
+   <span class="d"> 9</span>  Never say a check passed unless you ran it and read what it printed.
+   <span class="d">10</span>  One step per command: do not chain stop, clean, restart and test in one line.
+   <span class="d">11</span>  A preview shows the real thing with real data, not a mock-up.
+   <span class="d">12</span>  A simple request is done with few questions. Ask only what the files cannot tell you.
+   <span class="d">13</span>  "Uniform" means the same parts with the same ends and heights in every repeated piece.
+   <span class="d">14</span>  When you are stuck, ask the user what to do instead of guessing or stopping.
+   <span class="d">15</span>  When you revise a file you already handed over, keep the original and write a new one.
+
+  <span class="b">Other notes</span>  <span class="d">1 · one line at the start, the whole note only when a request fits</span>
+  <span class="f">──────────────────────────────────────────────────────────────────────────────────────────</span>
+   <span class="d">16</span>  Created a self-contained notes.html on the Desktop with local storage…  <span class="w">⚠ an event, not a rule</span>
+
+  <span class="d">/rules add &lt;text&gt; · /rules off 16 · /rules remove 16 · /rules always 16 · /rules open (browser)</span>
+
+<span class="a">&gt;</span> <span class="f">█</span></pre>
+  </div>
+
+  <h2>Design 2 · The editor</h2>
+  <p class="sub"><code>/rules</code> opens a panel you move through with the arrow keys, like <code>/increase</code>. You change a rule where it sits.</p>
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>you — coding — 107×44</span></div>
+<pre><span class="a">╭─ Rules ──────────────────────────────────────────────────────────────────────── 15 of 20 always ─╮</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="d">Read at every start</span>  <span class="a">███████████████</span><span class="f">░░░░░</span>  <span class="d">15 rules · about 330 tokens · 5 more fit</span>             <span class="a">│</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="b">Always</span>                                                                                          <span class="a">│</span>
+<span class="a">│</span>   <span class="a">●</span>  After you make a page or a file, say exactly where it is, with its full path.               <span class="a">│</span>
+<span class="a">│</span>   <span class="a">●</span>  Before a job that takes more than a few minutes, say how long it will take.                 <span class="a">│</span>
+<span class="a">│</span><span class="sel"> <span class="a">❯</span> <span class="a">●</span>  Before you change anything, say in one plain, simple sentence what you are going to do.     </span><span class="a">│</span>
+<span class="a">│</span>   <span class="a">●</span>  Before you delete or move many files, make a backup first.                                  <span class="a">│</span>
+<span class="a">│</span>   <span class="a">●</span>  Explain simply: the result first, then a few short steps. No file names or code…            <span class="a">│</span>
+<span class="a">│</span>   <span class="a">●</span>  A finished page or report is ONE self-contained .html file with &lt;meta charset="utf-8"&gt;…     <span class="a">│</span>
+<span class="a">│</span>   <span class="a">●</span>  If a file the user named is missing, say so at once and ask where it went.                  <span class="a">│</span>
+<span class="a">│</span>   <span class="d">   … 8 more (↓)</span>                                                                                <span class="a">│</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="b">Other notes</span>                                                                                     <span class="a">│</span>
+<span class="a">│</span>   <span class="w">○</span>  Created a self-contained notes.html on the Desktop with…   <span class="w">⚠ an event, not a rule</span>           <span class="a">│</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="f">──────────────────────────────────────────────────────────────────────────────────────────────</span>  <span class="a">│</span>
+<span class="a">│</span>  <span class="d">Rule 3 · saved 28 Sep from Claude's notes · used 0 times · read at every start</span>                  <span class="a">│</span>
+<span class="a">│</span>                                                                                                  <span class="a">│</span>
+<span class="a">│</span>  <span class="d">↑↓ move · space on/off · e edit · a add · d delete · s always/sometimes · esc close</span>             <span class="a">│</span>
+<span class="a">╰──────────────────────────────────────────────────────────────────────────────────────────────────╯</span></pre>
+  </div>
+
+  <div class="keys">
+    <div class="card"><h3>What the keys do in design 2</h3><ul>
+      <li><b>space</b> switches a rule off without deleting it. <span style="color:var(--t-accent-dim)">●</span> on becomes ○ off, and Gemma stops reading it.</li>
+      <li><b>e</b> edits the rule in place. Enter saves it, esc leaves it as it was.</li>
+      <li><b>a</b> adds a new rule at the bottom of "Always".</li>
+      <li><b>d</b> asks "Delete this rule?" first. <code>/memory undo</code> brings it back.</li>
+      <li><b>s</b> moves a note between "Always" (read every time) and "Other notes" (read only when a request fits).</li>
+    </ul></div>
+    <div class="card"><h3>Same in both designs</h3><ul>
+      <li>The count: <b>15 of 20</b>. A 21st rule asks you to switch one off first, so the list can't grow without limit.</li>
+      <li>An orange ⚠ marks a note that only records something that happened, like "Created notes.html…".</li>
+      <li>The token count is what the rules cost Gemma before it reads your request.</li>
+      <li>Rules you change apply from the next message. Nothing restarts.</li>
+    </ul></div>
+  </div>
+
+  <p class="foot">Design round, 28 Sep 2026. Both mockups use the real notes in ~/.agentic/memory/facts (15 "always" rules + 1 other note, 1,292 characters of rules). The limit of 20 is a proposal. Nothing is built yet. You can pick one, or mix parts of both.</p>
+
+</div>
+</body>
+</html>
