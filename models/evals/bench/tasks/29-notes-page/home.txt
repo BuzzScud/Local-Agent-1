@@ -1,0 +1,5 @@
+This task runs with its project as the home folder: run.mjs points HOME there
+for the run, so "Save it to my Desktop" means project/Desktop, as it means
+~/Desktop when you run Agentic Coder from your home folder. Your real Desktop
+is never touched. The prompt is the notes.html test prompt, word for word
+(~/.agentic-coder/history.jsonl, 28 Sep 2026).
