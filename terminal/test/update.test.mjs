@@ -37,7 +37,7 @@ test('a code commit on main after the start lights the badge; a docs-only commit
   commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 2;\n' }, 'code');
   const u = await checkUpdate(repo, start, built);
   expect(u?.kind).toBe('ready');
-  expect(updateText(u)).toBe('↻ Update available · /update to use it');
+  expect(updateText(u)).toBe('Update available · /update to use it');
 });
 
 test('committing code that was already built in (older than the build) is not an update', async () => {
@@ -61,7 +61,7 @@ test("a push to GitHub's main from elsewhere (not in this folder) asks for a pul
   git(repo, 'update-ref', 'refs/remotes/origin/main', pushed);
   const u = await checkUpdate(repo, start, Date.now());
   expect(u?.kind).toBe('pull');
-  expect(updateText(u)).toBe('↻ Update on GitHub · /update to get it');
+  expect(updateText(u)).toBe('Update on GitHub · /update to get it');
   git(repo, 'merge', '-q', '--ff-only', 'other'); // pulled: now it is a plain restart
   expect((await checkUpdate(repo, start, Date.now() - 60_000))?.kind).toBe('ready');
 });
@@ -80,7 +80,7 @@ test('the real app shows the badge in the lower right when a code commit lands w
     await new Promise((r) => setTimeout(r, 700));
     expect(await t.screen()).not.toContain('Update available');
     commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 4;\n' }, 'an update');
-    await t.waitFor('↻ Update available · /update to use it', 10_000);
+    await t.waitFor('Update available · /update to use it', 10_000);
     const lines = (await t.screen()).split('\n');
     const footer = lines.find((l) => l.includes('Update available'));
     expect(footer).toContain('? for shortcuts'); // the footer line, right side
@@ -131,7 +131,7 @@ test('/update without the launcher (run from the source): up to date says so; an
     await t.type('/update'); t.key('enter');
     await t.waitFor('Agentic Coder is up to date');
     commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 6;\n' }, 'an update');
-    await t.waitFor('↻ Update available · /update to use it', 10_000);
+    await t.waitFor('Update available · /update to use it', 10_000);
     await t.type('/update'); t.key('enter');
     await t.waitFor('quit and start it again');
   } finally { await t.close(); await fake.close(); }
@@ -160,7 +160,7 @@ test('/update through the bonsai launcher: rebuilt, restarted in the same window
     await t.waitFor('Hello from before the update.');
     await t.idle();
     commit(repo, { 'terminal/src/app/commands.mjs': `${readFileSync(join(repo, 'terminal/src/app/commands.mjs'), 'utf8')}// an update\n` }, 'an update');
-    await t.waitFor('↻ Update available · /update to use it', 10_000);
+    await t.waitFor('Update available · /update to use it', 10_000);
     const before = t.raw().length;
     await t.type('/update'); t.key('enter');
     await t.waitFor('resumed: hi', 60_000);
@@ -300,7 +300,7 @@ test('the real app asks GitHub on its own: a push from another machine lights "U
     expect(await t.screen()).not.toContain('Update');
     const pushed = commit(other, { 'models/index.mjs': 'export {};\n' }, 'pushed from another machine');
     git(other, 'push', '-q', 'origin', 'main');
-    await t.waitFor('↻ Update on GitHub · /update to get it', 10_000);
+    await t.waitFor('Update on GitHub · /update to get it', 10_000);
     await t.type('/update'); t.key('enter');
     await t.waitFor('The update is in the repo now', 15_000);
     expect(git(local, 'rev-parse', 'main')).toBe(pushed);

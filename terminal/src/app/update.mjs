@@ -94,7 +94,7 @@ export async function checkUpdate(repo, start, built) {
   return null;
 }
 
-export const updateText = (u) => (!u ? null : u.kind === 'pull' ? '↻ Update on GitHub · /update to get it' : '↻ Update available · /update to use it');
+export const updateText = (u) => (!u ? null : u.kind === 'pull' ? 'Update on GitHub · /update to get it' : 'Update available · /update to use it');
 
 // Where the update may come from: GitHub over https or ssh (both check who
 // they talk to), or a folder on this Mac. Not plain http:// or git:// (anyone
