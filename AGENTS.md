@@ -20,6 +20,10 @@
   2026). Any report, diagram, flow, test page or other file about Gemma (the model, its
   tests, its thinking, its harness) is saved there; a replaced version moves to its
   `older versions/`. Raw model results still stay in `models/gemma-4-12b/results/`.
+  **Tests go in its `test/` folder** (the user's rule, 28 Sep evening): a test wizard or
+  runbook, a run's timeline, a test's results page. The logs and summaries a test wizard
+  has you save go in a subfolder there (`test/gemma-28-tests/`), and a replaced test page
+  moves to `test/older versions/`. Plans, diagrams and comparisons stay at the top.
 - **The Bonsai-era pages** (24–28 Sep 2026) left the DOCS folder on 28 Sep: they are in
   `~/Desktop/bonsai-docs/` (beside `gemma-docs`, on the Mac only, not in git), and in git
   history under `docs/`. The restore points from before the 24–28 Sep changes (git bundles,

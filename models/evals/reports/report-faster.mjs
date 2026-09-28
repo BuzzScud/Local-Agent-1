@@ -10,7 +10,7 @@ import { homedir } from 'node:os';
 
 const [beforeDir, afterDir, outArg] = process.argv.slice(2);
 if (!beforeDir || !afterDir) { console.error('usage: report-faster.mjs <before dir> <after dir> [out.html]'); process.exit(1); }
-const out = outArg ?? join(homedir(), 'Desktop', 'gemma-docs', 'gemma-faster-results-2026-09-28.html');
+const out = outArg ?? join(homedir(), 'Desktop', 'gemma-docs', 'test', 'gemma-faster-results-2026-09-28.html');
 const load = (d) => JSON.parse(readFileSync(join(d, 'summary.json'), 'utf8'));
 const B = load(beforeDir);
 const A = load(afterDir);
