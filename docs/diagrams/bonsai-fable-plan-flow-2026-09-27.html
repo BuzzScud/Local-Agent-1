@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fable round plan</title><style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--bestInk:#8a3a1c;--up:#1d7a46;--down:#b3261e;--c-before:#2a78d6;--c-after:#eb6834;--newBg:#fdf0e9;--upBg:#e9f4ec}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--c-before:#3987e5;--c-after:#d95926;--newBg:#33241d;--upBg:#1e2b22}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--c-before:#3987e5;--c-after:#d95926;--newBg:#33241d;--upBg:#1e2b22}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1120px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}h2{font-size:21px;letter-spacing:-.01em;margin:44px 0 6px}h3{font-size:16px;margin:0 0 4px}p{margin:0 0 10px}
+.lede{color:var(--mute);max-width:820px}.sub{color:var(--mute);font-size:14px;margin-bottom:14px;max-width:860px}
+.now{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
+.now span{font-size:13px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute)}
+.now span b{color:var(--ink)}
+.now span.run{border-color:var(--c-after);background:var(--newBg);color:var(--bestInk)}.now span.run b{color:var(--bestInk)}
+.now span.ok{border-color:var(--up);background:var(--upBg)}.now span.ok b{color:var(--up)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--mute);margin:8px 0 4px}.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{width:14px;height:10px;border-radius:3px;display:inline-block}
+figure{margin:14px 0 0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 12px;min-width:0}figcaption{color:var(--mute);font-size:13px;margin-top:8px;max-width:860px}
+.scroll{overflow-x:auto}svg{display:block;width:100%;height:auto;overflow:visible;margin:0 auto;max-width:940px;min-width:720px}svg text{fill:var(--mute);font-size:11px;font-family:inherit}
+.nd rect{fill:var(--soft);stroke:var(--line);stroke-width:1.5}
+.nd.done rect{fill:var(--upBg);stroke:var(--up)}
+.nd.run rect{fill:var(--newBg);stroke:var(--c-after);stroke-width:2}
+.nd.fb rect{fill:var(--card);stroke:var(--faint);stroke-dasharray:4 3}
+.nd .t{fill:var(--ink);font-weight:700;font-size:13px}.nd .s{fill:var(--mute);font-size:11.5px}
+.nd .st{font-size:11px;font-weight:700}.nd .st.done{fill:var(--up)}.nd .st.run{fill:var(--c-after)}.nd .st.wait{fill:var(--faint)}
+.bar{fill:var(--line)}.barfill{fill:var(--c-after)}
+.ar{fill:none;stroke:var(--mute);stroke-width:1.6}.ar.fb{stroke:var(--faint);stroke-dasharray:5 4}.al{fill:var(--mute);font-size:11px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
+.card{background:var(--soft);border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;font-size:14px}
+.card.new{background:var(--newBg);border-color:var(--c-after)}
+.card.fb{background:var(--card);border-style:dashed;border-color:var(--faint)}
+.card h3{display:flex;align-items:baseline;gap:8px}
+.pick{font-size:11.5px;font-weight:700;padding:0 7px;border-radius:999px;background:var(--c-after);color:#fff;white-space:nowrap}
+.pick.gray{background:var(--faint)}
+.card p{margin:6px 0 0;font-size:13.5px}.card .was{color:var(--mute)}.card b.g{color:var(--up)}
+.clock{display:flex;flex-wrap:wrap;gap:0;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.clock div{flex:1 1 150px;padding:12px 14px;border-left:1px solid var(--line);font-size:13px;color:var(--mute);min-width:150px}
+.clock div:first-child{border-left:none}
+.clock b{display:block;color:var(--ink);font-size:14px;font-variant-numeric:tabular-nums}
+.clock div.past b{color:var(--up)}.clock div.run{background:var(--newBg)}.clock div.run b{color:var(--bestInk)}
+.foot{margin-top:40px;color:var(--mute);font-size:13px}.foot li{margin:3px 0}code{font:12.5px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 5px;border-radius:4px}
+@media (max-width:760px){h1{font-size:25px}.clock div{flex:1 1 100%;border-left:none;border-top:1px solid var(--line)}.clock div:first-child{border-top:none}}
+</style></head><body><main>
+<h1>The Fable round&rsquo;s plan, drawn as a flow</h1>
+<p class="lede">What the optimization round does from start to finish: the two speed-ups it built this afternoon, the checks that protect tonight&rsquo;s runs, and the overnight measuring that ends as a report on your Desktop. Status marks are a snapshot of <b>4:31&nbsp;PM</b> &mdash; the live progress is in the round&rsquo;s <code>queue.log</code>.</p>
+<div class="now">
+<span class="ok"><b>done</b> &middot; two speed-ups built, 281/281 tests</span>
+<span class="run"><b>running now</b> &middot; &ldquo;before&rdquo; bench, 122 of 140 runs</span>
+<span><b>waiting</b> &middot; checks &rarr; freeze &rarr; overnight queue &rarr; report</span>
+<span><b>standing rule</b> &middot; build, test, measure, report &mdash; no commit</span>
+</div>
+
+<section id="flow"><h2>The plan, start to finish</h2>
+<div class="legend"><span><i style="background:var(--upBg);border:1.5px solid var(--up)"></i>done</span><span><i style="background:var(--newBg);border:1.5px solid var(--c-after)"></i>running now</span><span><i style="background:var(--soft);border:1.5px solid var(--line)"></i>waiting</span><span><i style="background:var(--card);border:1.5px dashed var(--faint)"></i>only if a check fails</span></div>
+<figure><div class="scroll"><svg viewBox="0 0 940 940" role="img" aria-label="The Fable round's plan as a flow diagram"><defs><marker id="hd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--mute)"/></marker><marker id="hdF" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--faint)"/></marker></defs>
+<g class="nd done"><rect x="40" y="16" width="400" height="66" rx="10"/><text class="t" x="54" y="38">1 &middot; Build the Fable-style upgrade</text><text class="st done" x="426" y="38" text-anchor="end">done &#10003;</text><text class="s" x="54" y="56">helpers with fresh memory &middot; several looks per step &middot;</text><text class="s" x="54" y="71">rescue &middot; reviewer &mdash; branch fable-harness, 280/280 tests</text></g>
+<g class="nd done"><rect x="40" y="112" width="400" height="66" rx="10"/><text class="t" x="54" y="134">2 &middot; Measure what is still slow</text><text class="st done" x="426" y="134" text-anchor="end">done &#10003;</text><text class="s" x="54" y="152">the failed chart run: 81% of it was the model re-reading</text><text class="s" x="54" y="167">its own memory after a trim &mdash; one re-read took 4:14</text></g>
+<g class="nd done"><rect x="40" y="208" width="400" height="66" rx="10"/><text class="t" x="54" y="230">3 &middot; Build the two speed-ups</text><text class="st done" x="426" y="230" text-anchor="end">done &#10003;</text><text class="s" x="54" y="248">memory kept across trims &middot; High instructions read</text><text class="s" x="54" y="263">ahead at start &mdash; both in, 281/281 tests</text></g>
+<g class="nd run"><rect x="40" y="304" width="400" height="82" rx="10"/><text class="t" x="54" y="326">4 &middot; &ldquo;Before&rdquo; bench on the old code</text><text class="st run" x="426" y="326" text-anchor="end">running</text><text class="s" x="54" y="344">the 28 practice tasks &times;5 on main &mdash; the yardstick</text><text class="s" x="54" y="359">tonight&rsquo;s after-runs are compared against</text><rect class="bar" x="54" y="368" width="300" height="6" rx="3"/><rect class="barfill" x="54" y="368" width="261" height="6" rx="3"/><text class="s" x="426" y="375" text-anchor="end">122/140</text></g>
+<g class="nd"><rect x="40" y="416" width="400" height="82" rx="10"/><text class="t" x="54" y="438">5 &middot; Live checks on the real model</text><text class="st wait" x="426" y="438" text-anchor="end">waiting</text><text class="s" x="54" y="456">several calls in one reply &middot; parking a conversation on</text><text class="s" x="54" y="471">disk and back &middot; a real Finder on the chart-bug copy &middot;</text><text class="s" x="54" y="486">the trim re-read &mdash; prints WORKS or did NOT help</text></g>
+<g class="nd"><rect x="40" y="528" width="400" height="66" rx="10"/><text class="t" x="54" y="550">6 &middot; Taste test</text><text class="st wait" x="426" y="550" text-anchor="end">waiting</text><text class="s" x="54" y="568">3 practice tasks on the new code, watched end to</text><text class="s" x="54" y="583">end &mdash; the last look before the night runs alone</text></g>
+<g class="nd"><rect x="40" y="624" width="400" height="66" rx="10"/><text class="t" x="54" y="646">7 &middot; Freeze the code</text><text class="st wait" x="426" y="646" text-anchor="end">waiting</text><text class="s" x="54" y="664">copy the worktree to fable-harness-frozen, so the</text><text class="s" x="54" y="679">night&rsquo;s runs stay untouched by any later edit</text></g>
+<g class="nd"><rect x="40" y="720" width="400" height="98" rx="10"/><text class="t" x="54" y="742">8 &middot; Overnight queue (queue.sh)</text><text class="st wait" x="426" y="742" text-anchor="end">waiting</text><text class="s" x="54" y="760">the chart bug &times;5, before and after (result ~9:30 PM) &rarr;</text><text class="s" x="54" y="775">28 tasks &times;5 after &rarr; 28 real requests &times;5, before + after</text><text class="s" x="54" y="790">one model at a time &middot; every step leaves a .done marker,</text><text class="s" x="54" y="805">so a crash resumes where it stopped</text></g>
+<g class="nd"><rect x="40" y="848" width="400" height="66" rx="10"/><text class="t" x="54" y="870">9 &middot; The report</text><text class="st wait" x="426" y="870" text-anchor="end">waiting</text><text class="s" x="54" y="888">one page, before vs after on all three sets + the probe</text><text class="s" x="54" y="903">numbers &mdash; on your Desktop by ~6:00 AM</text></g>
+<g class="nd fb"><rect x="560" y="440" width="330" height="130" rx="10"/><text class="t" x="574" y="462">If the memory switch misbehaves</text><text class="s" x="574" y="480">the trim check said &ldquo;did NOT help&rdquo;, or the taste</text><text class="s" x="574" y="495">test looks wrong &rarr; the engine switch goes back</text><text class="s" x="574" y="510">off and tonight still runs without it. Tomorrow&rsquo;s</text><text class="s" x="574" y="525">fallback is already designed: summarize the old</text><text class="s" x="574" y="540">steps instead of the big trim (not built).</text></g>
+<path class="ar" d="M240 82 V110" marker-end="url(#hd)"/>
+<path class="ar" d="M240 178 V206" marker-end="url(#hd)"/>
+<path class="ar" d="M240 274 V302" marker-end="url(#hd)"/>
+<path class="ar" d="M240 386 V414" marker-end="url(#hd)"/>
+<path class="ar" d="M240 498 V526" marker-end="url(#hd)"/>
+<path class="ar" d="M240 594 V622" marker-end="url(#hd)"/>
+<path class="ar" d="M240 690 V718" marker-end="url(#hd)"/>
+<path class="ar" d="M240 818 V846" marker-end="url(#hd)"/>
+<path class="ar fb" d="M440 457 H558" marker-end="url(#hdF)"/><text class="al" x="448" y="450">did NOT help</text>
+<path class="ar fb" d="M440 561 H524 V533 H558" marker-end="url(#hdF)"/><text class="al" x="448" y="554">looks wrong</text>
+<path class="ar fb" d="M725 570 V657 H442" marker-end="url(#hdF)"/><text class="al" x="733" y="618">carry on, switch off</text>
+</svg></div><figcaption>Steps 1&ndash;3 happened this afternoon; step 4 is running at the snapshot. The dashed box is the escape hatch: a failed check turns the new engine switch off but never cancels the night&rsquo;s measuring.</figcaption></figure></section>
+
+<section id="speedups"><h2>The two speed-ups, plainly</h2>
+<p class="sub">The optimize round measured a failed chart-bug run and found 81% of the time was the model re-reading its own memory. These are the picks that went into tonight&rsquo;s runs (their numbers are the option numbers from the round &mdash; option 2 was left as the fallback).</p>
+<div class="cards">
+<div class="card new"><h3><span class="pick">pick 1</span>Memory kept across trims</h3><p class="was">Before: when the conversation&rsquo;s memory filled and old output was trimmed, the engine forgot everything it had read and re-read its whole remaining memory &mdash; <b>4 min 14 s</b> in the measured run.</p><p>Now: one engine switch (<code>--cache-reuse 256</code>) lets it keep what it already read. An old test explicitly forbade this switch with <b>no reason recorded anywhere</b>; it was flipped, with the 4:14 measurement written into the test as the reason. Because it was never tried here, tonight&rsquo;s live check measures it directly and prints <b class="g">WORKS</b> or <b>did NOT help</b>.</p></div>
+<div class="card new"><h3><span class="pick">pick 3</span>High instructions read ahead</h3><p class="was">Before: the first rescue of a session paid <b>~25&ndash;30 s</b> reading the High-effort instructions before it could start.</p><p>Now: about 2.5 s after Bonsai starts, it quietly reads those instructions into the spare slot and saves that reading (skipped if the slot is busy). The first rescue restores the saved reading and starts <b class="g">right away</b>.</p></div>
+<div class="card fb"><h3><span class="pick gray">pick 2 &middot; not built</span>Summarize instead of the big trim</h3><p class="was">The fallback: instead of trimming old output and letting the model re-read, write a short summary of the old steps.</p><p>Only gets built if pick 1&rsquo;s switch misbehaves in tonight&rsquo;s checks &mdash; then it becomes tomorrow&rsquo;s plan.</p></div>
+</div></section>
+
+<section id="clock"><h2>The clock</h2>
+<div class="clock">
+<div class="past"><b>2:02 PM</b>&ldquo;before&rdquo; bench starts (140 runs)</div>
+<div class="run"><b>4:31 PM</b>snapshot: 122 of 140 done, ~ends 4:55</div>
+<div><b>~5 PM</b>live checks + taste test, then freeze</div>
+<div><b>evening</b>chart bug &times;5 both ways &mdash; result ~9:30 PM</div>
+<div><b>overnight</b>tasks + 28 real requests, both ways</div>
+<div><b>~6 AM</b>the report on your Desktop</div>
+</div></section>
+
+<section class="foot"><ul>
+<li>The plan is running in the peer session; the code is on branch <code>fable-harness</code> (~/worktrees/bonsai-fable), not committed &mdash; the round&rsquo;s standing rule.</li>
+<li>The steps come from the round&rsquo;s own scripts: <code>queue.sh</code>, <code>probes.mjs</code>, <code>chart-runs.mjs</code> in <code>models/bonsai-2-27b/results/fable-harness-2026-09-27/</code>; progress in <code>queue.log</code> and the <code>.done-*</code> markers.</li>
+<li>What the upgrade itself changes (helpers, rescue, reviewer, several looks) is the companion page: <code>bonsai-flow-before-after-fable-2026-09-27.html</code>, beside this one.</li>
+<li>Nothing on this page loads from the internet.</li></ul></section>
+</main></body></html>

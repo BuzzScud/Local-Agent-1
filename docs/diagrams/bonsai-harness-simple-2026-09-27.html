@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai harness, simply</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--m:#eb6834;--t-soft:rgba(42,120,214,.08);--m-soft:rgba(235,104,52,.09);--m-door:rgba(235,104,52,.16);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+    --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.12);--m-soft:rgba(232,116,63,.12);--m-door:rgba(232,116,63,.22);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+  --t:#3987e5;--m:#e8743f;--t-soft:rgba(57,135,229,.12);--m-soft:rgba(232,116,63,.12);--m-door:rgba(232,116,63,.22);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1240px;margin:0 auto;padding:26px 16px 30px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}
+h2{font-size:16px;letter-spacing:-.005em;margin:0}
+p{margin:0}
+.lede{color:var(--mute);max-width:900px;font-size:16px}
+.lede b{color:var(--ink);font-weight:600}
+
+/* the five steps */
+.steps{display:grid;grid-template-columns:1fr 30px 1fr 30px 1fr 30px 1fr 30px 1fr;margin-top:20px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px 15px;min-width:0}
+.step.open{background:var(--inner)}
+.head{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.n{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--bg);font-weight:600;font-size:12.5px}
+.head b{font-size:16px;letter-spacing:-.005em}
+.step span{display:block;color:var(--mute);font-size:13.5px}
+.arrow{display:grid;place-items:center;color:var(--mute)}
+.arrow svg{width:20px;height:20px;display:block}
+.arrow path{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* inside step 3 */
+.zoom{position:relative;margin-top:16px;background:var(--inner);border:1px solid var(--line);border-radius:14px;padding:15px 18px 16px}
+.zoom::before{content:"";position:absolute;left:50%;top:-8px;width:14px;height:14px;margin-left:-7px;background:var(--inner);border-left:1px solid var(--line);border-top:1px solid var(--line);transform:rotate(45deg)}
+.zoomhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-bottom:12px}
+.zoomhead p{color:var(--mute);font-size:13.5px}
+.loop{display:grid;grid-template-columns:1fr 44px 1fr 44px 1fr}
+.node{border:1px solid var(--line);border-radius:12px;padding:11px 14px 12px;min-width:0;background:var(--card)}
+.node.brain{background:linear-gradient(var(--m-soft),var(--m-soft)),var(--card)}
+.node.code{background:linear-gradient(var(--t-soft),var(--t-soft)),var(--card)}
+.who{display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin-bottom:3px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--t)}
+.brain .dot{background:var(--m)}
+.node b{display:block;font-size:15px}
+.node span.say{display:block;color:var(--mute);font-size:13px;margin-top:2px}
+.rail{position:relative;height:28px;margin:0 calc((100% - 88px) / 6);border:2px solid var(--mute);border-top:0;border-radius:0 0 16px 16px}
+.rail::before{content:"";position:absolute;left:-7px;top:0;border:6px solid transparent;border-top:0;border-bottom:9px solid var(--mute)}
+.rail span{position:absolute;left:50%;bottom:-11px;transform:translateX(-50%);background:var(--inner);padding:0 12px;white-space:nowrap;font-size:13px;color:var(--mute)}
+.rail span b{color:var(--ink);font-weight:600}
+.exit{margin-top:22px;text-align:center;color:var(--mute);font-size:13.5px}
+.exit b{color:var(--ink);font-weight:600}
+
+/* the four cards */
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 16px 14px;min-width:0}
+.card h2{margin-bottom:7px}
+.card ul{list-style:none;margin:0;padding:0}
+.card li{font-size:13.5px;color:var(--mute);padding:5px 0;border-top:1px solid var(--soft)}
+.card li:first-child{border-top:0;padding-top:0}
+.card li:last-child{padding-bottom:0}
+.card li b{color:var(--ink);font-weight:600}
+
+.foot{color:var(--faint);font-size:12.5px;margin-top:18px}
+.foot a{color:var(--mute)}
+
+@media (max-width:1080px){
+  .cards{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:860px){
+  .steps{grid-template-columns:1fr}
+  .arrow{height:26px}
+  .arrow svg{transform:rotate(90deg)}
+  .zoom::before{display:none}
+  .loop{grid-template-columns:1fr}
+  .rail{height:auto;margin:10px 0 0;border:0;border-radius:0}
+  .rail::before{display:none}
+  .rail span{position:static;transform:none;display:block;white-space:normal;text-align:center;padding:0;background:none}
+  .exit{margin-top:8px}
+}
+@media (max-width:560px){
+  h1{font-size:26px}
+  .cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<main>
+<h1>The Bonsai harness, simply</h1>
+<p class="lede"><b>Bonsai 2 27B is the brain.</b> The harness is everything around it: it sorts your request, hands the brain its tools, keeps your Mac safe, and checks the work before it says “done”.</p>
+
+<div class="steps">
+  <div class="step">
+    <div class="head"><i class="n">1</i><b>You ask</b></div>
+    <span>You type a request and press Enter.</span>
+  </div>
+  <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+  <div class="step">
+    <div class="head"><i class="n">2</i><b>It sorts</b></div>
+    <span>“Hello” gets a sentence back. An unclear request gets one question first. Then it picks the kind: rename, fix, change or question.</span>
+  </div>
+  <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+  <div class="step open">
+    <div class="head"><i class="n">3</i><b>It works</b></div>
+    <span>Rename, fix and change each have a shortcut built for them. Everything else goes step by step, one tool at a time.</span>
+  </div>
+  <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+  <div class="step">
+    <div class="head"><i class="n">4</i><b>It checks</b></div>
+    <span>If files changed, the tests run and a second look asks: is every part of the request done? A miss goes back to step 3.</span>
+  </div>
+  <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+  <div class="step">
+    <div class="head"><i class="n">5</i><b>Done</b></div>
+    <span>It tells you what changed, in a sentence or two.</span>
+  </div>
+</div>
+
+<section class="zoom">
+  <div class="zoomhead">
+    <h2>Inside step 3: step by step</h2>
+    <p>The brain never touches your files itself. It asks for a tool, and the harness decides.</p>
+  </div>
+  <div class="loop">
+    <div class="node brain">
+      <div class="who"><i class="dot"></i>the brain</div>
+      <b>Picks one tool</b>
+      <span class="say">It thinks, then asks for exactly one.</span>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="node code">
+      <div class="who"><i class="dot"></i>the harness</div>
+      <b>3 safety gates</b>
+      <span class="say">Blocked words, your OK, the fence.</span>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="node code">
+      <div class="who"><i class="dot"></i>the harness</div>
+      <b>Runs the tool</b>
+      <span class="say">Read, List, Search, Edit, Write, Bash, TodoWrite, Ask.</span>
+    </div>
+  </div>
+  <div class="rail"><span>the result goes back to the brain, <b>up to 40 steps</b></span></div>
+  <p class="exit">The loop ends when the brain <b>answers instead of asking for a tool</b>. Then on to step 4.</p>
+</section>
+
+<div class="cards">
+  <div class="card">
+    <h2>The 3 gates</h2>
+    <ul>
+      <li><b>Blocked words.</b> rm -rf, sudo, git push and kill never run.</li>
+      <li><b>Your OK.</b> Changes and commands are shown to you first.</li>
+      <li><b>The fence.</b> macOS keeps every command inside the project.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Its memory</h2>
+    <ul>
+      <li><b>About ¾ full.</b> Old tool output is cleared.</li>
+      <li><b>Still too full.</b> It writes itself a summary and carries on.</li>
+      <li><b>“update memory”.</b> Saves notes it reads at every start.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>When it asks you</h2>
+    <ul>
+      <li><b>Unclear request.</b> One question before it starts.</li>
+      <li><b>Before a change.</b> It shows you what it is about to do.</li>
+      <li><b>Looking too long.</b> 8 looks or 5 minutes with nothing changed.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>When it stops itself</h2>
+    <ul>
+      <li><b>40 steps.</b> The most one request can take.</li>
+      <li><b>Going in circles.</b> The same step over and over, or 5 errors in a row.</li>
+      <li><b>You press Esc.</b> It stops and waits for you.</li>
+    </ul>
+  </div>
+</div>
+
+<p class="foot">Drawn from the code on main, 27 Sep 2026. The full map with every path: <a href="bonsai-harness-flow-v2-2026-09-26.html">bonsai-harness-flow-v2</a> (kept unchanged).</p>
+</main>
+</body>
+</html>

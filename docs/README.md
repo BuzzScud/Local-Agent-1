@@ -8,7 +8,11 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/bonsai-test-record.html](tests/bonsai-test-record.html) | page | Bonsai test record | 34 KB | 2026-09-27 |
+| [tests/bonsai-test-record.html](tests/bonsai-test-record.html) | page | Bonsai test record | 41 KB | 2026-09-28 |
+| [diagrams/bonsai-harness-simple-2026-09-27.html](diagrams/bonsai-harness-simple-2026-09-27.html) | page | Bonsai harness, simply | 10 KB | 2026-09-28 |
+| [reports/bonsai-fable-harness-2026-09-27.html](reports/bonsai-fable-harness-2026-09-27.html) | page | Bonsai, Fable-style harness | 145 KB | 2026-09-28 |
+| [diagrams/bonsai-flow-before-after-fable-2026-09-27.html](diagrams/bonsai-flow-before-after-fable-2026-09-27.html) | page | Bonsai flow, before and after | 26 KB | 2026-09-28 |
+| [diagrams/bonsai-fable-plan-flow-2026-09-27.html](diagrams/bonsai-fable-plan-flow-2026-09-27.html) | page | Fable round plan | 16 KB | 2026-09-27 |
 | [tests/bonsai-crystalline-side-by-side-2026-09-27.html](tests/bonsai-crystalline-side-by-side-2026-09-27.html) | page | Crystalline side-by-side test | 20 KB | 2026-09-27 |
 | [reports/bonsai-math-brain-plan-v2-2026-09-27.html](reports/bonsai-math-brain-plan-v2-2026-09-27.html) | page | Bonsai math brain plan v2 | 93 KB | 2026-09-27 |
 | [older versions/bonsai-math-brain-plan-v1-2026-09-27.html](older%20versions/bonsai-math-brain-plan-v1-2026-09-27.html) | page | Bonsai math brain plan | 28 KB | 2026-09-27 |
