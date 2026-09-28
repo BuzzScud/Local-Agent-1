@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Agent, safeArgs, claimsAlreadyThere, AUTO } from '../src/agent/agent.mjs';
+import { Agent, safeArgs, claimsAlreadyThere, AUTO, CHECK_INS } from '../src/agent/agent.mjs';
 // Agentic Coder's "go ahead" nudge, as it reads now (labelled as automatic).
 const isNudge = (c) => c.startsWith(AUTO) && c.includes('did not do it');
 import { systemPrompt } from '../src/agent/prompt.mjs';
@@ -334,7 +334,7 @@ test('a check-in answered "keep going" adds nothing; "Stop here" ends the turn',
   expect(lastUser(go.fake.requests[8])).toBe('add a --json flag to export.mjs');
   const stop = await steered([...looks(8), { text: 'never reached' }], (req) => (req.kind === 'checkin' ? { choice: 'no' } : { choice: 'yes' }));
   expect(stop.reason).toBe('declined');
-  expect(stop.fake.requests.length).toBe(8);
+  expect(stop.fake.requests.length).toBe(CHECK_INS.steps); // it stops at the check-in (after six looks since 28 Sep)
 });
 
 test('on auto-accept the first edit is a plan question; an answer other than yes steers instead', async () => {
