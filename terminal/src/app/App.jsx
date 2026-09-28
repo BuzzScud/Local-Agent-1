@@ -651,9 +651,13 @@ export function App({ opts, win, onRestart }) {
       }
       case 'clear':
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
-        agent.reset();
-        sessionRef.current = { id: newSessionId(), title: null, items: [] };
-        push({ type: 'divider', text: 'new conversation' });
+        {
+          // Back in the folder Agentic Coder was started in, if a "Work in <project>?" moved it.
+          const back = agent.startOver(opts.cwd);
+          sessionRef.current = { id: newSessionId(), title: null, items: [] };
+          push({ type: 'divider', text: 'new conversation' });
+          if (back) push({ type: 'note', text: `Back in ${short(opts.cwd)}, the folder Agentic Coder was started in.`, tone: 'dim' });
+        }
         break;
       case 'btw': {
         // A quick side question, like Claude Code's: it runs while Agentic Coder works.

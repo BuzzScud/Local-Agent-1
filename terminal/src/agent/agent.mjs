@@ -3,7 +3,7 @@
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
 import { streamChat } from './client.mjs';
-import { toolSchemas, parseArgs, display, prepare, execute, resolvePath, didYouMean } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean } from './tools.mjs';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -268,8 +268,11 @@ export class Agent extends EventEmitter {
     for (const d of found) this.offered.add(d);
     const tilde = (p) => (p === home ? '~' : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
     const one = found.length === 1;
-    const question = `${one ? `Work in ${tilde(found[0])}?` : 'Work in which project?'} Agentic Coder then uses its tests and its AGENTS.md, and its commands can only change files there.`;
-    const options = [...found.map((d) => (one ? `Yes, work in ${basename(d)}` : tilde(d))), `No, stay in ${tilde(this.cwd)}`];
+    const question = `${one ? `Work in ${tilde(found[0])}?` : 'Work in which project?'} Agentic Coder then uses its tests and its AGENTS.md, and its commands can only change files there, until /clear.`;
+    // Staying is the first choice, so enter keeps you where you started: a
+    // pasted command that named the app's own repo once moved it there, and the
+    // next request's page could not reach the Desktop (28 Sep).
+    const options = [`No, stay in ${tilde(this.cwd)}`, ...found.map((d) => (one ? `Yes, work in ${basename(d)}` : tilde(d)))];
     const id = `project_${Date.now()}`;
     this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
     const answer = await this.ask({ id, name: 'Ask', args: { question, options }, prepared: {}, label: 'Ask', arg: question });
@@ -293,7 +296,17 @@ export class Agent extends EventEmitter {
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
-  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  // A new conversation (/clear) starts in the folder Agentic Coder was started
+  // in: a yes to "Work in <project>?" lasts for its conversation only, and each
+  // project can be offered again. True when it moved back.
+  startOver(home) {
+    this.reset();
+    this.offered = null;
+    if (!home || home === this.cwd) return false;
+    this.moveTo(home);
+    return true;
+  }
 
   get maxResultChars() { return Math.max(4000, Math.floor(this.ctx * 0.15 * 3.6)); }
 
@@ -1008,12 +1021,53 @@ export class Agent extends EventEmitter {
     return turn;
   }
 
+  // A Write with its content but no path: the content is kept, the call in the
+  // conversation shrinks to one line, and the next Write that sends only a path
+  // writes the kept content. On 28 Sep Gemma wrote a whole notes page this way
+  // twice (2,157 and 3,085 tokens); each time it was told only 'Write needs
+  // "path".', and the first draft filled its memory and was lost at the restart.
+  keepWrite(call, parsed) {
+    const sent = sentArgs('Write', call.args) ?? {};
+    const content = typeof sent.content === 'string' && sent.content.length ? sent.content : null;
+    const path = sent.path !== undefined && sent.path !== null && String(sent.path).trim() ? String(sent.path) : null;
+    if (content && !path) {
+      this.keptWrite = { content };
+      const lines = content.split('\n').length;
+      this.shrinkCall(call.id, JSON.stringify({ content: `[${lines} lines, kept by Agentic Coder]` }));
+      const named = this.fileNamed();
+      return {
+        error: `${needsText('Write', 'path')} Your content (${lines} lines) is kept, so do not write it again: send Write with only "path"${named ? ` (the request names "${named}")` : ''}, and the kept content is written there.`,
+        shown: `Write needs "path"; its ${lines} lines are kept until it names the file`,
+      };
+    }
+    if (path && !content && this.keptWrite) return { args: { path, content: this.keptWrite.content }, fromKept: true };
+    return parsed;
+  }
+
+  // Replace a call's arguments in the conversation (the model reads the shorter
+  // version from then on) and take the saved tokens off the count.
+  shrinkCall(id, args) {
+    for (let i = this.messages.length - 1; i > 0; i--) {
+      const c = this.messages[i].tool_calls?.find((t) => t.id === id);
+      if (!c) continue;
+      this.ctxUsed = Math.max(0, this.ctxUsed - Math.max(0, tokensOf(c.function.arguments) - tokensOf(args)));
+      c.function.arguments = args;
+      return;
+    }
+  }
+
+  // The first file name the request itself names ("notes.html"), if any.
+  fileNamed() {
+    return /(?:^|[\s"'`(])([\w.-]+\.(?:html?|md|txt|csv|json|jsx?|mjs|cjs|tsx?|css|py|sh|rb|go|rs|java|swift|ya?ml|toml|xml|svg))\b/i.exec(this.turn?.request ?? '')?.[1] ?? null;
+  }
+
   async runTool(call, signal) {
-    const parsed = parseArgs(call.name, call.args);
+    let parsed = parseArgs(call.name, call.args);
+    if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
     const shown = display(call.name, parsed.args ?? {});
     const id = call.id;
     if (parsed.error) {
-      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: parsed.error }, error: true });
+      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: parsed.shown ?? parsed.error }, error: true });
       return { text: parsed.error, error: true };
     }
     const args = parsed.args;
@@ -1115,6 +1169,11 @@ export class Agent extends EventEmitter {
       if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
+    // A Write that landed has used (or replaced) the kept content.
+    if (!out.error && call.name === 'Write' && this.keptWrite) {
+      if (parsed.fromKept) this.emit('note', { text: `Wrote the kept content to ${prepared.rel}; it was not written again.`, tone: 'dim' });
+      this.keptWrite = null;
+    }
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) { this.turn.testedAfterChange = true; this.turn.checkOk = !out.error; if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error }; }
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
@@ -1339,6 +1398,7 @@ export class Agent extends EventEmitter {
     if (t.searches?.length) lines.push(`Searches I ran: ${t.searches.map((s) => `"${s}"`).join(', ')}.`);
     const changed = [...new Set((t.diffs.match(/^(\S[^\n]*):$/gm) ?? []).map((l) => l.slice(0, -1)))];
     if (changed.length) lines.push(`Files I have changed: ${changed.join(', ')}.`);
+    if (this.keptWrite) lines.push(`Agentic Coder still keeps the content of my Write call that had no path (${this.keptWrite.content.split('\n').length} lines): I send Write with only "path" to save it, and do not write it again.`);
     return lines.length ? `\n\nFrom Agentic Coder's record of this message:\n${lines.map((l) => `- ${l}`).join('\n')}` : '';
   }
 

@@ -98,6 +98,29 @@ export function normalizeArgs(name, raw) {
   return out;
 }
 
+// What a missing argument holds. The error says how to send the call again,
+// not only what was wrong: on 28 Sep Gemma sent Write without "path" twice,
+// was told only 'Write needs "path".', and wrote the whole page again each time.
+const NEEDS = {
+  path: 'the file path, relative to the project folder',
+  content: 'the full file content',
+  old_text: 'the exact text to replace, copied from Read',
+  new_text: 'the text that replaces it',
+  command: 'the shell command to run',
+  pattern: 'the regular expression to look for',
+  todos: 'the whole plan, as a list of steps',
+  question: 'one short question',
+};
+export const needsText = (name, req) => `${name} needs "${req}"${NEEDS[req] ? `: ${NEEDS[req]}` : ''}. Send the ${name} call again with "${req}" set.`;
+
+// The arguments as sent, under their usual names; null when they are not a JSON object.
+export function sentArgs(name, json) {
+  try {
+    const raw = JSON.parse(json);
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? normalizeArgs(name, raw) : null;
+  } catch { return null; }
+}
+
 export function parseArgs(name, json) {
   let raw;
   try { raw = json && json.trim() ? JSON.parse(json) : {}; } catch (e) { return { error: `The arguments were not valid JSON (${e.message}). Write the call again with a valid JSON object. If the content is long, do not resend it whole: Write a short skeleton of the file first, then add one section at a time with Edit.` }; }
@@ -106,7 +129,7 @@ export function parseArgs(name, json) {
   const def = TOOL_DEFS.find((d) => d.name === name);
   if (!def) return { error: `There is no tool called "${name}". The tools are: ${TOOL_DEFS.map((d) => d.name).join(', ')}.` };
   for (const req of def.parameters.required ?? []) {
-    if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: `${name} needs "${req}".` };
+    if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: needsText(name, req) };
   }
   for (const [k, v] of Object.entries(args)) {
     const want = def.parameters.properties[k]?.type;
