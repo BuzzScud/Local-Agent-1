@@ -8,7 +8,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 88 KB | 2026-09-28 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 89 KB | 2026-09-28 |
 | [other/agentic-coder-finish-the-rename-plan-2026-09-28.html](other/agentic-coder-finish-the-rename-plan-2026-09-28.html) | page | Agentic Coder · finish the rename, the plan | 13 KB | 2026-09-28 |
 | [design rounds/context-line-3-designs-2026-09-28.html](design%20rounds/context-line-3-designs-2026-09-28.html) | page | Context Line Designs | 10 KB | 2026-09-28 |
 | [design rounds/rules-command-2-designs-2026-09-28.html](design%20rounds/rules-command-2-designs-2026-09-28.html) | page | Rules Command Designs | 13 KB | 2026-09-28 |
