@@ -4,7 +4,7 @@
 //   bun run docs              copy new and changed files, remove files gone from the Desktop folder
 //   bun run docs --dry        say what would change, change nothing
 //   bun run docs --force      go ahead even if the Desktop folder looks mostly empty
-// BONSAI_DOCS=<folder> points at the folder if it has moved.
+// AGENTIC_DOCS=<folder> points at the folder if it has moved.
 import { existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync, statSync, mkdirSync } from 'node:fs';
 import { join, dirname, relative, extname } from 'node:path';
 import { homedir } from 'node:os';
@@ -18,7 +18,7 @@ const dry = process.argv.includes('--dry');
 const force = process.argv.includes('--force');
 
 if (!existsSync(SRC)) {
-  console.error(`Not found: ${SRC}\nWas the folder moved or renamed? Run again with BONSAI_DOCS=<its path>.`);
+  console.error(`Not found: ${SRC}\nWas the folder moved or renamed? Run again with AGENTIC_DOCS=<its path>.`);
   process.exit(1);
 }
 
@@ -71,7 +71,7 @@ const rows = src
 const readme = `# Agentic Coder docs
 
 Every diagram, preview, report and test page about Agentic Coder, newest first. This
-folder mirrors \`bonsai-code DOCS/\` at the top of the repo on the Mac: pages are saved there, and
+folder mirrors \`agentic-coder DOCS/\` at the top of the repo on the Mac: pages are saved there, and
 \`bun run docs\` copies them here before a commit. The pages are single HTML files
 with nothing loaded from outside; download one and open it in a browser to see it
 (GitHub shows HTML as source).

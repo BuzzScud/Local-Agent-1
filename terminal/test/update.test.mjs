@@ -16,23 +16,23 @@ const git = (repo, ...args) => execFileSync('git', ['-C', repo, '-c', 'user.name
 function put(repo, path, text) { mkdirSync(dirname(join(repo, path)), { recursive: true }); writeFileSync(join(repo, path), text); }
 function commit(repo, files, msg) { for (const [p, t] of Object.entries(files)) put(repo, p, t); git(repo, 'add', '-A'); git(repo, 'commit', '-qm', msg); return git(repo, 'rev-parse', 'HEAD'); }
 function makeRepo() {
-  const repo = mkdtempSync(join(tmpdir(), 'bonsai-update-'));
+  const repo = mkdtempSync(join(tmpdir(), 'agentic-update-'));
   git(repo, 'init', '-q', '-b', 'main');
-  commit(repo, { 'terminal/src/cli.jsx': '// app\n', 'terminal/src/app/a.mjs': 'export const a = 1;\n', 'bonsai-code DOCS/x.html': '<p>x</p>' }, 'start');
+  commit(repo, { 'terminal/src/cli.jsx': '// app\n', 'terminal/src/app/a.mjs': 'export const a = 1;\n', 'agentic-coder DOCS/x.html': '<p>x</p>' }, 'start');
   return repo;
 }
 const heads = (repo) => ({ main: git(repo, 'rev-parse', 'main'), origin: null });
 
 test('the file list matches the launcher: code counts, docs, tests, results and READMEs do not', () => {
   for (const p of ['terminal/src/app/App.jsx', 'terminal/src/app/help.html', 'terminal/rules/bug-fixing.md', 'models/index.mjs', 'models/bonsai-2-27b/model.mjs', 'models/evals/record.mjs', 'package.json']) expect([p, isAppCode(p)]).toEqual([p, true]);
-  for (const p of ['docs/README.md', 'bonsai-code DOCS/a.html', 'terminal/test/app.test.mjs', 'models/evals/bench/run.mjs', 'models/bonsai-2-27b/results/r.json', 'models/README.md', 'terminal/README.md', 'terminal/scripts/demo/spin.jsx', 'models/runtime/engine/x.patch']) expect([p, isAppCode(p)]).toEqual([p, false]);
+  for (const p of ['docs/README.md', 'agentic-coder DOCS/a.html', 'terminal/test/app.test.mjs', 'models/evals/bench/run.mjs', 'models/bonsai-2-27b/results/r.json', 'models/README.md', 'terminal/README.md', 'terminal/scripts/demo/spin.jsx', 'models/runtime/engine/x.patch']) expect([p, isAppCode(p)]).toEqual([p, false]);
 });
 
 test('a code commit on main after the start lights the badge; a docs-only commit does not', async () => {
   const repo = makeRepo();
   const start = heads(repo);
   const built = Date.now() - 1000;
-  commit(repo, { 'bonsai-code DOCS/y.html': '<p>y</p>' }, 'docs only');
+  commit(repo, { 'agentic-coder DOCS/y.html': '<p>y</p>' }, 'docs only');
   expect(await checkUpdate(repo, start, built)).toBeNull();
   commit(repo, { 'terminal/src/app/a.mjs': 'export const a = 2;\n' }, 'code');
   const u = await checkUpdate(repo, start, built);
@@ -68,13 +68,13 @@ test("a push to GitHub's main from elsewhere (not in this folder) asks for a pul
 
 test('the real app shows the badge in the lower right when a code commit lands while it runs', async () => {
   const repo = makeRepo();
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-update-app-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-update-app-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   mkdirSync(join(base, 'home'), { recursive: true });
   writeFileSync(join(base, 'home', 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString() }));
   const fake = await startFakeServer([{ text: 'Hello.' }]);
-  const t = openTerm({ cwd, env: { BONSAI_HOME: join(base, 'home'), BONSAI_REPO: repo, BONSAI_UPDATE_EVERY: '300' }, args: ['--url', fake.url, '--no-flows'] });
+  const t = openTerm({ cwd, env: { AGENTIC_HOME: join(base, 'home'), AGENTIC_REPO: repo, AGENTIC_UPDATE_EVERY: '300' }, args: ['--url', fake.url, '--no-flows'] });
   try {
     await t.waitFor('? for shortcuts');
     await new Promise((r) => setTimeout(r, 700));
@@ -113,7 +113,7 @@ test('/update brings a GitHub-only update into main only when git can fast-forwa
 });
 
 function trustedProject() {
-  const base = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-update-app-')));
+  const base = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-update-app-')));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   mkdirSync(join(base, 'home'), { recursive: true });
@@ -125,7 +125,7 @@ test('/update without the launcher (run from the source): up to date says so; an
   const repo = makeRepo();
   const { base, cwd } = trustedProject();
   const fake = await startFakeServer([{ text: 'Hello.' }]);
-  const t = openTerm({ cwd, env: { BONSAI_HOME: join(base, 'home'), BONSAI_REPO: repo, BONSAI_UPDATE_EVERY: '300', BONSAI_RESTART_FILE: '' }, args: ['--url', fake.url, '--no-flows'] });
+  const t = openTerm({ cwd, env: { AGENTIC_HOME: join(base, 'home'), AGENTIC_REPO: repo, AGENTIC_UPDATE_EVERY: '300', AGENTIC_RESTART_FILE: '' }, args: ['--url', fake.url, '--no-flows'] });
   try {
     await t.waitFor('? for shortcuts');
     await t.type('/update'); t.key('enter');
@@ -139,20 +139,20 @@ test('/update without the launcher (run from the source): up to date says so; an
 
 // The whole path as you use it: the real launcher script, a repo made from
 // this working tree (so the launcher builds this code), the compiled app.
-test('/update through the bonsai launcher: rebuilt, restarted in the same window, conversation back, every key arrives', async () => {
+test('/update through the coding launcher: rebuilt, restarted in the same window, conversation back, every key arrives', async () => {
   const src = join(import.meta.dir, '..', '..');
-  const repo = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-update-repo-')));
+  const repo = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-update-repo-')));
   const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
     .split('\n').filter(Boolean); // models/ whole: the app imports from evals/ too (the test record)
   for (const f of files) { mkdirSync(dirname(join(repo, f)), { recursive: true }); cpSync(join(src, f), join(repo, f)); }
   symlinkSync(join(src, 'node_modules'), join(repo, 'node_modules'));
   git(repo, 'init', '-q', '-b', 'main'); git(repo, 'add', '-A'); git(repo, 'commit', '-qm', 'this tree');
   const { base, cwd } = trustedProject();
-  const launcher = join(base, 'bonsai');
+  const launcher = join(base, 'coding');
   writeFileSync(launcher, readFileSync(join(src, 'terminal/app/agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo));
   chmodSync(launcher, 0o755);
   const fake = await startFakeServer([{ text: 'Hello from before the update.' }, { text: 'Hello from after.' }]);
-  const env = { HOME: join(base, 'user'), BONSAI_HOME: join(base, 'home'), BONSAI_UPDATE_EVERY: '300', BONSAI_REPO: '' };
+  const env = { HOME: join(base, 'user'), AGENTIC_HOME: join(base, 'home'), AGENTIC_UPDATE_EVERY: '300', AGENTIC_REPO: '' };
   const t = openTerm({ cwd, bin: launcher, env, args: ['--url', fake.url, '--no-flows'] });
   try {
     await t.waitFor('? for shortcuts', 60_000);
@@ -187,7 +187,7 @@ test('/update through the bonsai launcher: rebuilt, restarted in the same window
 // A stand-in GitHub: a bare repo; `local` is Agentic Coder's folder (a clone of it),
 // `other` is another machine pushing to it.
 function github() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'bonsai-gh-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-gh-')));
   const hub = join(root, 'hub.git');
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', hub]);
   const seed = join(root, 'seed');
@@ -242,7 +242,7 @@ test('an http:// or git:// origin is never fetched from or brought in', async ()
 test('git runs without a terminal: nothing it starts can open /dev/tty to ask for a password', async () => {
   // Run inside a real pty, so the direct run below does have a terminal to open.
   const repo = makeRepo();
-  const probe = join(mkdtempSync(join(tmpdir(), 'bonsai-tty-')), 'probe.mjs');
+  const probe = join(mkdtempSync(join(tmpdir(), 'agentic-tty-')), 'probe.mjs');
   const alias = ['-c', 'alias.ttycheck=!sh -c "(exec 3</dev/tty) 2>/dev/null && echo HAS-TTY || echo NO-TTY"', 'ttycheck'];
   writeFileSync(probe, `import { runGit } from ${JSON.stringify(join(import.meta.dir, '../src/app/update.mjs'))};
 import { execFileSync } from 'node:child_process';
@@ -264,36 +264,40 @@ test("git's words on screen carry no control characters", () => {
 });
 
 test('the restart file is written fresh for you only; a link planted in its place is removed, not followed', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'bonsai-restart-'));
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-restart-'));
   const target = join(dir, 'precious.txt');
   writeFileSync(target, 'keep me\n');
   const file = join(dir, 'restart.123');
   symlinkSync(target, file);
   const keep = (process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE);
   try {
-    process.env.BONSAI_RESTART_FILE = file;
+    process.env.AGENTIC_RESTART_FILE = file;
     leaveRestart(['--resume', 'abc', '--url', 'http://127.0.0.1:1\nevil']);
-  } finally { if (keep === undefined) delete process.env.BONSAI_RESTART_FILE; else process.env.BONSAI_RESTART_FILE = keep; }
+  } finally { if (keep === undefined) delete process.env.AGENTIC_RESTART_FILE; else process.env.AGENTIC_RESTART_FILE = keep; }
   expect(readFileSync(target, 'utf8')).toBe('keep me\n');
   expect(lstatSync(file).isSymbolicLink()).toBe(false);
   expect(statSync(file).mode & 0o777).toBe(0o600);
   expect(readFileSync(file, 'utf8')).toBe('--resume\nabc\n--url\nhttp://127.0.0.1:1 evil\n');
 });
 
-test("commands Agentic Coder runs do not see where the restart file goes", async () => {
-  const keep = (process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE);
-  process.env.BONSAI_RESTART_FILE = '/tmp/x';
+test("commands Agentic Coder runs do not see where the restart file goes, under either name", async () => {
+  const keep = { now: process.env.AGENTIC_RESTART_FILE, old: process.env.BONSAI_RESTART_FILE };
+  process.env.AGENTIC_RESTART_FILE = '/tmp/x';
+  process.env.BONSAI_RESTART_FILE = '/tmp/y'; // an app started by a launcher from before the rename sets this one
   try {
-    const r = await runCommand('echo "file=${BONSAI_RESTART_FILE:-none}"', { cwd: tmpdir(), sandbox: false });
-    expect(r.output ?? r.lines?.join('\n') ?? String(r)).toContain('file=none');
-  } finally { if (keep === undefined) delete process.env.BONSAI_RESTART_FILE; else process.env.BONSAI_RESTART_FILE = keep; }
+    const r = await runCommand('echo "now=${AGENTIC_RESTART_FILE:-none} old=${BONSAI_RESTART_FILE:-none}"', { cwd: tmpdir(), sandbox: false });
+    expect(r.output ?? r.lines?.join('\n') ?? String(r)).toContain('now=none old=none');
+  } finally {
+    if (keep.now === undefined) delete process.env.AGENTIC_RESTART_FILE; else process.env.AGENTIC_RESTART_FILE = keep.now;
+    if (keep.old === undefined) delete process.env.BONSAI_RESTART_FILE; else process.env.BONSAI_RESTART_FILE = keep.old;
+  }
 });
 
 test('the real app asks GitHub on its own: a push from another machine lights "Update on GitHub", and /update brings it in', async () => {
   const { local, other } = github();
   const { base, cwd } = trustedProject();
   const fake = await startFakeServer([{ text: 'Hello.' }]);
-  const t = openTerm({ cwd, env: { BONSAI_HOME: join(base, 'home'), BONSAI_REPO: local, BONSAI_UPDATE_EVERY: '300', BONSAI_FETCH_EVERY: '400', BONSAI_RESTART_FILE: '' }, args: ['--url', fake.url, '--no-flows'] });
+  const t = openTerm({ cwd, env: { AGENTIC_HOME: join(base, 'home'), AGENTIC_REPO: local, AGENTIC_UPDATE_EVERY: '300', AGENTIC_FETCH_EVERY: '400', AGENTIC_RESTART_FILE: '' }, args: ['--url', fake.url, '--no-flows'] });
   try {
     await t.waitFor('? for shortcuts');
     await new Promise((r) => setTimeout(r, 900));

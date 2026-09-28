@@ -1,4 +1,4 @@
-// Part 1 of Bonsai Code: the terminal. The models part (part 2) imports only
+// Part 1 of Agentic Coder: the terminal. The models part (part 2) imports only
 // this file, for its bench, its tools and its probes. What it gets:
 //   - the agent: one request run headless, the agent itself, and the
 //     instructions and tools it is given;

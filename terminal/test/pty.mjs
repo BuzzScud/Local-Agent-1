@@ -1,4 +1,4 @@
-// Runs the real `bonsai` app in a pseudo-terminal, types keys into it, and
+// Runs the real Agentic Coder app in a pseudo-terminal, types keys into it, and
 // reads the screen back through a headless terminal emulator — the way you
 // would see it in Terminal.
 import { spawn } from 'node:child_process';
@@ -13,11 +13,11 @@ const { Terminal } = xterm;
 
 export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '\x1b[B', right: '\x1b[C', left: '\x1b[D', shiftTab: '\x1b[Z', ctrlC: '\x03', ctrlL: '\x0c', ctrlO: '\x0f', backspace: '\x7f' };
 
-// BONSAI_NO_OPEN: the app never opens a browser tab from a test (/help, /weights, /docs).
-// BONSAI_HUB_PORT=0: its hub takes any free port, never the real hub's 8757.
-// BONSAI_MEMORY: what the memory holds about you is kept beside the test's
-// own files, never in the real ~/.bonsai; and nothing is saved on its own
-// unless the test asks for it (BONSAI_MEMORY_SAVE).
+// AGENTIC_NO_OPEN: the app never opens a browser tab from a test (/help, /weights, /docs).
+// AGENTIC_HUB_PORT=0: its hub takes any free port, never the real hub's 8757.
+// AGENTIC_MEMORY: what the memory holds about you is kept beside the test's
+// own files, never in the real ~/.agentic; and nothing is saved on its own
+// unless the test asks for it (AGENTIC_MEMORY_SAVE).
 export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN) }) {
   const out = join(cwd, '..', `pty-${Date.now()}.log`);
   const exe = bin ? `'${bin}'` : `bun ${join(root, 'src/cli.jsx')}`;
@@ -27,7 +27,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   const fifo = `${out}.in`;
   execFileSync('mkfifo', [fifo]);
   const q = (x) => `'${x.replace(/'/g, `'\\''`)}'`;
-  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', BONSAI_NO_OPEN: '1', BONSAI_HUB_PORT: '0', BONSAI_FETCH_EVERY: '0', BONSAI_MEMORY: join(cwd, '..', 'memory-about-you'), BONSAI_MEMORY_SAVE: 'off', BONSAI_CLAUDE_NOTES: 'off', ...env }, stdio: 'ignore' });
+  const child = spawn('/bin/zsh', ['-c', `cat ${q(fifo)} | script -q -t 0 ${q(out)} /bin/zsh -c ${q(cmd)} > /dev/null 2>&1`], { detached: true, cwd, env: { ...process.env, TERM: 'xterm-256color', AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_MEMORY_SAVE: 'off', AGENTIC_CLAUDE_NOTES: 'off', ...env }, stdio: 'ignore' });
   const fd = openSync(fifo, 'w');
   const stdin = { write: (s) => { try { writeSync(fd, s); } catch {} } };
   const done = new Promise((resolve) => child.on('exit', (code) => resolve(code)));

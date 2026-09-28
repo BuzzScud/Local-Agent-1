@@ -12,13 +12,13 @@ import { checkScreen } from './screen-checks.mjs';
 const T = 60_000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function setup() {
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-resize-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-resize-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   // Pre-trusted, so the run starts on the welcome, not the safety check.
   mkdirSync(join(base, 'home'), { recursive: true });
   writeFileSync(join(base, 'home', 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString() }));
-  return { cwd, env: { BONSAI_HOME: join(base, 'home') } };
+  return { cwd, env: { AGENTIC_HOME: join(base, 'home') } };
 }
 const LONG = 'The project is a small Node.js script that reads trades.json and prints it as CSV, with two tests in export.test.mjs and no dependencies beyond Node itself.';
 async function clean(t, what) {

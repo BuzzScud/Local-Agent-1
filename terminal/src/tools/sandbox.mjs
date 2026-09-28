@@ -89,7 +89,7 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [] } = {}) {
 }
 
 let usable = null;
-// sandbox-exec is on every Mac; BONSAI_SANDBOX=0 turns the fence off (for a
+// sandbox-exec is on every Mac; AGENTIC_SANDBOX=0 turns the fence off (for a
 // tool that needs more than it allows).
 export function sandboxAvailable() {
   if ((process.env.AGENTIC_SANDBOX ?? process.env.BONSAI_SANDBOX) === '0') return false;

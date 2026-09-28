@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { findProjects, projectsNamed } from '../src/agent/projects.mjs';
 
 function home() {
-  const root = mkdtempSync(join(tmpdir(), 'bonsai-home-'));
+  const root = mkdtempSync(join(tmpdir(), 'agentic-home-'));
   const project = (rel) => { mkdirSync(join(root, rel), { recursive: true }); writeFileSync(join(root, rel, 'package.json'), '{}'); };
   project('Desktop/MAIN2026');
   project('Desktop/MAIN2026/desks/chart'); // part of MAIN2026, not a project of its own
-  project('Desktop/bonsai-code');
+  project('Desktop/agentic-coder');
   project('Library/Caches/tool'); // never searched
   project('.hidden/app'); // never searched
   mkdirSync(join(root, 'Desktop/SEP/notes'), { recursive: true });
@@ -19,7 +19,7 @@ function home() {
 
 test('projects are found a few levels down, not inside another project or the Mac\'s folders', () => {
   const root = home();
-  expect(findProjects(root).map((p) => p.slice(root.length + 1)).sort()).toEqual(['Desktop/MAIN2026', 'Desktop/bonsai-code']);
+  expect(findProjects(root).map((p) => p.slice(root.length + 1)).sort()).toEqual(['Desktop/MAIN2026', 'Desktop/agentic-coder']);
 });
 
 test('a request names a project by its folder name or a path into it', () => {
@@ -27,7 +27,7 @@ test('a request names a project by its folder name or a path into it', () => {
   const projects = findProjects(root);
   const named = (t) => projectsNamed(t, projects, root).map((p) => p.slice(root.length + 1));
   expect(named('fix the chart bug in MAIN2026')).toEqual(['Desktop/MAIN2026']);
-  expect(named('why is bonsai code slow to start?')).toEqual(['Desktop/bonsai-code']);
+  expect(named('why is agentic coder slow to start?')).toEqual(['Desktop/agentic-coder']);
   expect(named('look at Desktop/MAIN2026/desks/chart/index.html')).toEqual(['Desktop/MAIN2026']);
   expect(named('fix the bug')).toEqual([]);
 });

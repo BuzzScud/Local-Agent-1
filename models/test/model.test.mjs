@@ -100,7 +100,7 @@ test('with its helper the server guesses one word ahead and checks it in the sam
   // the helper's working space is sized by the micro-batch: 128 keeps it at ~0.4 GB
   expect(a[a.indexOf('-ub') + 1]).toBe('128');
   expect(a).not.toContain('--spec-ngram-simple-size-n');
-  // the file is missing, or BONSAI_HELPER=off: the old n-gram guessing, no helper memory counted
+  // the file is missing, or AGENTIC_HELPER=off: the old n-gram guessing, no helper memory counted
   const b = serverArgs(m, { ctx: 32_768, port: 17_600, draft: false });
   expect(b).not.toContain('-md');
   expect(b[b.indexOf('--spec-type') + 1]).toBe('ngram-simple');

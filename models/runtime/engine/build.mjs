@@ -1,9 +1,9 @@
-// Builds the model server Bonsai Code runs: Prism ML's llama.cpp (branch prism, the
+// Builds the model server Agentic Coder runs: Prism ML's llama.cpp (branch prism, the
 // commit in ENGINE) plus our Metal patch, as static llama-server and llama-bench in
 // ~/.agentic-coder/engine/<tag>/. Needs git, cmake and Apple's command line tools;
-// about 3 minutes on the M4. `bonsai setup` calls it; by hand:
+// about 3 minutes on the M4. `coding setup` calls it; by hand:
 //   node models/runtime/engine/build-now.mjs
-// (This module only defines the build: the one-file `bonsai` binary loads it on
+// (This module only defines the build: the one-file `agentic-coder` binary loads it on
 // every start, so running anything at import time would rebuild each time.)
 // A new tag gets a new folder, so a build in use is never replaced.
 import { spawn } from 'node:child_process';
@@ -36,8 +36,8 @@ export async function buildEngine({ tag, commit, home, say = () => {} }) {
   say('  getting the source…');
   await run('git', ['clone', '--quiet', '--filter=blob:none', 'https://github.com/PrismML-Eng/llama.cpp.git', src]);
   await run('git', ['-C', src, 'checkout', '--quiet', commit]);
-  writeFileSync(join(src, 'bonsai.patch'), PATCH);
-  await run('git', ['-C', src, 'apply', 'bonsai.patch']);
+  writeFileSync(join(src, 'agentic.patch'), PATCH);
+  await run('git', ['-C', src, 'apply', 'agentic.patch']);
   say('  configuring…');
   await run('cmake', ['-S', src, '-B', join(src, 'build'), '-DCMAKE_BUILD_TYPE=Release', '-DGGML_METAL=ON', '-DGGML_METAL_EMBED_LIBRARY=ON',
     // static and without SSL: the two programs need nothing outside macOS

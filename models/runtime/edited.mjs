@@ -2,7 +2,7 @@
 // ~/.agentic-coder/models, described by edited.json there. Each save rebuilds
 // the copy from a fresh clone of the original plus the full edit list, so
 // the manifest always says exactly what is in the file. The original and
-// `bonsai setup`'s fingerprint check are never involved.
+// `coding setup`'s fingerprint check are never involved.
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MODELS, MODELS_DIR } from '../registry.mjs';

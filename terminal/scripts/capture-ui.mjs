@@ -2,7 +2,7 @@
 // COLS/ROWS from the environment):
 // the start-up (restoring the saved warm-up), the "/" menu, the /model picker
 // and a first reply. Saves terminal/scripts/capture-ui.json for the report.
-//   BONSAI_BIN=~/.local/bin/bonsai [COLS=80 ROWS=24] node terminal/scripts/capture-ui.mjs [--out file.json]
+//   AGENTIC_BIN=~/.local/bin/coding [COLS=80 ROWS=24] node terminal/scripts/capture-ui.mjs [--out file.json]
 // Each screen is also checked: the box at the bottom, the picker and the menu
 // fully visible.
 import { cpSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -13,21 +13,21 @@ import { runInPty } from '../test/pty.mjs';
 import { termToHtml, visibleRange } from '../test/term-html.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const base = mkdtempSync(join(tmpdir(), 'bonsai-capture-ui-'));
+const base = mkdtempSync(join(tmpdir(), 'agentic-capture-ui-'));
 const cwd = join(base, 'demo-project');
 cpSync(join(root, 'demo-project'), cwd, { recursive: true });
 // A private home that borrows the real runtime, model and saved warm-ups.
 const home = join(base, 'home');
 mkdirSync(home);
-for (const d of ['bin', 'models', 'slots']) { mkdirSync(join(homedir(), '.bonsai-code', d), { recursive: true }); symlinkSync(join(homedir(), '.bonsai-code', d), join(home, d)); }
+for (const d of ['bin', 'models', 'slots']) { mkdirSync(join(homedir(), '.agentic-coder', d), { recursive: true }); symlinkSync(join(homedir(), '.agentic-coder', d), join(home, d)); }
 const cols = Number(process.env.COLS ?? 155);
 const rows = Number(process.env.ROWS ?? 43);
 const t0 = Date.now();
 const r = await runInPty({
-  cwd, cols, rows, env: { BONSAI_HOME: home }, timeoutMs: 300_000, bin: (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN),
+  cwd, cols, rows, env: { AGENTIC_HOME: home }, timeoutMs: 300_000, bin: (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN),
   steps: [
     { wait: 'Starting', ms: 60_000 }, { sleep: 1200 }, { snapshot: 'starting' },
-    { waitGone: 'Starting Bonsai', ms: 180_000 }, { sleep: 800 },
+    { waitGone: 'Starting ', ms: 180_000 }, { sleep: 800 },
     { type: '/' }, { wait: 'Pick the model and how much it thinks' }, { sleep: 400 }, { snapshot: 'slash' },
     { type: 'model' }, { key: 'enter' }, { wait: 'Pick the model and how much it thinks first' }, { key: 'right' }, { sleep: 500 }, { snapshot: 'model' },
     { key: 'esc' }, { sleep: 400 },

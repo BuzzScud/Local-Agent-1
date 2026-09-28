@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder · finish the rename, the plan</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --card: #ffffff; --ink: #1c1c1a; --dim: #6b6b66; --line: #e4e3df;
+    --green: #1f7a3d; --green-bg: #e3f3e8; --amber: #8a5a00; --amber-bg: #fdf0d5; --grey: #55554f; --grey-bg: #ecebe7;
+    --code-bg: #f1f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514; --card: #1e1e1c; --ink: #ecebe6; --dim: #a09f98; --line: #34342f;
+      --green: #7bd39a; --green-bg: #1c3526; --amber: #f0c36a; --amber-bg: #3a2e12; --grey: #c2c1ba; --grey-bg: #2b2b28;
+      --code-bg: #2a2a27;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 780px; margin: 0 auto; padding: 40px 16px 72px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 14px; letter-spacing: -0.01em; }
+  h2 { font-size: 22px; line-height: 1.25; margin: 44px 0 12px; }
+  p { margin: 0 0 14px; }
+  .sub { color: var(--dim); font-size: 15px; margin-bottom: 22px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 22px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card b { display: block; font-size: 32px; line-height: 1.1; }
+  .card span { display: block; color: var(--dim); font-size: 14px; margin-top: 4px; }
+  .note { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 0 0 14px; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .t-grey { background: var(--grey-bg); color: var(--grey); }
+  .t-green { background: var(--green-bg); color: var(--green); }
+  .t-amber { background: var(--amber-bg); color: var(--amber); }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; table-layout: fixed; }
+  th, td { text-align: left; vertical-align: top; padding: 12px 10px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  thead th { border-top: 0; color: var(--dim); font-size: 14px; font-weight: 600; padding-top: 0; }
+  td.n { color: var(--dim); }
+  td.what { font-weight: 600; }
+  td .more { display: block; color: var(--dim); font-size: 15px; font-weight: 400; margin-top: 4px; }
+  ol.bugs { padding-left: 22px; margin: 0 0 14px; }
+  ol.bugs li { margin-bottom: 8px; }
+  .calls { list-style: none; padding: 0; margin: 0; }
+  .calls li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 10px; }
+  .calls b { display: block; }
+  .calls span { color: var(--dim); font-size: 15px; }
+  .paths { color: var(--dim); font-size: 13px; }
+  .paths p { margin: 0 0 6px; }
+  @media (max-width: 640px) {
+    main { padding-top: 24px; }
+    h1 { font-size: 26px; }
+    .cards { grid-template-columns: 1fr; }
+    table, thead, tbody, tr, th, td { display: block; width: 100% !important; }
+    thead, colgroup { display: none; }
+    tr { border-top: 1px solid var(--line); padding: 10px 0; }
+    td, th { border: 0; padding: 2px 0; }
+    td.n { display: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Finish the rename: the plan</h1>
+<p class="sub">28 Sep 2026 · a plan only. Nothing in the repo has been changed.</p>
+
+<p>About 120 files still say Bonsai where they should say Agentic Coder. I would rename those in 8 steps, leave about 60 alone on purpose, and keep everything that worked under the old names still working. While reading the code I also found 5 places that only know the old name and are already wrong today, so the plan starts by fixing those.</p>
+
+<div class="note">The <code>/rules</code> and Context-line work you asked me to commit and push had already been committed and pushed by another session, so there was nothing left for me to commit. The repo is clean and matches GitHub, which is what makes it safe to start.</div>
+
+<div class="cards">
+  <div class="card"><b>~120</b><span>files to change</span></div>
+  <div class="card"><b>~60</b><span>files left as history, on purpose</span></div>
+  <div class="card"><b>5</b><span>places wrong today, found while reading</span></div>
+</div>
+
+<h2>What you decided</h2>
+<table>
+  <colgroup><col style="width:230px"><col></colgroup>
+  <thead><tr><th>Question</th><th>Your answer</th></tr></thead>
+  <tbody>
+    <tr><td class="what">The old model's name</td><td>Keep it. "Bonsai 2 27B" is the model's real name, so it stays wherever it means the model. Only the product is renamed.</td></tr>
+    <tr><td class="what">The old names as fallbacks</td><td>Keep them working, and say so in the docs. Nothing set up the old way breaks.</td></tr>
+    <tr><td class="what">Frozen history</td><td>Leave it. Old reports, the two big benchmark fixtures and old page names describe what happened when it was called Bonsai.</td></tr>
+    <tr><td class="what">Internal names</td><td>Rename all of them: temporary-file names, the page-storage keys, the scheduled-job label and the GitHub user-agent.</td></tr>
+    <tr><td class="what">The other session's work</td><td>Commit and push it, then write this plan. Already done by that session.</td></tr>
+  </tbody>
+</table>
+
+<h2>The 5 places that are wrong today</h2>
+<ol class="bugs">
+  <li><b>The nightly memory review can't be scheduled.</b> It looks for the app under the old folder and old name, which are gone, so it would stop with "the bonsai app is not installed".</li>
+  <li><b>Commands the agent runs inherit the app's restart setting.</b> The launcher sets it under both names; the code only removes the old one.</li>
+  <li><b>The update-check timers only answer to the old names.</b> Setting the new name does nothing.</li>
+  <li><b>The docs mirror's off switch and the background memory save</b> also know only the old name.</li>
+  <li><b>Two on-screen messages tell you to set old-named switches</b>, and the Hub page tells you to look in a folder called "bonsai-code DOCS".</li>
+</ol>
+
+<h2>The steps, in order</h2>
+<table>
+  <colgroup><col style="width:44px"><col style="width:170px"><col><col style="width:110px"></colgroup>
+  <thead><tr><th></th><th>Step</th><th>What happens</th><th>State</th></tr></thead>
+  <tbody>
+    <tr><td class="n">0</td><td class="what">Baseline</td><td>Run the full test suite before touching anything, so a failure can't be blamed on the rename. The last recorded run was 416 of 417.<span class="more">About 3 minutes.</span></td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">1</td><td class="what">Fix the 5 places</td><td>Each one gets a small test. The new names work everywhere, and the old ones still do.</td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">2</td><td class="what">The app's own words</td><td>Messages, help and comments in the app's code say Agentic Coder, <code>coding</code> and the new switch names. The old-name fallbacks stay, each with one line saying why.<span class="more">35 files.</span></td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">3</td><td class="what">Internal names</td><td>Temporary files, the page-check markers, the page-storage keys, the scheduled-job label, the GitHub user-agent. Turning the job off also removes one under the old label, if it exists.<span class="more">Only visible effect: the test-record page forgets its saved filter once.</span></td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">4</td><td class="what">The docs</td><td>The READMEs, the engine notes, the setup notes and the messages of the docs tools. Every command and folder a doc names is checked against the code first.<span class="more">The old names get one plain "still works" line.</span></td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">5</td><td class="what">The tests</td><td>Tests set the new names and use new temporary names. One new test proves the old names and an old <code>.bonsai/</code> notes file still work, so the promise can't quietly break.<span class="more">47 test files.</span></td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">6</td><td class="what">The dev tools</td><td>Old folder paths and "Close Bonsai" messages in the evaluation tools. Two screen-capture scripts wait for words the app no longer prints ("Starting Bonsai", "Bonsai asks"), so they can't work as they are.</td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+    <tr><td class="n">7</td><td class="what">A guard (optional)</td><td>A small check that fails if the word Bonsai turns up anywhere outside the list of places that keep it. Otherwise it creeps back the next time someone copies an old snippet.</td><td class="st"><span class="tag t-amber">Your call</span></td></tr>
+    <tr><td class="n">8</td><td class="what">Prove it, hand back</td><td>Full suite, the one-file build, and the real app started in a terminal (welcome screen, <code>/model</code>, a real answer). Then a list of every remaining "bonsai", each with its reason. Left uncommitted until you say.<span class="more">About an hour in all; most of it is waiting for the tests.</span></td><td class="st"><span class="tag t-grey">Not started</span></td></tr>
+  </tbody>
+</table>
+
+<h2>How I'll avoid last time's mistakes</h2>
+<p>The first rename pass used one blanket find-and-replace and broke three things: the greetings ("hello bonsai" stopped counting as small talk), an environment setting written in a form that silently stopped a test file from loading, and patterns hidden behind <code>\n</code> in strings. This time each group of files is changed on its own, I read the whole difference before running anything, and the tests run after every group.</p>
+
+<h2>What stays, and why</h2>
+<table class="keep">
+  <colgroup><col style="width:230px"><col></colgroup>
+  <thead><tr><th>What</th><th>Why it stays</th></tr></thead>
+  <tbody>
+    <tr><td class="what">The old model's name and folder</td><td>"Bonsai 2 27B", the model's own folder and the download link. It is the model's real name, and the link must match the real file.</td></tr>
+    <tr><td class="what">Old names as fallbacks</td><td>The <code>BONSAI_*</code> settings, <code>.bonsai/</code> project folders and the old state folder are still read, so anything set up the old way keeps working.</td></tr>
+    <tr><td class="what">Frozen history</td><td>The two big benchmark fixtures (40 files), the report builders of the Bonsai-era rounds, old page names and the test record. Changing the fixtures would make new benchmark runs impossible to compare with the recorded ones.</td></tr>
+    <tr><td class="what">Old commits</td><td>Already published; they keep saying Bonsai.</td></tr>
+  </tbody>
+</table>
+
+<h2>Your call</h2>
+<ul class="calls">
+  <li><b>Rename the GitHub repo, now called Local-Agent-1</b><span>It is the first name a cloner sees, and it says neither Bonsai nor Agentic Coder. GitHub forwards old links, but it is public and outward-facing, so I won't do it without a yes. Three files name it.</span></li>
+  <li><b>A new app icon</b><span>The icon is still a bonsai tree on a green disc. A new one needs a design round first, so it is not part of this plan.</span></li>
+  <li><b>Step 7, the guard</b><span>A few lines of code and one more check to keep passing. Skip it and the rename is finished today but can drift.</span></li>
+  <li><b>Commit and push at the end</b><span>Nothing is committed or pushed until you say.</span></li>
+</ul>
+
+<h2>Names, for reference</h2>
+<div class="paths">
+  <p>This page: <span class="mono">~/Desktop/agentic-coder/agentic-coder DOCS/other/agentic-coder-finish-the-rename-plan-2026-09-28.html</span></p>
+  <p>Wrong today, in order: <span class="mono">terminal/src/app/review.mjs</span> · <span class="mono">terminal/src/tools/run.mjs</span> · <span class="mono">terminal/src/app/update.mjs</span> · <span class="mono">docs/to-docs.mjs</span> and <span class="mono">terminal/src/app/autosave.mjs</span> · <span class="mono">terminal/src/app/App.jsx</span> and <span class="mono">terminal/src/app/hub.html</span></p>
+  <p>Measured: 190 tracked files outside <span class="mono">docs/</span> mention Bonsai (806 lines). By area: app 35, tests 47, scripts 15, model runtime and docs 10, evaluation tools 24, benchmark fixtures 40, old report builders 9, READMEs and launcher 7, the model's own folder 2.</p>
+</div>
+
+</main>
+</body>
+</html>

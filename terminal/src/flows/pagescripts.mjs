@@ -339,7 +339,7 @@ const IN_PAGE = String.raw`(() => {
 })();`;
 
 // The probe: job.json in, one JSON line out (between the marks).
-export const MARKS = ['<<<BONSAI', 'BONSAI>>>'];
+export const MARKS = ['<<<AGENTIC', 'AGENTIC>>>'];
 export function probeScript() {
   return `${IMPORTS}
 const job = JSON.parse(readFileSync(process.argv[2], 'utf8'));

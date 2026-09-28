@@ -29,7 +29,7 @@ test('onlyOldTestsFail: old-only failures qualify, new-test failures do not', ()
 });
 
 const fixture = () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-rescue-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-rescue-')), 'project');
   mkdirSync(cwd, { recursive: true });
   writeFileSync(join(cwd, 'price.mjs'), 'export const total = (n) => n * 2;\n');
   writeFileSync(join(cwd, 'price.test.mjs'), "import { test } from 'node:test';\nimport assert from 'node:assert';\nimport { total } from './price.mjs';\n\ntest('total doubles', () => { assert.strictEqual(total(2), 4); });\n");
@@ -112,7 +112,7 @@ test('the done check judges the request part by part', async () => {
 });
 
 test("Read's outline of a long file shows the lines that match the request", async () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'bonsai-readex-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-readex-'));
   const lines = [];
   for (let i = 1; i <= 300; i++) lines.push(i === 207 ? 'const symMenu = { zIndex: 80 };' : `const filler${i} = ${i};`);
   writeFileSync(join(cwd, 'page.mjs'), lines.join('\n') + '\n');

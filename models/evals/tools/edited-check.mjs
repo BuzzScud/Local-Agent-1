@@ -1,7 +1,7 @@
 // Before and after for the EDITED weights: the same questions and the same
 // speed measure against the original model and the edited copy, one page
-// with the answers side by side. Run it with Bonsai closed and the model
-// stopped (bonsai stop): only one 27B fits in memory.
+// with the answers side by side. Run it with Agentic Coder closed and the model
+// stopped (coding stop): only one 27B fits in memory.
 //   node models/evals/tools/edited-check.mjs [--ctx 16384] [--max-new 200]
 // Writes models/evals/reports/edited-check-<day>.json and the page
 // "Edited weights — before and after" into the DOCS folder under tests/.
@@ -21,7 +21,7 @@ const log = (s) => console.log(`[${new Date().toTimeString().slice(0, 8)}] ${s}`
 const manifest = readEdited();
 if (!manifest) { console.error('No edited copy is saved (models/edited.json). Save edits from the Weights tab first.'); process.exit(1); }
 const live = scanServers();
-if (live.length) { console.error(`A model server is running (port ${live[0].port}). Close Bonsai and run "bonsai stop" first: only one 27B fits in memory.`); process.exit(1); }
+if (live.length) { console.error(`A model server is running (port ${live[0].port}). Close Agentic Coder and run "coding stop" first: only one 27B fits in memory.`); process.exit(1); }
 
 const original = MODELS[DEFAULT_MODEL];
 const edited = editedModel();
@@ -128,7 +128,7 @@ ${o.checks.map((c, i) => `<tr><td>${esc(c.q)}<div class="small">wants “${esc(c
 </tbody></table>
 <p class="small">One self-contained file · raw run in models/evals/reports/edited-check-${day}.json</p>
 </div></body></html>`;
-const pagePath = docsPath(join('tests', `bonsai-edited-before-after-${day}.html`));
+const pagePath = docsPath(join('tests', `agentic-coder-edited-before-after-${day}.html`));
 writeFileSync(pagePath, page);
 log(`wrote ${pagePath}`);
 log(`done: original ${o.passed}/${o.checks.length} at ${o.tps ? o.tps.toFixed(1) : '?'} tok/s · edited ${e.passed}/${e.checks.length} at ${e.tps ? e.tps.toFixed(1) : '?'} tok/s`);

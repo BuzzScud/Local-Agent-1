@@ -606,7 +606,7 @@ if (typeof module !== 'undefined') module.exports = Core;
   const hideTip = () => { tip.style.display = 'none'; };
 
   // ---------- remembering your place ----------
-  const placeKey = () => `bonsai-weights-place:${file.name}:${file.size}`;
+  const placeKey = () => `agentic-weights-place:${file.name}:${file.size}`;
   let saveT = null;
   // Saved a moment after each change, and at once when the page is left, so a
   // quick reload never loses the last click.
@@ -930,7 +930,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
   // ---------- the layers ----------
   let layerStats = null;
-  function layerKey() { return `bonsai-weights:${file.name}:${file.size}`; }
+  function layerKey() { return `agentic-weights:${file.name}:${file.size}`; }
   function buildLayersGrid() {
     const g = $('#layersgrid'); g.innerHTML = ''; const n = model.kv[`${model.kv['general.architecture']}.block_count`] || 0;
     g.insertAdjacentHTML('beforeend', '<div class="h"></div>' + MATS.map((m) => `<div class="h" title="${m}">${m}</div>`).join(''));
@@ -976,7 +976,7 @@ if (typeof module !== 'undefined') module.exports = Core;
   // For each layer, how big the real weights are on each input channel,
   // as a ratio to that layer's average channel. 512 sampled rows per layer.
   let chData = null, chSel = null, chGeom = null;
-  const chKey = () => `bonsai-weights-channels:${file.name}:${file.size}:${$('#chmat').value}`;
+  const chKey = () => `agentic-weights-channels:${file.name}:${file.size}:${$('#chmat').value}`;
   const nLayers = () => model.kv[`${model.kv['general.architecture']}.block_count`] || 0;
   function chTensor(l) { const m = $('#chmat').value; return m === 'attn_in' ? model.tensors.find((t) => t.name === `blk.${l}.attn_qkv.weight`) || model.tensors.find((t) => t.name === `blk.${l}.attn_q.weight`) : model.tensors.find((t) => t.name === `blk.${l}.${m}.weight`); }
   function loadChannels(paint) {
@@ -1096,7 +1096,7 @@ if (typeof module !== 'undefined') module.exports = Core;
   // Opened from disk (file://) there is no hub, so the queue only previews.
   const served = /^https?:/.test(location.protocol);
   let edits = [], savedManifest = null, lastPick = null;
-  const editsKey = () => `bonsai-weights-edits:${file.name}`;
+  const editsKey = () => `agentic-weights-edits:${file.name}`;
   function loadEdits() { try { edits = JSON.parse(localStorage.getItem(editsKey())) || []; } catch { edits = []; } }
   function persistEdits() { try { localStorage.setItem(editsKey(), JSON.stringify(edits)); } catch {} }
   async function refreshSaved() { if (!served) return; try { savedManifest = (await (await fetch('/edits.json')).json()).saved; } catch { savedManifest = null; } }

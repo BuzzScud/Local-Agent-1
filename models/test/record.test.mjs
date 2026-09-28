@@ -6,7 +6,7 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 
-const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'bonsai-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
+const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'agentic-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
 const quiet = (file) => ({ file, snapshot: false, quiet: true });
 
 test('a run is written as one line and read back newest first; pass or fail follows from the counts', () => {
@@ -64,8 +64,8 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
 test('a record that is not the real one never reaches the DOCS folder by itself, and its folder path is not shown', () => {
   const { dir, file } = scratch();
   const was = { docs: (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), home: (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME), rec: (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD) };
-  delete process.env.BONSAI_DOCS; delete process.env.BONSAI_TEST_RECORD;
-  process.env.BONSAI_HOME = dir; // what a test or a scratch run sets
+  delete process.env.AGENTIC_DOCS; delete process.env.AGENTIC_TEST_RECORD;
+  process.env.AGENTIC_HOME = dir; // what a test or a scratch run sets
   try {
     expect(recordFile()).toBe(file);
     expect(recordFile()).not.toBe(REAL_RECORD);
@@ -75,13 +75,13 @@ test('a record that is not the real one never reaches the DOCS folder by itself,
     expect(writeSnapshot({ file })).toBe(null);
     expect(recordData(file).file).toBe('record.jsonl'); // no folder of a scratch run in a page
   } finally {
-    for (const [k, v] of [['BONSAI_DOCS', was.docs], ['BONSAI_HOME', was.home], ['BONSAI_TEST_RECORD', was.rec]]) { if (v == null) delete process.env[k]; else process.env[k] = v; }
+    for (const [k, v] of [['AGENTIC_DOCS', was.docs], ['AGENTIC_HOME', was.home], ['AGENTIC_TEST_RECORD', was.rec]]) { if (v == null) delete process.env[k]; else process.env[k] = v; }
   }
 });
 
 test('the code under test is named by its commit, and a frozen copy inside another repo by its folder', () => {
   expect(codeLabel()).toMatch(/^[0-9a-f]{7,}\+?$/);
-  const frozen = join(mkdtempSync(join(tmpdir(), 'bonsai-frozen-')), 'main-7595055'); mkdirSync(frozen);
+  const frozen = join(mkdtempSync(join(tmpdir(), 'agentic-frozen-')), 'main-7595055'); mkdirSync(frozen);
   expect(codeLabel(frozen)).toBe('main-7595055');
 });
 

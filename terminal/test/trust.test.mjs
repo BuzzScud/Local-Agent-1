@@ -5,11 +5,11 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.BONSAI_HOME = mkdtempSync(join(tmpdir(), 'bonsai-trust-home-'));
+process.env.AGENTIC_HOME = mkdtempSync(join(tmpdir(), 'agentic-trust-home-'));
 const { isTrusted, saveTrust, trustedRoot } = await import('../src/app/trust.mjs');
 
 test('nothing is trusted until saved; a yes covers the folder and its children', () => {
-  const a = mkdtempSync(join(tmpdir(), 'bonsai-trust-a-'));
+  const a = mkdtempSync(join(tmpdir(), 'agentic-trust-a-'));
   expect(isTrusted(a)).toBe(false);
   saveTrust(a);
   expect(isTrusted(a)).toBe(true);

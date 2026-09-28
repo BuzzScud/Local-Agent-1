@@ -57,7 +57,7 @@ test('/btw when idle: c copies the answer, f sends the question and answer with 
   const { cwd, env, base } = setup();
   const clip = join(base, 'clipboard.txt');
   const fake = await startFakeServer([{ text: 'Hi.' }, { text: 'Noted.' }], { route: (j) => (isSide(j) ? { text: 'You asked me to say hi.' } : null) });
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], steps: [
     { wait: 'Welcome' },
     { type: 'say hi' }, { key: 'enter' }, { wait: 'Hi.' }, { waitGone: 'esc to interrupt' },
     { type: '/btw what did I ask?' }, { key: 'enter' }, { wait: 'f to send to main' },

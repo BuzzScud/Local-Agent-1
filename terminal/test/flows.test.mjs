@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
-const copy = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project'); cpSync(join(import.meta.dir, name), d, { recursive: true }); return d; };
+const copy = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project'); cpSync(join(import.meta.dir, name), d, { recursive: true }); return d; };
 
 async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots, testTimeoutMs } = {}) {
   const fake = await startFakeServer(replies);
@@ -106,7 +106,7 @@ const exportWith = (extra) => readFileSync(join(import.meta.dir, '..', 'demo-pro
 const jsonTest = "```js\ntest('--json prints the rows', () => {\n  const out = JSON.parse(main(['trades.json', '--json']));\n  assert.equal(out.length, 3);\n});\n```";
 
 test('change: tests first, drafts cross-checked, you approve the test, then the change', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
   const bad = '```js\n' + exportWith('') + '```';
@@ -124,7 +124,7 @@ test('change: tests first, drafts cross-checked, you approve the test, then the 
 });
 
 test('change: when two tests and two drafts agree, nothing more is written', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
   const replies = [{ text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }, { text: 'never used' }];
@@ -138,7 +138,7 @@ test('change: when two tests and two drafts agree, nothing more is written', asy
 });
 
 test('change: not approving the test stops before any change', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
   const replies = [{ text: jsonTest }, { text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: good }, { text: good }];
@@ -224,7 +224,7 @@ test('writing requests and new files work step by step (no test can define "done
 });
 
 test('a folder that is not a code project (a Desktop, a home folder) works step by step', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'desk');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'desk');
   mkdirSync(cwd);
   writeFileSync(join(cwd, 'notes.txt'), 'hello');
   mkdirSync(join(cwd, 'some-app'));
@@ -239,7 +239,7 @@ test('a folder that is not a code project (a Desktop, a home folder) works step 
 });
 
 test('change: two tests that cannot even load the code stop the test step early', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const brokenTest = "```js\nimport { thing } from './SEP';\ntest('x', () => assert.equal(thing(), 1));\n```";
   const replies = [{ text: brokenTest }, { text: brokenTest }, { text: 'I added nothing yet.' }];
@@ -286,7 +286,7 @@ test('checks named in a request, and e2e checks count as tests', () => {
 });
 
 test('the file list is ranked before it is cut, so folders early in A to Z cannot crowd out the right one', () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'big');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'big');
   const files = [];
   for (let i = 0; i < 200; i++) { const rel = `archive/old${String(i).padStart(3, '0')}.js`; mkdirSync(join(cwd, 'archive'), { recursive: true }); writeFileSync(join(cwd, rel), `export const price${i} = ${i};\n`); files.push(rel); }
   mkdirSync(join(cwd, 'desks', 'chart'), { recursive: true });
@@ -298,7 +298,7 @@ test('the file list is ranked before it is cut, so folders early in A to Z canno
 });
 
 test('tests in the scratch copy see the project\'s git, but cannot change it', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'repo');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'repo');
   mkdirSync(cwd);
   const git = (...a) => spawnSync('git', a, { cwd, encoding: 'utf8' });
   git('init', '-q');
@@ -336,7 +336,7 @@ const z = (file, sel) => Number(new RegExp(sel.replace('.', '\\\\.') + '\\\\{[^}
 assert.ok(z('page.html', '.hud') > z('legend.css', '.lg'), 'the menu (inside .hud) must paint above the legend');
 `;
 const pageProject = () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'page');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'page');
   mkdirSync(cwd);
   writeFileSync(join(cwd, 'page.html'), PAGE);
   writeFileSync(join(cwd, 'legend.css'), '.lg{position:absolute;top:40px;z-index:4}\n');
@@ -373,7 +373,7 @@ test('fix in a page: when no try passes, nothing is changed', async () => {
 });
 
 test('excerpts: the lines with the most terms first, a little around each, long lines left out', () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'ex');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'ex');
   mkdirSync(cwd);
   const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`);
   lines[10] = '.hud{z-index:4}';
@@ -384,7 +384,7 @@ test('excerpts: the lines with the most terms first, a little around each, long 
 });
 
 test('tools can write their caches in node_modules of the scratch copy; your node_modules is untouched', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-flow-')), 'app');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'app');
   mkdirSync(join(cwd, 'node_modules', 'pkg'), { recursive: true });
   mkdirSync(join(cwd, 'node_modules', '.vite-temp'));
   writeFileSync(join(cwd, 'node_modules', 'pkg', 'index.js'), 'module.exports = 42;\n');

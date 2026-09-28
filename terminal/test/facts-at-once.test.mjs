@@ -1,4 +1,4 @@
-// Two Bonsai windows in one folder save at the same moment (part 1 of the
+// Two Agentic Coder windows in one folder save at the same moment (part 1 of the
 // memory plan, step 7). Each window is its own process, as in real use, and
 // both start their save on the same millisecond. Afterwards every fact has
 // to be there, once, under a name of its own, and the log and the list of
@@ -28,7 +28,7 @@ process.stdout.write(JSON.stringify({ added: out.added?.length ?? 0, refused: ou
 
 function openWindow(dir, at, job) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['-e', WINDOW, dir, String(at), JSON.stringify(job)], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, BONSAI_NO_RECORD: '1' } });
+    const child = spawn(process.execPath, ['-e', WINDOW, dir, String(at), JSON.stringify(job)], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, AGENTIC_NO_RECORD: '1' } });
     let out = ''; let err = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { err += d; });
@@ -37,7 +37,7 @@ function openWindow(dir, at, job) {
   });
 }
 
-const place = () => { const dir = join(mkdtempSync(join(tmpdir(), 'bonsai-at-once-')), 'memory'); mkdirSync(dir, { recursive: true }); return dir; };
+const place = () => { const dir = join(mkdtempSync(join(tmpdir(), 'agentic-at-once-')), 'memory'); mkdirSync(dir, { recursive: true }); return dir; };
 // The same first six words in every fact, so both windows reach for the same file name.
 const facts = (w, n) => Array.from({ length: n }, (_, i) => ({ kind: 'project', text: `The build for this project needs step ${w}${i + 1} before the tests of window ${w} can run`, from: `window ${w}` }));
 

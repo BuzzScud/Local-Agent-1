@@ -6,8 +6,8 @@
 // conversation back up.
 // GitHub is asked too (git fetch, 30 s after the start, then every 5 min, and
 // at each /update), so a push from anywhere else shows up as well.
-//   BONSAI_NO_UPDATE=1 turns the check off (as it turns off the launcher's rebuild);
-//   BONSAI_UPDATE_EVERY=<ms> looks more often (the tests); BONSAI_FETCH_EVERY=<ms>
+//   AGENTIC_NO_UPDATE=1 turns the check off (as it turns off the launcher's rebuild);
+//   AGENTIC_UPDATE_EVERY=<ms> looks more often (the tests); AGENTIC_FETCH_EVERY=<ms>
 //   asks GitHub that often, 0 never.
 import { spawn } from 'node:child_process';
 import { statSync, writeFileSync, unlinkSync } from 'node:fs';
@@ -58,7 +58,7 @@ const git = async (repo, args) => { const r = await runGit(repo, args); return r
 const rev = (repo, ref) => git(repo, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
 const changed = async (repo, from, to) => ((await git(repo, ['diff', '--name-only', `${from}..${to}`])) ?? '').split('\n').filter(isAppCode);
 
-// Where Agentic Coder's code lives: the launcher passes BONSAI_REPO; run from the
+// Where Agentic Coder's code lives: the launcher passes AGENTIC_REPO; run from the
 // source (bun run start), it is the repo this file sits in.
 export function findRepo() {
   const tries = [(process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO), join(import.meta.dir, '..', '..', '..')].filter(Boolean);
@@ -130,11 +130,11 @@ export async function fetchMain(repo, timeout = 20_000) {
 // Git's words, safe to put on the screen: no control characters (a file name
 // in an error cannot move the cursor or recolour the terminal), one line.
 export const plain = (text) => String(text ?? '').split('\n').map((l) => l.replace(/^(fatal|error): /, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()).find(Boolean)?.slice(0, 200) ?? '';
-const msEnv = (name, dflt) => { const v = process.env[name]; return v === undefined || v === '' ? dflt : Number(v) || 0; };
+export const msEnv = (name, dflt) => { const v = process.env[`AGENTIC_${name}`] ?? process.env[`BONSAI_${name}`]; return v === undefined || v === '' ? dflt : Number(v) || 0; };
 
 // Watches until stopped; calls onChange with the new state when it changes.
 // Returns { stop, check }: check() asks GitHub, then looks (for /update).
-export function watchUpdates(onChange, { repo = findRepo(), every = msEnv('BONSAI_UPDATE_EVERY', EVERY_MS) || EVERY_MS, fetchEvery = msEnv('BONSAI_FETCH_EVERY', FETCH_EVERY_MS) } = {}) {
+export function watchUpdates(onChange, { repo = findRepo(), every = msEnv('UPDATE_EVERY', EVERY_MS) || EVERY_MS, fetchEvery = msEnv('FETCH_EVERY', FETCH_EVERY_MS) } = {}) {
   if (!repo || (process.env.AGENTIC_NO_UPDATE ?? process.env.BONSAI_NO_UPDATE) === '1') return { repo: null, stop: () => {}, check: async () => null };
   const built = builtAt();
   let start = null;
@@ -179,7 +179,7 @@ const short = (p) => (process.env.HOME && p.startsWith(process.env.HOME) ? `~${p
 
 // Restarting is the launcher's job (terminal/app/agentic-coder-launcher.sh): it runs
 // the app and waits, so when this app exits with RESTART_CODE it rebuilds and
-// starts the new version with the arguments left in BONSAI_RESTART_FILE (one
+// starts the new version with the arguments left in AGENTIC_RESTART_FILE (one
 // per line). This window has fully let go of the keyboard by then; a restart
 // from inside the app (it waiting on the new one) lost typed keys to the old
 // process and left one more of them behind at each /update.

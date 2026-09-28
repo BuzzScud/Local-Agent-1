@@ -53,7 +53,7 @@ test('what a task taught is saved after the window closed, and the next start sa
   const m = memories(base, cwd);
   const saved = { add: [{ kind: 'worked', text: 'Worked: export.mjs prints the rows as JSON when argv includes --json.', turn: 1 }, { kind: 'failed', text: 'Failed: nothing failed here, so this must be refused.', turn: 1 }], drop: [] };
   const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(saved) } : null) });
-  const on = { ...env, BONSAI_MEMORY_SAVE: 'on' };
+  const on = { ...env, AGENTIC_MEMORY_SAVE: 'on' };
   const first = await runInPty({ cwd, env: on, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: 'add a --json flag to export.mjs' }, { key: 'enter' },
     { wait: 'Do you want to make this edit' }, { sleep: 200 }, { key: 'enter' },
@@ -93,7 +93,7 @@ test('asking first: after a task the facts are listed, Save keeps them', async (
   const { cwd, env, base } = setup();
   const m = memories(base, cwd);
   const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(learned) } : null) });
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_MEMORY_SAVE: 'ask' }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], timeoutMs: 60_000, steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_MEMORY_SAVE: 'ask' }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], timeoutMs: 60_000, steps: [
     ...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { snapshot: 'asked' },
     { key: 'enter' }, { wait: 'Memory: 1 saved' }, ...quit,
   ] });
@@ -108,7 +108,7 @@ test('asking first: Skip (esc) keeps nothing, and quitting does not save on its 
   const { cwd, env, base } = setup();
   const m = memories(base, cwd);
   const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(learned) } : null) });
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_MEMORY_SAVE: 'ask' }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], timeoutMs: 60_000, steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_MEMORY_SAVE: 'ask' }, args: ['--url', fake.url, '--no-flows', '--slots', '2'], timeoutMs: 60_000, steps: [
     ...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { key: 'esc' }, { wait: 'Not saved' }, ...quit,
   ] });
   await fake.close();
@@ -146,7 +146,7 @@ test('"remember that …" saves at once into the new memory, and "memory": false
   expect(JSON.stringify(fake.requests.find(isSave))).toContain('The user now says: remember that I want pages as one self-contained HTML file');
   expect(existsSync(join(cwd, '.bonsai', 'notes.md'))).toBe(false); // not the old notes file
   // off: nothing is read, brought back or saved
-  const off = await runInPty({ cwd, env: { ...env, BONSAI_NO_MEMORY: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const off = await runInPty({ cwd, env: { ...env, AGENTIC_NO_MEMORY: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: 'what is a self-contained HTML file?' }, { key: 'enter' }, { wait: 'Done.' },
     { type: '/memory' }, { key: 'enter' }, { wait: 'The memory is off here' }, ...quit,
   ] });

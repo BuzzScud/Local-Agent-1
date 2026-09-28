@@ -3,7 +3,7 @@
 // auto-approved. Records where each went, how long, errors, file changes,
 // blocked commands, and whether it wrote tests for something that isn't code.
 //   node models/evals/bench/words/real.mjs [--out file.json] [--only 1,5] [--memory]
-// --memory: with Bonsai's memory on, as the app has it (a throwaway one, empty
+// --memory: with Agentic Coder's memory on, as the app has it (a throwaway one, empty
 // at the start; Claude's notes off). What a request taught is saved after
 // its checks, so the memory's own files are never taken for the request's.
 // Blocked-command requests use harmless variants (rm -rf ./logs, sudo ls):
@@ -76,7 +76,7 @@ const approve = (req) => !(req.name === 'Bash' && SERVICES.test(String(req.args?
 const only = opt('only', null)?.split(',').map(Number);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 const withMemory = args.includes('--memory');
-const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'bonsai-words-memory-')) : null;
+const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'agentic-words-memory-')) : null;
 // One small model for the whole run, stopped with it.
 const embedder = withMemory && embedderReady() ? new Embedder() : null;
 const saves = [];
@@ -86,10 +86,10 @@ const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
 const rows = [];
 try {
   for (const [i, [folder, prompt, expect, reply]] of REQUESTS.entries()) {
-    // What "the user" says when Bonsai asks a question about this request.
+    // What "the user" says when Agentic Coder asks a question about this request.
     const answers = () => reply ?? 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.';
     if (only && !only.includes(i + 1)) continue;
-    const base = mkdtempSync(join(tmpdir(), 'bonsai-words-'));
+    const base = mkdtempSync(join(tmpdir(), 'agentic-words-'));
     const cwd = join(base, 'project');
     cpSync(FOLDERS[folder], cwd, { recursive: true });
     // Everything copied counts as old; changes after this are the model's.

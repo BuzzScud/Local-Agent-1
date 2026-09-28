@@ -1,4 +1,4 @@
-// Builds the engine by hand (bonsai setup does the same when it is missing):
+// Builds the engine by hand (coding setup does the same when it is missing):
 //   node models/runtime/engine/build-now.mjs
 import { ENGINE, HOME } from '../../registry.mjs';
 import { buildEngine } from './build.mjs';

@@ -355,7 +355,7 @@ export function syntaxError(path, text) {
   if (ext === '.json') { try { JSON.parse(text); return null; } catch (e) { return e.message; } }
   const cmd = ['.js', '.mjs', '.cjs'].includes(ext) ? ['node', ['--check']] : ext === '.py' ? ['python3', ['-m', 'py_compile']] : null;
   if (!cmd) return null;
-  const tmp = join(tmpdir(), `bonsai-check-${process.pid}-${Date.now()}${ext}`);
+  const tmp = join(tmpdir(), `agentic-check-${process.pid}-${Date.now()}${ext}`);
   writeFileSync(tmp, text);
   const r = spawnSync(cmd[0], [...cmd[1], tmp], { encoding: 'utf8', timeout: 10_000 });
   rmSync(tmp, { force: true });

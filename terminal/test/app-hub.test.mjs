@@ -13,7 +13,7 @@ test('/weights starts the viewer inside the window: the note names the page, and
   writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in'); // 8 bytes
   const fake = await startFakeServer([]);
   let served = null;
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/wei' }, { sleep: 250 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
@@ -32,21 +32,21 @@ test('/docs opens the hub on the harness page and says how many pages the DOCS f
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'models'), { recursive: true });
   writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
-  const docs = join(base, 'bonsai-code DOCS'); mkdirSync(docs);
-  writeFileSync(join(docs, 'bonsai-harness-flow-v2.html'), '<!doctype html><title>Agentic Coder harness v2</title><p>flow');
-  writeFileSync(join(docs, 'bonsai-code-structure-v4.html'), '<!doctype html><title>Agentic Coder structure v4</title><p>tree');
+  const docs = join(base, 'agentic-coder DOCS'); mkdirSync(docs);
+  writeFileSync(join(docs, 'agentic-coder-harness-flow-v2.html'), '<!doctype html><title>Agentic Coder harness v2</title><p>flow');
+  writeFileSync(join(docs, 'agentic-coder-structure-v4.html'), '<!doctype html><title>Agentic Coder structure v4</title><p>tree');
   const fake = await startFakeServer([]);
   let served = null;
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1', BONSAI_DOCS: docs }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1', AGENTIC_DOCS: docs }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/docs' }, { key: 'enter' },
     { wait: 'Docs opened in the browser at http://127.0.0.1:' },
-    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { list: await (await fetch(url + 'docs.json')).json(), page: await (await fetch(url + 'docs/bonsai-harness-flow-v2.html')).text(), hub: await (await fetch(url + '?tab=harness')).text() }; } },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { list: await (await fetch(url + 'docs.json')).json(), page: await (await fetch(url + 'docs/agentic-coder-harness-flow-v2.html')).text(), hub: await (await fetch(url + '?tab=harness')).text() }; } },
     ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('?tab=harness · 2 pages from');
   expect(r.text.replace(/\s+/g, ' ')).toContain('harness: Agentic Coder harness v2 · structure: Agentic Coder structure v4'); // the longer name wraps the note
-  expect(served.list.pinned.harness.file).toBe('bonsai-harness-flow-v2.html');
+  expect(served.list.pinned.harness.file).toBe('agentic-coder-harness-flow-v2.html');
   expect(served.page).toContain('flow');
   expect(served.hub).toContain('<title>Agentic Coder Hub</title>');
 }, T);
@@ -60,7 +60,7 @@ test('/tests opens the hub on the test record and says how many runs it holds an
   ].map((r) => JSON.stringify(r)).join('\n') + '\n');
   const fake = await startFakeServer([]);
   let served = null;
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/tests' }, { key: 'enter' },
     { wait: 'Tests opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'tests.json')).json(), page: await (await fetch(url + 'tests')).text() }; } },
@@ -76,7 +76,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   let served = null;
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/help' }, { key: 'enter' }, { wait: 'esc or enter to close' }, { sleep: 200 }, { snapshot: 'box' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'help.json')).json(), page: await (await fetch(url + 'help')).text(), hub: await (await fetch(url + '?tab=help')).text() }; } },
     { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },

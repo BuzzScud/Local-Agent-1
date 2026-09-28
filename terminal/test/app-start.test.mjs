@@ -1,5 +1,5 @@
 // End-to-end, the real app in a pseudo-terminal (see app.test.mjs).
-// Here: the start, the safety check of a new folder, and bonsai -p.
+// Here: the start, the safety check of a new folder, and coding -p.
 import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync, existsSync, mkdirSync, symlinkSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,10 +50,10 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
 // The safety check is a menu: ❯ on "Yes" first, the arrows move it, enter
 // picks. Here it is moved down to No and back up to Yes before enter.
 test('a folder not yet trusted gets the safety check first; arrows + enter say yes, and it is remembered', async () => {
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
-  const env = { BONSAI_HOME: join(base, 'home') }; // no trust seeded
+  const env = { AGENTIC_HOME: join(base, 'home') }; // no trust seeded
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Quick safety check' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'onNo' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
@@ -73,10 +73,10 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
 
 test('safety check: typing 2 picks No at once and nothing is read; 1 still says yes', async () => {
   const mk = () => {
-    const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+    const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
     const cwd = join(base, 'demo-project');
     cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
-    return { base, cwd, env: { BONSAI_HOME: join(base, 'home') } };
+    return { base, cwd, env: { AGENTIC_HOME: join(base, 'home') } };
   };
   const a = mk();
   const no = await runInPty({ cwd: a.cwd, env: a.env, args: ['--no-flows'], steps: [
@@ -94,7 +94,7 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
   expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
 }, T * 2);
 
-test('bonsai -p: a question with choices is an arrow menu, "Type an answer" takes a line, a bare question takes a line', async () => {
+test('coding -p: a question with choices is an arrow menu, "Type an answer" takes a line, a bare question takes a line', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([
     { tool: { name: 'Ask', args: { question: 'Which file should change?', options: ['export.mjs', 'trades.json'] } } },

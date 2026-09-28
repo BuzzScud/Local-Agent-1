@@ -7,7 +7,7 @@ import { diffLines } from '../src/tools/edit.mjs';
 
 let dir;
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), 'bonsai-tools-'));
+  dir = mkdtempSync(join(tmpdir(), 'agentic-tools-'));
   writeFileSync(join(dir, 'a.js'), 'function add(a, b) {\n  return a + b;\n}\n\nfunction sub(a, b) {\n  return a - b;\n}\n');
   mkdirSync(join(dir, 'src'));
   writeFileSync(join(dir, 'src', 'b.js'), 'export const port = 8790;\n');

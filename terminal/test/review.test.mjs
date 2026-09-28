@@ -14,17 +14,17 @@ test('when it may run: at night, on power, the Mac idle, no window open and no t
   expect(whyNot({ ...ok, hour: 6 })).toBe('it is not between 1 and 6 in the morning');
   expect(whyNot({ ...ok, onPower: false })).toBe('the Mac runs on its battery');
   expect(whyNot({ ...ok, idleMins: 4.4 })).toBe('the Mac was used 4 minutes ago');
-  expect(whyNot({ ...ok, windows: 1 })).toBe('a Agentic Coder window is open');
+  expect(whyNot({ ...ok, windows: 1 })).toBe('an Agentic Coder window is open');
   expect(whyNot({ ...ok, bench: true })).toBe('a test run has the model');
   // --now skips the clock, the power and the idle check, never the other two
   expect(whyNot({ hour: 14, onPower: false, idleMins: 0, windows: 0, bench: false }, { now: true })).toBe(null);
-  expect(whyNot({ ...ok, windows: 2 }, { now: true })).toBe('a Agentic Coder window is open');
+  expect(whyNot({ ...ok, windows: 2 }, { now: true })).toBe('an Agentic Coder window is open');
   expect([HOURS, IDLE_MINS]).toEqual([[1, 2, 3, 4, 5], 30]);
 });
 
 test('the scheduler\'s file: once an hour in those hours, the installed app, in the background', () => {
-  const p = plistText('/Users/me/.bonsai-code/app/bonsai');
-  expect(p).toContain('<string>/Users/me/.bonsai-code/app/bonsai</string><string>memory-review</string>');
+  const p = plistText('/Users/me/.agentic-coder/app/agentic-coder');
+  expect(p).toContain('<string>/Users/me/.agentic-coder/app/agentic-coder</string><string>memory-review</string>');
   expect(p.match(/<key>Hour<\/key>/g)).toHaveLength(5);
   expect(p).toContain('<key>ProcessType</key><string>Background</string>');
   expect(p).not.toContain('KeepAlive'); // it is never restarted on its own
@@ -33,7 +33,7 @@ test('the scheduler\'s file: once an hour in those hours, the installed app, in 
 
 // In its own process with its own home (the folders are read when the code loads).
 function inChild(body, files = () => {}) {
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-review-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-review-'));
   const repo = join(base, 'repo');
   mkdirSync(join(repo, '.git'), { recursive: true });
   writeFileSync(join(repo, 'legend.js'), 'export const z = 0;\n');
@@ -54,7 +54,7 @@ function inChild(body, files = () => {}) {
     console.log(JSON.stringify(out));
     process.exit(0);
   `;
-  const r = spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, BONSAI_HOME: join(base, 'home'), BONSAI_MEMORY: join(base, 'about-you') }, timeout: 30_000 });
+  const r = spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: join(base, 'home'), AGENTIC_MEMORY: join(base, 'about-you') }, timeout: 30_000 });
   if (r.status !== 0) throw new Error(r.stderr || r.stdout);
   return { ...JSON.parse(r.stdout.trim().split('\n').pop()), base };
 }
@@ -88,7 +88,7 @@ test('it reads the day\'s conversations once, saves what they teach, and leaves 
   expect(done.line).toContain('Memory: reviewed last night, 2 saved');
 });
 
-test('a Agentic Coder window opens while it reads: it stops at once, and picks the rest up the next night', () => {
+test('an Agentic Coder window opens while it reads: it stops at once, and picks the rest up the next night', () => {
   const o = inChild(`
     const fake = await startFakeServer([], { route: () => ({ text: '{"add":[{"kind":"you","text":"Explain things simply, in plain words."}],"drop":[]}' }) });
     let calls = 0;

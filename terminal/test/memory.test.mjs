@@ -16,7 +16,7 @@ test('which messages ask to save to memory', () => {
 });
 
 test('the right file: the home folder\'s, the git repo\'s top, or the folder itself', () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-mem-home-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-mem-home-'));
   expect(memoryFile(home, home)).toBe(join(home, '.agentic', 'notes.md'));
   const repo = join(home, 'repo'); mkdirSync(join(repo, '.git'), { recursive: true }); mkdirSync(join(repo, 'src', 'deep'), { recursive: true });
   expect(memoryFile(join(repo, 'src', 'deep'), home)).toBe(join(repo, '.agentic', 'notes.md'));
@@ -28,7 +28,7 @@ test('the right file: the home folder\'s, the git repo\'s top, or the folder its
 });
 
 test('merging: new facts added once, named lines dropped, the user\'s own text kept, kept out of git', () => {
-  const repo = mkdtempSync(join(tmpdir(), 'bonsai-mem-repo-')); mkdirSync(join(repo, '.git', 'info'), { recursive: true });
+  const repo = mkdtempSync(join(tmpdir(), 'agentic-mem-repo-')); mkdirSync(join(repo, '.git', 'info'), { recursive: true });
   const file = join(repo, '.bonsai', 'notes.md');
   let r = applyMemory(file, { add: ['Prefers tabs over spaces', 'Tests run with bun test'], drop: [] });
   expect(r.added).toHaveLength(2);
@@ -44,7 +44,7 @@ test('merging: new facts added once, named lines dropped, the user\'s own text k
 });
 
 test('"update memory" in a conversation saves straight to the file: no question about where', async () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'bonsai-mem-agent-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-mem-agent-'));
   const fake = await startFakeServer([{ text: '{"add":["Likes self-contained HTML files on the Desktop"],"drop":[]}' }]);
   const asked = [];
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'ask', flows: true, ask: async (req) => { asked.push(req); return { choice: 'no' }; } });

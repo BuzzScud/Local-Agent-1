@@ -50,6 +50,7 @@ mkdir -p "$(dirname "$RESTART")"
 while :; do
   rebuild
   rm -f "$RESTART"
+  # Both names: an app built before the rename reads only BONSAI_*.
   AGENTIC_REPO="$REPO" AGENTIC_RESTART_FILE="$RESTART" BONSAI_REPO="$REPO" BONSAI_RESTART_FILE="$RESTART" "$APP" "$@"
   code=$?
   # Only a plain file of yours that the app just wrote (not a link); each line

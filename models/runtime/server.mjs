@@ -35,7 +35,7 @@ function watch(pid, port, secs) {
   // Started through a shell that leaves at once, so the watcher is nobody's
   // child: it outlives Agentic Coder and Terminal's title does not show its `sleep`.
   const args = [String(pid), usersDir(port), regFile(port), String(secs), String(step)];
-  spawn('/bin/sh', ['-c', '/bin/sh -c "$0" bonsai-watch "$@" </dev/null >/dev/null 2>&1 &', WATCH, ...args], { detached: true, stdio: 'ignore' }).unref();
+  spawn('/bin/sh', ['-c', '/bin/sh -c "$0" agentic-watch "$@" </dev/null >/dev/null 2>&1 &', WATCH, ...args], { detached: true, stdio: 'ignore' }).unref();
 }
 
 const portFree = (port) => new Promise((resolve) => {
@@ -70,7 +70,7 @@ export function scanServers() {
 }
 
 // Whether the model's guessing helper is used: it is on this Mac (coding setup
-// downloads it) and not switched off with BONSAI_HELPER=off.
+// downloads it) and not switched off with AGENTIC_HELPER=off.
 export const hasDraft = (model) => Boolean(model?.draft && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' && existsSync(draftPath(model)));
 
 export function serverArgs(model, { ctx, port, draft = false }) {

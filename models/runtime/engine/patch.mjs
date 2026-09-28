@@ -1,4 +1,4 @@
-// The Metal patch as text, so the one-file `bonsai` binary carries it: the same bytes as
+// The Metal patch as text, so the one-file `agentic-coder` binary carries it: the same bytes as
 // pq2-multicol.patch (a test checks). Made by make-patch.mjs; do not edit by hand.
 export const PATCH = `diff --git a/ggml/src/ggml-metal/ggml-metal-device.cpp b/ggml/src/ggml-metal/ggml-metal-device.cpp
 index 3420ba8..ffe7833 100644

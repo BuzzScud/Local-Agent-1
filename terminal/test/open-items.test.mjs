@@ -22,7 +22,7 @@ import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const dir = (files) => {
-  const d = mkdtempSync(join(tmpdir(), 'bonsai-open-'));
+  const d = mkdtempSync(join(tmpdir(), 'agentic-open-'));
   for (const [name, text] of Object.entries(files)) writeFileSync(join(d, name), text);
   return d;
 };
@@ -72,7 +72,7 @@ test.skipIf(!sandboxAvailable())('commands cannot read the home folder or write 
   expect(home.lines.join('\n')).toMatch(/Operation not permitted/);
   expect(home.lines.join('\n')).toMatch(/cannot be read or changed/);
   expect((await runCommand('ls "$HOME"/Documents; ls ~$USER/Library', { cwd })).lines.join('\n')).not.toMatch(/^\w+\.\w+$/m);
-  const probe = join(homedir(), `bonsai-fence-probe-${process.pid}.txt`);
+  const probe = join(homedir(), `agentic-fence-probe-${process.pid}.txt`);
   await runCommand(`echo x > ${probe}`, { cwd });
   expect(existsSync(probe)).toBe(false);
   expect((await runCommand('echo ok > b.txt && cat a.txt b.txt', { cwd })).lines).toEqual(['inside', 'ok']);

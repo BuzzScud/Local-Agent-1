@@ -20,8 +20,8 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[DEFAULT_MODEL];
 
-const base = mkdtempSync(join(tmpdir(), 'bonsai-reread-'));
-const src = join(base, 'bonsai-code');
+const base = mkdtempSync(join(tmpdir(), 'agentic-reread-'));
+const src = join(base, 'agentic-coder');
 mkdirSync(src);
 for (const [from, to] of [['terminal/src', 'src'], ['README.md', 'README.md'], ['package.json', 'package.json']]) cpSync(join(root, from), join(src, to), { recursive: true });
 

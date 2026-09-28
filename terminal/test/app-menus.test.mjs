@@ -147,7 +147,7 @@ test('shift + arrows select text in the prompt: copied at once, delete removes i
   const clip = join(base, 'clipboard.txt'); // stands in for the Mac clipboard
   const fake = await startFakeServer([]);
   const SL = '\x1b[1;2D', SU = '\x1b[1;2A'; // what Terminal.app sends for shift+← and shift+↑
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_CLIPBOARD: clip }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: 'hello world' }, { sleep: 150 },
     ...Array.from({ length: 5 }, () => [{ key: SL }, { sleep: 40 }]).flat(),
     { wait: 'copied 5 chars to clipboard' }, { snapshot: 'selected' },

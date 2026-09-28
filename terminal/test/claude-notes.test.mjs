@@ -27,15 +27,15 @@ const NOTES = {
   'check-a-page.md': note('check-a-page', 'How to look at a page without a browser window; pages behind login need a saved session', 'reference', 'Open it headless and take a picture.'),
 };
 function folder(files = NOTES) {
-  const dir = mkdtempSync(join(tmpdir(), 'bonsai-claude-notes-'));
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-claude-notes-'));
   for (const [n, text] of Object.entries(files)) writeFileSync(join(dir, n), text);
   return dir;
 }
-const store = () => mkdtempSync(join(tmpdir(), 'bonsai-claude-store-'));
+const store = () => mkdtempSync(join(tmpdir(), 'agentic-claude-store-'));
 const snapshot = (dir) => readdirSync(dir).sort().map((n) => `${n} ${statSync(join(dir, n)).mtimeMs} ${statSync(join(dir, n)).size}`).join('\n');
 
 test('the notes are found in Claude Code\'s memory folder for the home folder, or where the setting says; "off" means none', () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-claude-home-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-claude-home-'));
   const slug = home.replace(/[/.]/g, '-');
   const dir = join(home, '.claude', 'projects', slug, 'memory');
   mkdirSync(dir, { recursive: true });
@@ -141,7 +141,7 @@ test('what goes with the request says whose notes these are and that the files a
 });
 
 async function converse(prompt, memory) {
-  const cwd = mkdtempSync(join(tmpdir(), 'bonsai-claude-agent-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-claude-agent-'));
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
   const fake = await startFakeServer([{ text: 'Print it from a headless browser, in A4.' }]);
   const events = [];
@@ -154,7 +154,7 @@ async function converse(prompt, memory) {
 
 test('in a conversation the note goes into the request itself, with one Context line on the screen', async () => {
   const dir = folder();
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-claude-you-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-claude-you-'));
   const { agent, fake, events } = await converse('how do I turn this html report into a pdf?', { embedder: new FakeEmbedder(), home, save: false, claude: { dir, store: store() } });
   const sent = fake.requests.filter((r) => r.stream)[0].messages.find((m) => m.role === 'user').content;
   expect(sent).toStartWith('how do I turn this html report into a pdf?\n\n(From Claude\'s notes.');
@@ -167,7 +167,7 @@ test('in a conversation the note goes into the request itself, with one Context 
 
 test('Claude\'s notes switched off, or a request no note fits: the request goes as it was typed', async () => {
   const dir = folder();
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-claude-you-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-claude-you-'));
   const off = await converse('how do I turn this html report into a pdf?', { embedder: new FakeEmbedder(), home, save: false, claude: false });
   expect(off.agent.messages[1].content).toBe('how do I turn this html report into a pdf?');
   const none = await converse('whats the capital of brazil?', { embedder: new FakeEmbedder(), home, save: false, claude: { dir, store: store() } });
@@ -176,7 +176,7 @@ test('Claude\'s notes switched off, or a request no note fits: the request goes 
 });
 
 test('the thirteen lines on how the user likes things done are saved once, always read, and short enough to read at every start', () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-claude-rules-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-claude-rules-'));
   const repo = join(home, 'work', 'repo');
   mkdirSync(join(repo, '.git'), { recursive: true });
   expect(CLAUDE_RULES.length).toBe(13); // the user read the fifteen and dropped two (28 Sep)
@@ -196,7 +196,7 @@ test('the thirteen lines on how the user likes things done are saved once, alway
   expect(notes).toContain('- Never say a check passed unless you ran it and read what it printed.');
   expect(notes.length).toBeLessThan(1900);
   // Without the rules handed in (tests, practice runs) nothing but the first two is saved.
-  const bare = mkdtempSync(join(tmpdir(), 'bonsai-claude-rules-'));
+  const bare = mkdtempSync(join(tmpdir(), 'agentic-claude-rules-'));
   mkdirSync(join(bare, 'r', '.git'), { recursive: true });
   expect(openMemory(join(bare, 'r'), { home: bare }).rules).toEqual([]);
 });
@@ -215,5 +215,5 @@ test('for work on the code here, a note about another project of the user\'s doe
   expect(await ask('/Users/someone/shop', 'commit and push it to github', 'change')).toEqual(['commit-rule']);
   // A folder name any project could have is not a project's name.
   expect(foldersOf('/Users/someone/Desktop/MAIN2026/desks/chart', '/Users/someone')).toEqual(['main2026', 'chart']);
-  expect(foldersOf('/private/var/folders/t7/abc123def/T/bonsai-eval-1-json-flag-x9Qr2k/project', '/Users/someone')).toEqual([]);
+  expect(foldersOf('/private/var/folders/t7/abc123def/T/agentic-eval-1-json-flag-x9Qr2k/project', '/Users/someone')).toEqual([]);
 });

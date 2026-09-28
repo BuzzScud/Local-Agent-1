@@ -7,7 +7,7 @@ import { join } from 'node:path';
 // The state folder: ~/.agentic-coder once it exists; until the migration
 // runs, the old ~/.agentic-coder keeps working. AGENTIC_HOME overrides.
 const NEW_HOME = join(homedir(), '.agentic-coder');
-const OLD_HOME = join(homedir(), '.bonsai-code');
+const OLD_HOME = join(homedir(), '.bonsai-code'); // the folder's name before the rename: used only while ~/.agentic-coder does not exist
 export const HOME = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? (existsSync(NEW_HOME) || !existsSync(OLD_HOME) ? NEW_HOME : OLD_HOME);
 // The model server: Prism ML's llama.cpp built from source with our Metal patch
 // (models/runtime/engine: it checks 2-8 guessed words in one pass). Each build

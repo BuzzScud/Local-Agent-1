@@ -1,4 +1,4 @@
-// Real-use test of Bonsai 2 27B through llama-server with Bonsai Code's own settings.
+// Real-use test of Bonsai 2 27B through llama-server with Agentic Coder's own settings.
 // Usage: node realuse.mjs <port> <server pid>
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';

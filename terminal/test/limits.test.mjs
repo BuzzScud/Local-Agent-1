@@ -13,7 +13,7 @@ import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
-const project = () => { const d = mkdtempSync(join(tmpdir(), 'bonsai-limits-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
+const project = () => { const d = mkdtempSync(join(tmpdir(), 'agentic-limits-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
 
 test('/increase is a command, and every limit has a default on one of its own steps', () => {
   expect(COMMANDS.some((c) => c.name === 'increase')).toBe(true);

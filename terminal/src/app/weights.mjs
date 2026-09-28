@@ -8,8 +8,8 @@
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
-// The DOCS folder is `bonsai-code DOCS/` at the top of the repo on this Mac:
-// BONSAI_DOCS names it outright, else BONSAI_REPO (the launcher passes it),
+// The DOCS folder is `agentic-coder DOCS/` at the top of the repo on this Mac:
+// AGENTIC_DOCS names it outright, else AGENTIC_REPO (the launcher passes it),
 // else the repo this source runs from.
 import { statSync, existsSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
@@ -58,7 +58,7 @@ export function listDocs(dir) {
 // The hub's usual address. A fixed port keeps the page's saved place (the
 // open tensor, the Channels and Layers results) from one start to the next,
 // since the browser keeps those per address. Taken already (a second Agentic Coder
-// window) → any free port. BONSAI_HUB_PORT overrides; 0 = any free port, which
+// window) → any free port. AGENTIC_HUB_PORT overrides; 0 = any free port, which
 // every test run uses: a test's hub (no model file) on 8757 answered the tab
 // the real hub had opened, and Weights said the model was missing (27 Sep).
 const envPort = Number((process.env.AGENTIC_HUB_PORT ?? process.env.BONSAI_HUB_PORT) || NaN);

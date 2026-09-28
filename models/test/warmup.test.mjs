@@ -4,10 +4,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Runs in its own process with its own BONSAI_HOME (the slot folder comes
+// Runs in its own process with its own AGENTIC_HOME (the slot folder comes
 // from the home folder when models.mjs loads; see server.test.mjs).
 function inChild(body) {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-warm-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-warm-'));
   const src = (p) => JSON.stringify(join(import.meta.dir, '..', '..', p));
   const script = `
     import { createServer } from 'node:http';
@@ -45,7 +45,7 @@ function inChild(body) {
     console.log(JSON.stringify(out));
     process.exit(0);
   `;
-  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, BONSAI_HOME: home }, encoding: 'utf8', timeout: 30000 });
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 30000 });
   const line = r.stdout.trim().split('\n').pop();
   if (!line) throw new Error(r.stderr);
   return JSON.parse(line);

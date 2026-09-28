@@ -4,8 +4,8 @@
 // when it runs:
 //   - only between 1 and 6 in the morning, on power, after 30 minutes with
 //     no key or mouse (it never wakes the Mac: a sleeping Mac runs nothing);
-//   - not while a Agentic Coder window is open or a test run has the model;
-//   - it stops the moment a Agentic Coder window starts.
+//   - not while an Agentic Coder window is open or a test run has the model;
+//   - it stops the moment an Agentic Coder window starts.
 // --now skips the clock, the power and the idle check (not the others).
 // It is started by the Mac's own scheduler (launchd), once an hour in those
 // hours; `coding memory-review --install` sets that up and --uninstall
@@ -22,8 +22,10 @@ import { memoryOn, jobsDir } from './autosave.mjs';
 
 export const HOURS = [1, 2, 3, 4, 5];
 export const IDLE_MINS = 30;
-const LABEL = 'com.bonsai-code.memory-review';
+const LABEL = 'com.agentic-coder.memory-review';
+const OLD_LABEL = 'com.bonsai-code.memory-review'; // the job's name before the rename: still cleaned up (leave this one as it is)
 const plist = () => join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
+const oldPlist = () => join(homedir(), 'Library', 'LaunchAgents', `${OLD_LABEL}.plist`);
 const stateFile = () => join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? HOME, 'memory-review.json');
 const readState = () => { try { return JSON.parse(readFileSync(stateFile(), 'utf8')); } catch { return { sessions: {} }; } };
 const say = (text) => { try { mkdirSync(LOG_DIR, { recursive: true }); appendFileSync(join(LOG_DIR, 'memory-review.log'), `${new Date().toISOString()} ${text}\n`); } catch { /* no log, no harm */ } };
@@ -44,7 +46,7 @@ export function look() {
 
 // Why not now, or null when it may run.
 export function whyNot(s, { now = false } = {}) {
-  if (s.windows) return 'a Agentic Coder window is open';
+  if (s.windows) return 'an Agentic Coder window is open';
   if (s.bench) return 'a test run has the model';
   if (now) return null;
   if (!HOURS.includes(s.hour)) return `it is not between ${HOURS[0]} and ${HOURS.at(-1) + 1} in the morning`;
@@ -102,7 +104,7 @@ export async function review({ now = false, url = null, model = null, state = lo
   const out = { ran: true, read: 0, added: 0, replaced: 0, retired: 0, stopped: false, lines: [] };
   try {
     for (const s of sessions) {
-      if (!alone()) { out.stopped = true; say('a Agentic Coder window opened; stopping'); break; }
+      if (!alone()) { out.stopped = true; say('an Agentic Coder window opened; stopping'); break; }
       const r = await saveLessons({ url, model, slot, cwd: s.cwd, lessons: s.lessons, messages: s.messages, today, embedder, review: true, why: 'night review' });
       out.read++; out.added += r.added.length; out.replaced += r.replaced.length; out.retired += r.retired.length;
       st.sessions[s.key] = s.updated;
@@ -125,14 +127,22 @@ export async function review({ now = false, url = null, model = null, state = lo
 }
 
 // The scheduler's file: once an hour in the review's hours. It runs the
-// installed `bonsai` and does nothing when the review says "not now".
+// installed `coding` app and does nothing when the review says "not now".
 export function plistText(bin) {
   const times = HOURS.map((h) => `    <dict><key>Hour</key><integer>${h}</integer><key>Minute</key><integer>10</integer></dict>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>Label</key><string>${LABEL}</string>\n  <key>ProgramArguments</key>\n  <array><string>${bin}</string><string>memory-review</string></array>\n  <key>StartCalendarInterval</key>\n  <array>\n${times}\n  </array>\n  <key>EnvironmentVariables</key>\n  <dict><key>BONSAI_NO_UPDATE</key><string>1</string></dict>\n  <key>ProcessType</key><string>Background</string>\n  <key>LowPriorityIO</key><true/>\n  <key>StandardOutPath</key><string>/dev/null</string>\n  <key>StandardErrorPath</key><string>/dev/null</string>\n</dict>\n</plist>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>Label</key><string>${LABEL}</string>\n  <key>ProgramArguments</key>\n  <array><string>${bin}</string><string>memory-review</string></array>\n  <key>StartCalendarInterval</key>\n  <array>\n${times}\n  </array>\n  <key>EnvironmentVariables</key>\n  <dict><key>AGENTIC_NO_UPDATE</key><string>1</string></dict>\n  <key>ProcessType</key><string>Background</string>\n  <key>LowPriorityIO</key><true/>\n  <key>StandardOutPath</key><string>/dev/null</string>\n  <key>StandardErrorPath</key><string>/dev/null</string>\n</dict>\n</plist>\n`;
 }
 
-export function install({ bin = join(homedir(), '.bonsai-code', 'app', 'bonsai') } = {}) {
-  if (!existsSync(bin)) throw new Error(`the bonsai app is not installed at ${bin} (bun run install-cli)`);
+// A job left under the old name would run a second time (and points at an app that is gone).
+function removeOld() {
+  spawnSync('/bin/launchctl', ['bootout', `gui/${String(process.getuid())}/${OLD_LABEL}`], { encoding: 'utf8' });
+  const was = existsSync(oldPlist());
+  rmSync(oldPlist(), { force: true });
+  return was;
+}
+export function install({ bin = join(homedir(), '.agentic-coder', 'app', 'agentic-coder') } = {}) {
+  if (!existsSync(bin)) throw new Error(`the Agentic Coder app is not installed at ${bin} (bun run install-cli)`);
+  removeOld();
   mkdirSync(join(plist(), '..'), { recursive: true });
   writeFileSync(plist(), plistText(bin));
   const uid = String(process.getuid());
@@ -145,6 +155,6 @@ export function uninstall() {
   spawnSync('/bin/launchctl', ['bootout', `gui/${String(process.getuid())}/${LABEL}`], { encoding: 'utf8' });
   const was = existsSync(plist());
   rmSync(plist(), { force: true });
-  return was;
+  return removeOld() || was;
 }
 export const installed = () => existsSync(plist());

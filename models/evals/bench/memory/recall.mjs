@@ -20,7 +20,7 @@ if (!words && !embedderReady(model)) { console.error(`${model.name} is not on th
 
 // A throwaway home and project holding the 20 facts; every file a fact
 // names is there, so no fact is left out as "about a file that is gone".
-const home = mkdtempSync(join(tmpdir(), 'bonsai-recall-bench-'));
+const home = mkdtempSync(join(tmpdir(), 'agentic-recall-bench-'));
 const project = join(home, 'work', 'project');
 mkdirSync(join(project, '.git'), { recursive: true });
 const dirs = memoryDirs(project, home);

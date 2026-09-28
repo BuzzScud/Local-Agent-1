@@ -7,10 +7,10 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const FIX = join(tmpdir(), `bonsai-math-fixture-${process.pid}`);
-const HOME = join(tmpdir(), `bonsai-math-home-${process.pid}`);
-process.env.BONSAI_MATH = FIX;
-process.env.BONSAI_HOME = HOME;
+const FIX = join(tmpdir(), `agentic-math-fixture-${process.pid}`);
+const HOME = join(tmpdir(), `agentic-math-home-${process.pid}`);
+process.env.AGENTIC_MATH = FIX;
+process.env.AGENTIC_HOME = HOME;
 
 // Imported after the env points at the fixture (the module reads it lazily,
 // but tests should never look at the real folder even by accident).
@@ -93,7 +93,7 @@ test('a file added later is picked up without being asked', () => {
 });
 
 test('MATH/ paths read from the folder and are never writable', () => {
-  const cwd = join(tmpdir(), `bonsai-math-project-${process.pid}`);
+  const cwd = join(tmpdir(), `agentic-math-project-${process.pid}`);
   mkdirSync(cwd, { recursive: true });
   const p = resolvePath(cwd, 'MATH/thesis/THESIS.md');
   expect(p.inside).toBe(true);
@@ -117,7 +117,7 @@ test('the notes come only with /math: not named in the instructions, never attac
   const { Agent } = await import('../src/agent/agent.mjs');
   const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
   const { startFakeServer } = await import('./fake-server.mjs');
-  const cwd = join(tmpdir(), `bonsai-math-plain-${process.pid}`); mkdirSync(cwd, { recursive: true });
+  const cwd = join(tmpdir(), `agentic-math-plain-${process.pid}`); mkdirSync(cwd, { recursive: true });
   for (const at of [cwd, HOME, join(HOME, '..')]) {
     const sys = systemPrompt({ cwd: at, git: 'test', tests: null });
     expect(sys).not.toMatch(/MATH|own mathematic/); // no pointer to the folder, not even in the home-folder note

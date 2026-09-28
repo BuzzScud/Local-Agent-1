@@ -215,7 +215,7 @@ export class Agent extends EventEmitter {
   // whenFull: what happens when the conversation fills the model's memory.
   // 'notes' (the default): it writes down where it is and carries on from
   // its notes. 'trim': old tool output is emptied first (the way before
-  // 2026-09-27; BONSAI_WHEN_FULL=trim).
+  // 2026-09-27; AGENTIC_WHEN_FULL=trim).
   // memory: what Agentic Coder remembers from one day to the next (facts.mjs).
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts

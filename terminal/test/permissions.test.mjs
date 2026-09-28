@@ -37,7 +37,7 @@ test('"don\'t ask again" remembers the first two words', () => {
 });
 
 test('commands stay inside the project folder', () => {
-  const cwd = `${homedir()}/Desktop/bonsai-code/demo-project`;
+  const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
   const out = {
     'cd ~/Desktop/MAIN2026 && git status': '~/Desktop/MAIN2026', 'cat ~/.ssh/id_ed25519': '~/.ssh/id_ed25519', 'cd': '~', 'ls && cd': '~',
     'cd .. && ls': '..', 'ls ../..': '../..', 'cat $HOME/.zshrc': '$HOME/.zshrc', 'find . -newer /tmp': '/tmp', 'ls ~/Desktop/24\\ SEP\\ CODE/': '~/Desktop/24 SEP CODE/',

@@ -164,7 +164,7 @@ async function privateOnGitHub({ offline }) {
   const m = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(url);
   if (!m) return look(`the repo's home is not GitHub: ${url || 'none set'}`);
   try {
-    const r = await fetch(`https://api.github.com/repos/${m[1]}/${m[2]}`, { headers: { 'User-Agent': 'bonsai-check' }, signal: AbortSignal.timeout(10_000) });
+    const r = await fetch(`https://api.github.com/repos/${m[1]}/${m[2]}`, { headers: { 'User-Agent': 'agentic-coder-check' }, signal: AbortSignal.timeout(10_000) });
     if (r.status === 404) return fine(`a stranger asking for ${m[1]}/${m[2]} gets "not found"`);
     if (r.status === 200) return wrong(`${m[1]}/${m[2]} is PUBLIC: anyone can read it`);
     return look(`GitHub answered ${r.status}; could not tell`);
@@ -243,7 +243,7 @@ async function packages({ offline }) {
   // list's fingerprints by npm) compared with what is installed, file by file.
   const audit = await run('npm', ['audit', '--json'], { timeout: 60_000 });
   try { const n = JSON.parse(audit.out).metadata?.vulnerabilities?.total; if (n) bad.push(`${n} known problem${n > 1 ? 's' : ''} in the packages (npm audit)`); else if (n == null) notes.push('npm could not be asked for known problems'); } catch { notes.push('npm could not be asked for known problems'); }
-  const tmp = mkdtempSync(join(tmpdir(), 'bonsai-check-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'agentic-check-'));
   try {
     copyFileSync(join(root, 'package.json'), join(tmp, 'package.json'));
     copyFileSync(lockFile, join(tmp, 'package-lock.json'));
@@ -328,7 +328,7 @@ async function installedApp() {
   const repo = /^REPO="\$\{AGENTIC_REPO:-\$\{BONSAI_REPO:-(.*)\}\}"$/m.exec(have)?.[1] ?? /^REPO="\$\{BONSAI_REPO:-(.*)\}"$/m.exec(have)?.[1];
   const source = join(root, 'terminal', 'app', 'agentic-coder-launcher.sh');
   if (!repo) bad.push(`${tilde(launcher)} is not Agentic Coder's launcher`);
-  else if (resolve(repo) !== resolve(root)) notes.push(`the installed bonsai is built from another folder: ${tilde(repo)}`);
+  else if (resolve(repo) !== resolve(root)) notes.push(`the installed app is built from another folder: ${tilde(repo)}`);
   else if (have !== readFileSync(source, 'utf8').replace('__REPO__', repo)) notes.push('the launcher differs from the repo\'s (bun run install-cli installs the current one)');
   const changed = newerThanApp(app);
   if (changed) notes.push(`the app is older than the code (${changed}); it rebuilds itself at the next start`);
@@ -336,7 +336,7 @@ async function installedApp() {
     // The output's name is written into the file, so the fresh build gets the
     // same name; then the two files must be the same, byte for byte.
     const name = /\/\$bunfs\/root\/((?:agentic-coder|bonsai)[A-Za-z0-9._-]*)/.exec(readFileSync(app).toString('latin1'))?.[1] ?? 'agentic-coder';
-    const tmp = mkdtempSync(join(tmpdir(), 'bonsai-check-'));
+    const tmp = mkdtempSync(join(tmpdir(), 'agentic-check-'));
     try {
       const bun = existsSync(join(homedir(), '.bun', 'bin', 'bun')) ? join(homedir(), '.bun', 'bin', 'bun') : 'bun';
       const built = await run(bun, ['build', '--compile', '--minify', 'terminal/src/cli.jsx', '--outfile', join(tmp, name)], { timeout: 120_000 });

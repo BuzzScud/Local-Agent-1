@@ -29,7 +29,7 @@ function linkEach(from, to) {
 export class Scratch {
   constructor(cwd) {
     this.cwd = cwd;
-    this.dir = mkdtempSync(join(tmpdir(), 'bonsai-scratch-'));
+    this.dir = mkdtempSync(join(tmpdir(), 'agentic-scratch-'));
     this.saved = new Map(); // rel → original text (null = did not exist)
     for (const name of readdirSync(cwd)) {
       if (SKIP.has(name)) continue;

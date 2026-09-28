@@ -587,7 +587,7 @@ export function App({ opts, win, onRestart }) {
   // do that without touching anything uncommitted.
   const updateNow = useCallback(async () => {
     const w = updateRef.current;
-    if (!w?.repo) { push({ type: 'note', text: 'Updates are looked for when Agentic Coder runs from its repo (the coding command); BONSAI_NO_UPDATE=1 turns them off.', tone: 'dim' }); return; }
+    if (!w?.repo) { push({ type: 'note', text: 'Updates are looked for when Agentic Coder runs from its repo (the coding command); AGENTIC_NO_UPDATE=1 turns them off.', tone: 'dim' }); return; }
     if (S.current.live.phase === 'working' || S.current.perm) { push({ type: 'note', text: 'Agentic Coder is busy. Let it finish (or press esc), then /update.', tone: 'warn' }); return; }
     const u = await w.check();
     if (!u) { push({ type: 'note', text: 'Agentic Coder is up to date: no new code on main since this window started.', tone: 'dim' }); return; }

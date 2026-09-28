@@ -4,11 +4,11 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Runs in its own process with its own BONSAI_HOME: the server module reads
+// Runs in its own process with its own AGENTIC_HOME: the server module reads
 // the home folder when it loads, and this test must never see the real one
 // (an earlier version of it stopped a real model server).
 test('a second window shares a live server; a left-over one is stopped', () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-srv-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-srv-'));
   const script = `
     import { spawn } from 'node:child_process';
     import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
@@ -31,7 +31,7 @@ test('a second window shares a live server; a left-over one is stopped', () => {
     shared.kill();
     console.log(JSON.stringify({ live, sig, left: [17601, 17602].map((p) => existsSync(join(reg, p + '.json'))) }));
   `;
-  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, BONSAI_HOME: home }, encoding: 'utf8', timeout: 20000 });
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 20000 });
   const out = JSON.parse(r.stdout.trim().split('\n').pop());
   expect(out).toEqual({ live: [17600], sig: 'SIGTERM', left: [false, false] });
 });
@@ -40,7 +40,7 @@ test('a second window shares a live server; a left-over one is stopped', () => {
 // it and quits, a second window that finds it at once, then the watcher
 // stopping it when no window has used it for the linger time.
 test('the model stays loaded after the window quits, the next start takes it over, and it stops once idle', () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-linger-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-linger-'));
   const mod = (p) => JSON.stringify(join(import.meta.dir, '..', p));
   const script = `
     import { spawnSync } from 'node:child_process';
@@ -77,14 +77,14 @@ test('the model stays loaded after the window quits, the next start takes it ove
     for (let i = 0; i < 40; i++) { await sleep(250); if (!alive(a.pid)) { stoppedAfter = (i + 1) * 250; break; } }
     let regLeft = true;
     for (let i = 0; i < 20 && regLeft; i++) { regLeft = existsSync(join(HOME, 'servers', a.port + '.json')); if (regLeft) await sleep(100); }
-    // bonsai stop: a kept server with no window stops at once
+    // coding stop: a kept server with no window stops at once
     const c = winOut(winRun());
     const stopped = stopIdleServers();
     await sleep(300);
     console.log(JSON.stringify({ a, b, afterQuit, seen: seen && { port: seen.port, linger: seen.linger }, stoppedAfter, regLeft, c: { shared: c.shared }, stoppedNow: stopped.stopped.length, cGone: !alive(c.pid) }));
     process.exit(0);
   `;
-  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, BONSAI_HOME: home }, encoding: 'utf8', timeout: 40000 });
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 40000 });
   const line = r.stdout.trim().split('\n').pop();
   if (!line) throw new Error(r.stderr);
   const out = JSON.parse(line);

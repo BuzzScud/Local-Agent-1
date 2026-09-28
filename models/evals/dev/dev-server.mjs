@@ -1,5 +1,5 @@
 // Starts the dev model server the models/evals/dev tools expect: port 17650, 16k,
-// with the app's own flags (serverArgs). Stop it with: kill $(cat ~/.bonsai-code/logs/dev-server.pid)
+// with the app's own flags (serverArgs). Stop it with: kill $(cat ~/.agentic-coder/logs/dev-server.pid)
 import { spawn } from 'node:child_process';
 import { openSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';

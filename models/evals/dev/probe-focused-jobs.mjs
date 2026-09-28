@@ -9,7 +9,7 @@ import { MODELS, DEFAULT_MODEL } from '../../index.mjs';
 import { serverArgs } from '../../index.mjs';
 import { join } from 'node:path';
 const T = new URL('../bench/tasks', import.meta.url).pathname; // models/evals/bench/tasks
-const H = join(homedir(), '.bonsai-code');
+const H = join(homedir(), '.agentic-coder');
 const N = Number(process.argv[2] ?? 8);
 const srv = spawn(`${H}/bin/llama-server`, serverArgs(MODELS[DEFAULT_MODEL], { ctx: 16384, port: 17650 }), { stdio: 'ignore' });
 process.on('exit', () => srv.kill());

@@ -30,7 +30,7 @@ const freePct = () => { try { return Number(/free percentage: (\d+)%/.exec(execF
 const out = { at: new Date().toISOString(), estimateGb32k: gb(needBytes(model, 32768)), starts: [], conversation: { turns: [], samples: [] } };
 
 // A. Cold starts
-const project = mkdtempSync(join(tmpdir(), 'bonsai-soak-'));
+const project = mkdtempSync(join(tmpdir(), 'agentic-soak-'));
 cpSync(join(root, 'terminal', 'demo-project'), join(project, 'demo'), { recursive: true });
 for (let i = 1; i <= Number(opt('starts', 10)); i++) {
   const srv = new ModelServer(model);
@@ -63,7 +63,7 @@ for (let i = 1; i <= Number(opt('starts', 10)); i++) {
 }
 
 // B. One long conversation that fills the memory
-const src = join(project, 'bonsai-code');
+const src = join(project, 'agentic-coder');
 mkdirSync(src);
 for (const [from, to] of [['terminal/src', 'src'], ['terminal/test', 'test'], ['README.md', 'README.md'], ['package.json', 'package.json']]) cpSync(join(root, from), join(src, to), { recursive: true });
 const srv = new ModelServer(model);

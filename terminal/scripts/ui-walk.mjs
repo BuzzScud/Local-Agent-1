@@ -25,10 +25,10 @@ const REPLY = `## What export.mjs does\n\n${LONG}\n\n- **toCsv(rows)** turns the
 const THINK = 'The user asks me to think it over. The file is short, so the question is really about the design: whether the CSV header belongs in toCsv or in main, and whether quantities should be formatted. '.repeat(6);
 
 function setup(from = 'demo-project') {
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-walk-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-walk-'));
   const cwd = join(base, 'project');
   cpSync(join(root, from), cwd, { recursive: true });
-  return { cwd, env: { BONSAI_HOME: join(base, 'home') } };
+  return { cwd, env: { AGENTIC_HOME: join(base, 'home') } };
 }
 
 const shots = [];
@@ -79,7 +79,7 @@ async function tour() {
     { reasoning: 'Read the file first.', tool: { name: 'Read', args: { path: 'export.mjs' } } },
     { text: REPLY },
     ...demoReplies,
-    // After "Done" with changes, Bonsai checks the work against the request (verifyDone).
+    // After "Done" with changes, Agentic Coder checks the work against the request (verifyDone).
     { text: '{"done": true, "missing": ""}' },
     { reasoning: THINK.repeat(14), text: 'Done thinking: keep the header in toCsv.' },
     { text: 'Second answer, sent after the first finished.' },
@@ -126,7 +126,7 @@ async function tour() {
     await t.waitFor('Thinking…'); await sleep(800); await shot(t, 'live layout: thinking window');
     await t.type('/'); await sleep(400); await shot(t, 'menu open while working', { must: ['esc to interrupt', '/help'] });
     t.key('esc'); await sleep(400);
-    await shot(t, 'esc closes the menu (still working)', { must: ['esc to interrupt'], mustNot: ['/help'], note: 'The first esc closes the menu and Bonsai keeps working.' });
+    await shot(t, 'esc closes the menu (still working)', { must: ['esc to interrupt'], mustNot: ['/help'], note: 'The first esc closes the menu and Agentic Coder keeps working.' });
     t.key('backspace'); await sleep(200);
     await resizes(t, 'while thinking');
     await t.type('a second question'); t.key('enter'); await sleep(400);
@@ -191,7 +191,7 @@ async function steer() {
   await run('ask where', [], [], async (t) => {
     await t.type('the csv header is shown twice when the list is empty, fix it'); t.key('enter');
     await t.waitFor('Where do you see it'); await t.idle();
-    await shot(t, 'ask where first', { must: ['Bonsai asks', 'Type an answer', 'Stop here'] });
+    await shot(t, 'ask where first', { must: ['Agentic Coder asks', 'Type an answer', 'Stop here'] });
     await resizes(t, 'ask where first');
     t.key('esc'); await t.idle();
     await shot(t, 'ask where: esc stops', { anchored: false, mustNot: ['Type an answer'] });

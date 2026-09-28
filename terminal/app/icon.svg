@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Bonsai Code: a bonsai tree on a green disc, flat like the XMR Miner icon. -->
+  <!-- Agentic Coder's icon: still the bonsai tree on a green disc from the Bonsai Code days, flat like the XMR Miner icon. -->
   <circle cx="512" cy="512" r="456" fill="#2f8a4c"/>
   <!-- trunk and branches -->
   <g fill="none" stroke="#4f4f4f" stroke-linecap="round" stroke-linejoin="round">

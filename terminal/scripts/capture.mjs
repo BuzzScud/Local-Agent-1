@@ -11,19 +11,19 @@ import { termToHtml, visibleRange } from '../test/term-html.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const layout = process.argv[2] === 'live' ? 'live' : 'classic';
-const base = mkdtempSync(join(tmpdir(), 'bonsai-capture-'));
+const base = mkdtempSync(join(tmpdir(), 'agentic-capture-'));
 const cwd = join(base, 'demo-project');
 cpSync(join(root, 'demo-project'), cwd, { recursive: true });
 // A private home that borrows the real runtime and model (no settings or history touched).
 const home = join(base, 'home');
 mkdirSync(home);
-for (const d of ['bin', 'models']) symlinkSync(join(homedir(), '.bonsai-code', d), join(home, d));
+for (const d of ['bin', 'models']) symlinkSync(join(homedir(), '.agentic-coder', d), join(home, d));
 
 const task = 'add a --json flag to export.mjs that prints the rows as JSON, and add a test for it';
 const long = 400_000;
 const t0 = Date.now();
 const r = await runInPty({
-  cwd, cols: 155, rows: 43, env: { BONSAI_HOME: home }, timeoutMs: 900_000,
+  cwd, cols: 155, rows: 43, env: { AGENTIC_HOME: home }, timeoutMs: 900_000,
   bin: (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN), args: ['--layout', layout, ...(process.env.CAPTURE_URL ? ['--url', process.env.CAPTURE_URL] : [])],
   steps: [
     { wait: '? for shortcuts', ms: 120_000 }, { sleep: 1500 },

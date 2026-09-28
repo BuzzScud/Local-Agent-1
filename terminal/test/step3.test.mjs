@@ -15,8 +15,8 @@ import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const TASKS = join(import.meta.dir, '..', '..', 'models', 'evals', 'bench', 'tasks');
-const demo = () => { const d = mkdtempSync(join(tmpdir(), 'bonsai-step3-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
-const copyTask = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-step3-')), 'project'); cpSync(join(TASKS, name, 'project'), d, { recursive: true }); return d; };
+const demo = () => { const d = mkdtempSync(join(tmpdir(), 'agentic-step3-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
+const copyTask = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-step3-')), 'project'); cpSync(join(TASKS, name, 'project'), d, { recursive: true }); return d; };
 
 async function run(cwd, prompt, replies, { flows = true, mode = 'edits', answer = 'yes' } = {}) {
   const fake = await startFakeServer(replies);
@@ -126,7 +126,7 @@ test('a draft that changes only the tests is still dropped', async () => {
 // ————— Reading long files —————
 
 function longFiles(pageLines = 900) {
-  const cwd = mkdtempSync(join(tmpdir(), 'bonsai-step3-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-step3-'));
   const page = [];
   for (let i = 1; i <= pageLines; i++) page.push(i === 412 ? '    .hud{position:absolute;z-index:4;pointer-events:none}' : i === 640 ? '    .symbox .ag-menu{z-index:80;width:330px}' : `    .filler-${i}{color:#${String(i).padStart(3, '0')}}`);
   writeFileSync(join(cwd, 'index.html'), `${page.join('\n')}\n`);

@@ -19,7 +19,7 @@ test('the instructions start the same in every project and on every day (so the 
 });
 
 test('a private .bonsai/notes.md is read alongside AGENTS.md', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'bonsai-notes-'));
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-notes-'));
   writeFileSync(join(dir, 'AGENTS.md'), 'Run the tests with npm test.');
   mkdirSync(join(dir, '.bonsai'), { recursive: true });
   writeFileSync(join(dir, '.bonsai', 'notes.md'), 'The deploy password lives in 1Password.');

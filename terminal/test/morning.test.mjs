@@ -1,4 +1,4 @@
-// The morning brief (/morning, bonsai morning): reading repos, picking what
+// The morning brief (/morning, coding morning): reading repos, picking what
 // earns a line, checking the model's words against the facts, the page with
 // its calendar, the saved history — and /morning end to end in the app.
 import { test, expect } from 'bun:test';
@@ -16,7 +16,7 @@ import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
 
-const tmp = () => mkdtempSync(join(tmpdir(), 'bonsai-morning-'));
+const tmp = () => mkdtempSync(join(tmpdir(), 'agentic-morning-'));
 const baseConfig = (dir, over = {}) => ({ name: 'Christian', scan: [dir], maxDepth: 3, exclude: [], emails: ['me@example.com'], ciOwners: [], deploy: {}, testRecords: {}, ignoreUntracked: ['.venv'], ignoreDirty: [], out: join(dir, 'out', 'morning-brief.html'), history: join(dir, 'history'), ...over });
 
 // A git repo with commits at the given local times
@@ -213,7 +213,7 @@ test('/morning today in the app: reads the repos, the model writes the words, th
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
   const reply = { headline: 'Two small commits in proj, Christian, just after midnight.', acts: ['Two changes to proj just after midnight.', 'Quiet all afternoon.', 'Quiet in the evening.'], attention: [], resolved: [] };
   const fake = await startFakeServer([{ text: JSON.stringify(reply) }]);
-  const r = await runInPty({ cwd, env: { ...env, BONSAI_NO_OPEN: '1', REPO_MORNING_CONFIG: join(dir, 'config.json') }, args: ['--url', fake.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1', REPO_MORNING_CONFIG: join(dir, 'config.json') }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/morning today' }, { key: 'enter' },
     { wait: 'Morning brief for' }, ...quit,
   ] });

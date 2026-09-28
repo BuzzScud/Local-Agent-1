@@ -13,7 +13,7 @@ import { FakeEmbedder } from './fake-embedder.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const place = () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-lessons-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-lessons-'));
   const repo = join(home, 'work', 'repo');
   mkdirSync(join(repo, '.git'), { recursive: true });
   writeFileSync(join(repo, 'legend.js'), 'export const z = 0;\n');

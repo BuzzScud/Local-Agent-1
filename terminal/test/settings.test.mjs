@@ -6,12 +6,12 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.BONSAI_HOME ??= mkdtempSync(join(tmpdir(), 'bonsai-settings-home-'));
+process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-settings-home-'));
 const { loadSettings } = await import('../src/app/store.mjs');
 const { saveTrust } = await import('../src/app/trust.mjs');
 
 function project(fileBody) {
-  const cwd = mkdtempSync(join(tmpdir(), 'bonsai-settings-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-settings-'));
   mkdirSync(join(cwd, '.bonsai'), { recursive: true });
   writeFileSync(join(cwd, '.bonsai', 'settings.json'), fileBody);
   return cwd;

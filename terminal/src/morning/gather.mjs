@@ -82,7 +82,7 @@ async function githubJson(route) {
   if (!token) return null;
   try {
     const res = await fetch(`https://api.github.com${route}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'bonsai-morning' },
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'agentic-coder-morning' },
       signal: AbortSignal.timeout(12_000),
     });
     return res.ok ? await res.json() : null;

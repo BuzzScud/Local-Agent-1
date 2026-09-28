@@ -56,7 +56,7 @@ test('a server open to the network, and code built from text, are noticed', () =
 });
 
 test('a code file nothing uses is found; one a script or a test names is not', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'bonsai-check-'));
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-check-'));
   const put = (parts, text) => { const p = join(dir, ...parts); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, text); return parts.join('/'); };
   const uses = (name) => ['imp', `ort './${name}';\n`].join('');
   const files = [

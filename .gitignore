@@ -2,6 +2,7 @@ node_modules/
 dist/
 backups/
 Agentic Coder.app/
+# the app's and the DOCS folder's names before the rename: still ignored if one is left over
 Bonsai Code.app/
 .DS_Store
 .env*
@@ -23,7 +24,7 @@ terminal/scripts/ui-walk-*.json
 terminal/ui-walk/
 
 # Part 2 · models: raw test runs stay on this Mac (one results/ per model);
-# the report pages live in docs/ (mirror of ~/Desktop/bonsai-code DOCS).
+# the report pages live in docs/ (mirror of `agentic-coder DOCS/`).
 models/*/results/
 models/evals/dev/experiments/slots/
 models/evals/dev/experiments/*.log

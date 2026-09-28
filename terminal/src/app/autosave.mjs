@@ -5,7 +5,7 @@
 //   - when the window closes: what is still unsaved is handed to a small
 //     process of its own (`coding memory-save <job>`), which finishes after
 //     the window is gone and leaves a line for the next start.
-// BONSAI_MEMORY_SAVE=off turns saving on its own off ("update memory" still
+// AGENTIC_MEMORY_SAVE=off turns saving on its own off ("update memory" still
 // works); "memory": false in settings.json turns the whole memory off.
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -92,7 +92,7 @@ export class AutoSave {
       const file = join(JOBS(), `${Date.now()}-${process.pid}.json`);
       writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: a.url, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, lessons: a.lessons.filter((l) => !l.saved), messages: slim(a.messages) }));
       const [cmd, ...args] = self();
-      spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, BONSAI_NO_UPDATE: '1' } }).unref();
+      spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
       return true;
     } catch { return false; }
   }

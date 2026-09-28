@@ -13,7 +13,7 @@
   The folder has six groups, each a subfolder: `diagrams/` (how Agentic Coder is built),
   `reports/` (what got built, by day), `tests/` (measured runs and checks), `design rounds/`,
   `other/`, and `older versions/` (a page replaced by a newer one moves there; nothing is
-  deleted). A builder names its group in the path it gives `docsPath` (`tests/bonsai-night-….html`).
+  deleted). A builder names its group in the path it gives `docsPath` (`tests/agentic-coder-….html`).
   `/docs` in Agentic Coder (the hub) lists the folder live by these groups; a file left at the top
   level shows as unsorted until it is filed.
 - **Gemma pages go in `~/Desktop/gemma-docs/`, not the DOCS folder** (the user's rule, 28 Sep

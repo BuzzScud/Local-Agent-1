@@ -22,7 +22,7 @@ const setFile = opt('set', results ? join(results, 'claude-notes-2026-09-28', 'c
 if (!setFile || !existsSync(setFile)) { console.error('The set of requests is not on this Mac (results/claude-notes-2026-09-28/claude-notes-set.json), or name one with --set.'); process.exit(2); }
 const set = JSON.parse(readFileSync(setFile, 'utf8'));
 const dir = notesDir();
-if (!dir) { console.error("Claude's notes were not found on this Mac (BONSAI_CLAUDE_NOTES names the folder)."); process.exit(2); }
+if (!dir) { console.error("Claude's notes were not found on this Mac (AGENTIC_CLAUDE_NOTES names the folder)."); process.exit(2); }
 const words = args.includes('--words');
 const model = EMBEDDERS[DEFAULT_EMBEDDER];
 if (!words && !embedderReady(model)) { console.error(`${model.name} is not on this Mac yet. Run: coding setup   (or --words to match by words)`); process.exit(2); }
@@ -64,5 +64,5 @@ const name = words ? 'by words' : model.name;
 console.log(`\n${name}: ${right} of ${set.test.length} right, ${wrong} of ${set.none.length} wrong · ${(ms / n).toFixed(0)} ms a request${embedder ? ` · model loaded in ${loadSecs.toFixed(1)} s, the notes read the first time in ${first.toFixed(1)} s` : ''} · the bar is 27 right and at most 2 wrong · ${pass ? 'PASS' : 'FAIL'}`);
 const out = join(dirname(setFile), `recall-${words ? 'words' : 'meaning'}.json`);
 writeFileSync(out, JSON.stringify({ when: new Date().toISOString(), how: name, cut: NOTES_CUT, margin: NOTES_MARGIN, notes: count.used, leftOut: count.leftOut.length, right, of: set.test.length, wrong, ofNone: set.none.length, msEach: ms / n, loadSecs, firstSecs: first, pass, detail }, null, 1));
-if (!args.includes('--no-record')) recordTest({ kind: 'other', name: `Claude's notes: the right note comes back (${name})`, code: codeLabel(root), passed: right + (set.none.length - wrong), total: n, secs: Math.round((Date.now() - t0) / 1000), note: `${right} of ${set.test.length} right, ${wrong} of ${set.none.length} wrong, ${count.used} notes`, raw: out.replace(`${homedir()}/Desktop/bonsai-code/`, '') });
+if (!args.includes('--no-record')) recordTest({ kind: 'other', name: `Claude's notes: the right note comes back (${name})`, code: codeLabel(root), passed: right + (set.none.length - wrong), total: n, secs: Math.round((Date.now() - t0) / 1000), note: `${right} of ${set.test.length} right, ${wrong} of ${set.none.length} wrong, ${count.used} notes`, raw: out.replace(`${homedir()}/Desktop/agentic-coder/`, '') });
 process.exit(pass ? 0 : 1);

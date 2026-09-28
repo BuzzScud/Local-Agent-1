@@ -11,7 +11,7 @@ import { startFakeServer } from './fake-server.mjs';
 import { demoReplies } from './demo-script.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
-const project = () => { const d = mkdtempSync(join(tmpdir(), 'bonsai-agent-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
+const project = () => { const d = mkdtempSync(join(tmpdir(), 'agentic-agent-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
 
 async function run(replies, { answer = 'yes', mode = 'edits', ctx = 32768, abortAfterMs, fakeOpts } = {}) {
   const cwd = project();

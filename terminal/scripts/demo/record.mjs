@@ -13,7 +13,7 @@ import * as S from './script.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const tokens = (s) => Math.max(1, Math.ceil(s.length / 3.6));
 
-const work = mkdtempSync(join(tmpdir(), 'bonsai-demo-'));
+const work = mkdtempSync(join(tmpdir(), 'agentic-demo-'));
 cpSync(join(here, '../../demo-project'), work, { recursive: true });
 
 let t = 0;

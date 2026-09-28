@@ -31,14 +31,14 @@ const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
 const embedder = embedderReady() ? new Embedder() : null;
 console.log(`model server up: ctx ${started.ctx}; the notes are found by ${embedder ? 'meaning' : 'their words'}`);
 // The memory of the second way: a throwaway one that holds the fifteen lines, as the app's does.
-const home = mkdtempSync(join(tmpdir(), 'bonsai-claude-questions-'));
+const home = mkdtempSync(join(tmpdir(), 'agentic-claude-questions-'));
 const rows = [];
 const t0 = Date.now();
 try {
   for (const [i, q] of set.entries()) {
     // --with-only: the second way alone (the first does not change with the notes' wording).
     for (const way of args.includes('--with-only') ? ['with'] : ['without', 'with']) {
-      const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-claude-q-')), 'desk');
+      const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-claude-q-')), 'desk');
       mkdirSync(cwd, { recursive: true });
       writeFileSync(join(cwd, 'README.md'), '# A folder to ask questions from\n');
       if (way === 'with') openMemory(cwd, { home, rules: CLAUDE_RULES });
@@ -70,5 +70,5 @@ const a = sum('without'), b = sum('with');
 console.log(`\nwithout a memory: ${a.right} of ${a.of} right, ${a.secs} s, ${a.steps} steps\nwith Claude's notes: ${b.right} of ${b.of} right, ${b.secs} s, ${b.steps} steps`);
 const out = join(dirname(setFile), opt('out', 'questions.json'));
 writeFileSync(out, JSON.stringify({ when: new Date().toISOString(), code: codeLabel(root), without: a, with: b, rows }, null, 1));
-if (!args.includes('--no-record')) recordTest({ kind: 'other', name: `Questions about your own work, with Claude's notes (${b.right} of ${b.of}) and without (${a.right} of ${a.of})`, code: codeLabel(root), effort: 'low', ctx: started.ctx, passed: b.right, total: b.of, secs: Math.round((Date.now() - t0) / 1000), note: `without a memory ${a.right} of ${a.of} in ${a.secs} s; with the notes ${b.right} of ${b.of} in ${b.secs} s`, raw: out.replace(`${homedir()}/Desktop/bonsai-code/`, '') });
+if (!args.includes('--no-record')) recordTest({ kind: 'other', name: `Questions about your own work, with Claude's notes (${b.right} of ${b.of}) and without (${a.right} of ${a.of})`, code: codeLabel(root), effort: 'low', ctx: started.ctx, passed: b.right, total: b.of, secs: Math.round((Date.now() - t0) / 1000), note: `without a memory ${a.right} of ${a.of} in ${a.secs} s; with the notes ${b.right} of ${b.of} in ${b.secs} s`, raw: out.replace(`${homedir()}/Desktop/agentic-coder/`, '') });
 process.exit(0);

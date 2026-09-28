@@ -32,7 +32,7 @@ export function testPlan(cwd, target, files, testCmd) {
   const rel = join(dirname(target), name);
   if (testCmd) return { rel, lang, throwaway: false, cmd: testCmd, created: true };
   // No test setup: a scratch-only check run directly.
-  const check = js ? join(dirname(target), 'bonsai-check.test.mjs') : join(dirname(target), 'bonsai_check.py');
+  const check = js ? join(dirname(target), 'agentic-check.test.mjs') : join(dirname(target), 'agentic_check.py');
   return { rel: check, lang, throwaway: true, created: true, cmd: js ? `node --test ${check}` : `python3 ${check}` };
 }
 

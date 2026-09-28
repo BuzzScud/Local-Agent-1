@@ -23,7 +23,7 @@ export const spinGlyph = (t) => SPIN[Math.floor(t * 8) % SPIN.length];
 
 // The working icon. orbit (picked 2026-09-26, the default): dots that go round one
 // step per token written, drifting slowly and dimmer while nothing is written
-// (reading, a tool). BONSAI_SPINNER=classic|bloom shows the other two looks:
+// (reading, a tool). AGENTIC_SPINNER=classic|bloom shows the other two looks:
 // Claude Code's star, or a flower that opens and closes as its green brightens.
 export const SPINNERS = {
   classic: { name: 'Now', frames: SPIN, fps: 8 },

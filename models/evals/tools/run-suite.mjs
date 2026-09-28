@@ -1,7 +1,7 @@
 // `bun run test`: the unit tests of both parts, and one line in the test
 // record when a full run ends. The test files run side by side, each in its
 // own `bun test`, the slowest of the last run first; a file's output is
-// printed whole when it ends. BONSAI_TEST_JOBS sets how many run at once
+// printed whole when it ends. AGENTIC_TEST_JOBS sets how many run at once
 // (1 = one after the other). A run narrowed by extra arguments (a file,
 // -t "name") goes to one `bun test` as before and is not recorded.
 //   node models/evals/tools/run-suite.mjs [anything bun test takes]

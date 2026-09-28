@@ -90,11 +90,11 @@ test('long lines in finished steps wrap at the window edge, between words', asyn
 }, T);
 
 test('focused paths on screen: the plan, the try counter, the rename prompt and the fix prompt', async () => {
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-e2e-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
   const cwd = join(base, 'project');
   cpSync(join(import.meta.dir, 'fixture-fix'), cwd, { recursive: true });
   seedTrust(base, cwd);
-  const env = { BONSAI_HOME: join(base, 'home') };
+  const env = { AGENTIC_HOME: join(base, 'home') };
   const src = readFileSync(join(cwd, 'stats.mjs'), 'utf8');
   const wrong = '```js\n' + src.replace('  return sorted[mid];', '  return (sorted[mid] + sorted[mid + 1]) / 2;') + '```';
   const right = '```js\n' + src.replace('  return sorted[mid];', '  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;') + '```';

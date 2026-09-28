@@ -80,12 +80,12 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   $('lede').textContent = `Every test run on this Mac, newest first: ${rows.length} run${rows.length === 1 ? '' : 's'} since ${day(first.at)}. A run adds its own line when it finishes.`;
 
   let shown = 'all';
-  try { const s = new URL(location.href).searchParams.get('kind') ?? localStorage.getItem('bonsai-tests-kind'); if (s && (s === 'all' || order.includes(s))) shown = s; } catch { /* no storage */ }
+  try { const s = new URL(location.href).searchParams.get('kind') ?? localStorage.getItem('agentic-tests-kind'); if (s && (s === 'all' || order.includes(s))) shown = s; } catch { /* no storage */ }
   function filters() {
     $('filters').innerHTML = [['all', 'All', rows.length], ...order.map((k) => [k, KINDS[k][0], rows.filter((r) => r.kind === k).length])]
       .map(([k, name, n]) => `<button type="button" data-kind="${k}" aria-pressed="${k === shown}">${esc(name)}<span>${n}</span></button>`).join('');
   }
-  $('filters').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; shown = b.dataset.kind; try { localStorage.setItem('bonsai-tests-kind', shown); } catch { /* no storage */ } draw(); };
+  $('filters').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; shown = b.dataset.kind; try { localStorage.setItem('agentic-tests-kind', shown); } catch { /* no storage */ } draw(); };
 
   function cards() {
     $('cards').innerHTML = order.filter((k) => shown === 'all' || shown === k).map((k) => {

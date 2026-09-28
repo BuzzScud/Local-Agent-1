@@ -14,19 +14,19 @@ results folded (`⏺ Read(file)` / `⎿ Read 28 lines (ctrl+o to expand)`); and 
 ends, the time it took: `⠿ Worked for 41s · done 12:58 PM`. Nothing sits under the prompt
 but the footer; from 70% memory a line says what happens next, `/stats` has every number,
 and `/meters on` adds the old status bar (model, speed, memory, effort) for those who want it.
-When a commit that changes Bonsai's code lands on main while it runs, the lower right says
+When a commit that changes Agentic Coder's code lands on main while it runs, the lower right says
 `↻ Update available · /update to use it`; pushed to GitHub's main from a worktree but not in this
 folder yet, `↻ Update on GitHub · /update to get it` (`src/app/update.mjs`, checked every 20 s;
-`BONSAI_NO_UPDATE=1` turns it off). GitHub itself is asked too, with `git fetch` 30 s after the
-start, every 5 minutes and at each `/update` (`BONSAI_FETCH_EVERY=<ms>`, `0` never), so a push
+`AGENTIC_NO_UPDATE=1` turns it off). GitHub itself is asked too, with `git fetch` 30 s after the
+start, every 5 minutes and at each `/update` (`AGENTIC_FETCH_EVERY=<ms>`, `0` never), so a push
 from another machine shows as well. That fetch only reads: it moves one ref
 (`refs/remotes/origin/main`), never your branches, tags, submodules or files; only from an https,
 ssh or on-this-Mac origin (never `http://`, `git://` or `ext::`); with TLS checks on, objects
 checked as they arrive, and git run with no terminal, so a password or host-key prompt fails
 instead of taking over the screen. Your folder changes only when you type `/update`, and then
-only by a fast-forward. `/update` restarts Bonsai in the same window on the new code,
+only by a fast-forward. `/update` restarts Agentic Coder in the same window on the new code,
 the conversation picked back up and the model kept loaded: the app exits with code 75 and the
-`bonsai` launcher, which waits on it, rebuilds and starts it again (an update only on GitHub is
+`coding` launcher, which waits on it, rebuilds and starts it again (an update only on GitHub is
 fast-forwarded into this folder's main first, when git can do that without touching anything
 uncommitted).
 
@@ -35,7 +35,7 @@ uncommitted).
 | Key | Does |
 |---|---|
 | enter | send · `\` + enter for a new line |
-| esc | interrupt Bonsai · twice to clear the prompt |
+| esc | interrupt Agentic Coder · twice to clear the prompt |
 | shift+tab | ask first → accept edits → plan (read-only) |
 | ctrl+o | show the last thinking, output or Context line in full; again for the one before |
 | ↑ ↓ | earlier prompts |
@@ -49,21 +49,23 @@ set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` 
 
 ## Memory
 
-Bonsai remembers on its own. The model itself does not change; what it knows about you
+Agentic Coder remembers on its own. The model itself does not change; what it knows about you
 and the project does.
 
 | | |
 |---|---|
-| Where | `~/.bonsai/memory` about you (it follows you into every project) and `<project>/.bonsai/memory` about a project (kept out of git). One small file per fact in `facts/`, a short `index.md`, a `retired/` folder, and `log.jsonl`. |
+| Where | `~/.agentic/memory` about you (it follows you into every project) and `<project>/.agentic/memory` about a project (kept out of git; a project that already has a `.bonsai/notes.md` keeps its memory in `.bonsai/memory`). One small file per fact in `facts/`, a short `index.md`, a `retired/` folder, and `log.jsonl`. |
 | Saving | A little after a task ends (in the background, on the side slot; it stops the moment you send a message) and when you quit (a small process finishes it after the window closed). At most 5 facts a save. A turn that went well on what the memory already held starts no save. "remember that …" saves at once. |
-| What | How you like to work · facts about the project · what worked and what failed, from a check · Bonsai's own mistakes · the steps of a job done twice (a recipe). A fact the turns do not bear out is refused, as is one naming a file that is not there, and anything that looks like a key or a password. |
+| What | How you like to work · facts about the project · what worked and what failed, from a check · Agentic Coder's own mistakes · the steps of a job done twice (a recipe). A fact the turns do not bear out is refused, as is one naming a file that is not there, and anything that looks like a key or a password. |
 | Bringing back | The rules marked "always" and one short line per fact are read at every start. A fact comes back in full with a request it fits: by meaning, with the small model BGE-M3 (`models/bge-m3`), or by shared words when that model is not there. It is written into the request itself, so nothing already read is read again, and the focused paths (fix, change, several files) get it in their own prompts. |
-| Trust | +1 when the task passed its check after the fact was used, -1 when it failed or Bonsai got stuck, -2 when you corrected or stopped Bonsai. At -3 the fact is taken out of use, unless you pinned it. |
+| Trust | +1 when the task passed its check after the fact was used, -1 when it failed or Agentic Coder got stuck, -2 when you corrected or stopped Agentic Coder. At -3 the fact is taken out of use, unless you pinned it. |
 | Keeping clean | Once a day: repeats merge, a fact about a file that is gone and one not used in 30 days are taken out of use. Nothing is deleted: `retired/` keeps it. |
-| Seeing it | `/memory` (both memories), `/memory undo` (takes the last save back), `/memory open` or `bonsai memory` (the hub's Memory tab: edit, pin, take out, bring back). |
-| At night | `bonsai memory-review` reads the day's conversations again and tidies. `--install` schedules it (1 to 6 in the morning, on power, the Mac idle for 30 minutes, no Bonsai window open); nothing is scheduled unless you run that. |
-| Claude's notes | What Claude Code has written down about your work (its memory folder, hundreds of notes) is a second place the memory looks. It is read where it is, every time, and never changed; Bonsai's own numbers for the notes are kept in `~/.bonsai-code/claude-notes`. The one or two notes that fit a request go along with it, cut to the part that fits (about 1,100 characters each), found by meaning and by the words they share. A note about sign-ins, servers or secrets is left out whole; in a note that is kept, a line that holds one is left out. Fifteen lines on how you like things done, boiled down from those notes, are read at every start (`src/agent/claude-rules.mjs`). `"claudeNotes": false` in `settings.json` leaves them out; a path names another folder (`BONSAI_CLAUDE_NOTES` does the same). |
-| Off | `"memory": false` in `settings.json` (yours or a folder's). `BONSAI_MEMORY_SAVE=off` keeps the memory but stops saving on its own. |
+| Seeing it | `/memory` (both memories), `/memory undo` (takes the last save back), `/memory open` or `coding memory` (the hub's Memory tab: edit, pin, take out, bring back). |
+| At night | `coding memory-review` reads the day's conversations again and tidies. `--install` schedules it (1 to 6 in the morning, on power, the Mac idle for 30 minutes, no Agentic Coder window open); nothing is scheduled unless you run that. |
+| Claude's notes | What Claude Code has written down about your work (its memory folder, hundreds of notes) is a second place the memory looks. It is read where it is, every time, and never changed; Agentic Coder's own numbers for the notes are kept in `~/.agentic-coder/claude-notes`. The one or two notes that fit a request go along with it, cut to the part that fits (about 1,100 characters each), found by meaning and by the words they share. A note about sign-ins, servers or secrets is left out whole; in a note that is kept, a line that holds one is left out. Fifteen lines on how you like things done, boiled down from those notes, are read at every start (`src/agent/claude-rules.mjs`). `"claudeNotes": false` in `settings.json` leaves them out; a path names another folder (`AGENTIC_CLAUDE_NOTES` does the same). |
+| Off | `"memory": false` in `settings.json` (yours or a folder's). `AGENTIC_MEMORY_SAVE=off` keeps the memory but stops saving on its own. |
+
+The older names still work: a `BONSAI_*` switch is read when its `AGENTIC_*` twin is not set, `.bonsai/` project folders are still read, and `~/.bonsai-code` is used only until `~/.agentic-coder` exists.
 
 Code: `src/agent/facts.mjs` (the store), `recall.mjs` (bringing back), `lessons.mjs` (saving),
 `src/app/autosave.mjs` (when), `review.mjs` (at night), `memory-hub.mjs` + `memory.html` (the hub's tab),
@@ -96,10 +98,10 @@ refused, and macOS's own sandbox fences what a command can reach.
   - Guards: repeated steps, looping output, a tool call written as text or inside the
     thinking, and "announce then stop".
   - When memory fills, the model writes its notes in the conversation it already holds
-    and carries on from the request and the notes (plus Bonsai's own list of what was read
+    and carries on from the request and the notes (plus Agentic Coder's own list of what was read
     and changed). Emptying old output, the way before, made it read everything after it
     again: three to four minutes each time. That way is still the fallback, and
-    `BONSAI_WHEN_FULL=trim` brings it back.
+    `AGENTIC_WHEN_FULL=trim` brings it back.
   - A question changes nothing: Edit and Write are turned away, and a command that is not
     plain reading runs in a throwaway copy of the project.
   - A question starts with the code it is about already read (`src/flows/explain.mjs`):
@@ -126,15 +128,15 @@ refused, and macOS's own sandbox fences what a command can reach.
   - Fix: run the tests, find the file, tries in a scratch copy, each told what the last
     one got wrong. Three tries on one function, then three wider tries as edit blocks.
   - Fix, check first (`src/flows/pagecheck.mjs`): a bug the tests cannot see on a page
-    (something covered) gets a check made before any fix. Bonsai opens the page in the
+    (something covered) gets a check made before any fix. Agentic Coder opens the page in the
     browser the project already has (Playwright), the way the project's own page checks
     do; the model picks the steps from what is on the page; the browser finds what covers
     what, and why (the two layers that are compared, and the lines that set them). The
     check must fail today, you approve it, the tries are scored by it, and it stays in
     the project. A fix that hides the covering thing does not pass. With no browser, or
     no passing try, the work goes step by step, with the check and the findings in hand.
-    `BONSAI_CHECK_FIRST=off` turns it off; a `page` entry in `.bonsai/settings.json`
-    (`serve`, `in`, `port`, `url`) says how to open a page when Bonsai cannot tell.
+    `AGENTIC_CHECK_FIRST=off` turns it off; a `page` entry in `.agentic/settings.json` (or the older `.bonsai/`)
+    (`serve`, `in`, `port`, `url`) says how to open a page when Agentic Coder cannot tell.
   - Change: a test first (cross-checked against drafts, then approved by you), then
     tries. Two tests and two drafts; more only when they disagree.
   - Several files: the files are planned from the project map, one test, then edit
@@ -142,11 +144,11 @@ refused, and macOS's own sandbox fences what a command can reach.
     files change and nothing is quietly removed. A draft that also touches the tests
     keeps its changes to the source; the test comes from its own step.
   - Anything a focused path cannot finish goes step by step. `--no-flows` always does.
-- **The project map** (`src/tools/repomap.mjs`, cached under `~/.bonsai-code/maps`) is
+- **The project map** (`src/tools/repomap.mjs`, cached under `~/.agentic-coder/maps`) is
   what files are chosen from and the first thing the loop sees in a bigger project.
 - **A check before "done"**: when the loop changed files, one forced-JSON check compares
   the diff with the request and sends it back once if a part is missing.
-- **The morning brief** (`src/morning`, `/morning` or `bonsai morning`): every repo under
+- **The morning brief** (`src/morning`, `/morning` or `coding morning`): every repo under
   the home folder read (the day's commits, what is not live, CI, the test record, old
   uncommitted work), what earns a line picked by rules, the words written by the model in
   one forced-JSON call and checked against the facts (a time or number it made up is
@@ -165,5 +167,5 @@ node terminal/scripts/ui-walk.mjs       # every screen at one window size, with 
 node terminal/scripts/capture-ui.mjs    # the real app with the real model, screens saved as HTML
 ```
 
-`scripts/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`); `scripts/shims` is the react-devtools stand-in the single-file build needs. Report pages are written to `~/Desktop/bonsai-code DOCS` and mirrored into the repo's `docs/`.
-`app/make-app.sh` builds `Bonsai Code.app` beside the repo's README.
+`scripts/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`); `scripts/shims` is the react-devtools stand-in the single-file build needs. Report pages are written to `agentic-coder DOCS/` at the top of the repo and mirrored into the repo's `docs/`.
+`app/make-app.sh` builds `Agentic Coder.app` beside the repo's README.

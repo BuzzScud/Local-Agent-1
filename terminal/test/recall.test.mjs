@@ -16,7 +16,7 @@ import { demoReplies } from './demo-script.mjs';
 import { FakeEmbedder } from './fake-embedder.mjs';
 
 function place() {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-recall-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-recall-'));
   const repo = join(home, 'work', 'repo');
   mkdirSync(join(repo, '.git'), { recursive: true });
   cpSync(join(import.meta.dir, '..', 'demo-project'), repo, { recursive: true });
@@ -99,7 +99,7 @@ test('without the small model, or when it does not answer: by words, and it says
   const down = await recall(repo, 'where are the flags read, in export.mjs?', { home, embedder: new FakeEmbedder({ fail: true }) });
   expect([down.how, texts(down), down.note]).toEqual(['words', ['The flags are read in export.mjs.'], "The memory's matcher did not answer (not running); matching by words."]);
   expect(wordsOf('Running the tests of z-index')).toEqual(['running', 'test', 'zindex']);
-  expect((await recall(mkdtempSync(join(tmpdir(), 'bonsai-empty-')), 'anything', { home: mkdtempSync(join(tmpdir(), 'bonsai-nohome-')) })).how).toBe('none');
+  expect((await recall(mkdtempSync(join(tmpdir(), 'agentic-empty-')), 'anything', { home: mkdtempSync(join(tmpdir(), 'agentic-nohome-')) })).how).toBe('none');
 });
 
 test('what travels with the request says what each fact is, and that the files win', () => {

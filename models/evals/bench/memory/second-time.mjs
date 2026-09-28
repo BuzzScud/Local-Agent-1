@@ -31,7 +31,7 @@ const rows = [];
 const t0 = Date.now();
 try {
   for (const task of tasks) {
-    const base = mkdtempSync(join(tmpdir(), `bonsai-second-${task}-`));
+    const base = mkdtempSync(join(tmpdir(), `agentic-second-${task}-`));
     const home = join(base, 'home');
     const work = join(base, 'project');
     const kept = join(base, 'memory-kept');
@@ -43,7 +43,7 @@ try {
       rmSync(work, { recursive: true, force: true });
       cpSync(join(tasksDir, task, 'project'), work, { recursive: true });
       // The second time: the same files as the first, and what the first run saved.
-      if (time === 2 && existsSync(kept)) cpSync(kept, join(work, '.bonsai', 'memory'), { recursive: true });
+      if (time === 2 && existsSync(kept)) cpSync(kept, join(work, '.agentic', 'memory'), { recursive: true });
       // What the checks read beside the project, as the practice runner leaves it:
       // when the run started (a file changed after it is the run's doing).
       writeFileSync(join(base, 'started'), '');
@@ -59,8 +59,8 @@ try {
       clearTimeout(timer);
       writeFileSync(join(base, 'answer.txt'), run.finalText ?? '');
       writeFileSync(join(base, 'asked.txt'), (run.asked ?? []).map((a) => a.question).join('\n'));
-      const aside = join(base, 'bonsai-aside');
-      const own = join(work, '.bonsai');
+      const aside = join(base, 'agentic-aside');
+      const own = join(work, '.agentic');
       if (existsSync(own)) renameSync(own, aside);
       const check = spawnSync('/bin/zsh', [join(tasksDir, task, 'check.sh')], { cwd: work, encoding: 'utf8', timeout: 60_000 });
       if (existsSync(aside)) renameSync(aside, own);

@@ -16,7 +16,7 @@ import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const project = (files) => {
-  const d = join(mkdtempSync(join(tmpdir(), 'bonsai-page-')), 'project');
+  const d = join(mkdtempSync(join(tmpdir(), 'agentic-page-')), 'project');
   for (const [rel, text] of Object.entries(files)) { mkdirSync(join(d, rel, '..'), { recursive: true }); writeFileSync(join(d, rel), text); }
   return d;
 };
@@ -79,7 +79,7 @@ test('what covers something is grouped by its layer, and the report says why in 
 });
 
 test('the lines that set the two layers are found: a one-line rule and a rule over several lines', () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-page-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-page-')), 'project');
   cpSync(join(import.meta.dir, 'fixture-page'), cwd, { recursive: true });
   const spots = findSpots(cwd, ['index.html', 'style.css', 'package.json'], 'index.html', groupPairs([found('.legend', 'Price', 3)])[0]);
   expect(spots.map((s) => `${s.for} ${s.rel}:${s.line}`)).toEqual(['.bar style.css:3', '.legend style.css:10']);
@@ -96,7 +96,7 @@ test('the check goes with the project\'s own page checks, or in a checks folder 
 });
 
 test('both scripts are valid JavaScript', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'bonsai-page-'));
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-page-'));
   writeFileSync(join(dir, 'probe.mjs'), probeScript());
   writeFileSync(join(dir, 'check.mjs'), checkScript({ spec: { browser: '.', engines: ['webkit'], size: { width: 800, height: 600 }, files: '.', url: '/index.html', waitFor: [], steps: [], covered: '#a', by: '.b', keep: true }, up: '..', head: ['one', 'two'] }));
   for (const f of ['probe.mjs', 'check.mjs']) expect([f, spawnSync('node', ['--check', join(dir, f)], { encoding: 'utf8' }).stderr]).toEqual([f, '']);
@@ -108,7 +108,7 @@ test('both scripts are valid JavaScript', () => {
 // project, not another one's node_modules).
 const PW = [join(homedir(), 'Desktop', 'MAIN2026', 'node_modules')].find((d) => existsSync(join(d, 'playwright', 'package.json')) && existsSync(join(d, 'playwright-core', 'package.json')));
 function pageProject() {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-page-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-page-')), 'project');
   cpSync(join(import.meta.dir, 'fixture-page'), cwd, { recursive: true });
   for (const name of ['playwright', 'playwright-core']) {
     mkdirSync(join(cwd, 'node_modules'), { recursive: true });
@@ -184,7 +184,7 @@ test.skipIf(!PW)('not approving the check changes nothing', async () => {
 }, 120_000);
 
 test('a project with no browser works step by step, as before', async () => {
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-page-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-page-')), 'project');
   cpSync(join(import.meta.dir, 'fixture-page'), cwd, { recursive: true });
   const { reason, events } = await run(cwd, REQUEST, [{ text: 'The legend covers the list.' }]);
   expect(reason).toBe('done');

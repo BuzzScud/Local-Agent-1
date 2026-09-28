@@ -49,8 +49,8 @@ export const OVERHEAD = 0.15e9;
 export const draftBytes = (m) => (m.draft ? m.draft.bytes + m.draft.computeBytes + (m.slots ?? 1) * m.draft.nMax * (m.fixedStateBytes ?? 0) : 0);
 
 // Each slot has its own running state and checkpoints; the cache is shared.
-// The helper is counted whenever the model has one (bonsai setup fetches it)
-// unless it is switched off with BONSAI_HELPER=off.
+// The helper is counted whenever the model has one (coding setup fetches it)
+// unless it is switched off with AGENTIC_HELPER=off.
 export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => m.bytes + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
 
 // effort 'high': the model mostly thinks, which the guessing helper barely

@@ -39,11 +39,11 @@ const HERE = 0.02;
 const ABOUT_THEM = 0.03;
 
 // Whether Claude's notes are used at all: "claudeNotes": false in
-// settings.json, or BONSAI_CLAUDE_NOTES=off (the app's tests), leaves them out,
+// settings.json, or AGENTIC_CLAUDE_NOTES=off (the app's tests), leaves them out,
 // and the lines boiled down from them with them.
 export const claudeOn = (settings = {}) => settings.claudeNotes !== false && !['off', ''].includes((process.env.AGENTIC_CLAUDE_NOTES ?? process.env.BONSAI_CLAUDE_NOTES) ?? 'on');
 
-// Where the notes are: BONSAI_CLAUDE_NOTES or the setting "claudeNotes" names
+// Where the notes are: AGENTIC_CLAUDE_NOTES or the setting "claudeNotes" names
 // the folder ("off" or false: none); otherwise Claude Code's memory folder
 // for your home folder, the one it writes to from any folder on this Mac.
 export function notesDir({ home = homedir(), setting } = {}) {

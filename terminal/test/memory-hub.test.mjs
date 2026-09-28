@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 // In its own process with its own home: the memory's folders are read from
 // the environment when the store loads.
 function inChild(body) {
-  const base = mkdtempSync(join(tmpdir(), 'bonsai-memhub-'));
+  const base = mkdtempSync(join(tmpdir(), 'agentic-memhub-'));
   const repo = join(base, 'repo');
   mkdirSync(join(repo, '.git'), { recursive: true });
   const src = (p) => JSON.stringify(join(import.meta.dir, '..', p));
@@ -29,7 +29,7 @@ function inChild(body) {
     s.stop();
     console.log(JSON.stringify(out));
   `;
-  const r = spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, BONSAI_HOME: join(base, 'home'), BONSAI_MEMORY: join(base, 'about-you') }, timeout: 30_000 });
+  const r = spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: join(base, 'home'), AGENTIC_MEMORY: join(base, 'about-you') }, timeout: 30_000 });
   if (r.status !== 0) throw new Error(r.stderr || r.stdout);
   return JSON.parse(r.stdout.trim().split('\n').pop());
 }

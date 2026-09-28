@@ -32,8 +32,8 @@ export const FIRST_FACTS = [
 
 // Where the memory lives for a folder. In the home folder there is no
 // project, only what holds for you.
-// BONSAI_MEMORY names another folder for what holds for you; with
-// BONSAI_HOME set (a test's own home for Agentic Coder's files) it is kept in
+// AGENTIC_MEMORY names another folder for what holds for you; with
+// AGENTIC_HOME set (a test's own home for Agentic Coder's files) it is kept in
 // there, so a test never reads or writes the real one.
 export function memoryDirs(cwd, home = homedir()) {
   const other = (process.env.AGENTIC_MEMORY ?? process.env.BONSAI_MEMORY) || ((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ? join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME), 'memory-about-you') : null);
@@ -100,7 +100,7 @@ export function formatFact(f) {
   return `${head.join('\n')}\n\n${f.text.trim()}${steps}\n`;
 }
 
-// One change at a time in a memory folder. Two Bonsai windows in one project,
+// One change at a time in a memory folder. Two Agentic Coder windows in one project,
 // or a window and the save handed over when another one quit, can reach the
 // same folder in the same moment; each reads the facts, then writes. Without
 // this, a fact of one was written over by the other's (both picked the same

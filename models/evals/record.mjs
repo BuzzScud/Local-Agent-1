@@ -1,5 +1,5 @@
 // The test record: one line per test run, kept on this Mac in
-// ~/.bonsai-code/tests/record.jsonl (BONSAI_HOME moves it, BONSAI_TEST_RECORD
+// ~/.agentic-coder/tests/record.jsonl (AGENTIC_HOME moves it, AGENTIC_TEST_RECORD
 // names the file outright). Every runner adds its result with recordTest();
 // the hub's Tests tab reads the file live, and a snapshot page goes into the
 // DOCS folder (tests/agentic-coder-test-record.html) so the record reaches GitHub
@@ -12,7 +12,7 @@
 //   part    true for a run of only some of the set (a rerun of two tasks): kept, never shown as "the latest full run"
 //   code    the commit under test ("7595055", "7595055+" with uncommitted changes)
 //   raw     where the raw results are, from the repo's top
-//   page    its results page in the DOCS folder ("tests/bonsai-….html"), if one was made
+//   page    its results page in the DOCS folder ("tests/agentic-coder-….html"), if one was made
 // A later line with the same id replaces the earlier one.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve, relative } from 'node:path';
@@ -95,7 +95,7 @@ export function recordData(file = recordFile()) {
 // the DOCS folder. Skipped quietly when the folder or the page's source is
 // not here (a worktree, a frozen copy): the hub still reads the record live.
 // Only the real record goes to the repo's DOCS folder; any other record needs
-// the folder named (docsDir, or BONSAI_DOCS).
+// the folder named (docsDir, or AGENTIC_DOCS).
 export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD ? (['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(repo, n)).find((p) => existsSync(p)) ?? join(repo, 'agentic-coder DOCS')) : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
   try {
     if ((process.env.AGENTIC_NO_DOCS ?? process.env.BONSAI_NO_DOCS) || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;

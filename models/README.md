@@ -30,14 +30,14 @@ numbers live in the 27B's comparison pages.
    download URL and checksum, its layout (for the memory estimate), sampling, effort levels,
    and the server options it needs.
 2. Import it in `registry.mjs` and add it to the list.
-3. `bonsai setup` fetches it; `/model` in the terminal lists it.
+3. `coding setup` fetches it; `/model` in the terminal lists it.
 4. Test it the way the 27B was: `node models/evals/bench/run.mjs --model <id>` and
    `node models/evals/bench/words/real.mjs --model <id>`; results land in `models/<name>/results/`.
 
 ## The test bench (`evals/`)
 
 Each run starts its own llama-server, runs the terminal's agent headless with the model,
-and checks the result. Everything is auto-approved inside throwaway copies; Bonsai's
+and checks the result. Everything is auto-approved inside throwaway copies; Agentic Coder's
 questions get scripted answers (`answers.json` per task).
 
 | Script | What it measures |
@@ -47,7 +47,7 @@ questions get scripted answers (`answers.json` per task).
 | `bench/words/real.mjs` | 28 real requests built around trigger words and blocked commands, in three kinds of folder. |
 | `tools/speed.mjs`, `soak.mjs`, `reread.mjs` | Engine settings, long conversations and cold starts, what gets re-read each step. |
 | `bench/night/start.sh` | All of the above overnight, with a morning report. |
-| `reports/` | The builders of the report pages; pages go to `~/Desktop/bonsai-code DOCS`, mirrored into the repo's `docs/`. |
+| `reports/` | The builders of the report pages; pages go to `agentic-coder DOCS/` at the top of the repo, mirrored into the repo's `docs/`. |
 | `dev/` | Probes and experiments against a running server (see `dev/experiments/README.md`). |
 
 Only one model fits in memory at a time on a 16 GB Mac, so bench runs wait for each other.

@@ -13,8 +13,8 @@ import { runHeadless } from '../src/headless.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
-const project = () => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-ask-')), 'project'); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
-const plainFolder = () => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-ask-')), 'notes'); cpSync(join(import.meta.dir, '..', '..', 'models', 'evals', 'bench', 'tasks', '18-writing-noncode-folder', 'project'), d, { recursive: true }); return d; };
+const project = () => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-ask-')), 'project'); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
+const plainFolder = () => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-ask-')), 'notes'); cpSync(join(import.meta.dir, '..', '..', 'models', 'evals', 'bench', 'tasks', '18-writing-noncode-folder', 'project'), d, { recursive: true }); return d; };
 
 async function run(prompt, replies, { flows = false, answer, cwd = project() } = {}) {
   const fake = await startFakeServer(replies);
@@ -80,7 +80,7 @@ test('"fix the bug" in a project whose tests pass asks; a failing test suite is 
   expect(a.events.find((e) => e.type === 'ask').req.args.question).toBe(FIX_QUESTION);
   expect(a.reason).toBe('done');
   // Failing tests: the fix path is the answer; no question.
-  const cwd = join(mkdtempSync(join(tmpdir(), 'bonsai-ask-')), 'project');
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-ask-')), 'project');
   cpSync(join(import.meta.dir, 'fixture-fix'), cwd, { recursive: true });
   const b = await run('fix the bug', [{ text: '```js\nexport function median(v) { return 0; }\n```' }, { text: 'Done.' }], { flows: true, cwd, answer: { choice: 'no' } });
   expect(b.events.some((e) => e.type === 'ask' && e.name === 'Ask')).toBe(false);

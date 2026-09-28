@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { memoryDirs, dirFor, parseFact, formatFact, readFacts, applyChanges, undoLast, restoreFact, markUsed, changeTrust, pinFact, tidy, openMemory, memoryNotes, looksSecret, namesMissingFile, readLog, FIRST_FACTS, RETIRE_AT } from '../src/agent/facts.mjs';
 
 const place = () => {
-  const home = mkdtempSync(join(tmpdir(), 'bonsai-facts-'));
+  const home = mkdtempSync(join(tmpdir(), 'agentic-facts-'));
   const repo = join(home, 'work', 'repo');
   mkdirSync(join(repo, '.git', 'info'), { recursive: true });
   mkdirSync(join(repo, 'src'), { recursive: true });

@@ -38,7 +38,7 @@ const model = { ...base,
 const withMemory = args.includes('--memory');
 // --claude (with --memory): Claude's notes are looked in as well, where they are.
 const withClaude = withMemory && args.includes('--claude');
-const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'bonsai-eval-memory-')) : null;
+const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'agentic-eval-memory-')) : null;
 const saves = [];
 // One small model for the whole run, stopped with it.
 const embedder = withMemory && embedderReady() ? new Embedder() : null;
@@ -55,7 +55,7 @@ try {
   for (const thinking of thinkModes) for (let rep = 1; rep <= reps; rep++) {
     for (const task of tasks) {
       if (pastStop()) { console.log(`stop time ${stopAt} reached; not starting ${task}`); continue; }
-      const dir = mkdtempSync(join(tmpdir(), `bonsai-eval-${task}-`));
+      const dir = mkdtempSync(join(tmpdir(), `agentic-eval-${task}-`));
       const work = join(dir, 'project');
       cpSync(join(here, 'tasks', task, 'project'), work, { recursive: true });
       writeFileSync(join(dir, 'started'), '');

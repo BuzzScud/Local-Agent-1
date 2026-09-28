@@ -20,7 +20,7 @@ import { startFakeServer } from './fake-server.mjs';
 import { LINES } from './sort-lines.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
-const project = () => { const d = join(mkdtempSync(join(tmpdir(), 'bonsai-sort-')), 'project'); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
+const project = () => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-sort-')), 'project'); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
 
 // One conversation against the scripted model: each message is sent in turn.
 async function talk(messages, replies, { answer, cwd = project(), mode = 'edits' } = {}) {
