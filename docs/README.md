@@ -8,5 +8,5 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 65 KB | 2026-09-28 |
-| [other/btw-side-question-plan-2026-09-28.html](other/btw-side-question-plan-2026-09-28.html) | page | /btw plan | 19 KB | 2026-09-28 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 68 KB | 2026-09-28 |
+| [older versions/btw-side-question-plan-2026-09-28.html](older%20versions/btw-side-question-plan-2026-09-28.html) | page | /btw plan | 19 KB | 2026-09-28 |
