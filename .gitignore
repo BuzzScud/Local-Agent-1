@@ -12,8 +12,6 @@ Bonsai Code.app/
 # The pages' working folder, on this Mac only: `bun run docs` mirrors it into docs/
 agentic-coder DOCS/
 bonsai-code DOCS/
-# The Bonsai-era pages (24-28 Sep 2026), beside the retired model's recipe: on this Mac only
-models/bonsai-2-27b/Bonsai Docs/
 # Reading material kept beside the repo, never committed
 CLAUDE MODEL DOCS/
 

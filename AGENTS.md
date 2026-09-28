@@ -21,8 +21,9 @@
   tests, its thinking, its harness) is saved there; a replaced version moves to its
   `older versions/`. Raw model results still stay in `models/gemma-4-12b/results/`.
 - **The Bonsai-era pages** (24–28 Sep 2026) left the DOCS folder on 28 Sep: they are in
-  `models/bonsai-2-27b/Bonsai Docs/` (beside the retired model's recipe, on the Mac only,
-  not in git), and in git history under `docs/`.
+  `~/Desktop/bonsai-docs/` (beside `gemma-docs`, on the Mac only, not in git), and in git
+  history under `docs/`. The restore points from before the 24–28 Sep changes (git bundles,
+  zips, tgz) are in `~/Desktop/agentic-coder backups/`, also on the Mac only.
 - **Before a commit, run `bun run docs`.** It mirrors that folder into `docs/` (and
   rewrites `docs/README.md`, the index); commit `docs/` with the rest. It stops if the
   folder is missing or looks emptied, and changes nothing then.
