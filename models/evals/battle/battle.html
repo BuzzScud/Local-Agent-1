@@ -58,32 +58,53 @@ code { font: 12px var(--mono); }
 .none { color: var(--ink3); font-size: 13px; border: 1px dashed var(--line2); border-radius: 8px; padding: 8px 10px; }
 .note { font-size: 12.5px; color: var(--ink2); background: var(--panel); border-radius: 8px; padding: 7px 10px; margin-bottom: 10px; line-height: 1.45; }
 
-/* The top band: score, every test as a cell, the actions. */
-.band { display: flex; align-items: center; gap: 22px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; }
-.tally { display: flex; align-items: center; gap: 10px; flex: none; }
-.tally .side { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
-.tally .n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.tally .m { font-size: 11.5px; color: var(--ink2); }
-.tally .dash { color: var(--ink3); font-size: 18px; }
-.tally .sub { font-size: 11px; color: var(--ink3); max-width: 90px; line-height: 1.25; }
-.strips { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
-.suite { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.suite .sl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; white-space: nowrap; }
-.cells { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; }
-.cellb { width: 22px; height: 34px; display: grid; grid-template-rows: 12px 12px 4px; gap: 2px; padding: 2px 3px; cursor: pointer; border-radius: 6px; border: 1.5px solid transparent; background: none; }
-.cellb:hover { border-color: var(--line2); background: var(--panel); }
-.cellb.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.cellb .h { border-radius: 3px; }
-/* Not run yet: a hatch that shows on light and dark alike (an outline alone vanished on dark). */
-.h.plan, .h.todo { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink3) 45%, transparent) 0 1.5px, transparent 1.5px 4px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink3) 60%, transparent); }
-.h.ok { background: var(--ok); } .h.bad { background: var(--bad); } .h.warn { background: var(--warn); } .h.run { box-shadow: inset 0 0 0 1.5px var(--b); animation: pulse 1.2s infinite; }
-.cellb .v { justify-self: center; width: 4px; height: 4px; border-radius: 50%; }
-.v.A { background: var(--a); } .v.B { background: var(--b); } .v.T { background: var(--ink3); }
-.addcell { width: 22px; height: 34px; border-radius: 6px; border: 1.5px dashed color-mix(in srgb, var(--ink3) 70%, transparent); background: none; color: var(--ink2); cursor: pointer; font-size: 15px; line-height: 1; margin-left: 3px; }
-.addcell:hover { color: var(--ink); border-color: var(--ink3); }
-.keyq { width: 18px; height: 18px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--ink3) 70%, transparent); color: var(--ink2); font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; cursor: help; flex: none; }
-@media (max-width: 1700px) { .cellb, .addcell { width: 17px; } .cellb { padding: 2px 2px; } }
-@media (max-width: 1440px) { .cellb, .addcell { width: 14px; } .cells { gap: 2px; } .tally .sub { display: none; } .band { gap: 16px; } .strips { gap: 10px; } }
+/* The top band (design A · Load + Battle, picked 29 Sep 2026): load one test or a set, press
+   Battle, the score. What was a row of cells is the Load list now: each test with its result. */
+.band { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; min-height: 60px; }
+.band .pick, .band .more { position: relative; flex: none; }
+.band .fill { flex: 1; min-width: 0; }
+.band .status { font-size: 12.5px; color: var(--ink2); }
+.loadb { display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line2); background: var(--surface); color: var(--ink); border-radius: 9px; padding: 7px 12px; cursor: pointer; min-width: 260px; max-width: 440px; }
+.loadb:hover, .loadb[aria-expanded="true"] { background: var(--panel); }
+.loadb .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; }
+.loadb b { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loadb .c { margin-left: auto; color: var(--ink2); font-size: 13px; }
+.btn.battle { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 8px 18px; font-size: 14px; border-radius: 9px; flex: none; }
+.btn.battle:hover { filter: brightness(1.07); }
+.btn.stopb { color: var(--bad); font-weight: 650; padding: 8px 16px; font-size: 14px; border-radius: 9px; flex: none; }
+.btn.dots { padding: 6px 10px; letter-spacing: .08em; }
+.prog { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; }
+.prog .live { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.prog .bar { width: 140px; height: 6px; border-radius: 3px; background: var(--panel); overflow: hidden; flex: none; }
+.prog .bar i { display: block; height: 100%; background: var(--accent); }
+.prog .muted { color: var(--ink3); }
+.prog .okd { color: var(--ok); font-weight: 650; }
+.score { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+.score .nm { font-size: 13px; color: var(--ink2); font-weight: 650; }
+.score b { font-size: 22px; font-weight: 800; line-height: 1; }
+.score .sep { color: var(--ink3); }
+.score .lbl { font-size: 11px; color: var(--ink3); margin-left: 2px; }
+/* The Load list: the sets, then every test with its result (click one: it is loaded and shown below). */
+.lm { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: 580px; background: var(--surface); border: 1px solid var(--line2); border-radius: 12px; padding: 6px; box-shadow: 0 12px 34px rgba(0,0,0,.28); display: grid; gap: 2px; }
+.lm-h { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; padding: 6px 10px 3px; }
+.lm-i { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; gap: 10px; text-align: left; border: 0; background: none; color: var(--ink); padding: 5px 10px; border-radius: 7px; cursor: pointer; }
+.lm-i:hover, .lm-i.on { background: var(--panel); }
+.lm-i.on b::after { content: " ✓"; color: var(--accent); }
+.lm-i.sel { box-shadow: inset 2px 0 0 var(--accent); }
+.lm-i b { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-n { font-size: 12px; color: var(--accent); font-weight: 650; white-space: nowrap; }
+.lm-d { font-size: 12px; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lm-tests { max-height: min(44vh, 330px); display: grid; gap: 1px; align-content: start; }
+.lm-i.t { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.lm-i.t b { font-weight: 550; }
+.lm-num { font-size: 11.5px; color: var(--ink3); font-variant-numeric: tabular-nums; text-align: right; }
+.lm-res { display: flex; gap: 7px; align-items: baseline; font-size: 11.5px; white-space: nowrap; color: var(--ink3); }
+.lm-res .run { color: var(--b); font-weight: 650; }
+.rs { font-weight: 700; } .rs.ok { color: var(--ok); } .rs.bad { color: var(--bad); } .rs.warn { color: var(--warn); } .rs.done { color: var(--ink2); }
+.vt { color: var(--ink2); } .vt.todo { color: var(--accent); font-weight: 650; }
+.lm-f { display: flex; gap: 6px; align-items: center; border-top: 1px solid var(--line); margin-top: 2px; padding: 6px 4px 1px; }
+.lm-key { margin-left: auto; font-size: 11px; color: var(--ink3); }
+@media (max-width: 1350px) { .score .lbl { display: none; } .prog .bar { display: none; } .loadb { min-width: 200px; } }
 
 /* The test's title row. */
 .titlerow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 12px 18px 10px; align-items: center; }
@@ -229,10 +250,8 @@ code { font: 12px var(--mono); }
 .panelmsg h2 { margin: 0; font-size: 20px; }
 
 /* Short windows (under 860 px tall): everything tightens so it still fits. */
-body.compact .band { padding: 5px 18px; }
-body.compact .cellb { height: 28px; grid-template-rows: 10px 10px 2px; }
-body.compact .addcell { height: 28px; }
-body.compact .tally .n { font-size: 22px; }
+body.compact .band { padding: 5px 18px; min-height: 46px; }
+body.compact .score b { font-size: 19px; }
 body.compact .titlerow { padding: 7px 18px 6px; gap: 4px 16px; }
 body.compact .titlerow h2 { font-size: 16px; }
 body.compact .tl { padding: 6px 12px 5px; }
@@ -259,12 +278,9 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   body { overflow: auto; height: auto; min-height: 100vh; }
   #app { overflow: visible; }
   .view { height: auto; }
-  .band { flex-wrap: wrap; gap: 12px; }
-  .strips { flex-wrap: wrap; flex-basis: 100%; }
-  .suite { flex-wrap: wrap; }
-  .bandacts { flex-wrap: wrap; }
-  .bandacts .status { white-space: normal; }
-  .bandacts { flex: 1 1 100%; min-width: 0; }
+  .band { flex-wrap: wrap; gap: 10px; }
+  .prog { flex-basis: 100%; order: 5; }
+  .lm { width: min(580px, calc(100vw - 36px)); }
   .duel .k { flex-wrap: wrap; }
   .d3.body, .d4.body { grid-template-rows: none; }
   .duels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -286,8 +302,6 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
 #main { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; }
 #main > .nt, #main > .panelmsg { grid-row: 1 / -1; }
 #main > .panelmsg { align-content: start; }
-.h.done { background: var(--ink3); }
-.cellb.queued { border: 1.5px dashed var(--accent); }
 .live.A::before { background: var(--a); }
 .chip.plain::before { content: none; }
 .rv.small { font-size: 11.5px; color: var(--ink3); }
@@ -301,10 +315,8 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
 .kv > span:nth-child(odd) { color: var(--ink3); }
 .panelmsg { max-width: 980px; }
 .rmfiles { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 8px; font-size: 12.5px; color: var(--ink2); }
-/* The band's buttons, and the Clear menu. */
-.bandacts { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; position: relative; }
-.bandacts .brow { display: flex; gap: 8px; }
-.bandacts .status { font-size: 11.5px; color: var(--ink2); white-space: nowrap; }
+/* The ⋯ menu: clear the line or every result, and what the marks mean. */
+.ckey { border-top: 1px solid var(--line); margin-top: 4px; padding: 8px 10px 4px; font-size: 11.5px; color: var(--ink2); line-height: 1.5; }
 .cmenu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; width: 340px; background: var(--surface); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 6px; display: grid; gap: 2px; }
 .cmenu button { text-align: left; border: none; background: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; display: grid; gap: 2px; color: var(--ink); }
 .cmenu button:hover:not(:disabled) { background: var(--panel); }
@@ -429,45 +441,75 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   const errsOf = (r) => (r.running ? r.steps.filter((s) => s.kind === 'error').length : r.errors ?? 0);
   const who = (side, order) => `<span class="who"><span class="sw ${side}"></span>Model ${side}${order ? `<span class="real">· ${esc(fullName(order[side]))}</span>` : ''}</span>`;
 
-  // ---------- The band ----------
-  function runAllLabel() {
-    const t28 = tests().filter((t) => t.suite === 'new28');
-    const left = t28.filter((t) => !t.latest || t.latest.status !== 'done').length;
-    return !t28.length ? null : left === t28.length ? `Run all ${t28.length}` : left ? `Run the ${left} left` : `Run all ${t28.length} again`;
+  // ---------- The band: Load, Battle, the score ----------
+  const isDone = (t) => Boolean(t?.latest && t.latest.status === 'done');
+  const loadedNow = () => S.st.loaded ?? { kind: 'set', id: 'new28' };
+  // What is loaded: its name, its tests, how many are not done yet.
+  function loadInfo() {
+    const L = loadedNow();
+    if (L.kind === 'test') { const t = testById(L.id); return t ? { name: `${t.n ? `${t.n}. ` : ''}${t.title}`, ids: [t.id], left: isDone(t) ? 0 : 1 } : null; }
+    const s = (S.st.sets ?? []).find((x) => x.id === L.id);
+    return s ? { name: s.name, ids: s.ids, left: s.ids.filter((id) => !isDone(testById(id))).length } : null;
+  }
+  // The button says what it will do.
+  function battleLabel(li) {
+    const n = li.ids.length;
+    if (!li.left) return `▶ Battle again${n > 1 ? ` · ${n} tests` : ''}`;
+    if (li.left < n) return `▶ Battle · ${li.left} left`;
+    return `▶ Battle · ${n} test${n > 1 ? 's' : ''}`;
   }
   function band() {
     const st = S.st; if (!st) return '';
     const [m1, m2] = st.models;
     const sc = st.score;
     const q = st.queue ?? [];
-    const cell = (t) => {
-      const l = t.latest; const qi = q.indexOf(t.id);
-      const isRun = st.running && st.running.test === t.id;
-      const h = (side) => { if (isRun) { const rs = st.running.side; return side === rs ? 'run' : side < rs ? verdictBrief(l?.runs?.[side]).mk : 'todo'; } return l && l.status !== 'running' ? verdictBrief(l.runs[side]).mk : 'todo'; };
-      const v = l?.vote;
-      const tipText = `${t.n ? `${t.n}. ` : ''}${t.title}${isRun ? ' · running now' : qi >= 0 ? ` · in line (#${qi + 1})` : l ? ` · A: ${verdictBrief(l.runs.A).text} · B: ${verdictBrief(l.runs.B).text}${v ? ` · your vote: ${v === 'T' ? 'tie' : `Model ${v}`}` : ' · not voted yet'}` : ' · not run yet'}`;
-      return `<button class="cellb${t.id === S.sel ? ' sel' : ''}${qi >= 0 ? ' queued' : ''}" data-act="pick" data-id="${esc(t.id)}" data-tip="${esc(tipText)}" aria-label="${esc(tipText)}"><span class="h ${h('A')}"></span><span class="h ${h('B')}"></span><span class="v ${v || ''}"></span></button>`;
-    };
-    const t28 = tests().filter((t) => t.suite === 'new28'), mine = tests().filter((t) => t.suite !== 'new28');
-    let status = 'Idle · no model loaded';
-    if (st.running?.waiting) status = `<span class="live">${esc(st.waiting ?? 'Waiting for memory')}</span>`;
-    else if (st.running) { const t = testById(st.running.test); status = `<span class="live ${st.running.side}">Model ${st.running.side} running · ${esc(t?.title ?? '')} · <span data-since="${st.running.startedAt}">${mmss((Date.now() - st.running.startedAt) / 1000)}</span></span>`; }
-    else if (st.paused && q.length) status = `Paused · ${q.length} in line`;
-    if (!st.running && q.length && !st.paused) status = `Starting the next · ${q.length} in line`;
-    const lead = st.running && q.length ? ` · ${q.length} more in line` : '';
-    const runAll = runAllLabel();
+    const li = loadInfo() ?? { name: 'nothing loaded', ids: [], left: 0 };
+    const act = st.running ? '<button class="btn stopb" data-act="stop">■ Stop</button>' : `<button class="btn battle" data-act="battle"${li.ids.length ? '' : ' disabled'}>${battleLabel(li)}</button>`;
+    // Beside the button: what is happening now.
+    const batch = st.batch ?? [];
+    let prog = '';
+    if (st.running?.waiting) prog = `<span class="live">${esc(st.waiting ?? 'Waiting for memory')}</span>`;
+    else if (st.running) {
+      const t = testById(st.running.test); const inB = batch.length > 1 && batch.includes(st.running.test);
+      const i = batch.length - batch.filter((id) => q.includes(id)).length;
+      prog = `<span class="live ${st.running.side}">${inB ? `Test ${i} of ${batch.length} · ` : ''}Model ${st.running.side} on “${esc(t?.title ?? '')}” · <span data-since="${st.running.startedAt}">${mmss((Date.now() - st.running.startedAt) / 1000)}</span></span>${inB ? `<span class="bar"><i style="width:${Math.round(((i - 1) / batch.length) * 100)}%"></i></span>` : ''}${q.length && !inB ? `<span class="muted">${q.length} more in line</span>` : ''}`;
+    } else if (q.length) prog = `<span class="muted">${st.paused ? 'Paused' : 'Starting the next'} · ${q.length} in line</span>`;
+    else if (batch.length && batch.every((id) => testById(id)?.latest)) {
+      const toVote = batch.filter((id) => { const l = testById(id).latest; return l.status === 'done' && !l.vote; }).length;
+      prog = `<span class="okd">✓ Done · ${batch.length} of ${batch.length}</span>${toVote ? `<span class="muted">${toVote} to vote: pick one in Load</span>` : ''}`;
+    }
+    if (st.fake) prog += '<span class="muted">practice mode (no model)</span>';
+    const ties = sc.ties ? ` · ${sc.ties} tie${sc.ties > 1 ? 's' : ''}` : '';
     return `<div class="band">
-      <div class="tally"><div class="side"><span class="n">${sc.votes[m1.id] ?? 0}</span><span class="m">${esc(nameOf(m1.id))}</span></div><span class="dash">–</span><div class="side"><span class="n">${sc.votes[m2.id] ?? 0}</span><span class="m">${esc(nameOf(m2.id))}</span></div><span class="sub">your votes${sc.ties ? ` · ${sc.ties} tie${sc.ties > 1 ? 's' : ''}` : ''}<br>passes ${sc.passes[m1.id] ?? 0}–${sc.passes[m2.id] ?? 0}</span></div>
-      <div class="strips">${t28.length ? `<div class="suite"><span class="sl">New 28</span><div class="cells">${t28.map(cell).join('')}</div></div>` : ''}<div class="suite"><span class="sl">My tests</span><div class="cells">${mine.map(cell).join('')}<button class="addcell" data-act="new" data-tip="Add a test" aria-label="Add a test">+</button></div></div>
-        <span class="keyq" data-tip="Each test is one cell: top = Model A, bottom = Model B. Green pass · red fail · amber out of time or stopped · grey finished with no checks · dashed = not run yet · blue outline = in line. The dot under it is your vote." aria-label="What the cells mean">?</span></div>
-      <div class="bandacts"><div class="brow"><button class="btn pri" data-act="new">+ New test</button><button class="btn" data-act="edittests">Edit tests</button>${st.running ? '<button class="btn stop" data-act="stop">■ Stop</button>' : st.paused && q.length ? '<button class="btn" data-act="resume">Resume</button>' : runAll ? `<button class="btn" data-act="runall">${runAll}</button>` : ''}<button class="btn" data-act="clearmenu" aria-haspopup="menu" aria-expanded="${Boolean(S.clearOpen)}">Clear ▾</button></div><span class="status">${status}${lead}${st.fake ? ' · practice mode (no model)' : ''}</span>${S.clearOpen ? clearMenu() : ''}</div></div>`;
+      <div class="pick"><button class="loadb" data-act="loadmenu" aria-haspopup="menu" aria-expanded="${Boolean(S.loadOpen)}"><span class="k">Load</span><b>${esc(li.name)}</b><span class="c">▾</span></button>${S.loadOpen ? loadMenu() : ''}</div>
+      ${act}<div class="prog">${prog}</div><span class="fill"></span>
+      <div class="score" data-tip="Passes: ${esc(nameOf(m1.id))} ${sc.passes[m1.id] ?? 0}, ${esc(nameOf(m2.id))} ${sc.passes[m2.id] ?? 0} · ${sc.battles} battle${sc.battles === 1 ? '' : 's'}"><span class="nm">${esc(nameOf(m1.id))}</span><b>${sc.votes[m1.id] ?? 0}</b><span class="sep">–</span><b>${sc.votes[m2.id] ?? 0}</b><span class="nm">${esc(nameOf(m2.id))}</span><span class="lbl">your votes${ties}</span></div>
+      <div class="more"><button class="btn dots" data-act="clearmenu" aria-haspopup="menu" aria-expanded="${Boolean(S.clearOpen)}" aria-label="More: clear, what the marks mean">⋯</button>${S.clearOpen ? clearMenu() : ''}</div></div>`;
+  }
+  // The Load list: the sets, then every test with how its last battle went.
+  function loadMenu() {
+    const L = loadedNow(); const q = S.st.queue ?? [];
+    const res = (t) => {
+      if (S.st.running?.test === t.id) return '<span class="run">running</span>';
+      if (q.includes(t.id)) return '<span>in line</span>';
+      const l = t.latest; if (!l) return '<span>not run</span>';
+      const one = (side) => { const v = verdictBrief(l.runs?.[side]); return `<span class="rs ${v.mk}" data-tip="Model ${side}: ${esc(v.text)}">${side} ${v.mk === 'ok' ? '✓' : v.mk === 'bad' ? '✗' : v.mk === 'warn' ? '■' : '·'}</span>`; };
+      return `${one('A')}${one('B')}${l.vote ? `<span class="vt">${l.vote === 'T' ? 'a tie' : `your vote ${l.vote}`}</span>` : l.status === 'done' ? '<span class="vt todo">to vote</span>' : ''}`;
+    };
+    const sets = (S.st.sets ?? []).map((x) => { const done = x.ids.filter((id) => isDone(testById(id))).length;
+      return `<button class="lm-i${L.kind === 'set' && L.id === x.id ? ' on' : ''}" role="menuitem" data-act="load" data-kind="set" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><span class="lm-n">${x.ids.length} test${x.ids.length > 1 ? 's' : ''}</span><span class="lm-d">${done ? `${done} of ${x.ids.length} run` : 'not run yet'}</span></button>`; }).join('');
+    const one = tests().map((t) => `<button class="lm-i t${L.kind === 'test' && L.id === t.id ? ' on' : ''}${t.id === S.sel ? ' sel' : ''}" role="menuitem" data-act="load" data-kind="test" data-id="${esc(t.id)}"><span class="lm-num">${t.n ?? '·'}</span><b>${esc(t.title)}</b><span class="lm-res">${res(t)}</span></button>`).join('');
+    return `<div class="lm" role="menu"><div class="lm-h">Sets · several tests, one after the other</div>${sets}
+      <div class="lm-h">One test · click to load it and see its results below</div><div class="lm-tests scroll">${one}</div>
+      <div class="lm-f"><button class="btn" data-act="new">+ New test</button><button class="btn" data-act="edittests">Edit tests</button><span class="lm-key">A = Model A · B = Model B · ✓ pass · ✗ fail · ■ stopped</span></div></div>`;
   }
   // Clear: the line of tests waiting, or every result (moved to the arena's trash, never deleted).
   function clearMenu() {
     const q = S.st.queue ?? [], anyResult = tests().some((t) => t.latest), busy = Boolean(S.st.running);
     return `<div class="cmenu" role="menu">
       <button role="menuitem" data-act="clearline"${q.length ? '' : ' disabled'}><b>Clear the line</b><span>${q.length ? `the ${q.length} test${q.length > 1 ? 's' : ''} waiting to run come${q.length > 1 ? '' : 's'} out of the line; ${busy ? 'the battle running now finishes' : 'nothing else changes'}` : 'nothing is waiting to run'}</span></button>
-      <button role="menuitem" data-act="clearresults"${anyResult && !busy ? '' : ' disabled'}><b>Clear all results</b><span>${busy ? 'stop the battle that is running first' : anyResult ? 'every result and vote moves to the arena\'s trash folder; the score goes back to 0–0; your tests stay' : 'there are no results yet'}</span></button></div>`;
+      <button role="menuitem" data-act="clearresults"${anyResult && !busy ? '' : ' disabled'}><b>Clear all results</b><span>${busy ? 'stop the battle that is running first' : anyResult ? 'every result and vote moves to the arena\'s trash folder; the score goes back to 0–0; your tests stay' : 'there are no results yet'}</span></button>
+      <div class="ckey">In the Load list each test shows its last battle: A = Model A, B = Model B · ✓ pass · ✗ fail · ■ stopped or out of time · “to vote” = done, waiting for your vote.</div></div>`;
   }
   const verdictBrief = (r) => (!r ? { mk: 'todo', text: 'not run' } : r.skipped ? { mk: 'todo', text: 'not run' } : r.error ? { mk: 'bad', text: 'did not finish' } : r.stopped ? { mk: 'warn', text: 'stopped' } : r.overLimit ? { mk: 'warn', text: 'out of time' } : r.pass == null ? { mk: 'done', text: 'finished (no checks)' } : r.pass ? { mk: 'ok', text: 'pass' } : { mk: 'bad', text: 'fail' });
 
@@ -821,7 +863,13 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     for (const el of document.querySelectorAll('[data-since]')) el.textContent = mmss((Date.now() - Number(el.dataset.since)) / 1000);
     if (S.det?.live && S.view === 'test') { const r = runOf(S.det, S.det.live.side); for (const el of mainEl.querySelectorAll('[data-clock]')) el.textContent = mmss(r.clock); redrawTimeline(); }
   }
-  function drawBand() { const html = band(); if (html !== S.bandKey) { S.bandKey = html; bandEl.innerHTML = html; } else tickClocks(); }
+  function drawBand() {
+    const html = band();
+    if (html === S.bandKey) { tickClocks(); return; }
+    const top = bandEl.querySelector('.lm-tests')?.scrollTop; // the Load list keeps its place when a poll redraws it
+    S.bandKey = html; bandEl.innerHTML = html;
+    if (top) { const l = bandEl.querySelector('.lm-tests'); if (l) l.scrollTop = top; }
+  }
 
   // ---------- Reading the runner ----------
   let polling = false;
@@ -853,21 +901,32 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   });
   document.addEventListener('click', async (e) => {
     if (S.clearOpen && !e.target.closest('.cmenu, [data-act="clearmenu"]')) { S.clearOpen = false; drawBand(); }
+    if (S.loadOpen && !e.target.closest('.lm, [data-act="loadmenu"]')) { S.loadOpen = false; drawBand(); }
     const seg = e.target.closest('.seg');
     if (seg && Number(seg.dataset.step) >= 0) { S.tab[S.sel] = 'did'; S.hl = { side: seg.dataset.side, i: Number(seg.dataset.step) }; drawMain(true); const row = mainEl.querySelector(`[data-row="${S.hl.side}${S.hl.i}"]`); if (row) { const box = row.closest('.tbody'); box.scrollTop = row.offsetTop - box.clientHeight / 3; fades(); } return; }
     const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
     const act = el.dataset.act;
     try {
-      if (act === 'pick') { if (S.view === 'form' && !confirmLeave()) return; S.view = 'test'; F = null; S.sel = el.dataset.id; store.set('battle-sel', S.sel); S.hl = null; S.full = null; S.openPrompt = false; await poll(true); }
+      if (act === 'loadmenu') { S.loadOpen = !S.loadOpen; S.clearOpen = false; drawBand(); }
+      // Load a set, or one test (which also shows its results below).
+      if (act === 'load') {
+        const one = el.dataset.kind === 'test';
+        if (one && S.view === 'form' && !confirmLeave()) return;
+        await api('/api/load', { kind: el.dataset.kind, id: el.dataset.id });
+        S.loadOpen = false;
+        if (one) { S.view = 'test'; F = null; S.sel = el.dataset.id; store.set('battle-sel', S.sel); S.hl = null; S.full = null; S.openPrompt = false; }
+        await poll(true);
+      }
+      // Battle: what is loaded goes in line, in place of whatever waited there.
+      // The results below follow the battle that starts.
+      if (act === 'battle') { const r = await api('/api/start', {}); toast(r.queued > 1 ? `${r.queued} tests in line, one battle at a time.` : 'In line. It starts when the memory is free.'); S.view = 'test'; F = null; S.sel = null; S.hl = null; S.full = null; await poll(true); if (S.sel) store.set('battle-sel', S.sel); }
       if (act === 'new') { if (S.view === 'form' && !confirmLeave()) return; openForm(); }
       if (act === 'edit' || act === 'edittests') { if (S.view === 'form' && !confirmLeave()) return; if (S.view === 'form') { S.view = 'test'; drawMain(true); } openModal(act === 'edit' ? S.sel : S.sel ?? null); }
       if (act === 'cancel') { S.view = 'test'; F = null; drawMain(true); }
       if (act === 'run') { await api('/api/run', { id: S.sel }); toast('In line. It starts when the memory is free.'); await poll(true); }
       if (act === 'unqueue') { await api('/api/unqueue', { id: S.sel }); await poll(true); }
-      if (act === 'runall') { const r = await api('/api/runall', { suite: 'new28' }); toast(`${r.queued} tests in line, one battle at a time.`); await poll(true); }
       if (act === 'stop') { if (confirm('Stop the battle that is running? The line of tests waiting is paused too.')) { await api('/api/stop', {}); await poll(true); } }
-      if (act === 'resume') { await api('/api/resume', {}); await poll(true); }
-      if (act === 'clearmenu') { S.clearOpen = !S.clearOpen; drawBand(); }
+      if (act === 'clearmenu') { S.clearOpen = !S.clearOpen; S.loadOpen = false; drawBand(); }
       if (act === 'clearline') { S.clearOpen = false; await api('/api/clearqueue', {}); toast('The line is clear: nothing waits to run.'); await poll(true); }
       if (act === 'clearresults') { S.clearOpen = false; drawBand(); if (confirm('Clear all results? Every battle and your votes move to the arena\'s trash folder (~/.agentic-coder/battle/trash); the score goes back to 0–0. Your tests stay.')) { const r = await api('/api/clearresults', {}); S.det = null; toast(`Cleared: ${r.moved} result${r.moved === 1 ? '' : 's'} moved to the trash folder.`); await poll(true); } }
       if (act === 'vote') { const r = await api('/api/vote', { id: S.det.id, v: el.dataset.v }); toast(r.order ? `Model A was ${nameOf(r.order.A)}, Model B was ${nameOf(r.order.B)}.` : 'Saved.'); await poll(true); }
@@ -923,7 +982,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('scroll')) fades(); }, true);
   document.addEventListener('keydown', (e) => {
     if (S.modal && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveForm(false); return; }
-    if (e.key === 'Escape' && S.clearOpen) { S.clearOpen = false; drawBand(); return; }
+    if (e.key === 'Escape' && (S.clearOpen || S.loadOpen)) { S.clearOpen = false; S.loadOpen = false; drawBand(); return; }
     if (e.key === 'Escape' && S.modal) { closeModal(); return; }
     if (e.key === 'Escape' && S.full) { S.full = null; drawMain(true); }
   });

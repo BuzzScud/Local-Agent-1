@@ -52,7 +52,7 @@ questions get scripted answers (`answers.json` per task).
 | `bench/words/real.mjs` | 28 real requests built around trigger words and blocked commands, in three kinds of folder. |
 | `tools/speed.mjs`, `soak.mjs`, `reread.mjs` | Engine settings, long conversations and cold starts, what gets re-read each step. |
 | `bench/night/start.sh` | All of the above overnight, with a morning report. |
-| `battle/` | The Battle arena (the hub's Battle tab, `/battle`): Gemma vs Qwen on tests you make and the New 28 (`battle/new28/`), one model at a time, each run stopped at 10 min, a blind vote. `runner.mjs` is its own server (8758), `run-one.mjs` one model on one test, `checks.mjs` the pass checks, `verify-new28.mjs` proves each New 28 test fails as given and passes with its answer. Your tests and battles stay in `~/.agentic-coder/battle/`. |
+| `battle/` | The Battle arena (the hub's Battle tab, `/battle`): Gemma vs Qwen on tests you make and the New 28 (`battle/new28/`), one model at a time, each run stopped at 10 min, a blind vote. Its header: **Load** one test or a set (All New 28, one kind of them, or My tests) and press **Battle**; what is loaded replaces the line, and a set runs only the tests not done yet. The Load list shows each test's last result and opens it. `runner.mjs` is its own server (8758), `run-one.mjs` one model on one test, `checks.mjs` the pass checks, `verify-new28.mjs` proves each New 28 test fails as given and passes with its answer. Your tests and battles stay in `~/.agentic-coder/battle/`. |
 | `reports/` | The builders of the report pages; pages go to `agentic-coder DOCS/` at the top of the repo, mirrored into the repo's `docs/`. |
 | `dev/` | Probes and experiments against a running server (see `dev/experiments/README.md`). |
 

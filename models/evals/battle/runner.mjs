@@ -33,6 +33,19 @@ writeFileSync(P.pid, String(process.pid));
 const log = (m) => appendFileSync(P.log, `${new Date().toISOString()} ${m}\n`);
 
 let state = readJson(P.state, { queue: [], paused: false });
+// The header's Load and Battle (design A, 29 Sep 2026): you load one test or a set, and Battle
+// puts what is loaded in line in place of whatever waited there. state.loaded is what is loaded;
+// state.batch the tests the last Battle put in line ("Test 2 of 5"). A set is the New 28, one
+// kind of them, or your own tests.
+const SETS = {
+  new28: ['All New 28', (t) => t.suite === 'new28'],
+  code: ['Code', (t) => t.suite === 'new28' && t.kind === 'code'],
+  question: ['Questions', (t) => t.suite === 'new28' && t.kind === 'question'],
+  page: ['Pages', (t) => t.suite === 'new28' && t.kind === 'page'],
+  writing: ['Writing', (t) => t.suite === 'new28' && t.kind === 'writing'],
+  mine: ['My tests', (t) => t.suite !== 'new28'],
+};
+const loadedNow = () => state.loaded ?? { kind: 'set', id: 'new28' };
 const saveState = () => writeJson(P.state, state);
 let current = null;   // { battle, side, child, startedAt, loading }
 let waiting = null;   // why the next run waits, in words
@@ -167,6 +180,8 @@ function view() {
   }
   return {
     models: IDS.map((id) => ({ id, name: MODELS[id].name })), limit: LIMIT_SECS, fake: FAKE, paused: state.paused, queue: state.queue, waiting,
+    loaded: loadedNow(), batch: (state.batch ?? []).filter((id) => tests.some((t) => t.id === id)),
+    sets: Object.entries(SETS).map(([id, [name, has]]) => ({ id, name, ids: tests.filter(has).map((t) => t.id) })).filter((x) => x.ids.length),
     running: current ? { battle: current.battle, test: current.test, side: current.side, startedAt: current.startedAt } : busy && waiting ? { waiting: true } : null,
     score,
     tests: tests.map((t) => { const b = latest[t.id]; return { id: t.id, n: t.n ?? null, suite: t.suite, title: t.title, kind: t.kind, prompt: t.prompt, checks: t.checks ?? [], hasScript: t.hasScript, noScript: Boolean(t.noScript), edited: t.edited ?? null, rules: t.rules ?? null, ask: t.answers?.[0]?.reply ?? '', files: t.files, latest: b ? { id: b.id, at: b.at, status: b.status, vote: b.vote, order: reveal(b), runs: { A: brief(b.runs.A), B: brief(b.runs.B) } } : null }; }),
@@ -221,6 +236,31 @@ http.createServer(async (req, res) => {
         for (const t of pick) if (!state.queue.includes(t.id) && current?.test !== t.id) state.queue.push(t.id);
         state.paused = false; saveState(); tick();
         return send(res, 200, { ok: true, queued: pick.length });
+      }
+      // Load: what the header's Load button holds. Nothing starts.
+      case '/api/load': {
+        const kind = body.kind === 'test' ? 'test' : 'set';
+        if (kind === 'set' ? !SETS[body.id] : !tests().some((t) => t.id === body.id)) return send(res, 400, { error: 'no such test or set' });
+        state.loaded = { kind, id: String(body.id) }; saveState();
+        return send(res, 200, { ok: true });
+      }
+      // Battle: what is loaded replaces the line. A set runs its tests not done yet (the whole
+      // set again once every one is done); one test runs (again).
+      case '/api/start': {
+        if (busy) return send(res, 409, { error: 'a battle is running: stop it first' });
+        const L = loadedNow(); const all = tests();
+        let ids = [];
+        if (L.kind === 'test') ids = all.some((t) => t.id === L.id) ? [L.id] : [];
+        else if (SETS[L.id]) {
+          const latest = latestByTest(listBattles()); const inSet = all.filter(SETS[L.id][1]);
+          const left = inSet.filter((t) => !latest[t.id] || latest[t.id].status !== 'done');
+          ids = (left.length ? left : inSet).map((t) => t.id);
+        }
+        if (!ids.length) return send(res, 400, { error: 'nothing loaded to battle' });
+        // Copies: tick() takes the first off the line, and the batch must keep all of them.
+        state.queue = [...ids]; state.batch = [...ids]; state.paused = false; saveState(); tick();
+        log(`battle: ${ids.length} test${ids.length > 1 ? 's' : ''} in line (${L.kind} ${L.id})`);
+        return send(res, 200, { ok: true, queued: ids.length });
       }
       case '/api/unqueue': state.queue = state.queue.filter((q) => q !== body.id); saveState(); return send(res, 200, { ok: true });
       case '/api/clearqueue': state.queue = []; state.paused = false; saveState(); log('the line was cleared'); return send(res, 200, { ok: true });

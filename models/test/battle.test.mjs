@@ -198,3 +198,41 @@ test('run all queues the New 28, stop pauses the line, a page test keeps its pag
   expect((await get('/api/state')).tests.find((t) => t.id === 'n02-csv-quoted-comma')).toMatchObject({ title: 'Fix a CSV line split on a quoted comma', edited: null });
   expect((await get('/api/state')).tests.some((t) => t.id === page.body.id)).toBe(false);
 }, 60_000);
+
+test('Load and Battle: what is loaded replaces the line, a set runs only the ones left, one test runs again, and the state says what is loaded', async () => {
+  const idle = async () => until(async () => { const s = await get('/api/state'); return !s.running ? s : null; });
+  const s0 = await idle();
+  expect(s0.loaded).toEqual({ kind: 'set', id: 'new28' });
+  const pages = s0.sets.find((x) => x.id === 'page').ids;
+  expect(pages.length).toBe(5);
+  expect(s0.sets.map((x) => x.id)).toEqual(expect.arrayContaining(['new28', 'code', 'question', 'page', 'writing']));
+  expect((await post('/api/load', { kind: 'set', id: 'nope' })).status).toBe(400);
+  expect((await post('/api/load', { kind: 'test', id: 'nope' })).status).toBe(400);
+  expect((await post('/api/load', { kind: 'set', id: 'page' }, 'https://evil.example')).status).toBe(403);
+  // A line of New 28 tests waits, paused…
+  await post('/api/runall', { suite: 'new28' });
+  await post('/api/stop');
+  const paused = await until(async () => { const s = await get('/api/state'); return !s.running && s.paused && s.queue.length > 20 ? s : null; });
+  expect(paused.queue.length).toBeGreaterThan(20);
+  // …one page test is loaded and battled: it replaces that line, and is done.
+  expect((await post('/api/load', { kind: 'test', id: pages[0] })).status).toBe(200);
+  expect((await post('/api/start')).body.queued).toBe(1);
+  const one = await get('/api/state');
+  expect(one.batch).toEqual([pages[0]]);
+  expect(one.queue.filter((id) => id !== pages[0])).toEqual([]);
+  await until(async () => (await get('/api/state')).tests.find((t) => t.id === pages[0] && t.latest?.status === 'done'));
+  await idle();
+  // The Pages set: only the 4 not done yet go in line, and the state says so.
+  expect((await post('/api/load', { kind: 'set', id: 'page' })).status).toBe(200);
+  const r = await post('/api/start');
+  expect(r.body.queued).toBe(4);
+  const s1 = await get('/api/state');
+  expect(s1.loaded).toEqual({ kind: 'set', id: 'page' });
+  expect(s1.batch).toEqual(pages.slice(1));
+  expect([...s1.queue, s1.running?.test].filter(Boolean).every((id) => pages.slice(1).includes(id))).toBe(true);
+  // While a battle runs, Battle is refused (the header shows Stop instead).
+  if ((await get('/api/state')).running) expect((await post('/api/start')).status).toBe(409);
+  await post('/api/stop');
+  await idle();
+  await post('/api/clearqueue');
+}, 90_000);
