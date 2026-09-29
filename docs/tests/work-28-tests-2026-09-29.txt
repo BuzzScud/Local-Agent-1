@@ -1,0 +1,446 @@
+THE WORK 28: Battle tests about the work you do
+Agentic Coder · written 29 Sep 2026 · pushed to main in 388be2f
+============================================================================================
+
+28 tests: 16 code, 5 questions, 5 pages, 2 writing.
+
+How they run: in the Battle tab (/battle in the app, or coding battle),
+Load → All Work 28 → Battle.
+Gemma and Qwen each get the prompt below, work on their own copy of the starter files, and are
+stopped at 10 minutes. The test passes when every line under "Passes when" holds.
+Change a test: Battle tab → Edit tests → pick it → Save (Put back the original undoes it).
+Each test is proven without a model: it fails as given and passes with a known-good answer
+(bun run battle:verify).
+Where they live: ~/Desktop/agentic-coder/models/evals/battle/work28/
+
+
+============================================================================================
+CODE (16)
+============================================================================================
+
+w01 · Fix a futures roll that stays in the old year
+--------------------------------------------------------------------------------------------
+  The prompt:
+    nextContract('NQZ6') in contracts.mjs gives NQH6, but the contract after December 2026 is
+    March 2027: NQH7. Fix it so December always rolls into March of the next year, including the
+    end of a decade (ESZ9 -> ESH0). The tests show what is expected; fix the code, not the
+    tests.
+  Starter files: contracts.mjs, contracts.test.mjs, package.json
+  Passes when:
+    ✓ The tests pass
+    ✓ Z9 rolls into H0
+    ✓ The test file is unchanged
+  Folder: work28/w01-contract-roll/
+
+w02 · Fix prices like 2345.7000000000003
+--------------------------------------------------------------------------------------------
+  The prompt:
+    roundToTick in ticks.mjs gives prices like 2345.7000000000003 for gold (GC). A price rounded
+    to its tick must come out clean: roundToTick('GC', 2345.67) is exactly 2345.7 and
+    roundToTick('CL', 71.234) is exactly 71.23. Fix it for every symbol in TICK; fix the code,
+    not the tests.
+  Starter files: package.json, ticks.mjs, ticks.test.mjs
+  Passes when:
+    ✓ The tests pass
+    ✓ Clean prices for every symbol
+    ✓ The test file is unchanged
+  Folder: work28/w02-tick-rounding/
+
+w03 · Fix the trading day of an evening bar
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Futures start a new trading day at 6 PM New York time, so a bar at 7 PM on Monday belongs to
+    Tuesday. tradingDate in session.mjs gets evening bars wrong (a bar at 10 PM Monday comes out
+    as Wednesday) and gives different answers on computers in other time zones. Fix it so it
+    always follows New York time, summer and winter. The tests show what is expected; fix the
+    code, not the tests.
+  Starter files: package.json, session.mjs, session.test.mjs
+  Passes when:
+    ✓ The tests pass in New York
+    ✓ Right in Tokyo and London too
+    ✓ The test file is unchanged
+  Folder: work28/w03-trading-day/
+
+w04 · Add Camarilla pivot levels, with a test
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Add camarilla(high, low, close) to levels.mjs and export it. It returns { h1, h2, h3, h4,
+    l1, l2, l3, l4 }: with range = high - low, h4 = close + range * 1.1 / 2, h3 = close + range
+    * 1.1 / 4, h2 = close + range * 1.1 / 6, h1 = close + range * 1.1 / 12, and l1 to l4 are the
+    same distances below the close. Round every level to 2 decimals. Add a test for it.
+  Starter files: levels.mjs, levels.test.mjs, package.json
+  Passes when:
+    ✓ camarilla() gives all 8 levels
+    ✓ Rounded to 2 decimals
+    ✓ A new test, and the tests pass
+  Folder: work28/w04-camarilla/
+
+w05 · Turn 1-minute bars into hourly bars
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Add resample(bars, minutes) to bars.mjs and export it. It groups 1-minute bars into bars of
+    that many minutes (60 = hourly), each group starting on a multiple of that many minutes
+    since midnight UTC. A group's t is its start time, its open is the first bar's open, close
+    the last bar's close, high the highest high, low the lowest low, and v the sum of the
+    volumes. The bars come in time order; a group with no bars is left out. Add a test for it.
+  Starter files: bars.mjs, bars.test.mjs, package.json
+  Passes when:
+    ✓ Open, high, low, close and volume right
+    ✓ Any bar size (5, 15, 60 minutes)
+    ✓ A new test, and the tests pass
+  Folder: work28/w05-resample-bars/
+
+w06 · Stop the daily market break showing as a gap
+--------------------------------------------------------------------------------------------
+  The prompt:
+    findGaps in gaps.mjs finds the minutes missing from a day of 1-minute bars, but the market
+    closes every day from 21:00 to 21:59 UTC, so every day shows a false gap there. Leave out a
+    gap whose missing minutes all fall between 21:00 and 21:59 UTC; a gap with any missing
+    minute outside that hour is still reported, whole, as before. Add a test for it.
+  Starter files: gaps.mjs, gaps.test.mjs, package.json
+  Passes when:
+    ✓ The break alone is not a gap
+    ✓ Other gaps are still found
+    ✓ A new test, and the tests pass
+  Folder: work28/w06-daily-break-gaps/
+
+w07 · Wait and retry when the calendar says 429
+--------------------------------------------------------------------------------------------
+  The prompt:
+    The economic calendar export answers 429 (too many requests) when we ask too often, and
+    loadWeek in calendar.mjs gives up at once. Make it wait and ask again: on a 429, wait the
+    number of seconds in the response's Retry-After header (5 seconds when it has none), using
+    the sleep function it is given, then try again, up to 3 tries in all. After a third 429 it
+    throws; any other error still throws at once. Add a test that uses a stand-in fetch.
+  Starter files: calendar.mjs, calendar.test.mjs, package.json
+  Passes when:
+    ✓ Waits Retry-After seconds (5 if none)
+    ✓ At most 3 tries, then throws
+    ✓ Other errors throw at once
+    ✓ A new test, and the tests pass
+  Folder: work28/w07-calendar-429/
+
+w08 · Fix the live feed's reconnect wait
+--------------------------------------------------------------------------------------------
+  The prompt:
+    After a long outage the live quote feed takes minutes to come back: Backoff.next() in
+    reconnect.mjs keeps doubling its wait past 30 seconds, and after a good connection the wait
+    never starts over at 1 second. Fix both (the comments in the file say what it should do).
+    The tests show what is expected; fix the code, not the tests.
+  Starter files: package.json, reconnect.mjs, reconnect.test.mjs
+  Passes when:
+    ✓ Doubles from 1 s, never past 30 s
+    ✓ Starts over after a good connection
+    ✓ The test file is unchanged
+  Folder: work28/w08-reconnect-backoff/
+
+w09 · Fix a feed that is called stalled too soon
+--------------------------------------------------------------------------------------------
+  The prompt:
+    The Ladder flags the tick feed as stalled after less than a second without a tick. isStalled
+    in stall.mjs should only say yes after more than 15 seconds (STALL_SECS) without a tick
+    while the market is open, and never while it is closed; no tick at all yet while open counts
+    as stalled. Fix it; the tests show what is expected (fix the code, not the tests).
+  Starter files: package.json, stall.mjs, stall.test.mjs
+  Passes when:
+    ✓ Stalled after 15 s without a tick
+    ✓ Never stalled while closed
+    ✓ The test file is unchanged
+  Folder: work28/w09-stall-detector/
+
+w10 · Python: fix micro contracts priced as full ones
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Trades in the micro contracts come out ten times too big: pnl('MNQZ6', 'long', 100, 110, 1)
+    in pnl.py gives 200.0 instead of 20.0. Fix it so every contract code gets its own point
+    value (MNQ is $2 a point, NQ $20, MES $5, ES $50). Fix the code, not the tests.
+  Starter files: pnl.py, test_pnl.py
+  Passes when:
+    ✓ Each root gets its own point value
+    ✓ Unknown symbols still raise
+    ✓ The test file is unchanged
+  Folder: work28/w10-python-point-value/
+
+w11 · Python: skip bad rows in a bars file
+--------------------------------------------------------------------------------------------
+  The prompt:
+    load_bars in loader.py crashes on the first bad row of a bars file (an empty price, a word
+    where a number should be, a missing column). Make it skip bad rows and keep going, and
+    return (bars, skipped) where skipped is how many rows it left out. Update report.py, which
+    uses it, so it prints the same first line as today and then "skipped N bad rows" when N is
+    more than 0. Add a test for it.
+  Starter files: loader.py, report.py, test_loader.py
+  Passes when:
+    ✓ Bad rows are skipped and counted
+    ✓ report.py says how many
+    ✓ A new test, and the tests pass
+  Folder: work28/w11-python-bad-rows/
+
+w12 · Fix invites that expire in minutes and work twice
+--------------------------------------------------------------------------------------------
+  The prompt:
+    An invite link stops working about ten minutes after it is sent, and a used invite can be
+    used again. Fix checkInvite in invites.mjs: an invite works until 7 days (INVITE_DAYS) after
+    it was sent, and only once: a used invite gives { ok: false, why: 'already used' }. The
+    tests show what is expected; fix the code, not the tests.
+  Starter files: invites.mjs, invites.test.mjs, package.json
+  Passes when:
+    ✓ Works for 7 days
+    ✓ Works only once
+    ✓ The test file is unchanged
+  Folder: work28/w12-invite-expiry/
+
+w13 · Add a read-only viewer role across 3 files
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Add a viewer role: a viewer can read (GET /api/bars) but cannot write, invite or see the
+    users. Add it in roles.mjs, let makeInvite in invite.mjs make viewer invites, and add a test
+    that a viewer can GET /api/bars but not POST to it. Owners and members keep what they can do
+    today.
+  Starter files: invite.mjs, package.json, roles.mjs, routes.mjs, routes.test.mjs
+  Passes when:
+    ✓ A viewer can read, nothing else
+    ✓ Viewer invites can be made
+    ✓ A new test, and the tests pass
+  Folder: work28/w13-viewer-role/
+
+w14 · Send deleted days to a 30-day trash
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Deleting a day of bars with removeDay in trash.mjs loses it for good. Make removeDay(store,
+    day, now) move it to store.trash[day] = { bars, deletedAt: now } instead, add
+    restoreDay(store, day) that puts it back into store.days, and add purgeTrash(store, now)
+    that removes what has been in the trash for more than 30 days (a day deleted exactly 30 days
+    ago stays). Export all three and add tests.
+  Starter files: package.json, trash.mjs, trash.test.mjs
+  Passes when:
+    ✓ A deleted day goes to the trash
+    ✓ It can be put back
+    ✓ Gone after 30 days, not before
+    ✓ Tests for it, and the tests pass
+  Folder: work28/w14-trash-30-days/
+
+w15 · Rename fetchBars to loadBars across 4 files
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Rename the function fetchBars to loadBars everywhere in this project (the code, the comments
+    and the tests). The tests must still pass.
+  Starter files: bank.mjs, bank.test.mjs, bars.mjs, chart.mjs, package.json
+  Passes when:
+    ✓ No fetchBars left
+    ✓ loadBars in all 4 files
+    ✓ The tests pass, none removed
+  Folder: work28/w15-rename-fetchbars/
+
+w16 · Show the running build in /api/health
+--------------------------------------------------------------------------------------------
+  The prompt:
+    After a deploy we can't tell which build the server is running. Add a build field to the
+    /api/health answer in server.mjs: the first 7 characters of the BUILD_SHA environment
+    variable, or "dev" when it is not set. Keep ok and uptime as they are, and add a test for
+    it.
+  Starter files: package.json, server.mjs, server.test.mjs
+  Passes when:
+    ✓ build = first 7 of BUILD_SHA
+    ✓ "dev" when it is not set
+    ✓ ok and uptime unchanged, a new test
+  Folder: work28/w16-health-build/
+
+============================================================================================
+QUESTIONS (5)
+============================================================================================
+
+w17 · Why is there a gap at 21:00 UTC every day?
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Every day the gap report says about 60 minutes are missing, starting at 21:00 UTC. Why?
+    Explain in a few sentences what those missing minutes are and which function reports them.
+    Don't change any files.
+  Starter files: config.mjs, data/README.md, gaps.mjs, package.json, report.mjs
+  Passes when:
+    ✓ Says the market is closed then (the daily break)
+    ✓ Names findGaps
+    ✓ No file changed
+  Folder: work28/w17-why-daily-gap/
+
+w18 · How often may we ask the calendar, and where is that set?
+--------------------------------------------------------------------------------------------
+  The prompt:
+    How many times a minute may this project ask the economic calendar export for data, and
+    where is that number set? Don't change any files.
+  Starter files: calendar.mjs, limiter.mjs, limits.mjs, package.json, quotes.mjs
+  Passes when:
+    ✓ Says 4 a minute
+    ✓ Names limits.mjs
+    ✓ No file changed
+  Folder: work28/w18-calendar-limit/
+
+w19 · When does the nightly bank run? (a cron line)
+--------------------------------------------------------------------------------------------
+  The prompt:
+    When does the nightly-bank job in schedule.json run? Say the time and the days in plain
+    words. Don't change any files.
+  Starter files: bank.mjs, schedule.json, scheduler.mjs
+  Passes when:
+    ✓ Says 6:15 PM, New York time
+    ✓ Says Sunday to Thursday
+    ✓ No file changed
+  Folder: work28/w19-cron-schedule/
+
+w20 · Big project: which file answers /api/health?
+--------------------------------------------------------------------------------------------
+  The prompt:
+    In this project, which file answers GET /api/health, and what fields does its answer have?
+    Don't change any files.
+  Starter files: README.md, package.json, scripts/deploy.sh, src/config.mjs, src/lib/auth.mjs,
+                 src/lib/db.mjs, src/lib/health-old.mjs, src/lib/log.mjs, src/lib/time.mjs,
+                 src/routes/bars.mjs, src/routes/index.mjs, src/routes/invites.mjs,
+                 src/routes/status.mjs, src/routes/users.mjs, src/server.mjs,
+                 test/routes.test.mjs
+  Passes when:
+    ✓ Names src/routes/status.mjs
+    ✓ Names ok, build and uptime
+    ✓ No file changed
+  Folder: work28/w20-bigproject-health/
+
+w21 · Which contracts are banked, and for how long?
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Which contracts does the nightly bank save, and for how many days does it keep them? Don't
+    change any files.
+  Starter files: bank/config.mjs, bank/run.mjs, bank/store.mjs, old/README.md, old/config.mjs,
+                 package.json
+  Passes when:
+    ✓ Names NQ, ES, CL and GC
+    ✓ Says 45 days
+    ✓ No file changed
+  Folder: work28/w21-banked-contracts/
+
+============================================================================================
+PAGES (5)
+============================================================================================
+
+w22 · Make a futures position size page
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Make one self-contained HTML file called position-size.html that works when I double-click
+    it: all CSS and JavaScript inside, nothing loaded from the internet, and <meta
+    charset="utf-8"> in the head. It is a futures position size calculator: boxes for the
+    account size in dollars, the risk per trade in %, and the stop in points, and a choice of NQ
+    ($20 a point), MNQ ($2), ES ($50) or MES ($5). It shows the dollars at risk and how many
+    contracts to trade (rounded down), updating as I type. Save it to my Desktop.
+  Starter files: none (an empty folder)
+  Passes when:
+    ✓ Desktop/position-size.html is saved, offline
+    ✓ Account, risk % and stop boxes; NQ, MNQ, ES, MES
+    ✓ Contracts rounded down, live
+    ✓ Its script is valid
+  Runs with its copy as the home folder, so the page lands on that copy's Desktop.
+  Folder: work28/w22-position-size-page/
+
+w23 · Make a market sessions clock page
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Make one self-contained HTML file called sessions.html (all CSS and JavaScript inside,
+    nothing from the internet, <meta charset="utf-8">). It shows the time now in New York and a
+    row for each market session: Asia (Tokyo, 9:00 to 15:00), London (8:00 to 16:30) and New
+    York (9:30 to 16:00), each in its own city's time, marked open or closed right now (weekdays
+    only). Use the real time zones (Asia/Tokyo, Europe/London, America/New_York) so it is right
+    in summer and winter, update it every second, and follow my system's light or dark mode.
+    Save it to my Desktop.
+  Starter files: none (an empty folder)
+  Passes when:
+    ✓ Desktop/sessions.html is saved, offline
+    ✓ Asia, London and New York, open or closed
+    ✓ Real time zones, updates every second
+    ✓ Follows light or dark mode
+  Runs with its copy as the home folder, so the page lands on that copy's Desktop.
+  Folder: work28/w23-sessions-clock-page/
+
+w24 · Make a trade journal page that remembers
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Make one self-contained HTML file called journal.html (all CSS and JavaScript inside,
+    nothing from the internet, <meta charset="utf-8">). It is a trade journal: a form with the
+    symbol, long or short, the entry price, the exit price and the number of contracts, and an
+    Add button. Trades show in a table, each with its P&L in points (exit minus entry for a
+    long, entry minus exit for a short, times the contracts), a Delete button on each row, and
+    the total at the bottom. Keep the trades in the browser's local storage so they are still
+    there when I reopen the file, and follow my system's light or dark mode. Save it to my
+    Desktop.
+  Starter files: none (an empty folder)
+  Passes when:
+    ✓ Desktop/journal.html is saved, offline
+    ✓ Add trades, P&L per trade and a total
+    ✓ Delete a row; kept in local storage
+    ✓ Follows light or dark mode
+  Runs with its copy as the home folder, so the page lands on that copy's Desktop.
+  Folder: work28/w24-trade-journal-page/
+
+w25 · Make a Camarilla pivot levels page
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Make one self-contained HTML file called pivots.html (all CSS and JavaScript inside, nothing
+    from the internet, <meta charset="utf-8">). It has boxes for yesterday's high, low and
+    close, and below them the Camarilla levels H4, H3, H2, H1, L1, L2, L3, L4 and the classic
+    pivot P = (high + low + close) / 3, updating as I type. With range = high - low: H4 = close
+    + range × 1.1 / 2, H3 = close + range × 1.1 / 4, H2 = close + range × 1.1 / 6, H1 = close +
+    range × 1.1 / 12, and L1 to L4 are the same distances below the close. Show every level with
+    2 decimals. Save it to my Desktop.
+  Starter files: none (an empty folder)
+  Passes when:
+    ✓ Desktop/pivots.html is saved, offline
+    ✓ High, low and close boxes
+    ✓ H1-H4, L1-L4 and P, live, 2 decimals
+    ✓ Its script is valid
+  Runs with its copy as the home folder, so the page lands on that copy's Desktop.
+  Folder: work28/w25-pivot-levels-page/
+
+w26 · Make a Fibonacci retracement page
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Make one self-contained HTML file called fib.html (all CSS and JavaScript inside, nothing
+    from the internet, <meta charset="utf-8">). It has boxes for a swing high and a swing low,
+    and a switch for whether the move was up or down. It lists the Fibonacci retracement levels
+    0, 23.6, 38.2, 50, 61.8, 78.6 and 100 % with their prices (for a move up, 0 % is at the high
+    and 100 % at the low; for a move down, the other way round), updating as I type. Save it to
+    my Desktop.
+  Starter files: none (an empty folder)
+  Passes when:
+    ✓ Desktop/fib.html is saved, offline
+    ✓ Swing high, swing low, up or down
+    ✓ 0 to 100 % levels with prices, live
+    ✓ Its script is valid
+  Runs with its copy as the home folder, so the page lands on that copy's Desktop.
+  Folder: work28/w26-fib-levels-page/
+
+============================================================================================
+WRITING (2)
+============================================================================================
+
+w27 · Tailor a resume summary to a job
+--------------------------------------------------------------------------------------------
+  The prompt:
+    Using resume.md and job.txt, write SUMMARY.md: a professional summary of 3 sentences for the
+    top of the resume, aimed at this job, then one bullet for each of the job's must-haves with
+    the proof for it from the resume. Use only facts that are in resume.md.
+  Starter files: job.txt, resume.md
+  Passes when:
+    ✓ SUMMARY.md: 3 sentences + a bullet per must-have
+    ✓ Proof from the resume, nothing made up (6 years, not 8)
+    ✓ resume.md and job.txt unchanged
+  Folder: work28/w27-resume-summary/
+
+w28 · Write What's new from a week of commits
+--------------------------------------------------------------------------------------------
+  The prompt:
+    commits.txt lists this week's commits. Write WHATS-NEW.md for the people who use the site: a
+    "New" section for the feat commits and a "Fixed" section for the fix commits, one bullet
+    each in plain words (no commit ids, types, scopes or file names), and leave out the chore
+    and docs commits.
+  Starter files: commits.txt
+  Passes when:
+    ✓ A New and a Fixed section
+    ✓ One plain bullet per feat and fix
+    ✓ No chore or docs, no ids or scopes
+  Folder: work28/w28-whats-new-notes/

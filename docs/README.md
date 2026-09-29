@@ -1,14 +1,16 @@
 # Agentic Coder docs
 
 Every diagram, preview, report and test page about Agentic Coder, newest first. This
-folder mirrors `agentic-coder DOCS/` at the top of the repo on the Mac: pages are saved there, and
-`bun run docs` copies them here before a commit. The pages are single HTML files
+folder mirrors the page groups of `cli docs/` at the top of the repo on the Mac: pages are saved there,
+and `bun run docs` copies them here before a commit. The pages are single HTML files
 with nothing loaded from outside; download one and open it in a browser to see it
 (GitHub shows HTML as source).
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 148 KB | 2026-09-29 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 156 KB | 2026-09-29 |
+| [design rounds/settings-command-preview-2026-09-29.html](design%20rounds/settings-command-preview-2026-09-29.html) | page | Settings Command Preview | 47 KB | 2026-09-29 |
+| [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-09-29 |
 | [diagrams/embedder-retriever-reranker-explained-v2.html](diagrams/embedder-retriever-reranker-explained-v2.html) | page | Embedder, retriever, reranker | 27 KB | 2026-09-29 |
 | [older versions/embedder-retriever-reranker-explained.html](older%20versions/embedder-retriever-reranker-explained.html) | page | Embedder, retriever, reranker | 22 KB | 2026-09-29 |
 | [diagrams/agentic-coder-structure-2026-09-29.html](diagrams/agentic-coder-structure-2026-09-29.html) | page | Agentic Coder folder structure | 199 KB | 2026-09-29 |

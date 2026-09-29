@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings Command Preview</title>
+<style>
+:root { --bg:#f3f2ee; --card:#fff; --ink:#1d1d1b; --ink2:#5f5e59; --ink3:#8c8a83; --line:#e3e0d8; --soft:#f6f5f1; --acc:#2f7d3a; --acc-soft:#e3f1e3; --bad:#a3402d; --bad-soft:#f7e4df; --term:#171717; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#121211; --card:#1b1b19; --ink:#ecebe6; --ink2:#b4b2aa; --ink3:#86847d; --line:#312f2b; --soft:#232320; --acc:#87d787; --acc-soft:#1f3321; --bad:#f0a08c; --bad-soft:#3a221c; --term:#101010; } }
+:root[data-theme="dark"] { --bg:#121211; --card:#1b1b19; --ink:#ecebe6; --ink2:#b4b2aa; --ink3:#86847d; --line:#312f2b; --soft:#232320; --acc:#87d787; --acc-soft:#1f3321; --bad:#f0a08c; --bad-soft:#3a221c; --term:#101010; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; }
+header { padding: 14px 24px 0; max-width: 1480px; width: 100%; margin: 0 auto; }
+h1 { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+.date { color: var(--ink3); font-size: 12.5px; margin-top: 2px; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 0; }
+nav button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); border-radius: 999px; padding: 5px 13px; cursor: pointer; }
+nav button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+main { flex: 1; min-height: 0; max-width: 1480px; width: 100%; margin: 0 auto; padding: 12px 24px 16px; }
+section { display: none; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; }
+section.on { display: block; }
+.lead { margin: 0 0 12px; color: var(--ink2); max-width: 1100px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.two.tight { margin-top: 14px; grid-template-columns: auto 1fr; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.side { display: grid; grid-template-columns: auto minmax(280px, 1fr); gap: 20px; align-items: start; }
+figure { margin: 0; min-width: 0; }
+figcaption { font-size: 13px; color: var(--ink2); margin-bottom: 6px; }
+figcaption b { color: var(--ink); }
+.term { background: var(--term); border-radius: 9px; overflow: hidden; border: 1px solid #2c2c2c; max-width: 100%; container-type: inline-size; }
+.term { width: calc(var(--cols) * 7.2px + 22px); }
+.term.s { width: calc(var(--cols) * 6.3px + 22px); }
+.bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: #2a2a2a; }
+.bar i { width: 10px; height: 10px; border-radius: 50%; display: block; background: #ff5f57; } .bar i:nth-child(2) { background: #febc2e; } .bar i:nth-child(3) { background: #28c840; }
+.bar span { flex: 1; text-align: center; color: #9a9a9a; font-size: 11.5px; margin-right: 36px; }
+.scr { color: #fff; padding: 8px 10px; font: 11.5px/1.36 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre; overflow-x: auto; scrollbar-width: none; }
+.scr::-webkit-scrollbar { display: none; }
+@container (min-width: 1px) { .scr { font-size: clamp(6px, calc((100cqw - 22px) / (var(--cols) * 0.625)), 11.5px); } .term.s .scr { font-size: clamp(6px, calc((100cqw - 22px) / (var(--cols) * 0.625)), 10px); } }
+.scr div { height: 1.36em; }
+.scr .g { display: inline-block; width: 1ch; text-align: center; font-weight: inherit; }
+.notes h3 { font-size: 14px; margin: 14px 0 4px; } .notes h3:first-child { margin-top: 0; }
+.notes p, .notes li { color: var(--ink2); margin: 0 0 6px; }
+.notes ul { padding-left: 18px; margin: 0; }
+.small { font-size: 12.5px; color: var(--ink3) !important; }
+code { font: 12.5px ui-monospace, Menlo, monospace; background: var(--soft); border: 1px solid var(--line); padding: 0 5px; border-radius: 4px; }
+kbd { font: 11.5px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--card); margin: 0 1px; }
+.tag { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 8px; margin-left: 4px; }
+.tag.ok { background: var(--acc-soft); color: var(--acc); } .tag.bad { background: var(--bad-soft); color: var(--bad); }
+.n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 11px; font-weight: 700; margin-right: 4px; }
+.moved { margin-top: 12px; padding: 10px 12px; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; color: var(--ink2); }
+.moved code { margin: 0 1px; }
+pre.help, pre.out { margin: 0; background: var(--term); color: #d7d7d7; border-radius: 9px; padding: 10px 12px; font: 11.5px/1.5 ui-monospace, Menlo, monospace; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+pre.out { white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+pre.out b { color: #87d787; font-weight: 600; }
+pre.help .del { color: #ff8f7a; text-decoration: line-through; text-decoration-color: rgba(255,143,122,.6); }
+pre.help .add { color: #87d787; font-weight: 600; }
+.outs { margin-top: 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+td { border-top: 1px solid var(--line); padding: 6px 8px 6px 0; vertical-align: top; color: var(--ink2); }
+td:first-child { white-space: nowrap; color: var(--ink); }
+td code { white-space: nowrap; }
+@media (max-width: 1100px) {
+  .two, .two.tight, .grid3, .side { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) { header, main { padding-left: 16px; padding-right: 16px; } section { padding: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>/settings: preview</h1>
+  <div class="date">29 Sep 2026 · Agentic Coder · shape A, old names hidden, <code>coding hub [tab]</code> · real screens of the app with this change (now on <code>main</code>)</div>
+  <nav><button data-tab="menu">1 · The / menu</button><button data-tab="settings">2 · /settings</button><button data-tab="use">3 · Using it</button><button data-tab="old">4 · Old names</button><button data-tab="shell">5 · In the shell</button><button data-tab="small">6 · Small window</button><button data-tab="changes">7 · What changes</button></nav>
+</header>
+<main>
+<section id="menu">
+    <p class="lead">Typing <code>/</code> today lists 24 commands and shows 10 of them at a time. With <code>/settings</code>, the list is 12 and shows all 12.</p>
+    <div class="two">
+      <figure><figcaption><b>Today</b> · 24 commands, the list scrolls after 10 <span class="tag bad">main</span></figcaption><div class="term m" style="--cols:107"><div class="bar"><i></i><i></i><i></i><span>coding — 107 × 42</span></div><div class="scr"><div><span style="color:#6c6c6c">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#6c6c6c">│</span> &gt; /                                                                                                     <span style="color:#6c6c6c">│</span></div><div><span style="color:#6c6c6c">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div><div>  <span style="color:#87d787;font-weight:700">/help          </span><span style="color:#87d787">Open the Help page in the browser: every command, key and setting</span></div><div>  /clear         <span style="color:#8a8a8a">Start a new conversation, in the folder you started in (the screen keeps its history)</span></div><div>  /compact       <span style="color:#8a8a8a">Summarize the conversation to free memory</span></div><div>  /btw           <span style="color:#8a8a8a">Ask a quick side question without interrupting the main conversation</span></div><div>  /effort        <span style="color:#8a8a8a">Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, s<b class="g">…</b></span></div><div>  /mode          <span style="color:#8a8a8a">Pick the mode: ask first, auto-edit or plan (shift+tab)</span></div><div>  /math          <span style="color:#8a8a8a">Ask with the math notes (~/Desktop/MATH); alone: list its topics</span></div><div>  /init          <span style="color:#8a8a8a">Write an AGENTS.md with notes about this project</span></div><div>  /memory        <span style="color:#8a8a8a">What Agentic Coder remembers about you and this project; undo takes the last save back</span></div><div>  /instructions  <span style="color:#8a8a8a">Edit general and planning instructions in the hub; saves apply to the next task</span></div></div></div></figure>
+      <figure><figcaption><b>With /settings</b> · 12 commands, all on screen <span class="tag ok">preview</span></figcaption><div class="term m" style="--cols:107"><div class="bar"><i></i><i></i><i></i><span>coding — 107 × 42</span></div><div class="scr"><div><span style="color:#6c6c6c">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#6c6c6c">│</span> &gt; /                                                                                                     <span style="color:#6c6c6c">│</span></div><div><span style="color:#6c6c6c">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div><div>  <span style="color:#87d787;font-weight:700">/help         </span><span style="color:#87d787">Open the Help page in the browser: every command, key and setting</span></div><div>  /clear        <span style="color:#8a8a8a">Start a new conversation, in the folder you started in (the screen keeps its history)</span></div><div>  /compact      <span style="color:#8a8a8a">Summarize the conversation to free memory</span></div><div>  /btw          <span style="color:#8a8a8a">Ask a quick side question without interrupting the main conversation</span></div><div>  /effort       <span style="color:#8a8a8a">Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, st<b class="g">…</b></span></div><div>  /mode         <span style="color:#8a8a8a">Pick the mode: ask first, auto-edit or plan (shift+tab)</span></div><div>  /math         <span style="color:#8a8a8a">Ask with the math notes (~/Desktop/MATH); alone: list its topics</span></div><div>  /resume       <span style="color:#8a8a8a">Pick up an earlier conversation in this folder</span></div><div>  /model        <span style="color:#8a8a8a">Pick the model and its effort</span></div><div>  /morning      <span style="color:#8a8a8a">The morning brief on your repos: the day drawn, what needs you, what closed</span></div><div>  /settings     <span style="color:#8a8a8a">Everything else in one menu: status bar, helpers, rules, instructions, memory, the hub p<b class="g">…</b></span></div><div>  /exit         <span style="color:#8a8a8a">Quit Agentic Coder</span></div></div></div></figure>
+    </div>
+    <div class="moved"><b>Moved into /settings (13):</b> <code>/meters</code> <code>/helpers</code> <code>/rules</code> <code>/instructions</code> <code>/memory</code> · <code>/weights</code> <code>/docs</code> <code>/tests</code> <code>/battle</code> · <code>/stats</code> <code>/doctor</code> <code>/init</code> <code>/update</code></div></section>
+<section id="settings">
+    <div class="side">
+      <figure><figcaption><b>/settings</b> · what opens when you pick it</figcaption><div class="term m" style="--cols:107"><div class="bar"><i></i><i></i><i></i><span>coding — 107 × 42</span></div><div class="scr"><div><span style="color:#87d787">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Settings</span>                                                                                                <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a">Everything not in the / menu. Each still works typed in full, like /doctor.</span>                             <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Setup</span>                                                                                                   <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#87d787;font-weight:700"><b class="g">❯</b> Status bar    </span><span style="color:#87d787">off                       </span><span style="color:#8a8a8a">model, speed and memory under the prompt</span>                      <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Helpers       4 of 4 on                 <span style="color:#8a8a8a">what comes along with each request</span>                            <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Rules         16 rules                  <span style="color:#8a8a8a">what the model reads at every start</span>                           <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Instructions  14 general <b class="g">·</b> 9 planning   <span style="color:#8a8a8a">general and planning, edited in the browser</span>                   <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Memory        18 about you <b class="g">·</b> 0 here     <span style="color:#8a8a8a">what it remembers about you and this project</span>                  <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Pages <b class="g">·</b> the hub in the browser</span>                                                                          <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Weights       Qwen3.5 9B <b class="g">·</b> 6.87 GB      <span style="color:#8a8a8a">the model's weights, layer by layer</span>                           <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Docs          DOCS folder not found     <span style="color:#8a8a8a">the diagrams and every Agentic Coder page</span>                     <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Tests         356 runs <b class="g">·</b> last 535/535   <span style="color:#8a8a8a">every test run and its result</span>                                 <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Battle        84 tests <b class="g">·</b> 1 battle       <span style="color:#8a8a8a">Gemma vs Qwen on the test sets or yours, a blind vote</span>         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Tools</span>                                                                                                   <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Stats         4.5k of 32k context       <span style="color:#8a8a8a">speed, memory and context used</span>                                <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Doctor        1.4 GB free now           <span style="color:#8a8a8a">check the model, the server and this Mac</span>                      <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Init          AGENTS.md is here         <span style="color:#8a8a8a">write an AGENTS.md for this project</span>                           <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Update        0.1.0 <b class="g">·</b> nothing new       <span style="color:#8a8a8a">restart on new code, keep this conversation</span>                   <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a"><b class="g">↑</b><b class="g">↓</b> to choose <b class="g">·</b> enter to open <b class="g">·</b> esc to go back</span>                                                           <span style="color:#87d787">│</span></div><div><span style="color:#87d787">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div></div></div></figure>
+      <div class="notes">
+        <h3>Three groups</h3>
+        <ul>
+          <li><b>Setup</b>: what changes how Agentic Coder works.</li>
+          <li><b>Pages</b>: each one opens the hub in your browser on that tab.</li>
+          <li><b>Tools</b>: one-off checks and actions.</li>
+        </ul>
+        <h3>The middle column is live</h3>
+        <p>It's read when the menu opens, so no row is blank. These are your real numbers: 18 memory facts, 16 rules, 4 of 4 helpers on, the Qwen file, 84 battle tests and the test record.</p><p class="small">Docs says “DOCS folder not found” because the folder moved from the repo to <code>~/Desktop/cli docs</code> at 14:59, and the app still looks for it in the repo.</p>
+        <p class="small">Another session was running the test suite while these screens were taken, so the Tests row changed between screenshots (356 runs · last 535/535 here).</p>
+        <h3>Keys</h3>
+        <ul><li><kbd>↑</kbd><kbd>↓</kbd> move, and wrap around at the ends</li><li><kbd>enter</kbd> runs that row's command</li><li><kbd>esc</kbd> closes it with nothing changed</li></ul>
+        <h3>vs. the sketch you picked</h3>
+        <p>The sketch put Pages and Tools on one line each. In the build every item gets its own row, so ↑↓ works the same all the way down, the way /mode and /meters already work.</p>
+      </div>
+    </div></section>
+<section id="use">
+    <p class="lead">Every row runs the same command you'd type, so its output looks exactly the same as it does today. <span class="small">On enter: Status bar opens the On / Off menu (as <code>/meters</code>). Helpers, Rules, Memory, Stats and Doctor print their panels. Instructions and the four Pages open the hub in the browser. Init writes AGENTS.md, and Update restarts on new code.</span></p>
+    <div class="two">
+      <figure><figcaption><span class="n">1</span> Type <code>/se</code>, then <kbd>enter</kbd> opens it</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="color:#6c6c6c">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#6c6c6c">│</span> &gt; /se                                                                                                   <span style="color:#6c6c6c">│</span></div><div><span style="color:#6c6c6c">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div><div>  <span style="color:#87d787;font-weight:700">/settings     </span><span style="color:#87d787">Everything else in one menu: status bar, helpers, rules, instructions, memory, the hub p<b class="g">…</b></span></div></div></div></figure>
+      <figure><figcaption><span class="n">2</span> <kbd>↓</kbd> down to Stats, then <kbd>enter</kbd>…</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="color:#87d787">│</span> <span style="font-weight:700">Tools</span>                                                                                                   <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#87d787;font-weight:700"><b class="g">❯</b> Stats         </span><span style="color:#87d787">4.5k of 32k context       </span><span style="color:#8a8a8a">speed, memory and context used</span>                                <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Doctor        1.4 GB free now           <span style="color:#8a8a8a">check the model, the server and this Mac</span>                      <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Init          AGENTS.md is here         <span style="color:#8a8a8a">write an AGENTS.md for this project</span>                           <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Update        0.1.0 <b class="g">·</b> nothing new       <span style="color:#8a8a8a">restart on new code, keep this conversation</span>                   <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a"><b class="g">↑</b><b class="g">↓</b> to choose <b class="g">·</b> enter to open <b class="g">·</b> esc to go back</span>                                                           <span style="color:#87d787">│</span></div><div><span style="color:#87d787">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div></div></div></figure>
+      <figure><figcaption>…prints the Stats panel, just like typing <code>/stats</code></figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="font-weight:700">Stats</span></div><div><span style="color:#87d787">model               </span>Qwen3.5 9B</div><div><span style="color:#87d787">context used        </span>4,574 of 32,768 tokens</div><div><span style="color:#87d787">writing speed       </span><b class="g">—</b></div><div><span style="color:#87d787">reading speed       </span><b class="g">—</b></div><div><span style="color:#87d787">written so far      </span>0 tokens in 0 replies</div><div><span style="color:#87d787">memory              </span><b class="g">—</b></div><div><span style="color:#87d787">search              </span>embedder BGE-M3 <b class="g">·</b> retriever meaning <b class="g">·</b> reranker Off <b class="g">·</b> /effort moves them</div><div><span style="color:#87d787">limits              </span>context 32k <b class="g">·</b> thinking cap 8,192 tokens <b class="g">·</b> 12 tries <b class="g">·</b> 60 steps <b class="g">·</b> /effort moves them</div><div><span style="color:#87d787">kept loaded         </span>30 min after the last window quits <b class="g">·</b> coding stop frees it now</div><div><span style="color:#87d787">server              </span>http://127.0.0.1:64230</div></div></div></figure>
+      <figure><figcaption><span class="n">3</span> Status bar + <kbd>enter</kbd> opens the /meters menu you already know</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="color:#87d787">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Status bar</span>                                                                                              <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a">Model, speed, memory and effort on one line under the prompt. Kept for next time.</span>                       <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   1. On   <span style="color:#8a8a8a">show it under the prompt</span>                                                                      <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#87d787;font-weight:700"><b class="g">❯</b> 2. Off  </span><span style="color:#8a8a8a">hide it; /stats has the numbers</span><span style="color:#87d787">  <b class="g">✔</b> in use</span>                                                     <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>                                                                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a"><b class="g">↑</b><b class="g">↓</b> to choose <b class="g">·</b> enter to select <b class="g">·</b> esc to go back</span>                                                         <span style="color:#87d787">│</span></div><div><span style="color:#87d787">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div></div></div></figure>
+    </div></section>
+<section id="old">
+    <p class="lead">You picked “keep working, hidden.” The 13 moved commands no longer show up when you type <code>/</code>, but each one still runs when typed in full, arguments included (<code>/memory undo</code>, <code>/rules off 3</code>).</p>
+    <div class="two">
+      <figure><figcaption><b>Typed in full:</b> <code>/helpers</code>. No menu appears under it…</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="color:#6c6c6c">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#6c6c6c">│</span> &gt; /helpers                                                                                              <span style="color:#6c6c6c">│</span></div><div><span style="color:#6c6c6c">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div><div>  <span style="color:#8a8a8a">? for shortcuts</span>                                                                        <span style="color:#ffaf5f"><b class="g">●</b></span><span style="color:#8a8a8a"> Mac 14.7/16 GB</span></div></div></div></figure>
+      <figure><figcaption>…<kbd>enter</kbd> runs it just like before</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="font-weight:700">Helpers <b class="g">·</b> 4 of 4 on <b class="g">·</b> what comes along with a request before the first step</span></div><div><span style="color:#87d787">1  on   </span><span style="color:#87d787;font-weight:700">SCOUT </span><span style="color:#87d787">  Files you name     </span>read whole before the first step (Read first)</div><div><span style="color:#87d787">2  on   </span><span style="color:#87d787;font-weight:700">MEDIC </span><span style="color:#87d787">  Tests and changes  </span>on a fix request: the failing tests first, and what is not committed yet</div><div><span style="color:#87d787">3  on   </span><span style="color:#87d787;font-weight:700">ORACLE</span><span style="color:#87d787">  Code by meaning    </span>the closest files read first, then the closest functions of long ones</div><div>(bge-m3)</div><div><span style="color:#87d787">4  on   </span><span style="color:#87d787;font-weight:700">SENTRY</span><span style="color:#87d787">  Light checks       </span>a syntax check after every edit; where the names you use are defined and</div><div> used</div><div><span style="color:#87d787">                                   </span>/helpers off 3 <b class="g">·</b> /helpers on oracle <b class="g">·</b> /helpers off all <b class="g">·</b> kept in</div><div>settings.json</div></div></div></figure>
+      <figure><figcaption><b>Half a name:</b> <code>/do</code> matches nothing in the / menu now…</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="color:#6c6c6c">╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#6c6c6c">│</span> &gt; /do                                                                                                   <span style="color:#6c6c6c">│</span></div><div><span style="color:#6c6c6c">╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span></div><div>  <span style="color:#8a8a8a">? for shortcuts</span>                                                                        <span style="color:#ffaf5f"><b class="g">●</b></span><span style="color:#8a8a8a"> Mac 14.7/16 GB</span></div></div></div></figure>
+      <figure><figcaption>…so <kbd>enter</kbd> says where to look</figcaption><div class="term s" style="--cols:107"><div class="scr"><div><span style="color:#ffaf5f"><b class="g">·</b></span> <span style="color:#ffaf5f">Unknown command /do. /settings has the ones not in the / menu, and /help lists them all.</span></div></div></div></figure>
+    </div></section>
+<section id="shell">
+    <p class="lead"><code>coding --help</code> goes from 14 usage lines to 9. Six one-word hub commands become <code>coding hub [tab]</code>, and the old words still work.</p>
+    <div class="two">
+      <figure><figcaption><b>Today</b> · 14 lines <span class="tag bad">main</span></figcaption><pre class="help"><span class="">  coding                    start in the current folder</span>
+<span class="">  coding "fix the tests"    start and send a first prompt</span>
+<span class="">  coding -p "question"      answer once and exit (changes are refused unless --yes)</span>
+<span class="">  coding -c                 continue the last conversation in this folder</span>
+<span class="">  coding setup              download the model and runtime (if missing) and check them</span>
+<span class="">  coding stop               free the model's memory now (it stays loaded 30 min after you quit)</span>
+<span class="del">  coding weights            the hub in the browser, on the model's weights (ctrl+c here closes it)</span>
+<span class="del">  coding docs               the hub on the harness and structure diagrams and every Agentic Coder page</span>
+<span class="del">  coding tests              the hub on the test record: every test run and its result</span>
+<span class="del">  coding instructions       the hub instruction editor: shared General and Planning rules, preview, save and undo</span>
+<span class="del">  coding battle             the hub on the Battle tab: Gemma vs Qwen on tests you make, one model at a time</span>
+<span class="del">  coding memory             the hub on the memory: every fact, with its trust, to edit, pin, take out or bring back</span>
+<span class="">  coding memory-review      read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)</span>
+<span class="">  coding morning            the morning brief on your repos, opened in the browser (--plain: no model)</span></pre></figure>
+      <figure><figcaption><b>With coding hub</b> · 9 lines <span class="tag ok">preview</span></figcaption><pre class="help"><span class="">  coding                    start in the current folder</span>
+<span class="">  coding "fix the tests"    start and send a first prompt</span>
+<span class="">  coding -p "question"      answer once and exit (changes are refused unless --yes)</span>
+<span class="">  coding -c                 continue the last conversation in this folder</span>
+<span class="">  coding setup              download the model and runtime (if missing) and check them</span>
+<span class="">  coding stop               free the model's memory now (it stays loaded 30 min after you quit)</span>
+<span class="add">  coding hub [tab]          the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, tests, battle, memory, instructions, help</span>
+<span class="">  coding memory-review      read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)</span>
+<span class="">  coding morning            the morning brief on your repos, opened in the browser (--plain: no model)</span></pre></figure>
+    </div>
+    <div class="grid3 outs">
+      <figure><figcaption>The new form</figcaption><pre class="out"><b>$ coding hub tests</b>
+Agentic Coder hub: gemma-4-12B-it-qat-UD-Q4_K_XL.gguf (6.72 GB) and the pages in no DOCS folder (not found) at http://127.0.0.1:64232/?tab=tests
+The page reads the files through this window. Press ctrl+c to close it.</pre></figure>
+      <figure><figcaption>The old word, still working</figcaption><pre class="out"><b>$ coding tests</b>
+Agentic Coder hub: gemma-4-12B-it-qat-UD-Q4_K_XL.gguf (6.72 GB) and the pages in no DOCS folder (not found) at http://127.0.0.1:64233/?tab=tests
+The page reads the files through this window. Press ctrl+c to close it.</pre></figure>
+      <figure><figcaption>A tab that doesn't exist</figcaption><pre class="out"><b>$ coding hub notes</b>
+coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, tests, battle, memory, instructions, help.</pre></figure>
+    </div>
+    <p class="small">The hub line names the Gemma file because <code>coding hub</code> opens on the default model's weights. That's the same as <code>coding weights</code> today and wasn't changed.</p></section>
+<section id="small">
+    <div class="side narrow">
+      <figure><figcaption><b>80 × 24</b> · the smallest window the app lays out</figcaption><div class="term m" style="--cols:80"><div class="bar"><i></i><i></i><i></i><span>coding — 80 × 24</span></div><div class="scr"><div><span style="color:#87d787">╭──────────────────────────────────────────────────────────────────────────────╮</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Settings</span>                                                                     <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a">Everything not in the / menu. Each still works typed in full, like /doctor.</span>  <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Setup</span>                                                                        <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#87d787;font-weight:700"><b class="g">❯</b> Status bar    </span><span style="color:#87d787">off                       </span><span style="color:#8a8a8a">model, speed and memory under the<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Helpers       4 of 4 on                 <span style="color:#8a8a8a">what comes along with each request</span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Rules         16 rules                  <span style="color:#8a8a8a">what the model reads at every sta<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Instructions  14 general <b class="g">·</b> 9 planning   <span style="color:#8a8a8a">general and planning, edited in t<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Memory        18 about you <b class="g">·</b> 0 here     <span style="color:#8a8a8a">what it remembers about you and t<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Pages <b class="g">·</b> the hub in the browser</span>                                               <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Weights       Qwen3.5 9B <b class="g">·</b> 6.87 GB      <span style="color:#8a8a8a">the model's weights, layer by lay<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Docs          DOCS folder not found     <span style="color:#8a8a8a">the diagrams and every Agentic Co<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Tests         356 runs <b class="g">·</b> last 535/535   <span style="color:#8a8a8a">every test run and its result</span>      <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Battle        84 tests <b class="g">·</b> 1 battle       <span style="color:#8a8a8a">Gemma vs Qwen on the test sets or<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="font-weight:700">Tools</span>                                                                        <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Stats         4.5k of 32k context       <span style="color:#8a8a8a">speed, memory and context used</span>     <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Doctor        1.4 GB free now           <span style="color:#8a8a8a">check the model, the server and t<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Init          AGENTS.md is here         <span style="color:#8a8a8a">write an AGENTS.md for this proje<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span>   Update        0.1.0 <b class="g">·</b> nothing new       <span style="color:#8a8a8a">restart on new code, keep this co<b class="g">…</b></span> <span style="color:#87d787">│</span></div><div><span style="color:#87d787">│</span> <span style="color:#8a8a8a"><b class="g">↑</b><b class="g">↓</b> to choose <b class="g">·</b> enter to open <b class="g">·</b> esc to go back</span>                                <span style="color:#87d787">│</span></div><div><span style="color:#87d787">╰──────────────────────────────────────────────────────────────────────────────╯</span></div></div></div></figure>
+      <div class="notes">
+        <h3>It still fits</h3>
+        <p>With its gaps, the menu is 25 lines tall. A window under 30 rows drops the blank lines, which brings it to 21, so it fits in 24 rows without scrolling and nothing is cut off at the top.</p>
+        <h3>Narrow</h3>
+        <p>At 80 columns the notes on the right end in “…”. The names and the live values always show in full. At your 107 columns, every note fits (tab 2).</p>
+      </div>
+    </div></section>
+<section id="changes">
+    <div class="two">
+      <div class="notes">
+        <h3>What changed in the code</h3>
+        <table>
+          <tr><td><code>app/commands.mjs</code></td><td>the <code>/settings</code> command, its three groups, and the / menu skipping those 13</td></tr>
+          <tr><td><code>app/App.jsx</code></td><td>opens the menu with live values; ↑↓ enter esc; a clearer “unknown command” note</td></tr>
+          <tr><td><code>app/screen.jsx</code></td><td>draws the menu (the gaps drop in short windows); the / list shows 12, not 10</td></tr>
+          <tr><td><code>cli.jsx</code> · <code>app/help.mjs</code></td><td><code>coding hub [tab]</code>, with the old words still working; <code>--help</code> lists it once</td></tr>
+          <tr><td><code>app/help.html</code></td><td>the Help page lists commands in two parts: the / menu and /settings</td></tr>
+          <tr><td><code>battle/store.mjs</code></td><td>counts the battle tests for the Battle row</td></tr>
+          <tr><td>tests</td><td><code>app-settings.test.mjs</code> is new (the split, the menu and its keys, 80 × 24, <code>coding hub</code>). Four older tests that picked <code>/wei</code> or <code>/batt</code> from the / menu, or counted 10 rows, were updated</td></tr>
+          <tr><td>READMEs · AGENTS.md</td><td>name <code>/settings</code> and <code>coding hub tests</code></td></tr>
+        </table>
+      </div>
+      <div class="notes">
+        <h3>Stays the same</h3>
+        <ul>
+          <li>Every command still runs when typed in full, with its arguments</li>
+          <li><code>/model</code>, <code>/effort</code> and <code>/mode</code> stay in the / menu</li>
+          <li>The hub, its tabs and every panel look the same</li>
+        </ul>
+        <h3>Checks</h3>
+        <ul>
+          <li>Full suite 535 of 535, twice on the final code; the app compiles; the repo check passes except the known “the repo is public” item</li>
+          <li>Under heavy load, a test that types the moment the welcome box appears can miss its first keys. That happened on <code>main</code> too (1 run in 12), so it isn't from this change</li>
+        </ul>
+        <h3>How these screens were made</h3>
+        <p class="small">The real app, with this change, ran in a pseudo-terminal at 107 × 42 (and 80 × 24). A stand-in model server replaced the model, so no GPU was used. Your settings, memory, test record and battle tests were copied in, so the values are yours. “Today” screens ran <code>main</code>'s code the same way.</p>
+      </div>
+    </div></section>
+</main>
+<script>
+const ids = ["menu","settings","use","old","shell","small","changes"];
+function show(id) {
+  if (!ids.includes(id)) id = ids[0];
+  for (const s of document.querySelectorAll('section')) s.classList.toggle('on', s.id === id);
+  for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.tab === id);
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+}
+document.querySelector('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(b.dataset.tab); });
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const cur = ids.indexOf(document.querySelector('section.on')?.id);
+  if (/^[1-9]$/.test(e.key) && Number(e.key) <= ids.length) show(ids[Number(e.key) - 1]);
+  else if (e.key === 'ArrowRight') show(ids[(cur + 1) % ids.length]);
+  else if (e.key === 'ArrowLeft') show(ids[(cur + ids.length - 1) % ids.length]);
+});
+show(location.hash.slice(1));
+</script>
+</body>
+</html>
