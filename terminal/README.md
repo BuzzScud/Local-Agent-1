@@ -165,6 +165,7 @@ bun terminal/src/cli.jsx               # run from source
 bun run test:terminal                   # its tests, including the app driven by keys in a real terminal
 node terminal/scripts/ui-walk.mjs       # every screen at one window size, with resizes, checked
 node terminal/scripts/capture-ui.mjs    # the real app with the real model, screens saved as HTML
+bun terminal/scripts/flow-page.mjs       # redraw the hub's Flow tab (src/app/flow.html); add a file name to write a dated copy for agentic-coder DOCS/
 ```
 
 `scripts/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`); `scripts/shims` is the react-devtools stand-in the single-file build needs. Report pages are written to `agentic-coder DOCS/` at the top of the repo and mirrored into the repo's `docs/`.

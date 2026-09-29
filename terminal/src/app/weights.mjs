@@ -6,6 +6,7 @@
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned harness and structure pages
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
+//   /flow             the Flow tab: how Agentic Coder works as a flow diagram (flow.html, drawn by scripts/flow-page.mjs)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `agentic-coder DOCS/` at the top of the repo on this Mac:
@@ -18,6 +19,7 @@ import hubHtml from './hub.html' with { type: 'text' };
 import helpHtml from './help.html' with { type: 'text' };
 import testsHtml from './tests.html' with { type: 'text' };
 import memoryHtml from './memory.html' with { type: 'text' };
+import flowHtml from './flow.html' with { type: 'text' };
 import { memoryRoute } from './memory-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData } from '../../../models/index.mjs';
@@ -106,6 +108,7 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/') return page(hubHtml);
       if (url.pathname === '/weights') return page(html);
       if (url.pathname === '/help') return page(helpHtml);
+      if (url.pathname === '/flow') return page(flowHtml);
       if (url.pathname === '/tests') return page(testsHtml);
       if (url.pathname === '/memory') return page(memoryHtml);
       if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
