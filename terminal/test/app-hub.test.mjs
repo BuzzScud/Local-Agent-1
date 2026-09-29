@@ -7,20 +7,21 @@ import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
 
-test('/weights starts the viewer inside the window: the note names the page, and it serves the model while the app runs', async () => {
+test('/settings → Weights starts the viewer inside the window: the note names the page, and it serves the model while the app runs', async () => {
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'models'), { recursive: true });
   writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in'); // 8 bytes
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/wei' }, { sleep: 250 }, { snapshot: 'menu' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
+    ...Array.from({ length: 5 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toContain('/weights');
+  expect(r.snapshots.menu).toMatch(/❯ Weights\s+Gemma 4 12B QAT · 0\.00 GB\s+the model's weights/); // the row names the file it opens
   expect(r.text).toContain('Weights of gemma-4-12B-it-qat-UD-Q4_K_XL.gguf (0.00 GB) opened in the browser at http://127.0.0.1:');
   expect(served.facts).toEqual({ name: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', size: 8 });
   expect(served.page).toContain('<title>Agentic Coder Weights</title>');

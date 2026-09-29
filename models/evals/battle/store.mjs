@@ -220,6 +220,12 @@ export function listBattles(home = battleHome()) {
   if (!existsSync(P.battles)) return [];
   return readdirSync(P.battles).map((id) => readJson(join(P.battles, id, 'battle.json'))).filter(Boolean).sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
+// How many tests and battles there are, without reading them (the /settings row).
+export function battleCounts(home = battleHome()) {
+  const P = paths(home);
+  const n = (d) => { try { return readdirSync(d).filter((f) => !f.startsWith('.')).length; } catch { return 0; } };
+  return { tests: n(P.tests), battles: n(P.battles) };
+}
 export const latestByTest = (battles) => { const m = {}; for (const b of battles) m[b.test] = b; return m; };
 
 // The hold on the memory (running.json): { pid, state: 'want' | 'running', test, title, run, of, startedAt }.

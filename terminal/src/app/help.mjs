@@ -1,7 +1,7 @@
 // Everything /help shows, in one place: the terminal's /help panel, the Help
 // tab of the hub (help.html reads it as /help.json) and `coding --help` all
 // come from these lists, so they never disagree. Plain data, no screen code.
-import { COMMANDS } from './commands.mjs';
+import { COMMANDS, SETTINGS, IN_SETTINGS } from './commands.mjs';
 
 export const VERSION = '0.1.0';
 
@@ -76,12 +76,7 @@ export function cliRows(lingerMins = 30) {
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
       ['coding stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
-      ['coding weights', "the hub in the browser, on the model's weights (ctrl+c here closes it)"],
-      ['coding docs', 'the hub on the harness and structure diagrams and every Agentic Coder page'],
-      ['coding tests', 'the hub on the test record: every test run and its result'],
-      ['coding instructions', 'the hub instruction editor: shared General and Planning rules, preview, save and undo'],
-      ['coding battle', 'the hub on the Battle tab: Gemma vs Qwen on tests you make, one model at a time'],
-      ['coding memory', 'the hub on the memory: every fact, with its trust, to edit, pin, take out or bring back'],
+      ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, tests, battle, memory, instructions, help'],
       ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
       ['coding morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],
     ],
@@ -148,7 +143,8 @@ export const TIPS = [
 export function helpData({ version = '', modelName = '', effort = [], lingerMins = 30 } = {}) {
   return {
     version, modelName,
-    commands: COMMANDS.map((c) => ({ name: c.name, arg: c.arg ?? '', desc: c.desc, menu: !!c.picker })),
+    commands: COMMANDS.map((c) => ({ name: c.name, arg: c.arg ?? '', desc: c.desc, menu: !!c.picker, settings: IN_SETTINGS.has(c.name) })),
+    settings: SETTINGS.map((g) => ({ group: g.group, names: g.rows.map((r) => r.name) })),
     keys: KEYS,
     cli: cliRows(lingerMins),
     modes: MODE_OPTIONS,

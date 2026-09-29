@@ -24,12 +24,41 @@ export const COMMANDS = [
   { name: 'battle', desc: 'Open the hub on the Battle tab: Gemma vs Qwen on the New 28, Work 28, Practice 28 or tests you make, one model at a time, a blind vote' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
   { name: 'update', desc: 'Restart on new Agentic Coder code, keeping this conversation · /update memory saves to memory now', arg: '[memory]' },
+  { name: 'settings', desc: 'Everything else in one menu: status bar, helpers, rules, instructions, memory, the hub pages and the tools' },
   { name: 'exit', desc: 'Quit Agentic Coder' },
 ];
 
+// /settings: the commands kept out of the / menu, in three groups. Enter on a
+// row runs the command; each one still works typed in full (/doctor), and
+// /help lists them with the rest.
+export const SETTINGS = [
+  { group: 'Setup', rows: [
+    { name: 'meters', label: 'Status bar', note: 'model, speed and memory under the prompt' },
+    { name: 'helpers', label: 'Helpers', note: 'what comes along with each request' },
+    { name: 'rules', label: 'Rules', note: 'what the model reads at every start' },
+    { name: 'instructions', label: 'Instructions', note: 'general and planning, edited in the browser' },
+    { name: 'memory', label: 'Memory', note: 'what it remembers about you and this project' },
+  ] },
+  { group: 'Pages · the hub in the browser', rows: [
+    { name: 'weights', label: 'Weights', note: "the model's weights, layer by layer" },
+    { name: 'docs', label: 'Docs', note: 'the diagrams and every Agentic Coder page' },
+    { name: 'tests', label: 'Tests', note: 'every test run and its result' },
+    { name: 'battle', label: 'Battle', note: 'Gemma vs Qwen on the test sets or yours, a blind vote' },
+  ] },
+  { group: 'Tools', rows: [
+    { name: 'stats', label: 'Stats', note: 'speed, memory and context used' },
+    { name: 'doctor', label: 'Doctor', note: 'check the model, the server and this Mac' },
+    { name: 'init', label: 'Init', note: 'write an AGENTS.md for this project' },
+    { name: 'update', label: 'Update', note: 'restart on new code, keep this conversation' },
+  ] },
+];
+export const IN_SETTINGS = new Set(SETTINGS.flatMap((g) => g.rows.map((r) => r.name)));
+
+// The / menu: every command but the ones /settings holds.
 export function matchCommands(value) {
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  return COMMANDS.filter((c) => c.name.startsWith(q)).concat(COMMANDS.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
+  const shown = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name));
+  return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }

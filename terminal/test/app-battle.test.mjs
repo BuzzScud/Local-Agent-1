@@ -26,18 +26,19 @@ function withStandInModel() {
   return { cwd, env, home };
 }
 
-test('/battle opens the hub on the Battle tab and says a battle unloads this window\'s model until it is over', async () => {
+test('/settings → Battle opens the hub on the Battle tab and says a battle unloads this window\'s model until it is over', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   let hub = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/batt' }, { sleep: 250 }, { snapshot: 'menu' }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
+    ...Array.from({ length: 8 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'Battle opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=battle`)).text(); } },
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toContain('/battle');
+  expect(r.snapshots.menu).toMatch(/❯ Battle\s+\d+ tests? · \d+ battles?\s+Gemma vs Qwen/);
   expect(r.text).toContain('?tab=battle · Gemma vs Qwen, one model at a time, each run stopped at 10 min');
   expect(hub).toContain('<button data-tab="battle">Battle</button>');
 }, T);

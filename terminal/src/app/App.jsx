@@ -14,16 +14,16 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, battleCounts, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, mentionAt, selectedText, withUndo, undoEdit, redoEdit, moveBy, promptTextWidth } from './edit-input.mjs';
 import { copyToClipboard } from './clipboard.mjs';
-import { matchCommands, COMMANDS } from './commands.mjs';
-import { startWeightsServer, listDocs } from './weights.mjs';
-import { MODE_OPTIONS } from './help.mjs';
+import { matchCommands, COMMANDS, SETTINGS } from './commands.mjs';
+import { startWeightsServer, listDocs, findDocsDir } from './weights.mjs';
+import { MODE_OPTIONS, VERSION } from './help.mjs';
 import { memoryDirs, readFacts, readLog, undoSave, openMemory } from '../agent/facts.mjs';
 import { rulesList, changeRules, looksLikeEvent, ALWAYS_MAX } from './rules.mjs';
 import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
@@ -34,6 +34,7 @@ import { loadSettings, saveSettings, saveSession, listSessions, loadSession, new
 import { saveTrust } from './trust.mjs';
 import { countTries } from './live.mjs';
 import { spinStyle } from '../ui/theme.mjs';
+import { readInstructions } from '../agent/instructions.mjs';
 import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
@@ -375,6 +376,39 @@ export function App({ opts, win, onRestart }) {
     setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
+  // /settings: the commands kept out of the / menu, each row with what it
+  // holds right now (none reads blank); enter runs the row's command.
+  const openSettings = () => {
+    const n = (k, word) => `${k} ${word}${k === 1 ? '' : 's'}`;
+    const tokK = (t) => `${(t / 1024).toFixed(t < 10240 ? 1 : 0)}k`;
+    const dirs = agent.memory ? memoryDirs(cwd) : null;
+    const facts = (d) => (d ? readFacts(d).length : 0);
+    let ins = null;
+    try { ins = readInstructions(); } catch {}
+    const steps = (t) => (String(t ?? '').match(/^\d+\./gm) ?? []).length;
+    const docs = listDocs(findDocsDir());
+    const runs = readRecord();
+    const last = runs[0];
+    const bc = battleCounts();
+    const file = modelPath(model);
+    const value = {
+      meters: S.current.meters ? 'on' : 'off',
+      helpers: `${agent.helpers.size} of 4 on`,
+      rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
+      instructions: ins ? `${steps(ins.sections.general)} general · ${steps(ins.sections.planning)} planning` : 'could not read',
+      memory: dirs ? `${facts(dirs.you)} about you · ${facts(dirs.project)} here` : 'off here',
+      weights: existsSync(file) ? `${model.name} · ${(statSync(file).size / 1e9).toFixed(2)} GB` : 'file not here yet',
+      docs: docs.missing ? 'DOCS folder not found' : n(docs.pages.length, 'page'),
+      tests: last ? `${n(runs.length, 'run')} · last ${last.total != null ? `${last.passed}/${last.total}` : last.result}` : 'no runs yet',
+      battle: battleHold() ? 'a battle is running' : `${n(bc.tests, 'test')} · ${n(bc.battles, 'battle')}`,
+      stats: `${tokK(agent.ctxUsed ?? 0)} of ${tokK(agent.ctx)} context`,
+      doctor: `${(availableBytes() / 1e9).toFixed(1)} GB free now`,
+      init: existsSync(join(cwd, 'AGENTS.md')) ? 'AGENTS.md is here' : 'no AGENTS.md yet',
+      update: update ? (update.kind === 'pull' ? 'new code on GitHub' : 'new code waiting') : `${VERSION} · nothing new`,
+    };
+    const groups = SETTINGS.map((g) => ({ group: g.group, rows: g.rows.map((r) => ({ ...r, value: value[r.name] })) }));
+    setPicker({ kind: 'settings', groups, rows: groups.flatMap((g) => g.rows), index: 0 });
+  };
   // /effort, one panel: Effort on top, then every limit that can move, with
   // what each value costs; ←→ moves, enter saves all of it.
   // The memory Gemma holds now counts as free: a restart hands it back first.
@@ -1000,6 +1034,9 @@ export function App({ opts, win, onRestart }) {
         sendPrompt(arg, `/math ${arg}`);
         break;
       }
+      case 'settings':
+        openSettings();
+        break;
       case 'resume': {
         const list = listSessions(cwd);
         if (!list.length) { push({ type: 'note', text: 'No earlier conversations in this folder.', tone: 'dim' }); break; }
@@ -1082,9 +1119,9 @@ export function App({ opts, win, onRestart }) {
         await quit();
         break;
       default:
-        push({ type: 'note', text: `Unknown command /${cmd}. Type /help for the list.`, tone: 'warn' });
+        push({ type: 'note', text: `Unknown command /${cmd}. /settings has the ones not in the / menu, and /help lists them all.`, tone: 'warn' });
     }
-  }, [agent, askBtw, cwd, doctor, flash, meters, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, updateNow]);
+  }, [agent, askBtw, cwd, doctor, flash, meters, model, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, update, updateNow]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');
@@ -1294,6 +1331,16 @@ export function App({ opts, win, onRestart }) {
         const kept = pk.options.find((o) => o.id === pk.current);
         push({ type: 'note', text: `Kept ${pk.what} as ${kept ? kept.label.toLowerCase() : 'it was'}.`, tone: 'dim' });
       }
+      return;
+    }
+    // /settings: ↑↓ a row, enter runs its command, esc goes back
+    if (cur.picker?.kind === 'settings') {
+      const pk = cur.picker;
+      const n = pk.rows.length;
+      if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
+      else if (key.return) { setPicker(null); runSlash(`/${pk.rows[pk.index].name}`); }
+      else if (key.escape || (key.ctrl && ch === 'c')) setPicker(null);
       return;
     }
     // Resume picker

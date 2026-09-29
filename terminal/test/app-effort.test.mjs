@@ -124,7 +124,7 @@ test('/increase is gone: not in the "/" menu, and typing it is an unknown comman
   await fake.close();
   expect(r.snapshots.menu).toMatch(/\/init\s/); // the "/in" list still has /init…
   expect(r.snapshots.menu).not.toContain('/increase'); // …and not /increase
-  expect(r.text).toContain('Unknown command /increase. Type /help for the list.');
+  expect(r.text).toContain('Unknown command /increase. /settings has the ones not in the / menu, and /help lists them all.');
 }, T);
 
 test('saved limits are read at start: /stats lists them', async () => {

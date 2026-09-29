@@ -42,7 +42,10 @@ uncommitted).
 | `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
 | ctrl+c twice | quit (the conversation is saved) |
 
-Commands: `/help /clear /compact /effort /mode /init /resume /model /stats /meters /doctor /exit` — and typing `exit` quits too.
+Commands: `/help /clear /compact /btw /effort /mode /math /resume /model /morning /settings /exit` — and typing `exit` quits too.
+`/settings` holds the rest in one menu: Setup (status bar, helpers, rules, instructions, memory),
+Pages (weights, docs, tests, battle: the hub in the browser) and Tools (stats, doctor, init, update).
+Each of those still works typed in full (`/doctor`, `/memory undo`); it just is not in the `/` list.
 
 **Effort** is how much the model thinks before it acts: Off (the default), Medium or High,
 set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` still work.
@@ -75,7 +78,7 @@ and the project does.
 | Bringing back | The rules marked "always" and one short line per fact are read at every start. A fact comes back in full with a request it fits: by meaning, with the small model BGE-M3 (`models/bge-m3`), or by shared words when that model is not there. It is written into the request itself, so nothing already read is read again, and the focused paths (fix, change, several files) get it in their own prompts. |
 | Trust | +1 when the task passed its check after the fact was used, -1 when it failed or Agentic Coder got stuck, -2 when you corrected or stopped Agentic Coder. At -3 the fact is taken out of use, unless you pinned it. |
 | Keeping clean | Once a day: repeats merge, a fact about a file that is gone and one not used in 30 days are taken out of use. Nothing is deleted: `retired/` keeps it. |
-| Seeing it | `/memory` (both memories), `/memory undo` (takes the last save back), `/memory open` or `coding memory` (the hub's Memory tab: edit, pin, take out, bring back). |
+| Seeing it | `/memory` (both memories), `/memory undo` (takes the last save back), `/memory open` or `coding hub memory` (the hub's Memory tab: edit, pin, take out, bring back). |
 | At night | `coding memory-review` reads the day's conversations again and tidies. `--install` schedules it (1 to 6 in the morning, on power, the Mac idle for 30 minutes, no Agentic Coder window open); nothing is scheduled unless you run that. |
 | Claude's notes | What Claude Code has written down about your work (its memory folder, hundreds of notes) is a second place the memory looks. It is read where it is, every time, and never changed; Agentic Coder's own numbers for the notes are kept in `~/.agentic-coder/claude-notes`. The one or two notes that fit a request go along with it, cut to the part that fits (about 1,100 characters each), found by meaning and by the words they share. A note about sign-ins, servers or secrets is left out whole; in a note that is kept, a line that holds one is left out. Fifteen lines on how you like things done, boiled down from those notes, are read at every start (`src/agent/claude-rules.mjs`). `"claudeNotes": false` in `settings.json` leaves them out; a path names another folder (`AGENTIC_CLAUDE_NOTES` does the same). |
 | Off | `"memory": false` in `settings.json` (yours or a folder's). `AGENTIC_MEMORY_SAVE=off` keeps the memory but stops saving on its own. |

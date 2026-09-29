@@ -459,7 +459,7 @@ function PermissionPrompt({ app }) {
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
-  const SHOW = 10;
+  const SHOW = 12; // the whole / menu (the rest is in /settings)
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
   return (
@@ -605,6 +605,40 @@ function ChoicePicker({ app }) {
       })}
       <Text> </Text>
       <Text color={C.dim}>↑↓ to choose · enter to select · esc to go back</Text>
+    </Box>
+  );
+}
+
+// /settings: the commands kept out of the / menu, under their groups, each
+// with what it holds now. ↑↓ to choose, enter opens it, esc goes back.
+function SettingsPicker({ app }) {
+  const pk = app.picker;
+  const lw = Math.max(...pk.rows.map((r) => r.label.length)) + 2;
+  const vw = Math.max(...pk.rows.map((r) => r.value.length)) + 3;
+  // 25 lines with the gaps; a short window (24 rows at the least) drops them.
+  const tight = app.rows < 30;
+  let at = 0;
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Settings</Text>
+      <Text color={C.dim}>Everything not in the / menu. Each still works typed in full, like /doctor.</Text>
+      {pk.groups.map((g) => (
+        <Box key={g.group} flexDirection="column" marginTop={tight ? 0 : 1}>
+          <Text bold>{g.group}</Text>
+          {g.rows.map((r) => {
+            const on = at++ === pk.index;
+            return (
+              <Text key={r.name} wrap="truncate-end">
+                <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.label.padEnd(lw)}</Text>
+                <Text color={on ? C.accent : undefined}>{r.value.padEnd(vw)}</Text>
+                <Text color={C.dim}>{r.note}</Text>
+              </Text>
+            );
+          })}
+        </Box>
+      ))}
+      {tight ? null : <Text> </Text>}
+      <Text color={C.dim}>↑↓ to choose · enter to open · esc to go back</Text>
     </Box>
   );
 }
@@ -943,6 +977,8 @@ export function Screen({ app }) {
         <ChoicePicker app={app} />
       ) : app.picker?.kind === 'limits' ? (
         <LimitsPicker app={app} />
+      ) : app.picker?.kind === 'settings' ? (
+        <SettingsPicker app={app} />
       ) : app.picker ? (
         <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={width}>
           <Text bold>{app.picker.title}</Text>

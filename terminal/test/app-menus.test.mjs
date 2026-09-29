@@ -126,7 +126,7 @@ test('/model: the model list and the effort in one picker; the choice is used an
   expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
 }, T);
 
-test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab fills in', async () => {
+test('"/" menu like Claude Code: all 12 commands (the rest are in /settings), the footer makes room, tab fills in', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -137,7 +137,10 @@ test('"/" menu like Claude Code: up to 10 commands, the footer makes room, tab f
   ] });
   await fake.close();
   const rows = (s) => s.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
-  expect(rows(r.snapshots.all)).toHaveLength(10);
+  expect(rows(r.snapshots.all)).toHaveLength(12);
+  expect(r.snapshots.all).toMatch(/\/settings\s+Everything else in one menu/);
+  expect(r.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/); // the last one shows too: nothing scrolls
+  expect(r.snapshots.all).not.toMatch(/^\s{2}\/(doctor|weights|meters)\s/m); // those live in /settings
   expect(r.snapshots.all).not.toContain('? for shortcuts');
   expect(rows(r.snapshots.mo)[0]).toMatch(/\/model\s+Pick the model and its effort/);
   expect(r.snapshots.tab).toMatch(/> \/model/);

@@ -72,7 +72,7 @@ bun run check              # is anything here that should not be? secrets, packa
 ```
 
 Every test run adds a line to the test record (`~/.agentic-coder/tests/record.jsonl`); the hub shows it on its
-Tests tab: `/tests` in Agentic Coder, or `coding tests`.
+Tests tab: `/settings` → Tests (or `/tests`) in Agentic Coder, or `coding hub tests`.
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 
@@ -83,7 +83,7 @@ into `~/.agentic-coder`. Environment switches are `AGENTIC_*` (the old `BONSAI_*
 
 ## Shared instructions
 
-Open the hub’s **Instructions** tab with `/instructions` in the app or `coding instructions`
+Open the hub’s **Instructions** tab with `/instructions` in the app (also in `/settings`) or `coding hub instructions`
 in a shell (no model download needed). Edit **General** behavior and **Planning** rules, inspect
 loaded project context, and preview the main or focused coding prompt. Save applies both sections
 to the next task in an updated app; an in-progress task keeps its current instructions.

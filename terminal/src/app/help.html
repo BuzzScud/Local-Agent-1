@@ -86,8 +86,10 @@ code { font-family: var(--mono); font-size: .92em; background: var(--panel); pad
   function render(h) {
     $('#lede').textContent = `A coding agent in your terminal${h.modelName ? `, running ${h.modelName}` : ''} on this Mac.${h.version ? ` Version ${h.version}.` : ''} Type / in Agentic Coder for the command list; this page has everything in one place.`;
     const S = [];
-    S.push(['commands', 'Commands', 'Type them in Agentic Coder’s prompt. The ones marked menu open a list to choose from when typed alone; add a word to set it straight away.',
-      table(h.commands.map((c) => row(`/${esc(c.name)}${c.arg ? ` <span class="arg">${esc(c.arg)}</span>` : ''}`, c.desc, c.menu ? '<span class="badge">menu</span>' : '')))]);
+    const cmdRow = (c) => row(`/${esc(c.name)}${c.arg ? ` <span class="arg">${esc(c.arg)}</span>` : ''}`, c.desc, c.menu ? '<span class="badge">menu</span>' : '');
+    const byName = Object.fromEntries(h.commands.map((c) => [c.name, c]));
+    S.push(['commands', 'Commands', 'Type them in Agentic Coder’s prompt. Typing / lists the first group; /settings holds the rest, and each of those still works typed in full. The ones marked menu open a list to choose from when typed alone; add a word to set it straight away.',
+      `<h3>In the / menu</h3>${table(h.commands.filter((c) => !c.settings).map(cmdRow))}${(h.settings ?? []).map((g) => `<h3>In /settings · ${esc(g.group)}</h3>${table(g.names.map((n) => byName[n]).filter(Boolean).map(cmdRow))}`).join('')}`]);
     S.push(['keys', 'Keys', 'What each key does, grouped by where you use it.',
       h.keys.map((g) => `<h3>${esc(g.group)}</h3>${table(g.rows.map(([k, d]) => row(esc(k), d)))}`).join('')]);
     S.push(['modes', 'Modes', 'How Agentic Coder asks before it changes things. Pick with /mode or switch with shift+tab. It lasts for the conversation.',
