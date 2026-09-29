@@ -10,20 +10,24 @@
 :root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--c-before:#3987e5;--c-after:#d95926}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:1120px;margin:0 auto;padding:28px 16px 64px;position:relative}
-/* The model picker sits in the empty space left of the page (no panel of its own): it follows the scroll there. When the window is too narrow to leave that space, it is a row of buttons under the title instead. */
-aside{margin:14px 0 4px}
-.side-h{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+/* One container that fits the window: the title, the model picker and the tabs stay put, and each tab fills the space under them. A table shows as many runs as fit and pages through the rest; the run picked in it is shown in full beside it. A small window (a phone) scrolls instead. */
+main{max-width:1120px;margin:0 auto;padding:22px 16px 16px;position:relative;display:flex;flex-direction:column;min-height:100vh}
+@media (min-width:900px) and (min-height:560px){html,body{height:100%;overflow:hidden}main{height:100vh;min-height:0}}
+/* The model picker sits in the empty space left of the page (no panel of its own). When the window is too narrow to leave that space, it is one row of buttons under the title instead. */
+aside{margin:10px 0 0;flex:none}
+.side-in{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.side-h{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);margin:0}
 .models{display:flex;flex-wrap:wrap;gap:8px}
-.models button{font:inherit;display:block;text-align:left;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.models button{font:inherit;display:block;text-align:left;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
 .models button:hover{color:var(--ink);border-color:var(--faint)}.models button:focus-visible{outline:2px solid var(--c-before);outline-offset:1px}
 .models button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
 .models .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}.models .top b{font-weight:400}.models button[aria-pressed="true"] .top b{font-weight:600}
 .models .top span{color:var(--faint);font-variant-numeric:tabular-nums}.models .s,.models hr{display:none}
-.side-note{color:var(--mute);font-size:12px;margin:8px 0 0}
+.side-note{display:none}
 @media (min-width:1580px){
   aside{position:absolute;right:100%;top:0;bottom:0;width:212px;margin:0 8px 0 0}
-  .side-in{position:sticky;top:28px}
+  .side-in{display:block;padding-top:26px}
+  .side-h{margin:0 0 8px}
   .models{flex-direction:column;gap:2px}
   .models button{width:100%;padding:8px 10px;border-color:transparent;border-radius:10px;background:none}
   .models button:hover{background:var(--soft);border-color:transparent}
@@ -31,32 +35,55 @@ aside{margin:14px 0 4px}
   .models .top{font-size:14px}.models .top b{font-weight:500}.models button[aria-pressed="true"] .top b{font-weight:700}
   .models .s{display:block;color:var(--mute);font-size:12px;margin-top:1px}
   .models hr{display:block;border:0;border-top:1px solid var(--line);margin:8px 10px}
-  .side-note{margin:14px 10px 0}
+  .side-note{display:block;color:var(--mute);font-size:12px;margin:14px 10px 0}
 }
-h1{font-size:28px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}h2{font-size:20px;letter-spacing:-.01em;margin:40px 0 4px}h3{font-size:16px;margin:0 0 2px}p{margin:0 0 10px}a{color:inherit;text-underline-offset:3px}
-.lede{color:var(--mute);max-width:780px}.sub{color:var(--mute);font-size:14px;margin-bottom:12px;max-width:840px}
-.filters{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}
-.filters button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
-.filters button:hover{color:var(--ink);border-color:var(--faint)}.filters button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
-.filters button span{color:var(--faint);font-weight:400;margin-left:5px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
-.card .k{color:var(--mute);font-size:13px}.card .v{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
-.card .n{font-size:13.5px}.card .m{color:var(--mute);font-size:12.5px;margin-top:4px}
+h1{font-size:26px;line-height:1.15;letter-spacing:-.02em;margin:0 0 4px}h2{font-size:18px;letter-spacing:-.01em;margin:0}h3{font-size:15px;margin:0 0 2px}p{margin:0 0 10px}a{color:inherit;text-underline-offset:3px}
+.lede{color:var(--mute);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sub{color:var(--mute);font-size:14px;margin:0}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0;flex:none}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.tabs button:hover{color:var(--ink);border-color:var(--faint)}.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
+.tabs button span{color:var(--faint);font-weight:400;margin-left:5px}
+.stage{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:14px}
+.pane{flex:1;min-height:0;display:flex;flex-direction:column}.pane[hidden]{display:none}
+/* Overview: the latest run of each kind, then the 28-task check over time, which takes the rest of the height. */
+#overview{gap:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;flex:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0;cursor:pointer;font:inherit;color:inherit;text-align:left;display:flex;flex-direction:column;justify-content:flex-start}
+.card:hover{border-color:var(--faint)}.card:focus-visible{outline:2px solid var(--c-before);outline-offset:1px}
+.card .k{color:var(--mute);font-size:13px}.card .v{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
+.card .n{font-size:13.5px}.card .m{color:var(--mute);font-size:12.5px;margin-top:4px;overflow-wrap:anywhere}
 .ok{color:var(--up)}.bad{color:var(--down)}.stop{color:var(--warn)}
-.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;white-space:nowrap}tr:last-child td{border-bottom:none}
-thead th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft)}
-td.t{white-space:normal;min-width:240px}td.t b{display:block;font-weight:600}td.t span{display:block;color:var(--mute);font-size:13px;max-width:520px}
-td .q{display:block;color:var(--mute);font-size:12px}td.r{font-weight:600}td.p{font-size:13.5px}td.t code{display:block;margin-top:3px}
+#trend{flex:1;min-height:0;display:flex;flex-direction:column}#trend:empty{display:none}
+.charts{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;margin-top:10px}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 10px;min-width:0;min-height:0;max-height:100%;align-self:start;display:flex;flex-direction:column}figcaption{color:var(--mute);font-size:13px;margin-top:6px}
+/* The chart keeps its own shape and shrinks when the window is short. */
+.plot{position:relative;aspect-ratio:560/262;flex:0 1 auto;min-height:130px;max-width:620px;width:100%;margin:0 auto}.plot svg{position:absolute;inset:0;width:100%;height:100%}
+svg{display:block;overflow:visible}svg text{fill:var(--mute);font-size:11px;font-family:inherit}svg .grid{stroke:var(--line);stroke-width:1}svg .axis{stroke:var(--faint);stroke-width:1}svg .lbl{fill:var(--ink);font-weight:600}
+/* A kind's tab: one line of runs per row on the left, the picked run in full on the right, the pages under the rows. */
+.khead{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;flex:none;min-width:0}.khead .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.rows{flex:1;min-height:0;overflow:hidden}
+table{border-collapse:collapse;width:100%;table-layout:fixed;font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:39px}
+thead th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft);height:36px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--soft)}tbody tr[aria-selected="true"]{background:var(--soft)}tbody tr[aria-selected="true"] td.t{font-weight:600}
+td .q{color:var(--mute);font-size:12.5px;margin-left:6px}td.r{font-weight:600}td.pg{color:var(--mute);text-align:center}
 code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
-.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px;margin-top:12px}
-figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 16px 12px;min-width:0}figcaption{color:var(--mute);font-size:13px;margin-top:8px}
-.scroll{overflow-x:auto}.scroll svg{min-width:440px}
-svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin:0 auto}svg text{fill:var(--mute);font-size:11px;font-family:inherit}svg .grid{stroke:var(--line);stroke-width:1}svg .axis{stroke:var(--faint);stroke-width:1}svg .lbl{fill:var(--ink);font-weight:600}
-.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);margin-top:18px;max-width:780px}
-.foot{margin-top:40px;color:var(--mute);font-size:13px;max-width:860px}.foot li{margin:3px 0}
-@media (max-width:600px){h1{font-size:24px}th,td{padding:8px 10px}}
+.pager{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--line);background:var(--card)}
+.pager button{font:inherit;font-size:13px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.pager button:hover:not(:disabled){border-color:var(--faint)}.pager button:disabled{background:var(--soft);color:var(--mute);cursor:default}
+.pager .at{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}.pager .keys{margin-left:auto;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The picked run is fitted, not scrolled: its type shrinks to a floor, then a long note is cut to the lines that fit (all of it on hover). */
+.detail{padding:16px 18px;overflow:hidden;font-size:calc(15px * var(--ds, 1))}
+.detail .k{color:var(--mute);font-size:.867em}.detail h3{font-size:1.067em;line-height:1.35;margin:4px 0 8px}
+.detail .v{font-size:1.4em;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}.detail .m{color:var(--mute);font-size:.867em;margin:2px 0 12px}
+.detail .note{font-size:.933em;margin:0 0 12px}.detail .note.cut{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}.detail .more{color:var(--faint);font-size:.8em;margin:0 0 12px}
+.detail dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;font-size:.9em}.detail dt{color:var(--mute)}.detail dd{margin:0;min-width:0}.detail code{font-size:.89em}
+.about{max-width:860px;color:var(--mute);font-size:14px}.about li{margin:4px 0}.about h3{color:var(--ink);font-size:16px;margin:0 0 6px}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);max-width:780px}
+@media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none;min-height:637px}.detail{overflow:visible}}
+@media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-when{width:92px!important}.col-time,.col-pg,td.tm,td.pg,th.tm,th.pg{display:none}}
 </style>
 </head>
 <body>
@@ -68,11 +95,20 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
 <nav class="models" id="models" aria-labelledby="side-h"></nav>
 <p class="side-note" id="sidenote"></p>
 </div></aside>
-<div class="filters" id="filters" role="group" aria-label="Which tests to show"></div>
-<div class="cards" id="cards"></div>
-<section id="trend"></section>
-<div id="tables"></div>
-<section class="foot" id="foot"></section>
+<div class="tabs" id="tabs" role="tablist" aria-label="Which tests to show"></div>
+<div class="stage">
+<section class="pane" id="overview" role="tabpanel"><div class="cards" id="cards"></div><section id="trend"></section></section>
+<section class="pane" id="kindpane" role="tabpanel" hidden>
+<div class="khead"><h2 id="kname"></h2><p class="sub" id="ksub"></p></div>
+<div class="split">
+<div class="box"><div class="rows" id="rowsbox"><table><colgroup><col class="col-when" style="width:150px"><col><col class="col-res" style="width:160px"><col class="col-time" style="width:96px"><col class="col-pg" style="width:70px"></colgroup>
+<thead><tr><th>When</th><th>Test</th><th>Result</th><th class="tm">Time</th><th class="pg" title="Has a results page">Page</th></tr></thead><tbody id="tbody"></tbody></table></div>
+<div class="pager"><button type="button" id="newer">‹ Newer</button><button type="button" id="older">Older ›</button><span class="at" id="at"></span><span class="keys">↑ ↓ pick a run · page up / down · ← → tabs</span></div></div>
+<div class="box detail" id="detail" aria-live="polite"></div>
+</div>
+</section>
+<section class="pane about" id="foot" role="tabpanel" hidden></section>
+</div>
 </main>
 <!--DATA-->
 <script>
@@ -85,7 +121,7 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   catch { $('lede').textContent = 'The test record could not be read. Open this page from Agentic Coder with /docs, then the Tests tab.'; return; }
   const live = !built;
   const all = data.rows ?? [], KINDS = data.kinds ?? {}, models = data.models ?? [];
-  let rows = all, order = [], kind = 'all'; // the rows in view (the model picked, then the kind), the kinds in them, the kind shown
+  let rows = all, order = [], kind = 'all'; // the rows in view (the model picked, then the kind), the kinds in them, the tab shown
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = (iso) => { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
   const clock = (iso) => { const d = new Date(iso); const h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
@@ -104,13 +140,18 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   try { const m = new URL(location.href).searchParams.get('model') ?? localStorage.getItem('agentic-tests-model'); if (m && (m === 'all' || m === 'none' || models.some((x) => x.id === m))) pick = m; } catch { /* no storage */ }
   const inPick = (r) => pick === 'all' || (pick === 'none' ? !r.model : r.model === pick);
 
-  let shown = 'all'; // the kind asked for; `kind` is what it comes to once the model is picked
-  try { const s = new URL(location.href).searchParams.get('kind') ?? localStorage.getItem('agentic-tests-kind'); if (s && (s === 'all' || s in KINDS)) shown = s; } catch { /* no storage */ }
-  function filters() {
-    $('filters').innerHTML = [['all', 'All', rows.length], ...order.map((k) => [k, KINDS[k][0], rows.filter((r) => r.kind === k).length])]
-      .map(([k, name, n]) => `<button type="button" data-kind="${k}" aria-pressed="${k === kind}">${esc(name)}<span>${n}</span></button>`).join('');
+  // The tab asked for (`kind` is what it comes to once the model is picked): 'all' is the overview, 'about' is how the record is kept.
+  const valid = (s) => s === 'all' || s === 'about' || s in KINDS;
+  let shown = 'all';
+  try { const s = location.hash.slice(1) || new URL(location.href).searchParams.get('kind') || localStorage.getItem('agentic-tests-kind'); if (s && valid(s)) shown = s; } catch { /* no storage */ }
+  const tabList = () => ['all', ...order, 'about'];
+  function go(k) { shown = k; page = 0; sel = 0; try { localStorage.setItem('agentic-tests-kind', k); history.replaceState(null, '', '#' + k); } catch { /* no storage */ } draw(); }
+  function tabs() {
+    const n = (k) => (k === 'all' ? rows.length : rows.filter((r) => r.kind === k).length);
+    const name = (k) => (k === 'all' ? 'Overview' : k === 'about' ? 'How it is kept' : KINDS[k][0]);
+    $('tabs').innerHTML = tabList().map((k) => `<button type="button" role="tab" data-kind="${k}" aria-selected="${k === kind}">${esc(name(k))}${k === 'about' ? '' : `<span>${n(k)}</span>`}</button>`).join('');
   }
-  $('filters').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; shown = b.dataset.kind; try { localStorage.setItem('agentic-tests-kind', shown); } catch { /* no storage */ } draw(); };
+  $('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.kind); };
 
   // The side panel: All models, each model whose file is on this Mac, then the runs that are of no one model.
   function side() {
@@ -121,9 +162,10 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
       + models.map((m) => { const l = latest(m.id); return item(m.id, m.name, all.filter((r) => r.model === m.id).length, l ? `28 tasks: ${l.passed} of 28 · ${day(l.at)}` : 'no full 28-task run yet'); }).join('')
       + (none ? `<hr>${item('none', 'Not model-specific', none, 'unit tests and checks')}` : '');
     const names = [...new Set(gone.map((r) => modelName(r.model)))];
-    $('sidenote').textContent = gone.length ? `${gone.length} run${gone.length === 1 ? '' : 's'} of ${names.join(' and ')}, no longer on this Mac, show under All models only.` : '';
+    const note = gone.length ? `${gone.length} run${gone.length === 1 ? '' : 's'} of ${names.join(' and ')}, no longer on this Mac, show under All models only.` : '';
+    $('sidenote').textContent = note; $('models').title = note;
   }
-  $('models').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; pick = b.dataset.model; try { localStorage.setItem('agentic-tests-model', pick); } catch { /* no storage */ } draw(); };
+  $('models').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; pick = b.dataset.model; page = 0; sel = 0; try { localStorage.setItem('agentic-tests-model', pick); } catch { /* no storage */ } draw(); };
 
   const who = () => (pick === 'all' ? 'Every test run' : pick === 'none' ? 'Every run of no one model (the unit tests and checks)' : `Every run of ${modelName(pick)}`);
   function head() {
@@ -132,13 +174,15 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
     $('lede').textContent = `${who()} on this Mac, newest first: ${rows.length} run${rows.length === 1 ? '' : 's'} since ${day(rows[rows.length - 1].at)}. A run adds its own line when it finishes.`;
   }
 
+  // Overview: one card per kind, its latest run; a card opens its kind's tab.
   function cards() {
-    $('cards').innerHTML = order.filter((k) => kind === 'all' || kind === k).map((k) => {
+    $('cards').innerHTML = order.map((k) => {
       const mine = rows.filter((x) => x.kind === k);
       const r = mine.find((x) => !x.part && x.result !== 'stopped') ?? mine[0]; const [c] = mark(r);
-      return `<div class="card"><div class="k">${esc(KINDS[k][0])} · latest${k === 'bug' ? '' : r.part ? ' run, part of the set' : ' full run'}</div><div class="v ${c}">${esc(mark(r)[1])} ${esc(words(r))}</div><div class="n">${esc(r.name)}</div><div class="m">${day(r.at)} · ${clock(r.at)}${r.secs != null ? ` · ${secs(r.secs)}` : ''}${r.code ? ` · code ${esc(r.code)}` : ''}${pick === 'all' && r.model ? ` · ${esc(modelName(r.model))}` : ''}</div></div>`;
+      return `<button type="button" class="card" data-kind="${k}"><div class="k">${esc(KINDS[k][0])} · latest${k === 'bug' ? '' : r.part ? ' run, part of the set' : ' full run'}</div><div class="v ${c}">${esc(mark(r)[1])} ${esc(words(r))}</div><div class="n">${esc(r.name)}</div><div class="m">${day(r.at)} · ${clock(r.at)}${r.secs != null ? ` · ${secs(r.secs)}` : ''}${r.code ? ` · code ${esc(r.code)}` : ''}${pick === 'all' && r.model ? ` · ${esc(modelName(r.model))}` : ''}</div></button>`;
     }).join('');
   }
+  $('cards').onclick = (e) => { const c = e.target.closest('.card'); if (c) go(c.dataset.kind); };
 
   // The full 28-task runs at effort Off, oldest first: tasks passed, and seconds in all.
   function line({ title, pts, get, fmt, floor, top, cap }) {
@@ -158,52 +202,107 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
       s += `<g><circle cx="${X(i)}" cy="${Y(get(p))}" r="4.5" fill="var(--c-before)" stroke="var(--card)" stroke-width="2"/><circle cx="${X(i)}" cy="${Y(get(p))}" r="13" fill="transparent"><title>${esc(p.name)} · ${day(p.at)} ${clock(p.at)} · ${esc(fmt(get(p)))}${p.code ? ` · code ${esc(p.code)}` : ''}</title></circle></g>`;
       if (i === 0 || i === pts.length - 1) s += `<text class="lbl" x="${X(i)}" y="${Y(get(p)) - 10}" text-anchor="${i === 0 ? 'start' : 'end'}">${esc(fmt(get(p)))}</text>`;
     });
-    return `<figure><h3>${esc(title)}</h3><div class="scroll">${s}</svg></div><figcaption>${cap}</figcaption></figure>`;
+    return `<figure><h3>${esc(title)}</h3><div class="plot">${s}</svg></div><figcaption>${cap}</figcaption></figure>`;
   }
   function trend() {
     const pts = rows.filter((r) => r.kind === 'tasks' && r.total === 28 && !r.part && r.result !== 'stopped' && (!r.effort || /^(off|low)$/i.test(r.effort))).reverse();
-    if (pts.length < 2 || (kind !== 'all' && kind !== 'tasks')) { $('trend').innerHTML = ''; return; }
-    $('trend').innerHTML = `<h2>The 28-task check over time</h2><p class="sub">Each full run of the 28 practice tasks at the default effort, oldest on the left. Point at a dot for the run behind it; every run is in the table below.</p><div class="charts">${
+    if (pts.length < 2) { $('trend').innerHTML = ''; return; }
+    $('trend').innerHTML = `<h2>The 28-task check over time</h2><p class="sub">Each full run of the 28 practice tasks at the default effort, oldest on the left. Point at a dot for the run behind it; every run is in the Practice tasks tab.</p><div class="charts">${
       line({ title: 'Tasks passed, of 28', pts, get: (p) => p.passed, fmt: (v) => `${v} of 28`, floor: Math.min(20, ...pts.map((p) => p.passed)), top: 28, cap: 'Higher is better; 28 is every task.' })}${
       line({ title: 'Seconds for all 28', pts, get: (p) => p.secs, fmt: (v) => `${v.toLocaleString()} s`, cap: 'Lower is better. One run each, so a few percent either way is run-to-run noise.' })}</div>`;
   }
 
-  const KEEP = 30; // unit test runs shown; the rest stay in the record
-  function tables() {
-    $('tables').innerHTML = order.filter((k) => kind === 'all' || kind === k).map((k) => {
-      const mine = rows.filter((r) => r.kind === k), list = k === 'suite' ? mine.slice(0, KEEP) : mine;
-      return `<h2>${esc(KINDS[k][0])}</h2><p class="sub">${esc(KINDS[k][1][0].toUpperCase() + KINDS[k][1].slice(1))}. ${mine.length} run${mine.length === 1 ? '' : 's'}${mine.length > list.length ? `, the newest ${list.length} shown` : ''}.</p>
-<div class="wrap"><table><thead><tr><th>When</th><th>Test</th><th>Code</th><th>Settings</th><th>Result</th><th>Time</th><th>Results page</th></tr></thead><tbody>${list.map((r) => `<tr>
-<td>${day(r.at)}<span class="q">${clock(r.at)}</span></td>
-<td class="t"><b>${esc(r.name)}</b>${r.note ? `<span>${esc(r.note)}</span>` : ''}${r.raw ? `<code>${esc(r.raw)}</code>` : ''}</td>
-<td>${r.code ? `<code>${esc(r.code)}</code>` : '—'}</td>
-<td>${esc(settings(r))}${pick === 'all' && r.model ? `<span class="q">${esc(modelName(r.model))}</span>` : ''}</td>
-<td class="r">${result(r)}</td>
-<td>${secs(r.secs)}${mins(r.secs) ? `<span class="q">${mins(r.secs)}</span>` : ''}</td>
-<td class="p">${r.page ? `<a href="${href(r.page)}"${live ? ' target="_top"' : ''}>open the page</a>` : '—'}</td></tr>`).join('')}</tbody></table></div>`;
-    }).join('');
+  // A kind's tab. As many runs as fit the box make a page (one line each, so every page holds the same number); the picked run is shown in full beside them.
+  let page = 0, sel = 0, per = 12; // the page shown, the run picked (its place in the kind's list), runs per page
+  const fits = () => matchMedia('(min-width:900px) and (min-height:560px)').matches;
+  const mine = () => rows.filter((r) => r.kind === kind);
+  function fit() {
+    if (!fits()) { per = 15; return; }
+    const box = $('rowsbox'), th = box.querySelector('thead').getBoundingClientRect().height || 36, tr = $('tbody').rows[0];
+    per = Math.max(3, Math.floor((box.clientHeight - th) / (tr ? tr.getBoundingClientRect().height : 40)));
   }
+  function detail(r) {
+    if (!r) { $('detail').innerHTML = ''; return; }
+    const [c, m] = mark(r), dl = [
+      ['Code', r.code ? `<code>${esc(r.code)}</code>` : '—'],
+      ['Settings', esc(settings(r))],
+      r.model ? ['Model', esc(modelName(r.model))] : null,
+      r.raw ? ['Raw results', `<code>${esc(r.raw)}</code>`] : null,
+      ['Results page', r.page ? `<a href="${href(r.page)}"${live ? ' target="_top"' : ''}>open the page</a>` : '—'],
+    ].filter(Boolean);
+    $('detail').innerHTML = `<div class="k">${esc(KINDS[r.kind]?.[0] ?? r.kind)} · run ${sel + 1} of ${mine().length}</div><h3>${esc(r.name)}</h3><div class="v ${c}">${m} ${esc(words(r))}</div><div class="m">${day(r.at)} · ${clock(r.at)} · ${secs(r.secs)}${mins(r.secs) ? ` (${mins(r.secs)})` : ''}</div>${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}<dl>${dl.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+    fitDetail();
+  }
+  function fitDetail() {
+    const d = $('detail'), over = () => d.scrollHeight > d.clientHeight + 1;
+    d.style.removeProperty('--ds');
+    for (let s = 0.95; over() && s >= 0.8; s -= 0.05) d.style.setProperty('--ds', s.toFixed(2));
+    const note = d.querySelector('.note');
+    if (!note || !over()) return;
+    const lh = parseFloat(getComputedStyle(note).lineHeight) || 20;
+    note.classList.add('cut'); note.title = note.textContent;
+    note.insertAdjacentHTML('afterend', '<p class="more">The note is cut to fit; point at it for all of it.</p>');
+    for (let n = Math.round(note.scrollHeight / lh) - 1; n >= 1 && over(); n--) note.style.webkitLineClamp = n;
+  }
+  function table() {
+    const list = mine(); fit();
+    const pages = Math.max(1, Math.ceil(list.length / per));
+    sel = Math.min(Math.max(0, sel), list.length - 1); page = Math.floor(sel / per);
+    const from = page * per, part = list.slice(from, from + per);
+    $('kname').textContent = KINDS[kind][0];
+    $('ksub').textContent = `${KINDS[kind][1][0].toUpperCase() + KINDS[kind][1].slice(1)}. ${list.length} run${list.length === 1 ? '' : 's'}, newest first.`;
+    $('tbody').innerHTML = part.map((r, i) => `<tr data-i="${from + i}" aria-selected="${from + i === sel}" title="${esc(r.name)}">
+<td>${day(r.at)}<span class="q">${clock(r.at)}</span></td>
+<td class="t">${esc(r.name)}${pick === 'all' && r.model ? `<span class="q">${esc(modelName(r.model))}</span>` : ''}</td>
+<td class="r">${result(r)}</td>
+<td class="tm">${secs(r.secs)}</td>
+<td class="pg">${r.page ? '↗' : ''}</td></tr>`).join('');
+    $('at').textContent = `Page ${page + 1} of ${pages} · runs ${list.length ? from + 1 : 0}–${from + part.length} of ${list.length}`;
+    $('newer').disabled = page === 0; $('older').disabled = page >= pages - 1;
+    detail(list[sel]);
+  }
+  $('tbody').onclick = (e) => { const tr = e.target.closest('tr'); if (!tr) return; sel = +tr.dataset.i; table(); };
+  const turn = (d) => { sel = Math.min(Math.max(0, (page + d) * per), mine().length - 1); table(); };
+  $('newer').onclick = () => turn(-1); $('older').onclick = () => turn(1);
+  new ResizeObserver(() => { if (!$('kindpane').hidden) table(); }).observe($('rowsbox'));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || !rows.length) return;
+    const t = tabList(), at = t.indexOf(kind);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); go(t[(at + (e.key === 'ArrowRight' ? 1 : t.length - 1)) % t.length]); return; }
+    if (/^[1-9]$/.test(e.key) && +e.key <= t.length) { go(t[+e.key - 1]); return; }
+    if ($('kindpane').hidden) return;
+    const n = mine().length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = Math.min(Math.max(0, sel + (e.key === 'ArrowDown' ? 1 : -1)), n - 1); table(); }
+    else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); turn(e.key === 'PageDown' ? 1 : -1); }
+    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); sel = e.key === 'Home' ? 0 : n - 1; table(); }
+  });
+
   function draw() {
     rows = all.filter(inPick);
     order = Object.keys(KINDS).filter((k) => rows.some((r) => r.kind === k));
-    kind = shown === 'all' || order.includes(shown) ? shown : 'all';
+    kind = shown === 'all' || shown === 'about' || order.includes(shown) ? shown : 'all';
     side(); head();
     if (!rows.length) {
-      $('filters').innerHTML = ''; $('trend').innerHTML = ''; $('tables').innerHTML = '';
+      kind = 'all'; $('tabs').innerHTML = ''; $('trend').innerHTML = '';
+      $('overview').hidden = false; $('kindpane').hidden = true; $('foot').hidden = true;
       $('cards').innerHTML = all.length
         ? `<div class="empty">No run of ${esc(modelName(pick))} has been recorded yet. Run the 28-task check on it (<code>bun run eval --model ${esc(pick)}</code>) and its line will appear here.</div>`
         : '<div class="empty">No test has been recorded yet. The 28-task check (<code>bun run eval</code>), the real requests (<code>bun run eval:words</code>) and the unit tests (<code>bun run test</code>) each add a line here when they finish.</div>';
       return;
     }
-    filters(); cards(); trend(); tables();
+    tabs();
+    $('overview').hidden = kind !== 'all'; $('kindpane').hidden = kind === 'all' || kind === 'about'; $('foot').hidden = kind !== 'about';
+    if (kind === 'all') { cards(); trend(); } else if (kind !== 'about') table();
   }
-  draw();
-  $('foot').innerHTML = `<h3 style="color:var(--ink)">How this record is kept</h3><ul>
+  $('foot').innerHTML = `<h3>How this record is kept</h3><ul>
 <li>The record is one file on this Mac, <code>${esc(data.file ?? '')}</code>, one line per run. The 28-task check, the real requests, a real-bug run and the unit tests each add their line when they finish; any other check adds one with <code>recordTest()</code> from <code>models/evals/record.mjs</code>.</li>
 <li>The side panel picks a model. A run is filed under the model it used (the <code>model</code> on its line). A line written before that was added is filed by the model its results folder or its words name; the unit tests and the checks are of no one model, so they sit under Not model-specific.</li>
+<li>Each kind of test has its own tab. It shows as many runs as fit the window and pages through the rest, newest first; pick a run to see all of it (its notes, the code it ran on, its settings, its raw results and its results page).</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;
+  draw();
 })();
 </script>
 </body>
