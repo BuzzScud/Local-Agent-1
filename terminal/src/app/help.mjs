@@ -18,7 +18,7 @@ export const KEYS = [
   { group: 'The prompt', rows: [
     ['enter', 'send'],
     ['\\ then enter', 'a new line instead of sending'],
-    ['↑ ↓', 'earlier prompts (on the first or last line of the box)'],
+    ['↑ ↓', 'earlier prompts (on the first or last row of the box; inside a long prompt they move a row)'],
     ['/', 'the command list; keep typing to narrow it, enter or tab to pick'],
     ['@', 'attach a file: type part of its name and pick it'],
     ['!', 'run a shell command yourself, e.g. !ls'],
@@ -27,7 +27,9 @@ export const KEYS = [
   { group: 'Moving and deleting in the text', rows: [
     ['← →', 'move one character'],
     ['option + ← →', 'move one word'],
+    ['option + click', 'put the cursor on the letter you click (Terminal moves it with arrow keys)'],
     ['ctrl+a · ctrl+e', 'start · end of the line'],
+    ['ctrl+a twice', 'select the whole prompt (and copy it)'],
     ['option + delete · ctrl+w', 'delete the word before the cursor'],
     ['ctrl+u', 'delete everything before the cursor on this line'],
     ['ctrl+k', 'delete everything after the cursor on this line'],
@@ -38,6 +40,7 @@ export const KEYS = [
     ['← → · esc', 'with text selected: jump to its start or end · keep the text, drop the selection'],
     ['esc twice', 'clear the whole prompt'],
     ['ctrl+c', 'clear the whole prompt (on an empty prompt: press twice to quit)'],
+    ['ctrl+z · ctrl+y', 'undo · redo the last change: a word typed, a delete, a paste, a clear'],
   ] },
   { group: 'While Agentic Coder works', rows: [
     ['esc', 'stop Agentic Coder; then say what to do instead'],

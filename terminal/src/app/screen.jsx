@@ -4,8 +4,9 @@
 // the status bar).
 // Finished lines go in <Static> (printed once, so the terminal's own
 // scrollback keeps working); the live area below them is redrawn.
-import React, { useRef, useLayoutEffect } from 'react';
-import { Box, Text, Static, renderToString, measureElement } from 'ink';
+import React, { useRef, useLayoutEffect, useState } from 'react';
+import { Box, Text, Static, renderToString, measureElement, useCursor } from 'ink';
+import { cursorCell, rowText, selection, promptTextWidth } from './edit-input.mjs';
 import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
@@ -478,6 +479,7 @@ const SHORTCUTS = [
   ['! to run a shell command', 'esc to interrupt Agentic Coder'],
   ['\\ + enter for a new line', 'ctrl+c twice to quit'],
   ['↑ ↓ for earlier prompts', 'shift+arrows to select and copy'],
+  ['⌥+click to move the cursor', 'ctrl+z to undo · ctrl+y to redo'],
 ];
 
 // The footer's right side is the mode, as in Claude Code; a narrow window
@@ -516,47 +518,53 @@ function Footer({ app }) {
   );
 }
 
-// One line of the prompt with part of it selected: the selected characters on
-// a blue background, the cursor inverse, the rest plain. A selected line
-// break shows as one highlighted space.
-function selectedLine(line, start, sel, col) {
-  const chars = [...(line || ' ')].map((ch, i) => ({ ch, sel: start + i >= sel[0] && start + i < sel[1] && (line || start + i < sel[1]), cur: i === col }));
-  if (col === line.length && line.length) chars.push({ ch: ' ', sel: false, cur: true });
-  if (line.length && start + line.length >= sel[0] && start + line.length < sel[1] && col !== line.length) chars.push({ ch: ' ', sel: true, cur: false });
-  const out = []; let run = '', style = null;
-  const flush = (k) => { if (!run) return; out.push(style.cur ? <Text key={k} inverse>{run}</Text> : style.sel ? <Text key={k} backgroundColor={C.selBg} color="white">{run}</Text> : <Text key={k}>{run}</Text>); run = ''; };
-  chars.forEach((c, i) => { const st = { sel: c.sel && !c.cur, cur: c.cur }; if (style && (st.sel !== style.sel || st.cur !== style.cur)) flush(i); style = st; run += c.ch; });
-  flush('end');
+// One row of the prompt with part of it selected: the selected characters on
+// a blue background, the rest plain. A selected line break (brk, where the
+// line ends) shows as one highlighted space.
+function selectedRow(text, start, sel, brk) {
+  const out = [];
+  let run = '', on = null, at = start;
+  const flush = () => { if (run) out.push(on ? <Text key={out.length} backgroundColor={C.selBg} color="white">{run}</Text> : <Text key={out.length}>{run}</Text>); run = ''; };
+  const add = (ch, s) => { if (on !== null && s !== on) flush(); on = s; run += ch; };
+  for (const ch of text) { add(ch, at >= sel[0] && at < sel[1]); at += ch.length; }
+  if (brk != null && brk >= sel[0] && brk < sel[1]) add(' ', true);
+  flush();
   return out;
 }
 
+// Where a box is drawn in the live area, from the layout of it and its parents.
+const offsetOf = (el) => {
+  let x = 0, y = 0;
+  for (let n = el; n; n = n.parentNode) { const l = n.yogaNode?.getComputedLayout(); if (l) { x += l.left; y += l.top; } }
+  return { x, y };
+};
+
+// The prompt, in rows it wraps itself (the same rows ↑ ↓ move through). The
+// terminal's own cursor is put where you type: ⌥-click in Terminal counts
+// the arrow keys it sends from it, and an input method opens its box there.
 function PromptBox({ app }) {
   const { input, width, inputMode } = app;
   const border = inputMode === 'bash' ? C.edits : C.border;
   const prefix = inputMode === 'bash' ? '!' : '>';
-  const value = inputMode === 'bash' ? input.value.slice(1) : input.value;
-  const cursor = inputMode === 'bash' ? Math.max(0, input.cursor - 1) : input.cursor;
-  const placeholder = app.placeholder;
-  const lines = value.split('\n');
-  // the selection, in this box's own positions (the ! of shell mode is not drawn)
-  const shift = inputMode === 'bash' ? 1 : 0;
-  const sel = input.anchor != null && input.anchor !== input.cursor ? [Math.min(input.anchor, input.cursor) - shift, Math.max(input.anchor, input.cursor) - shift] : null;
-  let pos = 0;
+  const opts = { width: promptTextWidth(width), skip: inputMode === 'bash' ? 1 : 0 };
+  const { row: curRow, x: curX, rows } = cursorCell(input, opts);
+  const sel = selection(input);
+  const ref = useRef(null);
+  const [at, setAt] = useState(null);
+  useLayoutEffect(() => { const o = offsetOf(ref.current); if (o.x !== at?.x || o.y !== at?.y) setAt(o); });
+  const { setCursorPosition } = useCursor();
+  setCursorPosition(at && !app.leaving ? { x: at.x + 4 + curX, y: at.y + 1 + curRow } : undefined);
+  const v = input.value;
   return (
-    <Box borderStyle="round" borderColor={border} paddingX={1} width={width} flexDirection="column">
-      {lines.map((line, li) => {
-        const start = pos;
-        pos += line.length + 1;
-        const here = cursor >= start && cursor <= start + line.length;
-        const col = cursor - start;
-        const lead = li === 0 ? <Text color={inputMode === 'bash' ? C.edits : undefined}>{prefix} </Text> : <Text>  </Text>;
-        if (!value && li === 0) {
-          return <Text key={li}>{lead}<Text inverse>{placeholder[0]}</Text><Text color={C.dim}>{placeholder.slice(1)}</Text></Text>;
-        }
-        if (sel && sel[0] <= start + line.length && sel[1] > start) return <Text key={li}>{lead}{selectedLine(line, start, sel, here ? col : -1)}</Text>;
-        if (!here) return <Text key={li}>{lead}{line || ' '}</Text>;
-        if (app.argHint && col === line.length) return <Text key={li}>{lead}{line}<Text inverse> </Text><Text color={C.dim}>{app.argHint}</Text></Text>;
-        return <Text key={li}>{lead}{line.slice(0, col)}<Text inverse>{line[col] ?? ' '}</Text>{line.slice(col + 1)}</Text>;
+    <Box ref={ref} borderStyle="round" borderColor={border} paddingX={1} width={width} flexDirection="column">
+      {rows.map((r, i) => {
+        const lead = i === 0 ? <Text color={inputMode === 'bash' ? C.edits : undefined}>{prefix} </Text> : <Text>  </Text>;
+        if (i === 0 && !v.slice(opts.skip)) return <Text key={i}>{lead}<Text color={C.dim}>{app.placeholder}</Text></Text>;
+        const t = rowText(v, r, opts);
+        if (sel && sel[0] <= r.end && sel[1] > r.start) return <Text key={i}>{lead}{selectedRow(t, r.start, sel, r.last && r.end < v.length ? r.end : null)}</Text>;
+        // "/btw " typed: its argument's hint after the cursor
+        if (app.argHint && i === curRow && r.last && input.cursor === r.end) return <Text key={i} wrap="truncate-end">{lead}{t} <Text color={C.dim}>{app.argHint}</Text></Text>;
+        return <Text key={i}>{lead}{t}</Text>;
       })}
     </Box>
   );

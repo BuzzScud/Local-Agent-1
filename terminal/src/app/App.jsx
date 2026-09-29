@@ -19,7 +19,7 @@ import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
-import { editInput, insertText, cursorLine, mentionAt, selectedText } from './edit-input.mjs';
+import { editInput, insertText, cursorLine, mentionAt, selectedText, withUndo, undoEdit, redoEdit, moveBy, promptTextWidth } from './edit-input.mjs';
 import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands, COMMANDS } from './commands.mjs';
 import { startWeightsServer, listDocs } from './weights.mjs';
@@ -166,6 +166,9 @@ export function App({ opts, win, onRestart }) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [popup, setPopup] = useState(null); // a box in the middle of the window (/help); any key closes it
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
+  // Quitting or restarting: the terminal's cursor leaves the prompt box for the
+  // line under it, so what is printed after the app goes there, not into the box.
+  const [leaving, setLeaving] = useState(false);
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
   // /btw: a side question and its answer, in a panel in the prompt box's place
@@ -641,6 +644,7 @@ export function App({ opts, win, onRestart }) {
   }
 
   const quit = useCallback(async () => {
+    setLeaving(true);
     abortRef.current?.abort();
     btwRef.current?.ac.abort();
     saveNow();
@@ -679,6 +683,7 @@ export function App({ opts, win, onRestart }) {
       ...(opts.ctx ? ['--ctx', String(opts.ctx)] : []),
       ...(['low', 'medium', 'high'].includes(level) ? ['--effort', level] : []),
     ]);
+    setLeaving(true);
     await serverRef.current?.stop({ keep: true });
     exit();
   }, [effort, exit, model, onRestart, opts.ctx, opts.flows, opts.url, push, saveNow, thinking]);
@@ -1063,10 +1068,37 @@ export function App({ opts, win, onRestart }) {
   usePaste((text) => {
     setPopup(null); // a paste closes the /help box, like any key
     if (S.current.perm || S.current.picker || (S.current.btw && !S.current.answerWait)) return;
-    setInput((s) => insertText(s, text.replace(/\r\n?/g, '\n')));
+    setInput((s) => withUndo(s, insertText(s, text.replace(/\r\n?/g, '\n'))));
   });
 
+  // The prompt box's rows as it draws them (its width; the ! of shell mode is not drawn).
+  const rowsOf = (s) => ({ width: promptTextWidth(width), skip: s.value.startsWith('!') ? 1 : 0 });
+  // ⌥-click in Terminal moves the cursor by sending arrow keys, all at once:
+  // plain arrows for the prompt wait for the rest of their read. One alone is
+  // a key as usual; several are one move by rows and cells, kept in the box
+  // (never the menu or earlier prompts), whatever order they came in.
+  const arrowsRef = useRef([]);
+  const flushArrows = () => {
+    const keys = arrowsRef.current;
+    if (!keys.length) return;
+    arrowsRef.current = [];
+    if (keys.length === 1) { onKey('', keys[0]); return; }
+    const n = (k) => keys.filter((x) => x[k]).length;
+    setPopup(null);
+    setInput((s) => withUndo(s, moveBy(s, n('downArrow') - n('upArrow'), n('rightArrow') - n('leftArrow'), rowsOf(s))));
+  };
   useInput((ch, key) => {
+    const cur = S.current;
+    const arrow = (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) && !key.shift && !key.meta && !key.ctrl;
+    if (arrow && !cur.tooSmall && !cur.perm && !cur.picker && !(cur.btw && !cur.answerWait) && !waitRef.current) {
+      arrowsRef.current.push(key);
+      if (arrowsRef.current.length === 1) queueMicrotask(flushArrows);
+      return;
+    }
+    flushArrows();
+    onKey(ch, key);
+  });
+  const onKey = (ch, key) => {
     const cur = S.current;
     // A window too small to show the screen takes no keys (enter could answer
     // a question you cannot see), except ctrl+c.
@@ -1199,7 +1231,7 @@ export function App({ opts, win, onRestart }) {
     // Keys that work everywhere
     if (key.ctrl && ch === 'c') {
       if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
-      if (cur.input.value) { setInput({ value: '', cursor: 0 }); return; }
+      if (cur.input.value) { setInput((s) => withUndo(s, { value: '', cursor: 0 })); return; } // ctrl+z brings it back
       if (Date.now() - exitArmed.current < 2000) { quit(); return; }
       exitArmed.current = Date.now();
       flash('Press ctrl+c again to exit', 2000);
@@ -1210,10 +1242,10 @@ export function App({ opts, win, onRestart }) {
       // An open menu or shortcut list closes first; the next esc stops Agentic Coder.
       if (menu) { setMenuClosedFor(cur.input.value); return; }
       if (showShortcuts) { setShowShortcuts(false); return; }
-      if (selectedText(cur.input)) { setInput({ value: cur.input.value, cursor: cur.input.cursor }); return; } // drops the selection only
+      if (selectedText(cur.input)) { setInput((s) => withUndo(s, { value: s.value, cursor: s.cursor })); return; } // drops the selection only
       if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
       if (cur.input.value) {
-        if (Date.now() - escArmed.current < 1500) { setInput({ value: '', cursor: 0 }); return; }
+        if (Date.now() - escArmed.current < 1500) { setInput((s) => withUndo(s, { value: '', cursor: 0 })); return; } // ctrl+z brings it back
         escArmed.current = Date.now();
         flash('Press esc again to clear', 1500);
       }
@@ -1263,7 +1295,7 @@ export function App({ opts, win, onRestart }) {
       }
     }
     // History
-    const pos = cursorLine(cur.input);
+    const pos = cursorLine(cur.input, rowsOf(cur.input)); // rows as drawn: ↑ ↓ move inside a long prompt first
     if (key.upArrow && !key.shift && pos.line === 0) {
       const h = historyRef.current;
       if (!h.length) return;
@@ -1291,8 +1323,15 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     if (ch === '?' && !cur.input.value) { setShowShortcuts((v) => !v); return; }
-    setInput((s) => editInput(s, ch, key));
-  });
+    // ctrl+z takes back the last change to the prompt, ctrl+y puts it back
+    if (key.ctrl && (ch === 'z' || ch === 'y')) {
+      const back = ch === 'z';
+      if (!(back ? cur.input.undo : cur.input.redo)?.length) { flash(back ? 'Nothing to undo' : 'Nothing to redo', 1500); return; }
+      setInput((s) => (back ? undoEdit(s) : redoEdit(s)));
+      return;
+    }
+    setInput((s) => withUndo(s, editInput(s, ch, key, rowsOf(s))));
+  };
 
   // Items added some other way (a resumed conversation, /clear) or a resize:
   // measure after the frame, then draw once more with the space right.
@@ -1308,7 +1347,7 @@ export function App({ opts, win, onRestart }) {
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
   const app = {
-    btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint,
+    btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
     modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
