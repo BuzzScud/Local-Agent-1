@@ -29,7 +29,7 @@ Memory: the recall set (`models/evals/bench/memory/recall-set.json`: 20
 facts, 30 scored requests), BGE-M3's own rule deciding how many facts come
 and the reranker which ones, as the app does.
 
-| Reranker | Code: right function first (higher is better) | Code: in the first 3 (higher is better) | Memory: right / wrong of 30 | Time a request (lower is better) |
+| Reranker | Code: right function first (higher is better) | Code: in the first 3 (higher is better) | Memory: right / wrong of 30 | Time a search (lower is better) |
 |---|---|---|---|---|
 | none (BGE-M3 alone) | 6 of 12 | 8 of 12 | 23 / 0 | — |
 | jina-reranker-v1-tiny-en (37 MB) | 5 | 9 | 22 / 2 | 0.1–0.3 s |
@@ -54,6 +54,10 @@ and the reranker which ones, as the app does.
 Memory: the reranker's server holds ~1.1 GB while it is loaded (measured with
 `-c 2048`; 1.56 GB with `-c 8192`, same choices and speed). It is started at
 the first request after the row is turned on and stopped when it is turned off.
+
+A whole request with Gemma (29 Sep, the big-project question practice task, run as
+`coding -p` does): the same answer and the same pieces as with the rows off, 49 s
+against 42 s: the reranker's first start and each search that brought something.
 
 A real check on this repo's files (Read first, 3 requests, BGE-M3 + Hybrid +
 the reranker, ~2 s each): better on two ("the effort panel rows" put

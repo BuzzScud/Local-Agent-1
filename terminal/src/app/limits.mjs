@@ -51,7 +51,7 @@ export const LIMITS = [
       const m = RERANKERS[v];
       if (!rerankerReady(m)) return `⚠ not on this Mac: coding setup downloads it (${mb(m.bytes)})`;
       const last = e.lastRerank ? ` · last ${(e.lastRerank.ms / 1000).toFixed(1)} s` : '';
-      return `reads the best ${m.pool} with your request · ~2 s, ~1.1 GB${last}`;
+      return `reads the best ${m.pool} with your request · ~2 s a search, ~1.1 GB${last}`;
     },
   },
   {
@@ -197,7 +197,8 @@ export function modelWithLimits(model, values) {
 // The search's rows (they take effect with the next message; no restart): the
 // embedder and the reranker are servers of their own, started at their first
 // use. Embedder Off takes it away from every search (they go by words, and
-// the code search pauses); back on, one is made again. A reranker turned off
+// the code search pauses); back on, one is made again where the memory or
+// the code search uses it. A reranker turned off
 // is stopped, to hand its memory back. A model not on this Mac is left off.
 // → a note to show when a row could not take effect, else null.
 //   make, ready: how a model is made and whether its files are here (tests pass their own).
@@ -210,7 +211,9 @@ export function applySearch(agent, values, { make = { embedder: (m) => new Embed
       if (agent.memory) agent.memory.embedder = null;
       agent.codeIndex = null;
     }
-  } else if (!agent.embedder && ready.embedder(EMBEDDERS[e])) {
+  } else if (!agent.embedder && (agent.memory || agent.helpers?.has?.('rag')) && ready.embedder(EMBEDDERS[e])) {
+    // Only where one is used (the memory, or the code search), as at start:
+    // with both off, the focused paths keep choosing their file by words.
     const made = make.embedder(EMBEDDERS[e]);
     agent.embedder = made;
     agent.ranker = made;

@@ -122,6 +122,13 @@ test('the code search\'s word half finds a function by its exact name, from the 
   expect(index.wordSearch('zzz nothing')).toEqual([]);
 });
 
+test('the Context and Helpers lines say how the pieces were chosen, only when the Search rows changed it', async () => {
+  const { contextHead } = await import('../src/app/screen.jsx');
+  const items = [{ from: 'memory', text: 'a' }, { from: 'memory', text: 'b', skipped: 'an event, skipped' }];
+  expect(contextHead({ items, tokens: 40, ms: 1500 })).toBe('· 1 brought along · 1 skipped · +40 tokens · 1.5 s');
+  expect(contextHead({ items, tokens: 40, ms: 50, chosen: 'by meaning + words, reranked' })).toBe('· 1 brought along · by meaning + words, reranked · 1 skipped · +40 tokens');
+});
+
 test('the reranker runs in the engine\'s reranking mode, on its own server', () => {
   const m = RERANKERS[DEFAULT_RERANKER];
   expect(m.kind).toBe('rerank');

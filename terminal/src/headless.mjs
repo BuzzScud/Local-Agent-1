@@ -99,6 +99,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   return {
     saved, save, lessons: agent.lessons,
     reason, finalText, log, messages: agent.messages, secs,
+    // How the helpers searched (/effort's Search rows, from the limits given).
+    search: { embedder: agent.embedder ? agent.embedder.model?.id ?? 'on' : 'off', retriever: agent.search.retriever, reranker: agent.reranker?.model?.id ?? 'off' },
     steps: log.filter((e) => e.type === 'tool').length,
     // The model's own work: its steps (a helper's step is not one), and every
     // call it answered (the steps, the focused paths' drafts, the checks).

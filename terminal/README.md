@@ -52,7 +52,8 @@ thinking cap, tries, steps, command output, timeout, and the trim and summarize 
 The Search rows choose how the helpers find what goes along with a request (the code search,
 Read first's files, the saved facts, Claude's notes): **Embedder** BGE-M3 or Off (words only; the code
 search pauses), **Retriever** Meaning or Hybrid (meaning + a word search, merged by rank fusion), and
-**Reranker** Off or Qwen3 0.6B (reads your request with the best 15 pieces, ~2 s and ~1.1 GB, downloaded by
+**Reranker** Off or Qwen3 0.6B (reads your request with the best 15 pieces: ~2 s for each search that
+brings something, ~7 s on a whole request in the 29 Sep check with its first start, and ~1.1 GB; downloaded by
 `coding setup`). How many pieces come along is still each search's own rule; the Retriever and the
 Reranker only choose which. They apply from the next message with no restart, and `coding -p` follows
 them. Measured on 29 Sep, Hybrid changed nothing and the reranker helped only the code search, so both

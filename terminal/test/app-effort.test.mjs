@@ -261,4 +261,9 @@ test('/effort Search rows: Retriever and Reranker save with one enter, no restar
   expect(r.text).toContain('Qwen3-Reranker 0.6B is not on this Mac yet, so the reranker stays off: run coding setup (639 MB), then save it again in /effort.');
   expect(r.text).toMatch(/embedder (BGE-M3|Off) · retriever hybrid · reranker Qwen3 0\.6B/);
   expect(settingsOf(base).limits).toEqual({ retriever: 'hybrid', reranker: 'qwen3-reranker-0.6b' });
+  // the panel fits a 24-row window with room to spare (at the window's height the screen redraws whole on every key)
+  const lines = r.snapshots.moved.split('\n');
+  const top = lines.findIndex((l) => l.includes('Effort and limits'));
+  const bottom = lines.findIndex((l, i) => i > top && l.includes('↑↓ choose'));
+  expect(bottom - top + 1 + 2).toBeLessThanOrEqual(22); // with its two border lines
 }, T);

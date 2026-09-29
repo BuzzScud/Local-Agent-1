@@ -5,7 +5,7 @@
 // embedder (BGE-M3) reads the two apart, which is why it is fast and why it
 // can be fooled by a piece that only shares the request's words.
 // Measured 29 Sep 2026 on the M4 (README.md): on 12 code requests the right
-// function came in the first 3 for 10 (8 without it), ~1.9 s a request for 15
+// function came in the first 3 for 10 (8 without it), ~1.9 s a search for 15
 // pieces; on the 30 memory requests it did not beat BGE-M3 alone.
 export default {
   folder: 'qwen3-reranker-0.6b',

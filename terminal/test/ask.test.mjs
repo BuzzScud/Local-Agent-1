@@ -127,3 +127,17 @@ test('without a screen, the answers hook replies and every question is recorded'
   expect(run3.reason).toBe('declined');
   await Promise.all([fake.close(), fake2.close(), fake3.close()]);
 });
+
+test('coding -p follows /effort\'s Search rows: the saved retriever is used, Embedder Off leaves every search to words', async () => {
+  const { defaultLimits } = await import('../src/app/limits.mjs');
+  const model = MODELS[DEFAULT_MODEL];
+  const fake = await startFakeServer([{ text: 'Hello.' }]);
+  const r = await runHeadless({ prompt: 'hello', cwd: project(), url: fake.url, model, thinking: false, ctx: 32768, limits: { ...defaultLimits(model), embedder: 'off', retriever: 'hybrid' } });
+  expect(r.search).toEqual({ embedder: 'off', retriever: 'hybrid', reranker: 'off' });
+  // no limits given (the practice bench): the old way
+  const fake2 = await startFakeServer([{ text: 'Hello.' }]);
+  const r2 = await runHeadless({ prompt: 'hello', cwd: project(), url: fake2.url, model, thinking: false, ctx: 32768 });
+  expect(r2.search.retriever).toBe('meaning');
+  expect(r2.search.reranker).toBe('off');
+  await Promise.all([fake.close(), fake2.close()]);
+});

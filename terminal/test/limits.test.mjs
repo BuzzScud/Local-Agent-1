@@ -177,4 +177,12 @@ test('applySearch: Embedder Off takes it from every search, back on makes one; t
   applySearch(agent, d, opts(true));
   expect(agent.reranker).toBe(null);
   expect(stopped).toEqual([['reranker', { keep: false }]]); // turned off: its memory is handed back
+  // with the memory and the code search both off none is made, as at start: the focused paths keep choosing by words
+  const bare = { embedder: null, ranker: null, memory: null, helpers: new Set(['named']), codeIndex: null, search: {}, reranker: null };
+  applySearch(bare, d, opts(true));
+  expect([bare.embedder, bare.ranker]).toEqual([null, null]);
+  applySearch({ ...bare, helpers: new Set(['rag']) }, d, opts(true));
+  const withRag = { ...bare, helpers: new Set(['rag']) };
+  applySearch(withRag, d, opts(true));
+  expect(withRag.embedder?.kind).toBe('embedder');
 });

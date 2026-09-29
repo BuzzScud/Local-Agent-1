@@ -51,12 +51,14 @@ export function changeHelpers(on, what, arg, env = process.env) {
 // The panel: one row a helper, its codename in bold before the label (the
 // left cell as parts, [text, bold]), then how to switch them.
 //   last: what the helpers brought to the last request ([{ from, text, tokens }]).
-export function helperRows(on, last = []) {
+//   ragPaused: /effort's Embedder row is Off, so Oracle (on or not) finds nothing.
+export function helperRows(on, last = [], { ragPaused = false } = {}) {
   const rows = HELPER_INFO.map((h, i) => {
     const got = last.filter((x) => HELPER_OF[x.from] === h.name);
     const tokens = got.reduce((s, x) => s + (x.tokens ?? 0), 0);
     const brought = got.length ? ` · last request: ${got.length} item${got.length === 1 ? '' : 's'}, ${tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens} tokens` : '';
-    return [[[`${i + 1}  ${on.has(h.name) ? 'on ' : 'off'}  `], [h.code.toUpperCase().padEnd(CODE_W), true], [`  ${h.label}`]], `${h.what}${brought}`];
+    const paused = ragPaused && h.name === 'rag' && on.has('rag') ? ' · paused: Embedder is Off in /effort' : '';
+    return [[[`${i + 1}  ${on.has(h.name) ? 'on ' : 'off'}  `], [h.code.toUpperCase().padEnd(CODE_W), true], [`  ${h.label}`]], `${h.what}${paused}${brought}`];
   });
   return [...rows, ['', '/helpers off 3 · /helpers on oracle · /helpers off all · kept in settings.json']];
 }

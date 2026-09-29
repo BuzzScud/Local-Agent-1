@@ -1098,7 +1098,7 @@ export class Agent extends EventEmitter {
         const n = found.parts.filter((x) => x.close >= Math.max(CUT, best - MARGIN)).slice(0, 8).length;
         const hybrid = this.search?.retriever === 'hybrid';
         const chosen = await choose({ query: text, byMeaning: found.parts, byWords: hybrid ? index.wordSearch(text) : null, n, key: partKey, text: (p) => index.textOf(p, this.reranker?.model?.chars), retriever: this.search?.retriever, reranker: this.reranker, signal });
-        if (chosen.note) this.emit('note', { text: chosen.note, tone: 'dim' });
+        if (chosen.note && !this.rerankTold) { this.rerankTold = true; this.emit('note', { text: chosen.note, tone: 'dim' }); } // once a session
         if (chosen.order === 'hybrid' || chosen.reranked) codeChosen = howChosen(chosen);
         const byFile = new Map();
         for (const p of chosen.picked.map((x) => ({ ...x, close: x.close ?? found.closeOf?.get(partKey(x)) ?? 0 }))) {

@@ -112,11 +112,16 @@ const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', 
 // helpers brought (agent.bringHelpers, titled "Helpers"): one folded line,
 // like a tool's result; ctrl+o prints the list, each item with its fit and size
 // and, on the Helpers line, the codename of the helper that brought it.
-function Context({ it, width }) {
+// The folded line's words after its title. it.chosen: /effort's Search rows
+// changed how the pieces were chosen ("by meaning + words, reranked").
+export function contextHead(it) {
   const sent = it.items.filter((x) => !x.skipped);
   const skipped = it.items.length - sent.length;
   const secs = it.ms >= 100 ? ` · ${(it.ms / 1000).toFixed(1)} s` : '';
-  const head = `· ${sent.length} brought along${skipped ? ` · ${skipped} skipped` : ''}${it.tokens ? ` · +${it.tokens} tokens` : ''}${secs}`;
+  return `· ${sent.length} brought along${it.chosen ? ` · ${it.chosen}` : ''}${skipped ? ` · ${skipped} skipped` : ''}${it.tokens ? ` · +${it.tokens} tokens` : ''}${secs}`;
+}
+function Context({ it, width }) {
+  const head = contextHead(it);
   const textW = Math.max(20, Math.min(width, 110) - 40);
   return (
     <Box flexDirection="column">
@@ -626,7 +631,6 @@ function LimitsPicker({ app }) {
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Text bold>Effort and limits</Text>
       <Text color={C.dim} wrap="truncate-end">←→ moves a row; its cost is on the right. Kept for next time.</Text>
-      <Text> </Text>
       {lv ? (
         <>
           <Text wrap="truncate-end">
@@ -669,7 +673,6 @@ function LimitsPicker({ app }) {
         <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {'Reset all'.padEnd(lw)}</Text>
         <Text color={C.dim}>enter here: every row back to its default</Text>
       </Text>
-      <Text> </Text>
       <Text color={C.dim} wrap="truncate-end">↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model</Text>
     </Box>
   );

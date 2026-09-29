@@ -61,6 +61,10 @@ test('the panel: one row a helper, on or off, its codename in bold, with what it
   expect(rows[1][1]).toEndWith(' · last request: 2 items, 1.2k tokens');
   expect(rows[2][1]).toBe(HELPER_INFO[2].what);
   expect(COMMANDS.find((c) => c.name === 'helpers')).toMatchObject({ arg: '[on|off] [number|name|all]' });
+  // /effort's Embedder Off: Oracle, on, says it finds nothing; off, nothing to say
+  expect(helperRows(new Set(['rag']), [], { ragPaused: true })[2][1]).toContain('paused: Embedder is Off in /effort');
+  expect(helperRows(new Set(['named']), [], { ragPaused: true })[2][1]).not.toContain('paused');
+  expect(helperRows(new Set(['rag']))[2][1]).not.toContain('paused');
 });
 
 test('on screen: the Helpers line lists each item under its codename, the panel pads the bold codename cell like any other', () => {
