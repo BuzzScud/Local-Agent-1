@@ -4,7 +4,7 @@
 // matcher — and checks the files' SHA-256. Safe to run again: finished parts are skipped.
 import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, MODELS_DIR, engineOf, serverBinOf, modelPath, draftPath } from '../registry.mjs';
+import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, MODELS_DIR, engineOf, serverBinOf, modelPath, draftPath } from '../registry.mjs';
 import { buildEngine } from './engine/build.mjs';
 
 export const RUNTIME = ENGINE;
@@ -65,5 +65,8 @@ export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => pr
   // The memory's matcher. Without it the memory still works, by words.
   const e = EMBEDDERS[DEFAULT_EMBEDDER];
   if (e) await fetchChecked({ name: `${e.name}, the memory's matcher`, url: e.url, file: modelPath(e), bytes: e.bytes, sha: e.sha256 }, say);
+  // The reranker (/effort's Reranker row, off until you turn it on).
+  const r = RERANKERS[DEFAULT_RERANKER];
+  if (r) await fetchChecked({ name: `${r.name}, the search's reranker`, url: r.url, file: modelPath(r), bytes: r.bytes, sha: r.sha256 }, say);
   say('✓ all checked. Run: coding');
 }

@@ -17,6 +17,7 @@ import { walk } from './fs.mjs';
 import { outline } from './outline.mjs';
 import { CODE_FILE } from './repomap.mjs';
 import { HOME } from '../../../models/index.mjs';
+import { Words, terms, WORD_TOP } from '../agent/search.mjs';
 
 // How close a part must be to come along: the best one at least CUT, the
 // others no further than MARGIN behind it. Set on the practice tasks with
@@ -194,9 +195,38 @@ export class CodeIndex {
     const scored = this.parts.map((p) => ({ rel: p.rel, name: p.name, line: p.line, end: p.end, stamp: p.stamp, close: dot(q, p.vec) })).sort((a, b) => b.close - a.close);
     const files = new Map();
     for (const s of scored) if (!files.has(s.rel)) files.set(s.rel, s.close);
-    return { parts: scored.slice(0, top), files };
+    // Every part's closeness, for a part the word search brings (Hybrid).
+    const closeOf = new Map(scored.map((s) => [partKey(s), s.close]));
+    return { parts: scored.slice(0, top), files, closeOf };
+  }
+
+  // The parts that share the request's words, best first (BM25, the word
+  // half of /effort's Hybrid retriever). A part's words are read from its
+  // file as it is now, and kept until the file changes.
+  wordSearch(text, { top = WORD_TOP } = {}) {
+    if (!this.ready) return [];
+    if (this.words?.parts !== this.parts) {
+      this.words = { parts: this.parts, index: new Words(this.parts.map((p) => terms(this.textOf(p, WORDING)))) };
+    }
+    return this.words.index.order(text, top).map((i) => { const p = this.parts[i]; return { rel: p.rel, name: p.name, line: p.line, end: p.end, stamp: p.stamp }; });
+  }
+
+  // A part as the small models read it: its file, its name, its first lines.
+  textOf(p, chars = WORDING) {
+    this.lines ??= new Map(); // rel → { stamp, lines }
+    let f = this.lines.get(p.rel);
+    if (!f || f.stamp !== p.stamp) {
+      let lines = [];
+      try { lines = readFileSync(join(this.cwd, p.rel), 'utf8').split('\n'); } catch { /* gone: its name is all there is */ }
+      f = { stamp: p.stamp, lines };
+      this.lines.set(p.rel, f);
+    }
+    return `${p.rel} · ${p.name}\n${f.lines.slice(p.line - 1, p.end).join('\n')}`.slice(0, chars);
   }
 }
+
+// What makes two parts the same one.
+export const partKey = (p) => `${p.rel}#${p.line}`;
 
 // Is a part as it was when its numbers were worked out? (An edit since moves its lines.)
 export function sameAsIndexed(cwd, part) {

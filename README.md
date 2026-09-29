@@ -43,6 +43,7 @@ agentic-coder/
 │  ├─ runtime/          llama-server, memory, warm-up, coding setup; engine/ = how llama.cpp is built (Prism's, or the official)
 │  ├─ gemma-4-12b/      the model in use: settings (results/ stays local)
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
+│  ├─ qwen3-reranker-0.6b/ the reranker /effort's Reranker row turns on (off by default)
 │  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Battle tab's arena), reports, tools, dev
 │  └─ test/             unit tests of the models part

@@ -604,8 +604,9 @@ function ChoicePicker({ app }) {
   );
 }
 
-// /effort, one panel: the Effort row, then every limit that can move, each
-// value between ◀ ▶ with what it costs. ↻ marks the two that restart
+// /effort, one panel: the Effort row, then the search's rows (Embedder,
+// Retriever, Reranker) and every limit that can move, each under its heading,
+// each value between ◀ ▶ with what it costs. ↻ marks the two that restart
 // the model; • a value not saved yet. Thinking cap is dimmed while Effort is Low.
 function LimitsPicker({ app }) {
   const pk = app.picker;
@@ -614,7 +615,9 @@ function LimitsPicker({ app }) {
   const off = lv ? 1 : 0; // the Effort row, when the model has levels
   const effortOn = lv ? !!lv.effort : undefined;
   const lw = Math.max(...LIMITS.map((l) => l.label.length), off ? 'Effort'.length : 0) + 2;
-  const vw = Math.max(...LIMITS.map((l) => showLimit(l.id, pk.values[l.id]).length), ...levels.map((l) => l.label.length)) + 1;
+  // Wide enough for every name a search row can show, so the notes do not move.
+  const vw = Math.max(...LIMITS.flatMap((l) => (l.choice ? l.steps(pk.model).map((s) => showLimit(l.id, s).length) : [showLimit(l.id, pk.values[l.id]).length])), ...levels.map((l) => l.label.length)) + 1;
+  const heading = (name) => <Text key={`h-${name}`} color={C.faint}>{`── ${name} `}{'─'.repeat(Math.max(0, app.width - 8 - name.length))}</Text>;
   const env = { ...pk.env, values: pk.values, effortOn };
   const reset = pk.index === off + LIMITS.length;
   const onEffort = off && pk.index === 0;
@@ -634,10 +637,12 @@ function LimitsPicker({ app }) {
             <Text color={effortUnsaved ? C.accent : C.faint}>{effortUnsaved ? '•' : ' '}</Text>
             <Text color={C.dim}>{'  '}{lv.id === defaultLevelId(pk.model) ? 'default · ' : ''}{effortNote(lv, pk.values.thinking)}</Text>
           </Text>
-          <Text color={C.faint}>{'─'.repeat(Math.max(0, app.width - 4))}</Text>
         </>
       ) : null}
       {LIMITS.map((l, i) => {
+        // A heading where a group starts: "Search" over the search's rows, "Limits" over the rest.
+        const group = l.group ?? 'Limits';
+        const head = i === 0 || (LIMITS[i - 1].group ?? 'Limits') !== group ? heading(group) : null;
         const on = off + i === pk.index;
         const v = pk.values[l.id];
         const steps = l.steps(pk.model);
@@ -645,7 +650,9 @@ function LimitsPicker({ app }) {
         const note = limitNote(l.id, env);
         const idle = l.id === 'thinking' && effortOn === false; // not used while Effort is Low
         return (
-          <Text key={l.id} wrap="truncate-end">
+          <React.Fragment key={l.id}>
+          {head}
+          <Text wrap="truncate-end">
             <Text color={on ? C.accent : idle ? C.dim : undefined} bold={on}>{on ? '❯' : ' '} {l.label.padEnd(lw)}</Text>
             <Text color={on && v !== steps[0] ? C.accent : C.faint}>◀ </Text>
             <Text color={unsaved ? C.accent : idle ? C.dim : undefined} bold={unsaved}>{showLimit(l.id, v).padEnd(vw)}</Text>
@@ -654,6 +661,7 @@ function LimitsPicker({ app }) {
             <Text color={C.dim}>{l.restart ? '↻ ' : '  '}</Text>
             <Text color={note.startsWith('⚠') ? C.warn : C.dim}>{isDefault(l.id, pk.values, pk.model) ? 'default · ' : ''}{note}</Text>
           </Text>
+          </React.Fragment>
         );
       })}
       <Text> </Text>

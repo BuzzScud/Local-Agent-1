@@ -33,7 +33,8 @@ import { recall, recallNotes } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
 import { saveLessons, knownAlready } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
-import { CodeIndex, sameAsIndexed, CUT, MARGIN } from '../tools/codeindex.mjs';
+import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
+import { choose, howChosen } from './search.mjs';
 
 const MAX_STEPS = 40;
 const TRIM_AT = 0.78; // share of the context that starts a trim
@@ -236,7 +237,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null }) {
     super();
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
@@ -257,6 +258,11 @@ export class Agent extends EventEmitter {
     this.embedder = embedder ?? memory?.embedder ?? ranker ?? null;
     this.codeIndex = null;
     this.indexDir = indexDir; // where the code search keeps its index (tests: a throwaway folder)
+    // /effort's Search rows (search.mjs): Retriever 'meaning' or 'hybrid', and
+    // the reranker when it is on (models/runtime/rerank.mjs). Neither given,
+    // every search chooses by meaning alone, as it always has.
+    this.search = { retriever: 'meaning', ...(search ?? {}) };
+    this.reranker = reranker;
     this.lessons = []; // what happened in each turn, for the next save (lessons.mjs)
     // When Agentic Coder started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
@@ -838,7 +844,7 @@ export class Agent extends EventEmitter {
   async remember(text, at, signal) {
     if (!this.memory || this.memory.recall === false) return;
     const t0 = Date.now();
-    const r = await recall(this.cwd, text, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal });
+    const r = await recall(this.cwd, text, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal, retriever: this.search.retriever, reranker: this.reranker });
     if (r.note && !this.memory.told) { this.memory.told = true; this.emit('note', { text: r.note, tone: 'dim' }); }
     const request = this.messages[at];
     let added = 0;
@@ -859,7 +865,9 @@ export class Agent extends EventEmitter {
     for (const f of r.skipped ?? []) items.push({ from: 'memory', text: one(f), close: f.close, skipped: 'an event, skipped' });
     const c = await this.rememberClaude(text, goesAlong, signal);
     for (const n of c?.notes ?? []) items.push({ from: 'Claude', text: n.name.replace(/-/g, ' '), close: n.close, tokens: tokensOf(n.part) });
-    if (items.length) this.emit('context', { items, tokens: added, ms: Date.now() - t0, how: r.how });
+    // Said on the line when /effort's Search rows changed how they were chosen.
+    const chosen = [r.chosen, c?.chosen].find((x) => x && (x.order === 'hybrid' || x.reranked));
+    if (items.length) this.emit('context', { items, tokens: added, ms: Date.now() - t0, how: r.how, ...(chosen ? { chosen: howChosen(chosen, r.how) } : {}) });
   }
 
   // Claude's notes (claude-notes.mjs): what Claude Code wrote down about the
@@ -872,7 +880,7 @@ export class Agent extends EventEmitter {
     const dir = c === true ? notesDir() : notesDir({ setting: c.dir ?? c });
     if (!dir) return;
     let r;
-    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
+    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal, retriever: this.search.retriever, reranker: this.reranker }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
     if (!r.notes.length) return;
     goesAlong(claudeText(r.notes));
     if (this.happened) this.happened.claude = r.notes.map((n) => n.id);
@@ -987,7 +995,7 @@ export class Agent extends EventEmitter {
     const want = [];
     if (on.named) for (const f of filesNamed(this.cwd, text, { skip: createdNames(text) })) want.push(f);
     let ranked = { files: [], how: 'none', ms: 0 };
-    if (on.ranked) { try { ranked = await rankFiles(this.cwd, text, { embedder: this.ranker ?? this.memory?.embedder ?? null, entries, signal }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; } }
+    if (on.ranked) { try { ranked = await rankFiles(this.cwd, text, { embedder: this.ranker ?? this.memory?.embedder ?? null, entries, signal, retriever: this.search.retriever, reranker: this.reranker }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; } }
     for (const r of ranked.files) {
       const abs = resolvePath(this.cwd, r.rel).abs;
       if (!want.some((w) => w.abs === abs)) want.push({ rel: r.rel, abs, ranked: true });
@@ -1008,7 +1016,7 @@ export class Agent extends EventEmitter {
     if (this.turn) this.turn.ranked = { how: ranked.how, ms: ranked.ms, files: [...read, ...byMeaning] };
     // Which helper read each: Scout the files named, Oracle the closest ones.
     const said = [read.length && `${CODENAMES.named}: ${read.join(', ')}`,
-      byMeaning.length && `${CODENAMES.rag}${ranked.how === 'meaning' ? ', by meaning' : ranked.how === 'words' ? ', by the request’s words' : ''}: ${byMeaning.join(', ')}`].filter(Boolean);
+      byMeaning.length && `${CODENAMES.rag}${ranked.how === 'meaning' ? `, ${howChosen(ranked.chosen, 'meaning')}` : ranked.how === 'words' ? `, by the request’s words${ranked.chosen?.reranked ? ', reranked' : ''}` : ''}: ${byMeaning.join(', ')}`].filter(Boolean);
     if (said.length) this.emit('note', { text: `Read first · ${said.join(' · ')}`, tone: 'dim' });
   }
 
@@ -1055,6 +1063,7 @@ export class Agent extends EventEmitter {
     const home = isHomeFolder(this.cwd);
     const items = [];
     const skipped = [];
+    let codeChosen = null; // how the code search chose, when not by meaning alone
     // The tests, on a fix-type request: the run a focused path made for this
     // message, or one now (in a throwaway copy, 60 s at most).
     if (on.has('tests') && !home && this.testCmd && fixLike(kind, text)) {
@@ -1082,8 +1091,17 @@ export class Agent extends EventEmitter {
       try { found = await this.findCode(text, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
       if (found?.parts?.length && found.parts[0].close >= CUT) {
         const best = found.parts[0].close;
+        // How many parts come along is the meaning's rule; which ones, /effort's
+        // Retriever and Reranker rows (search.mjs). On Meaning with no reranker
+        // these are the closest parts, as always.
+        const index = this.codeIndex;
+        const n = found.parts.filter((x) => x.close >= Math.max(CUT, best - MARGIN)).slice(0, 8).length;
+        const hybrid = this.search?.retriever === 'hybrid';
+        const chosen = await choose({ query: text, byMeaning: found.parts, byWords: hybrid ? index.wordSearch(text) : null, n, key: partKey, text: (p) => index.textOf(p, this.reranker?.model?.chars), retriever: this.search?.retriever, reranker: this.reranker, signal });
+        if (chosen.note) this.emit('note', { text: chosen.note, tone: 'dim' });
+        if (chosen.order === 'hybrid' || chosen.reranked) codeChosen = howChosen(chosen);
         const byFile = new Map();
-        for (const p of found.parts.filter((x) => x.close >= Math.max(CUT, best - MARGIN)).slice(0, 8)) {
+        for (const p of chosen.picked.map((x) => ({ ...x, close: x.close ?? found.closeOf?.get(partKey(x)) ?? 0 }))) {
           const abs = resolvePath(this.cwd, p.rel).abs;
           if (this.readFiles.has(abs) || !sameAsIndexed(this.cwd, p)) continue;
           if (!byFile.has(p.rel)) byFile.set(p.rel, []);
@@ -1124,7 +1142,7 @@ export class Agent extends EventEmitter {
     const tokens = take.reduce((s, it) => s + tokensOf(it.body), 0);
     this.lastHelpers = [...(this.lastHelpers ?? []), ...take.map((it) => ({ from: it.from, text: it.text, tokens: tokensOf(it.body) }))];
     if (this.happened) this.happened.helpers = this.lastHelpers;
-    this.emit('context', { title: 'Helpers', items: [...take.map((it) => ({ from: it.from, text: it.text, close: it.close ?? null, tokens: tokensOf(it.body) })), ...skipped], tokens, ms: Date.now() - t0, how: 'meaning' });
+    this.emit('context', { title: 'Helpers', items: [...take.map((it) => ({ from: it.from, text: it.text, close: it.close ?? null, tokens: tokensOf(it.body) })), ...skipped], tokens, ms: Date.now() - t0, how: 'meaning', ...(codeChosen ? { chosen: `${CODENAMES.rag} ${codeChosen}` } : {}) });
   }
 
   // A step the model did not have to take: the call and its result go into

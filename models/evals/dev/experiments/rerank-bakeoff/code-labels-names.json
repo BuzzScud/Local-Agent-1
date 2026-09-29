@@ -1,0 +1,7 @@
+[
+ {"q": "moveLimit lets trim go above summarize, fix it", "file": "terminal/src/app/limits.mjs", "name": "moveLimit"},
+ {"q": "changeHelpers says the wrong thing when AGENTIC_HELPERS is set", "file": "terminal/src/app/helpers.mjs", "name": "changeHelpers"},
+ {"q": "rankFiles returns too many files", "file": "terminal/src/agent/rank.mjs", "name": "rankFiles"},
+ {"q": "shareOut drops the named files first", "file": "terminal/src/agent/helpers.mjs", "name": "shareOut"},
+ {"q": "unpack gives wrong numbers for the code index", "file": "terminal/src/tools/codeindex.mjs", "name": "unpack"}
+]

@@ -1,0 +1,14 @@
+[
+ {"q": "where are the saved memory facts matched to a request", "file": "terminal/src/agent/recall.mjs", "name": "recall"},
+ {"q": "how are code files ranked before the model reads them", "file": "terminal/src/agent/rank.mjs", "name": "rankFiles"},
+ {"q": "cache of texts the embedder already turned into numbers", "file": "models/runtime/embed.mjs", "name": "embed"},
+ {"q": "server flags for a model that only compares meanings", "file": "models/runtime/server.mjs", "name": "serverArgs"},
+ {"q": "save the effort and the limits from the panel", "file": "terminal/src/app/App.jsx", "name": "saveEffortLimits"},
+ {"q": "move a limit one step up or down", "file": "terminal/src/app/limits.mjs", "name": "moveLimit"},
+ {"q": "switch a context helper on or off by its codename", "file": "terminal/src/app/helpers.mjs", "name": "changeHelpers"},
+ {"q": "share the token ceiling between the helpers", "file": "terminal/src/agent/helpers.mjs", "name": "shareOut"},
+ {"q": "give the model the uncommitted changes as a diff", "file": "terminal/src/agent/helpers.mjs", "name": "gitChanges"},
+ {"q": "find where each name in the request is defined and used", "file": "terminal/src/agent/helpers.mjs", "name": "whoUses"},
+ {"q": "store the vectors as one byte per number with a scale", "file": "terminal/src/tools/codeindex.mjs", "name": "pack"},
+ {"q": "skip a memory that only says what happened", "file": "terminal/src/agent/recall.mjs", "name": "looksLikeEvent"}
+]

@@ -38,7 +38,7 @@ import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
-import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, defaultLimits, showLimit, effortNote, defaultLevelId } from './limits.mjs';
+import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, defaultLimits, showLimit, effortNote, defaultLevelId } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -237,7 +237,8 @@ export function App({ opts, win, onRestart }) {
     // settings.json) or AGENTIC_HELPERS says otherwise. The small model that
     // compares meanings serves both the memory and the code search.
     const helpers = helpersFrom(settings);
-    const embedder = (remembers || helpers.has('rag')) && embedderReady() ? new Embedder() : null;
+    // /effort's Embedder row Off: none, and every search goes by words.
+    const embedder = (remembers || helpers.has('rag')) && embedderReady() && limitsRef.current.embedder !== 'off' ? new Embedder() : null;
     agentRef.current = new Agent({
       // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
       memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
@@ -262,6 +263,8 @@ export function App({ opts, win, onRestart }) {
       },
     });
     applyLimits(agentRef.current, limitsRef.current);
+    // /effort's Search rows: the retriever, and the reranker when it is on (started at its first use).
+    applySearch(agentRef.current, limitsRef.current);
   }
   const agent = agentRef.current;
   // Saving on its own (autosave.mjs): a little after a task, and on quit.
@@ -379,7 +382,7 @@ export function App({ opts, win, onRestart }) {
     const freeBytes = availableBytes() + (serverRef.current?.port ? needBytes(model, agent.ctx, { draft: false }) : 0);
     const levels = model.thinkingLevels ?? [];
     const level = Math.max(0, levels.findIndex((l) => l.id === thinkingLevel(model, agent.thinking, agent.effort).id));
-    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx } });
+    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
   };
   askRef.current = (p) => new Promise((resolve) => {
     // Not over something you are doing: typing, or another menu open. Asked
@@ -425,6 +428,8 @@ export function App({ opts, win, onRestart }) {
     if (!changes.length) return;
     limitsRef.current = next;
     applyLimits(agent, next);
+    const searchNote = applySearch(agent, next);
+    if (searchNote) push({ type: 'note', text: searchNote, tone: 'warn' });
     saveSettings({ limits: limitsToSave(next, model) });
     const list = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
     if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.`, tone: 'dim' }); return; }
@@ -710,6 +715,7 @@ export function App({ opts, win, onRestart }) {
     // which needs the model a little longer and stops it when it is done.
     const handed = autoRef.current.leave({ stopAfter: Boolean(serverRef.current?.child) });
     await agent.embedder?.stop({ keep: true }).catch(() => {});
+    await agent.reranker?.stop({ keep: true }).catch(() => {});
     await serverRef.current?.stop({ keep: handed });
     exit();
   }, [exit, saveNow, agent]);
@@ -970,7 +976,7 @@ export function App({ opts, win, onRestart }) {
             agent.helpers = r.on;
             saveSettings({ helpers: [...r.on] });
             // The code search needs the small model, which the memory may not have started.
-            if (r.on.has('rag') && !agent.embedder && embedderReady()) agent.embedder = new Embedder();
+            if (r.on.has('rag') && !agent.embedder && embedderReady() && limitsRef.current.embedder !== 'off') agent.embedder = new Embedder();
           }
           push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
           break;
@@ -1018,6 +1024,7 @@ export function App({ opts, win, onRestart }) {
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
           ['written so far', `${(stats.outTokens ?? 0).toLocaleString()} tokens in ${stats.requests ?? 0} replies`],
           ['memory', `${ramGb ? `${ramGb.toFixed(1)} GB` : '—'}${memoryNote.current ? ` · ${memoryNote.current}` : ''}`],
+          ['search', `embedder ${showLimit('embedder', limitsRef.current.embedder)} · retriever ${showLimit('retriever', limitsRef.current.retriever).toLowerCase()} · reranker ${showLimit('reranker', limitsRef.current.reranker)}${agent.reranker?.last ? ` (last ${(agent.reranker.last.ms / 1000).toFixed(1)} s for ${agent.reranker.last.pieces})` : ''} · /effort moves them`],
           ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /effort moves them`],
           ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
           ['server', serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],

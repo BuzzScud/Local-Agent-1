@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, showLimit, limitNote, effortNote, defaultLevelId } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, showLimit, limitNote, effortNote, defaultLevelId } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -20,10 +20,12 @@ test('/effort is the one command for the panel (/increase is gone), and every li
   // /effort alone opens the panel, so it runs at once from the "/" menu
   expect(COMMANDS.find((c) => c.name === 'effort').picker).toBe(true);
   const d = defaultLimits(model);
-  expect(d).toEqual({ context: 0, thinking: model.thinkingBudget, tries: 8, steps: 40, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85 });
+  // the search's rows first (BGE-M3, by meaning, no reranker: as before), then the limits
+  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, tries: 8, steps: 40, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85 });
+  expect(LIMITS.slice(0, 3).map((l) => [l.id, l.group])).toEqual([['embedder', 'Search'], ['retriever', 'Search'], ['reranker', 'Search']]);
   for (const l of LIMITS) expect(l.steps(model)).toContain(d[l.id]);
   // the context goes as far as the model can (Gemma: 256k), 0 = auto
-  expect(LIMITS[0].steps(model)).toEqual([0, 16384, 32768, 65536, 131072, 262144]);
+  expect(LIMITS.find((l) => l.id === 'context').steps(model)).toEqual([0, 16384, 32768, 65536, 131072, 262144]);
 });
 
 test('saved limits: valid ones are used, junk and out-of-range ones are left out, only changes are saved', () => {
@@ -124,3 +126,55 @@ test('Bash shows the output lines and stops at the timeout /effort set', async (
   const slow = await execute('Bash', { command: 'sleep 5' }, {}, { cwd, bash: { maxLines: 80, timeoutMs: 500 } });
   expect(slow.text).toContain('(stopped after 1 s)');
 }, 15_000);
+
+test('Search rows: named choices move along their list, junk is left out, and only a change is saved', () => {
+  let v = defaultLimits(model);
+  expect(moveLimit(v, 'embedder', -1, model).embedder).toBe('off');
+  expect(moveLimit(v, 'embedder', 1, model)).toBe(v); // BGE-M3 is the last choice
+  v = moveLimit(v, 'retriever', 1, model);
+  expect(v.retriever).toBe('hybrid');
+  expect(moveLimit(v, 'retriever', 1, model)).toBe(v); // stops at the end
+  v = moveLimit(v, 'reranker', 1, model);
+  expect(v.reranker).toBe('qwen3-reranker-0.6b');
+  expect(showLimit('reranker', v.reranker)).toBe('Qwen3 0.6B');
+  expect(limitsToSave(v, model)).toEqual({ retriever: 'hybrid', reranker: 'qwen3-reranker-0.6b' });
+  expect(limitChanges(defaultLimits(model), v).map((c) => `${c.label} ${c.from} → ${c.to}${c.restart ? ' ↻' : ''}`)).toEqual(['Retriever Meaning → Hybrid', 'Reranker Off → Qwen3 0.6B']);
+  const r = readLimits({ limits: { embedder: 'nope', retriever: 'hybrid', reranker: 7 } }, model);
+  expect([r.embedder, r.retriever, r.reranker]).toEqual(['bge-m3', 'hybrid', 'off']);
+  // each says what it does
+  const env = (values) => ({ model, values });
+  expect(limitNote('embedder', env({ ...v, embedder: 'off' }))).toContain('words only');
+  expect(limitNote('retriever', env({ ...v, embedder: 'off' }))).toContain('by words while Embedder is Off');
+  expect(limitNote('reranker', env({ ...v, reranker: 'off' }))).toBe('the search’s own order');
+});
+
+test('applySearch: Embedder Off takes it from every search, back on makes one; the reranker starts only when its file is here', () => {
+  const made = [];
+  const stopped = [];
+  const fake = (kind) => (m) => { const x = { kind, model: m, stop: async (o) => { stopped.push([kind, o]); } }; made.push(x); return x; };
+  const opts = (here) => ({ make: { embedder: fake('embedder'), reranker: fake('reranker') }, ready: { embedder: () => true, reranker: () => here } });
+  const e0 = { stop: async () => {} };
+  const agent = { embedder: e0, ranker: e0, memory: { embedder: e0 }, codeIndex: {}, search: { retriever: 'meaning' }, reranker: null };
+  const d = defaultLimits(model);
+  expect(applySearch(agent, d, opts(true))).toBe(null);
+  expect(agent.embedder).toBe(e0); // the one it had stays
+  expect(agent.reranker).toBe(null);
+  applySearch(agent, { ...d, embedder: 'off', retriever: 'hybrid' }, opts(true));
+  expect([agent.embedder, agent.ranker, agent.memory.embedder, agent.codeIndex]).toEqual([null, null, null, null]);
+  expect(agent.search.retriever).toBe('hybrid');
+  applySearch(agent, d, opts(true));
+  expect(agent.embedder.kind).toBe('embedder');
+  expect(agent.ranker).toBe(agent.embedder);
+  expect(agent.memory.embedder).toBe(agent.embedder);
+  // the reranker: not on this Mac → it stays off and says how to get it
+  expect(applySearch(agent, { ...d, reranker: 'qwen3-reranker-0.6b' }, opts(false))).toContain('coding setup');
+  expect(agent.reranker).toBe(null);
+  expect(applySearch(agent, { ...d, reranker: 'qwen3-reranker-0.6b' }, opts(true))).toBe(null);
+  expect(agent.reranker.kind).toBe('reranker');
+  const rr = agent.reranker;
+  applySearch(agent, { ...d, reranker: 'qwen3-reranker-0.6b' }, opts(true));
+  expect(agent.reranker).toBe(rr); // the same one, not a second
+  applySearch(agent, d, opts(true));
+  expect(agent.reranker).toBe(null);
+  expect(stopped).toEqual([['reranker', { keep: false }]]); // turned off: its memory is handed back
+});

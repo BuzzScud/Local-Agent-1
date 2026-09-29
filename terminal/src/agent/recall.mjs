@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { memoryDirs, readFacts, markUsed, namesMissingFile } from './facts.mjs';
+import { choose } from './search.mjs';
 
 export const TOP = 3; // at most this many facts travel with a request
 
@@ -78,7 +79,9 @@ function byWords(text, facts) {
 //   embedder  the models part's Embedder (null: by words)
 // Answers { facts, how, ms }; how is 'meaning', 'words' or 'none' (nothing saved).
 // near: how many of the next closest facts to also give back (with their closeness), for the Instructions page; the agent leaves it at 0.
-export async function recall(cwd, text, { embedder = null, home = homedir(), top = TOP, signal, today, mark = true, near = 0 } = {}) {
+// retriever, reranker: /effort's Search rows (search.mjs): which facts come;
+// how many is still the cut-off's.
+export async function recall(cwd, text, { embedder = null, home = homedir(), top = TOP, signal, today, mark = true, near = 0, retriever = 'meaning', reranker = null } = {}) {
   const t0 = Date.now();
   const dirs = memoryDirs(cwd, home);
   const root = dirs.project ? dirname(dirname(dirs.project)) : null;
@@ -115,11 +118,19 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   const event = (s) => looksLikeEvent(s.fact.text);
   const real = scored.filter((s) => !event(s));
   const best = real[0]?.score ?? 0;
-  const picked = real.filter((s) => s.score >= cut && s.score >= best - margin).slice(0, top);
+  const n = real.filter((s) => s.score >= cut && s.score >= best - margin).slice(0, top).length;
+  const keyOf = (s) => `${s.fact.dir}\0${s.fact.id}`;
+  let wordOrder = null;
+  if (retriever === 'hybrid' && how === 'meaning') {
+    const w = byWords(text, facts);
+    wordOrder = real.filter((s) => w.get(keyOf(s)) > 0).sort((a, b) => w.get(keyOf(b)) - w.get(keyOf(a)));
+  }
+  const chosen = await choose({ query: text, byMeaning: real, byWords: wordOrder, n, key: keyOf, text: (s) => wording(s.fact), retriever, reranker, signal });
+  const picked = chosen.picked;
   const skipped = scored.filter((s) => event(s) && s.score >= cut).slice(0, top);
   if (mark && picked.length) for (const dir of new Set(picked.map((s) => s.fact.dir))) markUsed(dir, picked.filter((s) => s.fact.dir === dir).map((s) => s.fact.id), today);
   const plain = (s) => ({ ...s.fact, close: Math.round(s.close * 1000) / 1000 });
-  return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, ...(note ? { note } : {}), ...(near ? { near: real.filter((s) => !picked.includes(s)).slice(0, near).map(plain) } : {}) };
+  return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, chosen, ...(note || chosen.note ? { note: note ?? chosen.note } : {}), ...(near ? { near: real.filter((s) => !picked.includes(s)).slice(0, near).map(plain) } : {}) };
 }
 
 const LABEL = { you: 'about you', project: 'this project', worked: 'this worked', failed: 'this failed before: do not try it again', mistake: 'a mistake to avoid', recipe: 'steps that worked before' };

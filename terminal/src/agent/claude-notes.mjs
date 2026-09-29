@@ -18,6 +18,7 @@ import { homedir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 import { looksSecret } from './facts.mjs';
 import { wordsOf } from './recall.mjs';
+import { choose } from './search.mjs';
 
 export const TOP = 2; // at most this many notes travel with a request
 export const PART_CHARS = 1100; // of one note
@@ -245,7 +246,9 @@ export function foldersOf(cwd, home = homedir()) {
 //          "the tests fail, fix them" in every project (28 Sep 2026). Notes
 //          on how the user likes things done and on how something is done
 //          on this Mac hold everywhere.
-export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(), top = TOP, signal, store, kind = null } = {}) {
+//   retriever, reranker  /effort's Search rows (search.mjs): which notes come;
+//          how many is still the cut-off's.
+export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(), top = TOP, signal, store, kind = null, retriever = 'meaning', reranker = null } = {}) {
   const t0 = Date.now();
   const folders = foldersOf(cwd);
   const isHere = (n) => { const t = `${n.id} ${n.title ?? ''} ${n.description}`.toLowerCase(); return folders.some((f) => t.includes(f)); };
@@ -281,10 +284,14 @@ export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(
   }
   scored.sort((a, b) => b.score - a.score);
   const first = scored.find(fits);
-  const picked = ((process.env.AGENTIC_NOTES_ALL ?? process.env.BONSAI_NOTES_ALL) ? scored : first ? scored.filter((s) => fits(s) && s.score >= first.score - margin) : []).slice(0, top);
+  const all = Boolean(process.env.AGENTIC_NOTES_ALL ?? process.env.BONSAI_NOTES_ALL);
+  const n = (all ? scored : first ? scored.filter((s) => fits(s) && s.score >= first.score - margin) : []).slice(0, top).length;
+  const wordOrder = retriever === 'hybrid' && how === 'meaning' ? scored.filter((s) => s.words > 0).sort((a, b) => b.words - a.words) : null;
+  const chosen = all ? { picked: scored.slice(0, top) } : await choose({ query: text, byMeaning: scored, byWords: wordOrder, n, key: (s) => s.note.id, text: (s) => `${s.note.name.replace(/-/g, ' ')}: ${s.note.description}`, retriever, reranker, signal });
+  const picked = chosen.picked;
   return {
     notes: picked.map((s) => ({ id: s.note.id, name: s.note.name, type: s.note.type, description: s.note.description, part: bestPart(s.note, text), close: Math.round(s.close * 1000) / 1000, words: Math.round(s.words * 10) / 10 })),
-    how, ms: Date.now() - t0, of: notes.length, ...(note ? { note } : {}),
+    how, ms: Date.now() - t0, of: notes.length, chosen, ...(note || chosen.note ? { note: note ?? chosen.note } : {}),
   };
 }
 

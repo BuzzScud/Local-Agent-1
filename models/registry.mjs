@@ -57,6 +57,13 @@ import bgeM3 from './bge-m3/model.mjs';
 export const EMBEDDERS = Object.fromEntries([bgeM3].map((m) => [m.id, m]));
 export const DEFAULT_EMBEDDER = 'bge-m3';
 
+// The small models that read a request together with each piece the search
+// found and put the best first (/effort's Reranker row, off by default).
+import qwen3Reranker from './qwen3-reranker-0.6b/model.mjs';
+
+export const RERANKERS = Object.fromEntries([qwen3Reranker].map((m) => [m.id, m]));
+export const DEFAULT_RERANKER = 'qwen3-reranker-0.6b';
+
 // The thinking level for on/off plus an effort id ('medium' | 'high').
 // Thinking off is the level without an effort (Low: answers straight away).
 export function thinkingLevel(model, thinking, effort) {

@@ -1,7 +1,7 @@
 // Runs one prompt start to finish without the terminal UI: used by the
 // practice-task runner and by `coding -p "…"`.
 import { Agent } from './agent/agent.mjs';
-import { applyLimits } from './app/limits.mjs';
+import { applyLimits, applySearch } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './agent/prompt.mjs';
 import { toolSchemas } from './agent/tools.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
@@ -55,8 +55,9 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
       return { choice: autoApprove && (!approve || approve(req)) ? 'yes' : 'no' };
     },
   });
-  // The limits /effort saved (coding -p passes them; the practice bench does not).
-  if (limits) applyLimits(agent, limits);
+  // The limits /effort saved (coding -p passes them; the practice bench does
+  // not), with its Search rows: the embedder, the retriever and the reranker.
+  if (limits) { applyLimits(agent, limits); applySearch(agent, limits); }
   // coding -p started the server itself: restore (or read) the instructions first.
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
   const log = [];
@@ -91,6 +92,9 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   if (mem?.save === true && !signal?.aborted) { saved = await save(); if (saved) onEvent('saved', saved); }
   if (mem?.embedder && !memory?.embedder && !embedder) await mem.embedder.stop({ keep: true }).catch(() => {});
   await own?.stop({ keep: true }).catch(() => {});
+  // An embedder or reranker the Search rows made (applySearch) stays loaded for the next run.
+  if (agent.embedder && agent.embedder !== own && agent.embedder !== mem?.embedder && agent.embedder !== embedder) await agent.embedder.stop({ keep: true }).catch(() => {});
+  await agent.reranker?.stop({ keep: true }).catch(() => {});
   const given = log.filter((e) => e.type === 'context' && e.title === 'Helpers').flatMap((e) => e.items.filter((x) => !x.skipped));
   return {
     saved, save, lessons: agent.lessons,

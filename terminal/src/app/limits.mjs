@@ -1,9 +1,12 @@
-// /effort (one panel): the effort, then the limits you can move up and down,
-// in one place. Each limit has the steps it moves through, its default, how it
-// reads, and what a value costs (said next to it in the panel). Saved as
-// "limits" in settings.json; only the ones moved off their default are kept,
-// so a new default reaches you.
-import { needBytes, hasDraft, thinkingLevel } from '../../../models/index.mjs';
+// /effort (one panel): the effort, then the search's three rows (Embedder,
+// Retriever, Reranker: agent/search.mjs), then the limits you can move up and
+// down, in one place. Each row has the steps it moves through (numbers, or
+// named choices for the search's rows), its default, how it reads, and what a
+// value costs (said next to it in the panel). Saved as "limits" in
+// settings.json; only the ones moved off their default are kept, so a new
+// default reaches you.
+import { needBytes, hasDraft, thinkingLevel, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
+import { SEARCH } from '../agent/search.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
 const mins = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`);
@@ -12,7 +15,45 @@ const pct = (v) => `${Math.round(v * 100)}%`;
 const READ_TPS = 130;
 const WRITE_TPS = 13;
 
+const mb = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`);
+
 export const LIMITS = [
+  // The search (group 'Search', shown first): which models find what goes
+  // along with a request. Measured 29 Sep (models/qwen3-reranker-0.6b/README.md).
+  {
+    id: 'embedder', label: 'Embedder', group: 'Search', choice: true,
+    steps: () => ['off', ...Object.keys(EMBEDDERS)],
+    def: () => (EMBEDDERS[SEARCH.embedder] ? SEARCH.embedder : 'off'),
+    show: (v) => (v === 'off' ? 'Off' : EMBEDDERS[v]?.name ?? v),
+    note: (v) => {
+      if (v === 'off') return 'words only: the code search (Oracle) pauses';
+      if (!embedderReady(EMBEDDERS[v])) return `⚠ not on this Mac: coding setup downloads it (${mb(EMBEDDERS[v].bytes)})`;
+      return 'finds pieces by meaning · ~214 MB';
+    },
+  },
+  {
+    id: 'retriever', label: 'Retriever', group: 'Search', choice: true,
+    steps: () => ['meaning', 'hybrid'],
+    def: () => SEARCH.retriever,
+    show: (v) => (v === 'hybrid' ? 'Hybrid' : 'Meaning'),
+    note: (v, e) => {
+      if (e.values.embedder === 'off') return 'by words while Embedder is Off';
+      return v === 'hybrid' ? 'meaning + words, merged (RRF) · same results in the 29 Sep test' : 'by meaning alone';
+    },
+  },
+  {
+    id: 'reranker', label: 'Reranker', group: 'Search', choice: true,
+    steps: () => ['off', ...Object.keys(RERANKERS)],
+    def: () => SEARCH.reranker,
+    show: (v) => (v === 'off' ? 'Off' : RERANKERS[v]?.short ?? RERANKERS[v]?.name ?? v),
+    note: (v, e) => {
+      if (v === 'off') return 'the search’s own order';
+      const m = RERANKERS[v];
+      if (!rerankerReady(m)) return `⚠ not on this Mac: coding setup downloads it (${mb(m.bytes)})`;
+      const last = e.lastRerank ? ` · last ${(e.lastRerank.ms / 1000).toFixed(1)} s` : '';
+      return `reads the best ${m.pool} with your request · ~2 s, ~1.1 GB${last}`;
+    },
+  },
   {
     id: 'context', label: 'Context', restart: true,
     // 0 = auto: 32k, or 16k when memory is short (chooseContext).
@@ -106,7 +147,7 @@ export function readLimits(settings, model) {
   for (const l of LIMITS) {
     const v = saved[l.id];
     const steps = l.steps(model);
-    if (typeof v === 'number' && Number.isFinite(v) && v >= steps[0] && v <= steps.at(-1)) out[l.id] = v;
+    if (l.choice ? steps.includes(v) : typeof v === 'number' && Number.isFinite(v) && v >= steps[0] && v <= steps.at(-1)) out[l.id] = v;
   }
   if (out.trimAt >= out.summarizeAt) { out.trimAt = defaultLimits(model).trimAt; out.summarizeAt = defaultLimits(model).summarizeAt; }
   return out;
@@ -125,7 +166,8 @@ export function moveLimit(values, id, dir, model) {
   const l = byId[id];
   const steps = l.steps(model);
   const v = values[id];
-  const next = dir > 0 ? steps.find((s) => s > v) : [...steps].reverse().find((s) => s < v);
+  // A named choice moves along its list; a number to the next step that way.
+  const next = l.choice ? steps[steps.indexOf(v) + dir] : dir > 0 ? steps.find((s) => s > v) : [...steps].reverse().find((s) => s < v);
   if (next === undefined) return values;
   const out = { ...values, [id]: next };
   if (id === 'trimAt' && out.trimAt >= out.summarizeAt) return values;
@@ -150,6 +192,44 @@ export function modelWithLimits(model, values) {
   const want = values?.thinking;
   if (!want || want === model.thinkingBudget) return model;
   return { ...model, thinkingBudget: want };
+}
+
+// The search's rows (they take effect with the next message; no restart): the
+// embedder and the reranker are servers of their own, started at their first
+// use. Embedder Off takes it away from every search (they go by words, and
+// the code search pauses); back on, one is made again. A reranker turned off
+// is stopped, to hand its memory back. A model not on this Mac is left off.
+// → a note to show when a row could not take effect, else null.
+//   make, ready: how a model is made and whether its files are here (tests pass their own).
+export function applySearch(agent, values, { make = { embedder: (m) => new Embedder(m), reranker: (m) => new Reranker(m) }, ready = { embedder: embedderReady, reranker: rerankerReady } } = {}) {
+  const e = values.embedder;
+  if (e === 'off' || !EMBEDDERS[e]) {
+    if (agent.embedder || agent.ranker || agent.memory?.embedder) {
+      agent.embedder = null;
+      agent.ranker = null;
+      if (agent.memory) agent.memory.embedder = null;
+      agent.codeIndex = null;
+    }
+  } else if (!agent.embedder && ready.embedder(EMBEDDERS[e])) {
+    const made = make.embedder(EMBEDDERS[e]);
+    agent.embedder = made;
+    agent.ranker = made;
+    if (agent.memory) agent.memory.embedder = made;
+    agent.codeIndex = null;
+  }
+  agent.search = { ...(agent.search ?? {}), retriever: values.retriever ?? SEARCH.retriever };
+  const r = values.reranker;
+  if (!r || r === 'off' || !RERANKERS[r]) {
+    agent.reranker?.stop({ keep: false }).catch(() => {});
+    agent.reranker = null;
+    return null;
+  }
+  if (agent.reranker?.model?.id === r) return null;
+  agent.reranker?.stop({ keep: false }).catch(() => {});
+  agent.reranker = null;
+  if (!ready.reranker(RERANKERS[r])) return `${RERANKERS[r].name} is not on this Mac yet, so the reranker stays off: run coding setup (${mb(RERANKERS[r].bytes)}), then save it again in /effort.`;
+  agent.reranker = make.reranker(RERANKERS[r]);
+  return null;
 }
 
 // The limits the agent reads while it works (they take effect at once).

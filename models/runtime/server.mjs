@@ -80,6 +80,14 @@ export function serverArgs(model, { ctx, port, draft = false }) {
     return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--embedding', '--pooling', model.pooling ?? 'cls',
       '-c', String(ctx ?? model.ctx ?? 2048), '-ub', String(ctx ?? model.ctx ?? 2048), '-ngl', '99', '-np', '1', '--no-webui'];
   }
+  // A model that reads a request with each piece and scores the pair: the
+  // engine's reranking mode (its own template and scoring head), one slot,
+  // the pieces of one request read in one batch.
+  if (model.kind === 'rerank') {
+    const c = String(ctx ?? model.ctx ?? 8192);
+    return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--rerank',
+      '-c', c, '-ub', c, '-b', c, '-ngl', '99', '-np', '1', '--no-webui'];
+  }
   return [
     '-m', modelPath(model),
     '--host', '127.0.0.1', '--port', String(port),

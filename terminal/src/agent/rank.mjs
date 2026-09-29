@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { HOME } from '../../../models/index.mjs';
 import { repoMap } from '../tools/repomap.mjs';
+import { choose, Words, terms } from './search.mjs';
 
 const RANK_DIR = () => join(HOME, 'ranks');
 const CARD_LINES = 12; // the file's first lines on its card (its imports and opening comment say most)
@@ -48,7 +49,9 @@ function wordScore(text, e) {
 
 // → { files: [{ rel, lines, score }], how: 'meaning' | 'words', ms }
 // files: best first, only those that pass MIN_CLOSE and WITHIN (at most top).
-export async function rankFiles(cwd, text, { embedder = null, top = 3, signal, entries } = {}) {
+// retriever, reranker: /effort's Search rows (search.mjs). They choose which
+// files come along; how many is still MIN_CLOSE and WITHIN's (or the words').
+export async function rankFiles(cwd, text, { embedder = null, top = 3, signal, entries, retriever = 'meaning', reranker = null } = {}) {
   const t0 = Date.now();
   let list = entries;
   if (!list) { try { list = repoMap(cwd).entries; } catch { list = []; } }
@@ -70,8 +73,12 @@ export async function rankFiles(cwd, text, { embedder = null, top = 3, signal, e
       const scored = list.map((e) => ({ rel: e.rel, lines: e.lines, score: dot(q, unpack(kept[e.rel].v)) + 0.02 * wordScore(text, e) }))
         .sort((a, b) => b.score - a.score);
       const best = scored[0]?.score ?? 0;
-      const files = scored.filter((f) => f.score >= MIN_CLOSE && f.score >= best - WITHIN).slice(0, top);
-      return { files, how: 'meaning', ms: Date.now() - t0, best: scored.slice(0, top) };
+      const n = scored.filter((f) => f.score >= MIN_CLOSE && f.score >= best - WITHIN).slice(0, top).length;
+      const cardOf = new Map(cards.map(({ e, c }) => [e.rel, c]));
+      const byRel = new Map(scored.map((f) => [f.rel, f]));
+      const byWords = retriever === 'hybrid' ? new Words(cards.map(({ c }) => terms(c))).order(text).map((i) => byRel.get(cards[i].e.rel)) : null;
+      const chosen = await choose({ query: text, byMeaning: scored, byWords, n, key: (f) => f.rel, text: (f) => cardOf.get(f.rel), retriever, reranker, signal });
+      return { files: chosen.picked, how: 'meaning', ms: Date.now() - t0, best: scored.slice(0, top), chosen };
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') throw e;
       // The small model is not there or failed: rank by words.
@@ -80,5 +87,8 @@ export async function rankFiles(cwd, text, { embedder = null, top = 3, signal, e
   const scored = list.map((e) => ({ rel: e.rel, lines: e.lines, score: wordScore(text, e) })).filter((f) => f.score > 0).sort((a, b) => b.score - a.score);
   const best = scored[0]?.score ?? 0;
   // By words, a file is given only when it shares at least a third of the request's words.
-  return { files: scored.filter((f) => f.score >= Math.max(0.34, best - 0.1)).slice(0, top), how: 'words', ms: Date.now() - t0, best: scored.slice(0, top) };
+  const n = scored.filter((f) => f.score >= Math.max(0.34, best - 0.1)).slice(0, top).length;
+  const entryOf = new Map(list.map((e) => [e.rel, e]));
+  const chosen = await choose({ query: text, byMeaning: scored, n, key: (f) => f.rel, text: (f) => card(cwd, entryOf.get(f.rel)), reranker, signal });
+  return { files: chosen.picked, how: 'words', ms: Date.now() - t0, best: scored.slice(0, top), chosen };
 }

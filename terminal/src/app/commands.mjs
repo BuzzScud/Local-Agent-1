@@ -5,7 +5,7 @@ export const COMMANDS = [
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
-  { name: 'effort', desc: 'Effort and limits in one panel: thinking, context, tries, steps, output', arg: '[low|medium|high]', picker: true },
+  { name: 'effort', desc: 'Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, steps', arg: '[low|medium|high]', picker: true },
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },

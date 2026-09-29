@@ -47,8 +47,16 @@ Commands: `/help /clear /compact /effort /mode /init /resume /model /stats /mete
 **Effort** is how much the model thinks before it acts: Off (the default), Medium or High,
 set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` still work.
 
-`/effort` alone shows Effort on top and every limit that can move under it: context,
+`/effort` alone shows Effort on top, then the **Search** rows, then every limit that can move: context,
 thinking cap, tries, steps, command output, timeout, and the trim and summarize points, each with what a value costs.
+The Search rows choose how the helpers find what goes along with a request (the code search,
+Read first's files, the saved facts, Claude's notes): **Embedder** BGE-M3 or Off (words only; the code
+search pauses), **Retriever** Meaning or Hybrid (meaning + a word search, merged by rank fusion), and
+**Reranker** Off or Qwen3 0.6B (reads your request with the best 15 pieces, ~2 s and ~1.1 GB, downloaded by
+`coding setup`). How many pieces come along is still each search's own rule; the Retriever and the
+Reranker only choose which. They apply from the next message with no restart, and `coding -p` follows
+them. Measured on 29 Sep, Hybrid changed nothing and the reranker helped only the code search, so both
+start off (`models/qwen3-reranker-0.6b/README.md`).
 ←→ moves a row, one enter saves all of it (a new context or thinking cap restarts the model once, so it waits while a reply is running or the model is still starting, and then changes nothing), esc keeps everything as it was.
 
 ## Memory

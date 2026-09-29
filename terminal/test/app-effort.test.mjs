@@ -1,6 +1,7 @@
 // End-to-end, the real app in a pseudo-terminal (see app.test.mjs).
-// Here: /effort, the panel with the Effort row and the limits that move up and
-// down, kept in settings.json. (/increase was folded into it on 29 Sep 2026.)
+// Here: /effort, the panel with the Effort row, the search's rows and the
+// limits that move up and down, kept in settings.json. (/increase was folded
+// into it on 29 Sep 2026; the Search rows came the same day.)
 import { test, expect } from 'bun:test';
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +11,8 @@ import { T, setup, quit } from './app-setup.mjs';
 import { ENGINE } from '../../models/index.mjs';
 
 const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+// The three Search rows (Embedder, Retriever, Reranker) sit between Effort and the limits.
+const PAST_SEARCH = [{ key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }];
 
 test('/effort: Effort and every limit with its cost, ←→ moves one, enter saves it for next time, Reset all puts them back', async () => {
   const { cwd, env, base } = setup();
@@ -18,7 +21,7 @@ test('/effort: Effort and every limit with its cost, ←→ moves one, enter sav
     { wait: 'Welcome' },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 }, { snapshot: 'panel' },
     // Effort is the first row; down to Tries per fix, up one step (8 → 12), and Steps down one (40 → 20)
-    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 230 }, { snapshot: 'moved' },
+    ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 230 }, { snapshot: 'moved' },
     { key: 'enter' }, { wait: 'Saved:' }, { sleep: 150 }, { snapshot: 'saved' },
     // opened again it shows the saved values; esc keeps them
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 }, { snapshot: 'again' }, { key: 'esc' }, { wait: 'Effort and limits kept as they were' },
@@ -28,7 +31,9 @@ test('/effort: Effort and every limit with its cost, ←→ moves one, enter sav
   ] });
   await fake.close();
   const panel = r.snapshots.panel;
-  for (const label of ['Effort and limits', 'Effort', 'Context', 'Thinking cap', 'Tries per fix', 'Steps per request', 'Command output', 'Command timeout', 'Trim at', 'Summarize at', 'Reset all']) expect(panel).toContain(label);
+  for (const label of ['Effort and limits', 'Effort', '── Search', 'Embedder', 'Retriever', 'Reranker', '── Limits', 'Context', 'Thinking cap', 'Tries per fix', 'Steps per request', 'Command output', 'Command timeout', 'Trim at', 'Summarize at', 'Reset all']) expect(panel).toContain(label);
+  expect(panel).toMatch(/Retriever\s+◀ Meaning\s+▶\s+default · by meaning alone/);
+  expect(panel).toMatch(/Reranker\s+◀ Off\s+▶\s+default · the search’s own order/);
   expect(panel).toMatch(/Context\s+◀ auto\s+▶\s+↻ default · 32k, or 16k when memory is short/);
   expect(panel).toMatch(/Effort\s+◀ Low\s+▶\s+default · answers straight away/);
   expect(panel).toMatch(/Thinking cap\s+◀ 4,096 tokens ▶\s+↻ default · High only: not used while Effort is Low/); // Effort is Low
@@ -47,7 +52,7 @@ test('/effort with a server given by --url: a new thinking cap is saved, and it 
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
-    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'enter' }, { wait: 'restart it yourself' },
+    ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'enter' }, { wait: 'restart it yourself' },
     ...quit,
   ] });
   await fake.close();
@@ -63,7 +68,7 @@ test('/effort: High and two limits save with ONE enter; the Thinking cap wakes u
     { type: '/effort' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 150 }, { snapshot: 'low' },
     // Effort → High (Thinking cap stops being dimmed), Thinking cap → 8,192, Tries → 12
     { key: 'right' }, { sleep: 100 }, { snapshot: 'high' },
-    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 }, { snapshot: 'moved' },
+    ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 }, { snapshot: 'moved' },
     { key: 'enter' }, { wait: 'restart it yourself' },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
     ...quit,
@@ -146,7 +151,7 @@ test('/effort on a server Agentic Coder started: a new context and thinking cap 
     { wait: '? for shortcuts', ms: 45_000 }, { waitGone: 'Starting Gemma', ms: 60_000 }, // ready: a restart is refused while the model still starts
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
     // Effort stays; Context auto → 16k → 32k → 64k; Thinking cap 4,096 → 8,192
-    { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 },
+    ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 },
     { key: 'enter' }, { wait: 'Restarting Gemma' },
     { wait: 'restarted: context 64k · thinking cap 8,192 tokens', ms: 45_000 },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 },
@@ -176,12 +181,12 @@ test('/effort while a reply is running: a change that needs a restart is refused
     { type: 'hello' }, { key: 'enter' }, { sleep: 1500 },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
     // Effort → High, Context auto → 16k (a restart), enter
-    { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
+    { key: 'right' }, { sleep: 80 }, ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
     { key: 'enter' }, { wait: 'Nothing was changed' },
     { wait: 'Hello from the stand-in model.', ms: 30_000 }, { sleep: 500 },
     // idle now: the same change saves, and the server restarts once
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
-    { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
+    { key: 'right' }, { sleep: 80 }, ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
     { key: 'enter' }, { wait: 'Restarting Gemma' },
     { wait: 'restarted: context 16k', ms: 45_000 },
     ...quit,
@@ -216,7 +221,7 @@ test('/effort while the model is still starting: a Context change is refused and
     { type: 'hello' }, { key: 'enter' }, { sleep: 600 }, // queued: "sends as soon as the model is ready"
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
     // Effort → High, Context auto → 16k (a restart), enter
-    { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
+    { key: 'right' }, { sleep: 80 }, ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
     { key: 'enter' }, { wait: 'Nothing was changed' },
     // the queued message goes to the model that is still there (before, it went to the one just stopped)
     { wait: 'Hello from the stand-in model.', ms: 60_000 },
@@ -235,3 +240,25 @@ test('/effort while the model is still starting: a Context change is refused and
   expect(saved.limits ?? {}).toEqual({});
 }, 150_000);
 
+
+test('/effort Search rows: Retriever and Reranker save with one enter, no restart; a reranker not on this Mac says how to get it; /stats lists them', async () => {
+  const { cwd, env, base } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Welcome' },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
+    // Effort → Embedder → Retriever: Hybrid; → Reranker: Qwen3 0.6B
+    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 }, { snapshot: 'moved' },
+    { key: 'enter' }, { wait: 'Saved:' }, { sleep: 200 },
+    { type: '/stats' }, { key: 'enter' }, { wait: 'retriever hybrid' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.moved).toMatch(/Retriever\s+◀ Hybrid\s+▶ •\s+meaning \+ words, merged \(RRF\)/);
+  expect(r.snapshots.moved).toMatch(/❯ Reranker\s+◀ Qwen3 0\.6B\s+▶ •/);
+  expect(r.text).toContain('Saved: Retriever Meaning → Hybrid · Reranker Off → Qwen3 0.6B. In use from the next step; kept for next time.');
+  expect(r.text).not.toContain('Restarting'); // the search needs no restart
+  expect(r.text).toContain('Qwen3-Reranker 0.6B is not on this Mac yet, so the reranker stays off: run coding setup (639 MB), then save it again in /effort.');
+  expect(r.text).toMatch(/embedder (BGE-M3|Off) · retriever hybrid · reranker Qwen3 0\.6B/);
+  expect(settingsOf(base).limits).toEqual({ retriever: 'hybrid', reranker: 'qwen3-reranker-0.6b' });
+}, T);
