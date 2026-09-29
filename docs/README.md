@@ -8,7 +8,8 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 156 KB | 2026-09-29 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 170 KB | 2026-09-29 |
+| [design rounds/tests-tab-run-a-test-3-designs-2026-09-29.html](design%20rounds/tests-tab-run-a-test-3-designs-2026-09-29.html) | page | Run a test · 3 designs | 77 KB | 2026-09-29 |
 | [design rounds/settings-command-preview-2026-09-29.html](design%20rounds/settings-command-preview-2026-09-29.html) | page | Settings Command Preview | 47 KB | 2026-09-29 |
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-09-29 |
 | [diagrams/embedder-retriever-reranker-explained-v2.html](diagrams/embedder-retriever-reranker-explained-v2.html) | page | Embedder, retriever, reranker | 27 KB | 2026-09-29 |

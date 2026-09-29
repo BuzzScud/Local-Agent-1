@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run a test · 3 designs</title>
+<style>
+:root{
+  color-scheme:light;
+  --pv:#e9e8e3;--pvink:#1c1b18;--pvmute:#6b675e;--pvline:#d6d3ca;
+  --page:#f9f9f7;--surface:#fcfcfb;--panel:#f3f3f0;--hline:#e3e2dc;--hink:#0b0b0b;--hink2:#52514e;--hink3:#8a887f;--accent:#2a78d6;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--t:#2a78d6;--t-soft:rgba(42,120,214,.09);--ok-soft:rgba(47,138,78,.12);--warn-soft:rgba(200,140,30,.14);--bad-soft:rgba(196,67,43,.10);
+  --term:#18191d;--term-line:#2e3037;--term-ink:#e7e5df;--term-dim:#8e8b84;--term-ok:#7fd092;--term-bad:#f08a74;--term-warn:#e8b765;--term-prompt:#7fa9ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --pv:#0b0b0c;--pvink:#ecebe6;--pvmute:#a4a19a;--pvline:#2e3037;
+    --page:#0d0d0d;--surface:#1a1a19;--panel:#232322;--hline:#34342f;--hink:#fff;--hink2:#c3c2b7;--hink3:#8f8e86;--accent:#3987e5;
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;
+    --up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--t:#3987e5;--t-soft:rgba(57,135,229,.13);--ok-soft:rgba(86,182,117,.15);--warn-soft:rgba(224,165,74,.15);--bad-soft:rgba(228,106,82,.15);
+    --term:#0f1013;--term-line:#2a2c33;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --pv:#0b0b0c;--pvink:#ecebe6;--pvmute:#a4a19a;--pvline:#2e3037;
+  --page:#0d0d0d;--surface:#1a1a19;--panel:#232322;--hline:#34342f;--hink:#fff;--hink2:#c3c2b7;--hink3:#8f8e86;--accent:#3987e5;
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;
+  --up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--t:#3987e5;--t-soft:rgba(57,135,229,.13);--ok-soft:rgba(86,182,117,.15);--warn-soft:rgba(224,165,74,.15);--bad-soft:rgba(228,106,82,.15);
+  --term:#0f1013;--term-line:#2a2c33;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--pv);color:var(--pvink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit}
+code,.mono{font-family:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace}
+*{scrollbar-width:none}*::-webkit-scrollbar{display:none}
+
+/* ---------- the preview's own frame ---------- */
+.pv{height:100vh;height:100dvh;display:flex;flex-direction:column}
+.pvbar{flex:none;display:flex;align-items:center;gap:10px 16px;padding:8px 16px;flex-wrap:wrap}
+.pvt{display:flex;align-items:baseline;gap:10px;min-width:0}
+.pvt b{font-size:15px;font-weight:650;white-space:nowrap}
+.pvt span{color:var(--pvmute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvtabs{display:flex;gap:6px;flex-wrap:wrap}
+.pvtabs button{font-size:13px;padding:5px 13px;border:1px solid var(--pvline);border-radius:999px;background:transparent;color:var(--pvmute);cursor:pointer}
+.pvtabs button:hover{color:var(--pvink)}
+.pvtabs button[aria-selected="true"]{color:var(--pvink);border-color:var(--pvink);font-weight:650;background:var(--card)}
+.pvkeys{margin-left:auto;color:var(--pvmute);font-size:12px;white-space:nowrap}
+.pvstage{flex:1;min-height:0;padding:0 16px 14px;display:flex}
+
+/* ---------- the hub window (its real header) ---------- */
+.hub{flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid var(--hline);border-radius:12px;overflow:hidden;background:var(--page);box-shadow:0 1px 2px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.07)}
+.hub[hidden]{display:none}
+.hh{display:flex;align-items:center;gap:6px;padding:0 12px;border-bottom:1px solid var(--hline);background:var(--surface);height:44px;flex:none;color:var(--hink);overflow:hidden}
+.hh h1{font-size:15px;margin:0 14px 0 4px;font-weight:600;white-space:nowrap}
+.hh span.b{color:var(--hink2);border-radius:8px;padding:7px 12px;white-space:nowrap;font-size:14px}
+.hh span.b.on{color:var(--hink);box-shadow:inset 0 -2px 0 var(--accent);border-radius:8px 8px 0 0}
+.hh .spacer{flex:1}
+.hh .now{color:var(--hink3);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hh .own{color:var(--accent);font-size:12px;white-space:nowrap;padding:6px 8px}
+
+/* ---------- the Tests page (its own tokens) ---------- */
+.tp{flex:1;min-height:0;background:var(--bg);color:var(--ink);position:relative;overflow:hidden;font-size:15px;line-height:1.5}
+.tmain{position:relative;max-width:1120px;margin:0 auto;height:100%;padding:16px 16px 12px;display:flex;flex-direction:column}
+.tmain h1{font-size:24px;line-height:1.15;letter-spacing:-.02em;margin:0 0 3px}
+.lede{color:var(--mute);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14.5px}
+.side{margin:9px 0 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:none}
+.side-h{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);margin:0}
+.models{display:flex;flex-wrap:wrap;gap:8px}
+.models button{display:block;text-align:left;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.models button:hover{color:var(--ink);border-color:var(--faint)}
+.models button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+.models .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}.models .top b{font-weight:400}.models button[aria-pressed="true"] .top b{font-weight:600}
+.models .top span{color:var(--faint);font-variant-numeric:tabular-nums}.models .s,.models hr{display:none}
+.side-note{display:none}
+@media (min-width:1640px){
+  .side{position:absolute;right:100%;top:0;bottom:0;width:212px;margin:0 8px 0 0;display:block;padding-top:24px}
+  .side-h{margin:0 0 8px}
+  .models{flex-direction:column;gap:2px}
+  .models button{width:100%;padding:8px 10px;border-color:transparent;border-radius:10px;background:none}
+  .models button:hover{background:var(--soft);border-color:transparent}
+  .models button[aria-pressed="true"]{background:var(--card);border-color:var(--line)}
+  .models .top{font-size:14px}.models .top b{font-weight:500}.models button[aria-pressed="true"] .top b{font-weight:700}
+  .models .s{display:block;color:var(--mute);font-size:12px;margin-top:1px}
+  .models hr{display:block;border:0;border-top:1px solid var(--line);margin:8px 10px}
+  .side-note{display:block;color:var(--mute);font-size:12px;margin:14px 10px 0}
+}
+.ttabs{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;flex:none}
+.ttabs button{font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:default}
+.ttabs button span{color:var(--faint);font-weight:400;margin-left:5px}
+.ttabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
+.ttabs button.run{cursor:pointer}
+.ttabs button.run i{font-style:normal;color:var(--t);margin-right:5px;font-size:11px}
+.ttabs .new{font-size:10.5px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--t);background:var(--t-soft);border-radius:999px;padding:1px 6px;margin-left:6px}
+.dstage{flex:1;min-height:0;margin-top:12px;display:flex;flex-direction:column}
+
+/* shared pieces */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+.ok{color:var(--up)}.bad{color:var(--down)}.stop{color:var(--warn)}
+.pill{display:inline-block;font-size:12px;font-weight:500;background:var(--soft);color:var(--mute);border-radius:999px;padding:1px 9px;white-space:nowrap}
+.pill.new{background:var(--t-soft);color:var(--t);font-weight:650}
+.kicker{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.kicker .pill{text-transform:none;letter-spacing:0;margin-left:6px}
+.lab{display:flex;align-items:center;gap:8px;margin:12px 0 6px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:650;color:var(--mute)}
+.lab .num{display:inline-grid;place-items:center;width:19px;height:19px;border-radius:50%;background:var(--t);color:#fff;font-size:11px;letter-spacing:0}
+.lab .hint{text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.term{position:relative;background:var(--term);border:1px solid var(--term-line);border-radius:11px;color:var(--term-ink);font:13px/1.55 ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;padding:10px 14px}
+.type{padding-right:112px;min-height:44px;display:flex;align-items:center}
+.type .line{display:flex;gap:10px;min-width:0}
+.type .pr{color:var(--term-prompt);flex:none;user-select:none;-webkit-user-select:none}
+.type code{font:inherit;white-space:pre-wrap;word-break:break-all;color:#fff}
+.copy{position:absolute;top:50%;transform:translateY(-50%);right:9px;appearance:none;border:0;background:var(--t);color:#fff;font:600 13.5px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:9px;padding:7px 14px;cursor:pointer;min-width:86px}
+.copy:hover{filter:brightness(1.08)}.copy.did{background:#2f8a4e}
+.show{font-size:12.5px;line-height:1.5}
+.show div{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.show .d{color:var(--term-dim)}.show .g{color:var(--term-ok);font-weight:600}.show .r{color:var(--term-bad);font-weight:600}.show .y{color:var(--term-warn)}.show .or{color:var(--term-dim);font-style:italic}
+.note{font-size:12.5px;color:var(--faint);margin-top:6px}.note b{color:var(--mute);font-weight:600}
+.src{font-size:11.5px;color:var(--faint);margin-top:5px}
+.yl{color:var(--warn);font-weight:600}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);max-width:760px}
+.empty b{color:var(--ink)}
+
+/* ---------- design 1 · wizard ---------- */
+.wz{flex:1;min-height:0;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 20px}
+.wz-top{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.wz-top .l{font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--mute)}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg button{font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--inner);color:var(--mute);cursor:pointer;white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg button sup{font-size:9.5px;font-weight:700;color:var(--t);margin-left:3px;letter-spacing:.03em}
+.seg button[aria-pressed="true"] sup{color:inherit;opacity:.8}
+.wz-top .on{margin-left:auto;font-size:13px;color:var(--mute);white-space:nowrap}
+.wz-top .on b{color:var(--ink)}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:9px 0}
+.chip{appearance:none;border:1px solid var(--line);background:var(--inner);border-radius:10px;padding:5px 8px 6px;text-align:left;cursor:pointer;min-width:0;color:var(--mute)}
+.chip b{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.chip b i{flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-style:normal;font-size:11px}
+.chip span{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.chip.on{border-color:var(--ink);background:var(--card);color:var(--ink)}
+.chip.on b i{background:var(--ink);color:var(--bg)}
+.chip.did b i{background:#2f8a4e;color:#fff}
+.wz-stage{overflow:hidden;padding:4px 0 6px;min-height:0}
+.wz-stage h2{font-size:22px;line-height:1.15;letter-spacing:-.02em;margin:3px 0 4px}
+.why{color:var(--mute);font-size:14.5px;max-width:860px;margin:0}
+.why b{color:var(--ink);font-weight:600}
+.box{background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--mute);margin-top:10px}
+.box b{color:var(--ink);font-weight:600}
+.box ol{margin:4px 0 0;padding-left:20px}.box li+li{margin-top:3px}
+.help{display:none;margin-top:0}
+.helpopen .help{display:block}.helpopen .expect{display:none}
+.help dl{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}
+.help dt{font-weight:600;font-size:13.5px;color:var(--ink)}
+.help dd{margin:2px 0 0;font-size:13.5px;color:var(--mute)}
+.help code{font-size:12px;background:var(--soft);border-radius:5px;padding:0 4px;color:var(--ink)}
+.wz-foot{display:flex;align-items:center;gap:10px;padding:10px 0 12px;border-top:1px solid var(--line)}
+.btn{appearance:none;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 14px;cursor:pointer;font-size:14px;color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.alt{margin-left:auto}
+.btn.go{background:var(--t);border-color:var(--t);color:#fff;font-weight:600;padding:9px 18px}
+.btn.go:hover{filter:brightness(1.07)}
+.btn[disabled]{opacity:.45;cursor:default}
+.watch{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--t);flex:none;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.dot{animation:none}}
+.res{display:grid;grid-template-columns:auto 1fr;gap:4px 18px;font-size:14px;margin-top:8px}
+.res dt{color:var(--mute)}.res dd{margin:0;font-variant-numeric:tabular-nums}
+.big{font-size:26px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.landed{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:12px 16px;background:var(--card)}
+.landed .k{color:var(--mute);font-size:12.5px}
+.landed.lrow{display:flex;align-items:center;gap:16px;margin-top:0;padding:8px 14px}.landed.lrow .big{font-size:22px;white-space:nowrap}.landed.lrow .k b{color:var(--ink);font-weight:600}
+
+/* ---------- design 2 · shelf ---------- */
+.sh{flex:1;min-height:0;display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px}
+.shelf{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:6px}
+.shelf h3{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);margin:6px 10px 4px;font-weight:600}
+.srow{display:block;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:7px 10px;cursor:pointer}
+.srow:hover{background:var(--soft)}
+.srow[aria-pressed="true"]{background:var(--inner);border-color:var(--ink)}
+.srow .a{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.srow .a b{font-size:14.5px;font-weight:600}
+.srow .a span{font-size:12px;color:var(--faint);white-space:nowrap}
+.srow .w{font-size:12.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srow .last{font-size:12.5px;margin-top:1px;font-variant-numeric:tabular-nums}
+.srow.dim{opacity:.62;cursor:default}.srow.dim:hover{background:none}
+.shelf hr{border:0;border-top:1px solid var(--line);margin:6px 10px}
+.nom{display:flex;flex-wrap:wrap;gap:2px 14px;padding:2px 10px 6px;font-size:12.5px;color:var(--mute);opacity:.8}
+.nom b{color:var(--ink);font-weight:600}.nom em{font-style:normal;color:var(--faint);flex-basis:100%}
+.shd{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:14px 18px}
+.shd-h{display:flex;align-items:flex-start;gap:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.shd-h h2{font-size:21px;letter-spacing:-.015em;margin:0}
+.shd-h p{margin:1px 0 0;color:var(--mute);font-size:14px}
+.shd-h .cmp{margin-left:auto;display:grid;grid-template-columns:auto auto;gap:1px 12px;font-size:13px;white-space:nowrap}
+.shd-h .cmp dt{color:var(--mute);margin:0}.shd-h .cmp dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.track{flex:1;min-height:0;position:relative;padding:4px 0 0 34px;overflow:hidden}
+.track::before{content:"";position:absolute;left:12px;top:22px;bottom:30px;width:2px;background:var(--line)}
+.st{position:relative;padding:8px 0 4px}
+.st>.n{position:absolute;left:-34px;top:10px;width:26px;height:26px;border-radius:50%;background:var(--card);border:2px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--mute)}
+.st.cur>.n{border-color:var(--t);color:var(--t)}
+.st.did>.n{background:#2f8a4e;border-color:#2f8a4e;color:#fff}
+.st h4{margin:0;font-size:15px;display:flex;align-items:baseline;gap:8px}
+.st h4 .pill{font-weight:500}
+.st .p{font-size:13px;color:var(--mute);margin:3px 0 0}
+.st .p code{font-size:12px;color:var(--ink)}
+.st .term{margin-top:6px}
+.st .row2{display:flex;gap:8px;align-items:center;margin-top:6px}
+.tick{appearance:none;border:1px solid var(--line);background:var(--inner);border-radius:8px;padding:4px 10px;font-size:12.5px;cursor:pointer;color:var(--mute);white-space:nowrap}
+.tick:hover{color:var(--ink)}
+.tick.did{color:#2f8a4e;border-color:#2f8a4e}
+
+/* ---------- design 3 · run button ---------- */
+.rb{flex:1;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px}
+.rb-top{display:flex;align-items:center;gap:12px;padding:10px 14px;flex-wrap:wrap}
+.rb-top .status{font-size:13px;color:var(--mute);white-space:nowrap;display:flex;align-items:center;gap:7px}
+.rb-top .status i{width:8px;height:8px;border-radius:50%;background:#2f8a4e;display:inline-block}
+.runbtn{appearance:none;border:0;background:var(--t);color:#fff;font-weight:650;font-size:15px;border-radius:11px;padding:10px 20px;cursor:pointer;white-space:nowrap;margin-left:auto}
+.runbtn:hover{filter:brightness(1.07)}
+.runbtn.stopb{background:var(--down)}
+.rb-main{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;min-height:0}
+.stages{padding:14px 16px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.stg{display:flex;gap:10px;align-items:flex-start;padding:7px 0}
+.stg i{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:700;margin-top:1px}
+.stg.did i{background:#2f8a4e;border-color:#2f8a4e;color:#fff}
+.stg.cur i{border-color:var(--t);color:var(--t)}
+.stg b{display:block;font-size:14px;font-weight:600}
+.stg span{display:block;font-size:12.5px;color:var(--mute)}
+.bar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden;margin-top:6px}
+.bar>div{height:100%;background:var(--t);width:0;transition:width .25s}
+.clock{margin-top:auto;font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums;border-top:1px solid var(--line);padding-top:10px}
+.clock b{color:var(--ink);font-size:20px;display:block;letter-spacing:-.01em}
+.live{display:flex;flex-direction:column;min-height:0;padding:0;overflow:hidden}
+.live .bar2{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--term-line);color:var(--term-dim);font:12px -apple-system,BlinkMacSystemFont,sans-serif}
+.live .bar2 i{width:10px;height:10px;border-radius:50%;background:#3a3c44}
+.live .bar2 span{margin-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live .out{flex:1;min-height:0;overflow:hidden;padding:10px 14px;display:flex;flex-direction:column;justify-content:flex-end}
+.live .out>div{flex:none}
+.label{font:600 11px -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--term-warn);background:rgba(232,183,101,.12);border-radius:6px;padding:2px 7px;margin-left:auto;white-space:nowrap}
+
+/* ---------- what is real here ---------- */
+.real{flex:1;min-height:0;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;gap:14px;align-content:start;max-width:1400px;margin:0 auto;width:100%}
+.real[hidden]{display:none}
+.real .card{padding:14px 18px}
+.real h3{margin:0 0 6px;font-size:15px}
+.real ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--mute)}
+.real li+li{margin-top:4px}
+.real li b{color:var(--ink);font-weight:600}
+.real code{font-size:12px;color:var(--ink)}
+.real .wide{grid-column:1/-1}
+
+@media (max-width:1100px){.sh{grid-template-columns:270px minmax(0,1fr)}.rb-main{grid-template-columns:240px minmax(0,1fr)}}
+/* A small window (a phone) scrolls instead of fitting. */
+@media (max-width:899px),(max-height:640px){
+  html,body{height:auto}body{overflow:auto}
+  .pv,.hub,.tp,.tmain{height:auto}.pv{min-height:100vh}
+  .dstage,.wz,.sh,.rb,.rb-main,.shelf,.shd,.track,.live .out,.wz-stage,.stages{min-height:0;height:auto;overflow:visible}
+  .sh,.rb-main,.real{grid-template-columns:minmax(0,1fr)}
+  .live .out{max-height:320px;overflow:hidden}
+  .chips{grid-template-columns:repeat(2,1fr)}
+  .help dl{grid-template-columns:1fr}
+  .hh span.b:not(.on){display:none}.hh .own{display:none}
+  .wz-top .on{margin-left:0;white-space:normal}
+  .shd-h{flex-wrap:wrap}.shd-h .cmp{margin-left:0}
+  .show div{white-space:pre-wrap;word-break:break-all}
+  .lede{white-space:normal}
+}
+@media (max-width:600px){.tmain h1{font-size:21px}.pvkeys{display:none}.wz{padding:0 12px}.wz-foot{flex-wrap:wrap}.btn.alt{margin-left:0}.btn.go{flex:1 0 100%}.type{padding-right:14px;flex-direction:column;align-items:stretch;gap:8px}.copy{position:static;transform:none;align-self:flex-start}}
+</style>
+</head>
+<body>
+<div class="pv">
+  <div class="pvbar">
+    <div class="pvt"><b>Tests tab · Run a test</b><span>3 designs, one model at a time · a preview on 29 Sep 2026, nothing is built yet</span></div>
+    <nav class="pvtabs" id="pvtabs" role="tablist" aria-label="Designs">
+      <button type="button" role="tab" data-d="1">1 · Wizard</button>
+      <button type="button" role="tab" data-d="2">2 · Shelf</button>
+      <button type="button" role="tab" data-d="3">3 · Run button</button>
+      <button type="button" role="tab" data-d="real">What’s real here</button>
+    </nav>
+    <span class="pvkeys">keys 1–4 switch</span>
+  </div>
+  <div class="pvstage">
+    <div class="hub" id="hub">
+      <div class="hh">
+        <h1>Agentic Coder hub</h1>
+        <span class="b">Weights</span><span class="b">Harness</span><span class="b">Structure</span><span class="b">Flow</span><span class="b on">Tests</span><span class="b">Battle</span><span class="b">Memory</span><span class="b">Instructions</span><span class="b">All docs</span><span class="b">Help</span>
+        <span class="spacer"></span><span class="now">every test run and its result</span><span class="own">open in its own tab ↗</span>
+      </div>
+      <div class="tp">
+        <div class="tmain">
+          <h1>Agentic Coder test record</h1>
+          <p class="lede" id="lede"></p>
+          <aside class="side" aria-label="Model"><p class="side-h">Model</p><nav class="models" id="models"></nav><p class="side-note" id="sidenote"></p></aside>
+          <div class="ttabs" id="ttabs"></div>
+          <div class="dstage" id="dstage"></div>
+        </div>
+      </div>
+    </div>
+    <section class="real" id="real" hidden></section>
+  </div>
+</div>
+<script type="application/json" id="g28">{"lines": [{"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(export.mjs)"}, {"t": "s", "l": "    \u00b7 Test(export.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change export.mjs (+10 \u2212)"}, {"t": "s", "l": "    \u00b7 Update(export.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(node --test)"}, {"t": "r", "l": "FAIL  think=off  1-json-flag       147s  6 steps (0 its own)  15 model calls  0 errors  0 reads  ~0 thinking  --json output wrong", "secs": 147, "n": 1}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u2717 Bash(node --test)"}, {"t": "s", "l": "    \u00b7 Read(stats.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change stats.mjs (+4 \u22121))"}, {"t": "s", "l": "    \u00b7 Update(stats.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(node --test)"}, {"t": "r", "l": "PASS  think=off  2-fix-bug          15s  6 steps (0 its own)  2 model calls  1 errors  0 reads  ~0 thinking", "secs": 15, "n": 2}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(strings.mjs)"}, {"t": "s", "l": "    \u00b7 Test(strings.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change strings.mjs (+8 \u2212)"}, {"t": "s", "l": "    \u00b7 Update(strings.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(node --test)"}, {"t": "r", "l": "PASS  think=off  3-add-function     49s  6 steps (0 its own)  8 model calls  0 errors  0 reads  ~0 thinking", "secs": 49, "n": 3}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Search(calcTotal)"}, {"t": "s", "l": "    \u00b7 Update(cart.mjs)"}, {"t": "s", "l": "    \u00b7 Update(price.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(node --test)"}, {"t": "r", "l": "PASS  think=off  4-rename            0s  5 steps (0 its own)  0 model calls  0 errors  0 reads  ~0 thinking", "secs": 0, "n": 4}, {"t": "s", "l": "    + Read(src/config.mjs)"}, {"t": "s", "l": "    + Read(src/server.mjs)"}, {"t": "r", "l": "PASS  think=off  5-question          5s  2 steps (0 its own)  1 model calls  0 errors  2 reads  ~0 thinking", "secs": 5, "n": 5}, {"t": "s", "l": "    + Read(src/catalog.mjs)"}, {"t": "s", "l": "    + Read(src/paginate.mjs)"}, {"t": "s", "l": "    + Search(paginate)"}, {"t": "s", "l": "    + helpers brought 1 (33 tokens)"}, {"t": "r", "l": "PASS  think=off  6-question-page-size    5s  3 steps (0 its own)  1 model calls  0 errors  +33 helper tokens  2 reads  ~0 thinking", "secs": 5, "n": 6}, {"t": "s", "l": "    + Read(billing.mjs)"}, {"t": "s", "l": "    + Read(checkout.mjs)"}, {"t": "r", "l": "PASS  think=off  7-question-tax     17s  2 steps (0 its own)  1 model calls  0 errors  2 reads  ~0 thinking", "secs": 17, "n": 7}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Search(getTotal)"}, {"t": "s", "l": "    \u00b7 Update(cart.mjs)"}, {"t": "s", "l": "    \u00b7 Update(cart.test.mjs)"}, {"t": "s", "l": "    \u00b7 Update(receipt.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  8-rename-method     0s  6 steps (0 its own)  0 model calls  0 errors  0 reads  ~0 thinking", "secs": 0, "n": 8}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Search(MAX_ITEMS)"}, {"t": "s", "l": "    \u00b7 Update(limits.mjs)"}, {"t": "s", "l": "    \u00b7 Update(queue.mjs)"}, {"t": "s", "l": "    \u00b7 Update(queue.test.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  9-rename-constant    0s  6 steps (0 its own)  0 model calls  0 errors  0 reads  ~0 thinking", "secs": 0, "n": 9}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u2717 Bash(npm test)"}, {"t": "s", "l": "    \u00b7 Read(pages.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change pages.mjs (+1 \u22121))"}, {"t": "s", "l": "    \u00b7 Update(pages.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  10-fix-off-by-one   24s  6 steps (0 its own)  3 model calls  1 errors  0 reads  ~0 thinking", "secs": 24, "n": 10}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u2717 Bash(npm test)"}, {"t": "s", "l": "    \u00b7 Read(sort.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change sort.mjs (+1 \u22121).)"}, {"t": "s", "l": "    \u00b7 Update(sort.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  11-fix-sort-text   10s  6 steps (0 its own)  2 model calls  1 errors  0 reads  ~0 thinking", "secs": 10, "n": 11}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(money.mjs)"}, {"t": "s", "l": "    \u00b7 Test(money.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change money.mjs (+16 \u22122)"}, {"t": "s", "l": "    \u00b7 Update(money.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  12-feature-currency   30s  6 steps (0 its own)  5 model calls  0 errors  0 reads  ~0 thinking", "secs": 30, "n": 12}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(mathutil.py)"}, {"t": "s", "l": "    \u00b7 Test(test_mathutil.py)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change mathutil.py (+4 \u2212)"}, {"t": "s", "l": "    \u00b7 Update(mathutil.py)"}, {"t": "s", "l": "    \u00b7 Bash(pytest)"}, {"t": "r", "l": "PASS  think=off  13-feature-python   23s  6 steps (0 its own)  5 model calls  0 errors  0 reads  ~0 thinking", "secs": 23, "n": 13}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(shapes.mjs)"}, {"t": "s", "l": "    ! could not write a good test for this task (the test already passes on today's code, so it does not check the new behaviour); working step by step instead."}, {"t": "s", "l": "    + Read(shapes.mjs)"}, {"t": "s", "l": "    + helpers brought 1 (29 tokens)"}, {"t": "s", "l": "    \u00b7 Read(shapes.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: in shapes.mjs, change \"e)"}, {"t": "s", "l": "    \u00b7 Update(shapes.mjs)"}, {"t": "r", "l": "PASS  think=off  14-notests-perimeter   73s  6 steps (2 its own)  7 model calls  0 errors  +29 helper tokens  2 reads  ~0 thinking", "secs": 73, "n": 14}, {"t": "s", "l": "    ! This looks like a Wrong value bug (a number is wrong), so it follows the Wrong value steps."}, {"t": "s", "l": "    ! This project has no tests, so first a small check that shows the problem."}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(convert.mjs)"}, {"t": "s", "l": "    \u00b7 Test(agentic-check.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change convert.mjs (+1 \u2212)"}, {"t": "s", "l": "    \u00b7 Update(convert.mjs)"}, {"t": "r", "l": "PASS  think=off  15-notests-fahrenheit   35s  5 steps (0 its own)  6 model calls  0 errors  0 reads  ~0 thinking", "secs": 35, "n": 15}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: create STORY.txt. Go ahe)"}, {"t": "s", "l": "    \u00b7 Write(STORY.txt)"}, {"t": "s", "l": "    ! Checking the change: npm test"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  16-writing-story   34s  3 steps (1 its own)  3 model calls  0 errors  0 reads  ~0 thinking", "secs": 34, "n": 16}, {"t": "s", "l": "    \u00b7 Read(server.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: create NOTES.md. Go ahea)"}, {"t": "s", "l": "    \u00b7 Write(NOTES.md)"}, {"t": "r", "l": "PASS  think=off  17-writing-notes-api   38s  3 steps (2 its own)  4 model calls  0 errors  1 reads  ~0 thinking", "secs": 38, "n": 17}, {"t": "s", "l": "    + Read(old/test.mjs)"}, {"t": "s", "l": "    + helpers brought 1 (35 tokens)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: create TEST.txt. Go ahea)"}, {"t": "s", "l": "    \u00b7 Write(TEST.txt)"}, {"t": "r", "l": "FAIL  think=off  18-writing-noncode-folder   32s  3 steps (1 its own)  3 model calls  0 errors  +35 helper tokens  1 reads  ~0 thinking  TEST.txt has only 2 sentences", "secs": 32, "n": 18}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(config.mjs)"}, {"t": "s", "l": "    \u00b7 Read(format.mjs)"}, {"t": "s", "l": "    \u00b7 Read(report.mjs)"}, {"t": "s", "l": "    \u00b7 Test(report.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change config.mjs (+1 \u22121)"}, {"t": "s", "l": "    \u00b7 Update(config.mjs)"}, {"t": "s", "l": "    \u00b7 Update(format.mjs)"}, {"t": "s", "l": "    \u00b7 Update(report.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  19-multifile-symbol   72s  10 steps (0 its own)  5 model calls  0 errors  0 reads  ~0 thinking", "secs": 72, "n": 19}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(price.mjs)"}, {"t": "s", "l": "    \u00b7 Read(cart.mjs)"}, {"t": "s", "l": "    \u00b7 Read(invoice.mjs)"}, {"t": "s", "l": "    \u00b7 Test(price.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change price.mjs (+3 \u22122))"}, {"t": "s", "l": "    \u00b7 Update(price.mjs)"}, {"t": "s", "l": "    \u00b7 Update(cart.mjs)"}, {"t": "s", "l": "    \u00b7 Update(invoice.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  20-multifile-signature  118s  10 steps (0 its own)  8 model calls  0 errors  0 reads  ~0 thinking", "secs": 118, "n": 20}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u2717 Bash(npm test)"}, {"t": "s", "l": "    \u00b7 Read(stats.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change stats.mjs (+235 \u2212)"}, {"t": "s", "l": "    \u00b7 Update(stats.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  21-bigfile-two-places   94s  6 steps (0 its own)  6 model calls  1 errors  0 reads  ~0 thinking", "secs": 94, "n": 21}, {"t": "s", "l": "    ? The tests pass today. What is wrong, or what should a test check?"}, {"t": "s", "l": "      \u2192 slugify gives several dashes in a row when the text has several spaces in a row: slugify('Hello   World') is 'hello---world' but it should be 'hello-world'."}, {"t": "s", "l": "    \u00b7 Ask(The tests pass today. What is wrong, or what shoul)"}, {"t": "s", "l": "    ! This looks like a Wrong value bug (a number is wrong), so it follows the Wrong value steps."}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "s", "l": "    ! The tests pass today, so first a test that shows the problem."}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(slug.mjs)"}, {"t": "s", "l": "    \u00b7 Test(slug.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change slug.mjs (+1 \u22121).)"}, {"t": "s", "l": "    \u00b7 Update(slug.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  22-vague-fix-the-bug   20s  9 steps (0 its own)  5 model calls  0 errors  0 reads  ~0 thinking", "secs": 20, "n": 22}, {"t": "s", "l": "    ? What would you like me to do regarding the API?"}, {"t": "s", "l": "      \u2192 Add a GET /health route to server.mjs that returns status 200 with the body { ok: true }, and add a test for it."}, {"t": "s", "l": "    \u00b7 Ask(What would you like me to do regarding the API?)"}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(server.mjs)"}, {"t": "s", "l": "    \u00b7 Test(server.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change server.mjs (+1 \u22120)"}, {"t": "s", "l": "    \u00b7 Update(server.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  23-oneword-api     33s  7 steps (0 its own)  6 model calls  0 errors  0 reads  ~0 thinking", "secs": 33, "n": 23}, {"t": "s", "l": "    ? The tests pass today. What is wrong, or what should a test check?"}, {"t": "s", "l": "      \u2192 The test for toCsv should also cover an empty list: toCsv([]) must return an empty string. Add that to the test and make it pass."}, {"t": "s", "l": "    \u00b7 Ask(The tests pass today. What is wrong, or what shoul)"}, {"t": "s", "l": "    ! This looks like a Data bug (didn't load / stale), so it follows the Data steps."}, {"t": "s", "l": "    ! the test suite can't see a Data bug (it needs request + reply); working step by step instead."}, {"t": "s", "l": "    ! Running npm test first, to see what fails (a minute at most)."}, {"t": "s", "l": "    + Bash(npm test)"}, {"t": "s", "l": "    + Search(toCsv)"}, {"t": "s", "l": "    + helpers brought 2 (68 tokens)"}, {"t": "s", "l": "    \u00b7 Read(export.test.mjs)"}, {"t": "s", "l": "    \u2717 Write(export.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: in export.test.mjs, chan)"}, {"t": "s", "l": "    \u00b7 Update(export.test.mjs)"}, {"t": "s", "l": "    \u2717 Bash(npm test)"}, {"t": "s", "l": "    \u00b7 Read(export.mjs)"}, {"t": "s", "l": "    \u00b7 Update(export.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  24-fix-test-passing   86s  11 steps (7 its own)  9 model calls  2 errors  +68 helper tokens  2 reads  ~0 thinking", "secs": 86, "n": 24}, {"t": "s", "l": "    + List(the project map)"}, {"t": "s", "l": "    + Read(src/agent/prompt.mjs)"}, {"t": "s", "l": "    + Read(src/flows/change.mjs)"}, {"t": "s", "l": "    + helpers brought 1 (291 tokens)"}, {"t": "r", "l": "PASS  think=off  25-bigproject-question   37s  3 steps (0 its own)  1 model calls  0 errors  +291 helper tokens  2 reads  ~0 thinking", "secs": 37, "n": 25}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(src/tools/fs.mjs)"}, {"t": "s", "l": "    \u00b7 Read(src/flows/scratch.mjs)"}, {"t": "s", "l": "    \u00b7 Test(test/fs.test.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change src/tools/fs.mjs )"}, {"t": "s", "l": "    \u00b7 Update(src/tools/fs.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  26-bigproject-change   84s  7 steps (0 its own)  6 model calls  0 errors  0 reads  ~0 thinking", "secs": 84, "n": 26}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(money.mjs)"}, {"t": "s", "l": "    ! could not write a good test for this task (no new test was added); working step by step instead."}, {"t": "s", "l": "    + Read(money.test.mjs)"}, {"t": "s", "l": "    + Read(money.mjs)"}, {"t": "s", "l": "    + Search(formatMoney)"}, {"t": "s", "l": "    + helpers brought 3 (206 tokens)"}, {"t": "s", "l": "    \u2717 Write(money.mjs)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: in money.mjs, change \"ex)"}, {"t": "s", "l": "    \u00b7 Update(money.mjs)"}, {"t": "s", "l": "    \u00b7 Update(money.test.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "s", "l": "    \u2717 Update(money.test.mjs)"}, {"t": "s", "l": "    \u00b7 Read(money.test.mjs)"}, {"t": "s", "l": "    \u00b7 Update(money.test.mjs)"}, {"t": "s", "l": "    \u00b7 Bash(npm test)"}, {"t": "r", "l": "PASS  think=off  27-negative-money  124s  14 steps (8 its own)  13 model calls  2 errors  +206 helper tokens  3 reads  ~0 thinking", "secs": 124, "n": 27}, {"t": "s", "l": "    \u00b7 Plan()"}, {"t": "s", "l": "    \u00b7 Read(models.py)"}, {"t": "s", "l": "    \u00b7 Read(serialize.py)"}, {"t": "s", "l": "    \u00b7 Test(test_serialize.py)"}, {"t": "s", "l": "    \u00b7 Ask(Before I change anything: change models.py (+1 \u22120))"}, {"t": "s", "l": "    \u00b7 Update(models.py)"}, {"t": "s", "l": "    \u00b7 Update(serialize.py)"}, {"t": "s", "l": "    \u00b7 Bash(pytest)"}, {"t": "r", "l": "PASS  think=off  28-python-multifile  152s  8 steps (0 its own)  12 model calls  0 errors  0 reads  ~0 thinking", "secs": 152, "n": 28}], "passed": 26, "secs": 1357, "calls": 137, "own": 21}</script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const G28 = JSON.parse($('g28').textContent);
+  const REPO = 'cd ~/Desktop/agentic-coder && ';
+
+  // ---- the models, and the record's real counts (from recordData(), 29 Sep 15:15) ----
+  const M = {
+    gemma: { name: 'Gemma 4 12B QAT', short: 'Gemma', folder: 'gemma-4-12b', n: 82, s: '28 tasks: 26 of 28 · 28 Sep (one at a time)' },
+    qwen: { name: 'Qwen3.5 9B', short: 'Qwen', folder: 'qwen3.5-9b', n: 3, s: 'no practice run yet' },
+  };
+  const TABS = {
+    all: [['Overview', 359], ['Practice tasks', 91], ['Real requests', 7], ['Real bugs', 17], ['Unit tests', 129], ['Other', 115]],
+    gemma: [['Overview', 82], ['Practice tasks', 74], ['Other', 8]],
+    qwen: [['Overview', 3], ['Other', 3]],
+    none: [['Overview', 214], ['Unit tests', 129], ['Other', 85]],
+  };
+
+  // ---- the tests that take one model ----
+  // lines: ⟨…⟩ = yours to find out (yellow). A line starting "…" is a stand-in for many.
+  const trim = (l) => l.replace(/\s+\d+ reads\s+~\d+ thinking/, '').replace(/\s+\+\d+ helper tokens/, '');
+  const firstTools = G28.lines.slice(0, 6).map((x) => x.l);
+  const T = [
+    { id: 'p28', name: 'Practice 28', short: 'Practice 28', what: 'the 28 practice tasks, each with its own check', kind: 'Practice tasks',
+      time: { gemma: 'about 25 min', qwen: 'not timed yet' }, isNew: '--set 28',
+      cmd: (m) => `${REPO}caffeinate -i node models/evals/bench/run.mjs --model ${m} --set 28`,
+      last: { gemma: { v: '26 of 28', c: 'ok', when: '28 Sep', secs: 1357, note: 'run one task at a time · failed: 1-json-flag, 18-writing-noncode-folder' } },
+      lines: (m) => m === 'gemma' ? [
+        'server up on http://127.0.0.1:17600, ctx 32768, thinking budget 4096; helpers: named, tests, rag, lsp; focused paths: on',
+        '    · Plan()  · Read(export.mjs)  · Test(export.test.mjs)  · Update(export.mjs)  · Bash(node --test)',
+        trim(G28.lines[6].l), trim(G28.lines[13].l),
+        '… 26 more tasks: a few tool lines, then one PASS or FAIL line each …',
+        'thinking off: ⟨N⟩/28 passed, ⟨N⟩s total, ⟨N⟩ model calls, ⟨N⟩ own steps',
+        'recorded in the test record: The 28 practice tasks, helpers Scout+Medic+Oracle+Sentry — ⟨N⟩ of 28, ⟨N⟩ s',
+      ] : [
+        'server up on http://127.0.0.1:17600, ctx 32768, thinking budget ⟨N⟩; helpers: Scout, Medic, Oracle, Sentry; focused paths: on',
+        '    · Plan()  · Read(export.mjs)  · Test(export.test.mjs)  …',
+        '⟨PASS or FAIL⟩  think=off  1-json-flag   ⟨N⟩s  ⟨N⟩ steps (⟨N⟩ its own)  ⟨N⟩ model calls  ⟨N⟩ errors',
+        '… 27 more tasks: a few tool lines, then one PASS or FAIL line each …',
+        'thinking off: ⟨N⟩/28 passed, ⟨N⟩s total, ⟨N⟩ model calls, ⟨N⟩ own steps',
+        'recorded in the test record: The 28 practice tasks, helpers Scout+Medic+Oracle+Sentry — ⟨N⟩ of 28, ⟨N⟩ s',
+      ],
+      src: { gemma: 'real lines from Gemma’s 28 Sep run · long lines shortened', qwen: 'Qwen has not run these yet · yellow = yours to find out' },
+      ends: 'It ended with the recorded line' },
+    { id: 'one', name: 'One practice task', short: 'One task', what: 'task 10 (fix an off-by-one) as a quick check; any number 1–28 works', kind: 'Practice tasks',
+      time: { gemma: 'about 30 s', qwen: 'about a minute' },
+      cmd: (m) => `${REPO}node models/evals/bench/run.mjs --model ${m} --only 10`,
+      last: { gemma: { v: 'passed', c: 'ok', when: '28 Sep', secs: 24, note: '10-fix-off-by-one' } },
+      lines: (m) => m === 'gemma' ? [
+        'server up on http://127.0.0.1:17600, ctx 32768, thinking budget 4096; helpers: named, tests, rag, lsp; focused paths: on',
+        '    · Plan()', '    ✗ Bash(npm test)', '    · Read(pages.mjs)', '    · Ask(Before I change anything: change pages.mjs (+1 −1))', '    · Update(pages.mjs)', '    · Bash(npm test)',
+        'PASS  think=off  10-fix-off-by-one   24s  6 steps (0 its own)  3 model calls  1 errors',
+        'thinking off: 1/1 passed, 24s total, 3 model calls, 0 own steps',
+        'recorded in the test record: The 1 picked practice tasks, helpers named+tests+rag+lsp — 1 of 1, 24 s',
+      ] : [
+        'server up on http://127.0.0.1:17600, ctx 32768, thinking budget ⟨N⟩; helpers: Scout, Medic, Oracle, Sentry; focused paths: on',
+        '    · Plan()  ✗ Bash(npm test)  · Read(pages.mjs)  · Update(pages.mjs)  · Bash(npm test)  …',
+        '⟨PASS or FAIL⟩  think=off  10-fix-off-by-one   ⟨N⟩s  ⟨N⟩ steps (⟨N⟩ its own)  ⟨N⟩ model calls  ⟨N⟩ errors',
+        'thinking off: ⟨N⟩/1 passed, ⟨N⟩s total, ⟨N⟩ model calls, ⟨N⟩ own steps',
+        'recorded in the test record: The 1 picked practice tasks, helpers Scout+Medic+Oracle+Sentry — ⟨N⟩ of 1, ⟨N⟩ s',
+      ],
+      src: { gemma: 'Gemma’s real lines from 28 Sep (runs/10.log) · the ✗ is normal: the tests fail until the bug is fixed', qwen: 'Qwen has not run this task yet · yellow = yours to find out' },
+      ends: 'It ended with the recorded line' },
+    { id: 'req', name: 'Real requests', short: 'Real requests', what: '28 everyday requests in throwaway folders: where each goes, and blocked commands stay blocked', kind: 'Real requests',
+      time: { gemma: 'about 15 min', qwen: 'about 15 min' },
+      cmd: (m) => `${REPO}caffeinate -i node models/evals/bench/words/real.mjs --model ${m}`,
+      last: {},
+      lines: () => [
+        'OK   #1 [code] "hello" → step by step, ⟨1⟩s',
+        'OK   #2 [code] "thanks!" → step by step, ⟨2⟩s',
+        'OK   #3 [code] "What does the API in export.mjs do?" → question, ⟨18⟩s',
+        'OK   #4 [code] "Is there an API key in this project?" → question, ⟨26⟩s',
+        'OK   #19 [code] "run rm -rf ./logs to clean up" → other, ⟨23⟩s',
+        '… one OK or FAIL line per request, 28 in all …',
+        '⟨N⟩ of 28 OK · saved ⟨file⟩',
+        'recorded in the test record: The 28 real requests — ⟨N⟩ of 28, ⟨N⟩ s',
+      ],
+      src: { gemma: 'the Bonsai 27B’s real lines (27 Sep, 28 of 28, 827 s) · neither Gemma nor Qwen has run these yet', qwen: 'the Bonsai 27B’s real lines (27 Sep, 28 of 28, 827 s) · neither Gemma nor Qwen has run these yet' },
+      ends: 'It ended with the recorded line' },
+    { id: 'long', name: 'Long task', short: 'Long task', what: 'one long, read-heavy question: where the time goes, and what it reads twice', kind: 'Other',
+      time: { gemma: 'up to 21 min', qwen: 'up to 22 min' },
+      cmd: (m) => `${REPO}node models/evals/tools/long-task.mjs --model ${m} --minutes 20 --record`,
+      last: {},
+      lines: (m) => [
+        `${M[m].name} · 32k memory · High effort · thinking cap 8,192`,
+        'loading the model…',
+        'loaded in ⟨N⟩ s · getting ready (its instructions, the code search)…',
+        'asking the question · stops by itself after 20 minutes · Control-C stops early and keeps what it has',
+        '  ⟨0:41⟩ (given) Read src/cli.jsx',
+        '… one line per file it reads or search it runs …',
+        'done after ⟨m:ss⟩ · ⟨N⟩ steps · reading ⟨m:ss⟩ · writing ⟨m:ss⟩ · memory filled ⟨N⟩ times',
+        'recorded in the test record: Long task: where the time goes (step 3) — pass, ⟨N⟩ s',
+      ],
+      src: { gemma: 'the lines the tool prints (built today, nobody has run it yet) · yellow = yours to find out', qwen: 'the lines the tool prints (built today, nobody has run it yet) · yellow = yours to find out' },
+      ends: 'It ended with the recorded line' },
+    { id: 'w28', name: 'Work 28', short: 'Work 28', what: 'the Battle set about your own work, on this one model', kind: 'Battle sets',
+      time: { gemma: 'not timed yet · each test stops at 10 min', qwen: 'not timed yet · each test stops at 10 min' }, isNew: 'new command',
+      cmd: (m) => `${REPO}caffeinate -i node models/evals/battle/run-set.mjs --model ${m} --set work28`,
+      last: {},
+      lines: (m) => [
+        `${M[m].name} · Work 28 · one test at a time, each stops at 10 minutes`,
+        '⟨PASS⟩  w01-contract-roll       ⟨N⟩s  ⟨N⟩ steps',
+        '⟨FAIL⟩  w02-tick-rounding       ⟨N⟩s  ⟨N⟩ steps  ⟨what the check said⟩',
+        '… one line per test …',
+        `Work 28 on ${M[m].short}: ⟨N⟩ of 28 passed · ⟨m:ss⟩`,
+        'recorded in the test record: Work 28 — ⟨N⟩ of 28, ⟨N⟩ s',
+      ],
+      src: { gemma: 'a NEW command (part of the build) · these are the lines it would print', qwen: 'a NEW command (part of the build) · these are the lines it would print' },
+      ends: 'It ended with the recorded line' },
+    { id: 'n28', name: 'New 28', short: 'New 28', what: 'the Battle’s New 28 set, on this one model', kind: 'Battle sets',
+      time: { gemma: 'not timed yet · each test stops at 10 min', qwen: 'not timed yet · each test stops at 10 min' }, isNew: 'new command',
+      cmd: (m) => `${REPO}caffeinate -i node models/evals/battle/run-set.mjs --model ${m} --set new28`,
+      last: {},
+      lines: (m) => [
+        `${M[m].name} · New 28 · one test at a time, each stops at 10 minutes`,
+        '⟨PASS⟩  n01-date-one-day-early  ⟨N⟩s  ⟨N⟩ steps',
+        '⟨FAIL⟩  n02-csv-quoted-comma    ⟨N⟩s  ⟨N⟩ steps  ⟨what the check said⟩',
+        '… one line per test …',
+        `New 28 on ${M[m].short}: ⟨N⟩ of 28 passed · ⟨m:ss⟩`,
+        'recorded in the test record: New 28 — ⟨N⟩ of 28, ⟨N⟩ s',
+      ],
+      src: { gemma: 'a NEW command (part of the build) · these are the lines it would print', qwen: 'a NEW command (part of the build) · these are the lines it would print' },
+      ends: 'It ended with the recorded line' },
+  ];
+  const NOMODEL = [
+    { name: 'Unit tests', what: 'bun test over both parts', last: '<span class="ok">✓ 535 of 535</span> · 110 s · today 3:12 PM' },
+    { name: 'Repo check', what: 'is anything in the repo that should not be', last: '<span class="bad">✗ 9 of 10</span> · today 3:09 PM' },
+  ];
+  const byId = (id) => T.find((t) => t.id === id) ?? T[0];
+
+  // ---- state ----
+  let S = { d: '1', m: 'gemma', t: 'p28', step: 0, help: false, landed: false, did: {}, sh: {} };
+  try { const s = JSON.parse(localStorage.getItem('run-a-test-preview') || 'null'); if (s) S = { ...S, ...s, help: false, landed: false }; } catch { /* no storage */ }
+  const save = () => { try { localStorage.setItem('run-a-test-preview', JSON.stringify({ d: S.d, m: S.m, t: S.t, step: S.step })); } catch { /* no storage */ } };
+  try { const h = location.hash.slice(1); if (['1', '2', '3', 'real'].includes(h)) S.d = h; } catch { /* */ }
+  const one = () => S.m === 'gemma' || S.m === 'qwen';
+
+  // ---- helpers that draw ----
+  const secs = (s) => `${s.toLocaleString()} s${s >= 90 ? ` (${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s)` : ''}`;
+  function termLine(l) {
+    let h = esc(l).replace(/⟨(.*?)⟩/g, '<span class="y">$1</span>');
+    if (/^(PASS|OK) /.test(l)) h = h.replace(/^(PASS|OK)/, '<span class="g">$1</span>');
+    else if (/^FAIL/.test(l)) h = h.replace(/^FAIL/, '<span class="r">FAIL</span>');
+    const cls = /^…/.test(l) ? 'or' : /^\s{2,}/.test(l) && !/^\s+⟨/.test(l) && !/^\s+<span/.test(h) ? 'd' : '';
+    return `<div class="${cls}">${h}</div>`;
+  }
+  const show = (lines) => `<div class="term show">${lines.map(termLine).join('')}</div>`;
+  const typeBox = (cmd, id) => `<div class="term type"><div class="line"><span class="pr">%</span><code>${esc(cmd)}</code></div><button type="button" class="copy" data-copy="${esc(cmd)}" id="${id}">Copy</button></div>`;
+  const lastOf = (t, m) => t.last[m];
+  const lastTxt = (t, m) => { const l = lastOf(t, m); return l ? `<span class="${l.c}">✓ ${esc(l.v)}</span> · ${esc(l.when)}` : '<span style="color:var(--faint)">never run</span>'; };
+  const STOP = ['coding stop'];
+  const STOP_LINES = ['Stopped the model on port 17600; its memory is free.', '— or —', 'No model is loaded.'];
+  const HELP = {
+    start: [],
+    stop: [['“Still in use by an open Agentic Coder window … Quit that window first.”', 'Type <code>/exit</code> in that window (or quit the app), then run it again.'], ['“command not found: coding”', 'Type <code>~/.local/bin/coding stop</code> instead.']],
+    run: [['“refused: … is loaded”', 'A model is still loaded (a window, a Battle). Go back one step, then run this again.'], ['“refused: … GB free”', 'Quit apps you don’t need (browsers with many tabs, the desk servers), wait 10 s, run it again.'], ['You need to stop it early', 'Press Control-C once. It saves what it has and records the run as stopped.'], ['An error with a long list of file lines', 'Stop here and tell Claude “the run errored”, with what Terminal printed.']],
+    result: [['No line after the run ended', 'Check Terminal: did it end with “recorded in the test record”? If it said “not recorded …”, tell Claude.'], ['The page was closed during the run', 'Nothing is lost: the line is in the record. Open this tab again and it shows.']],
+  };
+  const helpBlock = (k) => HELP[k].length ? `<div class="box help"><dl>${HELP[k].map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></div>` : '';
+
+  // ---- the page around the designs: side panel, lede, the tabs ----
+  function side() {
+    const item = (id, name, n, s) => `<button type="button" data-model="${id}" aria-pressed="${id === S.m}"><span class="top"><b>${esc(name)}</b><span>${n}</span></span><span class="s">${esc(s)}</span></button>`;
+    $('models').innerHTML = item('all', 'All models', 359, 'every run') + item('gemma', M.gemma.name, 82, M.gemma.s) + item('qwen', M.qwen.name, 3, M.qwen.s) + '<hr>' + item('none', 'Not model-specific', 214, 'unit tests and checks');
+    $('sidenote').textContent = '60 runs of Bonsai 27B, no longer on this Mac, show under All models only.';
+    const who = S.m === 'all' ? 'Every test run' : S.m === 'none' ? 'Every run of no one model' : `Every run of ${M[S.m].name}`;
+    $('lede').textContent = S.m === 'qwen' ? `${who} on this Mac, newest first: 3 runs since 29 Sep. A run adds its own line when it finishes.` : S.m === 'gemma' ? `${who} on this Mac, newest first: 82 runs since 28 Sep. A run adds its own line when it finishes.` : `${who} on this Mac, newest first. A run adds its own line when it finishes.`;
+    $('ttabs').innerHTML = `<button type="button" class="run" aria-selected="true"><i>▶</i>Run a test<span class="new">new</span></button>` + TABS[S.m].map(([k, n]) => `<button type="button" title="today’s record tab, unchanged in this round">${k}<span>${n}</span></button>`).join('') + '<button type="button" title="today’s record tab, unchanged in this round">How it is kept</button>';
+  }
+  $('models').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.m = b.dataset.model; S.landed = false; save(); draw(); };
+
+  // ---- the empty state: the run tab needs one model ----
+  const pickOne = () => `<div class="empty"><b>Pick one model on the left to run a test.</b><br>A run tests one model at a time: Gemma 4 12B QAT or Qwen3.5 9B. ${S.m === 'none' ? 'The unit tests and the repo check take no model; they stay in the record’s own tabs (<code>bun run test</code>, <code>bun run check</code>).' : 'All models shows the record; running needs a single model.'}</div>`;
+
+  // ---- design 1 · wizard ----
+  const STEPS = [['Start', 'Before you start'], ['1', 'Free the memory'], ['2', 'Run it'], ['3', 'The result']];
+  function resultBody(t, m, idBase) {
+    const l = lastOf(t, m), other = m === 'gemma' ? 'qwen' : 'gemma', lo = lastOf(t, other);
+    const watch = `<div class="watch"><span class="dot"></span>Watching the test record for ${M[m].short}’s next <b>${esc(t.name)}</b> line… <span class="pill">started 3:41 PM</span></div>`;
+    const cmp = `<dl class="res"><dt>Last time on ${M[m].short}</dt><dd>${l ? `<span class="${l.c}">✓ ${esc(l.v)}</span> · ${secs(l.secs)} · ${esc(l.when)}${l.note ? ` · ${esc(l.note)}` : ''}` : 'none yet: this will be its first'}</dd><dt>${M[other].short}’s latest</dt><dd>${lo ? `<span class="${lo.c}">✓ ${esc(lo.v)}</span> · ${esc(lo.when)}` : 'none yet'}</dd></dl>`;
+    const landed = !S.landed ? `<button type="button" class="btn" id="${idBase}-land" style="margin-top:10px">Show how it looks when the line lands</button>` : (m === 'gemma' && l && t.id === 'p28'
+      ? `<div class="landed"><div class="k">Example, using Gemma’s real 28 Sep numbers · ${esc(t.name)} · Gemma 4 12B QAT · code 78b6dd7 · effort low</div><div class="big ok">✓ 26 of 28</div><div class="k">1,357 s of task time (22 min 37 s) · failed: 1-json-flag, 18-writing-noncode-folder · <a href="#" onclick="return false">open it in Practice tasks ›</a></div></div>`
+      : `<div class="landed"><div class="k">How it would look · ${esc(t.name)} · ${esc(M[m].name)} · yellow = yours to find out</div><div class="big"><span class="yl">N</span> of ${t.id === 'one' ? 1 : 28}</div><div class="k"><span class="yl">N</span> s · vs last time: ${l ? `<span class="yl">±N</span>` : 'its first run'} · <a href="#" onclick="return false">open it in ${esc(t.kind)} ›</a></div></div>`);
+    return watch + cmp + landed;
+  }
+  function wizard() {
+    const t = byId(S.t), m = S.m;
+    const seg = T.map((x) => `<button type="button" data-t="${x.id}" aria-pressed="${x.id === t.id}">${esc(x.short)}${x.isNew === 'new command' ? '<sup>NEW</sup>' : ''}</button>`).join('');
+    const chips = STEPS.map(([n, w], i) => `<button type="button" class="chip${i === S.step ? ' on' : ''}${S.did['w' + i] && i !== S.step ? ' did' : ''}" data-step="${i}"><b><i>${S.did['w' + i] && i !== S.step ? '✓' : n === 'Start' ? '·' : n}</i>${n === 'Start' ? 'Start' : 'Step ' + n}</b><span>${w}</span></button>`).join('');
+    let body = '', helpK = 'start', goLabel = 'I’m ready →';
+    if (S.step === 0) {
+      body = `<div class="kicker">Before you start<span class="pill">${esc(t.time[m])}</span></div><h2>${esc(t.name)} on ${esc(M[m].name)}</h2><p class="why">${esc(t.what[0].toUpperCase() + t.what.slice(1))}. Each step shows <b>what to type</b> and <b>what Terminal should print back</b>. When the run ends, step 3 shows its result by itself.</p>
+      <div class="box"><b>Do these first</b><ol><li>Open Terminal (⌘ Space, type Terminal, Return) and put it beside this window.</li><li>Quit Agentic Coder: type <b>/exit</b> in every window. Don’t start a Battle while this runs: only one model fits in memory.</li><li>Plug in the Mac. The run keeps the Mac awake by itself.</li></ol></div>
+      ${t.isNew ? `<div class="box" style="background:var(--t-soft);border-color:transparent"><b>New in the build:</b> ${t.isNew === '--set 28' ? 'the <code>--set 28</code> flag. Today a full run also does task 29 (the notes page), so the Tests tab never counts it as a full 28-task run; <code>--only 1,…,28</code> is marked “part of the set”.' : '<code>run-set.mjs</code>: one model, one Battle set, one line in the record. Today only the Battle runner plays these sets, and always with both models.'}</div>` : ''}`;
+    } else if (S.step === 1) {
+      helpK = 'stop'; goLabel = 'It printed one of these →';
+      body = `<div class="kicker">Step 1 of 3<span class="pill">a few seconds</span></div><h2>Free the memory</h2><p class="why">After you quit Agentic Coder it keeps its model loaded for 30 more minutes. This unloads it now, so the test has the memory to itself.</p>
+      <div class="lab"><span class="num">1</span>Type this into Terminal<span class="hint">· Copy, click in Terminal, ⌘V, Return</span></div>${typeBox('coding stop', 'c1')}
+      <div class="expect"><div class="lab"><span class="num">2</span>Terminal should print one of these<span class="hint">· either is fine · the real messages</span></div>${show(STOP_LINES)}</div>${helpBlock('stop')}`;
+    } else if (S.step === 2) {
+      helpK = 'run'; goLabel = `${t.ends} →`;
+      body = `<div class="kicker">Step 2 of 3<span class="pill">${esc(t.time[m])}</span>${t.isNew ? '<span class="pill new">' + (t.isNew === '--set 28' ? 'new flag' : 'new command') + '</span>' : ''}</div><h2>Run ${esc(t.name)} on ${esc(M[m].short)}</h2><p class="why">Leave the Mac alone while it runs. Control-C once stops it early and still saves what it has.</p>
+      <div class="lab"><span class="num">1</span>Type this into Terminal<span class="hint">· one line; Copy takes all of it</span></div>${typeBox(t.cmd(m), 'c2')}
+      <div class="expect"><div class="lab"><span class="num">2</span>Terminal should print lines like these<span class="hint">· ${esc(t.src[m])}</span></div>${show(t.lines(m))}</div>${helpBlock('run')}`;
+    } else {
+      helpK = 'result'; goLabel = 'Run another test ↺';
+      body = `<div class="kicker">Step 3 of 3<span class="pill">when the run ends</span></div><h2>The result</h2><p class="why">This tab reads the test record. When the run writes its line, the result shows here <b>by itself</b>: no file to pick, no page to build.</p>
+      <div class="box" style="background:var(--card)">${resultBody(t, m, 'w')}</div>${helpBlock('result')}`;
+    }
+    $('dstage').innerHTML = `<div class="wz"><div class="wz-top"><span class="l">Test</span><div class="seg" id="seg">${seg}</div><span class="on">on <b>${esc(M[m].name)}</b> · picked on the left</span></div>
+      <div class="chips" id="chips">${chips}</div>
+      <div class="wz-stage${S.help ? ' helpopen' : ''}" id="wzs">${body}</div>
+      <div class="wz-foot"><button type="button" class="btn" id="back" ${S.step === 0 ? 'disabled' : ''}>← Back</button><button type="button" class="btn alt" id="diff" style="visibility:${HELP[helpK].length ? 'visible' : 'hidden'}">${S.help ? 'Show what it should print' : 'Something’s different'}</button><button type="button" class="btn go" id="go">${esc(goLabel)}</button></div></div>`;
+    $('seg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.t = b.dataset.t; S.step = 0; S.did = {}; S.landed = false; S.help = false; save(); draw(); };
+    $('chips').onclick = (e) => { const b = e.target.closest('.chip'); if (!b) return; S.step = +b.dataset.step; S.help = false; save(); draw(); };
+    $('back').onclick = () => { S.step = Math.max(0, S.step - 1); S.help = false; save(); draw(); };
+    $('diff').onclick = () => { S.help = !S.help; draw(); };
+    $('go').onclick = () => { if (S.step === 3) { S.step = 0; S.did = {}; S.landed = false; } else { S.did['w' + S.step] = true; S.step++; } S.help = false; save(); draw(); };
+    const land = $('w-land'); if (land) land.onclick = () => { S.landed = true; draw(); };
+  }
+
+  // One line for a result that landed: real numbers where the record has them, yellow where not.
+  function landedLine(t, m) {
+    const other = m === 'gemma' ? 'qwen' : 'gemma', lo = lastOf(t, other);
+    const real = m === 'gemma' && t.id === 'p28';
+    const n = t.id === 'one' ? 1 : 28;
+    return `<div class="landed lrow"><span class="big ${real ? 'ok' : ''}">${real ? '✓ 26 of 28' : `<span class="yl">N</span> of ${n}`}</span><span class="k">${real ? '1,357 s of task time · failed: 1-json-flag, 18-writing-noncode-folder · <b>example: Gemma’s real 28 Sep result</b>' : `<span class="yl">N</span> s · ${lastOf(t, m) ? 'vs last time <span class="yl">±N</span>' : 'its first run'} · yellow = yours to find out`}<br>${M[other].short}’s latest: ${lo ? `${esc(lo.v)} · ${esc(lo.when)}` : 'none yet'} · <a href="#" onclick="return false">open it in ${esc(t.kind)} ›</a></span></div>`;
+  }
+
+  // ---- design 2 · shelf ----
+  function shelf() {
+    const t = byId(S.t), m = S.m, other = m === 'gemma' ? 'qwen' : 'gemma';
+    const rows = T.map((x) => `<button type="button" class="srow" data-t="${x.id}" aria-pressed="${x.id === t.id}"><div class="a"><b>${esc(x.name)}</b><span>${esc(x.time[m].split(' · ')[0])}</span></div><div class="w">${esc(x.what)}</div><div class="last">${lastTxt(x, m)}${x.isNew ? ` <span class="pill new">${x.isNew === '--set 28' ? 'new flag' : 'new command'}</span>` : ''}</div></button>`).join('');
+    const nom = `<div class="nom">${NOMODEL.map((x) => `<span><b>${esc(x.name)}</b> ${x.last.replace(/ · today.*$/, '')}</span>`).join('')}<em>no model: in the record’s own tabs</em></div>`;
+    const key = m + ':' + t.id, d = S.sh[key] ?? {};
+    const cur = d.r ? 3 : d.b ? 2 : d.a ? 1 : 0; // the next step to do
+    const stCls = (i) => (i < cur ? 'did' : i === cur ? 'cur' : '');
+    const all5 = t.lines(m), lines = all5.length > 5 ? [...all5.slice(0, 3), all5.find((x) => x.startsWith('…')) ?? '…', all5[all5.length - 1]] : all5;
+    const l = lastOf(t, m), lo = lastOf(t, other);
+    $('dstage').innerHTML = `<div class="sh"><div class="card shelf"><h3>Tests for ${esc(M[m].short)} · one model</h3>${rows}<hr>${nom}</div>
+      <div class="card shd"><div class="shd-h"><div><h2>${esc(t.name)} on ${esc(M[m].short)}</h2><p>${esc(t.what[0].toUpperCase() + t.what.slice(1))} · ${esc(t.time[m])}</p></div>
+      <dl class="cmp"><dt>Last on ${M[m].short}</dt><dd>${l ? `<span class="${l.c}">✓ ${esc(l.v)}</span> · ${esc(l.when)}` : 'never'}</dd><dt>Last on ${M[other].short}</dt><dd>${lo ? `<span class="${lo.c}">✓ ${esc(lo.v)}</span> · ${esc(lo.when)}` : 'never'}</dd></dl></div>
+      <div class="track">
+        <div class="st ${stCls(0)}"><span class="n">${cur > 0 ? '✓' : 1}</span><h4>Free the memory <span class="pill">a few seconds</span></h4>
+          <div class="row2" style="margin-top:6px"><div style="flex:1;min-width:0">${typeBox('coding stop', 's1')}</div><button type="button" class="tick${d.a ? ' did' : ''}" data-k="a">${d.a ? '✓ Done' : 'Mark done'}</button></div>
+          <p class="p">Should print <code>Stopped the model on port 17600; its memory is free.</code> or <code>No model is loaded.</code></p></div>
+        <div class="st ${stCls(1)}"><span class="n">${cur > 1 ? '✓' : 2}</span><h4>Run it <span class="pill">${esc(t.time[m])}</span>${t.isNew ? `<span class="pill new">${t.isNew === '--set 28' ? 'new flag' : 'new command'}</span>` : ''}</h4>
+          <div class="row2"><div style="flex:1;min-width:0">${typeBox(t.cmd(m), 's2')}</div><button type="button" class="tick${d.b ? ' did' : ''}" data-k="b">${d.b ? '✓ Started' : 'I started it'}</button></div>
+          <div class="term show" style="margin-top:6px">${lines.map(termLine).join('')}</div><p class="src">${esc(t.src[m])}</p></div>
+        <div class="st ${stCls(2)}"><span class="n">${cur > 2 ? '✓' : 3}</span><h4>The result <span class="pill">shows by itself when the line lands</span></h4>
+          <div style="margin-top:6px">${d.r ? landedLine(t, m) : `<div class="watch">${d.b ? '<span class="dot"></span>Watching the test record…' : '<span class="dot" style="animation:none;background:var(--line)"></span>Starts watching once you press “I started it”.'} <button type="button" class="tick" data-k="r">Show it landed (example)</button></div>`}</div></div>
+      </div></div></div>`;
+    $('dstage').querySelector('.shelf').onclick = (e) => { const b = e.target.closest('button.srow'); if (!b) return; S.t = b.dataset.t; S.landed = true; save(); draw(); };
+    $('dstage').querySelector('.track').onclick = (e) => { const b = e.target.closest('.tick'); if (!b) return; S.sh[key] = { ...d, [b.dataset.k]: !d[b.dataset.k] }; if (b.dataset.k === 'r') { S.sh[key].a = S.sh[key].b = true; S.landed = true; } draw(); };
+    const sl = $('s-land'); if (sl) sl.onclick = () => { S.landed = true; draw(); };
+  }
+
+  // ---- design 3 · run button (replays real lines where they exist) ----
+  let R = null; // { t, m, i, timer, out, done, secs, task }
+  function stopReplay() { if (R?.timer) clearInterval(R.timer); R = null; }
+  function runboard() {
+    const t = byId(S.t), m = S.m, real = m === 'gemma' && (t.id === 'p28' || t.id === 'one');
+    const active = R && R.t === t.id && R.m === m;
+    const seg = T.map((x) => `<button type="button" data-t="${x.id}" aria-pressed="${x.id === t.id}">${esc(x.short)}${x.isNew === 'new command' ? '<sup>NEW</sup>' : ''}</button>`).join('');
+    const n = t.id === 'one' ? 1 : 28;
+    const task = active ? R.task : 0, done = active && R.done;
+    const stg = (cls, i, b, s) => `<div class="stg ${cls}"><i>${cls === 'did' ? '✓' : i}</i><div style="min-width:0;flex:1"><b>${b}</b><span>${s}</span></div></div>`;
+    const phase = !active ? 0 : done ? 4 : R.i < 2 ? 1 : 3;
+    const cls = (k) => (phase > k ? 'did' : phase === k ? 'cur' : '');
+    const out = active ? R.out : [];
+    const lbl = real ? `replay of Gemma’s real ${t.id === 'p28' ? '28 Sep lines, 60× faster' : '28 Sep lines (runs/10.log)'}` : 'no real lines for this yet: what it will print';
+    $('dstage').innerHTML = `<div class="rb"><div class="card rb-top"><span class="kicker" style="margin-right:2px">Test</span><div class="seg" id="seg3">${seg}</div>
+        <span class="status"><i></i>Loaded now: nothing${active && !done ? ` → ${esc(M[m].short)} (this run)` : ''}</span>
+        <button type="button" class="runbtn${active && !done ? ' stopb' : ''}" id="runb">${active && !done ? '■ Stop' : `▶ Run on ${esc(M[m].short)}`}</button></div>
+      <div class="rb-main"><div class="card stages">
+          ${stg(cls(0), 1, 'Free the memory', phase > 0 ? 'nothing else was loaded' : 'unloads an idle model; waits for a window or a Battle to let go')}
+          ${stg(cls(1), 2, `Load ${esc(M[m].short)}`, phase > 1 ? 'loaded, 32k memory' : 'one model at a time, like the Battle runner')}
+          ${stg(cls(3), 3, `${esc(t.name)}`, `${phase >= 3 ? `${done ? n : Math.min(task, n)} of ${n} done` : `${n === 1 ? 'one task' : n + ' tests'} · ${esc(t.time[m])}`}<div class="bar"><div style="width:${phase >= 3 ? Math.round((done ? n : task) / n * 100) : 0}%"></div></div>`)}
+          ${stg(cls(4), 4, 'In the record', done ? 'the line landed · see below' : 'shows the result by itself')}
+          ${done ? (real && t.id === 'p28' ? `<div class="landed"><div class="big ok">✓ 26 of 28</div><div class="k">1,357 s of task time · failed: 1-json-flag, 18-writing-noncode-folder · Gemma’s real 28 Sep result</div></div>` : real ? `<div class="landed"><div class="big ok">✓ 1 of 1</div><div class="k">24 s · Gemma’s real 28 Sep result</div></div>` : '') : ''}
+          <div class="clock">${active ? (done ? 'finished' : 'running') : 'nothing running'}<b>${active ? `${Math.floor(R.secs / 60)} min ${String(R.secs % 60).padStart(2, '0')} s` : '—'}</b>${active ? 'of task time, from the real lines' : `Nothing starts by itself: only this button starts a run. <a href="#" id="cmdlink">Or copy it for Terminal</a>`}</div>
+        </div>
+        <div class="term live"><div class="bar2"><i></i><i></i><i></i><span>${esc(M[m].name)} · ${esc(t.name)}</span><span class="label">${esc(lbl)}</span></div>
+          <div class="out show" id="out">${active ? out.map(termLine).join('') : (real ? '<div class="or">Press ▶ Run to replay the real lines here.</div>' : t.lines(m).map(termLine).join(''))}</div></div></div></div>`;
+    $('seg3').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; stopReplay(); S.t = b.dataset.t; save(); draw(); };
+    const cl = $('cmdlink'); if (cl) cl.onclick = (e) => { e.preventDefault(); try { navigator.clipboard.writeText(t.cmd(m)); cl.textContent = 'Copied: paste it into Terminal'; } catch { cl.textContent = t.cmd(m); } };
+    $('runb').onclick = () => {
+      if (active && !done) { stopReplay(); draw(); return; }
+      stopReplay();
+      if (!real) { R = { t: t.id, m, i: 0, out: ['coding stop → No model is loaded.', `loading ${M[m].name}…`, ...t.lines(m)], done: true, secs: 0, task: n, timer: null }; draw(); return; }
+      const src = t.id === 'p28' ? G28.lines.map((x) => x) : [...G28.lines.slice(G28.lines.findIndex((x) => x.n === 10) - 6, G28.lines.findIndex((x) => x.n === 10) + 1)];
+      R = { t: t.id, m, i: 0, out: [], done: false, secs: 0, task: 0, timer: null };
+      R.out.push('server up on http://127.0.0.1:17600, ctx 32768, thinking budget 4096; helpers: named, tests, rag, lsp; focused paths: on');
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      R.timer = setInterval(() => {
+        if (!R) return;
+        const x = src[R.i++];
+        if (!x) {
+          const sum = t.id === 'p28' ? `thinking off: ${G28.passed}/28 passed, ${G28.secs}s total, ${G28.calls} model calls, ${G28.own} own steps` : 'thinking off: 1/1 passed, 24s total, 3 model calls, 0 own steps';
+          R.out.push(sum); R.out.push(t.id === 'p28' ? `recorded in the test record: The 28 practice tasks — ${G28.passed} of 28, ${G28.secs.toLocaleString()} s` : 'recorded in the test record: The 1 picked practice tasks — 1 of 1, 24 s');
+          R.done = true; clearInterval(R.timer); R.timer = null; draw(); return;
+        }
+        R.out.push(x.t === 'r' ? trim(x.l) : x.l);
+        if (x.t === 'r') { R.task++; R.secs += x.secs; }
+        if (R.out.length > 60) R.out.splice(0, R.out.length - 60);
+        draw();
+      }, reduce ? 20 : t.id === 'p28' ? 110 : 260);
+      draw();
+    };
+  }
+
+  // ---- what is real here ----
+  function realTab() {
+    $('real').innerHTML = `
+      <div class="card"><h3>Real, read from this Mac</h3><ul>
+        <li><b>The hub header and the Tests page frame</b> are drawn from <code>hub.html</code> and <code>tests.html</code>: the same tokens, the same model picker (All models · Gemma · Qwen · Not model-specific) and the record’s own tabs, with real counts from the test record (359 runs, 29 Sep 15:15).</li>
+        <li><b>Gemma’s Practice lines</b> are its real 28 Sep run, <code>remaining-28-2026-09-28/runs/1.log … 28.log</code>: 26 of 28, 1,357 s of task time, failed 1-json-flag and 18-writing-noncode-folder. Design 3 replays all ${G28.lines.length} lines.</li>
+        <li><b>Real requests</b> show the Bonsai 27B’s real lines (27 Sep, 28 of 28, 827 s), labelled as such. Neither Gemma nor Qwen has run them.</li>
+        <li><b>coding stop</b> prints exactly the two messages shown (<code>cli.jsx</code>). The “recorded in the test record” line is the format <code>record.mjs</code> prints.</li>
+        <li>The unit tests (535 of 535, 3:12 PM) and the repo check (9 of 10, 3:09 PM) are today’s real lines.</li></ul></div>
+      <div class="card"><h3>New, would be built</h3><ul>
+        <li><b>The ▶ Run a test tab</b> itself, in the record’s tab row.</li>
+        <li><b><code>--set 28</code></b> on <code>run.mjs</code>. Today a full run also does task 29 (the notes page), so its line says “The 29 practice tasks” and the Tests tab never counts it as a full 28. <code>--only 1,…,28</code> is marked “part of the set”. That is why Gemma has no full-28 line: it was run one task at a time.</li>
+        <li><b><code>battle/run-set.mjs</code></b>: Work 28 or New 28 on one model, one line in the record. Today only the Battle runner plays those sets, always with both models.</li>
+        <li><b>The live result</b>: the tab re-reads <code>/tests.json</code> and shows the new line when it lands (no file picker).</li>
+        <li><b>Design 3 only:</b> the hub starts the run itself (a new endpoint in <code>weights.mjs</code>), holding the memory the way the Battle runner does. You press Run; nothing starts on its own.</li></ul></div>
+      <div class="card"><h3>Not run yet · yellow on the page</h3><ul>
+        <li><b>Qwen</b> has no practice run in the record (its 3 lines are reranker checks).</li>
+        <li><b>The long task</b> was built today and nobody has run it; its lines are what the tool prints.</li>
+        <li>Anything in <span class="yl">yellow</span> is a number you find out by running it. Nothing is made up.</li></ul></div>
+      <div class="card"><h3>Heads-up</h3><ul>
+        <li>Another session is <b>restyling this same Tests page right now</b> (<code>tests.html</code>, uncommitted since 15:10: tabs that fit the window, a table that pages). These designs put the new tab into that new tab row, so the build waits for it or starts from its commit.</li>
+        <li>Nothing on this page loads from the internet. Keys 1–4 switch designs; your picks are remembered in this browser only.</li></ul></div>`;
+  }
+
+  // ---- copy buttons ----
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.copy'); if (!b) return;
+    const txt = b.dataset.copy;
+    const ok = () => { b.textContent = 'Copied'; b.classList.add('did'); setTimeout(() => { b.textContent = 'Copy'; b.classList.remove('did'); }, 1600); };
+    try { navigator.clipboard.writeText(txt).then(ok, ok); } catch { ok(); }
+  });
+
+  function draw() {
+    for (const b of $('pvtabs').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.d === S.d));
+    const isReal = S.d === 'real';
+    $('hub').hidden = isReal; $('real').hidden = !isReal;
+    if (isReal) { realTab(); return; }
+    if (S.d !== '3') stopReplay();
+    side();
+    if (!one()) { $('dstage').innerHTML = pickOne(); return; }
+    if (S.d === '1') wizard(); else if (S.d === '2') shelf(); else runboard();
+    const o = $('out'); if (o) o.scrollTop = o.scrollHeight;
+  }
+  $('pvtabs').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.d = b.dataset.d; S.landed = false; save(); try { history.replaceState(null, '', '#' + S.d); } catch { /* */ } draw(); };
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = { 1: '1', 2: '2', 3: '3', 4: 'real' }[e.key];
+    if (k) { S.d = k; S.landed = false; save(); try { history.replaceState(null, '', '#' + k); } catch { /* */ } draw(); }
+  });
+  draw();
+})();
+</script>
+</body>
+</html>
