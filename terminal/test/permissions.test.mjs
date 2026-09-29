@@ -246,3 +246,33 @@ test('judge says why: the /permissions test panel prints it; decide() is the sam
   expect(judge('Edit', { path: 'src/a.js' }, { mode: 'ask' }).why).toBe('Ask first is on');
   expect(judge('Edit', { path: '.env' }, { mode: 'edits' }).why).toBe('it is a protected file (.env); protected files always ask');
 });
+
+// ---- a command that names a protected file (found on the "all good?" check, 29 Sep) ----
+
+test('a command that names a protected file asks every time, whatever rule you saved; reading one does not', () => {
+  const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
+  const rules = { allow: ['cp *', 'sed -i *', 'git checkout *', 'npm test'], protect: ['config/prod.*'] };
+  for (const mode of ['ask', 'edits']) {
+    for (const [command, guard] of [['cp .env.example .env', '.env.*'], ['cp defaults.txt .env', '.env'], ['sed -i s/3000/4000/ .env', '.env'], ['git checkout -- .env', '.env'], ['cp tmp.json config/prod.json', 'config/prod.*'], ['npm test && cp a .ENV', '.env'], ['cp a --target-directory=.git', '.git'], ['cp id_rsa.pub keys/', 'id_rsa*']])
+      expect([mode, command, decide('Bash', { command }, { mode, cwd, rules })]).toEqual([mode, command, { decision: 'ask', once: true, protectedBy: guard }]);
+    for (const command of ['cp a b', 'npm test', 'sed -i s/a/b/ src/app.js']) expect([mode, command, decide('Bash', { command }, { mode, cwd, rules }).decision]).toEqual([mode, command, 'allow']);
+    for (const command of ['cat .env', 'grep API .env', 'git diff .env']) expect([mode, command, decide('Bash', { command }, { mode, cwd, rules }).decision]).toEqual([mode, command, 'allow']);
+  }
+  expect(judge('Bash', { command: 'cp defaults.txt .env' }, { mode: 'edits', cwd, rules }).why).toBe('"cp defaults.txt .env" names a protected file (.env), so it asks');
+  expect(offerFor('cp .env.example .env', { saved: [] })).toBe(null);                  // no rule could let it through
+  expect(offerFor('npm test && cp a .env', { saved: [] })).toEqual({ rule: 'npm test', part: 'npm test' }); // the part before it still can be
+  expect(checkRule('allow', 'cp defaults.txt .env').error).toMatch(/names a protected file \(\.env\)/);
+  expect(checkRule('allow', 'cp tmp.json config/prod.json', { protect: ['config/prod.*'] }).error).toMatch(/config\/prod\.\*/);
+  expect(checkRule('allow', 'cp tmp.json config/dev.json', { protect: ['config/prod.*'] })).toEqual({ rule: 'cp tmp.json config/dev.json' });
+  expect(checkRule('never', 'cp x .env')).toEqual({ rule: 'cp x .env' });                // a never rule may name one
+});
+
+test('the question: four choices with "always allow … in this folder"; a protected file or command has only yes and no', async () => {
+  const { permissionOptions } = await import('../src/app/screen.jsx');
+  expect(permissionOptions({ name: 'Bash' }, 'node --test', 'node --test').map((o) => [o.choice, o.label])).toEqual([
+    ['yes', 'Yes'], ['always', "Yes, and don't ask again for node --test this session"], ['save', 'Yes, and always allow node --test in this folder'], ['no', 'No, and tell Agentic Coder what to do differently (esc)']]);
+  expect(permissionOptions({ name: 'Bash' }, null, null).map((o) => o.choice)).toEqual(['yes', 'no']);          // words that cannot make a rule
+  expect(permissionOptions({ name: 'Bash', once: true, protectedBy: '.env' }, 'cp', 'cp').map((o) => o.choice)).toEqual(['yes', 'no']);
+  for (const name of ['Edit', 'Write', 'Rename']) expect([name, permissionOptions({ name, once: true, protectedBy: '.env' }, null).map((o) => o.choice)]).toEqual([name, ['yes', 'no']]);
+  expect(permissionOptions({ name: 'Edit' }, null).map((o) => o.choice)).toEqual(['yes', 'always', 'no']);
+});

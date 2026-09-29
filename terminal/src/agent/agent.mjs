@@ -1466,7 +1466,7 @@ export class Agent extends EventEmitter {
       if (answer.choice === 'always') {
         // A commit asks every time (d.once): a "yes" to it is never remembered.
         // What is remembered is the rule for the first part of the command nothing covers yet.
-        if (call.name === 'Bash') { const o = d.once ? null : offerFor(args.command, { saved: rules?.allow, session: this.allowedPrefixes }); if (o) this.allowedPrefixes.add(o.rule); }
+        if (call.name === 'Bash') { const o = d.once ? null : offerFor(args.command, { saved: rules?.allow, session: this.allowedPrefixes, protect: rules?.protect }); if (o) this.allowedPrefixes.add(o.rule); }
         else if (!d.once) this.setMode('edits');
       }
       // You saw this change and said yes: that was the plan question.

@@ -258,7 +258,7 @@ export function App({ opts, win, onRestart }) {
         // "Don't ask again" and "always allow" remember the first part of the command nothing covers yet.
         const a = agentRef.current;
         const saved = a?.savedRules();
-        const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes }) : null;
+        const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes, protect: saved?.protect }) : null;
         setPerm({ req, selected: 0, options: permissionOptions(req, offer?.rule ?? null, saved?.broken ? null : offer?.rule ?? null), resolve, offer });
       }),
       waitForServer: async () => { if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },

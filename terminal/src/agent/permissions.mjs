@@ -206,17 +206,28 @@ export function ruleFor(part) {
   return ruleCovers(head, part) ? head : w.join(' ');
 }
 
+// The protected file a command names, if any ("cp .env.example .env" → ".env"):
+// a word of it, or a piece after = (--out=.env). Reading one is fine; this is
+// for a part that can change things.
+export function namesProtected(part, protect = []) {
+  for (const w of shellWords(String(part ?? ''))) { const g = protectedBy(String(w), protect); if (g) return g; }
+  return null;
+}
+
 // Every part of a command against the rules: which part only reads, which
 // a saved rule or this session's "don't ask again" covers, which nothing does.
 // Allowed only when every part is covered and its words can be trusted (no
-// $(…), no file written by >, no job left running).
-export function coverage(command, { saved = [], session = [] } = {}) {
+// $(…), no file written by >, no job left running). A part that names a
+// protected file is never covered, whatever the rules say: it asks.
+export function coverage(command, { saved = [], session = [], protect = [] } = {}) {
   const s = splitCommand(command);
   const plain = !(s.nested || s.writes || s.background || s.open);
   const sessionRules = [...(session ?? [])];
   const parts = s.parts.map((p) => p.trim()).filter(Boolean).map((part) => {
     if (readerPart(part)) return { part, by: 'reads' };
     if (/^cd\s+\S/.test(part)) return { part, by: 'cd' }; // the fence already keeps cd inside the project
+    const guard = namesProtected(part, protect);
+    if (guard) return { part, by: null, protectedBy: guard };
     const rule = (saved ?? []).find((r) => ruleCovers(r, part));
     if (rule) return { part, by: 'saved', rule };
     const now = sessionRules.find((r) => ruleCovers(r, part));
@@ -233,6 +244,7 @@ export function offerFor(command, rules = {}) {
   const c = coverage(command, rules);
   if (!c.plain) return null;
   const next = c.parts.find((p) => !p.by);
+  if (next?.protectedBy) return null; // no rule could let it through
   const rule = next ? ruleFor(next.part) : null;
   // A rule longer than a typed one may be (checkRule) is not offered: the question asks each time.
   return rule && rule.length <= 120 ? { rule, part: next.part } : null;
@@ -273,7 +285,7 @@ export function protectedBy(rel, extra = []) {
 
 // What a typed rule may be, for /permissions allow | never | protect:
 // { rule, note? } to save, or { error } to say why not.
-export function checkRule(kind, text) {
+export function checkRule(kind, text, { protect = [] } = {}) {
   const t = String(text ?? '').trim().replace(/^(["'`])(.*)\1$/s, '$2').replace(/\s+/g, ' ').trim();
   if (!t) return { error: kind === 'protect' ? 'Say which file, like /permissions protect config/prod.*' : `Say which command, like /permissions ${kind} npm test` };
   if (t.length > 120) return { error: 'That is too long for a rule (120 characters at most).' };
@@ -289,6 +301,8 @@ export function checkRule(kind, text) {
     if (why) return { error: `That is never allowed (${why}), so no rule can allow it.` };
     if (runsGitCommit(bare) || /^git\s+commit\b/.test(bare)) return { error: 'A commit always asks first, so no rule can allow it.' };
     if (isReadOnly(bare)) return { error: `"${bare}" only reads, so it already runs without asking.` };
+    const guard = namesProtected(bare, protect);
+    if (guard) return { error: `That names a protected file (${guard}): a command that changes one always asks, so no rule can allow it.` };
     const w = words(bare);
     if (isBroad(w) && !STAR.test(t)) return { rule: t, note: `"${bare} *" would cover anything after it.` };
     return { rule: t };
@@ -325,12 +339,15 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
     if (isReadOnly(command)) return { decision: 'allow', why: 'it only reads' };
-    const c = coverage(command, { saved: rules?.allow, session: allowedPrefixes });
+    const c = coverage(command, { saved: rules?.allow, session: allowedPrefixes, protect: rules?.protect });
     if (c.allowed) {
       const used = [...new Set(c.parts.filter((p) => p.rule).map((p) => `"${p.rule}" (${p.by === 'saved' ? 'saved' : 'this session'})`))];
       return { decision: 'allow', why: `every part is covered: ${used.join(', ')}${c.parts.some((p) => p.by === 'reads') ? ', the rest only reads' : ''}` };
     }
     const open = c.parts.find((p) => !p.by);
+    // A command that names a protected file: asked every time, with no "don't ask again".
+    const guarded = c.parts.find((p) => p.protectedBy);
+    if (guarded) return { decision: 'ask', once: true, protectedBy: guarded.protectedBy, why: `"${guarded.part}" names a protected file (${guarded.protectedBy}), so it asks` };
     return { decision: 'ask', why: !c.plain ? 'its words cannot be trusted for a rule ($(…), a file written with >, or a job left running), so it asks' : c.parts.length > 1 ? `"${open.part}" is not covered by any rule` : 'it can change things and no rule covers it' };
   }
   return { decision: 'deny', reason: 'unknown tool' };

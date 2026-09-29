@@ -88,6 +88,15 @@ test('the file is written whole (no leftovers), tidied when a list empties, and 
   expect(store.addRule(proj, 'never', 'one more').error).toMatch(/list is full \(40 rules\)/);
 });
 
+test('rules for a folder never reach a folder whose name only starts the same (proj and proj-old)', () => {
+  const old = join(base, 'proj-old');
+  mkdirSync(old, { recursive: true });
+  saveTrust(old);
+  say(proj, 'allow npm test');
+  expect(store.rulesFor(old).allow).toEqual([]);
+  expect(store.rulesFor(proj).allow).toEqual(['npm test']);
+});
+
 test('the start-up mode is saved for a folder or everywhere, the folder wins, reset takes it away, and loadSettings reads it', () => {
   const r = say(proj, 'mode edits', { mode: 'ask' });
   expect(r).toEqual({ text: 'Start-up mode: auto-edit for this folder, and on now. Auto-edit still asks before commands, and protected files still ask.', mode: 'edits', changed: true });

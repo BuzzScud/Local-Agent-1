@@ -51,7 +51,7 @@ function listRows(kind, cwd) {
 }
 
 // One section of the picker as a panel: numbered, with how to change it.
-export function section(what, cwd, { session, mode } = {}) {
+export function section(what, cwd, { session } = {}) {
   const kind = KIND_WORDS[what];
   const state = readState();
   const broken = state.broken ? [[`${tilde(permissionsFile())} cannot be read (${state.broken}), so none of your saved rules apply until it is fixed.`]] : [];
@@ -84,7 +84,7 @@ export function section(what, cwd, { session, mode } = {}) {
     const list = listRows('protect', cwd);
     return { title: `${HEAD.protect} · ${PROTECTED.length} built in · ${list.length} yours`, pad: 4, rows: [
       ...broken,
-      ['They always ask before a change, even in Auto-edit, and have no "allow all edits". Reading them is unchanged.'],
+      ['They always ask before a change, even in Auto-edit, with no "allow all edits"; so does a command that names one (cp x .env), whatever rule you saved. Reading them is unchanged.'],
       [`Built in: ${PROTECTED.join('  ')}`],
       ...(list.length ? list : [['', 'none of yours yet: /permissions protect config/prod.*']]),
       ['/permissions protect <file> · /permissions remove protect <n> · /permissions everywhere protect <n>'],
@@ -99,15 +99,10 @@ export function section(what, cwd, { session, mode } = {}) {
       ['/permissions forget <n>: the safety check asks again the next time Agentic Coder starts there.'],
     ] };
   }
-  const start = startModeFor(cwd, state);
-  return { title: `Start-up mode · ${start ? `${modeWord(start.mode)}, saved for ${start.where === 'everywhere' ? 'every folder' : 'this folder'}` : 'ask first, not saved'}`, pad: 4, rows: [
-    ['What Agentic Coder starts in here. /mode and shift+tab change only this conversation.'],
-    ...Object.entries(MODE_WORDS).map(([id, word]) => ['', `${word}${mode === id ? '   ← now' : ''}`]),
-    ['/permissions mode <ask|edits|plan> · /permissions mode plan everywhere · /permissions mode reset'],
-  ] };
+  return null; // the start-up mode is a picker (/permissions mode), not a list
 }
 
-const part = (c, cwd, rules) => c.by === 'reads' ? 'only reads' : c.by === 'cd' ? 'stays in the folder' : c.by === 'saved' ? `runs · your saved rule "${c.rule}"` : c.by === 'session' ? `runs · "${c.rule}" for this session` : runsGitCommit(c.part) ? 'asks · a commit always asks' : 'asks · no rule covers it';
+const part = (c) => c.by === 'reads' ? 'only reads' : c.by === 'cd' ? 'stays in the folder' : c.by === 'saved' ? `runs · your saved rule "${c.rule}"` : c.by === 'session' ? `runs · "${c.rule}" for this session` : c.protectedBy ? `asks · names a protected file (${c.protectedBy})` : runsGitCommit(c.part) ? 'asks · a commit always asks' : 'asks · no rule covers it';
 
 // /permissions test <command> · test edit <path>: the real check, and why.
 function tryIt(cwd, text, { mode, session }) {
@@ -127,8 +122,8 @@ function tryIt(cwd, text, { mode, session }) {
   const word = verdict.decision === 'allow' ? 'RUNS' : verdict.decision === 'ask' ? 'ASKS' : 'REFUSED';
   const rows = [['', shown], [word, verdict.why ?? verdict.reason]];
   if (!edit && verdict.decision !== 'deny') {
-    const c = coverage(text, { saved: rules.allow, session });
-    if (c.parts.length > 1) c.parts.forEach((p, i) => rows.push([`part ${i + 1}`, `${p.part}   ${part(p, cwd, rules)}`]));
+    const c = coverage(text, { saved: rules.allow, session, protect: rules.protect });
+    if (c.parts.length > 1) c.parts.forEach((p, i) => rows.push([`part ${i + 1}`, `${p.part}   ${part(p)}`]));
   }
   rows.push([`in ${modeWord(mode)} mode, this folder's rules and this session's. Nothing was run.`]);
   return { panel: { title: 'Try a command', pad: 8, rows } };
@@ -147,8 +142,8 @@ export function changePermissions(cwd, arg, { mode, session } = {}) {
   if (!what) return { open: 'panel' };
   if (KIND_WORDS[what] || what === 'folders') {
     const kind = KIND_WORDS[what];
-    if (!text || !kind) return { panel: section(what, cwd, { session, mode }) };
-    const c = checkRule(kind, text);
+    if (!text || !kind) return { panel: section(what, cwd, { session }) };
+    const c = checkRule(kind, text, { protect: entries(cwd, 'protect').map((e) => e.text) });
     if (c.error) return warn(c.error);
     const r = addRule(cwd, kind, c.rule);
     if (r.error) return warn(r.error);

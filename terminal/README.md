@@ -109,7 +109,7 @@ never in the project, so a project you download cannot bring rules of its own:
 |---|---|
 | Runs without asking | `/permissions allow npm test`, or "always allow" when it asks. A rule covers its command with options added (`npm test --watch`; for npm, bun and the like, what follows `--` too), not other words (`rm notes.txt` never covers `rm notes.txt other.txt`); end it with `*` for anything after it (`git add *`). In a chain (`a && b`, `a; b`, `a \| b`, or two lines) every part must be covered or only read. |
 | Never runs | `/permissions never npm publish`: refused in every mode, `coding -p --yes` included, wherever the words appear in a command. |
-| Protected files | Always ask before a change, even in Auto-edit, with no "allow all edits": `.env`, `.env.*`, keys, `.git/`, `.agentic/settings.json` and `.agentic-coder/` (when you work from the home folder), and yours (`/permissions protect config/prod.*`). A link to one counts; so does `.ENV`. |
+| Protected files | Always ask before a change, even in Auto-edit, with no "allow all edits": `.env`, `.env.*`, keys, `.git/`, `.agentic/settings.json` and `.agentic-coder/` (when you work from the home folder), and yours (`/permissions protect config/prod.*`). A link to one counts; so does `.ENV`. A command that names one (`cp .env.example .env`) asks too, whatever rule you saved, and no rule naming one can be saved; reading one (`cat .env`) is unchanged. |
 | Start-up mode | `/permissions mode edits` (add `everywhere` for every folder, `reset` to take it away); the welcome box says when a saved mode is on. `/mode` and shift+tab still change only the conversation. |
 | Trusted folders | `/permissions folders` lists them; `/permissions forget 2` makes the safety check ask again there. |
 

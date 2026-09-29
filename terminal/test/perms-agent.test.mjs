@@ -74,3 +74,66 @@ test('a new line starts another command: "ls⏎rm notes.txt" asks, where it used
   expect(asked.map((a) => a.command)).toEqual(['ls\nrm export.test.mjs']);
   expect(existsSync(join(cwd, 'export.test.mjs'))).toBe(true);
 });
+
+test('an "always" answer on a protected file never turns Auto-edit on', async () => {
+  const { agent, cwd } = await run([write('.env', 'A=1\n'), { text: 'Done.' }], { mode: 'ask', answers: ['always'] });
+  expect(agent.mode).toBe('ask');
+  expect(existsSync(join(cwd, '.env'))).toBe(true); // the answer was a yes
+});
+
+test('rules are read at every command: one saved in another window counts at once, and a move to another project switches the lists', async () => {
+  const cwd = project();
+  const other = project();
+  const allow = [];
+  const fake = await startFakeServer([bash('node --test'), { text: 'One.' }, bash('node --test'), { text: 'Two.' }, bash('node --test'), { text: 'Three.' }]);
+  const asked = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'ask', flows: false, verify: false, confirmPlan: false,
+    permissions: (dir) => (dir === cwd ? { allow } : { allow: [] }),
+    ask: async (req) => { asked.push(req.args.command); return { choice: 'yes' }; } });
+  await agent.send('run the tests');
+  expect(asked).toEqual(['node --test']);
+  allow.push('node --test'); // saved by another window
+  await agent.send('again');
+  expect(asked).toEqual(['node --test']);
+  agent.moveTo(other); // "Work in <project>?": its own rules, none saved there
+  await agent.send('and there');
+  expect(asked).toEqual(['node --test', 'node --test']);
+  await fake.close();
+});
+
+test('the fix and change paths on auto-accept: a protected file is asked about before anything is written, and a no leaves every file as it was', async () => {
+  const { applyChange } = await import('../src/flows/apply.mjs');
+  const cwd = project();
+  const asked = [];
+  const ctx = { cwd, mode: () => 'edits', confirm: async () => ({ ok: true }), protectedBy: (rel) => (rel === '.env' ? '.env' : null), tool: () => {}, setMode: () => { throw new Error('mode changed'); },
+    ask: async (req) => { asked.push({ path: req.args.path, once: !!req.once, protectedBy: req.protectedBy ?? null }); return { choice: 'no' }; } };
+  const r = await applyChange(ctx, [{ rel: 'notes.md', before: null, after: '# Notes\n' }, { rel: '.env', before: null, after: 'A=1\n' }]);
+  expect(r.ok).toBe(false);
+  expect(asked).toEqual([{ path: '.env', once: true, protectedBy: '.env' }]);
+  expect(existsSync(join(cwd, 'notes.md'))).toBe(false);
+  expect(existsSync(join(cwd, '.env'))).toBe(false);
+  // a yes writes both, and the ordinary file is not asked about
+  asked.length = 0;
+  ctx.ask = async (req) => { asked.push(req.args.path); return { choice: 'yes' }; };
+  expect((await applyChange(ctx, [{ rel: 'notes.md', before: null, after: '# Notes\n' }, { rel: '.env', before: null, after: 'A=1\n' }])).ok).toBe(true);
+  expect(asked).toEqual(['.env']);
+  expect(readFileSync(join(cwd, '.env'), 'utf8')).toBe('A=1\n');
+});
+
+test('a rename on auto-accept that reaches a protected file asks, with no "allow all edits", and a no changes nothing', async () => {
+  const { renameFlow } = await import('../src/flows/index.mjs');
+  const cwd = project();
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(join(cwd, 'config'), { recursive: true });
+  writeFileSync(join(cwd, 'config', 'prod.js'), 'export const oldName = 1;\n');
+  writeFileSync(join(cwd, 'use.js'), "import { oldName } from './config/prod.js';\nconsole.log(oldName);\n");
+  const asked = [];
+  const ctx = { cwd, testCmd: null, mode: () => 'edits', plan: () => ({ step() {}, done() {} }), tool: () => {}, setMode: () => { throw new Error('mode changed'); },
+    protectedBy: (rel) => (rel.startsWith('config/prod.') ? 'config/prod.*' : null),
+    ask: async (req) => { asked.push({ name: req.name, once: !!req.once, protectedBy: req.protectedBy ?? null }); return { choice: 'no' }; } };
+  const r = await renameFlow(ctx, 'oldName', 'newName');
+  expect(asked).toEqual([{ name: 'Rename', once: true, protectedBy: 'config/prod.*' }]);
+  expect(r.declined).toBe(true);
+  expect(readFileSync(join(cwd, 'config', 'prod.js'), 'utf8')).toContain('oldName');
+  expect(readFileSync(join(cwd, 'use.js'), 'utf8')).toContain('oldName');
+});
