@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { saveLessons, savePrompt, lessonText, worthSaving, knownAlready, fromTask, saveLine, writtenBefore, seedMemory, saysHow, MAX_FACTS } from '../src/agent/lessons.mjs';
+import { saveLessons, savePrompt, lessonText, worthSaving, knownAlready, fromTask, saveLine, writtenBefore, seedMemory, saysHow, practiceWork, MAX_FACTS } from '../src/agent/lessons.mjs';
 import { memoryDirs, applyChanges, readFacts, readState, undoLast } from '../src/agent/facts.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
@@ -48,6 +48,27 @@ test('when there is something to learn: a result, a correction, or the user sayi
   expect(worthSaving([turn({ corrected: 'no, wrong file' })])).toBe(true);
   expect(worthSaving([turn({ request: 'from now on explain things simply', kind: 'other' })])).toBe(true);
   expect(worthSaving([])).toBe(false);
+});
+
+test("work on the tests' own starter files is practice: never worth saving, and a save of only that asks the model nothing", async () => {
+  // A Battle prompt pasted into the app started in the home folder (29 Sep 2026).
+  const w01 = turn({ request: 'w01 · Fix a futures roll that stays in the old year', outcome: 'passed', files: ['Desktop/agentic-coder/models/evals/battle/work28/w01-contract-roll/project/contracts.mjs'] });
+  expect(practiceWork(w01, '/Users/me')).toBe(true);
+  expect(practiceWork(turn({ files: ['answer.mjs'] }), '/Users/me/agentic-coder/models/evals/battle/new28/n01-date/solution')).toBe(true);
+  expect(practiceWork(turn({ files: ['stats.mjs'] }), '/Users/me/agentic-coder/models/evals/bench/tasks/10-fix-off-by-one/project')).toBe(true);
+  // The arena's and the bench's own code is real work, and so is any other project.
+  expect(practiceWork(turn({ files: ['models/evals/battle/runner.mjs', 'models/evals/bench/run.mjs'] }), '/Users/me/agentic-coder')).toBe(false);
+  expect(practiceWork(passed, '/Users/me/work/repo')).toBe(false);
+  expect(worthSaving([{ ...w01, practice: true }])).toBe(false);
+  expect(worthSaving([{ ...w01, practice: true }, passed])).toBe(true);
+  const only = await save({ add: [{ kind: 'worked', text: 'The fix for the futures roll was a check for December.', turn: 1 }], drop: [] }, { lessons: [{ ...w01 }] });
+  expect(only.fake.requests).toHaveLength(0);
+  expect(only.out.added).toEqual([]);
+  expect(readFacts(only.you)).toEqual([]);
+  const mixed = await save({ add: [], drop: [] }, { lessons: [{ ...w01 }, { ...passed }] });
+  expect(mixed.fake.requests).toHaveLength(1);
+  expect(JSON.stringify(mixed.fake.requests[0])).not.toContain('futures roll');
+  expect(JSON.stringify(mixed.fake.requests[0])).toContain('hidden behind the legend');
 });
 
 test('a save: each fact goes to its memory, says where it came from, and the turns are marked as saved', async () => {

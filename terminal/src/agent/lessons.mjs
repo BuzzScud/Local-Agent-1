@@ -6,7 +6,7 @@
 // at most five facts. It runs on the side slot, so the conversation's own
 // reading is left alone, and it steps aside the moment you send a message.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { complete } from '../flows/llm.mjs';
 import { digest } from './memory.mjs';
@@ -102,10 +102,20 @@ export function knownAlready(l, { cwd, home = homedir() } = {}) {
   return [...readFacts(dirs.project), ...readFacts(dirs.you)].some((f) => f.from === from);
 }
 
+// The tests' own starter files and answers (a Battle set's tests and the
+// bench's tasks, under models/evals/) are practice, not your work: a turn that
+// changed one, or ran inside one, is never saved. Pasting a Battle prompt into
+// the app is a way to watch a test, and what it "learns" would be about the
+// test (and would sit in your memory as if it were about you).
+const PRACTICE = /(^|\/)models\/evals\/(battle\/[^/]+|bench\/tasks)\/[^/]+\/(project|solution|reference)(\/|$)/;
+export function practiceWork(l, cwd = '.') {
+  return [cwd, ...(l.files ?? []).map((f) => resolve(cwd, String(f)))].some((p) => PRACTICE.test(String(p)));
+}
+
 // Is there anything to learn from? A turn that ended with a result, a
 // correction, or the user saying how they want things.
 export function worthSaving(lessons) {
-  return lessons.some((l) => !l.saved && !l.known && (['passed', 'failed', 'stuck', 'stopped'].includes(l.outcome) || l.corrected || l.files?.length || SAYS_HOW.test(l.request)));
+  return lessons.some((l) => !l.saved && !l.known && !l.practice && (['passed', 'failed', 'stuck', 'stopped'].includes(l.outcome) || l.corrected || l.files?.length || SAYS_HOW.test(l.request)));
 }
 
 // The save itself. Answers what was added, replaced and dropped, in both
@@ -114,7 +124,11 @@ export function worthSaving(lessons) {
 //   messages  the conversation (for the digest)
 export async function saveLessons({ url, model, slot, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, why = 'save', request = null, review = false, confirm = null }) {
   // The review reads every turn again, saved or not; repeats are refused below.
-  const fresh = review ? lessons : lessons.filter((l) => !l.saved);
+  const unsaved = review ? lessons : lessons.filter((l) => !l.saved);
+  const practice = (l) => l.practice || practiceWork(l, cwd);
+  const fresh = unsaved.filter((l) => !practice(l));
+  // Only practice turns and nobody asked: nothing is read, nothing saved.
+  if (!seeding && !request && unsaved.length && !fresh.length) return { added: [], replaced: [], retired: [], refused: [], secs: 0, tokens: 0 };
   const dirs = memoryDirs(cwd, home);
   const saved = [...readFacts(dirs.you), ...readFacts(dirs.project)];
   const p = savePrompt({ lessons: fresh, conversation: seeding ? String(messages[0]?.content ?? '') : digest(messages, 6000), saved, today, seeding, request, review });

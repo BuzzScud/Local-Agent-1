@@ -31,7 +31,7 @@ import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
 import { recall, recallNotes } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
-import { saveLessons, knownAlready } from './lessons.mjs';
+import { saveLessons, knownAlready, practiceWork } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
@@ -925,6 +925,8 @@ export class Agent extends EventEmitter {
     // A turn that went well on what the memory already holds teaches nothing
     // new: no save is started for it (the review at night still reads it).
     if (this.memory) { try { lesson.known = knownAlready(lesson, { cwd: this.cwd, home: this.memory.home }); } catch { /* then it is saved as usual */ } }
+    // Work on the tests' own starter files is practice: never saved (lessons.mjs).
+    if (practiceWork(lesson, this.cwd)) lesson.practice = true;
     this.lessons.push(lesson);
     this.lessons = this.lessons.slice(-20);
     const delta = { stopped: -2, stuck: -1, failed: -1, passed: +1 }[outcome] ?? 0;
