@@ -91,6 +91,9 @@ test('where the raw results are is kept from the repo\'s top, or from ~: never w
   expect(rawPlace(join(homedir(), 'elsewhere', 'runs'))).toBe('~/elsewhere/runs');
   expect(rawPlace('models/bonsai-2-27b/results/runs')).toBe('models/bonsai-2-27b/results/runs');
   expect([rawPlace(''), rawPlace(undefined), rawPlace('/opt/runs')]).toEqual(['', '', '/opt/runs']);
+  // A session's temporary folder names the account (the repo is public): only its last part is shown.
+  expect(rawPlace('/private/tmp/claude-501/-Users-someone/8550d4f8/scratchpad/smoke-after-app')).toBe('a temporary folder (smoke-after-app)');
+  expect(rawPlace('/tmp/agentic-eval-x/project')).toBe('a temporary folder (project)');
   // a line written before this rule is shown by the rule when read
   const { file } = scratch();
   const full = join(top, 'models', 'bonsai-2-27b', 'results', 'old-run');

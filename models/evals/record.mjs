@@ -52,7 +52,11 @@ export function rawPlace(raw, top = repo) {
   if (!p.startsWith('/')) return p;
   const rel = relative(resolve(top), resolve(p));
   if (rel && !rel.startsWith('..')) return rel;
-  return p === homedir() || p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p;
+  if (p === homedir() || p.startsWith(`${homedir()}/`)) return `~${p.slice(homedir().length)}`;
+  // A session's temporary folder (/private/tmp/claude-501/-Users-<account>/<id>/scratchpad/…)
+  // names the account too: only its last part is kept.
+  if (/^\/(private\/)?(tmp|var\/folders)\//.test(p)) return `a temporary folder (${basename(p)})`;
+  return p;
 }
 
 // Every line of the record, newest first. A line that does not parse is skipped.
