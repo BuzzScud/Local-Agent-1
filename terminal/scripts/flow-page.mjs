@@ -1,6 +1,6 @@
 // Draws the flow-diagram page: one self-contained HTML file, 8 tabs, hand-drawn inline SVG.
 //   bun terminal/scripts/flow-page.mjs                   writes src/app/flow.html, the hub's Flow tab (built into the app)
-//   bun terminal/scripts/flow-page.mjs <file.html>       writes a dated copy for agentic-coder DOCS/ (adds the date to the header)
+//   bun terminal/scripts/flow-page.mjs <file.html>       writes a dated copy for cli docs/ (adds the date to the header)
 // The boxes and arrows are drawn from terminal/README.md and models/README.md; when
 // how the app works changes, change the drawing here and run it again.
 import { writeFileSync } from 'node:fs';
@@ -249,7 +249,7 @@ f6.box(240, 60, 170, 90, { k: '', t: 'Throwaway copy', s: ['of the project; the'
 f6.box(460, 60, 190, 90, { k: 't2', t: 'Own llama-server', s: ['starts with the model', 'under test'] });
 f6.box(700, 60, 200, 90, { k: 't1', t: 'The agent, no screen', s: ['runs the task headless;', 'everything auto-approved;', 'questions get scripted answers'], dot: true });
 f6.box(945, 60, 145, 90, { k: '', t: 'The check', s: ['each task has one;', 'passes or fails'] });
-f6.box(1140, 60, 120, 90, { k: 'you', t: 'Report page', s: ['written to', 'agentic-coder', 'DOCS/'] });
+f6.box(1140, 60, 120, 90, { k: 'you', t: 'Report page', s: ['written to', 'the repo\'s', 'cli docs/'] });
 [[190, 240], [410, 460], [650, 700], [900, 945], [1090, 1140]].forEach(([a, b]) => f6.arrow([[a, 105], [b, 105]]));
 f6.text(20, 190, 'Each check is proven first: it must fail on the untouched project and pass with the reference answer (tools/verify-tasks.sh).', { k: 's' });
 f6.group(20, 226, 1240, 130, 'OTHER RUNS USE THE SAME RUNNER', '');
@@ -289,7 +289,7 @@ const where = `
 │  ├─ bonsai-2-27b/      retired, kept as a recipe
 │  ├─ bge-m3/            finds memory facts by meaning
 │  └─ evals/             the test bench
-├─ <b>agentic-coder DOCS/</b>  every diagram, report and test page (mirrored to docs/)
+├─ <b>cli docs/</b>            every diagram, report and test page (mirrored to docs/)
 └─ Agentic Coder.app     double-click: pick a folder, opens Terminal running coding</pre></div>
  <div class="card"><h3>On this Mac, outside the repo</h3>
 <pre><b>~/.local/bin/coding</b>          the launcher you type

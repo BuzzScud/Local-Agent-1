@@ -10,9 +10,9 @@
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
 //   /battle           the Battle tab: the arena's own page (Gemma vs Qwen), started when it is not up (models/evals/battle/)
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
-// The DOCS folder is `agentic-coder DOCS/` at the top of the repo on this Mac:
-// AGENTIC_DOCS names it outright, else AGENTIC_REPO (the launcher passes it),
-// else the repo this source runs from.
+// The DOCS folder is `cli docs/` at the top of the repo on this Mac (older
+// Macs: `agentic-coder DOCS/`): AGENTIC_DOCS names it outright, else
+// AGENTIC_REPO (the launcher passes it), else the repo this source runs from.
 import { statSync, existsSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import html from './weights.html' with { type: 'text' };
@@ -28,8 +28,12 @@ import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 
+const DOCS_NAMES = ['cli docs', 'agentic-coder DOCS', 'bonsai-code DOCS'];
+// The memory's own files sit in the folder too (the hub's Memory tab shows them): never listed or served as pages.
+const NOT_PAGES = 'memory-about-you';
 export function findDocsDir() {
-  const tries = [(process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) && join((process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO), 'agentic-coder DOCS'), (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) && join((process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO), 'bonsai-code DOCS'), join(import.meta.dir, '..', '..', '..', 'agentic-coder DOCS'), join(import.meta.dir, '..', '..', '..', 'bonsai-code DOCS')].filter(Boolean);
+  const repo = process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO;
+  const tries = [(process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), ...(repo ? DOCS_NAMES.map((n) => join(repo, n)) : []), ...DOCS_NAMES.map((n) => join(import.meta.dir, '..', '..', '..', n))].filter(Boolean);
   return tries.find((d) => { try { return statSync(d).isDirectory(); } catch { return false; } }) ?? null;
 }
 
@@ -53,7 +57,7 @@ export function listDocs(dir) {
   const pages = [];
   const add = (group, sub) => { for (const f of readdirSync(join(dir, sub))) { if (f.startsWith('.') || !KINDS[ext(f)]) continue; const st = statSync(join(dir, sub, f)); if (!st.isFile()) continue; pages.push({ file: sub ? `${sub}/${f}` : f, name: f, group, kind: KINDS[ext(f)][0], size: st.size, mtime: st.mtimeMs, saved: new Date(st.mtimeMs).toISOString().slice(0, 10), title: ext(f) === '.html' ? titleOf(join(dir, sub, f)) : '' }); } };
   add('unsorted', '');
-  for (const g of readdirSync(dir)) if (!g.startsWith('.') && statSync(join(dir, g)).isDirectory()) add(g, g);
+  for (const g of readdirSync(dir)) if (!g.startsWith('.') && g !== NOT_PAGES && statSync(join(dir, g)).isDirectory()) add(g, g);
   pages.sort((a, b) => b.mtime - a.mtime);
   const pin = (word) => pages.find((p) => p.kind === 'page' && p.group !== 'older versions' && p.name.toLowerCase().includes(word)) ?? null;
   const groups = [...GROUPS.filter((g) => pages.some((p) => p.group === g)), ...[...new Set(pages.map((p) => p.group))].filter((g) => !GROUPS.includes(g))];
@@ -141,7 +145,7 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
         const full = resolve(docsDir, file);
         // Only a file in the folder or one of its groups, never a path out of it.
         const parts = file.split('/');
-        const clean = parts.length <= 2 && parts.every((p) => p && p === basename(p) && p !== '..' && !p.startsWith('.'));
+        const clean = parts.length <= 2 && parts[0] !== NOT_PAGES && parts.every((p) => p && p === basename(p) && p !== '..' && !p.startsWith('.'));
         if (!clean || !KINDS[ext(file)] || !full.startsWith(resolve(docsDir) + '/') || !existsSync(full) || !statSync(full).isFile()) return new Response('not found', { status: 404 });
         return new Response(Bun.file(full), { headers: { 'content-type': KINDS[ext(file)][1], 'cache-control': 'no-store' } });
       }

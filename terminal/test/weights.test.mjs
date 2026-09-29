@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startWeightsServer, listDocs, HUB_PORT } from '../src/app/weights.mjs';
+import { startWeightsServer, listDocs, findDocsDir, HUB_PORT } from '../src/app/weights.mjs';
 
 function standIn() {
   const dir = mkdtempSync(join(tmpdir(), 'agentic-weights-'));
@@ -51,6 +51,7 @@ test('the DOCS folder: groups from its subfolders, every page newest first with 
   put('other/notes.pdf', '%PDF-1.4 stand-in', 40);
   put('agentic-coder-loose.html', '<!doctype html><title>Not filed yet</title>', 8);
   put('.DS_Store', 'x', 1); put('README.txt', 'not a page', 1);
+  mkdirSync(join(docs, 'memory-about-you')); put('memory-about-you/index.md', '# the memory, not a page', 1);
   writeFileSync(join(dir, 'secret.html'), '<title>outside</title>');
   const l = listDocs(docs);
   expect(l.groups).toEqual(['unsorted', 'diagrams', 'tests', 'other', 'older versions']);
@@ -64,7 +65,7 @@ test('the DOCS folder: groups from its subfolders, every page newest first with 
     const p = await fetch(s.url + 'docs/diagrams/agentic-coder-harness-flow-v2.html'); expect(p.status).toBe(200); expect(p.headers.get('content-type')).toContain('text/html'); expect(await p.text()).toContain('flow');
     expect((await fetch(s.url + 'docs/agentic-coder-loose.html')).status).toBe(200);
     expect((await fetch(s.url + 'docs/other/notes.pdf')).headers.get('content-type')).toBe('application/pdf');
-    for (const bad of ['docs/../secret.html', 'docs/%2E%2E/secret.html', 'docs/diagrams/../../secret.html', 'docs/README.txt', 'docs/missing.html', 'docs/diagrams', 'docs/diagrams/', 'docs/a/b/c.html']) expect((await fetch(s.url + bad)).status).toBe(404);
+    for (const bad of ['docs/memory-about-you/index.md', 'docs/../secret.html', 'docs/%2E%2E/secret.html', 'docs/diagrams/../../secret.html', 'docs/README.txt', 'docs/missing.html', 'docs/diagrams', 'docs/diagrams/', 'docs/a/b/c.html']) expect((await fetch(s.url + bad)).status).toBe(404);
     // a page saved after the start shows on the next list, in its group
     put('tests/agentic-coder-new.html', '<title>Brand new</title>', 0);
     expect((await (await fetch(s.url + 'docs.json')).json()).pages[0]).toMatchObject({ title: 'Brand new', group: 'tests' });
@@ -186,4 +187,17 @@ test('the Battle tab: /battle starts the arena when it is not up and sends the t
   expect(out.again).toBe(302);
   expect(out.hub).toContain('<button data-tab="battle">Battle</button>');
   expect(out.hub).toContain("if (tab === 'battle') return show('/battle'");
+});
+
+test('the DOCS folder is "cli docs" at the top of the repo, and a Mac that still has the older name keeps working', () => {
+  const was = { docs: process.env.AGENTIC_DOCS, bdocs: process.env.BONSAI_DOCS, repo: process.env.AGENTIC_REPO };
+  try {
+    delete process.env.AGENTIC_DOCS; delete process.env.BONSAI_DOCS;
+    const repo = mkdtempSync(join(tmpdir(), 'agentic-docsdir-'));
+    process.env.AGENTIC_REPO = repo;
+    mkdirSync(join(repo, 'agentic-coder DOCS'));
+    expect(findDocsDir()).toBe(join(repo, 'agentic-coder DOCS'));
+    mkdirSync(join(repo, 'cli docs'));
+    expect(findDocsDir()).toBe(join(repo, 'cli docs'));
+  } finally { for (const [k, v] of [['AGENTIC_DOCS', was.docs], ['BONSAI_DOCS', was.bdocs], ['AGENTIC_REPO', was.repo]]) { if (v == null) delete process.env[k]; else process.env[k] = v; } }
 });

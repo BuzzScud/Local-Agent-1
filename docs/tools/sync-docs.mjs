@@ -1,7 +1,9 @@
-// Mirrors the folder "agentic-coder DOCS" at the top of the repo (where every Agentic Coder
-// diagram, preview, report and test page is saved) into this repo's docs/,
+// Mirrors the page groups of the folder "cli docs" at the top of the repo (where every
+// Agentic Coder diagram, preview, report and test page is saved) into this repo's docs/,
 // and writes docs/README.md, an index GitHub shows. It lives in docs/tools/ with
-// to-docs.mjs, so that docs/ itself holds only pages.
+// to-docs.mjs, so that docs/ itself holds only pages. Only the groups in PAGE_GROUPS
+// are copied: the owner's own folders beside them (memory-about-you, gemma-docs,
+// morning briefs) and loose files at the top stay on the Mac, since the repo is public.
 //   bun run docs              copy new and changed files, remove files gone from the Desktop folder
 //   bun run docs --dry        say what would change, change nothing
 //   bun run docs --force      go ahead even if the Desktop folder looks mostly empty
@@ -10,9 +12,10 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmS
 import { join, dirname, relative, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { DOCS_NAMES, published } from './to-docs.mjs';
 
 const here = dirname(dirname(fileURLToPath(import.meta.url))); // <repo>/docs (this file is in docs/tools/)
-const SRC = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? join(here, '..', 'agentic-coder DOCS');
+const SRC = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (DOCS_NAMES.map((n) => join(here, '..', n)).find((p) => existsSync(p)) ?? join(here, '..', DOCS_NAMES[0]));
 const own = (f) => f === 'README.md' || f.startsWith('tools/'); // this folder's own files: the index and these tools
 const SKIP = /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/;
 const dry = process.argv.includes('--dry');
@@ -34,7 +37,10 @@ const list = (root, dir = root, out = []) => {
   return out;
 };
 
-const src = list(SRC);
+const all = list(SRC);
+const src = all.filter(published);
+// What stays on the Mac, by its top folder (or the file itself at the top).
+const kept = [...new Set(all.filter((f) => !published(f)).map((f) => (f.includes('/') ? `${f.split('/')[0]}/` : f)))];
 const dst = list(here).filter((f) => !own(f));
 // A folder that suddenly holds far fewer files than the repo copy was more
 // likely emptied or swapped by accident than cleaned on purpose.
@@ -72,8 +78,8 @@ const rows = src
 const readme = `# Agentic Coder docs
 
 Every diagram, preview, report and test page about Agentic Coder, newest first. This
-folder mirrors \`agentic-coder DOCS/\` at the top of the repo on the Mac: pages are saved there, and
-\`bun run docs\` copies them here before a commit. The pages are single HTML files
+folder mirrors the page groups of \`cli docs/\` at the top of the repo on the Mac: pages are saved there,
+and \`bun run docs\` copies them here before a commit. The pages are single HTML files
 with nothing loaded from outside; download one and open it in a browser to see it
 (GitHub shows HTML as source).
 
@@ -86,6 +92,7 @@ const readmeChanged = !existsSync(readmePath) || readFileSync(readmePath, 'utf8'
 if (!dry && readmeChanged) writeFileSync(readmePath, readme);
 
 const say = (label, xs) => xs.length && console.log(`${label} (${xs.length}): ${xs.join(', ')}`);
+say('kept on this Mac, never copied', kept);
 say(dry ? 'would add' : 'added', added);
 say(dry ? 'would update' : 'updated', changed);
 say(dry ? 'would remove' : 'removed', removed);

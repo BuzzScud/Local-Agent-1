@@ -14,6 +14,7 @@ import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, tmpdir } from 'node:os';
 import { recordTest, codeLabel } from '../record.mjs';
+import { DOCS_NAMES, published } from '../../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -354,11 +355,12 @@ async function installedApp() {
 }
 
 function pagesMirrored() {
-  const src = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(root, n)).find((p) => existsSync(p)) ?? join(root, 'agentic-coder DOCS')), dst = join(root, 'docs');
+  const src = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (DOCS_NAMES.map((n) => join(root, n)).find((p) => existsSync(p)) ?? join(root, DOCS_NAMES[0])), dst = join(root, 'docs');
   if (!existsSync(src)) return skipped('the DOCS folder is not here');
   const skip = (rel) => /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/.test(rel);
   const own = (f) => f === 'README.md' || f.startsWith('tools/'); // the index and the mirror's own scripts
-  const pages = filesUnder(src, skip), copies = filesUnder(dst, skip).filter((f) => !own(f));
+  // Only the page groups are mirrored; the owner's own folders beside them stay on the Mac.
+  const pages = filesUnder(src, skip).filter(published), copies = filesUnder(dst, skip).filter((f) => !own(f));
   const open = [...pages.filter((f) => !copies.includes(f)).map((f) => `${f}  not in docs/ yet`),
     ...pages.filter((f) => copies.includes(f) && !readFileSync(join(src, f)).equals(readFileSync(join(dst, f)))).map((f) => `${f}  changed since it was copied`),
     ...copies.filter((f) => !pages.includes(f)).map((f) => `${f}  in docs/ but gone from the DOCS folder`)];

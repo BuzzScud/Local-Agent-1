@@ -10,7 +10,9 @@ Bonsai Code.app/
 *.key
 .split-map.json
 
-# The pages' working folder, on this Mac only: `bun run docs` mirrors it into docs/
+# The pages' working folder, on this Mac only: `bun run docs` mirrors its page groups into docs/.
+# It also holds the owner's private things (memory-about-you, gemma-docs, morning briefs).
+cli docs/
 agentic-coder DOCS/
 bonsai-code DOCS/
 # Reading material kept beside the repo, never committed

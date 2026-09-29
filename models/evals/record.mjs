@@ -125,7 +125,7 @@ export function recordData(file = recordFile()) {
 // not here (a worktree, a frozen copy): the hub still reads the record live.
 // Only the real record goes to the repo's DOCS folder; any other record needs
 // the folder named (docsDir, or AGENTIC_DOCS).
-export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD ? (['agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(repo, n)).find((p) => existsSync(p)) ?? join(repo, 'agentic-coder DOCS')) : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
+export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD ? (['cli docs', 'agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(repo, n)).find((p) => existsSync(p)) ?? join(repo, 'cli docs')) : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
   try {
     if ((process.env.AGENTIC_NO_DOCS ?? process.env.BONSAI_NO_DOCS) || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
     const html = readFileSync(template, 'utf8');

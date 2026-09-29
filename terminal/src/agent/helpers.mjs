@@ -1,5 +1,5 @@
 // Context helpers: what comes along with a request so the model needs fewer
-// steps to find it (plan of 28 Sep 2026, in ~/Desktop/gemma-docs). Gemma reads
+// steps to find it (plan of 28 Sep 2026, in cli docs/gemma-docs). Gemma reads
 // about 120 tokens a second and writes about 12, so a step it does not have to
 // take (open a file, run the tests) saves far more than reading what it would
 // have found. The helpers share CEILING tokens; one with nothing to add passes

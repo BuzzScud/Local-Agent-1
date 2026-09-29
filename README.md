@@ -47,11 +47,12 @@ agentic-coder/
 │  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Battle tab's arena), reports, tools, dev
 │  └─ test/             unit tests of the models part
-└─ docs/                every diagram, preview and report page, the one home (mirrors agentic-coder DOCS/, which is on the Mac only); tools/ = the mirror's two scripts
+└─ docs/                every diagram, preview and report page, the one home (mirrors the page groups of cli docs/, which is on the Mac only); tools/ = the mirror's two scripts
 ```
 
 Only on this Mac, not in git: each model's `results/`, `models/evals/dev/experiments/julia-recall/`
-(the memory-matcher experiment and its results), `agentic-coder DOCS/`, and `~/.agentic-coder`
+(the memory-matcher experiment and its results), `cli docs/` (the pages, plus the owner's own
+folders that are never mirrored), and `~/.agentic-coder`
 (the engines, the model files, settings, logs and the test record).
 
 ## Commands
@@ -66,7 +67,7 @@ bun run eval:words         # the 28 real requests
 bun run eval:verify        # prove every practice task's check can fail and pass
 bun run battle:verify      # prove every Battle test that comes with the arena (New 28, Work 28, Practice 28) fails as given and passes with its answer (no model)
 bun run install-cli        # build one file and put it at ~/.local/bin/coding
-bun run docs               # mirror agentic-coder DOCS/ into docs/ (run before a commit)
+bun run docs               # mirror the page groups of cli docs/ into docs/ (run before a commit)
 bun run test:record        # add test runs that are on this Mac but not yet in the test record
 bun run check              # is anything here that should not be? secrets, packages, where the code connects, the installed app, the tests
 ```

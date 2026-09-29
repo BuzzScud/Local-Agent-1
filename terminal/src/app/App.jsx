@@ -1100,7 +1100,7 @@ export function App({ opts, win, onRestart }) {
         const w = hub.server; const url = hub.url;
         if (cmd === 'docs') {
           const d = listDocs(w.docsDir);
-          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (agentic-coder DOCS at the top of the repo; set AGENTIC_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
+          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (cli docs at the top of the repo; set AGENTIC_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
         } else push({ type: 'note', text: `Weights of ${w.name} (${(w.size / 1e9).toFixed(2)} GB) opened in the browser at ${url} · it stays up while this window is open`, tone: 'dim' });
         break;
       }
