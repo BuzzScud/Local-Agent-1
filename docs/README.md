@@ -8,6 +8,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/permissions-command-preview-2026-09-29.html](design%20rounds/permissions-command-preview-2026-09-29.html) | page | Permissions Command Preview | 79 KB | 2026-09-29 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 170 KB | 2026-09-29 |
 | [design rounds/tests-tab-run-a-test-3-designs-2026-09-29.html](design%20rounds/tests-tab-run-a-test-3-designs-2026-09-29.html) | page | Run a test · 3 designs | 77 KB | 2026-09-29 |
 | [design rounds/settings-command-preview-2026-09-29.html](design%20rounds/settings-command-preview-2026-09-29.html) | page | Settings Command Preview | 47 KB | 2026-09-29 |
