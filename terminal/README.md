@@ -192,6 +192,20 @@ Practice runs (`bun run eval`) never read your rules. Code: `src/agent/permissio
     files change and nothing is quietly removed. A draft that also touches the tests
     keeps its changes to the source; the test comes from its own step.
   - Anything a focused path cannot finish goes step by step. `--no-flows` always does.
+- **Design examples and the layout check** (`src/agent/design.mjs`, `src/flows/layoutcheck.mjs`).
+  A request to make or restyle a page, screen or widget brings the closest design card from
+  `cli docs/design examples/` (one folder per set: your picks, your rules, opus, fable, public
+  systems): the rules card, which always comes, plus the one best example, about 1,500 tokens.
+  The model can open any file there read-only as `DESIGN/…`. When it says it is done, each page
+  it made or changed is opened in headless Chrome (the Mac's own, or Playwright's) at 1440×900,
+  on a 390-wide phone and in dark mode. What is broken goes back to it once: sideways scroll,
+  text that overlaps, spills or is too faint, script errors, a missing charset or viewport line.
+  After its fix the page is checked again. `/design` lists the sets, `/design off` and
+  `/design check off` turn the two parts off, `/design sets opus,fable` picks the sets, and
+  `/design <request>` sends the cards with any request. `AGENTIC_DESIGN`, `AGENTIC_LAYOUT`
+  and `AGENTIC_DESIGN_SETS` win over what is saved. The benches run without either, unless
+  asked. `models/evals/bench/design/run.mjs` is the before/after test on five of the
+  user's own page requests.
 - **The project map** (`src/tools/repomap.mjs`, cached under `~/.agentic-coder/maps`) is
   what files are chosen from and the first thing the loop sees in a bigger project.
 - **A check before "done"**: when the loop changed files, one forced-JSON check compares

@@ -30,6 +30,7 @@ import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
+import { designSettings, designSummary, designDir, readCards } from '../agent/design.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
@@ -254,6 +255,8 @@ export function App({ opts, win, onRestart }) {
       memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
       // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
       helpers, embedder, ranker: embedder, rewind: rewindRef.current,
+      // The design examples and the layout check (/design), as saved.
+      design: settings.design,
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
@@ -1163,6 +1166,44 @@ export function App({ opts, win, onRestart }) {
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         agent.mathForce = true;
         sendPrompt(arg, `/math ${arg}`);
+        break;
+      }
+      case 'design': {
+        // Alone: the folder, set by set, and what is on. on|off: the cards with
+        // page requests; check on|off: the browser check; sets all|a,b: which
+        // sets. Anything else is a request sent with the cards.
+        const saved = { ...(settings.design ?? {}) };
+        const keep = (patch) => {
+          const next = { ...saved, ...patch };
+          settings.design = next;
+          if (agent) agent.designSaved = next;
+          saveSettings({ design: next });
+          const now = designSettings(next);
+          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_DESIGN_SETS ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
+        };
+        const a = arg.trim();
+        if (!a) {
+          const now = designSettings(saved);
+          const sum = designSummary(now);
+          if (!sum.dir) { push({ type: 'note', text: 'No design examples folder (make "design examples" in the cli docs folder, one subfolder per set of .md cards).', tone: 'warn' }); break; }
+          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
+          break;
+        }
+        if (/^(on|off)$/i.test(a)) { keep({ auto: /^on$/i.test(a) }); break; }
+        const chk = /^check\s+(on|off)$/i.exec(a);
+        if (chk) { keep({ check: /^on$/i.test(chk[1]) }); break; }
+        const sets = /^sets?\s+(.+)$/i.exec(a);
+        if (sets) {
+          const known = readCards(designDir()).sets.map((x) => x.name);
+          const want = /^all$/i.test(sets[1].trim()) ? 'all' : sets[1].split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+          const unknown = want === 'all' ? [] : want.filter((x) => !known.includes(x));
+          if (unknown.length) { push({ type: 'note', text: `No set named ${unknown.join(', ')}. The sets: ${known.join(', ') || 'none yet'}.`, tone: 'warn' }); break; }
+          keep({ sets: want });
+          break;
+        }
+        if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
+        agent.designForce = true;
+        sendPrompt(a, `/design ${a}`);
         break;
       }
       case 'settings':

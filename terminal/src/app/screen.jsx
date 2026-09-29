@@ -467,7 +467,7 @@ function PermissionPrompt({ app }) {
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
-  const SHOW = 14; // the whole / menu (the rest is in /settings)
+  const SHOW = 15; // the whole / menu (the rest is in /settings)
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
   return (

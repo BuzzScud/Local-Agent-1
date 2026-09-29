@@ -114,6 +114,7 @@ export const PLACES = [
   ['.agentic/memory', 'what Agentic Coder remembers about this project: one small file per fact in facts/, kept out of git; edit or delete them freely'],
   ['~/.agentic/memory', 'what Agentic Coder remembers about you: how you like to work; it follows you into every project'],
   ['.agentic/notes.md', 'the older notes file (.bonsai/notes.md too): its lines are carried over into the memory the first time'],
+  ['cli docs/design examples', 'the design cards that come with a request to make or restyle a page, one folder per set (your picks, your rules, opus, fable, public systems); read-only to the model as DESIGN/'],
 ];
 
 // How Agentic Coder keeps you safe, in plain words.
@@ -141,6 +142,7 @@ export const TIPS = [
   'A fact earns trust when the task passed its check after it was used, and loses it when the task failed or you corrected Agentic Coder. One that keeps failing is taken out of use.',
   '/compact frees memory in a long conversation; /clear starts fresh.',
   'Your math notes in ~/Desktop/MATH are used only when you ask with /math.',
+  'Ask for a page, a screen or a restyle and the closest design card comes with it (the "design examples" folder), then a browser check looks for a page that scrolls sideways, text that overlaps or is too faint, and script errors, and sends what it finds back once. /design lists the cards; /design off, /design check off and /design sets opus,fable change what comes; /design <request> brings the cards to any request.',
 ];
 
 // Everything the Help page shows, for /help.json.

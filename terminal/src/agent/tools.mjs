@@ -10,6 +10,7 @@ import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
 import { mathPathFor, mathDir } from './expertise.mjs';
+import { designPathFor, designDir, inDesignDir } from './design.mjs';
 
 const str = (description) => ({ type: 'string', description });
 // Read: files up to WHOLE_MAX lines come back whole; longer ones as an outline,
@@ -170,6 +171,11 @@ export function didYouMean(cwd, p) {
   return hits;
 }
 
+// Folders of the user's that the tools can read but never change, reached by a
+// name at the start of a path: what each is called and where it really is.
+const MATH_SHELF = () => ({ name: 'MATH', root: mathDir(), what: "the user's math notes" });
+const DESIGN_SHELF = () => ({ name: 'DESIGN', root: designDir(), what: "the user's design examples" });
+
 export function resolvePath(cwd, p) {
   // "~" and "~/…" mean the home folder, as in the shell: a Write to
   // "~/Desktop/notes.html" once made a folder named "~" in the home folder,
@@ -182,7 +188,12 @@ export function resolvePath(cwd, p) {
   // read-only, unless the project really has a MATH folder of its own.
   if ((p === 'MATH' || p.startsWith('MATH/')) && !existsSync(resolve(cwd, p))) {
     const m = mathPathFor(p);
-    if (m) return { abs: m.abs, rel: p, inside: true, math: true };
+    if (m) return { abs: m.abs, rel: p, inside: true, math: true, shelf: MATH_SHELF() };
+  }
+  // "DESIGN/…" is the user's design examples (src/agent/design.mjs), read-only the same way.
+  if ((p === 'DESIGN' || p.startsWith('DESIGN/')) && !existsSync(resolve(cwd, p))) {
+    const d = designPathFor(p);
+    if (d) return { abs: d.abs, rel: p, inside: true, design: true, shelf: DESIGN_SHELF() };
   }
   // The folder's own name used as a path ("project", "project/a.js") means the folder.
   const own = cwd.split(sep).pop();
@@ -220,8 +231,10 @@ export function resolvePath(cwd, p) {
   // A full path into the math notes folder still means the notes, read-only.
   if (!inside && existsSync(abs) && within(mathDir(), abs)) {
     const r = relative(mathDir(), abs);
-    return { abs, rel: `MATH${r ? `/${r}` : ''}`, inside: true, math: true };
+    return { abs, rel: `MATH${r ? `/${r}` : ''}`, inside: true, math: true, shelf: MATH_SHELF() };
   }
+  const inDesign = !inside && existsSync(abs) ? inDesignDir(abs) : null;
+  if (inDesign) return { abs, rel: inDesign, inside: true, design: true, shelf: DESIGN_SHELF() };
   return { abs, rel: rel || '.', inside, ...(realRel ? { realRel } : {}) };
 }
 
@@ -419,7 +432,7 @@ export function prepare(name, args, env) {
     for (const k of ['old_text', 'new_text', 'content']) if (args[k] !== undefined) args[k] = stripLineNumbers(args[k]).text;
     const p = resolvePath(env.cwd, args.path);
     if (!p.inside) return { error: `${args.path} is outside the project folder, which is not allowed.` };
-    if (p.math) return { error: `${p.rel} is in the user's math notes, which are read-only here. Read them; never change them.` };
+    if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
     let exists = existsSync(p.abs);
     if (!exists && name === 'Edit') {
       const alt = didYouMean(env.cwd, args.path);
@@ -550,21 +563,21 @@ export async function execute(name, args, prepared, env) {
         const lines = readFileSync(lp.abs, 'utf8').split('\n').length;
         return { text: `${lp.rel} is a file (${lines} lines, ${(statSync(lp.abs).size / 1024).toFixed(1)} KB). Use Read to see it.`, view: { kind: 'list', count: 1, content: lp.rel } };
       }
-      const r = listFiles(lp.math ? mathDir() : env.cwd, { path: lp.abs, pattern: args.pattern });
+      const r = listFiles(lp.shelf ? lp.shelf.root : env.cwd, { path: lp.abs, pattern: args.pattern });
       if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: r.error } };
-      // Entries in the math notes keep their MATH/ prefix so Read can use them as they are.
-      const lines = lp.math ? r.lines.map((l) => `${lp.rel}/${l}`) : r.lines;
+      // Entries in the math notes (or the design examples) keep their MATH/ prefix so Read can use them as they are.
+      const lines = lp.shelf ? r.lines.map((l) => `${lp.rel}/${l}`) : r.lines;
       const more = r.total > lines.length ? `\n… and ${r.total - lines.length} more` : '';
-      return { text: (lines.join('\n') || `(nothing found)${lp.math ? '' : projectFiles(env.cwd)}`) + more, view: { kind: 'list', count: r.total, content: lines.join('\n') } };
+      return { text: (lines.join('\n') || `(nothing found)${lp.shelf ? '' : projectFiles(env.cwd)}`) + more, view: { kind: 'list', count: r.total, content: lines.join('\n') } };
     }
     case 'Search': {
       const sp = resolvePath(env.cwd, args.path ?? '.');
-      const r = searchFiles(sp.math ? mathDir() : env.cwd, { pattern: args.pattern, path: sp.abs, glob: args.glob });
+      const r = searchFiles(sp.shelf ? sp.shelf.root : env.cwd, { pattern: args.pattern, path: sp.abs, glob: args.glob });
       if (r.error) return { text: r.error, error: true, view: { kind: 'error', message: r.error } };
-      // Matches in the math notes keep their MATH/ prefix so Read can use them as they are.
-      const lines = sp.math ? r.lines.map((l) => `MATH/${l}`) : r.lines;
+      // Matches in the math notes (or the design examples) keep their MATH/ prefix so Read can use them as they are.
+      const lines = sp.shelf ? r.lines.map((l) => `${sp.shelf.name}/${l}`) : r.lines;
       const more = r.total > lines.length ? `\n… and ${r.total - lines.length} more matches` : '';
-      return { text: cut((lines.join('\n') || `No matches. Try one plain word, or Read a likely file.${sp.math ? '' : projectFiles(env.cwd)}`) + more, max), view: { kind: 'search', count: r.total, content: lines.join('\n') } };
+      return { text: cut((lines.join('\n') || `No matches. Try one plain word, or Read a likely file.${sp.shelf ? '' : projectFiles(env.cwd)}`) + more, max), view: { kind: 'search', count: r.total, content: lines.join('\n') } };
     }
     case 'Edit':
     case 'Write': {

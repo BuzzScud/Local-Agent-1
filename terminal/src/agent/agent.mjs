@@ -13,6 +13,8 @@ import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
+import { isDesignRequest, pickCards, designNotes, designSettings } from './design.mjs';
+import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -237,7 +239,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design }) {
     super();
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
@@ -265,6 +267,9 @@ export class Agent extends EventEmitter {
     this.reranker = reranker;
     // /rewind (app/rewind.mjs): copies of the project around each message and command.
     this.rewind = rewind;
+    // The design examples and the layout check (design.mjs): settings.json's
+    // "design" as saved; AGENTIC_DESIGN, AGENTIC_DESIGN_SETS and AGENTIC_LAYOUT win over it.
+    this.designSaved = design ?? {};
     this.lessons = []; // what happened in each turn, for the next save (lessons.mjs)
     // When Agentic Coder started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
@@ -368,11 +373,42 @@ export class Agent extends EventEmitter {
     return { moved: pick };
   }
 
+  // The layout check of the pages this message changed (flows/layoutcheck.mjs):
+  // the text for the model when something is broken, else null. `again`: the
+  // look after its fix, which only tells you what is left.
+  async checkLayout(again = false) {
+    if (!designSettings(this.designSaved).check || !this.turn?.startTexts?.size) return null;
+    const pages = pagesToCheck(this.cwd, [...this.turn.startTexts.keys()]);
+    if (!pages.length) return null;
+    const chrome = findChrome();
+    if (!chrome) {
+      if (!this.layoutTold) { this.layoutTold = true; this.emit('note', { text: 'Layout check skipped: no headless Chrome on this Mac (Chrome, or Playwright\'s own).', tone: 'dim' }); }
+      return null;
+    }
+    const notes = [];
+    for (const rel of pages) {
+      const abs = resolvePath(this.cwd, rel).abs;
+      let html = '';
+      try { html = readFileSync(abs, 'utf8'); } catch { continue; }
+      const server = needsServer(html);
+      if (server) { this.emit('note', { text: `Layout check skipped for ${rel}: ${server}.`, tone: 'dim' }); continue; }
+      const r = await layoutCheck(abs, { chrome });
+      if (r.skipped) { this.emit('note', { text: `Layout check skipped for ${rel}: ${r.skipped}.`, tone: 'dim' }); continue; }
+      const n = r.problems.length;
+      if (!n) this.emit('note', { text: `Layout check, ${rel}: nothing broken at 1440 px, on a phone or in dark mode (${r.secs.toFixed(1)} s).`, tone: 'dim' });
+      else this.emit('note', { text: `Layout check, ${rel}: ${n} problem${n === 1 ? '' : 's'}${again ? ' left' : ''} (${r.secs.toFixed(1)} s)${again ? `: ${r.problems.slice(0, 3).join(' ')}` : ', sent back to fix.'}`, tone: 'warn' });
+      if (n) notes.push(layoutNote(rel, r.problems));
+    }
+    if (this.turn) this.turn.layout = { pages, problems: notes.length, again };
+    return notes.length ? notes.join('\n\n') : null;
+  }
+
   // This turn's request with what goes along with it (see send()): the steps
-  // for its kind of bug, and the user's own math notes when the topic came up.
+  // for its kind of bug, the user's own math notes when the topic came up, and
+  // the design examples with a request to make or restyle a page.
   withTurnNotes(messages) {
     const t = this.turn;
-    const extras = [t?.bug, t?.math, t?.carried].filter(Boolean);
+    const extras = [t?.bug, t?.math, t?.design, t?.carried].filter(Boolean);
     if (!extras.length) return messages;
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
@@ -650,6 +686,22 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: math.browse ? 'Using the math notes (~/Desktop/MATH).' : `Using the math notes: ${math.area.name} (~/Desktop/MATH).`, tone: 'dim' });
       } catch {}
     }
+    // The design examples (src/agent/design.mjs): with a request to make or
+    // restyle a page, screen or widget, or any request sent with /design; never
+    // with a question, a bug fix or a rename.
+    const design = designSettings(this.designSaved);
+    const forced = this.designForce;
+    this.designForce = false;
+    if ((forced || (design.auto && !['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text))) && request?.role === 'user' && typeof request.content === 'string') {
+      try {
+        const notes = designNotes(pickCards(text, { sets: design.sets }));
+        if (notes) {
+          this.turn.design = { request, notes: notes.text, cards: notes.cards.map((c) => c.file) };
+          this.ctxUsed += tokensOf(notes.text);
+          this.emit('note', { text: `Design examples: ${notes.cards.map((c) => c.file.replace(/\.md$/i, '')).join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim' });
+        } else if (forced) this.emit('note', { text: 'No design examples found (the "design examples" folder is missing or has no cards in the sets that are on).', tone: 'warn' });
+      } catch {}
+    }
     // A question about code: what it is about is read now, in one go, instead
     // of letting the model find, list and read it a piece at a time.
     this.prefetchMap();
@@ -663,6 +715,8 @@ export class Agent extends EventEmitter {
     }
     let verified = false;
     let lostChecked = false;
+    let layoutSent = false;
+    let layoutDone = false;
     let correctedAlready = false;
     let blankRetry = false;
     try {
@@ -797,6 +851,18 @@ export class Agent extends EventEmitter {
               this.messages.push({ role: 'user', content: auto(`Your changes removed ${lost}, and the request does not ask for that. Put it back with Edit and keep what you added, unless the request really needs it gone; then say why in one sentence.`) });
               continue;
             }
+          }
+          // A page it made or changed: opened in a browser and measured
+          // (flows/layoutcheck.mjs). What is broken goes back once; after the
+          // fix it looks again and says what is left.
+          if (this.turn.changed && !layoutDone && !signal?.aborted) {
+            const found = await this.checkLayout(layoutSent);
+            if (found && !layoutSent) {
+              layoutSent = true;
+              this.messages.push({ role: 'user', content: auto(found) });
+              continue;
+            }
+            layoutDone = true;
           }
           // It changed files and says it is done: does the work cover every
           // part of the request? Once per message; a miss sends it back.
@@ -1855,7 +1921,7 @@ export class Agent extends EventEmitter {
     const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
     // The notes that go with the request (the steps for its kind of bug, a
     // check the fix path made) follow the request into the new conversation.
-    for (const x of [this.turn?.bug, this.turn?.math, this.turn?.carried].filter(Boolean)) {
+    for (const x of [this.turn?.bug, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
       const i = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).indexOf(x.request);
       if (i >= 0) x.request = opening[i];
     }

@@ -13,8 +13,7 @@
 //   /battle           the Battle tab: the arena's own page (Gemma vs Qwen), started when it is not up (models/evals/battle/)
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `cli docs/` at the top of the repo on this Mac (older
-// Macs: `agentic-coder DOCS/`): AGENTIC_DOCS names it outright, else
-// AGENTIC_REPO (the launcher passes it), else the repo this source runs from.
+// Macs: `agentic-coder DOCS/`): see docs-dir.mjs.
 import { statSync, existsSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import html from './weights.html' with { type: 'text' };
@@ -29,15 +28,11 @@ import { memoryRoute } from './memory-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle, testRun, runCatalog } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
+import { findDocsDir } from './docs-dir.mjs';
 
-const DOCS_NAMES = ['cli docs', 'agentic-coder DOCS', 'bonsai-code DOCS'];
 // The memory's own files sit in the folder too (the hub's Memory tab shows them): never listed or served as pages.
 const NOT_PAGES = 'memory-about-you';
-export function findDocsDir() {
-  const repo = process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO;
-  const tries = [(process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), ...(repo ? DOCS_NAMES.map((n) => join(repo, n)) : []), ...DOCS_NAMES.map((n) => join(import.meta.dir, '..', '..', '..', n))].filter(Boolean);
-  return tries.find((d) => { try { return statSync(d).isDirectory(); } catch { return false; } }) ?? null;
-}
+export { findDocsDir };
 
 const KINDS = { '.html': ['page', 'text/html; charset=utf-8'], '.pdf': ['PDF', 'application/pdf'], '.png': ['image', 'image/png'], '.jpg': ['image', 'image/jpeg'], '.jpeg': ['image', 'image/jpeg'], '.md': ['notes', 'text/markdown; charset=utf-8'] };
 const ext = (f) => { const m = /\.[a-z0-9]+$/i.exec(f); return m ? m[0].toLowerCase() : ''; };

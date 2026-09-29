@@ -243,6 +243,8 @@ if (opts.print) {
       permissions: (dir) => rulesFor(dir),
       // The context helpers: as /helpers left them (AGENTIC_HELPERS wins).
       helpers: helpersFrom(settings),
+      // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
+      design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.
       memory: memoryOn(settings) ? { save: (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.

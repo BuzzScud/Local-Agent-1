@@ -7,3 +7,9 @@ process.env.AGENTIC_HUB_PORT = '0';
 // test turns them on: each test checks the steps it expects, and a helper's
 // test run or read would add steps of its own.
 process.env.AGENTIC_HELPERS ??= 'off';
+// The design examples and the layout check (src/agent/design.mjs,
+// src/flows/layoutcheck.mjs) are off in the tests unless a test turns them on:
+// the real folder would change what the model is sent, and a browser check
+// would add steps and seconds to every test that writes a page.
+process.env.AGENTIC_DESIGN ??= 'off';
+process.env.AGENTIC_LAYOUT ??= 'off';
