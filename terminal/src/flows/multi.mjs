@@ -26,11 +26,11 @@ export const MAX_FILES = 4;
 // model's pick from the project map (one to four, the main one first).
 export async function planFiles(ctx, task, files) {
   const named = filesInText(ctx.cwd, task).filter((f) => !isTestFile(f) && langFor(f));
-  if (named.length) return [...new Set(named)].slice(0, MAX_FILES);
+  if (named.length) return [...new Set(named)];
   const { code, text } = fileHints(ctx.cwd, task, files);
   if (!code.length) return [];
   if (code.length === 1) return code;
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 160,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 160,
     system: 'You choose which files in a project a task changes.',
     user: `Task: ${task}\n\nFiles:\n${text}\n\nWhich files must change to do this task? List every file that needs a change (1 to ${MAX_FILES}), the main one first. A new function goes in the file it belongs with.`,
     schema: { type: 'object', properties: { files: { type: 'array', items: { type: 'string', enum: code }, minItems: 1, maxItems: MAX_FILES } }, required: ['files'] } });

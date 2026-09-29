@@ -20,7 +20,8 @@ export const SETUP_THINK_CAP = 2048;
 
 // thinkCap: a smaller thinking cap for this one call (the server's
 // --reasoning-budget stays the model's thinkingBudget).
-export async function complete({ url, model, slot, system, user, temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap }) {
+export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap }) {
+  if (instructions) system = `${instructions}\n\nCurrent subtask (follow its output format):\n${system}`;
   llmCalls.n++;
   llmCalls.now++;
   try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }); } finally { llmCalls.now--; }

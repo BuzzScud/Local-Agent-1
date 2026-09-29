@@ -79,6 +79,7 @@ export function cliRows(lingerMins = 30) {
       ['coding weights', "the hub in the browser, on the model's weights (ctrl+c here closes it)"],
       ['coding docs', 'the hub on the harness and structure diagrams and every Agentic Coder page'],
       ['coding tests', 'the hub on the test record: every test run and its result'],
+      ['coding instructions', 'the hub instruction editor: shared General and Planning rules, preview, save and undo'],
       ['coding memory', 'the hub on the memory: every fact, with its trust, to edit, pin, take out or bring back'],
       ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
       ['coding morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],

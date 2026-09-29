@@ -980,6 +980,11 @@ export function App({ opts, win, onRestart }) {
         push({ type: 'note', text: runs.length ? `Tests opened in the browser at ${hub.url} · ${runs.length} run${runs.length === 1 ? '' : 's'} recorded, the latest: ${runs[0].name} (${runs[0].total != null ? `${runs[0].passed} of ${runs[0].total}` : runs[0].result}) · it stays up while this window is open` : `Tests opened in the browser at ${hub.url} · no test has been recorded yet`, tone: 'dim' });
         break;
       }
+      case 'instructions': {
+        const hub = openHub('instructions'); if (!hub) break;
+        push({ type: 'note', text: `Instructions opened at ${hub.url} · saved changes apply to the next task`, tone: 'dim' });
+        break;
+      }
       case 'weights':
       case 'docs': {
         // The hub in the browser: the same server as `coding weights` / `coding docs`,
@@ -1048,7 +1053,7 @@ export function App({ opts, win, onRestart }) {
   const btwShown = Boolean(btw && !perm && !answerWait);
   if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
     const cmds = inputMode === 'prompt' ? matchCommands(input.value) : [];
-    if (cmds.length) menu = { kind: 'slash', pad: 14, items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
+    if (cmds.length) menu = { kind: 'slash', pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     const at = mentionAt(input);
     if (!menu && at) {
       if (!filesRef.current) { filesRef.current = []; let n = 0; for (const f of walk(cwd)) { if (!f.dir) filesRef.current.push(f.path); if (++n > 5000) break; } }

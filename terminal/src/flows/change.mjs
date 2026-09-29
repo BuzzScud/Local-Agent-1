@@ -71,7 +71,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
   plan.step(0);
   const files = projectFiles(cwd);
   const named = filesInText(cwd, task).filter((f) => !isTestFile(f) && langFor(f));
-  const target = named[0] ?? hint ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal , embedder: ctx.embedder });
+  const target = named[0] ?? hint ?? await pickFile({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files, signal: ctx.signal , embedder: ctx.embedder });
   if (!target || !langFor(target)) return { handled: false, why: 'could not tell which file to change' };
   const lang = langFor(target);
   const original = readFileSync(join(cwd, target), 'utf8');
@@ -81,7 +81,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
   let unit = null;
   if (original.split('\n').length > WHOLE_FILE_MAX) {
     const names = functionNames(original, lang);
-    const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 60,
+    const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 60,
       system: 'You choose which function a task changes.',
       user: `Task: ${task}\nFunctions in ${target}: ${names.join(', ')}\nWhich function must change? Answer NEW if the task needs a new function.`,
       schema: { type: 'object', properties: { function: { type: 'string', enum: [...names, 'NEW'] } }, required: ['function'] } });

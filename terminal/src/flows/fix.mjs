@@ -91,7 +91,7 @@ export async function fixFlow(ctx, task) {
     const named = filesInText(cwd, task).filter((f) => !isCheck(f));
     const pickable = files.filter((f) => !isCheck(f));
     // A check Agentic Coder made comes with the lines that set the layers: the first of them is where to look.
-    let target = named[0] ?? made?.files.find((f) => !isCheck(f)) ?? sources[0] ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task: made ? `${task}\n${made.report}` : task, files: pickable, exts: EDITABLE, signal: ctx.signal , embedder: ctx.embedder });
+    let target = named[0] ?? made?.files.find((f) => !isCheck(f)) ?? sources[0] ?? await pickFile({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task: made ? `${task}\n${made.report}` : task, files: pickable, exts: EDITABLE, signal: ctx.signal , embedder: ctx.embedder });
     if (!target || !EDITABLE.test(target)) return { handled: false, why: 'could not tell which file to fix' };
     const original = readFileSync(join(cwd, target), 'utf8');
 
@@ -235,7 +235,7 @@ export async function fixFlow(ctx, task) {
 async function pickFunction(ctx, { target, original, lang, task, digest }) {
   const names = functionNames(original, lang);
   if (!names.length) return null;
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 60,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 60,
     system: 'You choose which function has the bug.',
     user: `The tests fail:\n${digest}\n\nTask: ${task}\nFunctions in ${target}: ${names.join(', ')}\nWhich function has the bug?`,
     schema: { type: 'object', properties: { function: { type: 'string', enum: names } }, required: ['function'] } });

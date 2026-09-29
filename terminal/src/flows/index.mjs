@@ -10,7 +10,7 @@ import { complete } from './llm.mjs';
 import { planRename, applyRename, leftAloneNote } from './rename.mjs';
 import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
-import { planFiles, multiFlow } from './multi.mjs';
+import { planFiles, multiFlow, MAX_FILES } from './multi.mjs';
 import { projectFiles } from './localize.mjs';
 import { isMoreTalk, isCommand, isPageRequest } from './words.mjs';
 
@@ -88,7 +88,7 @@ function byWords(t) {
 export async function route(ctx, text) {
   const byRules = routeByRules(text);
   if (byRules) return byRules;
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 80,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 80,
     system: 'You sort a request to a coding assistant into one kind.',
     user: `Request: ${text}\n\nKinds: question (only wants an answer), rename (rename one name everywhere), fix (something is broken), change (add or change code), other.`,
     schema: { type: 'object', properties: { kind: { type: 'string', enum: ['question', 'rename', 'fix', 'change', 'other'] }, from: { type: 'string' }, to: { type: 'string' } }, required: ['kind'] } });
@@ -165,12 +165,13 @@ export async function runFlows(ctx, text) {
 async function changeOrMulti(ctx, text) {
   let targets = [];
   try { targets = await planFiles(ctx, text, projectFiles(ctx.cwd)); } catch (e) { if (ctx.signal?.aborted) throw e; }
+  if (targets.length > MAX_FILES) { ctx.note('This task spans more files than the focused workflow can cover; working step by step.', 'dim'); return null; }
   if (targets.length >= 2) {
     const m = await multiFlow(ctx, text, targets);
     if (m.handled) return m;
     // Tries that failed against the test would fail the same way in one file: straight to step by step.
-    if (m.tried) { ctx.note(`${m.why}; working step by step instead.`, 'dim'); return null; }
-    ctx.note(`${m.why}; trying the main file on its own.`, 'dim');
+    ctx.note(`${m.why}; working step by step instead.`, 'dim');
+    return null;
   }
   const out = await changeFlow(ctx, text, { hint: targets[0] });
   if (out.handled) return out;

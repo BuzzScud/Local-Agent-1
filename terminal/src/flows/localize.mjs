@@ -108,7 +108,7 @@ export function fileHints(cwd, task, files, { max = 150, named = 60, exts = CODE
 // winner is taken without asking the model (one reply saved), and otherwise
 // the closest files head the list it chooses from.
 export const CLEAR_LEAD = 0.05; // the best file's lead over the next that makes it a clear winner
-export async function pickFile({ url, model, slot, cwd, task, files, signal, exts, embedder = null }) {
+export async function pickFile({ url, model, slot, cwd, task, files, signal, exts, embedder = null, instructions }) {
   let { code, text: hints } = fileHints(cwd, task, files, { exts });
   if (!code.length) return null;
   if (code.length === 1) return code[0];
@@ -126,6 +126,7 @@ export async function pickFile({ url, model, slot, cwd, task, files, signal, ext
     }
   }
   const r = await complete({
+    instructions,
     url, model, slot, signal, temperature: 0, maxTokens: 120,
     system: 'You choose which file in a project a task is about.',
     user: `Task: ${task}\n\nFiles:\n${hints}\n\nWhich one file must change to do this task?`,

@@ -2,6 +2,7 @@
 // back, run the tool it asks for (asking you first when needed), feed the
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
+import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX } from './tools.mjs';
 import { existsSync, statSync, readFileSync } from 'node:fs';
@@ -263,6 +264,7 @@ export class Agent extends EventEmitter {
     // How this project runs its tests; used to check a change before calling it done.
     this.testCmd = verify ? testCommand(cwd) : null;
     this.messages = [{ role: 'system', content: system }];
+    this.workingInstructions = readInstructions().sections;
     this.allowedPrefixes = new Set();
     this.readFiles = new Set(); // files read (or written) in this conversation
     this.todos = null;
@@ -276,7 +278,7 @@ export class Agent extends EventEmitter {
   // are read again once, as after a move to another folder.
   refreshNotes() {
     const before = tokensOf(this.messages[0].content);
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd).text, git: gitSummary(this.cwd) }));
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd).text, git: gitSummary(this.cwd), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // Work in another folder from now on: its tests, its AGENTS.md, and the fence
@@ -285,7 +287,7 @@ export class Agent extends EventEmitter {
     const before = tokensOf(this.messages[0].content);
     this.cwd = dir;
     this.testCmd = this.verify ? testCommand(dir) : null;
-    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir).text, git: gitSummary(dir) }));
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir).text, git: gitSummary(dir), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.readFiles = new Set();
     this.mapGiven = false;
@@ -387,6 +389,7 @@ export class Agent extends EventEmitter {
     };
     return {
       // The facts brought back for this request (recall.mjs), for the paths' own prompts.
+      instructions: focusedInstructions(this.messages[0].content),
       memory: this.happened?.notes ?? '',
       // The helpers on (helpers.mjs), for the paths that use one.
       helpers: this.helpers,
@@ -453,6 +456,16 @@ export class Agent extends EventEmitter {
   }
 
   async work(text, { signal } = {}) {
+    // A hub save applies between tasks; in-flight requests keep their snapshot.
+    const instructions = readInstructions();
+    this.workingInstructions = instructions.sections;
+    const before = this.messages[0].content;
+    const after = replaceInstructionBlock(before, instructions.sections);
+    if (after !== before) {
+      this.setSystem(after);
+      this.ctxUsed += tokensOf(after) - tokensOf(before);
+      this.emit('note', { text: 'Updated working instructions loaded.', tone: 'dim' });
+    }
     this.busy = true;
     const started = Date.now();
     const turnStart = this.messages.length;

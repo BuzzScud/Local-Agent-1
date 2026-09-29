@@ -79,6 +79,22 @@ on the model's engine: Prism's with our Metal patch today, a few minutes; needs 
 tools, see [`models/runtime/engine`](models/runtime/engine/README.md)) and downloads the model
 into `~/.agentic-coder`. Environment switches are `AGENTIC_*` (the old `BONSAI_*` names still work).
 
+## Shared instructions
+
+Open the hub’s **Instructions** tab with `/instructions` in the app or `coding instructions`
+in a shell (no model download needed). Edit **General** behavior and **Planning** rules, inspect
+loaded project context, and preview the main or focused coding prompt. Save applies both sections
+to the next task in an updated app; an in-progress task keeps its current instructions.
+
+Instructions are stored locally in `~/.agentic-coder/instructions.json` (`AGENTIC_HOME` overrides
+that folder). The editor detects conflicting saves, keeps up to 20 previous versions for undo,
+and can load recommended defaults into the draft. Project rules stay in `AGENTS.md`, `CLAUDE.md`,
+and the existing notes/memory sources. Tool permissions remain enforced by the app.
+
+Planning uses the selected coding model and existing task-list tool. These defaults request a
+brief covering goal, evidence, scope, steps, checks, and unknowns; they are guidance, not a
+separate planner or proof of correctness. Compare real task success and elapsed time when tuning them.
+
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).

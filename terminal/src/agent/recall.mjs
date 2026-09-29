@@ -77,7 +77,8 @@ function byWords(text, facts) {
 // The facts that fit a request, best first.
 //   embedder  the models part's Embedder (null: by words)
 // Answers { facts, how, ms }; how is 'meaning', 'words' or 'none' (nothing saved).
-export async function recall(cwd, text, { embedder = null, home = homedir(), top = TOP, signal, today, mark = true } = {}) {
+// near: how many of the next closest facts to also give back (with their closeness), for the Instructions page; the agent leaves it at 0.
+export async function recall(cwd, text, { embedder = null, home = homedir(), top = TOP, signal, today, mark = true, near = 0 } = {}) {
   const t0 = Date.now();
   const dirs = memoryDirs(cwd, home);
   const root = dirs.project ? dirname(dirname(dirs.project)) : null;
@@ -118,7 +119,7 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   const skipped = scored.filter((s) => event(s) && s.score >= cut).slice(0, top);
   if (mark && picked.length) for (const dir of new Set(picked.map((s) => s.fact.dir))) markUsed(dir, picked.filter((s) => s.fact.dir === dir).map((s) => s.fact.id), today);
   const plain = (s) => ({ ...s.fact, close: Math.round(s.close * 1000) / 1000 });
-  return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, ...(note ? { note } : {}) };
+  return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, ...(note ? { note } : {}), ...(near ? { near: real.filter((s) => !picked.includes(s)).slice(0, near).map(plain) } : {}) };
 }
 
 const LABEL = { you: 'about you', project: 'this project', worked: 'this worked', failed: 'this failed before: do not try it again', mistake: 'a mistake to avoid', recipe: 'steps that worked before' };

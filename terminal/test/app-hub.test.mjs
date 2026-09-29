@@ -145,3 +145,15 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   expect(r.text).toContain('Could not switch:');
   expect(r.snapshots.after).toContain('✱ on edited weights (1 edit)');
 }, T);
+
+
+test('/instructions opens a working editor in the hub without a downloaded model', async () => {
+ const {cwd, env} = setup(); const fake = await startFakeServer([]); let data;
+ try {
+  const r = await runInPty({cwd,env:{...env,AGENTIC_NO_OPEN:'1'},args:['--url',fake.url,'--no-flows'],steps:[
+   {wait:'? for shortcuts'}, {type:'/instructions'}, {key:'enter'}, {wait:'Instructions opened at http://127.0.0.1:'},
+   {fn:async ({text}) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; data = await (await fetch(url+'instructions.json')).json(); }}, ...quit,
+  ]});
+  expect(r.text).toContain('?tab=instructions'); expect(data.sections.general).toContain('evidence'); expect(data.sections.planning).toContain('success checks');
+ } finally { await fake.close(); }
+}, T);

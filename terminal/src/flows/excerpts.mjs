@@ -87,6 +87,7 @@ export function linesAround(rel, lines, hits, { around = 3, maxLines = 80, maxLi
 // The strings to look for, from the model (forced JSON).
 export async function searchTerms(ctx, { task, digest, files }) {
   const r = await complete({
+    instructions: ctx.instructions,
     url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 150,
     system: 'You find the code a bug fix must change.',
     user: `Task: ${task}\n\nWhat the check says:\n${digest.slice(0, 3000)}\n\nFiles: ${files.join(', ')}\n\nGive up to 6 exact strings to search these files for: ids, class names, CSS selectors or properties, function or variable names. Not common words.`,

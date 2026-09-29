@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Instructions · Agentic Coder</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f9;--surface:#fff;--soft:#f0f3f6;--ink:#17232f;--muted:#627080;--line:#dce3e9;--blue:#2566ba;--tint:#eaf2fd;--green:#217157;--red:#ad3737;--shadow:0 10px 30px #17232f07}
+@media(prefers-color-scheme:dark){:root{--bg:#111619;--surface:#192126;--soft:#202b32;--ink:#e8eff4;--muted:#a0b0bc;--line:#32414b;--blue:#8dbbff;--tint:#223b55;--green:#8ad5b6;--red:#ffaaaa;--shadow:none}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,textarea,select{font:inherit}button{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:9px 14px;transition:background .16s,transform .16s}button:hover:not(:disabled){background:var(--soft);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:default}button:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--blue);outline-offset:3px}.page{max-width:1440px;margin:auto;height:100dvh;min-height:590px;padding:28px 34px 20px;display:flex;flex-direction:column;gap:20px}.top{display:flex;justify-content:space-between;align-items:center;gap:20px}.eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue);font-weight:750}h1{font-size:29px;letter-spacing:-.8px;margin:3px 0 4px;font-weight:650}.subtitle{margin:0;color:var(--muted);max-width:730px}.badge{white-space:nowrap;border:1px solid var(--line);border-radius:30px;padding:7px 12px;font-size:12px;color:var(--green);background:var(--surface)}.badge:before{content:'●';margin-right:7px;font-size:8px}.workspace{flex:1;min-height:0;display:grid;grid-template-columns:226px 1fr;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);background:var(--surface)}aside{padding:20px 14px;background:var(--bg);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}aside .eyebrow{padding:0 10px 10px;color:var(--muted)}.nav{text-align:left;border:1px solid transparent;background:none;padding:11px 12px;display:block;width:100%;font-weight:600}.nav small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:2px}.nav[aria-selected=true]{background:var(--tint);border-color:var(--tint);color:var(--blue)}.aside-note{margin-top:auto;padding:18px 10px 2px;color:var(--muted);font-size:12px}.aside-note strong{color:var(--ink);display:block;margin-bottom:6px}.editor{min-width:0;min-height:0;display:flex;flex-direction:column}.section-head{padding:24px 28px 17px;border-bottom:1px solid var(--line)}.section-head h2{font-size:20px;margin:0 0 4px;letter-spacing:-.3px}.section-head p{color:var(--muted);margin:0;font-size:13px}.body{flex:1;min-height:0;padding:20px 28px;display:flex;flex-direction:column;gap:10px}textarea{resize:none;flex:1;min-height:150px;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:17px 18px;line-height:1.75;font-size:13px}textarea:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--tint)}.meta{display:flex;gap:12px;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)}.text-button{background:none;border:0;padding:2px;color:var(--blue);font-size:12px}.readview{margin:0;white-space:pre-wrap;overflow:auto;flex:1;min-height:0;overflow-wrap:anywhere;background:var(--soft);border-radius:10px;padding:18px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}.preview-note{margin:0;font-size:12px;color:var(--muted);line-height:1.55}.preview-note b{color:var(--ink);font-weight:600}.recall-box{display:flex;gap:8px}.recall-box input{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);padding:9px 12px;font-size:13px}.recall-box input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--tint)}.sources{font-size:12px;color:var(--muted);overflow-wrap:anywhere;max-height:70px;overflow:auto}.footer{border-top:1px solid var(--line);padding:15px 28px;display:flex;gap:8px;align-items:center}.status{flex:1;min-width:0;font-size:12px;color:var(--muted);padding-right:12px;overflow-wrap:anywhere}.status.error{color:var(--red)}.primary{color:white;background:#2566ba;border-color:#2566ba}.primary:hover:not(:disabled){background:#18559e}.hint{display:flex;gap:22px;color:var(--muted);font-size:12px}.hint b{color:var(--ink);font-weight:600}.hint span{flex:1}select{border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--surface);padding:5px 8px} [hidden]{display:none!important}
+@media(max-width:850px){.page{padding:20px 16px;gap:14px}.workspace{grid-template-columns:185px 1fr}.section-head,.body{padding:18px}.footer{padding:14px 18px;flex-wrap:wrap}.status{flex-basis:100%}.badge{display:none}.hint{gap:12px;font-size:11px}}
+@media(max-width:580px){.page{height:auto;min-height:100dvh}.workspace{display:flex;flex-direction:column}aside{display:grid;grid-template-columns:1fr 1fr;border-right:0;border-bottom:1px solid var(--line);padding:10px}.aside-note,aside>.eyebrow{display:none}.nav{font-size:12px;padding:8px}.nav small{font-size:10px}textarea{min-height:380px}.readview{max-height:440px}.hint{flex-direction:column;gap:7px}}
+
+.howto{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:22px}.howto-flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}.howto-node{position:relative;text-align:left;padding:16px 12px;border-radius:12px;background:var(--soft)}.howto-node:not(:last-child):after{content:'→';position:absolute;right:-14px;top:40%;color:var(--muted);pointer-events:none}.howto-node:hover:not(:disabled),.howto-node:focus-visible{transform:translateY(-4px);box-shadow:0 8px 20px #0001}.howto-node[aria-pressed=true]{border-color:var(--blue);background:var(--tint)}.howto-node .step-number{display:block;font:11px ui-monospace,monospace;color:var(--blue);margin-bottom:12px}.howto-node strong{display:block;font-size:13px}.howto-node small{display:block;font-size:10px;color:var(--muted);margin-top:5px}.howto-loop{text-align:center;color:var(--muted);font-size:12px}.howto-loop span{color:var(--green)}.howto-detail{border:1px solid var(--line);border-radius:12px;padding:22px;display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:22px;background:var(--soft)}.howto-detail h3{font-size:21px;margin:7px 0 9px;letter-spacing:-.4px}.howto-detail p{color:var(--muted);font-size:12px;line-height:1.6;margin:0}.howto-detail .part{font-size:12px;margin-top:10px}.howto-detail .part span{display:block;color:var(--muted);font-size:11px}.howto-detail .tip+.tip{margin-top:16px}.howto-detail .tip strong{display:block;color:var(--green);font-size:10px;letter-spacing:.08em;margin-bottom:5px}.howto-detail .tip:last-child strong{color:var(--blue)}.howto-note{font-size:11px;color:var(--muted);text-align:center}.howto-detail.changing{animation:howto-in .18s ease-out}@keyframes howto-in{from{opacity:.5;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media(max-width:1050px){.howto{gap:14px}.howto-flow{gap:12px}.howto-node{padding:12px 8px}.howto-node strong{font-size:11px}.howto-node small{font-size:9px}.howto-node:not(:last-child):after{right:-12px}.howto-detail{padding:16px;gap:14px}.howto-detail h3{font-size:18px}}
+@media(max-width:760px){.howto-flow{grid-template-columns:1fr}.howto{display:grid;grid-template-columns:125px 1fr;align-content:center;gap:16px}.howto-node{padding:8px 10px}.howto-node .step-number{display:inline-block;margin:0 6px 0 0;font-size:10px}.howto-node strong{display:inline;font-size:11px}.howto-node small{font-size:10px}.howto-node:not(:last-child):after{content:'↓';top:auto;bottom:-15px;right:50%}.howto-detail{grid-template-columns:1fr;gap:16px}.howto-loop,.howto-note{grid-column:1/-1}.howto-detail h3{margin:4px 0}.howto-detail .part{margin-top:6px}.howto-detail .tip+.tip{margin-top:8px}}
+
+@media(prefers-reduced-motion:reduce){button{transition:none}button:hover:not(:disabled){transform:none}.howto-detail.changing{animation:none}}
+</style>
+</head>
+<body><main class="page">
+<header class="top"><div><div class="eyebrow">Agent behavior / local configuration</div><h1>Instructions</h1><p class="subtitle">Define how your agent works, plans, and verifies a result. Shared across your local models and projects.</p></div><div class="badge">Applies on the next task</div></header>
+<div class="workspace">
+<aside><div class="eyebrow">Working policy</div><div role="tablist" aria-label="Instruction sections">
+<button class="nav" role="tab" id="tab-general" aria-selected="true" aria-controls="panel" data-section="general">01 &nbsp; General<small>Evidence, scope, and completion</small></button>
+<button class="nav" role="tab" id="tab-planning" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="planning">02 &nbsp; Planning<small>Inspect → plan → verify → revise</small></button>
+<button class="nav" role="tab" id="tab-context" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="context">03 &nbsp; Project context<small>Loaded notes · read only</small></button>
+<button class="nav" role="tab" id="tab-preview" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="preview">04 &nbsp; Prompt preview<small>See where your draft goes</small></button>
+<button class="nav" role="tab" id="tab-howto" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="howto">05 &nbsp; How to<small>How it works · interactive guide</small></button>
+</div><div class="aside-note"><strong>One agent, a clearer plan.</strong>Planning uses the active model and existing task list. No separate planner model is added.<br><br>Project rules remain in their source files. Tool permissions are enforced by the app.</div></aside>
+<section class="editor" id="panel" role="tabpanel" aria-labelledby="tab-general">
+<div class="section-head"><h2 id="section-title">General instructions</h2><p id="description">Loading your instructions…</p></div>
+<div class="body">
+<textarea id="text" aria-label="General instructions" spellcheck="false" disabled></textarea>
+<div class="meta" id="edit-meta"><button class="text-button" id="defaults" disabled>Use recommended defaults</button><span id="count"></span></div>
+<div class="meta" id="preview-meta" hidden><label>View <select id="preview-kind"><option value="main">Main agent prompt</option><option value="focused">Focused coding calls</option><option value="tools">Tools sent with it</option><option value="added">Added to each request</option><option value="models">Gemma and Qwen settings</option></select></label><span id="preview-edits">Preview includes unsaved edits</span></div>
+<p class="preview-note" id="preview-note" hidden></p>
+<form class="recall-box" id="recall-box" hidden><input id="recall-input" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="Try a request, for example: fix the login bug on the settings page" aria-label="Try a request to see which saved facts would be attached"><button type="submit" id="recall-run">Find facts</button></form>
+<div class="sources" id="sources" hidden></div><pre class="readview" id="readview" tabindex="0" hidden></pre>
+<section class="howto" id="howto" aria-label="How it works" hidden>
+<div class="howto-flow" aria-label="Task, context, coding model, tools, and checks"><button class="howto-node" data-step="0" aria-pressed="false"><span class="step-number">01</span><strong>Your task</strong><small>Goal + instructions</small></button>
+<button class="howto-node" data-step="1" aria-pressed="false"><span class="step-number">02</span><strong>Find context</strong><small>Search + rank</small></button>
+<button class="howto-node" data-step="2" aria-pressed="false"><span class="step-number">03</span><strong>Coding model</strong><small>Plan + write</small></button>
+<button class="howto-node" data-step="3" aria-pressed="false"><span class="step-number">04</span><strong>Run tools</strong><small>Read + edit + execute</small></button>
+<button class="howto-node" data-step="4" aria-pressed="false"><span class="step-number">05</span><strong>Check result</strong><small>Test + review</small></button></div>
+<div class="howto-loop">Needs work? Return results to the coding model. &nbsp; <span>✓ Checks pass → deliver code + verification</span></div>
+<section class="howto-detail" id="howto-detail" aria-label="Selected step details" aria-live="polite" aria-atomic="true"></section>
+<div class="howto-note">One coding model can handle planning, edits, and review. Embedders and rerankers are optional.</div>
+</section>
+
+</div>
+<footer class="footer"><div class="status" id="status" role="status" aria-live="polite">Reading local configuration…</div><button id="undo" disabled>Undo last save</button><button id="reload" disabled>Reload</button><button id="save" class="primary" disabled>Save instructions</button></footer>
+</section></div>
+<div class="hint"><span><b>Write reusable rules.</b> Keep task details in your request and repository rules in AGENTS.md.</span><span><b>Keep it compact.</b> Extra instructions add context. Measure task success and time before assuming improvement.</span></div>
+</main>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+let state, draft, section = 'general', busy = false, error = '';
+const editable = () => section === 'general' || section === 'planning';
+const dirty = () => !!state && Object.keys(state.sections).some(k => draft[k] !== state.sections[k]);
+window.instructionsDirty = dirty;
+const titles = {general:'General instructions',planning:'Planning instructions',context:'Project context',preview:'Effective prompt preview',howto:'How to'};
+const descriptions = {general:'Ground changes in evidence, preserve scope, and report what was actually verified.',planning:'Use a short plan for complex work. Define success, update the plan, and check the result.',context:'These sources are loaded for this hub’s project folder. Edit the original files to change them.',preview:'The real prompt with your draft inserted, and the other things the model receives: its tools, what is added to each request, and each model’s settings.',howto:'How it works · Hover or select a step to see what powers it and how to improve it.'};
+async function api(path, data) {
+ const r = await fetch(path, data ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)} : {cache:'no-store'});
+ const value = await r.json(); if (!r.ok) throw new Error(value.error || 'The request failed.'); return value;
+}
+function preview() {
+ const block = 'Shared working instructions\nGeneral\n' + draft.general + '\n\nPlanning\n' + draft.planning + '\nEnd shared working instructions';
+ const base = $('preview-kind').value === 'focused' ? state.focusedPreview : state.preview;
+ return base.replace(/Shared working instructions\n[\s\S]*?\nEnd shared working instructions/, () => block)
+   + ($('preview-kind').value === 'focused' ? '\n\nCurrent subtask (follow its output format):\n[The workflow adds its specific code, test, or JSON instructions here.]' : '');
+}
+// The other things the model receives, from the same code the agent runs (state.sees).
+const samples = s => s ? `temperature ${s.temperature} · top_p ${s.top_p} · top_k ${s.top_k} · min_p ${s.min_p}` : 'the server’s default';
+// "Try a request": the facts that would be attached to a request you type, found by the agent's own search (POST /instructions/recall).
+let recallState = null;
+function recallText() {
+ const r = recallState; if (!r) return '';
+ const rule = '\n────────\n\n';
+ if (r.busy) return `Try a request: “${r.request}”\n  Searching your saved facts. The first search loads the small matching model, so it can take a few seconds.\n${rule}`;
+ if (r.error) return `Try a request: ${r.error}\n${rule}`;
+ const line = f => `    ${f.close.toFixed(2)}  (${f.kind}) ${f.text}`;
+ return [
+  `Try a request: “${r.request}”`,
+  `  Found ${{meaning:'by meaning (closeness 1 = the same meaning)', words:'by words, because the small matching model is not available', none:'nothing: there are no saved facts to match'}[r.how] ?? r.how} in ${r.ms} ms.${r.note ? ' ' + r.note : ''}`,
+  r.attached.length ? `  Would be attached${r.cut != null ? ` (closeness ${r.cut} or more, at most ${state.sees.recall.top})` : ''}:` : '  Nothing would be attached: no fact is close enough.',
+  ...r.attached.map(line),
+  ...(r.near.length ? ['  Next closest, not attached:', ...r.near.map(line)] : []),
+  ...(r.goesAlong ? ['  The model would read this at the end of your message:', '    ' + r.goesAlong.replace(/\n/g, '\n    ')] : []),
+  rule
+ ].join('\n');
+}
+function addedText(s) {
+ const r = s.recall;
+ return recallText() + [
+  'Added to your request message, in parentheses, as it is sent. None of this is in the system prompt.',
+  '',
+  `1. Facts from memory that fit the request: up to ${r.top}, found by meaning. They arrive like this:`,
+  '   ' + r.example.replace(/\n/g, '\n   '),
+  `   Facts on file that can come back: ${r.total || 'none yet'}`,
+  ...r.facts.map(f => `   - (${f.kind}) ${f.text}`),
+  ...(r.total > r.facts.length ? [`   … and ${r.total - r.facts.length} more`] : []),
+  '',
+  '2. Claude Code’s notes about your work, when that source is on: the one or two that fit, cut to the part that fits. Notes about sign-ins, servers and secrets are left out.',
+  '',
+  '3. For a bug fix: the steps for its kind of bug (crash, wrong value, layout, data, speed…).',
+  '',
+  '4. The math notes from ~/Desktop/MATH: only when you use /math.',
+  '',
+  '5. After a fix path has run its check: what the check and the browser found.',
+  '',
+  'A focused call also gets its workflow’s own instructions after the shared block: “Current subtask (follow its output format): …”.'
+ ].join('\n');
+}
+function modelsText(s) {
+ return 'Sent by the server, not written in the prompt. Each model’s chat template is stored inside its file (the server runs with --jinja), so both read the same tools and messages in their own format. Every request also carries a thinking switch (enable_thinking, with reasoning_effort when thinking is on) and a reply limit: 2,048 tokens, plus the thinking budget when thinking is on. The server stops thinking at the budget.\n' + s.models.map(m => [
+  '', `${m.name}  (${m.id})`,
+  ...m.levels.flatMap(l => [`  Thinking ${l.label}: ${l.note}`, `    sent: ${Object.entries(l.kwargs).map(([k, v]) => `${k} ${v}`).join(', ')} · reply limit ${l.replyLimit.toLocaleString()} tokens`]),
+  ...(m.effortDial ? [] : ['  No effort dial: only enable_thinking counts. reasoning_effort is sent too, but this model’s template ignores it.']),
+  `  Thinking budget: ${m.budget ? m.budget.toLocaleString() + ' tokens' : 'none'}`,
+  `  Answering: ${samples(m.sampling)}`,
+  `  Thinking:  ${samples(m.thinkingSampling)}`
+ ].join('\n')).join('\n');
+}
+function viewText(kind) {
+ if (kind === 'tools') return JSON.stringify(state.sees.tools, null, 2);
+ if (kind === 'added') return addedText(state.sees);
+ if (kind === 'models') return modelsText(state.sees);
+ return preview();
+}
+function viewNote(kind) {
+ const s = state.sees;
+ if (kind === 'main') return (s.folder.isHome
+  ? `Preview for ${s.folder.path}, your home folder, not a project: it includes the home-folder note and has no test command. A project folder shows its own notes, Git line and test command instead.`
+  : `Preview for ${s.folder.path}: the notes, Git line and test command are this folder’s. Another project folder would change them.`)
+  + ' Not shown here: the tools, what is added to each request, and each model’s settings. See the other views.';
+ if (kind === 'focused') return `Fix, change and file-choice calls get only the shared block and the project notes, plus their own subtask text. Left out: ${s.focusedLeftOut.join(', ') || 'nothing'}.`;
+ if (kind === 'tools') return `${s.tools.length} tools are sent with every request, as definitions apart from the prompt. This is the exact list.`;
+ if (kind === 'added') return 'Added while a task runs, so it depends on your request and your saved memory. The facts listed are read from your memory now; notes that only record something done are skipped, as the agent skips them.';
+ return 'Both models get the same prompt text. These settings are what differs.';
+}
+function controls() {
+ const changed = dirty();
+ $('save').disabled = busy || !state || !changed;
+ $('undo').disabled = busy || !state || !state.undoCount;
+ $('reload').disabled = busy;
+ $('defaults').disabled = busy || !state;
+ $('text').disabled = busy || !state;
+ $('status').classList.toggle('error', !!error);
+ $('status').textContent = error || (busy ? 'Saving…' : changed ? 'Unsaved changes · Save applies both sections to the next task.' : state ? (state.updatedAt ? 'Saved ' + new Date(state.updatedAt).toLocaleString() : 'Recommended defaults · no custom version saved') : 'Loading…');
+ if (state && editable()) $('count').textContent = draft[section].length.toLocaleString() + ' / ' + state.limits[section].toLocaleString() + ' characters';
+}
+function render() {
+ document.querySelectorAll('[data-section]').forEach(b => { const on = b.dataset.section === section; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
+ $('panel').setAttribute('aria-labelledby', 'tab-' + section);
+ $('section-title').textContent = titles[section]; $('description').textContent = descriptions[section];
+ $('text').hidden = !editable(); $('edit-meta').hidden = !editable(); $('readview').hidden = section !== 'context' && section !== 'preview';
+ $('howto').hidden = section !== 'howto';
+ $('preview-meta').hidden = section !== 'preview'; $('preview-note').hidden = section !== 'preview'; $('recall-box').hidden = section !== 'preview' || $('preview-kind').value !== 'added'; $('sources').hidden = section !== 'context';
+ if (state) {
+  if (editable()) { $('text').value = draft[section]; $('text').maxLength = state.limits[section]; $('text').setAttribute('aria-label', titles[section]); }
+  if (section === 'preview') { const kind = $('preview-kind').value; $('readview').textContent = viewText(kind); $('preview-note').textContent = viewNote(kind); $('preview-edits').hidden = kind !== 'main' && kind !== 'focused'; }
+  if (section === 'context') { $('sources').textContent = 'Project: ' + state.cwd + '\nSources found: ' + (state.sources.join(' · ') || 'none'); $('readview').textContent = state.context || 'No project notes were found. General and Planning instructions still apply.'; }
+ }
+ controls();
+}
+function accept(value) { state = value; draft = {...state.sections}; error = ''; render(); }
+async function reload() {
+ if (dirty() && !confirm('Discard your unsaved edits and load the saved version?')) return;
+ busy = true; controls();
+ try { accept(await api('/instructions.json')); } catch (e) { error = e.message; }
+ finally { busy = false; render(); }
+}
+async function save(undo = false) {
+ if (!state || busy || (!undo && !dirty())) return;
+ if (undo && !confirm(dirty() ? 'Discard your unsaved edits and restore the previous saved version?' : 'Restore the previous saved version?')) return;
+ busy = true; error = ''; controls();
+ try { accept(await api('/instructions/' + (undo ? 'undo' : 'save'), {sections:draft,revision:state.revision})); }
+ catch (e) { error = e.message + ' Your edits are still here.'; }
+ finally { busy = false; render(); }
+}
+const tabs = [...document.querySelectorAll('[data-section]')];
+tabs.forEach((b, i) => { b.onclick = () => { section = b.dataset.section; render(); }; b.onkeydown = e => { let next;
+ if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+ if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (i + tabs.length - 1) % tabs.length;
+ if (e.key === 'Home') next = 0; if (e.key === 'End') next = tabs.length - 1;
+ if (next !== undefined) { e.preventDefault(); tabs[next].click(); tabs[next].focus(); }
+}; });
+
+// The How it works content from agentic-coding-flow.html, scoped to this guide.
+const howtoSteps=[
+{title:'Your task',type:'INPUT',description:'Tell the agent what to change and how to know it worked.',parts:[['Chat or CLI','Software · captures your request.'],['Instructions','Input · goals, rules, and project notes.'],['Planner','Optional · the coding model can do this.']],speed:'Include the error and relevant file.',quality:'Define the behavior you expect.'},
+{title:'Find context',type:'SOFTWARE + OPTIONAL MODELS',description:'Find useful code and fit it into the model’s prompt.',parts:[['Embedder','Optional AI · represents query and code.'],['Retriever','Software · finds matching code.'],['Reranker','Optional AI · scores the best matches.']],speed:'Cache code embeddings; rerank a shortlist.',quality:'Keep exact matches and needed definitions.'},
+{title:'Coding model',type:'AI MODEL',description:'Reads the context, plans a change, and requests the next action.',parts:[['Coding LLM','AI · reasons and generates edits.'],['Runtime','Software · runs the model.'],['Context builder','Software · packs code and tool results.']],speed:'Compare total task time, including retries.',quality:'Evaluate on your own coding tasks.'},
+{title:'Run tools',type:'SOFTWARE',description:'Executes the model’s requests and returns the output.',parts:[['Dispatcher','Software · calls the requested tool.'],['Shell + editor','Software · runs commands and edits.'],['Result collector','Software · captures output and errors.']],speed:'Batch independent reads or searches.',quality:'Return clear errors and execution status.'},
+{title:'Check result',type:'SOFTWARE + SAME AI MODEL',description:'Verify the change. Send failures back to the coding model.',parts:[['Tests + type checker','Software · checks the code.'],['Coding LLM','Same AI · reviews the evidence.'],['Loop controller','Software · continues or stops work.']],speed:'Use focused checks, then final validation.',quality:'Test the requested behavior and edge cases.'}
+];
+const howtoNodes = [...document.querySelectorAll('.howto-node')];
+let selectedStep = -1;
+function selectStep(index, animate = true) {
+ if (index === selectedStep) return;
+ selectedStep = index;
+ const item = howtoSteps[index], detail = $('howto-detail');
+ howtoNodes.forEach((node, i) => node.setAttribute('aria-pressed', String(i === index)));
+ detail.innerHTML = `<div><div class="eyebrow">0${index+1} / ${item.type}</div><h3>${item.title}</h3><p>${item.description}</p></div><div><div class="eyebrow">What powers this step</div>${item.parts.map(([name,text]) => `<div class="part"><strong>${name}</strong><span>${text}</span></div>`).join('')}</div><div><div class="tip"><strong>BETTER</strong><p>${item.quality}</p></div><div class="tip"><strong>FASTER</strong><p>${item.speed}</p></div></div>`;
+ detail.classList.remove('changing');
+ if (animate) { void detail.offsetWidth; detail.classList.add('changing'); }
+}
+howtoNodes.forEach((node, index) => {
+ node.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') selectStep(index); });
+ node.addEventListener('focus', () => selectStep(index));
+ node.addEventListener('click', () => selectStep(index));
+ node.addEventListener('keydown', e => { let next;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (index + 1) % howtoNodes.length;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (index + howtoNodes.length - 1) % howtoNodes.length;
+  if (next !== undefined) { e.preventDefault(); howtoNodes[next].focus(); }
+ });
+});
+selectStep(0, false);
+
+$('text').oninput = () => { draft[section] = $('text').value; controls(); };
+$('defaults').onclick = () => { if (!state || !editable()) return; draft[section] = state.defaults[section]; error = ''; render(); };
+$('preview-kind').onchange = render;
+$('recall-box').onsubmit = async e => {
+ e.preventDefault();
+ const request = $('recall-input').value.trim();
+ if (!request || recallState?.busy) return;
+ recallState = {busy:true, request}; $('recall-run').disabled = true; render();
+ try { recallState = await api('/instructions/recall', {request}); }
+ catch (err) { recallState = {error: err.message}; }
+ $('recall-run').disabled = false; render();
+};
+$('save').onclick = () => save(); $('undo').onclick = () => save(true); $('reload').onclick = reload;
+window.addEventListener('beforeunload', e => { if (dirty() && !window.instructionsLeaving) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } });
+reload();
+})();
+</script></body></html>

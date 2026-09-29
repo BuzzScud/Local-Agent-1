@@ -88,7 +88,7 @@ export async function questionFor(ctx, text) {
     return { question: `${ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS}${changed.length ? ` (Changed since the last commit: ${changed.join(', ')}.)` : ''}`, options: [] };
   }
   const files = fileList(ctx.cwd);
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 200,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 200,
     system: 'You decide whether a request to a coding assistant is clear enough to start on, given the project files. The assistant can read, search and change files; it asks only what the files cannot tell it.',
     user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}${changed.length ? `\n\nChanged since the last commit: ${changed.join(', ')}` : ''}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user and 2 or 3 short answers they might pick. Each answer is a different kind of work (explain something, fix something, add something, remove something), never the same work on three different files. Each answer is under 10 words and says what would be done. Name a file only when it is clearly the one meant; do not offer work on test files or data files unless the request is about them.`,
     schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' }, options: { type: 'array', items: { type: 'string' }, maxItems: 3 } }, required: ['clear', 'question', 'options'] } });

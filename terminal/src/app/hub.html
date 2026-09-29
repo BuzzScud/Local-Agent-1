@@ -51,6 +51,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="flow">Flow</button>
   <button data-tab="tests">Tests</button>
   <button data-tab="memory">Memory</button>
+  <button data-tab="instructions">Instructions</button>
   <button data-tab="docs">All docs</button>
   <button data-tab="help">Help</button>
   <span class="spacer"></span>
@@ -88,9 +89,15 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
       + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${docs.dir}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
   }
   function open(tab, page) {
+    if (frame.getAttribute('src') === '/instructions' && tab !== 'instructions' && frame.contentWindow?.instructionsDirty?.()) {
+      if (!confirm('Discard unsaved instruction edits and leave this tab?')) return;
+      frame.contentWindow.instructionsLeaving = true;
+      frame.src = 'about:blank';
+    }
     setTab(tab);
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
     if (tab === 'help') return show('/help', 'every command, key and setting');
+    if (tab === 'instructions') return show('/instructions', 'general behavior and planning');
     if (tab === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
     if (tab === 'tests' && !page) return show('/tests', 'every test run and its result');
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
@@ -104,7 +111,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'flow' || t === 'tests' || t === 'memory';
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'flow' || t === 'tests' || t === 'memory' || t === 'instructions';
   if (builtIn(tab) && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();

@@ -148,7 +148,7 @@ function rankOutline(outline, words, max = 60) {
 async function pickSteps(ctx, { task, pageRel, outline }) {
   if (!outline.length) return [];
   const list = outline.map((o, i) => `${i + 1}. ${o.sel}   (${o.kind}${o.label ? `: ${o.label}` : ''})`).join('\n');
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 300,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 300,
     system: 'You turn a bug report about a web page into the steps that make the bug show.',
     user: `The report:\n${task}\n\nThe page ${pageRel} is open in a browser. What can be clicked or typed in on it:\n${list}\n\nWhich steps make the problem show, the way the report describes it? Use only what the report says: click, type (with the text to type), hover, or press (with the key, such as Enter). If the problem shows as soon as the page opens, give no steps.`,
     schema: { type: 'object', properties: { steps: { type: 'array', maxItems: 6, items: { type: 'object', properties: { do: { type: 'string', enum: ['click', 'type', 'hover', 'press'] }, on: { type: 'string', enum: outline.map((o) => o.sel) }, text: { type: 'string' } }, required: ['do', 'on'] } } }, required: ['steps'] } });
@@ -175,7 +175,7 @@ export function groupPairs(pairs, words = []) {
 async function pickPair(ctx, { task, steps, pairs }) {
   if (!pairs.length) return null;
   const list = pairs.map((p, i) => `${i + 1}. ${p.covered}${p.coveredText ? ` ("${p.coveredText}")` : ''} is covered by ${p.by}${p.byText ? ` ("${p.byText}")` : ''}`).join('\n');
-  const r = await complete({ url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 40,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 40,
     system: 'You match a bug report about a web page to what a browser found on the page.',
     user: `The report:\n${task}\n\nAfter ${stepsText(steps)}, the browser finds these things covered by something else:\n${list}\n\nWhich one is the problem the report describes? Answer none if none of them is.`,
     schema: { type: 'object', properties: { pair: { type: 'string', enum: [...pairs.map((_, i) => String(i + 1)), 'none'] } }, required: ['pair'] } });
@@ -299,7 +299,7 @@ export async function pageCheckFirst(ctx, task, { scratch, files, plan }) {
   if (!pages.length) return { ok: false, why: 'the project has no page to open in a browser' };
   plan?.step(0);
   const named = filesInText(cwd, task).find((f) => PAGE.test(f));
-  const pageRel = named ?? await pickFile({ url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files: pages, exts: PAGE, signal: ctx.signal , embedder: ctx.embedder });
+  const pageRel = named ?? await pickFile({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, cwd, task, files: pages, exts: PAGE, signal: ctx.signal , embedder: ctx.embedder });
   if (!pageRel) return { ok: false, why: 'could not tell which page the request is about' };
   const browser = findBrowser(cwd, pageRel);
   if (browser === null) return { ok: false, why: `there is no browser to check ${pageRel} with (Playwright is not installed in this project)` };
