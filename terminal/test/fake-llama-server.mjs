@@ -10,11 +10,12 @@ const port = Number(arg('--port'));
 const slotDir = arg('--slot-save-path');
 const t0 = Date.now();
 // A test that checks how it was started names a file to note its arguments in;
-// one that needs a reply still running sets FAKE_LLAMA_REPLY_MS (below).
+// one that needs a reply still running sets FAKE_LLAMA_REPLY_MS (below), one that
+// needs the start-up to last longer sets FAKE_LLAMA_LOAD_MS (default 1500).
 if (process.env.FAKE_LLAMA_ARGS) appendFileSync(process.env.FAKE_LLAMA_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 createServer(async (req, res) => {
-  if (req.url === '/health') { const ok = Date.now() - t0 > 1500; res.statusCode = ok ? 200 : 503; res.end(ok ? '{"status":"ok"}' : '{"status":"loading"}'); return; }
+  if (req.url === '/health') { const ok = Date.now() - t0 > Number(process.env.FAKE_LLAMA_LOAD_MS ?? 1500); res.statusCode = ok ? 200 : 503; res.end(ok ? '{"status":"ok"}' : '{"status":"loading"}'); return; }
   let body = ''; for await (const c of req) body += c;
   const j = body ? JSON.parse(body) : {};
   res.setHeader('content-type', 'application/json');

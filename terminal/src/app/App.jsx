@@ -391,14 +391,19 @@ export function App({ opts, win, onRestart }) {
   // The Effort and limits panel saved (`levelId` is null when the model has no
   // levels): the effort and the agent's limits change at once; a new context or
   // thinking cap restarts the model server (the window and conversation stay).
-  // All of it or none: a restart is refused in the middle of a reply.
+  // All of it or none: a restart is refused in the middle of a reply and while the model is still starting.
   const saveEffortLimits = (levelId, next) => {
     const lv = levelId ? (model.thinkingLevels ?? []).find((l) => l.id === levelId) : null;
     const effortChanged = !!lv && lv.id !== thinkingLevel(model, agent.thinking, agent.effort).id;
     const changes = limitChanges(limitsRef.current, next);
     if (!effortChanged && !changes.length) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
     const restart = changes.some((c) => c.restart);
-    if (restart && !opts.url && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then save again in /effort. Nothing was changed.', tone: 'warn' }); return; }
+    if (restart && !opts.url) {
+      // A restart needs a quiet model: no reply running, and no start still going
+      // (a prompt queued meanwhile would be sent to the server just stopped).
+      const why = S.current.starting ? 'still starting. Wait until it is ready' : S.current.live !== IDLE || agent.busy ? 'in the middle of a reply. Let it finish (or press esc)' : null;
+      if (why) { push({ type: 'note', text: `Agentic Coder is ${why}, then save again in /effort. Nothing was changed.`, tone: 'warn' }); return; }
+    }
     if (effortChanged) { setThinking(!!lv.effort, lv.effort ? lv.id : undefined); sayEffort(lv, next.thinking); }
     if (!changes.length) return;
     limitsRef.current = next;

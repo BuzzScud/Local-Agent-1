@@ -143,7 +143,7 @@ test('/effort on a server Agentic Coder started: a new context and thinking cap 
   writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
   const argsFile = join(base, 'server-args.jsonl');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile }, args: ['--no-flows'], timeoutMs: 120_000, steps: [
-    { wait: '? for shortcuts', ms: 45_000 },
+    { wait: '? for shortcuts', ms: 45_000 }, { waitGone: 'Starting Gemma', ms: 60_000 }, // ready: a restart is refused while the model still starts
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
     // Effort stays; Context auto → 16k → 32k → 64k; Thinking cap 4,096 → 8,192
     { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 },
@@ -201,3 +201,37 @@ test('/effort while a reply is running: a change that needs a restart is refused
   expect([saved.thinking, saved.effort]).toEqual([true, 'high']);
   expect(saved.limits).toEqual({ context: 16384 });
 }, 150_000);
+
+test('/effort while the model is still starting: a Context change is refused and NOTHING changes, and a message queued meanwhile still gets its reply', async () => {
+  const { cwd, env, base } = setup();
+  const home = join(base, 'home');
+  mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
+  mkdirSync(join(home, 'models'), { recursive: true });
+  symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
+  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  const argsFile = join(base, 'server-args.jsonl');
+  // the stand-in takes 9 s to load, so the start-up window is long enough to act inside it
+  const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile, FAKE_LLAMA_LOAD_MS: '9000' }, args: ['--no-flows'], timeoutMs: 120_000, steps: [
+    { wait: '? for shortcuts', ms: 45_000 }, // the welcome shows this at once; the model is still loading
+    { type: 'hello' }, { key: 'enter' }, { sleep: 600 }, // queued: "sends as soon as the model is ready"
+    { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
+    // Effort → High, Context auto → 16k (a restart), enter
+    { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
+    { key: 'enter' }, { wait: 'Nothing was changed' },
+    // the queued message goes to the model that is still there (before, it went to the one just stopped)
+    { wait: 'Hello from the stand-in model.', ms: 60_000 },
+    ...quit,
+  ] });
+  const starts = readFileSync(argsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  expect(r.text).toContain('Agentic Coder is still starting. Wait until it is ready, then save again in /effort. Nothing was changed.');
+  expect(r.text).not.toContain('Unable to connect');
+  expect(r.text).not.toContain('Effort is high'); // Effort was part of the refused save
+  expect(r.text).not.toContain('Saved:');
+  expect(starts).toHaveLength(1); // no restart
+  let saved = {};
+  try { saved = settingsOf(base); } catch {}
+  expect(saved.effort).toBeUndefined();
+  expect(saved.thinking).toBeUndefined();
+  expect(saved.limits ?? {}).toEqual({});
+}, 150_000);
+
