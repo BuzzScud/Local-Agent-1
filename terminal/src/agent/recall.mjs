@@ -8,18 +8,14 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { memoryDirs, readFacts, markUsed, namesMissingFile } from './facts.mjs';
+import { memoryDirs, readFacts, markUsed, namesMissingFile, looksLikeEvent } from './facts.mjs';
 import { choose } from './search.mjs';
 
 export const TOP = 3; // at most this many facts travel with a request
 
-// A note that only says what happened ("Created notes.html on the Desktop…")
-// rather than how to work. Sent along, it told the model a page it was asked
-// for already existed (28 Sep: it came with a profile card and a weather
-// widget request), so it is skipped, and the screen says so.
-const DID = /^(?:created|made|wrote|added|fixed|built|ran|updated|deleted|removed|moved|saved|changed|renamed|installed|opened|started|finished|generated|implemented)\b/i;
-const HOW = /\b(?:always|never|should|must|use|prefer|avoid|when|before|after|instead|do not|don'?t|make sure|ask)\b/i;
-export const looksLikeEvent = (text) => DID.test(String(text).trim()) && !HOW.test(text);
+// A note that only says what happened is skipped, and the screen says so
+// (looksLikeEvent, in facts.mjs, which keeps it out of the short lines too).
+export { looksLikeEvent };
 // Trust moves a fact a little closer or further: three passed tasks weigh
 // as much as 0.03 of closeness, where the cut-off is 0.56.
 const TRUST_WEIGHT = 0.01;

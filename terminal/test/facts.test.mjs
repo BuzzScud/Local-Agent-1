@@ -147,6 +147,21 @@ test('first use: your two rules are saved once, and an older notes file is carri
   expect(readFacts(old)).toHaveLength(2);
 });
 
+test('an event ("Created notes.html…") stays in the memory but never goes into the prompt', () => {
+  const { home, repo, project } = place();
+  openMemory(join(repo, 'src'), { home });
+  applyChanges(project, { add: [{ text: 'Created a self-contained notes.html on the Desktop with local storage and modal functionality.' }] });
+  let n = memoryNotes(join(repo, 'src'), { home });
+  expect(readFacts(project)).toHaveLength(1);
+  expect(n.text).not.toContain('notes.html');
+  expect(n.text).not.toContain('What you know about this project'); // nothing left to list: no heading
+  expect(n.text).not.toContain('These are short lines');
+  applyChanges(project, { add: [{ text: 'The tests run with node --test from the repo top.' }] });
+  n = memoryNotes(join(repo, 'src'), { home });
+  expect(n.text).toContain('- The tests run with node --test from the repo top.');
+  expect(n.text).not.toContain('notes.html');
+});
+
 test('what is read at every start: the rules in full, then one short line per fact, inside its limit', () => {
   const { home, repo, project } = place();
   expect(memoryNotes(join(repo, 'src'), { home })).toEqual({ text: '', files: [], facts: 0 });

@@ -66,3 +66,21 @@ test('the story test: read-only checks run without asking, a quoted "/" is text,
   expect(outsidePath('ls /', cwd)).toBe('/');                     // a bare / outside quotes is still the disk
   expect(outsidePath(`node -e "require('fs').readFileSync('/Users/x/a')"`, `${cwd}/p`)).toBe('/Users/x/a');
 });
+
+test('a git commit always asks, even after "don\'t ask again" or chained after an allowed command', () => {
+  const allowed = new Set(['git commit', 'npm test']);
+  for (const command of ['git commit -m "x"', 'npm test && git commit -am "x"', 'git add . && git commit -m x', 'git -C sub commit -m x', 'git -c user.name=me commit -m x', 'sh -c "git commit -m x"', 'git commit --amend --no-edit']) {
+    for (const mode of ['ask', 'edits']) expect([command, mode, decide('Bash', { command }, { mode, allowedPrefixes: allowed })]).toEqual([command, mode, { decision: 'ask', once: true }]);
+  }
+  // plan mode still refuses it; reading the history still runs without asking
+  expect(decide('Bash', { command: 'git commit -m x' }, { mode: 'plan' }).decision).toBe('deny');
+  for (const command of ['git log --grep commit', 'git status', 'git show HEAD']) expect([command, decide('Bash', { command }, { mode: 'ask' }).decision]).toEqual([command, 'allow']);
+  // other commands keep "don't ask again"
+  expect(decide('Bash', { command: 'npm test' }, { mode: 'ask', allowedPrefixes: allowed }).decision).toBe('allow');
+});
+
+test('the question for a commit has no "don\'t ask again"', async () => {
+  const { permissionOptions } = await import('../src/app/screen.jsx');
+  expect(permissionOptions({ name: 'Bash', once: true }, 'git commit').map((o) => o.choice)).toEqual(['yes', 'no']);
+  expect(permissionOptions({ name: 'Bash' }, 'npm test').map((o) => o.choice)).toEqual(['yes', 'always', 'no']);
+});

@@ -1445,14 +1445,15 @@ export class Agent extends EventEmitter {
     }
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
-      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown });
+      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}) });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
       if (answer.choice === 'no') {
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
         return { text: `The user said no to this${answer.feedback ? ` and wrote: ${answer.feedback}` : '. Wait for their next message.'}`, error: true, stop: answer.feedback ? null : 'declined' };
       }
       if (answer.choice === 'always') {
-        if (call.name === 'Bash') this.allowedPrefixes.add(commandPrefix(args.command));
+        // A commit asks every time (d.once): a "yes" to it is never remembered.
+        if (call.name === 'Bash') { if (!d.once) this.allowedPrefixes.add(commandPrefix(args.command)); }
         else this.setMode('edits');
       }
       // You saw this change and said yes: that was the plan question.

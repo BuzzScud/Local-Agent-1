@@ -146,6 +146,14 @@ export function blockedReason(command) {
   return null;
 }
 
+// A commit always asks first, every time (the user's pick, 29 Sep 2026):
+// "don't ask again" for a command's first two words, or a commit chained
+// after an allowed one ("npm test && git commit -am …"), never lets one
+// through. Quotes count as a start too (sh -c "git commit …"): asking once
+// too often is cheap, a commit made without asking is not.
+const GIT_COMMIT = new RegExp(`(?:${CMD}|["'])\\s*git(?:\\s+(?:-[cC]\\s+\\S+|--?[\\w-]+(?:=\\S+)?))*\\s+commit\\b`);
+export const runsGitCommit = (command) => GIT_COMMIT.test(String(command ?? ''));
+
 // "don't ask again for X": the first two words of a command.
 export const commandPrefix = (command) => command.trim().split(/\s+/).slice(0, 2).join(' ');
 
@@ -164,6 +172,8 @@ export function decide(name, args, { mode, allowedPrefixes, inside = true, cwd }
     const out = outsidePath(args.command, cwd);
     if (out) return { decision: 'deny', reason: `${out} is outside the project folder; commands stay inside it` };
     if (mode === 'plan') return isReadOnly(args.command) ? { decision: 'allow' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
+    // once: no "don't ask again" for it.
+    if (runsGitCommit(args.command)) return { decision: 'ask', once: true };
     if (isReadOnly(args.command)) return { decision: 'allow' };
     if (allowedPrefixes?.has(commandPrefix(args.command))) return { decision: 'allow' };
     return { decision: 'ask' };

@@ -45,10 +45,21 @@ export function projectNotes(cwd, maxChars = 6000, { memory = true, home: homeDi
     dir = dirname(dir);
   }
   let out = '';
-  for (const f of found) {
-    const block = `From ${f.path.replace(home, '~')}:\n${f.text}\n\n`;
-    if (out.length + block.length > maxChars) { out += `(${f.path.replace(home, '~')} cut to fit)\n${f.text.slice(0, Math.max(0, maxChars - out.length - 80))}\n`; break; }
-    out += block;
+  for (let i = 0; i < found.length; i++) {
+    const f = found[i];
+    const name = f.path.replace(home, '~');
+    const block = `From ${name}:\n${f.text}\n\n`;
+    if (out.length + block.length <= maxChars) { out += block; continue; }
+    // Too long for what is left: whole sections, never half a sentence, and
+    // the model is told which headings (and which files) it does not have.
+    const rest = found.slice(i + 1).map((g) => g.path.replace(home, '~'));
+    const restNote = (names) => (names.length ? `(Left out to fit: ${names.join(', ')}.)\n` : '');
+    // Room for the heading line below (the file's name and up to three left-out headings) and the note.
+    const part = fitSections(f.text, maxChars - out.length - name.length - 250 - restNote(rest).length);
+    if (part.text) out += `From ${name} (part of it, to fit${part.left.length ? `; left out: ${namesOf(part.left)}` : ''}):\n${part.text}\n\n`;
+    else rest.unshift(name);
+    out += restNote(rest);
+    break;
   }
   const files = found.map((f) => f.path);
   if (memory) {
@@ -58,6 +69,45 @@ export function projectNotes(cwd, maxChars = 6000, { memory = true, home: homeDi
   }
   return { text: out.trim(), files };
 }
+
+// The sections of a notes file (a heading and what follows it, up to the
+// next heading; a "#" line inside a ``` block is code, not a heading) that
+// fit in room, in order. When even the first does not fit, its paragraphs,
+// then its lines. left: the headings that did not fit.
+export function fitSections(text, room) {
+  const lines = text.split(/\r?\n/);
+  const sections = [];
+  let fence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    const starts = !fence && /^#{1,6}\s/.test(line);
+    if (!sections.length || (starts && sections.at(-1).length)) sections.push([]);
+    sections.at(-1).push(line);
+  }
+  const heading = (s) => (/^#{1,6}\s/.test(s[0] ?? '') ? s[0].replace(/^#+\s*/, '').trim() : null);
+  const kept = [];
+  let used = 0;
+  let i = 0;
+  for (; i < sections.length; i++) {
+    const t = sections[i].join('\n').trim();
+    if (used + t.length + 2 > room) break;
+    kept.push(t);
+    used += t.length + 2;
+  }
+  if (!kept.length && sections.length && room > 0) {
+    // The first section alone is too long: its whole paragraphs, else its whole lines.
+    const first = sections[0].join('\n').trim();
+    for (const [units, sep] of [[first.split(/\n\s*\n/), '\n\n'], [first.split('\n'), '\n']]) {
+      let t = '';
+      for (const u of units) { const next = t ? `${t}${sep}${u}` : u; if (next.length > room) break; t = next; }
+      // A heading with nothing under it tells the model nothing: then the file is named as left out instead.
+      if (t.split('\n').some((l) => l.trim() && !/^#{1,6}\s/.test(l))) { kept.push(t.trim()); break; }
+    }
+    if (kept.length) i = 1;
+  }
+  return { text: kept.join('\n\n'), left: sections.slice(i).map(heading).filter(Boolean) };
+}
+const namesOf = (left) => `${left.slice(0, 3).map((h) => `"${h.slice(0, 60)}"`).join(', ')}${left.length > 3 ? ` and ${left.length - 3} more` : ''}`;
 
 export function gitSummary(cwd) {
   const r = spawnSync('git', ['status', '--porcelain', '-b'], { cwd, encoding: 'utf8' });

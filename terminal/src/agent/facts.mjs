@@ -58,6 +58,15 @@ const SECRETS = [
 ];
 export const looksSecret = (text) => SECRETS.some((re) => re.test(String(text)));
 
+// A note that only says what happened ("Created notes.html on the Desktop…")
+// rather than how to work. Sent along, it told the model a page it was asked
+// for already existed (28 Sep: it came with a profile card and a weather
+// widget request), so it never goes into a prompt: not with a request
+// (recall.mjs), not in the memory's short lines (memoryNotes), and the screen says so.
+const DID = /^(?:created|made|wrote|added|fixed|built|ran|updated|deleted|removed|moved|saved|changed|renamed|installed|opened|started|finished|generated|implemented)\b/i;
+const HOW = /\b(?:always|never|should|must|use|prefer|avoid|when|before|after|instead|do not|don'?t|make sure|ask)\b/i;
+export const looksLikeEvent = (text) => DID.test(String(text).trim()) && !HOW.test(text);
+
 export function parseFact(raw, id) {
   const [head, ...rest] = String(raw).replace(/\r/g, '').split(/\n\s*\n/);
   const f = { id, kind: 'project', text: '', saved: null, from: '', used: 0, last: null, trust: 0, passed: 0, failed: 0, always: false, pinned: false, steps: [] };
@@ -495,7 +504,8 @@ export function memoryNotes(cwd, { home = homedir(), maxChars = 1600 } = {}) {
   const here = readFacts(dirs.project).sort(byWorth);
   if (!you.length && !here.length) return { text: '', files: [], facts: 0 };
   const always = [...you, ...here].filter((f) => f.always);
-  const rest = (list) => list.filter((f) => !f.always);
+  // An event ("Created notes.html…") is not something to know: it stays in the memory, out of the prompt.
+  const rest = (list) => list.filter((f) => !f.always && !looksLikeEvent(f.text));
   const tilde = (p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
   let text = always.length ? `Always\n${always.map((f) => `- ${oneLine(f.text)}`).join('\n')}\n` : '';
   const blocks = [[`What you know about the user (${tilde(dirs.you)})`, rest(you)], [`What you know about this project (${dirs.project ? tilde(dirs.project) : ''})`, rest(here)]];

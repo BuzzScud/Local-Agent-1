@@ -394,7 +394,8 @@ const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash comman
 export function permissionOptions(req, prefix) {
   const no = { label: 'No, and tell Agentic Coder what to do differently (esc)', choice: 'no' };
   if (req.name === 'Ask') return [...(req.args.options ?? []).map((o) => ({ label: o, choice: 'answer', text: o })), { label: 'Type an answer', choice: 'type' }, { label: 'Stop here (esc)', choice: 'no' }];
-  if (req.name === 'Bash') return [{ label: 'Yes', choice: 'yes' }, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, no];
+  // A git commit asks every time (permissions.mjs), so it has no "don't ask again".
+  if (req.name === 'Bash') return req.once ? [{ label: 'Yes', choice: 'yes' }, no] : [{ label: 'Yes', choice: 'yes' }, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, no];
   if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Agentic Coder what the test should check (esc)', choice: 'no' }];
   if (req.name === 'Rename') return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
   return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, allow all edits this session (shift+tab)', choice: 'always' }, no];

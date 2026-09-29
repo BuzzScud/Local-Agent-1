@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { systemPrompt, SESSION_MARK, projectNotes } from '../src/agent/prompt.mjs';
+import { systemPrompt, SESSION_MARK, projectNotes, fitSections } from '../src/agent/prompt.mjs';
 import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, isWholeFile } from '../src/flows/units.mjs';
 
 test('the instructions start the same in every project and on every day (so the warm-up can be saved)', () => {
@@ -44,4 +44,33 @@ test('a whole-file reply is recognised when one function was asked for', () => {
   // a file with one other function: defining it again means the whole file
   const two = 'export function a() {\n  return 1;\n}\n\nexport function b() {\n  return 2;\n}\n';
   expect(isWholeFile(two.replace('return 2', 'return 5'), two, 'b', 'js')).toBe(true);
+});
+
+test('a notes file too long for what is left is cut at a heading, never mid-sentence, and says what it left out', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-notes-home-'));
+  const proj = join(home, 'proj');
+  mkdirSync(proj);
+  writeFileSync(join(proj, 'AGENTS.md'), `# Working here\n\n${'Keep each change small and test it. '.repeat(154).trim()}`); // leaves ~400 of 6,000
+  writeFileSync(join(home, 'AGENTS.md'), `# Local context\n\nRead MEMORY.md for resumes.\n\n# Other sessions may be working here too\n\nSeveral sessions run at once, and the owner's own work may be uncommitted.\n${'- Never run git stash in a shared folder; it wipes other work.\n'.repeat(10)}`);
+  const n = projectNotes(proj, 6000, { memory: false, home });
+  expect(n.text).toContain('From ~/proj/AGENTS.md:\n# Working here');
+  expect(n.text).toContain('From ~/AGENTS.md (part of it, to fit; left out: "Other sessions may be working here too"):\n# Local context\n\nRead MEMORY.md for resumes.');
+  expect(n.text).not.toContain('Several sessions'); // no half section
+  expect(n.text.length).toBeLessThanOrEqual(6000);
+  // No room at all for the home file: it is named, not cut.
+  const tight = projectNotes(proj, 5700, { memory: false, home });
+  expect(tight.text).toContain('(Left out to fit: ~/AGENTS.md.)');
+  expect(tight.text).not.toContain('Local context');
+  expect(tight.files).toHaveLength(2); // both are still listed as found
+});
+
+test('sections: a "#" inside a code block is not a heading; a first section too long gives whole paragraphs, then whole lines', () => {
+  const md = '# Setup\n\nRun it:\n```sh\n# not a heading\nnpm test\n```\n\n# Style\n\nTabs.';
+  expect(fitSections(md, 1000)).toEqual({ text: md, left: [] });
+  expect(fitSections(md, 60)).toEqual({ text: '# Setup\n\nRun it:\n```sh\n# not a heading\nnpm test\n```', left: ['Style'] });
+  expect(fitSections('# A\n\nOne paragraph here.\n\nA second one that is a lot longer than the room.', 30)).toEqual({ text: '# A\n\nOne paragraph here.', left: [] });
+  expect(fitSections('Line one is short.\nLine two is quite a bit longer than that.', 25)).toEqual({ text: 'Line one is short.', left: [] });
+  expect(fitSections('A single line that never fits anywhere.', 10)).toEqual({ text: '', left: [] });
+  // never a heading on its own
+  expect(fitSections('# Local context\n\nFor work involving the resumes, read MEMORY.md first.', 30)).toEqual({ text: '', left: ['Local context'] });
 });
