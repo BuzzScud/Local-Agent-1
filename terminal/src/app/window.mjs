@@ -45,10 +45,17 @@ export class TerminalWindow extends EventEmitter {
     this.resizing = false;
     this.columns = this.out.columns;
     this.rows = this.out.rows;
-    this.redraws++;
     // Frames were dropped during the drag, so the whole screen is drawn again,
     // even when the size ended where it started. The conversation is printed
     // again after blank lines (see Screen), so the prompt box ends on the last lines.
+    this.clear();
+  }
+
+  // The window and its scrollback wiped and drawn again from the top: after a
+  // resize, and on /clear (like Claude Code's, nothing of the old conversation
+  // is left to scroll back to).
+  clear() {
+    this.redraws++;
     this.out.write(CLEAR);
     // Only the app hears about it (not Ink's own resize handling, which would
     // draw one frame of the old layout at the new size first); the app's

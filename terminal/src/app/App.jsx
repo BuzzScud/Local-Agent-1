@@ -908,7 +908,16 @@ export function App({ opts, win, onRestart }) {
           // Back in the folder Agentic Coder was started in, if a "Work in <project>?" moved it.
           const back = agent.startOver(opts.cwd);
           sessionRef.current = { id: newSessionId(), title: null, items: [] };
-          push({ type: 'divider', text: 'new conversation' });
+          // Like Claude Code's /clear: nothing of the old conversation is left on
+          // the screen, in the scrollback, behind ctrl+o or in the status line;
+          // only the welcome box, drawn again. The old one stays in /resume.
+          pendingContext.current = [];
+          folds.current = { list: [], back: 0 };
+          setStats({});
+          closeBtw();
+          itemsRef.current = [{ key: 'welcome', type: 'welcome' }];
+          setItems(itemsRef.current);
+          win?.clear();
           if (back) push({ type: 'note', text: `Back in ${short(opts.cwd)}, the folder Agentic Coder was started in.`, tone: 'dim' });
         }
         break;
@@ -1184,7 +1193,7 @@ export function App({ opts, win, onRestart }) {
       default:
         push({ type: 'note', text: `Unknown command /${cmd}. /settings has the ones not in the / menu, and /help lists them all.`, tone: 'warn' });
     }
-  }, [agent, askBtw, cwd, doctor, flash, meters, model, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, update, updateNow]);
+  }, [agent, askBtw, closeBtw, cwd, doctor, flash, meters, model, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, update, updateNow, win]);
 
   const submit = useCallback((raw) => {
     const value = raw.replace(/\s+$/, '');

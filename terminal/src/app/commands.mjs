@@ -1,7 +1,7 @@
 // Slash commands shown in the menu when you type "/".
 export const COMMANDS = [
   { name: 'help', desc: 'Open the Help page in the browser: every command, key and setting' },
-  { name: 'clear', desc: 'Start a new conversation, in the folder you started in (the screen keeps its history)' },
+  { name: 'clear', desc: 'Start a new conversation: clears the screen and what the model remembers of this one, back in the folder you started in' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
