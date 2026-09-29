@@ -1,0 +1,16 @@
+{
+ "id": "n01-date-one-day-early",
+ "n": 1,
+ "suite": "new28",
+ "title": "Fix a date that shows one day early",
+ "kind": "code",
+ "rules": [
+  "The tests pass in New York",
+  "Right in Honolulu and Tokyo too",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "dups",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

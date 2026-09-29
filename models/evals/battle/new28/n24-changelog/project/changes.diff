@@ -1,0 +1,18 @@
+diff --git a/client.mjs b/client.mjs
+--- a/client.mjs
++++ b/client.mjs
+@@ -1,9 +1,12 @@
+-export async function get(url) {
+-  return fetch(url);
++// timeoutMs: give up after this long (new, default 10 s).
++export async function get(url, { timeoutMs = 10_000, retries = 2 } = {}) {
++  for (let i = 0; ; i++) {
++    try { return await fetch(url, { signal: AbortSignal.timeout(timeoutMs) }); }
++    catch (e) { if (i >= retries) throw e; }
++  }
+ }
+-export function getSync(url) {
+-  throw new Error('getSync is gone: use get()');
+-}
++/** @deprecated use get(); removed in 2.0 */
++export const fetchUrl = get;

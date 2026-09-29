@@ -1,0 +1,1 @@
+Make one self-contained HTML file called preview.html (all CSS and JavaScript inside, no libraries, nothing from the internet, <meta charset="utf-8">). A text box on the left and a live preview on the right that turns # and ## headings, **bold**, *italic* and lines starting with "- " into a list, updating as I type. Save it to my Desktop.

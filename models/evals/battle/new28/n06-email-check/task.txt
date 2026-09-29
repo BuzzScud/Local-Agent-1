@@ -1,0 +1,1 @@
+isEmail in email.mjs says yes to addresses like "a@b" and "a@@b.com". Make it stricter: exactly one @, something before it, no spaces, and a domain with a dot that does not start or end the domain. The tests list the cases; fix the code, not the tests.

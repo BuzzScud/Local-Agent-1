@@ -1,0 +1,20 @@
+{
+ "id": "n15-why-test-fails",
+ "n": 15,
+ "suite": "new28",
+ "title": "Why does this one test fail?",
+ "kind": "question",
+ "rules": [
+  "Explains binary floating point (1.005 is 1.00499\u2026)",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "stats",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

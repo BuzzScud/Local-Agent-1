@@ -1,0 +1,16 @@
+{
+ "id": "n08-retry-backoff",
+ "n": 8,
+ "suite": "new28",
+ "title": "Add retry with backoff to a fetch helper",
+ "kind": "code",
+ "rules": [
+  "Succeeds after failed tries",
+  "Waits 1\u00d7, 2\u00d7, 4\u00d7\u2026 between tries",
+  "Throws the last error when all fail"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

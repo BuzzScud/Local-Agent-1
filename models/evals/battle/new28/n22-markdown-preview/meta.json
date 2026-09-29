@@ -1,0 +1,30 @@
+{
+ "id": "n22-markdown-preview",
+ "n": 22,
+ "suite": "new28",
+ "title": "Make a markdown preview page",
+ "kind": "page",
+ "rules": [
+  "Desktop/preview.html is saved, offline",
+  "Headings, bold, italic and lists",
+  "Updates as you type",
+  "Its script is valid, no libraries"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/preview.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/preview.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

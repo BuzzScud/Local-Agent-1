@@ -1,0 +1,5 @@
+{
+  "name": "dates",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

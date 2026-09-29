@@ -1,0 +1,16 @@
+{
+ "id": "n02-csv-quoted-comma",
+ "n": 2,
+ "suite": "new28",
+ "title": "Fix a CSV line split on a quoted comma",
+ "kind": "code",
+ "rules": [
+  "The tests pass",
+  "An empty quoted field works too",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

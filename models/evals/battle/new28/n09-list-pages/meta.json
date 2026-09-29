@@ -1,0 +1,16 @@
+{
+ "id": "n09-list-pages",
+ "n": 9,
+ "suite": "new28",
+ "title": "Add page and pageSize to a list function",
+ "kind": "code",
+ "rules": [
+  "Page 1 of 10 by default",
+  "Any page and page size",
+  "Past the end and an empty list work"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

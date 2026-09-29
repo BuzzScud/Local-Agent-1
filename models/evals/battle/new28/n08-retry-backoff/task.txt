@@ -1,0 +1,1 @@
+Add an exported function retry(fn, times, waitMs) to retry.mjs. It calls fn() (which returns a promise) and returns its result. If fn fails it tries again, up to `times` tries in all, waiting waitMs before the 2nd try, 2 × waitMs before the 3rd, 4 × waitMs before the 4th, and so on. If every try fails it throws the last error.

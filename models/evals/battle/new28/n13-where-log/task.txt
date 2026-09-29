@@ -1,0 +1,1 @@
+Which function writes this app's activity log, and what is the log file called? Don't change any files.

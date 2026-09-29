@@ -14,7 +14,7 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -137,6 +137,22 @@ export function App({ opts, win, onRestart }) {
   // (the user's pick, 28 Sep). `waiting` is the line on the start screen.
   const [waiting, setWaiting] = useState(null);
   const waitRef = useRef(null);
+  // A battle (the hub's Battle tab, Gemma vs Qwen) holds the memory: only one model fits, so the
+  // start waits until it is over and says so. `battle` is the line on the screen.
+  const [battle, setBattle] = useState(null);
+  const waitForBattle = async (stillOn = () => true) => {
+    let h = battleHold();
+    if (!h) return;
+    setBattle(h); setStartPhase('waiting');
+    await new Promise((resolve) => {
+      const tick = setInterval(() => {
+        if (!stillOn()) { clearInterval(tick); resolve(); return; }
+        h = battleHold();
+        if (h) setBattle(h); else { clearInterval(tick); resolve(); }
+      }, 3000);
+    });
+    setBattle(null); setStartPhase('loading');
+  };
   const waitForOthers = async (m, stillOn = () => true) => {
     let others = otherCopies(m);
     if (!others.length) return;
@@ -324,6 +340,7 @@ export function App({ opts, win, onRestart }) {
       stopIdleServers(); // a server we only attached to (kept loaded earlier) is freed too
       // Wait for the old one to really exit: two 27Bs never fit side by side.
       if (oldPid && !(await exited(oldPid))) throw new Error('the old model server did not stop');
+      await waitForBattle();
       await waitForOthers(next);
       const fixed = limitsRef.current.context;
       const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined });
@@ -541,11 +558,47 @@ export function App({ opts, win, onRestart }) {
     return () => offs.forEach((f) => f());
   }, [agent, push, saveNow, sendPrompt]);
 
+  // A battle wants the memory (the Battle tab runs Gemma vs Qwen, one model at a time): once no
+  // reply is running, this window lets its model go, and loads it again by itself when the
+  // battle is over. A message sent meanwhile waits in line and goes once the model is back.
+  const battleRef = useRef({ released: false });
+  battleRef.current.switchModel = switchModel;
+  battleRef.current.sendPrompt = sendPrompt;
+  battleRef.current.model = model;
+  useEffect(() => {
+    if (opts.url) return undefined;
+    const tick = setInterval(async () => {
+      const b = battleRef.current;
+      const h = battleHold();
+      if (b.released) {
+        if (h) { setBattle(h); return; }
+        if (b.reloading) return;
+        b.reloading = true;
+        setBattle(null);
+        await b.switchModel(b.model, () => `The battle is over: ${b.model.name} is loaded again.`);
+        b.released = false; b.reloading = false;
+        // The model is back (switchModel has finished): a message typed meanwhile goes now.
+        const q = queuedRef.current;
+        if (q && serverRef.current?.port) { queuedRef.current = null; setQueued(null); setTimeout(() => b.sendPrompt(q), 50); }
+        return;
+      }
+      if (!h || S.current.starting || S.current.live !== IDLE || !serverRef.current?.port) return;
+      b.released = true;
+      setBattle(h);
+      setStarting(true); setStartPhase('waiting');
+      await serverRef.current.stop({ keep: false }).catch(() => {});
+      push({ type: 'note', text: `${b.model.name} is unloaded for now: ${h}. It loads again by itself when the battle is over; a message you send meanwhile waits for it.`, tone: 'dim' });
+    }, 3000);
+    return () => clearInterval(tick);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Start the model server (unless one was given with --url).
   useEffect(() => {
     let alive = true;
     (async () => {
       if (opts.url) { setStarting(false); return; }
+      await waitForBattle(() => alive);
+      if (!alive) return;
       // --ctx wins; then the context /effort saved; then what fits (chooseContext).
       let size = opts.ctx ?? (limitsRef.current.context || undefined);
       const picked = !opts.ctx && limitsRef.current.context;
@@ -973,6 +1026,13 @@ export function App({ opts, win, onRestart }) {
       case 'doctor':
         doctor();
         break;
+      case 'battle': {
+        // The hub on its Battle tab: Gemma vs Qwen on tests you make. The arena runs on its own
+        // (the hub starts it), so a battle keeps going when this window closes.
+        const hub = openHub('battle'); if (!hub) break;
+        push({ type: 'note', text: `Battle opened in the browser at ${hub.url} · Gemma vs Qwen, one model at a time, each run stopped at 10 min · while a battle runs, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
+        break;
+      }
       case 'tests': {
         // The hub on its Tests tab: the record every test run adds a line to.
         const hub = openHub('tests'); if (!hub) break;
@@ -1361,7 +1421,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
     modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

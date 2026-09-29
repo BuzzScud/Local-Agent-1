@@ -1,0 +1,200 @@
+// The Battle arena (models/evals/battle/): its checks, where it keeps tests, the New 28 (each
+// fails as given and passes with its known-good answer), and the runner end to end in practice
+// mode (no model): a battle, the blind vote, the hold on the memory, stop, run all, delete.
+import { test, expect, beforeAll, afterAll } from 'bun:test';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+
+// Everything here lives in a throwaway home and on a port of its own.
+const HOME = mkdtempSync(join(tmpdir(), 'agentic-battle-test-'));
+const PORT = 20000 + Math.floor(Math.random() * 20000);
+process.env.AGENTIC_HOME = HOME;
+process.env.AGENTIC_BATTLE_PORT = String(PORT);
+process.env.AGENTIC_TEST_RECORD = join(HOME, 'record.jsonl');
+const { runChecks, snapshot, whyOf, scriptsParse } = await import('../evals/battle/checks.mjs');
+const store = await import('../evals/battle/store.mjs');
+const { verify } = await import('../evals/battle/verify-new28.mjs');
+
+const folder = (files) => { const d = mkdtempSync(join(tmpdir(), 'battle-work-')); for (const [f, t] of Object.entries(files)) { mkdirSync(join(d, f, '..'), { recursive: true }); writeFileSync(join(d, f), t); } return d; };
+
+test('each check: the tests, only the named files, a file says, the answer, no change, saved, page checks', () => {
+  const work = folder({ 'package.json': '{"type":"module","scripts":{"test":"node --test"}}', 'a.mjs': 'export const a = 1;\n', 'b.mjs': 'export const b = 2;\n', 'a.test.mjs': "import { test } from 'node:test'; import assert from 'node:assert'; import { a } from './a.mjs'; test('a', () => assert.equal(a, 1));\n" });
+  const before = snapshot(work);
+  writeFileSync(join(work, 'a.mjs'), 'export const a = 1; // checked\n');
+  writeFileSync(join(work, 'page.html'), '<meta charset="utf-8"><h1>Hi there</h1><script>let x = 1;</script>');
+  const r = runChecks({ work, before, prompt: 'Change a.mjs', answer: 'It is in a.mjs, line 1.', checks: [
+    { type: 'tests' }, { type: 'only-named' }, { type: 'file-has', value: '// checked' }, { type: 'answer-has', value: 'a.mjs, line 1' },
+    { type: 'saved', value: 'page.html' }, { type: 'scripts-valid' }, { type: 'offline' }, { type: 'page-has', value: 'hi there' },
+  ] });
+  expect(r.checks.map((c) => [c.label.split(':')[0], c.pass])).toEqual([['The tests pass', true], ['Nothing else changed', true], ['A file says', true], ['The answer mentions', true], ['The file is saved', true], ['Its scripts are valid', true], ['Nothing from the internet', true], ['The page has', true]]);
+  expect(r.pass).toBe(true);
+  // Now wrong: b.mjs changed though the prompt never named it, a page from the internet, a broken script.
+  writeFileSync(join(work, 'b.mjs'), 'export const b = 3;\n');
+  writeFileSync(join(work, 'page.html'), '<script src="https://cdn.example.com/x.js"></script><script>let = ;</script>');
+  const w = runChecks({ work, before, prompt: 'Change a.mjs', answer: 'nothing', checks: [{ type: 'only-named' }, { type: 'offline' }, { type: 'scripts-valid' }, { type: 'answer-has', value: 'a.mjs' }, { type: 'no-change' }] });
+  expect(w.checks.map((c) => c.pass)).toEqual([false, false, false, false, false]);
+  expect(w.checks[0].why).toBe('also changed: b.mjs');
+  expect(w.checks[3].why).toBe('the answer lacks "a.mjs"');
+  expect(w.pass).toBe(false);
+});
+
+test('no checks means your vote decides (pass is null); a check script counts too, with a readable reason', () => {
+  const work = folder({ 'x.txt': 'x' });
+  expect(runChecks({ work, before: snapshot(work) }).pass).toBeNull();
+  const script = join(folder({}), 'check.sh');
+  writeFileSync(script, "#!/bin/zsh\nnode -e \"throw new TypeError('retry is not a function')\"\n");
+  const r = runChecks({ work, before: snapshot(work), script });
+  expect(r.pass).toBe(false);
+  expect(r.checks[0].why).toBe('TypeError: retry is not a function');
+  expect(whyOf({ stdout: 'tests fail\n', stderr: 'Node.js v24.1.0\n', status: 1 })).toBe('tests fail');
+  expect(scriptsParse('<script type="module">import x from "y"</script>').ok).toBe(true);
+  expect(scriptsParse('<p>no script</p>').ok).toBe(false);
+});
+
+test('tests are kept as folders: the New 28 are copied once (without their answers), yours are saved and edited, deleting moves to trash', () => {
+  const home = mkdtempSync(join(tmpdir(), 'battle-store-'));
+  expect(store.seedNew28(home)).toBe(28);
+  expect(store.seedNew28(home)).toBe(0);
+  const list = store.listTests(home);
+  expect(list).toHaveLength(28);
+  expect(list[0]).toMatchObject({ id: 'n01-date-one-day-early', suite: 'new28', n: 1, hasScript: true });
+  expect(existsSync(join(home, 'tests', 'n01-date-one-day-early', 'solution'))).toBe(false);
+  // Deleted, a New 28 test is not copied back.
+  store.trashTest('n28-python-dataclass', home);
+  expect(store.seedNew28(home)).toBe(0);
+  expect(store.listTests(home)).toHaveLength(27);
+  expect(readdirSync(join(home, 'trash'))[0]).toStartWith('n28-python-dataclass-');
+  // Yours: saved with its files; a path from outside stays inside the test's folder.
+  const m = store.saveTest({ title: 'Tax', kind: 'question', prompt: 'Which function computes tax?', checks: [{ type: 'answer-has', value: 'addTax' }], ask: 'billing.mjs', files: [{ path: 'src/billing.mjs', b64: Buffer.from('export const addTax = 1;').toString('base64') }, { path: '../../escape.txt', b64: 'eA==' }] }, home);
+  expect(m).toMatchObject({ kind: 'question', suite: 'mine', title: 'Tax', answers: [{ match: '.', reply: 'billing.mjs' }] });
+  const mine = store.listTests(home).at(-1);
+  expect(mine.files).toEqual(['src/billing.mjs']);
+  expect(existsSync(join(home, 'tests', 'escape.txt'))).toBe(false);
+  expect(existsSync(join(home, 'escape.txt'))).toBe(false);
+  // An edit keeps the id and the files unless told to remove them.
+  store.saveTest({ id: m.id, title: 'Tax 2', kind: 'question', prompt: 'Which function computes tax, and its rate?', checks: [] }, home);
+  expect(store.listTests(home).at(-1)).toMatchObject({ id: m.id, title: 'Tax 2', files: ['src/billing.mjs'], checks: [] });
+  expect(() => store.saveTest({ kind: 'code', prompt: ' ' }, home)).toThrow('needs a prompt');
+});
+
+test('editing a New 28 test: its own check can be turned off, starter files taken out one by one, and the original put back', () => {
+  const home = mkdtempSync(join(tmpdir(), 'battle-edit-'));
+  store.seedNew28(home);
+  const id = 'n01-date-one-day-early';
+  store.saveTest({ id, title: 'Dates', kind: 'code', prompt: 'Fix formatDay, a new way', checks: [{ type: 'tests' }], removePaths: ['package.json', '../../escape'], useScript: false }, home);
+  let t = store.listTests(home).find((x) => x.id === id);
+  expect(t).toMatchObject({ title: 'Dates', prompt: 'Fix formatDay, a new way', noScript: true, suite: 'new28', n: 1, checks: [{ type: 'tests', value: '' }] });
+  expect(t.files).toEqual(['dates.mjs', 'dates.test.mjs']);
+  expect(t.edited).toBeTruthy();
+  // Saved again without saying: its own check stays as it was.
+  store.saveTest({ id, title: 'Dates', kind: 'code', prompt: 'Fix formatDay, a new way', checks: [] }, home);
+  expect(store.listTests(home).find((x) => x.id === id).noScript).toBe(true);
+  store.resetTest(id, home);
+  t = store.listTests(home).find((x) => x.id === id);
+  expect(t.title).toBe('Fix a date that shows one day early');
+  expect(Boolean(t.noScript || t.edited)).toBe(false);
+  expect(t.files).toEqual(['dates.mjs', 'dates.test.mjs', 'package.json']);
+  expect(existsSync(join(home, 'tests', id, 'solution'))).toBe(false);
+  expect(readdirSync(join(home, 'trash')).some((f) => f.startsWith(`${id}-edited-`))).toBe(true);
+  expect(() => store.resetTest('m-mine-1234', home)).toThrow('only a New 28 test');
+});
+
+test('what the app says while a battle holds the memory names no model (the vote is blind)', () => {
+  const t = store.holdText({ state: 'running', title: 'Fix a bug', run: 2, of: 2, startedAt: Date.now() - 60_000 });
+  expect(t).toBe('a battle is running (Fix a bug · run 2 of 2 · at most 9 min left of this run)');
+  expect(store.holdText({ state: 'want', title: 'Fix a bug' })).toBe('a battle is about to start (Fix a bug)');
+  const home = mkdtempSync(join(tmpdir(), 'battle-hold-'));
+  store.writeHold({ pid: 999999, state: 'running', title: 'x' }, home);
+  expect(store.readHold(home)).toBeNull(); // its runner is gone
+  expect(existsSync(join(home, 'running.json'))).toBe(false);
+});
+
+test('the New 28: every one fails as given and passes with its known-good answer (no model)', () => {
+  const ids = readdirSync(store.NEW28_DIR).filter((id) => existsSync(join(store.NEW28_DIR, id, 'meta.json'))).sort();
+  expect(ids).toHaveLength(28);
+  const kinds = {};
+  for (const id of ids) {
+    const r = verify(id);
+    expect([id, r.failsFirst, r.passesAfter]).toEqual([id, true, true]);
+    kinds[r.kind] = (kinds[r.kind] ?? 0) + 1;
+  }
+  expect(kinds).toEqual({ code: 16, question: 5, page: 5, writing: 2 });
+}, 180_000);
+
+// ---------- The runner, end to end, in practice mode ----------
+let runner = null;
+const O = `http://127.0.0.1:${PORT}`;
+const get = async (p) => (await fetch(`${O}${p}`)).json();
+const post = async (p, body, origin = O) => { const r = await fetch(`${O}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body ?? {}) }); return { status: r.status, body: await r.json() }; };
+const until = async (fn, ms = 20_000) => { const t0 = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 150)); } };
+beforeAll(async () => {
+  runner = spawn(process.execPath.endsWith('bun') ? 'node' : process.execPath, [join(import.meta.dir, '..', 'evals', 'battle', 'runner.mjs')], { env: { ...process.env, AGENTIC_BATTLE_FAKE: '1', AGENTIC_BATTLE_FAKE_MS: '60' }, stdio: 'ignore' });
+  await until(async () => { try { return (await get('/api/ping')).ok; } catch { return false; } });
+});
+afterAll(() => { try { runner?.kill('SIGTERM'); } catch {} });
+
+test('a battle: both models run one after the other, names stay hidden until the vote, the vote reveals them', async () => {
+  const made = await post('/api/tests', { title: 'Tax question', kind: 'question', prompt: 'Which function computes tax?', checks: [{ type: 'answer-has', value: 'addTax' }], run: true });
+  expect(made.status).toBe(200);
+  const id = made.body.id;
+  // While it runs, the memory is held (the app reads this and waits).
+  const held = await until(() => existsSync(join(HOME, 'battle', 'running.json')));
+  expect(held).toBe(true);
+  const t = await until(async () => (await get('/api/state')).tests.find((x) => x.id === id && x.latest?.status === 'done'));
+  expect(existsSync(join(HOME, 'battle', 'running.json'))).toBe(false);
+  expect(t.latest.order).toBeNull();
+  expect(t.latest.runs.A).toMatchObject({ skipped: false });
+  expect(t.latest.runs.B).toMatchObject({ skipped: false });
+  const b = await get(`/api/battle?id=${encodeURIComponent(t.latest.id)}`);
+  expect(b.order).toBeNull();
+  expect(b.runs.A.steps.length).toBeGreaterThan(0);
+  // The vote: only from this page's own address, and then the names.
+  expect((await post('/api/vote', { id: b.id, v: 'A' }, 'https://evil.example')).status).toBe(403);
+  const v = await post('/api/vote', { id: b.id, v: 'A' });
+  expect(Object.values(v.body.order).sort()).toEqual(['gemma', 'qwen']);
+  const st = await get('/api/state');
+  expect(st.score.votes[v.body.order.A]).toBe(1);
+  expect(st.tests.find((x) => x.id === id).latest.order).toEqual(v.body.order);
+  // Practice runs are not written to the test record.
+  expect(existsSync(join(HOME, 'record.jsonl'))).toBe(false);
+}, 60_000);
+
+test('run all queues the New 28, stop pauses the line, a page test keeps its page, delete, clear the line, clear all results, put back an original', async () => {
+  const r = await post('/api/runall', { suite: 'new28' });
+  expect(r.body.queued).toBe(28);
+  await until(async () => (await get('/api/state')).running);
+  expect((await post('/api/stop')).status).toBe(200);
+  const st = await until(async () => { const s = await get('/api/state'); return !s.running && s.paused ? s : null; });
+  expect(st.queue.length).toBeGreaterThan(20);
+  expect(st.tests.some((t) => t.latest?.status === 'stopped')).toBe(true);
+  await post('/api/clearqueue');
+  const page = await post('/api/tests', { title: 'A page', kind: 'page', prompt: 'Make page.html', checks: [], run: true });
+  const done = await until(async () => (await get('/api/state')).tests.find((t) => t.id === page.body.id && t.latest?.status === 'done'));
+  const b = await get(`/api/battle?id=${encodeURIComponent(done.latest.id)}`);
+  expect(b.runs.A.pages).toEqual(['page.html']);
+  const html = await (await fetch(`${O}/files/${encodeURIComponent(b.id)}/A/page.html`)).text();
+  expect(html).toContain('Practice page');
+  expect((await fetch(`${O}/files/${encodeURIComponent(b.id)}/A/..%2F..%2Fbattle.json`)).status).toBe(404);
+  expect((await post('/api/tests/delete', { id: page.body.id })).status).toBe(200);
+  // Clear the line (the line starts again), and clear all results (moved to trash, the score back to 0–0).
+  await post('/api/runall', { suite: 'new28' });
+  await until(async () => (await get('/api/state')).running);
+  await post('/api/stop');
+  await until(async () => { const x = await get('/api/state'); return !x.running && x.paused; });
+  expect((await post('/api/clearqueue')).status).toBe(200);
+  expect(await get('/api/state')).toMatchObject({ queue: [], paused: false });
+  const cleared = await post('/api/clearresults');
+  expect(cleared.body.moved).toBeGreaterThan(0);
+  const after = await get('/api/state');
+  expect(after.tests.filter((t) => t.latest)).toEqual([]);
+  expect(Object.values(after.score.votes)).toEqual([0, 0]);
+  expect(readdirSync(join(HOME, 'battle', 'trash')).some((f) => f.startsWith('battles-'))).toBe(true);
+  // Put back a New 28 test through the page's address.
+  await post('/api/tests', { id: 'n02-csv-quoted-comma', title: 'CSV', kind: 'code', prompt: 'Changed', checks: [] });
+  expect((await get('/api/state')).tests.find((t) => t.id === 'n02-csv-quoted-comma').edited).toBeTruthy();
+  expect((await post('/api/tests/reset', { id: 'n02-csv-quoted-comma' })).status).toBe(200);
+  expect((await get('/api/state')).tests.find((t) => t.id === 'n02-csv-quoted-comma')).toMatchObject({ title: 'Fix a CSV line split on a quoted comma', edited: null });
+  expect((await get('/api/state')).tests.some((t) => t.id === page.body.id)).toBe(false);
+}, 60_000);

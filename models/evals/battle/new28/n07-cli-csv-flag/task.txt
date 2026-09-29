@@ -1,0 +1,1 @@
+cli.mjs prints the scores as a text table. Add a --csv flag: with it, print a header line "name,score" and then one "name,score" line per row instead of the table. Without the flag nothing changes. Add a test for the CSV output.

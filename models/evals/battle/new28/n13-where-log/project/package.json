@@ -1,0 +1,5 @@
+{
+  "name": "shop",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

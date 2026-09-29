@@ -1,0 +1,16 @@
+{
+ "id": "n07-cli-csv-flag",
+ "n": 7,
+ "suite": "new28",
+ "title": "Add a --csv flag to a small CLI",
+ "kind": "code",
+ "rules": [
+  "--csv prints the header and rows",
+  "The table is unchanged without it",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

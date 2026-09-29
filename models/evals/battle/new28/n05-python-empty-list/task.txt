@@ -1,0 +1,1 @@
+average([]) in stats.py crashes. It should return None for an empty list; everything else stays as it is. Fix the code, not the test.

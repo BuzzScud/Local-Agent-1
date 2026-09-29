@@ -1,0 +1,30 @@
+{
+ "id": "n18-countdown-timer",
+ "n": 18,
+ "suite": "new28",
+ "title": "Make a countdown timer page",
+ "kind": "page",
+ "rules": [
+  "Desktop/timer.html is saved, offline",
+  "Shows 25:00 with Start, Pause and Reset",
+  "Its script counts down and is valid",
+  "Follows light or dark mode"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/timer.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/timer.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

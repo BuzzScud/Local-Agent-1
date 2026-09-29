@@ -1,0 +1,1 @@
+Make one self-contained HTML file called palette.html (all CSS and JavaScript inside, nothing from the internet, <meta charset="utf-8">). It shows 5 random colours side by side, each with its hex code like #3A7BD5. Pressing the space bar or a "New palette" button makes 5 new colours, and clicking a colour copies its hex code. Save it to my Desktop.

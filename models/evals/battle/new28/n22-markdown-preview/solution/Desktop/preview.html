@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>preview.html</title>
+<style>:root{color-scheme:light dark}body{font:16px system-ui;margin:24px}@media (prefers-color-scheme: dark){body{background:#111;color:#eee}}</style>
+</head>
+<body>
+<div style="display:flex;gap:12px"><textarea id="src" style="width:50%;height:70vh"># Hello
+
+- **bold** and *italic*</textarea><div id="out" style="width:50%"></div></div>
+<script>const esc=(s)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");const inline=(s)=>esc(s).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/\*(.+?)\*/g,"<em>$1</em>");function render(t){let h="",list=false;for(const line of t.split("\n")){if(line.startsWith("- ")){if(!list){h+="<ul>";list=true}h+="<li>"+inline(line.slice(2))+"</li>";continue}if(list){h+="</ul>";list=false}if(line.startsWith("## "))h+="<h2>"+inline(line.slice(3))+"</h2>";else if(line.startsWith("# "))h+="<h1>"+inline(line.slice(2))+"</h1>";else if(line.trim())h+="<p>"+inline(line)+"</p>"}if(list)h+="</ul>";return h}const src=document.getElementById("src");const go=()=>{document.getElementById("out").innerHTML=render(src.value)};src.addEventListener("input",go);go();</script>
+</body>
+</html>

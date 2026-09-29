@@ -1,0 +1,1 @@
+Split utils.mjs into strings.mjs (slugify, titleCase) and numbers.mjs (clamp, roundTo). Update app.mjs and the tests to import from the new files, then delete utils.mjs. The tests must still pass and app.mjs must print the same thing.

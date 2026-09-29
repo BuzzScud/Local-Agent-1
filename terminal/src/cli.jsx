@@ -126,13 +126,13 @@ if (process.argv[2] === 'memory-review') {
     process.exit(0);
   } catch (e) { process.stderr.write(`coding memory-review: ${e.message}\n`); process.exit(1); }
 }
-if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests' || process.argv[2] === 'memory' || process.argv[2] === 'instructions') {
+if (process.argv[2] === 'weights' || process.argv[2] === 'docs' || process.argv[2] === 'tests' || process.argv[2] === 'battle' || process.argv[2] === 'memory' || process.argv[2] === 'instructions') {
   const { existsSync } = await import('node:fs');
   const path = modelPath(MODELS[DEFAULT_MODEL]);
   if (process.argv[2] === 'weights' && !existsSync(path)) { process.stderr.write(`coding weights: the model file is not here yet (${path}). Run coding setup first.\n`); process.exit(1); }
   const { startWeightsServer } = await import('./app/weights.mjs');
   const s = startWeightsServer({ path, cwd: process.cwd() });
-  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests', memory: 'memory', instructions: 'instructions' }[process.argv[2]] ?? 'weights'}`;
+  const url = `${s.url}?tab=${{ docs: 'harness', tests: 'tests', battle: 'battle', memory: 'memory', instructions: 'instructions' }[process.argv[2]] ?? 'weights'}`;
   process.stdout.write(`Agentic Coder hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
   if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
   process.on('SIGINT', () => { s.stop(); process.exit(0); });

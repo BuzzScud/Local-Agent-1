@@ -1,0 +1,5 @@
+{
+  "name": "email",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

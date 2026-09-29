@@ -1,0 +1,21 @@
+{
+ "id": "n17-bigproject-config",
+ "n": 17,
+ "suite": "new28",
+ "title": "Big project: where are the settings read?",
+ "kind": "question",
+ "rules": [
+  "Names loadSettings in src/boot/loadSettings.mjs",
+  "Names the listenPort setting",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

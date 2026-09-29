@@ -1,0 +1,5 @@
+{
+  "name": "bigapp",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

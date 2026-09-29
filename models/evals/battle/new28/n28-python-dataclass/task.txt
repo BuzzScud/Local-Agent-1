@@ -1,0 +1,1 @@
+In models.py a user is a plain dict. Turn it into a dataclass User(name: str, email: str, active: bool = True), keep make_user(name, email) returning a User, and update service.py to use the fields (user.name, not user['name']). The tests must still pass; don't change the test file.

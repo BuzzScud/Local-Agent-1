@@ -1,0 +1,21 @@
+{
+ "id": "n24-changelog",
+ "n": 24,
+ "suite": "new28",
+ "title": "Write a changelog from a diff",
+ "kind": "writing",
+ "rules": [
+  "A 1.3.0 entry, 1.2.0 kept",
+  "Timeout, retries, getSync removed, fetchUrl deprecated",
+  "One bullet per change"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "CHANGELOG.md"
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "save",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

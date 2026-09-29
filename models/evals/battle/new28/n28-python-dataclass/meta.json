@@ -1,0 +1,16 @@
+{
+ "id": "n28-python-dataclass",
+ "n": 28,
+ "suite": "new28",
+ "title": "Python: a dataclass used across 2 files",
+ "kind": "code",
+ "rules": [
+  "User is a dataclass, make_user returns one",
+  "service.py uses the fields",
+  "The tests pass, the test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,1 @@
+It accepts exactly three capital letters, a dash, then four digits, and nothing else. For example ABC-1234 and XYZ-0042.

@@ -1,0 +1,1 @@
+readConfig in config.mjs and loadUser in users.mjs take callbacks. Turn both into async functions that return a promise (readConfig() resolves to the config, loadUser(id) to the user or null), with no callbacks left in those two files. Update main.mjs and the test to use them with await. The test must still pass and main.mjs must still print Bo.

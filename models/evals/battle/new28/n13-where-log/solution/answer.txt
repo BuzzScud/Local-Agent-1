@@ -1,0 +1,1 @@
+The log is written by record() in audit.mjs (through appendLine in files.mjs), to shop-activity.log (LOG_NAME in config.mjs).

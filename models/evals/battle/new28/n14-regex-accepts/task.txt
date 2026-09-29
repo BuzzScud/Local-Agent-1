@@ -1,0 +1,1 @@
+What kind of text does the pattern in code.mjs accept? Say it in words and give two examples that pass. Don't change any files.

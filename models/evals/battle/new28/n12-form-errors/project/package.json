@@ -1,0 +1,5 @@
+{
+  "name": "form",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

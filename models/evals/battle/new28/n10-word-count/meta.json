@@ -1,0 +1,16 @@
+{
+ "id": "n10-word-count",
+ "n": 10,
+ "suite": "new28",
+ "title": "Add a word count to text stats, with a test",
+ "kind": "code",
+ "rules": [
+  "Words counted right",
+  "A new test, and the tests pass",
+  "Chars and lines unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

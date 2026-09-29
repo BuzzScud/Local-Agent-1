@@ -1,0 +1,16 @@
+{
+ "id": "n04-discount-twice",
+ "n": 4,
+ "suite": "new28",
+ "title": "Fix a discount applied twice",
+ "kind": "code",
+ "rules": [
+  "The tests pass",
+  "Right on a bigger cart",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

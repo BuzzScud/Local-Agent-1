@@ -1,0 +1,1 @@
+validate(form) in form.mjs returns true or false. Change it to return a list of the fields that are wrong, in the order name, age, email (an empty list when all are fine): name is wrong when empty or only spaces; age when it is not a whole number from 0 to 130; email when it has no @. Update app.mjs, which uses it.

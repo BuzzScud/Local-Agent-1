@@ -1,0 +1,1 @@
+rename.py adds a prefix to the name of every .txt file in a folder: python3 rename.py FOLDER PREFIX. Add a --dry-run option (it may come anywhere in the command) that renames nothing and prints one line per file, "old.txt -> PREFIXold.txt", in name order.

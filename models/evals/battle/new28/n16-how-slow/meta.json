@@ -1,0 +1,21 @@
+{
+ "id": "n16-how-slow",
+ "n": 16,
+ "suite": "new28",
+ "title": "How slow is this function as the list grows?",
+ "kind": "question",
+ "rules": [
+  "Says it grows with the square (O(n\u00b2))",
+  "Says why: a loop inside a loop",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

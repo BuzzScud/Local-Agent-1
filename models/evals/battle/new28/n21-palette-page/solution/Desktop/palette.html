@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>palette.html</title>
+<style>:root{color-scheme:light dark}body{font:16px system-ui;margin:24px}@media (prefers-color-scheme: dark){body{background:#111;color:#eee}}</style>
+</head>
+<body>
+<button id="n">New palette</button><div id="p" style="display:flex;gap:8px;margin-top:12px"></div>
+<script>function hex(){return "#"+Math.floor(Math.random()*16777216).toString(16).padStart(6,"0").toUpperCase()}function draw(){const p=document.getElementById("p");p.innerHTML="";for(let i=0;i<5;i++){const h=hex();const d=document.createElement("div");d.style.cssText=`background:${h};width:120px;height:160px;display:flex;align-items:end;justify-content:center;cursor:pointer`;d.textContent=h;d.onclick=()=>navigator.clipboard&&navigator.clipboard.writeText(h);p.append(d)}}document.getElementById("n").onclick=draw;document.addEventListener("keydown",(e)=>{if(e.code==="Space"){e.preventDefault();draw()}});draw();</script>
+</body>
+</html>

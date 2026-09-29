@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>todo.html</title>
+<style>:root{color-scheme:light dark}body{font:16px system-ui;margin:24px}@media (prefers-color-scheme: dark){body{background:#111;color:#eee}}</style>
+</head>
+<body>
+<form id="f"><input id="i" placeholder="A to-do"> <button>Add</button></form><ul id="l"></ul>
+<script>let items=JSON.parse(localStorage.getItem("todos")||"[]");const save=()=>localStorage.setItem("todos",JSON.stringify(items));function draw(){const l=document.getElementById("l");l.innerHTML="";items.forEach((it,k)=>{const li=document.createElement("li");const c=document.createElement("input");c.type="checkbox";c.checked=it.done;c.onchange=()=>{it.done=c.checked;save()};const x=document.createElement("button");x.textContent="Delete";x.onclick=()=>{items.splice(k,1);save();draw()};li.append(c," "+it.text+" ",x);l.append(li)})}document.getElementById("f").addEventListener("submit",(e)=>{e.preventDefault();const v=document.getElementById("i").value.trim();if(v){items.push({text:v,done:false});save();draw();document.getElementById("i").value=""}});draw();</script>
+</body>
+</html>

@@ -44,7 +44,7 @@ agentic-coder/
 │  ├─ gemma-4-12b/      the model in use: settings (results/ stays local)
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
 │  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)
-│  ├─ evals/            the test bench: bench (run, tasks, words, night), reports, tools, dev
+│  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Battle tab's arena), reports, tools, dev
 │  └─ test/             unit tests of the models part
 └─ docs/                every diagram, preview and report page, the one home (mirrors agentic-coder DOCS/, which is on the Mac only); tools/ = the mirror's two scripts
 ```
@@ -63,6 +63,7 @@ bun run test:models        # only the models part's
 bun run eval               # the 28 practice tasks against the real model (models/evals/bench/run.mjs)
 bun run eval:words         # the 28 real requests
 bun run eval:verify        # prove every practice task's check can fail and pass
+bun run battle:verify      # prove every New 28 Battle test fails as given and passes with its answer (no model)
 bun run install-cli        # build one file and put it at ~/.local/bin/coding
 bun run docs               # mirror agentic-coder DOCS/ into docs/ (run before a commit)
 bun run test:record        # add test runs that are on this Mac but not yet in the test record

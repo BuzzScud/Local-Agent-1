@@ -1,0 +1,1 @@
+listItems(items) in list.mjs returns every item. Add paging: listItems(items, { page, pageSize }) with page starting at 1 and pageSize 10 by default. It returns { items, page, pages, total }, where items is that page's items and pages is how many pages there are (at least 1). A page past the end gives an empty items list.

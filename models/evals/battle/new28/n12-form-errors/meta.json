@@ -1,0 +1,16 @@
+{
+ "id": "n12-form-errors",
+ "n": 12,
+ "suite": "new28",
+ "title": "Add clear errors to a form validator",
+ "kind": "code",
+ "rules": [
+  "Lists the wrong fields, in order",
+  "An empty list when all is right",
+  "app.mjs still says ok"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

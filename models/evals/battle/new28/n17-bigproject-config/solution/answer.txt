@@ -1,0 +1,1 @@
+settings.json is read by loadSettings() in src/boot/loadSettings.mjs; the port is the listenPort setting (8181).

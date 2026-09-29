@@ -1,0 +1,1 @@
+formatDay('2026-09-29') in dates.mjs shows 9/28/2026 on my Mac, one day early. Fix it so it always shows the date as written, whatever my time zone. The tests show what is expected; fix the code, not the tests.

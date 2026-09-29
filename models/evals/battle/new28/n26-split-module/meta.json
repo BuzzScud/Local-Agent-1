@@ -1,0 +1,16 @@
+{
+ "id": "n26-split-module",
+ "n": 26,
+ "suite": "new28",
+ "title": "Split one file into two modules",
+ "kind": "code",
+ "rules": [
+  "utils.mjs is gone",
+  "strings.mjs and numbers.mjs hold the right helpers",
+  "The tests pass, app.mjs prints the same"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

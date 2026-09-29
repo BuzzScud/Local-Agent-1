@@ -159,3 +159,31 @@ test('the Tests tab: the page is built in, and /tests.json is the test record re
     expect(d.kinds.tasks[0]).toBe('Practice tasks');
   } finally { s.stop(); if (was == null) delete process.env.AGENTIC_TEST_RECORD; else process.env.AGENTIC_TEST_RECORD = was; }
 });
+
+test('the Battle tab: /battle starts the arena when it is not up and sends the tab to its page; the hub lists the tab', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-battle-hub-'));
+  const port = 21000 + Math.floor(Math.random() * 20000);
+  const script = `
+    const { startWeightsServer } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'app', 'weights.mjs'))});
+    const s = startWeightsServer({ path: null, docsDir: null, port: 0 });
+    const out = {};
+    const r = await fetch(s.url + 'battle', { redirect: 'manual' });
+    out.status = r.status; out.location = r.headers.get('location');
+    out.page = await (await fetch(out.location)).text();
+    out.again = (await fetch(s.url + 'battle', { redirect: 'manual' })).status; // already up: no second runner
+    out.hub = await (await fetch(s.url)).text();
+    s.stop();
+    console.log(JSON.stringify(out));
+  `;
+  const env = { ...process.env, AGENTIC_HOME: home, AGENTIC_BATTLE_PORT: String(port), AGENTIC_BATTLE_FAKE: '1', AGENTIC_NO_OPEN: '1' };
+  const r = require('node:child_process').spawnSync('bun', ['-e', script], { env, encoding: 'utf8', timeout: 30000 });
+  const pid = Number(require('node:fs').readFileSync(join(home, 'battle', 'runner.pid'), 'utf8'));
+  try { process.kill(pid, 'SIGTERM'); } catch {}
+  const out = JSON.parse(r.stdout.trim().split('\n').pop() || (() => { throw new Error(r.stderr); })());
+  expect(out.status).toBe(302);
+  expect(out.location).toBe(`http://127.0.0.1:${port}/`);
+  expect(out.page).toContain('<title>Battle</title>');
+  expect(out.again).toBe(302);
+  expect(out.hub).toContain('<button data-tab="battle">Battle</button>');
+  expect(out.hub).toContain("if (tab === 'battle') return show('/battle'");
+});

@@ -1,0 +1,30 @@
+{
+ "id": "n20-todo-page",
+ "n": 20,
+ "suite": "new28",
+ "title": "Make a to-do page that remembers",
+ "kind": "page",
+ "rules": [
+  "Desktop/todo.html is saved, offline",
+  "Add with Enter, tick off, delete",
+  "Kept in local storage",
+  "Follows light or dark mode"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/todo.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/todo.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

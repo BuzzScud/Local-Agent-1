@@ -1,0 +1,1 @@
+textStats in stats.mjs gives chars and lines. Add words: the number of words, where words are separated by any spaces, tabs or new lines (several in a row count once, and empty text has 0 words). Add a test for it and keep the old test passing (update what it expects to include words).

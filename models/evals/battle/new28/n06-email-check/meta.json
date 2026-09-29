@@ -1,0 +1,16 @@
+{
+ "id": "n06-email-check",
+ "n": 6,
+ "suite": "new28",
+ "title": "Fix an email check that lets bad ones in",
+ "kind": "code",
+ "rules": [
+  "The tests pass",
+  "Right on more cases",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

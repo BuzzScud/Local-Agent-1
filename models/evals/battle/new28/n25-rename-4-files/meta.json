@@ -1,0 +1,16 @@
+{
+ "id": "n25-rename-4-files",
+ "n": 25,
+ "suite": "new28",
+ "title": "Rename a function across 4 files",
+ "kind": "code",
+ "rules": [
+  "No calcTotal left",
+  "computeTotal in all 4 files",
+  "The tests pass, none removed"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

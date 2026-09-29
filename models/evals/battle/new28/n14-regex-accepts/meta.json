@@ -1,0 +1,21 @@
+{
+ "id": "n14-regex-accepts",
+ "n": 14,
+ "suite": "new28",
+ "title": "What does this pattern accept?",
+ "kind": "question",
+ "rules": [
+  "Says three capital letters, a dash, four digits",
+  "Gives two examples that pass",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

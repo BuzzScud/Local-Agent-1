@@ -1,0 +1,1 @@
+The cart in cart.mjs takes the discount off twice: 10% off 100 comes out as 81 instead of 90. Fix it so the discount is taken once. Fix the code, not the tests.

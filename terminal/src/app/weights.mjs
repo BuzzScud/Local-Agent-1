@@ -1,6 +1,6 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Tests · All docs
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Tests · Battle · Memory · All docs · Help
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned harness and structure pages
@@ -8,6 +8,7 @@
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /flow             the Flow tab: how Agentic Coder works as a flow diagram (flow.html, drawn by scripts/flow-page.mjs)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
+//   /battle           the Battle tab: the arena's own page (Gemma vs Qwen), started when it is not up (models/evals/battle/)
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `agentic-coder DOCS/` at the top of the repo on this Mac:
 // AGENTIC_DOCS names it outright, else AGENTIC_REPO (the launcher passes it),
@@ -24,7 +25,7 @@ import instructionsHtml from './instructions.html' with { type: 'text' };
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
-import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 
 export function findDocsDir() {
@@ -112,6 +113,12 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/help') return page(helpHtml);
       if (url.pathname === '/flow') return page(flowHtml);
       if (url.pathname === '/tests') return page(testsHtml);
+      // The arena runs on its own (it keeps going when this window closes): started here when it is
+      // not up, then shown at its own address.
+      if (url.pathname === '/battle') {
+        try { const b = await startBattle(); return Response.redirect(b.url, 302); }
+        catch (e) { return page(`<!doctype html><meta charset="utf-8"><body style="font:14px -apple-system,sans-serif;padding:24px"><h3>The Battle arena did not start</h3><p>${String(e.message).replace(/[<>&]/g, '')}</p><p>Open the Battle tab again to try once more.</p>`); }
+      }
       if (url.pathname === '/memory') return page(memoryHtml);
       if (url.pathname === '/instructions') return page(instructionsHtml);
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome);

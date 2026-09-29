@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>timer.html</title>
+<style>:root{color-scheme:light dark}body{font:16px system-ui;margin:24px}@media (prefers-color-scheme: dark){body{background:#111;color:#eee}}</style>
+</head>
+<body>
+<h1 id="t">25:00</h1><button id="s">Start</button> <button id="p">Pause</button> <button id="r">Reset</button>
+<script>let left=1500,timer=null;const show=()=>{document.getElementById("t").textContent=`${String(Math.floor(left/60)).padStart(2,"0")}:${String(left%60).padStart(2,"0")}`};document.getElementById("s").onclick=()=>{if(!timer)timer=setInterval(()=>{if(left>0){left--;show()}},1000)};document.getElementById("p").onclick=()=>{clearInterval(timer);timer=null};document.getElementById("r").onclick=()=>{clearInterval(timer);timer=null;left=1500;show()};</script>
+</body>
+</html>

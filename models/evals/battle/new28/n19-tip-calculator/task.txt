@@ -1,0 +1,1 @@
+Make one self-contained HTML file called tip.html (all CSS and JavaScript inside, nothing from the internet, <meta charset="utf-8">). It has a box for the bill, a slider for the tip from 0 to 30 %, a box for how many people, and shows the tip, the total and the total per person, updating as I type or slide. Save it to my Desktop.

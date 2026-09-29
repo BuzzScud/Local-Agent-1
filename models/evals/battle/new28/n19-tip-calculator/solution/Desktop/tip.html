@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>tip.html</title>
+<style>:root{color-scheme:light dark}body{font:16px system-ui;margin:24px}@media (prefers-color-scheme: dark){body{background:#111;color:#eee}}</style>
+</head>
+<body>
+<label>Bill <input id="bill" type="number" value="50"></label><br><label>Tip <input id="tip" type="range" min="0" max="30" value="15"> <span id="tv">15</span> %</label><br><label>People <input id="ppl" type="number" value="2" min="1"></label>
+<p>Tip: <b id="t"></b> · Total: <b id="tot"></b> · Total per person: <b id="pp"></b></p>
+<script>const $=(i)=>document.getElementById(i);function calc(){const b=+$("bill").value||0,p=+$("tip").value,n=Math.max(1,+$("ppl").value||1);$("tv").textContent=p;const t=b*p/100;$("t").textContent=t.toFixed(2);$("tot").textContent=(b+t).toFixed(2);$("pp").textContent=((b+t)/n).toFixed(2)}for(const i of ["bill","tip","ppl"])$(i).addEventListener("input",calc);calc();</script>
+</body>
+</html>

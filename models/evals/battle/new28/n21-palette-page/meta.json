@@ -1,0 +1,30 @@
+{
+ "id": "n21-palette-page",
+ "n": 21,
+ "suite": "new28",
+ "title": "Make a colour palette page",
+ "kind": "page",
+ "rules": [
+  "Desktop/palette.html is saved, offline",
+  "5 random colours with hex codes",
+  "Space or \"New palette\" makes new ones",
+  "Clicking copies the code"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/palette.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/palette.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

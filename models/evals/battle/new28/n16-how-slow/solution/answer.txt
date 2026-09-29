@@ -1,0 +1,1 @@
+It is quadratic, O(n^2): a loop inside a loop compares every pair, so twice the list takes about four times as long.

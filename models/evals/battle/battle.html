@@ -1,0 +1,938 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle</title>
+<!-- The Battle arena (Gemma vs Qwen), served by models/evals/battle/runner.mjs and shown in the hub's
+     Battle tab. Design 3 · Scoreboard, picked 29 Sep 2026. Nothing loads from the internet. -->
+<style>
+/* The hub's own tokens (terminal/src/app/hub.html), plus the Battle colours. */
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc; --line2: #d4d3cb;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-ink: #fff;
+  --a: #2a78d6; --a-soft: #e8f1fc; --b: #c2571a; --b-soft: #fcefe7;
+  --ok: #1d7a46; --ok-soft: #e3f3e9; --bad: #b3261e; --bad-soft: #fbe7e5; --warn: #8a5a00; --warn-soft: #fbf1dc;
+  --k-read: #b4b2a8; --k-edit: #8b63e0; --k-bash: #14928f; --k-ask: #d19b00; --k-tries: #5d5c57; --k-error: #d0392f; --k-answer: #d9d7ce;
+  --t-read: #1a1a18; --t-plan: #1a1a18; --t-edit: #fff; --t-bash: #fff; --t-ask: #1a1a18; --t-tries: #fff; --t-error: #fff;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --pv: #1f1f1d; --pv-ink: #f3f3ee; --pv-ink2: #b7b5aa; --pv-on: #fff; --pv-line: #3a3a36;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --line2: #45453f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5;
+    --a: #4d95ea; --a-soft: #172636; --b: #e8834b; --b-soft: #36241a; --ok: #5fd08f; --ok-soft: #173424; --bad: #ff8a80; --bad-soft: #3d1a17; --warn: #f0c060; --warn-soft: #3a2e12;
+    --k-read: #6d6b64; --k-edit: #a88af0; --k-bash: #3cc1c1; --k-ask: #f0c060; --k-tries: #b5b3a9; --k-error: #ff7a6e; --k-answer: #3b3a36; --pv: #2b2b28; --pv-line: #474742; --shadow: none; --t-read: #fff; --t-plan: #fff; --t-edit: #16141f; --t-bash: #0c1c1c; --t-ask: #1f1a08; --t-tries: #151514; --t-error: #200c0a; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --line2: #45453f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5;
+  --a: #4d95ea; --a-soft: #172636; --b: #e8834b; --b-soft: #36241a; --ok: #5fd08f; --ok-soft: #173424; --bad: #ff8a80; --bad-soft: #3d1a17; --warn: #f0c060; --warn-soft: #3a2e12;
+  --k-read: #6d6b64; --k-edit: #a88af0; --k-bash: #3cc1c1; --k-ask: #f0c060; --k-tries: #b5b3a9; --k-error: #ff7a6e; --k-answer: #3b3a36; --pv: #2b2b28; --pv-line: #474742; --shadow: none; --t-read: #fff; --t-plan: #fff; --t-edit: #16141f; --t-bash: #0c1c1c; --t-ask: #1f1a08; --t-tries: #151514; --t-error: #200c0a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+code { font: 12px var(--mono); }
+/* Scroll without a scroll bar; a soft fade says there is more. */
+.scroll { overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.scroll::-webkit-scrollbar { display: none; }
+.scroll.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); }
+
+/* ---------- Parts both designs share ---------- */
+.view { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--panel); color: var(--ink2); white-space: nowrap; }
+.res { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12.5px; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.res.ok { color: var(--ok); background: var(--ok-soft); } .res.bad { color: var(--bad); background: var(--bad-soft); } .res.warn { color: var(--warn); background: var(--warn-soft); } .res.wait { color: var(--ink2); background: var(--panel); }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+.sw.A { background: var(--a); } .sw.B { background: var(--b); }
+.who { display: inline-flex; align-items: center; gap: 7px; font-weight: 650; white-space: nowrap; min-width: 0; }
+.who .real { font-weight: 500; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; }
+.btn { border: 1px solid var(--line2); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; font-size: 13px; line-height: 1.3; }
+.btn:hover { background: var(--panel); }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.pri:hover { filter: brightness(1.07); }
+.btn.stop { color: var(--bad); }
+.btn:disabled { background: var(--panel); color: var(--ink3); border-color: var(--line2); cursor: default; filter: none; }
+.live { display: inline-flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--b); animation: pulse 1.2s infinite; flex: none; }
+@keyframes pulse { 50% { opacity: .3; } }
+.none { color: var(--ink3); font-size: 13px; border: 1px dashed var(--line2); border-radius: 8px; padding: 8px 10px; }
+.note { font-size: 12.5px; color: var(--ink2); background: var(--panel); border-radius: 8px; padding: 7px 10px; margin-bottom: 10px; line-height: 1.45; }
+
+/* The top band: score, every test as a cell, the actions. */
+.band { display: flex; align-items: center; gap: 22px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.tally { display: flex; align-items: center; gap: 10px; flex: none; }
+.tally .side { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.tally .n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tally .m { font-size: 11.5px; color: var(--ink2); }
+.tally .dash { color: var(--ink3); font-size: 18px; }
+.tally .sub { font-size: 11px; color: var(--ink3); max-width: 90px; line-height: 1.25; }
+.strips { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+.suite { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.suite .sl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; white-space: nowrap; }
+.cells { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; }
+.cellb { width: 22px; height: 34px; display: grid; grid-template-rows: 12px 12px 4px; gap: 2px; padding: 2px 3px; cursor: pointer; border-radius: 6px; border: 1.5px solid transparent; background: none; }
+.cellb:hover { border-color: var(--line2); background: var(--panel); }
+.cellb.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cellb .h { border-radius: 3px; }
+/* Not run yet: a hatch that shows on light and dark alike (an outline alone vanished on dark). */
+.h.plan, .h.todo { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink3) 45%, transparent) 0 1.5px, transparent 1.5px 4px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink3) 60%, transparent); }
+.h.ok { background: var(--ok); } .h.bad { background: var(--bad); } .h.warn { background: var(--warn); } .h.run { box-shadow: inset 0 0 0 1.5px var(--b); animation: pulse 1.2s infinite; }
+.cellb .v { justify-self: center; width: 4px; height: 4px; border-radius: 50%; }
+.v.A { background: var(--a); } .v.B { background: var(--b); } .v.T { background: var(--ink3); }
+.addcell { width: 22px; height: 34px; border-radius: 6px; border: 1.5px dashed color-mix(in srgb, var(--ink3) 70%, transparent); background: none; color: var(--ink2); cursor: pointer; font-size: 15px; line-height: 1; margin-left: 3px; }
+.addcell:hover { color: var(--ink); border-color: var(--ink3); }
+.keyq { width: 18px; height: 18px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--ink3) 70%, transparent); color: var(--ink2); font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; cursor: help; flex: none; }
+@media (max-width: 1700px) { .cellb, .addcell { width: 17px; } .cellb { padding: 2px 2px; } }
+@media (max-width: 1440px) { .cellb, .addcell { width: 14px; } .cells { gap: 2px; } .tally .sub { display: none; } .band { gap: 16px; } .strips { gap: 10px; } }
+
+/* The test's title row. */
+.titlerow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 12px 18px 10px; align-items: center; }
+.titlerow h2 { margin: 0; font-size: 18px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.titlerow h2 span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titlerow .acts { display: flex; gap: 6px; }
+.titlerow .line2 { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; min-width: 0; }
+.titlerow .prompt { flex: 1; min-width: 0; color: var(--ink2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titlerow .prompt.open { white-space: normal; }
+.titlerow .more { color: var(--accent); font-size: 12.5px; cursor: pointer; background: none; border: none; padding: 0; white-space: nowrap; }
+.rules { display: flex; gap: 6px; flex: none; max-width: 55%; overflow: hidden; }
+.rules .chip { overflow: hidden; text-overflow: ellipsis; max-width: 360px; display: inline-block; }
+.rules .chip::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+
+/* The timeline: both runs on one clock, zoomed to the runs; each stretch = the time it took to reach that step. */
+.tl { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 8px; box-shadow: var(--shadow); }
+.tl .cap { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--ink3); flex-wrap: wrap; }
+.tl .cap b { color: var(--ink); font-weight: 650; }
+.tl .cap .delta { color: var(--ink2); font-weight: 600; }
+.tlsvg { display: block; width: 100%; overflow: visible; }
+.tlsvg text { font-size: 11px; fill: var(--ink3); font-family: inherit; }
+.tlsvg .seg { cursor: pointer; }
+.tlsvg .seg:hover { filter: brightness(1.12); stroke: var(--ink); stroke-width: 1.5; }
+.key { display: flex; gap: 12px; font-size: 11.5px; color: var(--ink3); flex-wrap: wrap; }
+.key span { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; } .key i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.k-read { background: var(--k-read); } .k-plan { background: var(--k-read); } .k-edit { background: var(--k-edit); } .k-bash { background: var(--k-bash); } .k-ask { background: var(--k-ask); } .k-tries { background: var(--k-tries); } .k-error { background: var(--k-error); } .k-answer { background: var(--k-answer); }
+#tip { position: fixed; z-index: 40; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; line-height: 1.4; padding: 6px 9px; border-radius: 7px; max-width: 360px; display: none; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+#tip b { font-weight: 650; } #tip .tm { opacity: .7; font-variant-numeric: tabular-nums; margin-right: 6px; } #tip .er { color: #ffb3ab; display: block; }
+:root[data-theme="dark"] #tip, :root:not([data-theme="light"]) #tip { }
+
+/* Tabs: What it did · Answer · Changes (or Page), each with Model A and Model B side by side. */
+.tabs { min-height: 240px; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.tabbar { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); }
+.tabbar button { border: none; background: none; padding: 7px 12px 8px; border-radius: 8px 8px 0 0; color: var(--ink2); cursor: pointer; font-size: 13px; display: inline-flex; gap: 7px; align-items: center; }
+.tabbar button:hover { color: var(--ink); background: var(--panel); }
+.tabbar button[aria-selected="true"] { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
+.tabbar .ct { font-size: 11px; font-weight: 500; color: var(--ink3); font-variant-numeric: tabular-nums; }
+.tabbar .fill { flex: 1; }
+.tabbar .hint { font-size: 11.5px; color: var(--ink3); padding-right: 6px; }
+.tcols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.tcol { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+.tcol + .tcol { border-left: 1px solid var(--line); }
+.tch { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 12px; color: var(--ink3); border-bottom: 1px solid var(--line); min-width: 0; }
+.tch .how { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbody { padding: 10px 14px 14px; min-height: 0; }
+.tbody.page { padding: 8px; }
+.steps { font: 12px/1.6 var(--mono); margin: 0; padding: 0; list-style: none; }
+.steps li { display: grid; grid-template-columns: 40px 10px minmax(0, 1fr); gap: 8px; align-items: baseline; border-radius: 6px; padding: 0 4px; }
+.steps li.hl { background: var(--warn-soft); }
+.steps .tm { color: var(--ink3); text-align: right; font-variant-numeric: tabular-nums; }
+.steps .dot { width: 8px; height: 8px; border-radius: 2px; align-self: center; }
+.steps .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps .lb i { font-style: normal; color: var(--ink3); }
+.steps .er { grid-column: 3; color: var(--bad); white-space: normal; font-size: 11.5px; }
+.steps li.new { animation: fadein .35s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.approx { font-size: 11.5px; color: var(--ink3); margin-top: 8px; }
+.answer { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.answer code { background: var(--panel); padding: 1px 4px; border-radius: 4px; }
+.diff { font: 11.5px/1.55 var(--mono); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+.diff .fh { padding: 4px 10px; background: var(--panel); color: var(--ink2); border-bottom: 1px solid var(--line); }
+.diff .ln { padding: 0 10px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.diff .ln.add { background: var(--ok-soft); } .diff .ln.del { background: var(--bad-soft); } .diff .ln.ctx { color: var(--ink3); }
+.pageframe { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: block; }
+
+/* The vote. */
+.vbtn { border: 1.5px solid var(--line2); background: var(--surface); border-radius: 10px; padding: 6px 14px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; }
+.vbtn:hover:not(:disabled) { background: var(--panel); }
+.vbtn.A:hover:not(:disabled), .vbtn.A.on { border-color: var(--a); background: var(--a-soft); } .vbtn.B:hover:not(:disabled), .vbtn.B.on { border-color: var(--b); background: var(--b-soft); } .vbtn.T.on { border-color: var(--ink2); background: var(--panel); }
+.vbtn:disabled { color: var(--ink3); background: var(--panel); cursor: default; }
+.picked { font-size: 13px; color: var(--ink2); }
+.picked b { color: var(--ink); }
+
+/* ---------- Design 3 · Scoreboard ---------- */
+.d3.body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 10px; padding: 0 18px 0; min-height: 0; }
+.duels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.duel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 9px; min-width: 0; box-shadow: var(--shadow); display: grid; gap: 5px; }
+.duel .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+.duel .k .w { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel .vals { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 8px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.duel .vals b { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.duel .vals b small { font-size: 11.5px; font-weight: 500; color: var(--ink3); }
+.duel .vals .x { color: var(--ink3); font-size: 11px; }
+.duel .vals .won { color: var(--ok); }
+.tug { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; background: var(--panel); }
+.tug .ta { background: var(--a); } .tug .tb { background: var(--b); }
+.tug.flat { background: none; } .tug.flat span { background: var(--line2); }
+.duel .rv { display: flex; justify-content: space-between; gap: 6px; }
+.d3 .vote { display: flex; align-items: center; gap: 10px; padding: 9px 0 11px; }
+.d3 .vote .q { font-weight: 650; }
+.d3 .vote .fill { flex: 1; }
+
+/* ---------- The new test: three steps on one screen ---------- */
+.nt { padding: 14px 18px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; min-height: 0; }
+.nt h2 { margin: 0; font-size: 18px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.nt h2 span { font-size: 13px; font-weight: 400; color: var(--ink3); }
+.steps3 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+.stp { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; min-width: 0; box-shadow: var(--shadow); }
+.stp .sh { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 14.5px; }
+.stp .sh .no { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--surface); display: grid; place-items: center; font-size: 12.5px; font-weight: 700; flex: none; }
+.stp .sh .opt { font-weight: 400; color: var(--ink3); font-size: 12.5px; }
+.stp .sb { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.stp textarea, .stp input[type=text] { font: inherit; font-size: 14px; color: var(--ink); background: var(--page); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; width: 100%; line-height: 1.5; }
+.stp textarea { flex: 1; min-height: 110px; resize: none; }
+.stp textarea::placeholder, .stp input::placeholder { color: var(--ink3); opacity: .75; }
+.stp textarea:focus, .stp input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 0; border-color: var(--accent); }
+.guess { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
+.pill { border: 1px solid var(--line2); background: var(--surface); color: var(--ink2); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 12.5px; }
+.pill[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.namerow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; font-size: 12.5px; color: var(--ink3); }
+.namerow input[type=text] { padding: 6px 10px; font-size: 13.5px; }
+.drop { flex: 1; min-height: 90px; border: 1.5px dashed var(--line2); border-radius: 12px; display: grid; place-items: center; text-align: center; color: var(--ink3); font-size: 13px; padding: 12px; }
+.drop b { color: var(--ink); font-weight: 600; }
+.drop.over { border-color: var(--accent); background: var(--a-soft); color: var(--ink); }
+.drop .files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+.checks { display: grid; gap: 8px; align-content: start; }
+.check { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: var(--page); }
+.check:hover { border-color: var(--line2); }
+.check .bx { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--line2); display: grid; place-items: center; font-size: 12px; color: transparent; font-weight: 800; }
+.check.on { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); background: color-mix(in srgb, var(--ok-soft) 60%, var(--page)); }
+.check.on .bx { background: var(--ok); border-color: var(--ok); color: #fff; }
+.check .ct { font-size: 13.5px; } .check .cd { grid-column: 2; font-size: 12px; color: var(--ink3); }
+.check input[type=text] { grid-column: 2; padding: 5px 9px; font-size: 13px; background: var(--surface); }
+.vonly { font-size: 12.5px; color: var(--ink3); }
+.ntfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ntfoot .fill { flex: 1; }
+.ntfoot .help { color: var(--ink3); font-size: 12.5px; }
+.moreopt { font-size: 12.5px; color: var(--ink2); }
+.moreopt summary { cursor: pointer; color: var(--accent); list-style: none; }
+.moreopt summary::-webkit-details-marker { display: none; }
+.moreopt[open] summary { margin-bottom: 6px; }
+.moreopt textarea { min-height: 48px; flex: none; }
+.full { position: absolute; inset: 0; z-index: 12; background: var(--page); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.fullbar { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.fullbar .fill { flex: 1; }
+.fullbar .seg2 { display: inline-flex; border: 1px solid var(--line2); border-radius: 9px; overflow: hidden; }
+.fullbar .seg2 button { border: none; background: var(--surface); padding: 5px 12px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; font-size: 13px; color: var(--ink2); }
+.fullbar .seg2 button[aria-pressed="true"] { background: var(--panel); color: var(--ink); font-weight: 600; }
+.full .fbody { padding: 12px 18px 16px; min-height: 0; }
+.bigbtn { margin-left: auto; border: 1px solid var(--line2); background: var(--surface); color: var(--ink2); border-radius: 7px; padding: 2px 9px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.bigbtn:hover { color: var(--ink); background: var(--panel); }
+.panelmsg { padding: 28px 24px; max-width: 760px; display: grid; gap: 12px; }
+.panelmsg h2 { margin: 0; font-size: 20px; }
+
+/* Short windows (under 860 px tall): everything tightens so it still fits. */
+body.compact .band { padding: 5px 18px; }
+body.compact .cellb { height: 28px; grid-template-rows: 10px 10px 2px; }
+body.compact .addcell { height: 28px; }
+body.compact .tally .n { font-size: 22px; }
+body.compact .titlerow { padding: 7px 18px 6px; gap: 4px 16px; }
+body.compact .titlerow h2 { font-size: 16px; }
+body.compact .tl { padding: 6px 12px 5px; }
+body.compact .tl .cap .long { display: none; }
+body.compact .duel { padding: 6px 10px; gap: 3px; }
+body.compact .duel .tug, body.compact .duel .rv + .rv { display: none; }
+body.compact .duel .vals b { font-size: 15px; }
+body.compact .d3.body { gap: 7px; }
+body.compact .d3 .vote { padding: 5px 0 7px; }
+body.compact .lane > div { padding-top: 5px; padding-bottom: 5px; }
+body.compact .lfoot { padding: 4px 12px; }
+body.compact .lfoot .long { display: none; }
+body.compact .tch { padding: 5px 14px; }
+body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
+
+/* Narrow windows: one column; the page scrolls there (a phone can't fit it all). */
+@media (max-width: 1100px) {
+  .duels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lgrid { grid-template-columns: minmax(150px, 1fr) 80px 56px 52px 72px; }
+  .lgrid > .axis, .lgrid > .band2, .lgrid > .vh, .lane .vcell { grid-column: 1 / -1; }
+  .lane .vcell { justify-content: flex-start; }
+}
+@media (max-width: 800px) {
+  body { overflow: auto; height: auto; min-height: 100vh; }
+  #app { overflow: visible; }
+  .view { height: auto; }
+  .band { flex-wrap: wrap; gap: 12px; }
+  .strips { flex-wrap: wrap; flex-basis: 100%; }
+  .suite { flex-wrap: wrap; }
+  .bandacts { flex-wrap: wrap; }
+  .bandacts .status { white-space: normal; }
+  .bandacts { flex: 1 1 100%; min-width: 0; }
+  .duel .k { flex-wrap: wrap; }
+  .d3.body, .d4.body { grid-template-rows: none; }
+  .duels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tabs { height: 520px; }
+  .tcols { grid-template-columns: 1fr; }
+  .tcol + .tcol { border-left: none; border-top: 1px solid var(--line); }
+  .steps3 { grid-template-columns: 1fr; }
+  .titlerow .line2 { flex-wrap: wrap; } .rules { max-width: 100%; flex-wrap: wrap; }
+  .lgrid { grid-template-columns: 1fr 1fr; }
+  .lgrid > div:first-child, .lgrid > .axis, .lgrid > .band2, .lane .vcell, .lane .id { grid-column: 1 / -1; }
+  .lhead > div:not(.axis) { display: none; }
+  .d3 .vote { flex-wrap: wrap; }
+}
+
+/* The Battle page inside the hub's tab: the page itself, a floor below which it scrolls (no bar). */
+#app { flex: 1; min-height: 0; position: relative; background: var(--page); overflow-y: auto; scrollbar-width: none; }
+#app::-webkit-scrollbar { display: none; }
+.view { grid-template-rows: auto minmax(0, 1fr); min-height: 560px; }
+#main { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; }
+#main > .nt, #main > .panelmsg { grid-row: 1 / -1; }
+#main > .panelmsg { align-content: start; }
+.h.done { background: var(--ink3); }
+.cellb.queued { border: 1.5px dashed var(--accent); }
+.live.A::before { background: var(--a); }
+.chip.plain::before { content: none; }
+.rv.small { font-size: 11.5px; color: var(--ink3); }
+.rv.small span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 49%; }
+.clist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.clist li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; padding: 8px 10px; border-radius: 8px; background: var(--page); border: 1px solid var(--line); }
+.clist li.ok .cm { color: var(--ok); font-weight: 800; } .clist li.bad .cm { color: var(--bad); font-weight: 800; }
+.clist .why { display: block; color: var(--ink2); font-size: 12.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.prompt-full { color: var(--ink2); font-size: 13.5px; line-height: 1.5; max-width: 900px; }
+.kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 12px; font-size: 13px; color: var(--ink2); max-width: 900px; }
+.kv > span:nth-child(odd) { color: var(--ink3); }
+.panelmsg { max-width: 980px; }
+.rmfiles { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 8px; font-size: 12.5px; color: var(--ink2); }
+/* The band's buttons, and the Clear menu. */
+.bandacts { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; position: relative; }
+.bandacts .brow { display: flex; gap: 8px; }
+.bandacts .status { font-size: 11.5px; color: var(--ink2); white-space: nowrap; }
+.cmenu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; width: 340px; background: var(--surface); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.22); padding: 6px; display: grid; gap: 2px; }
+.cmenu button { text-align: left; border: none; background: none; border-radius: 8px; padding: 8px 10px; cursor: pointer; display: grid; gap: 2px; color: var(--ink); }
+.cmenu button:hover:not(:disabled) { background: var(--panel); }
+.cmenu button b { font-weight: 650; font-size: 13.5px; }
+.cmenu button span { font-size: 12px; color: var(--ink2); line-height: 1.35; }
+.cmenu button:disabled { cursor: default; color: var(--ink3); background: var(--page); }
+.cmenu button:disabled span { color: var(--ink3); }
+/* Starter files: each with a × to take it out. */
+.files { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchip { gap: 4px; padding-right: 3px; }
+.fx { border: none; background: none; color: var(--ink3); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; border-radius: 999px; }
+.fx:hover { color: var(--bad); background: var(--bad-soft); }
+.rmline { font-size: 12.5px; color: var(--ink2); }
+.link { border: none; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
+.stp .sb.scroll { overflow: auto; }
+/* Edit tests: a window over the page. */
+#modal { display: none; }
+#modal.on { display: block; }
+.mback { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; }
+.modal { position: fixed; inset: 2.5vh 2vw; z-index: 41; background: var(--page); border: 1px solid var(--line2); border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,.35); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+.mhead { display: flex; align-items: baseline; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.mhead b { font-size: 16px; }
+.mhead .sub { font-size: 12.5px; color: var(--ink3); }
+.mhead .fill, .mfoot .fill, .mtitle .fill { flex: 1; }
+.mx { border: none; background: none; color: var(--ink2); font-size: 16px; cursor: pointer; border-radius: 8px; padding: 2px 8px; align-self: center; }
+.mx:hover { background: var(--panel); color: var(--ink); }
+.mbody { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: 0; }
+.mlist { border-right: 1px solid var(--line); padding: 8px; background: var(--surface); min-height: 0; }
+.mgroup { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; padding: 10px 8px 4px; }
+.mrow { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; align-items: center; width: 100%; text-align: left; border: none; background: none; border-radius: 8px; padding: 5px 8px; cursor: pointer; color: var(--ink); font-size: 13px; }
+.mrow:hover { background: var(--panel); }
+.mrow.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.mrow .no { font-size: 11px; color: var(--ink3); text-align: right; font-variant-numeric: tabular-nums; }
+.mrow .ti { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow .tag { font-size: 10.5px; color: var(--accent); }
+.mnone { font-size: 12.5px; color: var(--ink3); padding: 4px 8px; }
+.mform { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 14px 18px; min-height: 0; min-width: 0; }
+.mtitle { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.mtitle h3 { margin: 0; font-size: 18px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+.chip.unsaved { background: var(--warn-soft); color: var(--warn); }
+.mfoot { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+.mfoot .help { font-size: 12.5px; color: var(--ink3); margin-left: 6px; }
+@media (max-width: 900px) { .mbody { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); } .mlist { border-right: none; border-bottom: 1px solid var(--line); } .modal { inset: 8px; } .mform .steps3 { grid-template-columns: 1fr; overflow: auto; } }
+#toast { position: fixed; left: 50%; bottom: 16px; translate: -50% 0; z-index: 60; background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 10px; font-size: 13px; max-width: min(480px, calc(100vw - 32px)); box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
+#toast.on { opacity: 1; transform: none; }
+#toast.bad { background: var(--bad); color: #fff; }
+</style>
+</head>
+<body>
+<main id="app"><div class="view"><div id="band"></div><div id="main" class="mainarea"><div class="panelmsg"><div class="none">Reading the arena…</div></div></div></div></main>
+<div id="tip"></div>
+<div id="modal"></div>
+<div id="toast" role="status"></div>
+<script>
+(function () {
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const app = $('#app'), bandEl = $('#band'), mainEl = $('#main'), tip = $('#tip'), toastEl = $('#toast');
+  const whole = (s) => Math.round(s);
+  const mmss = (s) => { const r = Math.max(0, whole(s)); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; };
+  const human = (s) => { const r = Math.max(0, whole(s)); return r < 60 ? `${r} s` : `${Math.floor(r / 60)} min ${String(r % 60).padStart(2, '0')} s`; };
+  const md = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  const kindName = { code: 'Code change', question: 'Question', page: 'Page', writing: 'Writing' };
+  const KINDS = [['read', 'read / look'], ['edit', 'change a file'], ['bash', 'run a command'], ['ask', 'asked you'], ['tries', 'tries (tests, drafts)'], ['error', 'a step that failed'], ['answer', 'writing its answer']];
+  const SHORT = { gemma: 'Gemma', qwen: 'Qwen' };
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* no storage */ } } };
+  const S = { modal: false, clearOpen: false, st: null, sel: store.get('battle-sel'), det: null, view: 'test', tab: {}, openPrompt: false, hl: null, full: null, mainKey: '', bandKey: '', editId: null };
+
+  async function api(path, body) {
+    const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    return j;
+  }
+  let toastTimer = null;
+  function toast(text, bad) { toastEl.textContent = text; toastEl.className = `on${bad ? ' bad' : ''}`; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastEl.className = ''; }, 5000); }
+  const nameOf = (id) => SHORT[id] ?? S.st?.models.find((m) => m.id === id)?.name ?? id;
+  const fullName = (id) => S.st?.models.find((m) => m.id === id)?.name ?? id;
+  const tests = () => S.st?.tests ?? [];
+  const testById = (id) => tests().find((t) => t.id === id);
+
+  // ---------- A run, in the shape the drawing wants ----------
+  function runOf(det, side) {
+    const r = det?.runs?.[side];
+    const live = det?.live;
+    if (live && live.side === side) {
+      const ev = live.events ?? [];
+      const loadedT = ev.find((e) => e.type === 'note' && e.text === 'loaded')?.t;
+      const steps = ev.filter((e) => e.type === 'step').map((e) => ({ t: Math.max(0, e.t - (loadedT ?? 0)), label: e.label, arg: e.arg, kind: e.kind, err: e.err }));
+      const clock = loadedT == null ? 0 : Math.max(0, (Date.now() - live.startedAt) / 1000 - loadedT);
+      return { running: true, loading: loadedT == null, clock, steps, stepCount: steps.length, errors: steps.filter((s) => s.kind === 'error').length, answer: '', diffs: [], pages: [], checks: [] };
+    }
+    if (!r) return { pending: true, steps: [], stepCount: 0, errors: 0, secs: 0, diffs: [], pages: [], checks: [] };
+    if (r.skipped) return { skipped: true, steps: [], stepCount: 0, errors: 0, secs: 0, diffs: [], pages: [], checks: [] };
+    return { ...r, steps: r.steps ?? [], diffs: r.diffs ?? [], pages: r.pages ?? [], checks: r.checks ?? [] };
+  }
+  function verdict(r) {
+    if (!r || r.pending) return { cls: 'wait', text: 'Waits its turn', mk: 'todo', sym: '' };
+    if (r.running) return { cls: 'wait', text: r.loading ? 'Loading the model' : 'Running', mk: 'run', sym: '' };
+    if (r.skipped) return { cls: 'wait', text: 'Not run (stopped)', mk: 'todo', sym: '' };
+    if (r.error) return { cls: 'bad', text: 'Did not finish', mk: 'bad', sym: '!' };
+    if (r.stopped) return { cls: 'warn', text: 'Stopped by you', mk: 'warn', sym: '■' };
+    if (r.overLimit) return { cls: 'warn', text: 'Out of time', mk: 'warn', sym: '⏱' };
+    if (r.pass == null) return { cls: 'wait', text: 'Finished', mk: 'done', sym: '•' };
+    return r.pass ? { cls: 'ok', text: '✓ Pass', mk: 'ok', sym: '✓' } : { cls: 'bad', text: '✗ Fail', mk: 'bad', sym: '✗' };
+  }
+  function checkLine(r) {
+    if (r.pending) return 'runs after the other one';
+    if (r.running) return r.loading ? 'the 10 minutes start once it is loaded' : 'still working';
+    if (r.skipped) return 'the battle was stopped first';
+    if (r.error) return r.error;
+    const cs = r.checks ?? [];
+    if (!cs.length) return 'no checks: your vote decides';
+    const bad = cs.find((c) => !c.pass);
+    const lead = r.stopped || r.overLimit ? 'what it left: ' : '';
+    return bad ? `${lead}${bad.label}${bad.why ? ` — ${bad.why}` : ''}` : `${lead}all ${cs.length} check${cs.length > 1 ? 's' : ''} held`;
+  }
+  const clean = (r) => r && !r.running && !r.pending && !r.skipped && !r.stopped && !r.overLimit && !r.error;
+  const done = (r) => r && !r.running && !r.pending;
+  const fin = (r) => (r.running ? r.clock : r.pending || r.skipped ? 0 : r.secs ?? 0);
+  const stepsOf = (r) => (r.running ? r.steps.length : r.stepCount ?? r.steps.length);
+  const errsOf = (r) => (r.running ? r.steps.filter((s) => s.kind === 'error').length : r.errors ?? 0);
+  const who = (side, order) => `<span class="who"><span class="sw ${side}"></span>Model ${side}${order ? `<span class="real">· ${esc(fullName(order[side]))}</span>` : ''}</span>`;
+
+  // ---------- The band ----------
+  function runAllLabel() {
+    const t28 = tests().filter((t) => t.suite === 'new28');
+    const left = t28.filter((t) => !t.latest || t.latest.status !== 'done').length;
+    return !t28.length ? null : left === t28.length ? `Run all ${t28.length}` : left ? `Run the ${left} left` : `Run all ${t28.length} again`;
+  }
+  function band() {
+    const st = S.st; if (!st) return '';
+    const [m1, m2] = st.models;
+    const sc = st.score;
+    const q = st.queue ?? [];
+    const cell = (t) => {
+      const l = t.latest; const qi = q.indexOf(t.id);
+      const isRun = st.running && st.running.test === t.id;
+      const h = (side) => { if (isRun) { const rs = st.running.side; return side === rs ? 'run' : side < rs ? verdictBrief(l?.runs?.[side]).mk : 'todo'; } return l && l.status !== 'running' ? verdictBrief(l.runs[side]).mk : 'todo'; };
+      const v = l?.vote;
+      const tipText = `${t.n ? `${t.n}. ` : ''}${t.title}${isRun ? ' · running now' : qi >= 0 ? ` · in line (#${qi + 1})` : l ? ` · A: ${verdictBrief(l.runs.A).text} · B: ${verdictBrief(l.runs.B).text}${v ? ` · your vote: ${v === 'T' ? 'tie' : `Model ${v}`}` : ' · not voted yet'}` : ' · not run yet'}`;
+      return `<button class="cellb${t.id === S.sel ? ' sel' : ''}${qi >= 0 ? ' queued' : ''}" data-act="pick" data-id="${esc(t.id)}" data-tip="${esc(tipText)}" aria-label="${esc(tipText)}"><span class="h ${h('A')}"></span><span class="h ${h('B')}"></span><span class="v ${v || ''}"></span></button>`;
+    };
+    const t28 = tests().filter((t) => t.suite === 'new28'), mine = tests().filter((t) => t.suite !== 'new28');
+    let status = 'Idle · no model loaded';
+    if (st.running?.waiting) status = `<span class="live">${esc(st.waiting ?? 'Waiting for memory')}</span>`;
+    else if (st.running) { const t = testById(st.running.test); status = `<span class="live ${st.running.side}">Model ${st.running.side} running · ${esc(t?.title ?? '')} · <span data-since="${st.running.startedAt}">${mmss((Date.now() - st.running.startedAt) / 1000)}</span></span>`; }
+    else if (st.paused && q.length) status = `Paused · ${q.length} in line`;
+    if (!st.running && q.length && !st.paused) status = `Starting the next · ${q.length} in line`;
+    const lead = st.running && q.length ? ` · ${q.length} more in line` : '';
+    const runAll = runAllLabel();
+    return `<div class="band">
+      <div class="tally"><div class="side"><span class="n">${sc.votes[m1.id] ?? 0}</span><span class="m">${esc(nameOf(m1.id))}</span></div><span class="dash">–</span><div class="side"><span class="n">${sc.votes[m2.id] ?? 0}</span><span class="m">${esc(nameOf(m2.id))}</span></div><span class="sub">your votes${sc.ties ? ` · ${sc.ties} tie${sc.ties > 1 ? 's' : ''}` : ''}<br>passes ${sc.passes[m1.id] ?? 0}–${sc.passes[m2.id] ?? 0}</span></div>
+      <div class="strips">${t28.length ? `<div class="suite"><span class="sl">New 28</span><div class="cells">${t28.map(cell).join('')}</div></div>` : ''}<div class="suite"><span class="sl">My tests</span><div class="cells">${mine.map(cell).join('')}<button class="addcell" data-act="new" data-tip="Add a test" aria-label="Add a test">+</button></div></div>
+        <span class="keyq" data-tip="Each test is one cell: top = Model A, bottom = Model B. Green pass · red fail · amber out of time or stopped · grey finished with no checks · dashed = not run yet · blue outline = in line. The dot under it is your vote." aria-label="What the cells mean">?</span></div>
+      <div class="bandacts"><div class="brow"><button class="btn pri" data-act="new">+ New test</button><button class="btn" data-act="edittests">Edit tests</button>${st.running ? '<button class="btn stop" data-act="stop">■ Stop</button>' : st.paused && q.length ? '<button class="btn" data-act="resume">Resume</button>' : runAll ? `<button class="btn" data-act="runall">${runAll}</button>` : ''}<button class="btn" data-act="clearmenu" aria-haspopup="menu" aria-expanded="${Boolean(S.clearOpen)}">Clear ▾</button></div><span class="status">${status}${lead}${st.fake ? ' · practice mode (no model)' : ''}</span>${S.clearOpen ? clearMenu() : ''}</div></div>`;
+  }
+  // Clear: the line of tests waiting, or every result (moved to the arena's trash, never deleted).
+  function clearMenu() {
+    const q = S.st.queue ?? [], anyResult = tests().some((t) => t.latest), busy = Boolean(S.st.running);
+    return `<div class="cmenu" role="menu">
+      <button role="menuitem" data-act="clearline"${q.length ? '' : ' disabled'}><b>Clear the line</b><span>${q.length ? `the ${q.length} test${q.length > 1 ? 's' : ''} waiting to run come${q.length > 1 ? '' : 's'} out of the line; ${busy ? 'the battle running now finishes' : 'nothing else changes'}` : 'nothing is waiting to run'}</span></button>
+      <button role="menuitem" data-act="clearresults"${anyResult && !busy ? '' : ' disabled'}><b>Clear all results</b><span>${busy ? 'stop the battle that is running first' : anyResult ? 'every result and vote moves to the arena\'s trash folder; the score goes back to 0–0; your tests stay' : 'there are no results yet'}</span></button></div>`;
+  }
+  const verdictBrief = (r) => (!r ? { mk: 'todo', text: 'not run' } : r.skipped ? { mk: 'todo', text: 'not run' } : r.error ? { mk: 'bad', text: 'did not finish' } : r.stopped ? { mk: 'warn', text: 'stopped' } : r.overLimit ? { mk: 'warn', text: 'out of time' } : r.pass == null ? { mk: 'done', text: 'finished (no checks)' } : r.pass ? { mk: 'ok', text: 'pass' } : { mk: 'bad', text: 'fail' });
+
+  const rulesOf = (t) => [...(t.hasScript && !t.noScript ? t.rules ?? [] : []), ...(t.checks ?? []).map((c) => `${CHECKS[c.type]?.label ?? c.type}${c.value ? `: ${c.value}` : ''}`)];
+  // ---------- The title row ----------
+  function titleRow(t) {
+    const st = S.st; const qi = st.queue.indexOf(t.id);
+    const isRun = st.running && st.running.test === t.id;
+    const acts = isRun ? '<button class="btn stop" data-act="stop">■ Stop</button>' : `<button class="btn" data-act="edit">Edit</button>${qi >= 0 ? `<button class="btn" data-act="unqueue">In line (#${qi + 1}) · remove</button>` : `<button class="btn${t.latest ? '' : ' pri'}" data-act="run">${t.latest ? 'Run again' : 'Run'}</button>`}`;
+    const rules = rulesOf(t);
+    return `<div class="titlerow"><h2><span class="t">${esc(t.title)}</span><span class="chip">${kindName[t.kind] ?? t.kind}</span>${t.suite === 'new28' ? `<span class="chip">New 28 · ${t.n}</span>` : ''}</h2><div class="acts">${acts}</div>
+      <div class="line2"><span class="prompt${S.openPrompt ? ' open' : ''}">${esc(t.prompt)}</span><button class="more" data-act="prompt">${S.openPrompt ? 'less' : 'full prompt'}</button><div class="rules">${rules.length ? rules.map((x) => `<span class="chip" data-tip="${esc(x)}">${esc(x)}</span>`).join('') : '<span class="chip plain">no checks: your vote decides</span>'}</div></div></div>`;
+  }
+
+  // ---------- The timeline (drawn at the box's real width) ----------
+  const LIMIT = () => S.st?.limit ?? 600;
+  const NICE = [15, 20, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720];
+  function axisEnd(A, B) {
+    const mx = Math.max(fin(A), fin(B), 10);
+    const want = mx >= LIMIT() * 0.75 ? Math.max(LIMIT(), mx) * 1.02 : mx * 1.1;
+    return NICE.find((n) => n >= want) ?? Math.ceil(want / 60) * 60;
+  }
+  const tickStep = (end) => [5, 10, 15, 30, 60, 120].find((s) => end / s <= 10) ?? 120;
+  function segments(r) {
+    const out = []; let prev = 0;
+    r.steps.forEach((s, i) => { out.push({ x0: prev, x1: s.t, kind: s.kind, i, s }); prev = Math.max(prev, s.t); });
+    const end = fin(r);
+    if (end > prev) out.push({ x0: prev, x1: end, kind: r.running ? 'now' : 'answer', i: -1 });
+    return out;
+  }
+  function bandMarkup(r, side, end, W, y, h, L, R) {
+    const X = (s) => L + (Math.min(s, end) / end) * (W - L - R);
+    let g = `<rect x="${L}" y="${y}" width="${W - L - R}" height="${h}" rx="5" style="fill:var(--panel)"/>`;
+    if (r.pending || r.skipped || (r.running && r.loading)) return `${g}<text x="${L + 10}" y="${y + h / 2 + 4}" style="fill:var(--ink3);font-size:12px">${r.pending ? 'waits its turn' : r.skipped ? 'not run: the battle was stopped' : 'loading the model…'}</text>`;
+    for (const sg of segments(r)) {
+      const x0 = X(sg.x0), w = Math.max(2.5, X(sg.x1) - x0);
+      if (sg.kind === 'now') { g += `<rect x="${x0}" y="${y}" width="${w}" height="${h}" rx="3" style="fill:var(--${side === 'A' ? 'a' : 'b'});opacity:.25"><animate attributeName="opacity" values=".35;.12;.35" dur="1.4s" repeatCount="indefinite"/></rect>`; continue; }
+      const last = r.stopped ? 'Still working when you stopped it' : r.overLimit ? 'Still working at the 10 minutes' : 'Writing its answer';
+      const tipTxt = sg.i >= 0 ? `${mmss(sg.s.t)}|${sg.s.label} ${sg.s.arg}|${sg.s.err || ''}|${mmss(sg.x1 - sg.x0)} to reach it` : `${mmss(sg.x1)}|${last}||${mmss(sg.x1 - sg.x0)}`;
+      g += `<rect class="seg" x="${x0}" y="${y}" width="${w}" height="${h}" rx="3" style="fill:var(--k-${sg.kind})" data-step="${sg.i}" data-side="${side}" data-steptip="${esc(tipTxt)}"/>`;
+      if (w > 64 && sg.i >= 0) g += `<text x="${x0 + 6}" y="${y + h / 2 + 4}" style="fill:var(--t-${sg.kind});font-size:11px;font-weight:600;pointer-events:none">${esc((w > 150 ? `${sg.s.label} ${sg.s.arg}` : sg.s.label).slice(0, Math.floor(w / 7)))}</text>`;
+    }
+    const fx = X(fin(r)), v = verdict(r);
+    if (!r.running) g += `<circle cx="${fx}" cy="${y + h / 2}" r="10" style="fill:var(--${v.cls === 'ok' ? 'ok' : v.cls === 'bad' ? 'bad' : v.cls === 'warn' ? 'warn' : 'ink3'});stroke:var(--surface);stroke-width:2"/><text x="${fx}" y="${y + h / 2 + 4}" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:800">${v.sym}</text>`;
+    const label = r.running ? `${mmss(r.clock)} …` : human(r.secs ?? 0);
+    const right = fx + 16 + label.length * 7 > W;
+    g += `<text x="${right ? fx - 16 : fx + 16}" y="${y + h / 2 + 4}" text-anchor="${right ? 'end' : 'start'}" style="fill:var(--ink);font-weight:650;font-size:12px">${label}</text>`;
+    return g;
+  }
+  function axisMarkup(end, W, y0, y1, L, R, labels) {
+    const X = (s) => L + (Math.min(s, end) / end) * (W - L - R);
+    const stp = tickStep(end); let g = '';
+    for (let s = 0; s <= end + 0.01; s += stp) { const x = X(s); g += `<line x1="${x}" x2="${x}" y1="${y0}" y2="${y1}" style="stroke:var(--line)"/><text x="${x}" y="${labels}" text-anchor="${s === 0 ? 'start' : 'middle'}">${mmss(s)}</text>`; }
+    if (end >= LIMIT()) { const x = X(LIMIT()); g += `<line x1="${x}" x2="${x}" y1="${y0 - 6}" y2="${y1}" style="stroke:var(--warn);stroke-width:2" stroke-dasharray="4 3"/><text x="${x - 4}" y="${y0 - 8}" text-anchor="end" style="fill:var(--warn);font-weight:650">10:00 stop</text>`; }
+    return g;
+  }
+  function deltaLine(A, B) {
+    if (A.running || B.running || A.pending || B.pending) return 'still running';
+    if (!clean(A) || !clean(B)) return 'one run did not finish, so there is no "faster"';
+    const d = Math.abs(A.secs - B.secs);
+    return d < 1 ? 'both took the same time' : `Model ${A.secs < B.secs ? 'A' : 'B'} finished ${human(d)} sooner`;
+  }
+  const keyHtml = () => `<div class="key">${KINDS.map(([k, n]) => `<span><i class="k-${k}"></i>${n}</span>`).join('')}</div>`;
+  const pct = (s) => { const v = (s / LIMIT()) * 100; return v > 0 && v < 1 ? 'under 1%' : `${Math.round(v)}%`; };
+  function timelineBox(A, B) {
+    const end = axisEnd(A, B);
+    const note = end >= LIMIT() ? 'the 10:00 stop is the dashed line' : `zoomed to the runs · the 10:00 stop is off to the right (A used ${pct(fin(A))}, B ${pct(fin(B))})`;
+    return `<div class="tl"><div class="cap"><span><b>What each did, on one clock</b><span class="long"> · each coloured stretch is the time it took to reach that step · point at one for the step, click to open it</span></span><span class="delta">${deltaLine(A, B)}</span></div><svg class="tlsvg" id="tl3" height="112" role="img" aria-label="Both runs on one clock"></svg><div class="cap" style="margin-top:2px">${keyHtml()}<span>${note}</span></div></div>`;
+  }
+  function drawTimeline(A, B) {
+    const one = $('#tl3', mainEl); if (!one) return;
+    const end = axisEnd(A, B);
+    const W = Math.max(300, Math.round(one.getBoundingClientRect().width)), L = 64, R = 20;
+    const c = document.body.classList.contains('compact'), H = c ? 82 : 112, bh = c ? 20 : 24, ya = c ? 10 : 20, yb = c ? 38 : 58;
+    one.setAttribute('viewBox', `0 0 ${W} ${H}`); one.setAttribute('height', H);
+    one.innerHTML = `${axisMarkup(end, W, ya - 6, yb + bh + 6, L, R, H - 4)}<text x="0" y="${ya + bh / 2 + 4}" style="fill:var(--a);font-weight:700;font-size:12px">Model A</text><text x="0" y="${yb + bh / 2 + 4}" style="fill:var(--b);font-weight:700;font-size:12px">Model B</text>${bandMarkup(A, 'A', end, W, ya, bh, L, R)}${bandMarkup(B, 'B', end, W, yb, bh, L, R)}`;
+  }
+
+  // ---------- Stat cards ----------
+  function duels(A, B) {
+    const both = clean(A) && clean(B);
+    const res = (r) => (r.running ? `<span class="res wait"><span class="live">${r.loading ? 'Loading' : 'Running'}</span></span>` : `<span class="res ${verdict(r).cls}">${verdict(r).text}</span>`);
+    const cards = [`<div class="duel"><div class="k">Result</div><div class="rv">${res(A)}${res(B)}</div><div class="rv small"><span data-tip="${esc(checkLine(A))}">${esc(checkLine(A))}</span><span data-tip="${esc(checkLine(B))}" style="text-align:right">${esc(checkLine(B))}</span></div></div>`];
+    const stat = (label, key, get, fmt, lower) => {
+      const a = get(A), b = get(B);
+      const won = both && a != null && b != null && a !== b ? ((lower ? a < b : a > b) ? 'A' : 'B') : null;
+      const val = (x, side, r) => (x == null ? `<span class="x">${r.pending ? 'waits' : 'not measured'}</span>` : `<b class="${won === side ? 'won' : ''}">${fmt(x, r)}</b>`);
+      const tug = a == null || b == null ? '<div class="tug flat"><span style="flex:1"></span></div>' : (a || 0) + (b || 0) ? `<div class="tug"><span class="ta" style="flex:${a || 0.0001}"></span><span class="tb" style="flex:${b || 0.0001}"></span></div>` : '<div class="tug flat"><span style="flex:1"></span></div>';
+      const win = won ? `Model ${won} ${key === 'secs' ? 'faster' : key === 'tps' ? 'quicker writer' : 'fewer'}` : '';
+      return `<div class="duel"><div class="k">${label}<span class="w">${win}</span></div><div class="vals">${val(a, 'A', A)}<span class="x">vs</span>${val(b, 'B', B)}</div>${tug}</div>`;
+    };
+    cards.push(stat('Time', 'secs', (r) => (r.pending || r.skipped ? null : fin(r)), (s, r) => (r.running ? `<span data-clock>${mmss(s)}</span>` : human(s)), true));
+    cards.push(stat('Steps', 'steps', (r) => (r.pending || r.skipped ? null : stepsOf(r)), (n) => `${n}`, true));
+    cards.push(stat('Errors', 'errors', (r) => (r.pending || r.skipped ? null : errsOf(r)), (n) => `${n}`, true));
+    cards.push(stat('Writes', 'tps', (r) => r.tps ?? null, (n) => `${n} <small>tok/s</small>`, false));
+    return `<div class="duels">${cards.join('')}</div>`;
+  }
+
+  // ---------- Tabs ----------
+  const SHIM = '<script>(function(){var m={};var s={getItem:function(k){return Object.prototype.hasOwnProperty.call(m,k)?m[k]:null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){m={}},key:function(i){return Object.keys(m)[i]||null},get length(){return Object.keys(m).length}};try{Object.defineProperty(window,"localStorage",{value:s,configurable:true})}catch(e){}})();<\/script>';
+  const tabsFor = (t) => [['did', 'What it did'], ['answer', 'Answer'], t.kind === 'page' ? ['page', 'Page'] : ['changes', 'Changes'], ['checks', 'Checks']];
+  const defaultTab = (t) => (t.kind === 'page' ? 'page' : t.kind === 'question' ? 'answer' : 'changes');
+  function curTab(t, A, B) { return A.running || B.running ? 'did' : S.tab[t.id] || defaultTab(t); }
+  function tabContent(tab, r, side) {
+    if (r.pending) return '<div class="none">It runs after the other model.</div>';
+    if (r.skipped) return '<div class="none">Not run: the battle was stopped before its turn.</div>';
+    if (tab === 'did') {
+      if (!r.steps.length) return `<div class="none">${r.running ? (r.loading ? 'Loading the model…' : 'No steps yet') : 'No steps'}</div>`;
+      return `<ul class="steps">${r.steps.map((s, i) => `<li data-row="${side}${i}" class="${S.hl && S.hl.side === side && S.hl.i === i ? 'hl' : ''}${r.running && i === r.steps.length - 1 ? ' new' : ''}"><span class="tm">${mmss(s.t)}</span><span class="dot k-${s.kind}"></span><span class="lb">${esc(s.label)} <i>${esc(s.arg)}</i></span>${s.err ? `<span class="er">${esc(s.err)}</span>` : ''}</li>`).join('')}</ul>${r.error ? `<div class="note" style="margin-top:10px">${esc(r.error)}</div>` : ''}`;
+    }
+    if (r.running) return '<div class="none">Waiting for it to finish</div>';
+    if (tab === 'answer') return r.answer ? `<div class="answer">${md(r.answer)}</div>` : '<div class="none">It wrote no answer</div>';
+    if (tab === 'checks') {
+      if (!r.checks.length) return '<div class="none">This test has no checks: your vote decides.</div>';
+      return `<ul class="clist">${r.checks.map((c) => `<li class="${c.pass ? 'ok' : 'bad'}"><span class="cm">${c.pass ? '✓' : '✗'}</span><span><b>${esc(c.label === "The test's own check" ? "The test's own check (the rules above)" : c.label)}</b>${c.why ? `<span class="why">${esc(c.why)}</span>` : ''}</span></li>`).join('')}</ul>${r.asked?.length ? `<div class="note" style="margin-top:10px">It asked: ${r.asked.map(esc).join(' · ')}</div>` : ''}`;
+    }
+    if (tab === 'page') return r.pages.length ? `<iframe class="pageframe" title="The page Model ${side} made" data-page="${esc(r.pages[0])}" data-side="${side}"></iframe>` : '<div class="none">It made no page</div>';
+    if (!r.diffs.length) return '<div class="none">No files changed</div>';
+    const byPath = {};
+    for (const d of r.diffs) (byPath[d.path] ||= []).push(d);
+    return Object.entries(byPath).map(([p, ds]) => { const lines = ds.flatMap((d) => d.hunk); return `<div class="diff"><div class="fh">${esc(p)}${ds.length > 1 ? ` · ${ds.length} edits` : ''}</div>${lines.map(([k, x]) => `<div class="ln ${k === '+' ? 'add' : k === '-' ? 'del' : 'ctx'}">${k === ' ' ? ' ' : esc(k)} ${esc(x)}</div>`).join('')}</div>`; }).join('');
+  }
+  function countFor(tab, r) {
+    if (r.pending || r.skipped) return '–';
+    if (tab === 'did') return `${stepsOf(r)}`;
+    if (r.running) return '…';
+    if (tab === 'changes') { const n = new Set(r.diffs.map((d) => d.path)).size; return n ? `${n} file${n > 1 ? 's' : ''}` : 'none'; }
+    if (tab === 'answer') return r.answer ? `${r.answer.split(/\s+/).length} words` : 'none';
+    if (tab === 'checks') return r.checks.length ? `${r.checks.filter((c) => c.pass).length}/${r.checks.length}` : 'none';
+    if (tab === 'page') return r.pages.length ? `${r.pages.length}` : 'none';
+    return '';
+  }
+  function tabs(t, A, B, order) {
+    const cur = curTab(t, A, B);
+    const bar = tabsFor(t).map(([k, n]) => `<button role="tab" aria-selected="${cur === k}" data-act="tab" data-tab="${k}">${n}<span class="ct">${countFor(k, A)} · ${countFor(k, B)}</span></button>`).join('');
+    const col = (side, r) => `<div class="tcol"><div class="tch">${who(side, order)}<span class="how">${side === 'A' ? 'went first' : 'went second'} · 1 run · Low · 10 min cap</span>${cur === 'page' && r.pages?.length ? `<button class="bigbtn" data-act="full" data-side="${side}">Open full size ↗</button>` : ''}</div><div class="tbody scroll${cur === 'page' ? ' page' : ''}" data-body="${side}">${tabContent(cur, r, side)}</div></div>`;
+    return `<div class="tabs"><div class="tabbar" role="tablist">${bar}<span class="fill"></span><span class="hint">A on the left, B on the right</span></div><div class="tcols">${col('A', A)}${col('B', B)}</div></div>`;
+  }
+  async function fillFrames() {
+    const det = S.det; if (!det) return;
+    for (const f of mainEl.querySelectorAll('iframe[data-page]')) {
+      if (f.dataset.filled) continue;
+      f.dataset.filled = '1';
+      try { const html = await (await fetch(`/files/${encodeURIComponent(det.id)}/${f.dataset.side}/${f.dataset.page.split('/').map(encodeURIComponent).join('/')}`, { cache: 'no-store' })).text(); f.srcdoc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (h) => `${h}${SHIM}`) : SHIM + html; } catch { f.srcdoc = '<p style="font:14px system-ui;padding:16px">The page could not be read.</p>'; }
+    }
+  }
+  function voteBar(det, A, B) {
+    const v = det.vote;
+    const can = det.status !== 'running' && done(A) && done(B) && !(A.skipped && B.skipped);
+    if (!can) return `<div class="vote"><span class="q">Which did better?</span><span class="picked">${det.status === 'running' ? 'You can vote once both have finished.' : 'Nothing to compare: the battle was stopped.'}</span><span class="fill"></span><button class="vbtn A" disabled><span class="sw A"></span>Model A</button><button class="vbtn T" disabled>Tie</button><button class="vbtn B" disabled><span class="sw B"></span>Model B</button></div>`;
+    const picked = v ? `<span class="picked">You picked <b>${v === 'T' ? 'a tie' : `Model ${v}`}</b>${v !== 'T' && det.order ? ` · ${esc(fullName(det.order[v]))}` : ''}${det.order ? ` · A was ${esc(nameOf(det.order.A))}, B was ${esc(nameOf(det.order.B))}` : ''}</span>` : '<span class="picked">Names stay hidden until you vote.</span>';
+    return `<div class="vote"><span class="q">Which did better?</span>${picked}<span class="fill"></span>${['A', 'T', 'B'].map((k) => `<button class="vbtn ${k}${v === k ? ' on' : ''}" data-act="vote" data-v="${k}">${k === 'T' ? 'Tie' : `<span class="sw ${k}"></span>Model ${k}`}</button>`).join('')}</div>`;
+  }
+
+  // ---------- The main area ----------
+  function notRun(t) {
+    const rules = rulesOf(t);
+    const qi = S.st.queue.indexOf(t.id);
+    const waitingHere = S.st.running?.waiting && S.st.running;
+    return `<div class="panelmsg"><span class="chip" style="justify-self:start">${t.suite === 'new28' ? `New 28 · test ${t.n}` : 'My tests'} · ${kindName[t.kind] ?? t.kind} · not run yet</span><h2>${esc(t.title)}</h2><div class="prompt-full">${esc(t.prompt)}</div>
+      <div class="rules" style="max-width:none;flex-wrap:wrap">${rules.length ? rules.map((x) => `<span class="chip">${esc(x)}</span>`).join('') : '<span class="chip plain">no checks: your vote decides</span>'}</div>
+      <div class="kv"><span>Starter files</span><span>${t.files?.length ? `${t.files.slice(0, 8).map(esc).join(', ')}${t.files.length > 8 ? ` and ${t.files.length - 8} more` : ''}` : 'none (an empty folder)'}</span><span>How it runs</span><span>both models, one after the other · 1 run each · Low · each stopped at 10 min · which is A or B stays hidden until you vote</span></div>
+      <div style="display:flex;gap:8px;align-items:center">${qi >= 0 ? `<button class="btn" data-act="unqueue">In line (#${qi + 1}) · remove</button><span class="picked">${waitingHere ? esc(S.st.waiting ?? '') : ''}</span>` : '<button class="btn pri" data-act="run">Run this battle</button>'}<button class="btn" data-act="edit">Edit</button></div></div>`;
+  }
+  function testView(t) {
+    if (!t.latest || !S.det || S.det.test !== t.id) return notRun(t);
+    const det = S.det;
+    const A = runOf(det, 'A'), B = runOf(det, 'B');
+    const full = S.full && t.kind === 'page' ? (() => { const r = S.full === 'A' ? A : B; return `<div class="full"><div class="fullbar"><b>${esc(t.title)}</b><span style="color:var(--ink3)">· the page each model made, full size</span><span class="fill"></span><div class="seg2">${['A', 'B'].map((k) => `<button data-act="full" data-side="${k}" aria-pressed="${S.full === k}"><span class="sw ${k}"></span>Model ${k}${det.order ? ` · ${esc(nameOf(det.order[k]))}` : ''}</button>`).join('')}</div><button class="btn" data-act="closefull">Close ✕</button></div><div class="fbody">${r.pages?.length ? `<iframe class="pageframe" title="Full size page" data-page="${esc(r.pages[0])}" data-side="${S.full}"></iframe>` : '<div class="none">It made no page</div>'}</div></div>`; })() : '';
+    return `${titleRow(t)}<div class="d3 body">${timelineBox(A, B)}${duels(A, B)}${tabs(t, A, B, det.order)}${voteBar(det, A, B)}</div>${full}`;
+  }
+
+  // ---------- The New test form (also Edit) ----------
+  const EXAMPLES = [
+    ['Fix a bug', 'The tests in this project fail. Find the bug and fix it (fix the code, not the tests).'],
+    ['Ask a question', 'Which function reads the settings file, and what happens when the file is missing? Don\'t change any files.'],
+    ['Make a page', 'Make one self-contained HTML page called timer.html with a 25-minute countdown, Start, Pause and Reset buttons, and my system\'s light or dark mode. Save it to my Desktop.'],
+    ['Add a feature', 'Add a --json flag to the CLI in cli.mjs that prints the result as JSON instead of text, and add a test for it.'],
+  ];
+  const CHECKS = { tests: { label: 'The tests pass' }, 'only-named': { label: 'Nothing else changed' }, 'file-has': { label: 'A file says' }, 'answer-has': { label: 'The answer mentions' }, 'no-change': { label: 'No file was changed' }, saved: { label: 'The file is saved' }, 'scripts-valid': { label: 'Its scripts are valid' }, offline: { label: 'Nothing from the internet' }, 'page-has': { label: 'The page has' } };
+  const ROWS = {
+    code: [['tests', 'The tests pass', "runs the project's tests (npm test, node --test, pytest)", true, ''], ['only-named', 'Nothing else changed', 'only files named in the prompt, test files and new files may change', true, ''], ['file-has', 'A file says…', 'a word or line that must be in a changed file', false, 'e.g. export function slugify']],
+    question: [['answer-has', 'The answer mentions…', 'words the right answer must have (commas between)', true, 'e.g. 8790, config.json'], ['no-change', 'No file was changed', 'a question should not edit anything', true, '']],
+    page: [['saved', 'The page is saved', 'where it should end up (Desktop/ is the Desktop)', true, 'Desktop/page.html'], ['scripts-valid', 'Its scripts are valid', 'every script in the page parses (checked without a browser)', true, ''], ['offline', 'Nothing from the internet', 'works with the Wi-Fi off', true, ''], ['page-has', 'The page has…', 'a word or button that must be on it', false, 'e.g. Reset']],
+    writing: [['saved', 'The file is saved', 'where the text should end up', true, 'e.g. README.md'], ['file-has', 'The file mentions…', 'words it must have', false, '']],
+  };
+  let F = null;
+  const blankForm = () => ({ id: null, prompt: '', name: '', nameTouched: false, kind: null, files: [], oldFiles: [], removed: [], rows: null, rowsKind: null, ask: '', hasScript: false, useScript: true, rules: [], suite: 'mine', n: null, edited: null });
+  const guessKind = (p) => (/\b(html|page|web ?page|site)\b/i.test(p) ? 'page' : /\?\s*$|^(what|which|why|how|where|who|when|explain|is|does|do|can)\b/i.test(p.trim()) ? 'question' : /\b(write|draft) (a|an|the)? ?(story|readme|notes?|changelog|poem|letter|summary)\b/i.test(p) ? 'writing' : 'code');
+  const kindNow = () => F.kind || guessKind(F.prompt);
+  // A name from the prompt: its verb and the file it names ("Make timer.html"), else its first words.
+  const nameFrom = (p) => { const t = p.trim().replace(/\s+/g, ' '); const file = /([\w-]+\.[a-z]{2,5})\b/i.exec(t)?.[1]; const w = file && /^[A-Za-z]+/.test(t) ? `${t.split(' ')[0]} ${file}` : t.split(' ').slice(0, 6).join(' ').replace(/[.,:;]$/, ''); return w ? w[0].toUpperCase() + w.slice(1) : ''; };
+  const pageGuess = (p) => { const m = /([\w-]+\.html?)\b/i.exec(p); return m ? `${/desktop/i.test(p) ? 'Desktop/' : ''}${m[1]}` : ''; };
+  function rowsNow() {
+    const k = kindNow();
+    if (F.rowsKind !== k || !F.rows) { F.rowsKind = k; F.rows = ROWS[k].map(([type, t, d, on, ph]) => ({ type, t, d, on, ph, val: type === 'saved' && k === 'page' ? pageGuess(F.prompt) : '' })); }
+    return F.rows;
+  }
+  // The three steps, the same in the New test page and the Edit tests window.
+  function formSteps() {
+    const k = kindNow(), rows = rowsNow(), script = F.hasScript && F.useScript, any = rows.some((r) => r.on) || script;
+    const editing = Boolean(F.id);
+    const olds = F.oldFiles.filter((p) => !F.removed.includes(p));
+    const chips = [...olds.map((p) => `<span class="chip fchip">${esc(p)}<button class="fx" data-act="rmfile" data-path="${esc(p)}" aria-label="Remove ${esc(p)}" data-tip="Take this file out">×</button></span>`), ...F.files.map((f) => `<span class="chip fchip">${esc(f.path)} · new<button class="fx" data-act="rmnew" data-path="${esc(f.path)}" aria-label="Remove ${esc(f.path)}">×</button></span>`)].join('');
+    const gone = F.removed.length ? `<div class="rmline">${F.removed.length} file${F.removed.length > 1 ? 's' : ''} come${F.removed.length > 1 ? '' : 's'} out when you save · <button class="link" data-act="undorm">keep ${F.removed.length > 1 ? 'them' : 'it'}</button></div>` : '';
+    return `<div class="steps3">
+        <div class="stp"><div class="sh"><span class="no">1</span>What should it do?</div><div class="sb">
+          <textarea id="f-prompt" placeholder="Type it the way you'd ask Agentic Coder, e.g.&#10;&#10;Make a tip calculator page with a bill box, a tip % slider and the total per person. Save it to my Desktop.">${esc(F.prompt)}</textarea>
+          ${editing ? '' : `<div class="guess"><span>Or start from:</span>${EXAMPLES.map(([n], i) => `<button class="pill" data-act="example" data-i="${i}">${n}</button>`).join('')}</div>`}
+          <div class="guess"><span>Kind${F.kind ? '' : ' (guessed)'}:</span>${Object.entries(kindName).map(([key, n]) => `<button class="pill" data-act="kind" data-v="${key}" aria-pressed="${k === key}">${n}</button>`).join('')}</div>
+          <div class="namerow"><span>Name</span><input id="f-name" type="text" value="${esc(F.nameTouched ? F.name : nameFrom(F.prompt))}" placeholder="taken from the prompt"></div>
+          <details class="moreopt"${F.ask ? ' open' : ''}><summary>More: if it asks you something…</summary><textarea id="f-ask" placeholder="What to answer (empty: it's told to decide by itself)">${esc(F.ask)}</textarea></details>
+        </div></div>
+        <div class="stp"><div class="sh"><span class="no">2</span>Starter files <span class="opt">optional</span></div><div class="sb scroll">
+          <div class="drop" id="drop"><div><b>Drop files or a folder</b> or <label class="btn" style="display:inline-block;margin:0 2px">Choose files<input type="file" multiple hidden data-pick="files"></label> <label class="btn" style="display:inline-block">Choose a folder<input type="file" webkitdirectory hidden data-pick="dir"></label><br>Each model works on its own copy. Your files are never changed.<br><span style="font-size:12px">${k === 'page' || k === 'question' ? 'None needed for this kind: it can start in an empty folder.' : 'For a code change, drop the project it should change.'}</span></div></div>
+          ${chips ? `<div class="files">${chips}</div>` : ''}${gone}
+        </div></div>
+        <div class="stp"><div class="sh"><span class="no">3</span>How do we know it worked?</div><div class="sb scroll">
+          <div class="checks">${F.hasScript ? `<div class="check${script ? ' on' : ''}" data-act="script"><span class="bx">✓</span><span class="ct">Its own check${script ? '' : ' (off)'}</span><span class="cd">${script ? `this New 28 test's check script: ${esc((F.rules ?? []).join(' · ') || 'its rules')}` : 'off: it no longer runs. Turn it off when you change what the test asks.'}</span></div>` : ''}${rows.map((r, i) => `<div class="check${r.on ? ' on' : ''}" data-act="check" data-i="${i}"><span class="bx">✓</span><span class="ct">${esc(r.t)}</span><span class="cd">${esc(r.d)}</span>${r.ph && r.on ? `<input type="text" data-val="${i}" value="${esc(r.val)}" placeholder="${esc(r.ph)}">` : ''}</div>`).join('')}</div>
+          <div class="vonly">${any ? 'Every ticked check must hold. Your vote decides which did it better.' : 'No checks ticked: only your vote decides.'}</div>
+        </div></div>
+      </div>`;
+  }
+  // + New test: in the page.
+  function formView() {
+    return `<div class="nt"><h2>New test <span>Three steps. It runs on both models, one after the other: 1 run each, Low, each stopped at 10 min.</span></h2>${formSteps()}
+      <div class="ntfoot"><span class="help">Saved in <code>~/.agentic-coder/battle/tests/</code> as a folder you can also edit by hand.</span><span class="fill"></span><button class="btn" data-act="cancel">Cancel</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div></div>`;
+  }
+  // Edit tests: a window over the page, every test on the left, the one you pick on the right.
+  const modalEl = $('#modal');
+  const listOrder = () => [...tests().filter((t) => t.suite === 'new28'), ...tests().filter((t) => t.suite !== 'new28')];
+  function modalView() {
+    const list = listOrder();
+    const idx = list.findIndex((t) => t.id === F.id);
+    const row = (t) => `<button class="mrow${t.id === F.id ? ' sel' : ''}" data-act="mpick" data-id="${esc(t.id)}"><span class="no">${t.n ?? ''}</span><span class="ti">${esc(t.title)}</span>${t.edited ? '<span class="tag">edited</span>' : ''}</button>`;
+    const n28 = list.filter((t) => t.suite === 'new28'), mine = list.filter((t) => t.suite !== 'new28');
+    const name = F.nameTouched ? F.name : nameFrom(F.prompt);
+    return `<div class="mback" data-act="mclose"></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Edit tests">
+        <div class="mhead"><b>Edit tests</b><span class="sub">pick a test on the left; nothing changes until you press Save</span><span class="fill"></span><button class="mx" data-act="mclose" aria-label="Close">✕</button></div>
+        <div class="mbody">
+          <div class="mlist scroll">${n28.length ? `<div class="mgroup">New 28</div>${n28.map(row).join('')}` : ''}<div class="mgroup">My tests</div>${mine.length ? mine.map(row).join('') : '<div class="mnone">none yet: + New test adds one</div>'}</div>
+          <div class="mform"><div class="mtitle"><h3>${esc(name || 'Untitled test')}</h3><span class="chip">${F.suite === 'new28' ? `New 28 · test ${F.n}` : 'My tests'}</span>${F.edited ? `<span class="chip">edited ${esc(new Date(F.edited).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>` : ''}${dirty() ? '<span class="chip unsaved">not saved yet</span>' : ''}<span class="fill"></span>${F.suite === 'new28' && F.edited ? '<button class="btn" data-act="mreset">Put back the original</button>' : ''}<button class="btn stop" data-act="delete">Delete test</button></div>${formSteps()}</div>
+        </div>
+        <div class="mfoot"><button class="btn" data-act="mprev"${idx <= 0 ? ' disabled' : ''}>‹ Previous</button><button class="btn" data-act="mnext"${idx < 0 || idx >= list.length - 1 ? ' disabled' : ''}>Next ›</button><span class="help">${idx + 1} of ${list.length} · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Close</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div>
+      </div>`;
+  }
+  const snapshotF = () => JSON.stringify([F.prompt, F.nameTouched ? F.name : '', kindNow(), rowsNow().map((r) => [r.type, r.on, r.val]), F.ask, F.files.map((f) => f.path), F.removed, F.useScript]);
+  const dirty = () => Boolean(F && F.id && F.base !== undefined && snapshotF() !== F.base);
+  function loadForm(t) {
+    F = blankForm();
+    if (!t) return;
+    Object.assign(F, { id: t.id, prompt: t.prompt, name: t.title, nameTouched: true, kind: t.kind, oldFiles: t.files ?? [], ask: t.ask ?? '', hasScript: t.hasScript, useScript: !t.noScript, rules: t.rules ?? [], suite: t.suite, n: t.n, edited: t.edited });
+    rowsNow();
+    const have = new Map((t.checks ?? []).map((c) => [c.type, c.value]));
+    for (const r of F.rows) { r.on = have.has(r.type); r.val = have.get(r.type) ?? r.val; }
+    for (const [type, value] of have) if (!F.rows.some((r) => r.type === type)) F.rows.push({ type, t: CHECKS[type]?.label ?? type, d: 'kept from this test', on: true, ph: value ? ' ' : '', val: value });
+    F.base = snapshotF();
+  }
+  function openForm() { F = blankForm(); S.view = 'form'; S.full = null; drawMain(true); $('#f-prompt')?.focus(); }
+  function openModal(id) {
+    const t = testById(id) ?? listOrder()[0]; if (!t) { toast('No tests yet: + New test adds one.', true); return; }
+    loadForm(t); S.modal = true; drawModal(); $('#f-prompt', modalEl)?.focus();
+    const sel = modalEl.querySelector('.mrow.sel'); sel?.scrollIntoView({ block: 'center' });
+  }
+  function drawModal() {
+    const keep = [...modalEl.querySelectorAll('.scroll')].map((b) => b.scrollTop);
+    modalEl.innerHTML = S.modal ? modalView() : '';
+    modalEl.classList.toggle('on', Boolean(S.modal));
+    [...modalEl.querySelectorAll('.scroll')].forEach((b, i) => { b.scrollTop = keep[i] ?? 0; });
+    fades();
+  }
+  const drawForm = () => (S.modal ? drawModal() : drawMain(true));
+  const leaveOk = () => !dirty() || confirm(`You changed "${F.nameTouched ? F.name : nameFrom(F.prompt)}". Leave it without saving?`);
+  function modalGo(id) { if (!id || id === F.id) return; keepForm(); if (!leaveOk()) return; loadForm(testById(id)); drawModal(); modalEl.querySelector('.mrow.sel')?.scrollIntoView({ block: 'nearest' }); }
+  function closeModal() { keepForm(); if (!leaveOk()) return; S.modal = false; F = null; drawModal(); }
+  function keepForm() {
+    const root = S.modal ? modalEl : mainEl;
+    const p = $('#f-prompt', root), n = $('#f-name', root), a = $('#f-ask', root);
+    if (!F) return;
+    if (p) F.prompt = p.value;
+    if (n) { if (n.value !== nameFrom(F.prompt) && n.value.trim()) { F.name = n.value; F.nameTouched = true; } else if (!n.value.trim()) F.nameTouched = false; }
+    if (a) F.ask = a.value;
+  }
+  const toB64 = (buf) => { let s = ''; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+  const SKIPF = /(^|\/)(node_modules|\.git|\.DS_Store|__pycache__)(\/|$)/;
+  function addFiles(list) {
+    let total = F.files.reduce((n, f) => n + f.file.size, 0), skipped = 0;
+    for (const { path, file } of list) {
+      if (SKIPF.test(path)) continue;
+      if (total + file.size > 20e6) { skipped += 1; continue; }
+      F.files = F.files.filter((f) => f.path !== path); F.files.push({ path, file }); total += file.size;
+    }
+    if (skipped) toast(`${skipped} file${skipped > 1 ? 's were' : ' was'} left out: a test's files can be 20 MB in all.`, true);
+  }
+  async function walkEntry(entry, prefix, out) {
+    if (entry.isFile) { await new Promise((ok) => entry.file((f) => { out.push({ path: prefix + f.name, file: f }); ok(); }, ok)); return; }
+    if (!entry.isDirectory || SKIPF.test(prefix + entry.name)) return;
+    const reader = entry.createReader();
+    for (;;) { const batch = await new Promise((ok) => reader.readEntries(ok, () => ok([]))); if (!batch.length) break; for (const e of batch) await walkEntry(e, `${prefix}${entry.name}/`, out); }
+  }
+  async function saveForm(run) {
+    keepForm();
+    const k = kindNow();
+    const root = S.modal ? modalEl : mainEl;
+    if (!F.prompt.trim()) { toast('Type what it should do first (step 1).', true); $('#f-prompt', root)?.focus(); return; }
+    const checks = rowsNow().filter((r) => r.on).map((r) => ({ type: r.type, value: r.val }));
+    const miss = rowsNow().find((r) => r.on && r.ph && r.ph.trim() && !String(r.val).trim() && ['answer-has', 'file-has', 'page-has', 'saved'].includes(r.type));
+    if (miss) { toast(`"${miss.t.replace('…', '')}" needs something to look for, or untick it.`, true); return; }
+    const btns = root.querySelectorAll('.ntfoot .btn, .mfoot .btn'); btns.forEach((b) => { b.disabled = true; });
+    try {
+      // A folder dropped whole keeps its top folder name out: the files land at the project's top.
+      const tops = new Set(F.files.map((f) => f.path.split('/')[0]));
+      const strip = F.files.length > 1 && tops.size === 1 && F.files.every((f) => f.path.includes('/'));
+      const files = [];
+      for (const f of F.files) files.push({ path: strip ? f.path.split('/').slice(1).join('/') : f.path, b64: toB64(await f.file.arrayBuffer()) });
+      const r = await api('/api/tests', { id: F.id, title: F.nameTouched ? F.name : nameFrom(F.prompt), kind: k, prompt: F.prompt, checks, ask: F.ask, files, removePaths: F.removed, useScript: F.hasScript ? F.useScript : null, run });
+      toast(run ? 'Saved. It runs now: one model, then the other.' : 'Saved.');
+      if (S.modal && !run) { await poll(true); loadForm(testById(r.id)); drawModal(); return; }
+      S.modal = false; drawModal();
+      S.sel = r.id; store.set('battle-sel', r.id); S.view = 'test'; F = null;
+      await poll(true);
+    } catch (e) { toast(`Could not save: ${e.message}`, true); btns.forEach((b) => { b.disabled = false; }); }
+  }
+
+  // ---------- Drawing ----------
+  function fades() { for (const el of document.querySelectorAll('.scroll')) el.classList.toggle('more', el.scrollTop + el.clientHeight < el.scrollHeight - 2); }
+  function mainKey() {
+    if (S.view === 'form') return 'form';
+    const t = testById(S.sel); if (!t) return 'none';
+    const d = S.det;
+    const live = d?.live ? `${d.live.side}:${d.live.events.length}:${d.live.events.some((e) => e.text === 'loaded')}` : '';
+    return JSON.stringify([t.id, t.title, t.prompt, t.checks, t.rules, t.latest?.id, t.latest?.status, S.st.queue.indexOf(t.id), S.st.running?.test === t.id, d?.id, d?.status, d?.vote, Object.keys(d?.runs ?? {}), live, S.tab[t.id], S.openPrompt, S.hl, S.full, document.body.classList.contains('compact')]);
+  }
+  function drawMain(force) {
+    const key = mainKey();
+    if (!force && key === S.mainKey) { tickClocks(); return; }
+    S.mainKey = key;
+    if (S.view === 'form') { mainEl.innerHTML = formView(); fades(); return; }
+    const t = testById(S.sel);
+    const keep = [...mainEl.querySelectorAll('.tbody')].map((b) => b.scrollTop);
+    const sameTest = mainEl.dataset.test === S.sel;
+    mainEl.dataset.test = S.sel ?? '';
+    mainEl.innerHTML = t ? testView(t) : '<div class="panelmsg"><h2>No tests yet</h2><div class="none">Add one with + New test.</div></div>';
+    if (sameTest) [...mainEl.querySelectorAll('.tbody')].forEach((b, i) => { b.scrollTop = keep[i] ?? 0; });
+    if (S.det?.live) { const b = mainEl.querySelector(`.tbody[data-body="${S.det.live.side}"]`); if (b) b.scrollTop = b.scrollHeight; }
+    redrawTimeline(); fillFrames(); fades();
+  }
+  function redrawTimeline() { if (S.det && testById(S.sel)?.latest && S.det.test === S.sel) drawTimeline(runOf(S.det, 'A'), runOf(S.det, 'B')); }
+  function tickClocks() {
+    for (const el of document.querySelectorAll('[data-since]')) el.textContent = mmss((Date.now() - Number(el.dataset.since)) / 1000);
+    if (S.det?.live && S.view === 'test') { const r = runOf(S.det, S.det.live.side); for (const el of mainEl.querySelectorAll('[data-clock]')) el.textContent = mmss(r.clock); redrawTimeline(); }
+  }
+  function drawBand() { const html = band(); if (html !== S.bandKey) { S.bandKey = html; bandEl.innerHTML = html; } else tickClocks(); }
+
+  // ---------- Reading the runner ----------
+  let polling = false;
+  async function poll(force) {
+    if (polling && !force) return; polling = true;
+    try {
+      S.st = await api('/api/state');
+      if (!S.sel || !testById(S.sel)) S.sel = S.st.running?.test ?? tests().filter((t) => t.latest).sort((a, b) => String(b.latest.at).localeCompare(String(a.latest.at)))[0]?.id ?? tests()[0]?.id ?? null;
+      const t = testById(S.sel);
+      if (t?.latest) { try { S.det = await api(`/api/battle?id=${encodeURIComponent(t.latest.id)}`); } catch { S.det = null; } } else S.det = null;
+      drawBand();
+      if (S.view === 'test') drawMain(force === true);
+    } catch (e) {
+      bandEl.innerHTML = `<div class="band"><span class="status">The arena's runner is not answering (${esc(e.message)}). Open the Battle tab again to start it.</span></div>`;
+    } finally { polling = false; }
+    clearTimeout(poll.t); poll.t = setTimeout(poll, S.st?.running || S.st?.queue?.length ? 1000 : 2500);
+  }
+
+  // ---------- Clicks ----------
+  document.addEventListener('mousemove', (e) => {
+    const seg = e.target.closest?.('[data-steptip]'); const el = seg || e.target.closest?.('[data-tip]');
+    if (!el) { tip.style.display = 'none'; return; }
+    if (seg) { const [tm, what, err, took] = seg.dataset.steptip.split('|'); tip.innerHTML = `<span class="tm">${esc(tm)}</span><b>${esc(what)}</b>${err ? `<span class="er">${esc(err)}</span>` : ''}<div style="opacity:.7">${esc(took)}</div>`; }
+    else tip.textContent = el.dataset.tip;
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = `${Math.min(innerWidth - w - 8, e.clientX + 14)}px`;
+    tip.style.top = `${e.clientY + 18 + h > innerHeight ? e.clientY - h - 12 : e.clientY + 18}px`;
+  });
+  document.addEventListener('click', async (e) => {
+    if (S.clearOpen && !e.target.closest('.cmenu, [data-act="clearmenu"]')) { S.clearOpen = false; drawBand(); }
+    const seg = e.target.closest('.seg');
+    if (seg && Number(seg.dataset.step) >= 0) { S.tab[S.sel] = 'did'; S.hl = { side: seg.dataset.side, i: Number(seg.dataset.step) }; drawMain(true); const row = mainEl.querySelector(`[data-row="${S.hl.side}${S.hl.i}"]`); if (row) { const box = row.closest('.tbody'); box.scrollTop = row.offsetTop - box.clientHeight / 3; fades(); } return; }
+    const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+    const act = el.dataset.act;
+    try {
+      if (act === 'pick') { if (S.view === 'form' && !confirmLeave()) return; S.view = 'test'; F = null; S.sel = el.dataset.id; store.set('battle-sel', S.sel); S.hl = null; S.full = null; S.openPrompt = false; await poll(true); }
+      if (act === 'new') { if (S.view === 'form' && !confirmLeave()) return; openForm(); }
+      if (act === 'edit' || act === 'edittests') { if (S.view === 'form' && !confirmLeave()) return; if (S.view === 'form') { S.view = 'test'; drawMain(true); } openModal(act === 'edit' ? S.sel : S.sel ?? null); }
+      if (act === 'cancel') { S.view = 'test'; F = null; drawMain(true); }
+      if (act === 'run') { await api('/api/run', { id: S.sel }); toast('In line. It starts when the memory is free.'); await poll(true); }
+      if (act === 'unqueue') { await api('/api/unqueue', { id: S.sel }); await poll(true); }
+      if (act === 'runall') { const r = await api('/api/runall', { suite: 'new28' }); toast(`${r.queued} tests in line, one battle at a time.`); await poll(true); }
+      if (act === 'stop') { if (confirm('Stop the battle that is running? The line of tests waiting is paused too.')) { await api('/api/stop', {}); await poll(true); } }
+      if (act === 'resume') { await api('/api/resume', {}); await poll(true); }
+      if (act === 'clearmenu') { S.clearOpen = !S.clearOpen; drawBand(); }
+      if (act === 'clearline') { S.clearOpen = false; await api('/api/clearqueue', {}); toast('The line is clear: nothing waits to run.'); await poll(true); }
+      if (act === 'clearresults') { S.clearOpen = false; drawBand(); if (confirm('Clear all results? Every battle and your votes move to the arena\'s trash folder (~/.agentic-coder/battle/trash); the score goes back to 0–0. Your tests stay.')) { const r = await api('/api/clearresults', {}); S.det = null; toast(`Cleared: ${r.moved} result${r.moved === 1 ? '' : 's'} moved to the trash folder.`); await poll(true); } }
+      if (act === 'vote') { const r = await api('/api/vote', { id: S.det.id, v: el.dataset.v }); toast(r.order ? `Model A was ${nameOf(r.order.A)}, Model B was ${nameOf(r.order.B)}.` : 'Saved.'); await poll(true); }
+      if (act === 'tab') { S.tab[S.sel] = el.dataset.tab; S.hl = null; drawMain(true); }
+      if (act === 'prompt') { S.openPrompt = !S.openPrompt; drawMain(true); }
+      if (act === 'full') { S.full = el.dataset.side; drawMain(true); }
+      if (act === 'closefull') { S.full = null; drawMain(true); }
+      // The form (in the page, or in the Edit tests window)
+      if (act === 'kind') { keepForm(); F.kind = el.dataset.v; drawForm(); }
+      if (act === 'example') { const [, p] = EXAMPLES[Number(el.dataset.i)]; F.prompt = p; F.kind = null; F.nameTouched = false; F.rows = null; drawForm(); const ta = $('#f-prompt'); ta.focus(); ta.setSelectionRange(p.length, p.length); }
+      if (act === 'check' && !e.target.closest('input')) { keepForm(); const r = rowsNow()[Number(el.dataset.i)]; r.on = !r.on; drawForm(); }
+      if (act === 'script') { keepForm(); F.useScript = !F.useScript; drawForm(); }
+      if (act === 'rmfile') { keepForm(); F.removed.push(el.dataset.path); drawForm(); }
+      if (act === 'rmnew') { keepForm(); F.files = F.files.filter((f) => f.path !== el.dataset.path); drawForm(); }
+      if (act === 'undorm') { keepForm(); F.removed = []; drawForm(); }
+      if (act === 'save' || act === 'saverun') await saveForm(act === 'saverun');
+      if (act === 'delete') {
+        if (!confirm('Delete this test? It moves to the arena\'s trash folder; its results are kept.')) return;
+        const list = listOrder(); const i = list.findIndex((t) => t.id === F.id); const next = list[i + 1] ?? list[i - 1];
+        await api('/api/tests/delete', { id: F.id }); toast('Deleted (kept in ~/.agentic-coder/battle/trash).');
+        if (S.sel === F.id) S.sel = null;
+        await poll(true);
+        if (S.modal && next) { loadForm(testById(next.id)); drawModal(); } else { S.modal = false; F = null; drawModal(); S.view = 'test'; drawMain(true); }
+      }
+      // The Edit tests window
+      if (act === 'mclose') closeModal();
+      if (act === 'mpick') modalGo(el.dataset.id);
+      if (act === 'mprev' || act === 'mnext') { const list = listOrder(); const i = list.findIndex((t) => t.id === F.id); modalGo(list[i + (act === 'mnext' ? 1 : -1)]?.id); }
+      if (act === 'mreset') { if (confirm('Put back the original test? Your edited copy moves to the arena\'s trash folder.')) { await api('/api/tests/reset', { id: F.id }); await poll(true); loadForm(testById(F.id)); drawModal(); toast('The original is back.'); } }
+    } catch (err) { toast(err.message, true); }
+  });
+  const confirmLeave = () => !F || (!F.prompt.trim() && !F.files.length) || confirm('Leave this test without saving it?');
+  document.addEventListener('input', (e) => {
+    if (!F || !e.target.closest('#main, #modal')) return;
+    const root = S.modal ? modalEl : mainEl;
+    if (e.target.id === 'f-prompt') { F.prompt = e.target.value; const n = $('#f-name', root); if (n && !F.nameTouched) n.value = nameFrom(F.prompt); if (!F.kind) { const g = guessKind(F.prompt); for (const p of root.querySelectorAll('.pill[data-act="kind"]')) p.setAttribute('aria-pressed', String(p.dataset.v === g)); if (F.rowsKind !== g) { const pos = e.target.selectionStart; drawForm(); const ta = $('#f-prompt', root); ta.focus(); ta.setSelectionRange(pos, pos); } } }
+    if (e.target.id === 'f-name') { F.name = e.target.value; F.nameTouched = Boolean(e.target.value.trim()); }
+    if (e.target.id === 'f-ask') F.ask = e.target.value;
+    if (e.target.dataset.val != null) rowsNow()[Number(e.target.dataset.val)].val = e.target.value;
+    // The window's title and "not saved yet" follow what you type.
+    if (S.modal) { const h = $('.mtitle h3', modalEl); if (h) h.textContent = (F.nameTouched ? F.name : nameFrom(F.prompt)) || 'Untitled test'; const u = $('.mtitle .unsaved', modalEl); if (dirty() && !u) $('.mtitle h3', modalEl).insertAdjacentHTML('afterend', '<span class="chip unsaved">not saved yet</span>'); if (!dirty() && u) u.remove(); }
+  });
+  document.addEventListener('change', (e) => { const i = e.target.closest('input[data-pick]'); if (!i || !F) return; keepForm(); addFiles([...i.files].map((f) => ({ path: i.dataset.pick === 'dir' ? f.webkitRelativePath || f.name : f.name, file: f }))); drawForm(); });
+  document.addEventListener('dragover', (e) => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+  document.addEventListener('dragleave', (e) => { const d = e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+  document.addEventListener('drop', async (e) => {
+    const d = e.target.closest('#drop'); if (!d || !F) return; e.preventDefault(); d.classList.remove('over'); keepForm();
+    const out = [];
+    const items = [...(e.dataTransfer.items ?? [])].map((it) => it.webkitGetAsEntry?.()).filter(Boolean);
+    if (items.length) for (const en of items) await walkEntry(en, '', out); else for (const f of e.dataTransfer.files) out.push({ path: f.name, file: f });
+    addFiles(out); drawForm();
+  });
+  document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('scroll')) fades(); }, true);
+  document.addEventListener('keydown', (e) => {
+    if (S.modal && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveForm(false); return; }
+    if (e.key === 'Escape' && S.clearOpen) { S.clearOpen = false; drawBand(); return; }
+    if (e.key === 'Escape' && S.modal) { closeModal(); return; }
+    if (e.key === 'Escape' && S.full) { S.full = null; drawMain(true); }
+  });
+  const setCompact = () => { const c = innerHeight < 780; if (c !== document.body.classList.contains('compact')) { document.body.classList.toggle('compact', c); if (S.view === 'test') drawMain(true); } };
+  window.addEventListener('resize', () => { setCompact(); redrawTimeline(); fades(); });
+  setCompact();
+  setInterval(tickClocks, 1000);
+  poll(true);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+ "id": "n19-tip-calculator",
+ "n": 19,
+ "suite": "new28",
+ "title": "Make a tip calculator page",
+ "kind": "page",
+ "rules": [
+  "Desktop/tip.html is saved, offline",
+  "A 0\u201330 % slider, bill and people boxes",
+  "Shows the total per person, live",
+  "Its script is valid"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/tip.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/tip.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

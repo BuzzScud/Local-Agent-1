@@ -286,6 +286,7 @@ export function otherCopies(model, { psText = null, live = null } = {}) {
 function whoStarted(r, byPid) {
   for (let p = byPid.get(r.ppid), i = 0; p && i < 8; p = byPid.get(p.ppid), i++) {
     if (/evals\/bench\//.test(p.cmd)) return 'a practice-test run';
+    if (/evals\/battle\//.test(p.cmd)) return 'a battle (Gemma vs Qwen)';
     if (/probe|speed|compare/i.test(p.cmd)) return 'a speed test';
     if (/(^|\s)(-p|--print)(\s|$)/.test(p.cmd) && /coding|agentic|cli\.jsx/.test(p.cmd)) return 'a coding -p run';
   }

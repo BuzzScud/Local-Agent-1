@@ -1,0 +1,16 @@
+{
+ "id": "n11-python-dry-run",
+ "n": 11,
+ "suite": "new28",
+ "title": "Python: add a --dry-run option",
+ "kind": "code",
+ "rules": [
+  "--dry-run prints the renames",
+  "--dry-run renames nothing",
+  "The real rename still works"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

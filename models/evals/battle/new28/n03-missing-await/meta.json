@@ -1,0 +1,16 @@
+{
+ "id": "n03-missing-await",
+ "n": 3,
+ "suite": "new28",
+ "title": "Fix a save loop that finishes too early",
+ "kind": "code",
+ "rules": [
+  "The tests pass",
+  "Items are saved in order",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

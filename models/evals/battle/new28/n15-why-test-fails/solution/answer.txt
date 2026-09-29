@@ -1,0 +1,1 @@
+Because 1.005 cannot be stored exactly in binary floating point: it is really 1.00499999…, so toFixed(2) rounds it down to 1.00, not 1.01.

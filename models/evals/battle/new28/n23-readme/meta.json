@@ -1,0 +1,21 @@
+{
+ "id": "n23-readme",
+ "n": 23,
+ "suite": "new28",
+ "title": "Write a README for a small project",
+ "kind": "writing",
+ "rules": [
+  "README.md is saved (12+ lines)",
+  "Says how to install and run it, with an example",
+  "Explains --top and --min-length"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "README.md"
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}
