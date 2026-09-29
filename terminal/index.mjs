@@ -8,6 +8,8 @@
 //   - the context helpers: which are on, and the code search, for the bench.
 //   - the saved settings and the limits /effort keeps, for a probe that runs
 //     the way the app does (models/evals/tools/long-task.mjs).
+//   - the design examples and the layout check, for the before/after test
+//     (models/evals/bench/design/).
 export { runHeadless } from './src/headless.mjs';
 export { Agent, claimsAlreadyThere } from './src/agent/agent.mjs';
 export { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './src/agent/prompt.mjs';
@@ -27,3 +29,5 @@ export { helpersOn, HELPER_NAMES, CODENAMES, codenameOf } from './src/agent/help
 export { CodeIndex } from './src/tools/codeindex.mjs';
 export { loadSettings } from './src/app/store.mjs';
 export { readLimits, modelWithLimits } from './src/app/limits.mjs';
+export { designDir, readCards, isDesignRequest } from './src/agent/design.mjs';
+export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/layoutcheck.mjs';
