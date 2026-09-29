@@ -391,14 +391,20 @@ export function LiveArea({ app }) {
 
 const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks' };
 
-export function permissionOptions(req, prefix) {
+// prefix: the rule "don't ask again" would remember (null: none can, the
+// command's words cannot be trusted); saveRule: what "always allow" would save
+// for this folder (/permissions), when the app can save one.
+export function permissionOptions(req, prefix, saveRule = null) {
+  const yes = { label: 'Yes', choice: 'yes' };
   const no = { label: 'No, and tell Agentic Coder what to do differently (esc)', choice: 'no' };
   if (req.name === 'Ask') return [...(req.args.options ?? []).map((o) => ({ label: o, choice: 'answer', text: o })), { label: 'Type an answer', choice: 'type' }, { label: 'Stop here (esc)', choice: 'no' }];
   // A git commit asks every time (permissions.mjs), so it has no "don't ask again".
-  if (req.name === 'Bash') return req.once ? [{ label: 'Yes', choice: 'yes' }, no] : [{ label: 'Yes', choice: 'yes' }, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, no];
+  if (req.name === 'Bash') return req.once || !prefix ? [yes, no] : [yes, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, ...(saveRule ? [{ label: `Yes, and always allow ${saveRule} in this folder`, choice: 'save' }] : []), no];
   if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Agentic Coder what the test should check (esc)', choice: 'no' }];
-  if (req.name === 'Rename') return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
-  return [{ label: 'Yes', choice: 'yes' }, { label: 'Yes, allow all edits this session (shift+tab)', choice: 'always' }, no];
+  // A protected file asks every time (permissions.mjs), so it has no "allow all edits".
+  if (req.once) return [yes, no];
+  if (req.name === 'Rename') return [yes, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
+  return [yes, { label: 'Yes, allow all edits this session (shift+tab)', choice: 'always' }, no];
 }
 
 function PermissionPrompt({ app }) {
@@ -408,7 +414,7 @@ function PermissionPrompt({ app }) {
   const hunk = req.prepared?.hunk ?? [];
   // The whole prompt fits the window with a line to spare: a live area as
   // tall as the window makes Ink clear and redraw the screen on every frame.
-  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1; // …, the status line, a spare line
+  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1 + (req.protectedBy ? 1 : 0); // …, the status line, a spare line, the protected-file line
   const room = Math.max(3, app.rows - fixed);
   const cap = Math.max(2, room - 4); // the diff box: its border, file name and "more lines"
   const files = req.prepared?.files ?? [];
@@ -445,6 +451,7 @@ function PermissionPrompt({ app }) {
           {hunk.length > cap ? <Text color={C.dim}>… +{hunk.length - cap} more lines</Text> : null}
         </Box>
       )}
+      {req.protectedBy ? <Text color={C.warn}>Protected: {req.protectedBy} always asks before a change, even in Auto-edit.</Text> : null}
       {req.name === 'Ask' ? null
         : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
@@ -621,8 +628,8 @@ function SettingsPicker({ app }) {
   let at = 0;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>Settings</Text>
-      <Text color={C.dim}>Everything not in the / menu. Each still works typed in full, like /doctor.</Text>
+      <Text bold>{pk.title ?? 'Settings'}</Text>
+      <Text color={C.dim}>{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text>
       {pk.groups.map((g) => (
         <Box key={g.group} flexDirection="column" marginTop={tight ? 0 : 1}>
           <Text bold>{g.group}</Text>

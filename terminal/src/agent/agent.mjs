@@ -9,7 +9,7 @@ import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
-import { decide, commandPrefix, isReadOnly } from './permissions.mjs';
+import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
@@ -237,9 +237,9 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm });
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
     // or one given on its own (the practice bench runs without the memory).
     this.ranker = ranker;
@@ -372,6 +372,11 @@ export class Agent extends EventEmitter {
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
+  // What you saved with /permissions for the folder Agentic Coder works in now:
+  // { allow, never, protect }. `permissions` is a function of the folder (the app
+  // and `coding -p` give one), so a move to another project switches the lists;
+  // read at every call, so a rule saved in another window counts at once.
+  savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
   reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
@@ -416,6 +421,8 @@ export class Agent extends EventEmitter {
       confirm: (plan) => (this.confirmPlan ? this.confirm(plan, signal) : { ok: true }),
       mode: () => this.mode,
       setMode: (m) => this.setMode(m),
+      // A protected file always asks (permissions.mjs), even on auto-accept.
+      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return protectedBy([rel, at.realRel], this.savedRules()?.protect); },
       tool,
       note: (text, tone = 'dim') => this.emit('note', { text, tone }),
       // What a path found before handing over to the step-by-step way: a check
@@ -1430,8 +1437,10 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: msg }, error: true });
       return { text: msg, error: true };
     }
-    const inside = args.path ? resolvePath(this.cwd, args.path).inside : true;
-    const d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd });
+    const at = args.path ? resolvePath(this.cwd, args.path) : null;
+    const inside = at ? at.inside : true;
+    const rules = this.savedRules();
+    const d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel });
     if (d.decision === 'deny') {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: d.reason }, error: true });
       return { text: `Not allowed: ${d.reason}. ${this.claudeCame ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
@@ -1448,7 +1457,7 @@ export class Agent extends EventEmitter {
     }
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
-      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}) });
+      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}), ...(d.protectedBy ? { protectedBy: d.protectedBy } : {}) });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
       if (answer.choice === 'no') {
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
@@ -1456,8 +1465,9 @@ export class Agent extends EventEmitter {
       }
       if (answer.choice === 'always') {
         // A commit asks every time (d.once): a "yes" to it is never remembered.
-        if (call.name === 'Bash') { if (!d.once) this.allowedPrefixes.add(commandPrefix(args.command)); }
-        else this.setMode('edits');
+        // What is remembered is the rule for the first part of the command nothing covers yet.
+        if (call.name === 'Bash') { const o = d.once ? null : offerFor(args.command, { saved: rules?.allow, session: this.allowedPrefixes }); if (o) this.allowedPrefixes.add(o.rule); }
+        else if (!d.once) this.setMode('edits');
       }
       // You saw this change and said yes: that was the plan question.
       if ((call.name === 'Edit' || call.name === 'Write') && this.turn) this.turn.planOk = true;

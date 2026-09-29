@@ -105,10 +105,12 @@ export async function renameFlow(ctx, from, to) {
   p.step(0);
   ctx.tool('Search', from, { kind: 'search', count: plan.total, content: plan.files.map((f) => `${f.rel}: ${f.count}`).join('\n') });
   p.step(1);
-  if (ctx.mode() !== 'edits') {
-    const answer = await ctx.ask({ id: `rename_${Date.now()}`, name: 'Rename', args: { from, to }, prepared: { files: plan.files.map((f) => ({ rel: f.rel, hunk: f.hunk, count: f.count })), total: plan.total }, label: 'Rename', arg: `${from} → ${to}` });
+  // A rename that reaches a protected file (.env, .git/…, yours from /permissions) asks even on auto-accept.
+  const guard = plan.files.map((f) => ctx.protectedBy?.(f.rel)).find(Boolean) ?? null;
+  if (ctx.mode() !== 'edits' || guard) {
+    const answer = await ctx.ask({ id: `rename_${Date.now()}`, name: 'Rename', args: { from, to }, prepared: { files: plan.files.map((f) => ({ rel: f.rel, hunk: f.hunk, count: f.count })), total: plan.total }, label: 'Rename', arg: `${from} → ${to}`, ...(guard ? { once: true, protectedBy: guard } : {}) });
     if (answer.choice === 'no') { ctx.tool('Rename', `${from} → ${to}`, { kind: 'declined', feedback: answer.feedback }, true); return { handled: true, done: false, declined: true, summary: 'You said no to the rename; nothing was changed.' }; }
-    if (answer.choice === 'always') ctx.setMode('edits');
+    if (answer.choice === 'always' && !guard) ctx.setMode('edits');
   }
   applyRename(plan);
   for (const f of plan.files) {

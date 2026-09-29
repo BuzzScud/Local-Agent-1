@@ -34,6 +34,8 @@ import { memoryOn } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';
+import { rulesFor } from './app/perm-store.mjs';
+import { modeWord } from './app/perms.mjs';
 
 import { VERSION, cliHelpText } from './app/help.mjs';
 export { VERSION };
@@ -236,6 +238,8 @@ if (opts.print) {
     const r = await runHeadless({
       prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots, limits,
+      // What you saved with /permissions: commands that run without asking, and the ones that never run.
+      permissions: (dir) => rulesFor(dir),
       // The context helpers: as /helpers left them (AGENTIC_HELPERS wins).
       helpers: helpersFrom(settings),
       // The memory: facts brought back, and what the run taught saved before it ends.
@@ -267,6 +271,7 @@ if (opts.print) {
     opts.loaded = [
       names.join(' + ') || 'no AGENTS.md',
       ...(st.fromFolder?.length ? [`folder settings (${st.fromFolder.filter((k) => k !== 'thinking').join(', ')})`] : []),
+      ...(st.modeFrom && st.mode !== 'ask' ? [`${modeWord(st.mode)} (/permissions)`] : []),
       git === 'not a git repository' ? 'no git' : `git: ${git}`,
     ].join(' · ');
   } catch {}

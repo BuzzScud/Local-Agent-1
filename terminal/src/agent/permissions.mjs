@@ -105,11 +105,15 @@ function pathCandidates(cmd) {
 // (tail -c 60 file | od -c; wc -l file), as long as nothing writes a file
 // (> or >>, except to /dev/null) and no command runs another ($(…), `…`).
 const READERS = /^(?:ls|pwd|cat|head|tail|wc|grep|egrep|fgrep|rg|find|tree|file|stat|du|which|echo|printf|od|xxd|hexdump|sort|uniq|cut|tr|nl|cmp|diff|basename|dirname|realpath|date|column|fold|true|git\s+(?:status|diff|log|show|branch|blame|ls-files|rev-parse))\b/;
-export function isReadOnly(command) {
+
+// A command cut into its parts at unquoted | ; && || and NEW LINES (a new
+// line starts another command, so "ls⏎rm notes.txt" is two), with what makes
+// its words unsafe to judge: another command inside it ($(…), `…`), a file
+// written by > or >> (not to /dev/null), a job left running with &, a quote
+// left open. Quoted text is text: newlines and ; inside quotes do not cut.
+export function splitCommand(command) {
   const cmd = String(command ?? '').trim();
-  if (!cmd || /`|\$\(|<\(|>\(/.test(cmd)) return false;
-  // Split into commands at unquoted | ; && || and find unquoted > (writing a file).
-  const parts = [];
+  const out = { parts: [], nested: /`|\$\(|<\(|>\(/.test(cmd), writes: false, background: false, open: false };
   let cur = '';
   let q = null;
   for (let i = 0; i < cmd.length; i++) {
@@ -117,28 +121,33 @@ export function isReadOnly(command) {
     if (q) { if (c === '\\' && q === '"' && i + 1 < cmd.length) { cur += c + cmd[++i]; continue; } if (c === q) q = null; cur += c; continue; }
     if (c === '"' || c === "'") { q = c; cur += c; continue; }
     if (c === '\\' && i + 1 < cmd.length) { cur += c + cmd[++i]; continue; }
-    if (c === '|' || c === ';' || (c === '&' && cmd[i + 1] === '&')) { parts.push(cur); cur = ''; if (cmd[i + 1] === c) i++; continue; }
+    if (c === '|' || c === ';' || c === '\n' || (c === '&' && cmd[i + 1] === '&')) { out.parts.push(cur); cur = ''; if (cmd[i + 1] === c) i++; continue; }
     if (c === '>') {
-      const tail = cmd.slice(i);
-      const m = /^>{1,2}\s*\/dev\/null\b|^>&[12]\b/.exec(tail);
-      if (!m) return false; // writes a file
-      i += m[0].length - 1;
-      cur = cur.replace(/\d$/, '');
-      continue;
-    }
-    if (c === '&') return false; // runs something in the background
+      const m = /^>{1,2}\s*\/dev\/null\b|^>&[12]\b/.exec(cmd.slice(i));
+      if (m) { i += m[0].length - 1; cur = cur.replace(/\d$/, ''); continue; }
+      out.writes = true; // writes a file
+    } else if (c === '&') out.background = true; // runs something in the background
     cur += c;
   }
-  if (q) return false;
-  parts.push(cur);
-  for (const part of parts) {
-    const p = part.trim();
-    if (!p) continue;
-    if (/^sed\s+-n\s+'?\d+(,\d+)?p'?(\s|$)/.test(p) && !/\s-i\b/.test(p)) continue; // sed -n '24p' file
-    if (!READERS.test(p)) return false;
-    if (/^find\b/.test(p) && /\s-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)\b/.test(p)) return false;
-  }
-  return true;
+  out.open = q !== null;
+  out.parts.push(cur);
+  return out;
+}
+
+// One part that only reads.
+function readerPart(part) {
+  const p = part.trim();
+  if (/^sed\s+-n\s+'?\d+(,\d+)?p'?(\s|$)/.test(p) && !/\s-i\b/.test(p)) return true; // sed -n '24p' file
+  if (!READERS.test(p)) return false;
+  return !(/^find\b/.test(p) && /\s-(exec|execdir|ok|okdir|delete|fprint|fprintf|fls)\b/.test(p));
+}
+
+export function isReadOnly(command) {
+  const cmd = String(command ?? '').trim();
+  if (!cmd) return false;
+  const s = splitCommand(cmd);
+  if (s.nested || s.writes || s.background || s.open) return false;
+  return s.parts.every((p) => !p.trim() || readerPart(p));
 }
 
 export function blockedReason(command) {
@@ -154,29 +163,180 @@ export function blockedReason(command) {
 const GIT_COMMIT = new RegExp(`(?:${CMD}|["'])\\s*git(?:\\s+(?:-[cC]\\s+\\S+|--?[\\w-]+(?:=\\S+)?))*\\s+commit\\b`);
 export const runsGitCommit = (command) => GIT_COMMIT.test(String(command ?? ''));
 
-// "don't ask again for X": the first two words of a command.
-export const commandPrefix = (command) => command.trim().split(/\s+/).slice(0, 2).join(' ');
+// ---- What you save with /permissions: commands that run without asking,
+// commands that never run, and files that always ask. Rules are plain words.
 
-export function decide(name, args, { mode, allowedPrefixes, inside = true, cwd }) {
-  if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow' };
-  if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
+const words = (s) => String(s ?? '').trim().split(/\s+/).filter(Boolean);
+const STAR = /\s*\*\s*$/;
+// npm run, bun run …: the script after them is what a rule names.
+const RUNNERS = new Set(['npm', 'pnpm', 'yarn', 'bun', 'deno']);
+const RUN_WORDS = new Set(['run', 'exec', 'x', 'dlx', 'task']);
+// A rule that names a whole program ("make", "bun run"): it still covers only
+// that command and its options; /permissions says "make *" covers the rest.
+export const isBroad = (w) => w.length === 1 || (w.length === 2 && RUNNERS.has(w[0]) && RUN_WORDS.has(w[1]));
+
+// Does a rule cover one command (one part of a longer one)? The command must
+// start with the rule's words, whole words, and whatever follows must be
+// options (words that start with -): "npm test" covers "npm test --watch",
+// not "npm testing", not "npm run test", and "rm notes.txt" never covers
+// "rm notes.txt other.txt". For npm, bun and the like, what follows -- goes
+// to the script you allowed ("npm test -- foo"). A rule ending with * covers
+// anything after its words ("git add *").
+export function ruleCovers(rule, part) {
+  const r = words(String(rule ?? '').replace(STAR, ''));
+  const w = words(part);
+  if (!r.length || r.length > w.length || !r.every((x, i) => x === w[i])) return false;
+  if (STAR.test(String(rule))) return true;
+  const toScript = RUNNERS.has(r[0]);
+  for (let i = r.length; i < w.length; i++) {
+    if (toScript && w[i] === '--') return true;
+    if (!w[i].startsWith('-')) return false;
+  }
+  return true;
+}
+
+// The rule "always allow" saves for a command: what it runs ("npm test",
+// "bun run test", "git add", "node --test"), or the whole command when
+// that would not cover it ("git add ." → "git add ."; "rm notes.txt").
+export function ruleFor(part) {
+  const w = words(part);
+  if (!w.length) return null;
+  const n = RUNNERS.has(w[0]) && RUN_WORDS.has(w[1] ?? '') && w[2] && !w[2].startsWith('-') ? 3 : 2;
+  const head = w.slice(0, n).join(' ');
+  return ruleCovers(head, part) ? head : w.join(' ');
+}
+
+// Every part of a command against the rules: which part only reads, which
+// a saved rule or this session's "don't ask again" covers, which nothing does.
+// Allowed only when every part is covered and its words can be trusted (no
+// $(…), no file written by >, no job left running).
+export function coverage(command, { saved = [], session = [] } = {}) {
+  const s = splitCommand(command);
+  const plain = !(s.nested || s.writes || s.background || s.open);
+  const sessionRules = [...(session ?? [])];
+  const parts = s.parts.map((p) => p.trim()).filter(Boolean).map((part) => {
+    if (readerPart(part)) return { part, by: 'reads' };
+    if (/^cd\s+\S/.test(part)) return { part, by: 'cd' }; // the fence already keeps cd inside the project
+    const rule = (saved ?? []).find((r) => ruleCovers(r, part));
+    if (rule) return { part, by: 'saved', rule };
+    const now = sessionRules.find((r) => ruleCovers(r, part));
+    if (now) return { part, by: 'session', rule: now };
+    return { part, by: null };
+  });
+  return { plain, parts, allowed: plain && parts.length > 0 && parts.every((p) => p.by) };
+}
+
+// What "always allow" would save for this command: the rule for its first
+// part nothing covers yet. Nothing to offer when its words cannot be trusted
+// ($(…), a file written by >, a job left running) or every part is covered.
+export function offerFor(command, rules = {}) {
+  const c = coverage(command, rules);
+  if (!c.plain) return null;
+  const next = c.parts.find((p) => !p.by);
+  const rule = next ? ruleFor(next.part) : null;
+  // A rule longer than a typed one may be (checkRule) is not offered: the question asks each time.
+  return rule && rule.length <= 120 ? { rule, part: next.part } : null;
+}
+
+// The rule of yours (never) whose words appear one after another as whole
+// words anywhere in a command, quoted or chained: sh -c "npm publish" too.
+const escapeText = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function neverRule(command, never = []) {
+  const text = String(command ?? '');
+  for (const rule of never ?? []) {
+    const w = words(String(rule).replace(STAR, ''));
+    if (!w.length) continue;
+    const re = new RegExp(`(?:^|[\\s;&|(\\x60"'])${w.map(escapeText).join('\\s+')}(?=$|[\\s;&|)\\x60"'])`);
+    if (re.test(text)) return rule;
+  }
+  return null;
+}
+
+// Files that always ask before a change, even in Auto-edit: secrets, git's
+// own folder, and this app's settings (a model that could write "mode":
+// "edits" there would turn Auto-edit on for itself; started in the home
+// folder, .agentic-coder/ with the saved rules is inside the project). Yours
+// come on top. Names match whatever their case: on a Mac .ENV is .env.
+export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.bonsai/settings.json', '.agentic-coder/**'];
+// * is any run of characters within one name, ** any run across folders, ? one character.
+const globText = (g) => g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*').replace(/\?/g, '[^/]');
+const globRe = (g) => new RegExp(`(?:^|/)${globText(g)}$`, 'i');
+// rel: a path from the project folder, or several (a link and where it points).
+export function protectedBy(rel, extra = []) {
+  for (const one of [].concat(rel ?? [])) {
+    if (!one) continue;
+    const p = String(one).replace(/\\/g, '/').replace(/^\.\//, '');
+    for (const g of [...PROTECTED, ...(extra ?? [])]) if (globRe(String(g).replace(/^\.\//, '')).test(p)) return g;
+  }
+  return null;
+}
+
+// What a typed rule may be, for /permissions allow | never | protect:
+// { rule, note? } to save, or { error } to say why not.
+export function checkRule(kind, text) {
+  const t = String(text ?? '').trim().replace(/^(["'`])(.*)\1$/s, '$2').replace(/\s+/g, ' ').trim();
+  if (!t) return { error: kind === 'protect' ? 'Say which file, like /permissions protect config/prod.*' : `Say which command, like /permissions ${kind} npm test` };
+  if (t.length > 120) return { error: 'That is too long for a rule (120 characters at most).' };
+  if (kind === 'protect') {
+    if (/^[/~]|(^|\/)\.\.(\/|$)/.test(t)) return { error: 'A protected file is named from the project folder: config/prod.*, not a full path or ../ .' };
+    if (!/[^*?/]/.test(t)) return { error: 'That would match every file. Name the file: .env.local, config/prod.*' };
+    return { rule: t };
+  }
+  const bare = t.replace(STAR, '');
+  if (/[;&|<>\x60$()]/.test(bare)) return { error: 'A rule is one command, without ; & | > or $( ). Save each part as its own rule.' };
+  const why = blockedReason(bare);
+  if (kind === 'allow') {
+    if (why) return { error: `That is never allowed (${why}), so no rule can allow it.` };
+    if (runsGitCommit(bare) || /^git\s+commit\b/.test(bare)) return { error: 'A commit always asks first, so no rule can allow it.' };
+    if (isReadOnly(bare)) return { error: `"${bare}" only reads, so it already runs without asking.` };
+    const w = words(bare);
+    if (isBroad(w) && !STAR.test(t)) return { rule: t, note: `"${bare} *" would cover anything after it.` };
+    return { rule: t };
+  }
+  if (why) return { error: `That is already never allowed (${why}).` };
+  return { rule: t };
+}
+
+// The decision for one tool call, with the reason (the /permissions test
+// panel prints it). decide() below is the same without the reason.
+//   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
+export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel } = {}) {
+  if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
+  if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow', why: 'reading inside the project never asks' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
   if (name === 'Edit' || name === 'Write') {
     if (!inside) return { decision: 'deny', reason: 'that file is outside the project folder' };
     if (mode === 'plan') return { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' };
-    if (mode === 'edits') return { decision: 'allow' };
-    return { decision: 'ask' };
+    // A protected file always asks, even in Auto-edit, and has no "allow all edits" choice (once).
+    const guard = protectedBy(rel ?? args?.path, rules?.protect);
+    if (guard) return { decision: 'ask', once: true, protectedBy: guard, why: `it is a protected file (${guard}); protected files always ask` };
+    if (mode === 'edits') return { decision: 'allow', why: 'Auto-edit is on' };
+    return { decision: 'ask', why: 'Ask first is on' };
   }
   if (name === 'Bash') {
-    const why = blockedReason(args.command ?? '');
+    const command = args?.command ?? '';
+    const why = blockedReason(command);
     if (why) return { decision: 'deny', reason: `blocked: ${why}` };
-    const out = outsidePath(args.command, cwd);
+    const out = outsidePath(command, cwd);
     if (out) return { decision: 'deny', reason: `${out} is outside the project folder; commands stay inside it` };
-    if (mode === 'plan') return isReadOnly(args.command) ? { decision: 'allow' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
+    // Your own never-list holds in every mode.
+    const mine = neverRule(command, rules?.never);
+    if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
+    if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
     // once: no "don't ask again" for it.
-    if (runsGitCommit(args.command)) return { decision: 'ask', once: true };
-    if (isReadOnly(args.command)) return { decision: 'allow' };
-    if (allowedPrefixes?.has(commandPrefix(args.command))) return { decision: 'allow' };
-    return { decision: 'ask' };
+    if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
+    if (isReadOnly(command)) return { decision: 'allow', why: 'it only reads' };
+    const c = coverage(command, { saved: rules?.allow, session: allowedPrefixes });
+    if (c.allowed) {
+      const used = [...new Set(c.parts.filter((p) => p.rule).map((p) => `"${p.rule}" (${p.by === 'saved' ? 'saved' : 'this session'})`))];
+      return { decision: 'allow', why: `every part is covered: ${used.join(', ')}${c.parts.some((p) => p.by === 'reads') ? ', the rest only reads' : ''}` };
+    }
+    const open = c.parts.find((p) => !p.by);
+    return { decision: 'ask', why: !c.plain ? 'its words cannot be trusted for a rule ($(…), a file written with >, or a job left running), so it asks' : c.parts.length > 1 ? `"${open.part}" is not covered by any rule` : 'it can change things and no rule covers it' };
   }
   return { decision: 'deny', reason: 'unknown tool' };
+}
+
+export function decide(name, args, ctx) {
+  const { why, ...d } = judge(name, args, ctx);
+  return d;
 }

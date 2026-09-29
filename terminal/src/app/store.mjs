@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, ex
 import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
+import { startModeFor } from './perm-store.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
 const DEFAULTS = { thinking: null, model: 'gemma' };
@@ -36,11 +37,15 @@ function folderSettings(cwd) {
 export function loadSettings(cwd) {
   let global;
   try { global = { ...DEFAULTS, ...JSON.parse(readFileSync(SETTINGS, 'utf8')) }; } catch { global = { ...DEFAULTS }; }
-  return { ...global, ...folderSettings(cwd) };
+  // The start-up mode saved with /permissions (its folder's, else everywhere's)
+  // wins over the older settings files; modeFrom says which it was.
+  const saved = cwd ? startModeFor(cwd) : null;
+  return { ...global, ...folderSettings(cwd), ...(saved ? { mode: saved.mode, modeFrom: saved.where } : {}) };
 }
 export function saveSettings(patch) {
   const next = { ...loadSettings(), ...patch };
   delete next.fromFolder;
+  delete next.modeFrom;
   mkdirSync(HOME, { recursive: true });
   writeFileSync(SETTINGS, `${JSON.stringify(next, null, 2)}\n`);
   return next;

@@ -15,7 +15,7 @@ test('/settings → Weights starts the viewer inside the window: the note names 
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
-    ...Array.from({ length: 5 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
+    ...Array.from({ length: 6 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
     ...quit,

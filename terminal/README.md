@@ -43,7 +43,7 @@ uncommitted).
 | ctrl+c twice | quit (the conversation is saved) |
 
 Commands: `/help /clear /compact /btw /effort /mode /math /resume /model /morning /settings /exit` — and typing `exit` quits too.
-`/settings` holds the rest in one menu: Setup (status bar, helpers, rules, instructions, memory),
+`/settings` holds the rest in one menu: Setup (permissions, status bar, helpers, rules, instructions, memory),
 Pages (weights, docs, tests, battle: the hub in the browser) and Tools (stats, doctor, init, update).
 Each of those still works typed in full (`/doctor`, `/memory undo`); it just is not in the `/` list.
 
@@ -94,11 +94,31 @@ stay on the Mac, in the results folder).
 
 ## Permissions
 
-It asks before every edit and command (Yes · Yes for this session · No and say what
-instead). Always blocked, in every mode: `rm -rf`, `sudo`, `git push`,
-`git reset --hard`, `git clean -f`, `kill`/`pkill`/`killall`, stopping services, and
-piping the internet into a shell. Files and commands outside the project folder are
-refused, and macOS's own sandbox fences what a command can reach.
+It asks before every edit and every command that changes things (Yes · Yes for this session ·
+Yes, and always allow it in this folder · No and say what instead). Always blocked, in every
+mode: `rm -rf`, `sudo`, `git push`, `git reset --hard`, `git clean -f`, `kill`/`pkill`/`killall`,
+stopping services, and piping the internet into a shell; a `git commit` always asks. Files and
+commands outside the project folder are refused, and macOS's own sandbox fences what a command
+can reach.
+
+`/permissions` (also the first row of `/settings`) adds your own rules on top, kept in
+`~/.agentic-coder/permissions.json` for a folder (and what is inside it) or for every folder, and
+never in the project, so a project you download cannot bring rules of its own:
+
+| | |
+|---|---|
+| Runs without asking | `/permissions allow npm test`, or "always allow" when it asks. A rule covers its command with options added (`npm test --watch`; for npm, bun and the like, what follows `--` too), not other words (`rm notes.txt` never covers `rm notes.txt other.txt`); end it with `*` for anything after it (`git add *`). In a chain (`a && b`, `a; b`, `a \| b`, or two lines) every part must be covered or only read. |
+| Never runs | `/permissions never npm publish`: refused in every mode, `coding -p --yes` included, wherever the words appear in a command. |
+| Protected files | Always ask before a change, even in Auto-edit, with no "allow all edits": `.env`, `.env.*`, keys, `.git/`, `.agentic/settings.json` and `.agentic-coder/` (when you work from the home folder), and yours (`/permissions protect config/prod.*`). A link to one counts; so does `.ENV`. |
+| Start-up mode | `/permissions mode edits` (add `everywhere` for every folder, `reset` to take it away); the welcome box says when a saved mode is on. `/mode` and shift+tab still change only the conversation. |
+| Trusted folders | `/permissions folders` lists them; `/permissions forget 2` makes the safety check ask again there. |
+
+`/permissions remove allow 2` takes a rule out, `/permissions everywhere allow 2` moves one to every
+folder, and `/permissions test <command>` (or `test edit <file>`) says what would happen and why,
+part by part, without running anything. A rule can never lift the fixed ones above, plan mode, or the
+folder fence. A file that cannot be read turns every saved rule off and says so; it is never written over.
+Practice runs (`bun run eval`) never read your rules. Code: `src/agent/permissions.mjs` (the rules),
+`src/app/perm-store.mjs` (the file), `src/app/perms.mjs` (the command).
 
 ## How it works
 

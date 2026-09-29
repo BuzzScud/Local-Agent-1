@@ -7,6 +7,7 @@ export const COMMANDS = [
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
   { name: 'effort', desc: 'Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, steps', arg: '[low|medium|high]', picker: true },
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
+  { name: 'permissions', desc: 'What runs without asking, what never runs, which files always ask, and the start-up mode', arg: '[allow|never|protect|remove|mode|forget|test]' },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
@@ -34,6 +35,7 @@ export const COMMANDS = [
 // /help lists them with the rest.
 export const SETTINGS = [
   { group: 'Setup', rows: [
+    { name: 'permissions', label: 'Permissions', note: 'what runs without asking, what never runs' },
     { name: 'meters', label: 'Status bar', note: 'model, speed and memory under the prompt' },
     { name: 'helpers', label: 'Helpers', note: 'what comes along with each request' },
     { name: 'rules', label: 'Rules', note: 'what the model reads at every start' },

@@ -46,3 +46,20 @@ export function saveTrust(cwd) {
   mkdirSync(home(), { recursive: true });
   writeFileSync(file(), `${JSON.stringify(t, null, 2)}\n`);
 }
+
+// The folders you said yes to, by path: [{ path, at }] (/permissions lists them).
+export const trustedFolders = () => Object.entries(load()).map(([path, at]) => ({ path, at })).sort((a, b) => a.path.localeCompare(b.path));
+
+// Take a folder back out (/permissions forget): the safety check asks again the
+// next time Agentic Coder starts there. True when the folder was in the list.
+export function forgetTrust(path) {
+  const t = load();
+  const key = Object.keys(t).find((k) => k === path || real(k) === real(path));
+  if (key === undefined) return false;
+  delete t[key];
+  writeFileSync(file(), `${JSON.stringify(t, null, 2)}\n`);
+  return true;
+}
+
+// The same folder however it was spelled (links resolved), for rules kept by folder.
+export const realFolder = real;

@@ -15,13 +15,15 @@ export async function applyChange(ctx, changes) {
   for (const c of changes) {
     const d = diffLines(c.before ?? '', c.after);
     const prepared = { abs: join(ctx.cwd, c.rel), rel: c.rel, before: c.before ?? '', after: c.after, ...d, created: c.before === null || c.before === undefined };
-    if (ctx.mode() !== 'edits') {
-      const answer = await ctx.ask({ id: `flow_${Date.now()}`, name: prepared.created ? 'Write' : 'Edit', args: { path: c.rel }, prepared, label: prepared.created ? 'Write' : 'Update', arg: c.rel });
+    // A protected file (.env, .git/…, yours from /permissions) asks even on auto-accept.
+    const guard = ctx.protectedBy?.(c.rel) ?? null;
+    if (ctx.mode() !== 'edits' || guard) {
+      const answer = await ctx.ask({ id: `flow_${Date.now()}`, name: prepared.created ? 'Write' : 'Edit', args: { path: c.rel }, prepared, label: prepared.created ? 'Write' : 'Update', arg: c.rel, ...(guard ? { once: true, protectedBy: guard } : {}) });
       if (answer.choice === 'no') {
         ctx.tool(prepared.created ? 'Write' : 'Update', c.rel, { kind: 'declined', feedback: answer.feedback }, true);
         return { ok: false };
       }
-      if (answer.choice === 'always') ctx.setMode('edits');
+      if (answer.choice === 'always' && !guard) ctx.setMode('edits');
     }
     mkdirSync(dirname(prepared.abs), { recursive: true });
     writeFileSync(prepared.abs, c.after);

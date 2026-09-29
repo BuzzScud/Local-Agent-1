@@ -206,13 +206,23 @@ export function resolvePath(cwd, p) {
   const within = (base, p) => { const r = relative(base, p); return r === '' || (!r.startsWith('..') && !isAbsolute(r)); };
   // A link inside the project that points outside it is outside too.
   let inside = within(cwd, abs);
-  if (inside && existsSync(abs)) { try { inside = within(realpathSync(cwd), realpathSync(abs)); } catch {} }
+  // realRel: where a link inside the project really points (notes.md → .env),
+  // so a protected file is still protected under another name (permissions.mjs).
+  let realRel;
+  if (inside && existsSync(abs)) {
+    try {
+      const rc = realpathSync(cwd);
+      const ra = realpathSync(abs);
+      inside = within(rc, ra);
+      if (inside && relative(rc, ra) !== rel) realRel = relative(rc, ra);
+    } catch {}
+  }
   // A full path into the math notes folder still means the notes, read-only.
   if (!inside && existsSync(abs) && within(mathDir(), abs)) {
     const r = relative(mathDir(), abs);
     return { abs, rel: `MATH${r ? `/${r}` : ''}`, inside: true, math: true };
   }
-  return { abs, rel: rel || '.', inside };
+  return { abs, rel: rel || '.', inside, ...(realRel ? { realRel } : {}) };
 }
 
 // Edit matching: exact first; then line by line ignoring trailing spaces;

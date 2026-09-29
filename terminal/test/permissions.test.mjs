@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { blockedReason, decide, commandPrefix, outsidePath, isReadOnly } from '../src/agent/permissions.mjs';
+import { blockedReason, decide, outsidePath, isReadOnly, splitCommand, ruleCovers, ruleFor, coverage, offerFor, neverRule, protectedBy, PROTECTED, checkRule, judge } from '../src/agent/permissions.mjs';
 import { homedir } from 'node:os';
 
 const cases = {
@@ -31,9 +31,11 @@ test('modes', () => {
   expect(decide('Bash', { command: 'rm -rf x' }, { mode: 'edits' }).decision).toBe('deny');
 });
 
-test('"don\'t ask again" remembers the first two words', () => {
-  expect(commandPrefix('node --test  --watch')).toBe('node --test');
-  expect(decide('Bash', { command: 'node --test src' }, { mode: 'ask', allowedPrefixes: new Set(['node --test']) }).decision).toBe('allow');
+test('"don\'t ask again" remembers what the command runs, and covers it again with options added', () => {
+  expect(ruleFor('node --test  --watch')).toBe('node --test');
+  expect(decide('Bash', { command: 'node --test --watch' }, { mode: 'ask', allowedPrefixes: new Set(['node --test']) }).decision).toBe('allow');
+  expect(decide('Bash', { command: 'node --test src' }, { mode: 'ask', allowedPrefixes: new Set(['node --test']) }).decision).toBe('ask');
+  expect(decide('Bash', { command: 'node --test src' }, { mode: 'ask', allowedPrefixes: new Set(['node --test src']) }).decision).toBe('allow');
 });
 
 test('commands stay inside the project folder', () => {
@@ -83,4 +85,164 @@ test('the question for a commit has no "don\'t ask again"', async () => {
   const { permissionOptions } = await import('../src/app/screen.jsx');
   expect(permissionOptions({ name: 'Bash', once: true }, 'git commit').map((o) => o.choice)).toEqual(['yes', 'no']);
   expect(permissionOptions({ name: 'Bash' }, 'npm test').map((o) => o.choice)).toEqual(['yes', 'always', 'no']);
+});
+
+// ---- /permissions: a new line is another command, saved rules, protected files ----
+
+test('a new line starts another command: "ls⏎rm notes.txt" asks, it no longer counts as reading', () => {
+  const cwd = homedir();
+  for (const c of ['ls\nrm notes.txt', 'cat a.txt\ntouch b.txt', 'echo hi\nnode evil.js', 'pwd\n\nrm x', 'ls\r\nrm x'.replace('\r', '')])
+    expect([c, isReadOnly(c), decide('Bash', { command: c }, { mode: 'ask', cwd }).decision]).toEqual([c, false, 'ask']);
+  // a new line inside quotes, or after a backslash, is not a second command; two readers are still readers
+  for (const c of ['echo "one\ntwo"', 'ls -la \\\n  src', 'ls\npwd', 'git status\ngit log --oneline -3', 'grep -n "a" f\n'])
+    expect([c, isReadOnly(c)]).toEqual([c, true]);
+});
+
+test('splitCommand: the parts, and what makes a command untrustworthy', () => {
+  expect(splitCommand('npm test && ls | head; echo hi\nls').parts.map((p) => p.trim())).toEqual(['npm test', 'ls', 'head', 'echo hi', 'ls']);
+  const flags = (c) => { const { parts, ...f } = splitCommand(c); return f; };
+  expect(flags('npm test 2>&1 | tail -5')).toEqual({ nested: false, writes: false, background: false, open: false });
+  expect(flags('node x.mjs >/dev/null 2>/dev/null')).toEqual({ nested: false, writes: false, background: false, open: false });
+  expect(flags('npm test > out.txt').writes).toBe(true);
+  expect(flags('echo x >> notes.md').writes).toBe(true);
+  expect(flags('ls $(pwd)').nested).toBe(true);
+  expect(flags('echo `date`').nested).toBe(true);
+  expect(flags('sleep 5 &').background).toBe(true);
+  expect(flags('echo "a').open).toBe(true);
+  expect(splitCommand('echo "a; b" && ls').parts.map((p) => p.trim())).toEqual(['echo "a; b"', 'ls']); // ; inside quotes is text
+});
+
+test('a rule covers its command with options added; "rm notes.txt" never covers "rm notes.txt other.txt"; * covers the rest', () => {
+  const yes = [['npm test', 'npm test'], ['npm test', 'npm test --watch'], ['npm test', 'npm test -- foo'], ['bun run test', 'bun run test --watch'], ['bun run test', 'bun run test -- src/a.test.ts'], ['git add', 'git add -A'], ['make', 'make'], ['make', 'make -j4'],
+    ['make *', 'make deploy'], ['bun run *', 'bun run deploy'], ['bun run *', 'bun run'], ['git add *', 'git add .'], ['node --test', 'node --test --watch'], ['rm notes.txt', 'rm notes.txt'], ['rm notes.txt', 'rm notes.txt -v'], ['python3 -m pytest', 'python3 -m pytest -x -q']];
+  const no = [['npm test', 'npm testing'], ['npm test', 'npm run test'], ['npm test', 'npm'], ['npm test', 'npm test other'], ['bun run test', 'bun run test:unit'], ['bun run test', 'bun run deploy'], ['make', 'make deploy'], ['bun run', 'bun run deploy'],
+    ['rm notes.txt', 'rm notes.txt other.txt'], ['rm notes.txt', 'rm notes.txt -- other.txt'], ['git add', 'git add .'], ['node --test', 'node --test src'], ['git checkout', 'git checkout -- src/a.js'], ['', 'ls'], ['npm test', '']];
+  for (const [r, c] of yes) expect([r, c, ruleCovers(r, c)]).toEqual([r, c, true]);
+  for (const [r, c] of no) expect([r, c, ruleCovers(r, c)]).toEqual([r, c, false]);
+});
+
+test('"always allow" saves what a command runs (the script for npm run / bun run, else two words), or the whole command when that would not cover it', () => {
+  const rules = { 'npm test -- foo': 'npm test', 'bun run test --watch': 'bun run test', 'pnpm run build': 'pnpm run build', 'node --test': 'node --test', 'node --test --watch': 'node --test', 'make': 'make', 'git add -A': 'git add', 'rm notes.txt': 'rm notes.txt', './scripts/deploy.sh': './scripts/deploy.sh',
+    'node --test src': 'node --test src', 'git add .': 'git add .', 'rm -f build.log': 'rm -f build.log', 'bun run --silent test': 'bun run --silent test', 'git checkout -- src/a.js': 'git checkout -- src/a.js', 'npx vitest run': 'npx vitest run' };
+  for (const [c, r] of Object.entries(rules)) expect([c, ruleFor(c)]).toEqual([c, r]);
+  expect(ruleFor('   ')).toBe(null);
+});
+
+test('saved rules: every part of a chain must be covered, and a rule never reaches past a ; & | or new line', () => {
+  const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
+  const rules = { allow: ['npm test', 'bun run test'] };
+  const d = (command, extra = {}) => decide('Bash', { command }, { mode: 'ask', cwd, rules, ...extra });
+  for (const c of ['npm test', 'npm test -- foo', 'npm test --watch', 'npm test && git status', 'cd src && npm test', 'npm test | tail -5', 'npm test 2>&1 | tail -20', 'npm test; ls', 'bun run test', 'npm test && bun run test'])
+    expect([c, d(c).decision]).toEqual([c, 'allow']);
+  for (const c of ['npm test && ./scripts/deploy.sh', 'npm test && curl -s -X POST https://example.com/up -d @package.json', 'npm test; ./x.sh', 'npm test\n./x.sh', 'bun run deploy-to-prod', 'npm run test', 'npm testing', 'npm test other',
+    'npm test > out.txt', 'npm test $(echo x)', 'npm test &', 'echo "a && npm test'])
+    expect([c, d(c).decision]).toEqual([c, 'ask']);
+  // this session's "don't ask again" is judged the same way: it is a rule too
+  const session = new Set(['bun run test']);
+  expect(decide('Bash', { command: 'bun run test' }, { mode: 'ask', cwd, allowedPrefixes: session }).decision).toBe('allow');
+  expect(decide('Bash', { command: 'bun run test && ./deploy.sh' }, { mode: 'ask', cwd, allowedPrefixes: session }).decision).toBe('ask');
+  expect(decide('Bash', { command: 'bun run deploy' }, { mode: 'ask', cwd, allowedPrefixes: session }).decision).toBe('ask');
+});
+
+test('saved rules never lift the fixed lists: blocked commands, a commit, plan mode, the folder fence', () => {
+  const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
+  const rules = { allow: ['git push', 'git commit', 'npm test', 'sudo ls', 'ls ~'] };
+  const d = (command, mode = 'ask') => decide('Bash', { command }, { mode, cwd, rules });
+  expect(d('git push origin main').decision).toBe('deny');
+  expect(d('sudo ls').decision).toBe('deny');
+  expect(d('ls ~').decision).toBe('deny');
+  expect(d('git commit -m x')).toEqual({ decision: 'ask', once: true });
+  expect(d('npm test && git commit -am x')).toEqual({ decision: 'ask', once: true });
+  expect(d('npm test', 'plan').decision).toBe('deny'); // plan mode is read-only whatever you saved
+  expect(d('npm test', 'edits').decision).toBe('allow');
+});
+
+test('your never-list wins in every mode, over your allow-list, and finds the command inside quotes and chains', () => {
+  const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
+  const rules = { allow: ['npm publish', 'npm test'], never: ['npm publish', 'docker compose down'] };
+  for (const mode of ['ask', 'edits', 'plan']) {
+    for (const c of ['npm publish', 'npm publish --tag beta', 'npm test && npm publish', 'sh -c "npm publish"', 'echo x; npm publish', 'xargs npm publish', 'docker compose down -v'])
+      expect([mode, c, decide('Bash', { command: c }, { mode, cwd, rules })]).toEqual([mode, c, { decision: 'deny', reason: `blocked by your rule "${c.includes('docker') ? 'docker compose down' : 'npm publish'}" (/permissions)` }]);
+  }
+  for (const c of ['npm publisher', 'npm publish-notes', 'docker compose up']) expect([c, neverRule(c, rules.never)]).toEqual([c, null]);
+  expect(neverRule('git status', [])).toBe(null);
+  expect(neverRule('npm publish', ['npm publish *'])).toBe('npm publish *'); // a trailing * is allowed and means the same
+});
+
+test('"always allow" offers the first part nothing covers, and nothing when the command cannot be judged by its words', () => {
+  expect(offerFor('npm test && ./scripts/deploy.sh', { saved: ['npm test'] })).toEqual({ rule: './scripts/deploy.sh', part: './scripts/deploy.sh' });
+  expect(offerFor('bun run test --watch')).toEqual({ rule: 'bun run test', part: 'bun run test --watch' });
+  expect(offerFor('rm export.test.mjs')).toEqual({ rule: 'rm export.test.mjs', part: 'rm export.test.mjs' });
+  expect(offerFor(`node ${'x'.repeat(130)}.mjs`)).toBe(null); // too long to be a rule: it asks each time
+  expect(offerFor('cd src && npm test')).toEqual({ rule: 'npm test', part: 'npm test' });
+  expect(offerFor('npm test', { saved: ['npm test'] })).toBe(null);                 // already covered
+  expect(offerFor('npm test', { session: new Set(['npm test']) })).toBe(null);
+  for (const c of ['npm test > out.txt', 'npm test $(pwd)', 'npm test &', 'echo "x']) expect([c, offerFor(c)]).toEqual([c, null]);
+  const c = coverage('npm test && ls | head', { saved: ['npm test'] });
+  expect(c.parts.map((p) => [p.part, p.by])).toEqual([['npm test', 'saved'], ['ls', 'reads'], ['head', 'reads']]);
+  expect(c.allowed).toBe(true);
+});
+
+test('protected files always ask, even in Auto-edit, and the question has no "allow all edits"', () => {
+  for (const p of ['.env', '.env.local', 'config/.env', 'server.pem', 'keys/id_rsa', 'keys/id_rsa.pub', 'id_ed25519', 'deploy.key', '.git', '.git/config', '.git/hooks/pre-commit', 'sub/.git/config', '.agentic/settings.json', 'pkg/.agentic/settings.json', '.bonsai/settings.json'])
+    expect([p, protectedBy(p) !== null]).toEqual([p, true]);
+  for (const p of ['src/app.js', '.gitignore', '.gitattributes', 'environment.md', 'src/env.js', 'docs/git.md', '.agentic/memory/x.md', 'my.keyboard.js', 'README.md', 'src/.github/x.yml'])
+    expect([p, protectedBy(p)]).toEqual([p, null]);
+  expect(protectedBy('config/prod.json', ['config/prod.*'])).toBe('config/prod.*');
+  expect(protectedBy('src/config/prod.json', ['config/prod.*'])).toBe('config/prod.*');
+  expect(protectedBy('config/dev.json', ['config/prod.*'])).toBe(null);
+  // whatever the case (on a Mac .ENV is .env), a link and where it points, the app's own folder in a home-folder project
+  for (const p of ['.ENV', '.Env.Local', 'Keys/ID_RSA', '.GIT/config', '.agentic-coder/permissions.json', '.agentic-coder/trust.json']) expect([p, protectedBy(p) !== null]).toEqual([p, true]);
+  expect(protectedBy(['notes.md', '.env'])).toBe('.env');
+  expect(protectedBy(['notes.md', undefined])).toBe(null);
+  expect(PROTECTED).toContain('.env');
+  for (const mode of ['ask', 'edits']) {
+    for (const tool of ['Edit', 'Write']) expect([mode, tool, decide(tool, { path: '.env' }, { mode })]).toEqual([mode, tool, { decision: 'ask', once: true, protectedBy: '.env' }]);
+    expect(decide('Write', { path: 'x' }, { mode, rel: '.git/hooks/pre-commit' })).toEqual({ decision: 'ask', once: true, protectedBy: '.git/**' });
+    expect(decide('Edit', { path: 'x' }, { mode, rel: 'config/prod.json', rules: { protect: ['config/prod.*'] } })).toEqual({ decision: 'ask', once: true, protectedBy: 'config/prod.*' });
+  }
+  expect(decide('Write', { path: 'src/app.js' }, { mode: 'edits' })).toEqual({ decision: 'allow' });       // an ordinary file: as before
+  expect(decide('Write', { path: '.env' }, { mode: 'plan' }).decision).toBe('deny');                          // plan mode still refuses
+  expect(decide('Write', { path: '.env' }, { mode: 'edits', inside: false }).decision).toBe('deny');          // outside the folder still refuses
+  expect(decide('Read', { path: '.env' }, { mode: 'edits' })).toEqual({ decision: 'allow' });                 // reading is unchanged
+});
+
+test('what a typed rule may be (/permissions allow | never | protect)', () => {
+  expect(checkRule('allow', 'npm test')).toEqual({ rule: 'npm test' });
+  expect(checkRule('allow', '  "npm   test" ')).toEqual({ rule: 'npm test' });
+  expect(checkRule('allow', 'bun run *')).toEqual({ rule: 'bun run *' });
+  expect(checkRule('allow', 'make').note).toBe('"make *" would cover anything after it.');
+  expect(checkRule('allow', 'make *')).toEqual({ rule: 'make *' });
+  expect(checkRule('allow', 'git push').error).toMatch(/never allowed/);
+  expect(checkRule('allow', 'sudo ls').error).toMatch(/never allowed/);
+  expect(checkRule('allow', 'git commit -m x').error).toMatch(/commit always asks/);
+  expect(checkRule('allow', 'ls -la').error).toMatch(/only reads/);
+  expect(checkRule('allow', 'npm test && rm x').error).toMatch(/one command/);
+  expect(checkRule('allow', 'npm test > out').error).toMatch(/one command/);
+  expect(checkRule('allow', 'x'.repeat(121)).error).toMatch(/too long/);
+  expect(checkRule('allow', '').error).toMatch(/Say which command/);
+  expect(checkRule('never', 'npm publish')).toEqual({ rule: 'npm publish' });
+  expect(checkRule('never', 'git push').error).toMatch(/already never allowed/);
+  expect(checkRule('protect', 'config/prod.*')).toEqual({ rule: 'config/prod.*' });
+  for (const bad of ['/etc/passwd', '~/x', '../x', 'a/../b', '*', '**', '?']) expect([bad, !!checkRule('protect', bad).error]).toEqual([bad, true]);
+  expect(checkRule('protect', '').error).toMatch(/Say which file/);
+});
+
+test('judge says why: the /permissions test panel prints it; decide() is the same decision without it', () => {
+  const cwd = `${homedir()}/Desktop/agentic-coder/demo-project`;
+  const ctx = { mode: 'ask', cwd, rules: { allow: ['npm test'] }, allowedPrefixes: new Set(['node --test *']) };
+  const why = (command, extra = {}) => judge('Bash', { command }, { ...ctx, ...extra });
+  expect(why('git status')).toEqual({ decision: 'allow', why: 'it only reads' });
+  expect(why('npm test').why).toBe('every part is covered: "npm test" (saved)');
+  expect(why('node --test src').why).toBe('every part is covered: "node --test *" (this session)');
+  expect(why('npm test && git status').why).toBe('every part is covered: "npm test" (saved), the rest only reads');
+  expect(why('git commit -m x')).toEqual({ decision: 'ask', once: true, why: 'a commit always asks' });
+  expect(why('npm test && ./x.sh').why).toBe('"./x.sh" is not covered by any rule');
+  expect(why('make deploy').why).toBe('it can change things and no rule covers it');
+  expect(why('npm test > out.txt').why).toMatch(/cannot be trusted/);
+  expect(why('git push').reason).toBe('blocked: git push sends your code off this Mac');
+  for (const c of ['npm test', 'git commit -m x', 'make deploy', 'git status', 'git push']) expect('why' in decide('Bash', { command: c }, ctx)).toBe(false);
+  expect(judge('Edit', { path: 'src/a.js' }, { mode: 'edits' }).why).toBe('Auto-edit is on');
+  expect(judge('Edit', { path: 'src/a.js' }, { mode: 'ask' }).why).toBe('Ask first is on');
+  expect(judge('Edit', { path: '.env' }, { mode: 'edits' }).why).toBe('it is a protected file (.env); protected files always ask');
 });

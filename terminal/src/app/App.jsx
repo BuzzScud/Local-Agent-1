@@ -12,7 +12,7 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
-import { commandPrefix } from '../agent/permissions.mjs';
+import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
@@ -32,6 +32,8 @@ import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
+import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
+import { changePermissions, summary as permSummary, settingsValue, modeWord } from './perms.mjs';
 import { countTries } from './live.mjs';
 import { spinStyle } from '../ui/theme.mjs';
 import { readInstructions } from '../agent/instructions.mjs';
@@ -250,9 +252,14 @@ export function App({ opts, win, onRestart }) {
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
       system: systemPrompt({ cwd, notes: notes.text, git: gitSummary(cwd) }),
       thinking, effort, ctx, mode, flows: opts.flows !== false,
+      // What you saved with /permissions, read for the folder it works in at every command.
+      permissions: (dir) => rulesFor(dir),
       ask: (req) => new Promise((resolve) => {
-        const prefix = req.name === 'Bash' ? commandPrefix(req.args.command) : null;
-        setPerm({ req, selected: 0, options: permissionOptions(req, prefix), resolve });
+        // "Don't ask again" and "always allow" remember the first part of the command nothing covers yet.
+        const a = agentRef.current;
+        const saved = a?.savedRules();
+        const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes }) : null;
+        setPerm({ req, selected: 0, options: permissionOptions(req, offer?.rule ?? null, saved?.broken ? null : offer?.rule ?? null), resolve, offer });
       }),
       waitForServer: async () => { if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },
       // A conversation that starts over from its notes: the instructions come
@@ -305,6 +312,11 @@ export function App({ opts, win, onRestart }) {
   // (/effort opens the Effort and limits panel instead: openEffortLimits.)
   const choiceMenu = (id) => {
     if (id === 'memory-save') return { title: 'Remember for next time?', blurb: 'What Agentic Coder learned in that task is listed above. /memory undo takes a save back.', what: 'memory', current: 'save', options: [{ id: 'save', label: 'Save', note: 'read at every start from now on' }, { id: 'skip', label: 'Skip', note: 'nothing is saved; /update memory saves later' }] };
+    if (id === 'startmode') {
+      const st = startModeFor(agent.cwd);
+      const now = st && !st.here ? ` Now it starts in ${modeWord(st.mode)}, saved ${st.where === 'everywhere' ? 'for every folder' : `for ${st.key.replace(homedir(), '~')}`}.` : '';
+      return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else ask first' }] };
+    }
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
   };
@@ -396,6 +408,7 @@ export function App({ opts, win, onRestart }) {
     const value = {
       meters: S.current.meters ? 'on' : 'off',
       helpers: `${agent.helpers.size} of 4 on`,
+      permissions: settingsValue(agent.cwd),
       rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
       instructions: ins ? `${steps(ins.sections.general)} general · ${steps(ins.sections.planning)} planning` : 'could not read',
       memory: dirs ? `${facts(dirs.you)} about you · ${facts(dirs.project)} here` : 'off here',
@@ -410,6 +423,20 @@ export function App({ opts, win, onRestart }) {
     };
     const groups = SETTINGS.map((g) => ({ group: g.group, rows: g.rows.map((r) => ({ ...r, value: value[r.name] })) }));
     setPicker({ kind: 'settings', groups, rows: groups.flatMap((g) => g.rows), index: 0 });
+  };
+  // /permissions alone: its five rows, each with what it holds now; enter opens
+  // one (a list, or the start-up mode picker) by running its typed form.
+  const openPermissions = () => {
+    const at = agent.cwd;
+    const v = permSummary(at, { session: agent.allowedPrefixes });
+    const rows = [
+      { name: 'permissions mode', label: 'Start-up mode', value: v.mode, note: 'what it starts in; /mode changes one conversation' },
+      { name: 'permissions allow', label: 'Runs without asking', value: v.allow, note: 'on top of commands that only read' },
+      { name: 'permissions never', label: 'Never runs', value: v.never, note: 'every mode; a commit always asks' },
+      { name: 'permissions protect', label: 'Protected files', value: v.protect, note: 'always ask before a change, even in Auto-edit' },
+      { name: 'permissions folders', label: 'Trusted folders', value: v.folders, note: 'folders you said yes to in the safety check' },
+    ];
+    setPicker({ kind: 'settings', title: 'Permissions', blurb: `Saved for ${at.replace(homedir(), '~')}. Each row opens; /permissions test <command> tries one.`, groups: [{ group: 'What Agentic Coder may do here', rows }], rows, index: 0 });
   };
   // /effort, one panel: Effort on top, then every limit that can move, with
   // what each value costs; ←→ moves, enter saves all of it.
@@ -439,6 +466,10 @@ export function App({ opts, win, onRestart }) {
       setMeters(on);
       saveSettings({ meters: on });
       push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
+    } else if (id === 'startmode') {
+      const r = changePermissions(agent.cwd, `mode ${value}`, { mode: agent.mode, session: agent.allowedPrefixes });
+      if (r.mode) setMode(r.mode);
+      push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
     }
   };
   // What the note after an effort change says; a level's note can name the
@@ -720,6 +751,11 @@ export function App({ opts, win, onRestart }) {
   useEffect(() => {
     if (!agent.memory) return;
     for (const line of sinceLastTime(cwd)) push({ type: 'note', text: line, tone: 'dim' });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A permissions file that cannot be read turns every saved rule off: said once.
+  useEffect(() => {
+    const r = rulesFor(cwd);
+    if (r.broken) push({ type: 'note', text: `~/.agentic-coder/permissions.json cannot be read (${r.broken}), so none of your saved rules apply until it is fixed or deleted.`, tone: 'warn' });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // /weights: the viewer's little server, started once per window and closed with it.
   const weightsRef = useRef(null);
@@ -1040,6 +1076,16 @@ export function App({ opts, win, onRestart }) {
       case 'settings':
         openSettings();
         break;
+      case 'permissions': {
+        // The raw text after the command: a new line in a command to try stays a new line.
+        const r = changePermissions(agent.cwd, line.replace(/^\/permissions\b/i, ''), { mode: agent.mode, session: agent.allowedPrefixes });
+        if (r.open === 'panel') { openPermissions(); break; }
+        if (r.open === 'mode') { openChoice('startmode'); break; }
+        if (r.mode) setMode(r.mode);
+        if (r.panel) push({ type: 'panel', ...r.panel });
+        if (r.text) push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
+        break;
+      }
       case 'resume': {
         const list = listSessions(cwd);
         if (!list.length) { push({ type: 'note', text: 'No earlier conversations in this folder.', tone: 'dim' }); break; }
@@ -1253,6 +1299,13 @@ export function App({ opts, win, onRestart }) {
         // Agentic Coder's question: a listed choice answers it; "type" takes the next line you enter.
         if (choice === 'type') { answerRef.current = p.resolve; setAnswerWait(true); setPlaceholder('Type your answer to Agentic Coder, then enter'); return; }
         if (choice === 'answer') { p.resolve({ choice, text: o.text }); return; }
+        // "Always allow": saved for this folder, and it runs now. If it cannot be saved it still holds for this session.
+        if (choice === 'save') {
+          const r = addRule(agentRef.current.cwd, 'allow', p.offer.rule);
+          push({ type: 'note', text: r.ok ? `Saved for this folder: "${p.offer.rule}" runs without asking. /permissions lists it; /permissions remove allow <n> takes it back.` : r.duplicate ? `"${p.offer.rule}" is already saved.` : `${r.error} It holds for this session only.`, tone: r.ok || r.duplicate ? 'dim' : 'warn' });
+          p.resolve({ choice: r.ok || r.duplicate ? 'yes' : 'always' });
+          return;
+        }
         p.resolve({ choice });
         if (choice === 'no') setPlaceholder('Tell Agentic Coder what to do instead');
       };

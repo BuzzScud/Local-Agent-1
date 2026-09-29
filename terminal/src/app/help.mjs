@@ -72,7 +72,7 @@ export function cliRows(lingerMins = 30) {
     usage: [
       ['coding', 'start in the current folder'],
       ['coding "fix the tests"', 'start and send a first prompt'],
-      ['coding -p "question"', 'answer once and exit (changes are refused unless --yes)'],
+      ['coding -p "question"', 'answer once and exit (changes are refused unless --yes; commands you allowed in /permissions run)'],
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
       ['coding stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
@@ -85,7 +85,7 @@ export function cliRows(lingerMins = 30) {
       ['--think / --no-think', 'the old names: --effort medium / --effort low'],
       ['--ctx 16k|32k|64k|128k', 'memory size (default: 32k, or 16k when memory is short; /effort saves one)'],
       ['--mode ask|edits|plan', 'start in this permission mode'],
-      ['--yes', 'with -p: allow edits and commands without asking'],
+      ['--yes', 'with -p: allow edits and commands without asking (your /permissions never-list still holds)'],
       ['--url http://host:port', 'use a llama-server that is already running'],
       ['--no-flows', 'always work step by step (skip the focused fix/change/rename paths)'],
       ['-v, --version', 'print the version'],
@@ -106,6 +106,7 @@ export const PLACES = [
   ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
   ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the model'],
   ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
+  ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
   ['~/.agentic-coder/logs', 'the model server and update logs'],
   ['AGENTS.md', "a project's notes for Agentic Coder, read at the start (/init writes one)"],
@@ -118,8 +119,10 @@ export const PLACES = [
 // How Agentic Coder keeps you safe, in plain words.
 export const SAFETY = [
   'The first time you start Agentic Coder in a folder it asks whether you trust it. Nothing there is read before you say yes.',
-  'It asks before every edit and before commands that change things, unless you switch the mode.',
+  'It asks before every edit and before commands that change things, unless you switch the mode. A git commit always asks.',
   'Some commands are always refused: deleting folders wholesale, sudo, git push, resetting git, stopping other programs or services.',
+  'Files like .env, keys and .git always ask before a change, even in Auto-edit.',
+  '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, or reach services already running.',
   'Everything runs on this Mac. Nothing you type is sent anywhere.',
 ];
@@ -130,6 +133,7 @@ export const TIPS = [
   'Under your request a dim line says where it went: “Sorted as: change · shortcut”. If that is not what you meant, press esc and say it differently.',
   'Low effort is fastest and fine for most work. Try Medium or High for a tricky bug.',
   'Use Plan mode to see a plan before anything changes, then switch mode and say go.',
+  '/permissions shows what runs without asking, what never runs and which files always ask. Pick "always allow" when it asks about a command and it is saved for the folder; /permissions test npm test says what a command would do without running it.',
   'Agentic Coder learns as it works: after a task it shows what it would remember and asks (enter saves, esc skips), and a fact comes back when a request fits it. “/update memory” or “remember that …” saves at once.',
   '/memory shows what it keeps, /memory undo takes the last save back, /memory open shows every fact in the browser.',
   '/rules lists what the model reads at every start, numbered: /rules add <text> adds a rule, /rules off 3 switches one off (/rules on 3 brings it back), /rules always 16 makes a note a rule. Up to 20 rules.',
