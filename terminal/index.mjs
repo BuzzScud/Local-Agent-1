@@ -21,5 +21,5 @@ export { memoryDirs, readFacts, applyChanges, changeTrust, tidy, undoLast, openM
 export { recall, recallNotes } from './src/agent/recall.mjs';
 export { notesDir, readNotes, leftOut, holdsSecret, bestPart, recallClaude, claudeText, notesCount, CUT as NOTES_CUT, MARGIN as NOTES_MARGIN } from './src/agent/claude-notes.mjs';
 export { CLAUDE_RULES } from './src/agent/claude-rules.mjs';
-export { helpersOn, HELPER_NAMES } from './src/agent/helpers.mjs';
+export { helpersOn, HELPER_NAMES, CODENAMES, codenameOf } from './src/agent/helpers.mjs';
 export { CodeIndex } from './src/tools/codeindex.mjs';

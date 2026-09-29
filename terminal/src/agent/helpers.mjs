@@ -17,21 +17,31 @@
 // Read first has its own room (at most 8,000 tokens, agent.mjs RANK_MAX_TOKENS);
 // CEILING is for the rest.
 // AGENTIC_HELPERS picks them: unset or "all" = every one, "off" = none (the
-// way before), or a list such as "named,tests".
+// way before), or a list such as "named,tests" (or "scout,medic").
+// On screen each one goes by its codename (CODENAMES): Scout, Medic, Oracle,
+// Sentry. The ids above stay the names settings.json and the bench keep.
 import { readFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { readResults, failureDigest } from '../flows/results.mjs';
 
 export const HELPER_NAMES = ['named', 'tests', 'rag', 'lsp'];
+export const CODENAMES = { named: 'Scout', tests: 'Medic', rag: 'Oracle', lsp: 'Sentry' };
+// Which helper brought each kind of item (an item's from).
+export const HELPER_OF = { file: 'named', tests: 'tests', changes: 'tests', code: 'rag', uses: 'lsp' };
+// An item's from, or a helper's id, as its codename; anything else as it is.
+export const codenameOf = (from) => CODENAMES[HELPER_OF[from] ?? from] ?? from;
+// A helper's id from its id or its codename, any case.
+const idOf = (n) => HELPER_NAMES.find((h) => h === n || CODENAMES[h].toLowerCase() === String(n).toLowerCase());
 
 export function helpersOn(value = process.env.AGENTIC_HELPERS ?? process.env.BONSAI_HELPERS) {
   if (value instanceof Set) return value;
-  if (Array.isArray(value)) return new Set(value.filter((n) => HELPER_NAMES.includes(n)));
+  const ids = (list) => new Set(HELPER_NAMES.filter((h) => list.some((n) => idOf(n) === h)));
+  if (Array.isArray(value)) return ids(value);
   const v = String(value ?? '').trim().toLowerCase();
   if (!v || /^(on|all|yes|1|true)$/.test(v)) return new Set(HELPER_NAMES);
   if (/^(off|none|no|0|false)$/.test(v)) return new Set();
-  return new Set(v.split(/[\s,]+/).filter((n) => HELPER_NAMES.includes(n)));
+  return ids(v.split(/[\s,]+/));
 }
 
 // Tokens: the whole of what the helpers bring, and each one's share.

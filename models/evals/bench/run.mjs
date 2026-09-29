@@ -1,7 +1,8 @@
 // Plays the practice tasks against the real model and checks each result.
 //   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank]
-//     [--helpers all|off|named,tests,rag,lsp] [--flows on|off]
-// --helpers: the context helpers (terminal/src/agent/helpers.mjs); default what
+//     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off]
+// --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
+// or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
 // search on, each task's copy is indexed before its clock starts.
 // --flows off: no focused paths, every task step by step (where the model
@@ -17,7 +18,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady } from '../../index.mjs';
-import { runHeadless, openMemory, CLAUDE_RULES, helpersOn } from '../../../terminal/index.mjs';
+import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf } from '../../../terminal/index.mjs';
 import { recordTest, codeLabel } from '../record.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,10 @@ const withMemory = args.includes('--memory');
 // --no-rank: no ranking of files by meaning before the first step (by words only).
 const withRank = !args.includes('--no-rank');
 const helpers = helpersOn(opt('helpers', undefined));
+// The helpers on, by codename (Scout, Medic, Oracle, Sentry) for the lines printed and the test record.
+const codes = (sep) => [...helpers].map((h) => CODENAMES[h]).join(sep) || 'off';
+// What the Helpers line brought, counted by codename: "Scout 1, Medic 2".
+const byCode = (items) => Object.entries(Object.groupBy(items.filter((x) => !x.skipped), (x) => codenameOf(x.from))).map(([c, xs]) => `${c} ${xs.length}`).join(', ');
 const flowsOn = opt('flows', 'on') !== 'off';
 // --claude (with --memory): Claude's notes are looked in as well, where they are.
 const withClaude = withMemory && args.includes('--claude');
@@ -58,7 +63,7 @@ const tasks = readdirSync(join(here, 'tasks')).filter((t) => !only || only.some(
 const server = new ModelServer(model);
 const started = await server.start({ ctx });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
-console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${[...helpers].join(', ') || 'off'}; focused paths: ${flowsOn ? 'on' : 'off'}`);
+console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}`);
 const results = [];
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const tdir = opt('out', join(modelFolder(base), 'results', 'runs', stamp));
@@ -88,7 +93,7 @@ try {
       try {
         run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true,
           memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
-          onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : ev.given ? '+' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); if (type === 'context' && ev.title === 'Helpers') process.stdout.write(`    + helpers brought ${ev.items.filter((x) => !x.skipped).length} (${ev.tokens} tokens)${ev.items.some((x) => x.skipped) ? `; left out: ${ev.items.filter((x) => x.skipped).map((x) => `${x.text} (${x.skipped})`).join('; ')}` : ''}\n`); } });
+          onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : ev.given ? '+' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); if (type === 'context' && ev.title === 'Helpers') process.stdout.write(`    + helpers brought ${ev.items.filter((x) => !x.skipped).length} (${ev.tokens} tokens: ${byCode(ev.items)})${ev.items.some((x) => x.skipped) ? `; left out: ${ev.items.filter((x) => x.skipped).map((x) => `${x.text} (${x.skipped})`).join('; ')}` : ''}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
       clearTimeout(timer);
       writeFileSync(join(dir, 'answer.txt'), run.finalText ?? '');
@@ -120,7 +125,7 @@ for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length) recordTest({ kind: 'tasks', name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${[...helpers].join('+') || 'off'}${flowsOn ? '' : ', step by step'}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
+  if (rs.length) recordTest({ kind: 'tasks', name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);

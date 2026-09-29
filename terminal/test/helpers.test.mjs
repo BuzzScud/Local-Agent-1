@@ -213,7 +213,7 @@ test('files you name: Read first reads them before the first step; switched off 
   const prompt = "Add a symbol option (default '$') to the defaults in config.mjs.";
   const on = await run(cwd, prompt, [{ text: 'Done.' }], { helpers: 'named' });
   expect(on.given).toEqual(['List(the project map)', 'Read(config.mjs)']);
-  expect(on.readFirst).toBe('Read first: config.mjs');
+  expect(on.readFirst).toBe('Read first · Scout: config.mjs');
   const read = on.first.find((m) => m.role === 'tool' && m.content.startsWith('config.mjs ('));
   expect(read.content).toContain(readFileSync(join(cwd, 'config.mjs'), 'utf8').trim());
   // /helpers shows what it brought to the last request.
@@ -253,7 +253,7 @@ function bigFile(cwd) {
 test('code by meaning: Read first gives the closest file whole, and the code search adds the closest function of a long one', async () => {
   const emb = new WordEmbedder();
   const r = await run(bigFile(codeProject()), 'make walk skip the tmp folder too', [{ text: 'Done.' }], { helpers: 'rag', embedder: emb, ranker: emb, prewarm: true });
-  expect(r.readFirst).toBe('Read first, by meaning: src/fs.mjs');
+  expect(r.readFirst).toBe('Read first · Oracle, by meaning: src/fs.mjs');
   expect(r.given).toEqual(['List(the project map)', 'Read(src/fs.mjs)', 'Read(src/big.mjs)']);
   expect(r.helpers.items.map((x) => x.text)).toEqual(['src/big.mjs · walkFolders']);
   expect(r.helpers.items[0].close).toBeGreaterThan(0.9);

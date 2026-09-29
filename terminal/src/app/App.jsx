@@ -904,7 +904,7 @@ export function App({ opts, win, onRestart }) {
           break;
         }
         const set = helpersEnv();
-        push({ type: 'panel', title: `Helpers · ${agent.helpers.size} of 4 on · what comes along with a request before the first step${set !== undefined ? ` · AGENTIC_HELPERS=${set} decides` : ''}`, pad: 27, rows: helperRows(agent.helpers, agent.lastHelpers ?? []) });
+        push({ type: 'panel', title: `Helpers · ${agent.helpers.size} of 4 on · what comes along with a request before the first step${set !== undefined ? ` · AGENTIC_HELPERS=${set} decides` : ''}`, pad: 35, rows: helperRows(agent.helpers, agent.lastHelpers ?? []) });
         break;
       }
       case 'init':

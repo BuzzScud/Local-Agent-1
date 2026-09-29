@@ -30,7 +30,7 @@ import { changeTrust } from './facts.mjs';
 import { recall, recallNotes } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
 import { saveLessons, knownAlready } from './lessons.mjs';
-import { helpersOn, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
+import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
 import { CodeIndex, sameAsIndexed, CUT, MARGIN } from '../tools/codeindex.mjs';
 
 const MAX_STEPS = 40;
@@ -966,6 +966,7 @@ export class Agent extends EventEmitter {
       if (!want.some((w) => w.abs === abs)) want.push({ rel: r.rel, abs, ranked: true });
     }
     const read = [];
+    const byMeaning = [];
     for (const f of want) {
       if (this.readFiles.has(f.abs) || budget <= 400) continue;
       let got;
@@ -973,12 +974,15 @@ export class Agent extends EventEmitter {
       if (!got || got.body.length > budget) continue;
       budget -= got.body.length;
       this.giveRead(f.rel, { path: f.rel }, got.body, got.view);
-      read.push(f.rel);
+      (f.ranked ? byMeaning : read).push(f.rel);
       // For /helpers: which helper brought it, and its size.
       (this.lastHelpers ??= []).push({ from: f.ranked ? 'code' : 'file', text: f.rel, tokens: tokensOf(got.body) });
     }
-    if (this.turn) this.turn.ranked = { how: ranked.how, ms: ranked.ms, files: read };
-    if (read.length) this.emit('note', { text: `Read first${ranked.how === 'meaning' ? ', by meaning' : ranked.how === 'words' ? ', by the request’s words' : ''}: ${read.join(', ')}`, tone: 'dim' });
+    if (this.turn) this.turn.ranked = { how: ranked.how, ms: ranked.ms, files: [...read, ...byMeaning] };
+    // Which helper read each: Scout the files named, Oracle the closest ones.
+    const said = [read.length && `${CODENAMES.named}: ${read.join(', ')}`,
+      byMeaning.length && `${CODENAMES.rag}${ranked.how === 'meaning' ? ', by meaning' : ranked.how === 'words' ? ', by the request’s words' : ''}: ${byMeaning.join(', ')}`].filter(Boolean);
+    if (said.length) this.emit('note', { text: `Read first · ${said.join(' · ')}`, tone: 'dim' });
   }
 
   async prefetch(text) {

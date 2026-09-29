@@ -12,6 +12,7 @@ import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault } from './limits.mjs';
+import { codenameOf } from '../agent/helpers.mjs';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -108,7 +109,8 @@ const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', 
 
 // What came along with a request (agent.remember), and what the context
 // helpers brought (agent.bringHelpers, titled "Helpers"): one folded line,
-// like a tool's result; ctrl+o prints the list, each item with its fit and size.
+// like a tool's result; ctrl+o prints the list, each item with its fit and size
+// and, on the Helpers line, the codename of the helper that brought it.
 function Context({ it, width }) {
   const sent = it.items.filter((x) => !x.skipped);
   const skipped = it.items.length - sent.length;
@@ -122,7 +124,7 @@ function Context({ it, width }) {
         <Result>
           {it.items.map((x, i) => (
             <Box key={i}>
-              <Box width={9} flexShrink={0}><Text color={C.accentDim}>{x.from}</Text></Box>
+              <Box width={9} flexShrink={0}><Text color={C.accentDim}>{it.title === 'Helpers' ? codenameOf(x.from) : x.from}</Text></Box>
               <Box width={textW} flexShrink={1}><Text wrap="truncate-end">{x.text}</Text></Box>
               <Box flexShrink={0} paddingLeft={2}>{x.skipped ? <Text color={C.warn}>⚠ {x.skipped}</Text> : <Text color={C.dim}>{x.close != null && it.how === 'meaning' ? `fit ${Number(x.close).toFixed(2)} · ` : ''}{x.tokens} tokens</Text>}</Box>
             </Box>
@@ -218,7 +220,7 @@ export function Item({ it, width, model, cwd, loaded }) {
         {it.title ? <Text bold>{it.title}</Text> : null}
         {it.rows.map((r, i) => (
           <Text key={i}>
-            {r[1] === undefined ? <Text color={C.dim}>{r[0]}</Text> : <><Text color={C.accent}>{String(r[0]).padEnd(it.pad ?? 18)}</Text><Text>{r[1]}</Text></>}
+            {r[1] === undefined ? <Text color={C.dim}>{r[0]}</Text> : <><Cell v={r[0]} pad={it.pad ?? 18} /><Text>{r[1]}</Text></>}
           </Text>
         ))}
       </Box>
@@ -232,6 +234,14 @@ export function Item({ it, width, model, cwd, loaded }) {
     case 'divider': return <Text color={C.faint}>{`── ${it.text} `.padEnd(Math.min(width, 80), '─')}</Text>;
     default: return null;
   }
+}
+
+// A panel row's left cell: a string, or parts ([text, bold]) as /helpers
+// gives them so a codename stands out; padded to the panel's column either way.
+function Cell({ v, pad }) {
+  const parts = Array.isArray(v) ? v : [[String(v)]];
+  const len = parts.reduce((s, [t]) => s + t.length, 0);
+  return <Text color={C.accent}>{parts.map(([t, bold], j) => <Text key={j} bold={!!bold}>{t}</Text>)}{' '.repeat(Math.max(0, pad - len))}</Text>;
 }
 
 function Marks({ marks, pending = false }) {

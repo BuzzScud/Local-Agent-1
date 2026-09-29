@@ -1,10 +1,14 @@
-// /helpers: the four context helpers, numbered, on or off, kept in
-// settings.json; AGENTIC_HELPERS decides when it is set. The words first,
+// /helpers: the four context helpers, numbered and by codename (Scout, Medic,
+// Oracle, Sentry), on or off, kept in settings.json; AGENTIC_HELPERS decides when it is set. The words first,
 // then the real app in a pseudo-terminal (see app.test.mjs).
 import { test, expect } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { helpersFrom, changeHelpers, helperRows, HELPER_INFO } from '../src/app/helpers.mjs';
+import { codenameOf, helpersOn } from '../src/agent/helpers.mjs';
+import React from 'react';
+import { renderToString } from 'ink';
+import { Item } from '../src/app/screen.jsx';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
@@ -18,18 +22,29 @@ test('which are on: AGENTIC_HELPERS when set, else what /helpers saved, else all
   expect([...helpersFrom({ helpers: [] }, {})]).toEqual([]);
   expect([...helpersFrom({ helpers: ['tests'] }, { AGENTIC_HELPERS: 'rag' })]).toEqual(['rag']);
   expect([...helpersFrom({}, { AGENTIC_HELPERS: 'off' })]).toEqual([]);
+  // The codenames work wherever the ids do.
+  expect([...helpersFrom({}, { AGENTIC_HELPERS: 'Scout,oracle' })]).toEqual(['named', 'rag']);
+  expect([...helpersOn(['medic', 'lsp', 'nope'])]).toEqual(['tests', 'lsp']);
 });
 
-test('/helpers off 3, on rag, off all: by number or name; a helper already so, or none named, says so', () => {
+test('codenames: each kind of item on the Helpers line by the helper that brought it; anything else as it is', () => {
+  expect(HELPER_INFO.map((h) => h.code)).toEqual(['Scout', 'Medic', 'Oracle', 'Sentry']);
+  expect(['file', 'tests', 'changes', 'code', 'uses', 'rag', 'memory'].map(codenameOf)).toEqual(['Scout', 'Medic', 'Medic', 'Oracle', 'Sentry', 'Oracle', 'memory']);
+});
+
+test('/helpers off 3, off oracle, on rag, off all: by number, codename or name; a helper already so, or none named, says so', () => {
   const env = {};
   const a = changeHelpers(all(), 'off', '3', env);
-  expect(a).toMatchObject({ changed: true, text: '3 Code by meaning off: the next message uses it. Kept for next time (settings.json).' });
+  expect(a).toMatchObject({ changed: true, text: 'Oracle off: the next message uses it. Kept for next time (settings.json).' });
   expect([...a.on]).toEqual(['named', 'tests', 'lsp']);
   expect([...changeHelpers(a.on, 'on', 'rag', env).on]).toEqual(['named', 'tests', 'rag', 'lsp']);
-  expect(changeHelpers(a.on, 'off', 'code by meaning', env)).toMatchObject({ changed: false, text: '3 Code by meaning is already off.' });
+  expect([...changeHelpers(a.on, 'on', 'Oracle', env).on]).toEqual(['named', 'tests', 'rag', 'lsp']);
+  expect([...changeHelpers(all(), 'off', 'medic', env).on]).toEqual(['named', 'rag', 'lsp']);
+  expect(changeHelpers(a.on, 'off', 'code by meaning', env)).toMatchObject({ changed: false, text: 'Oracle is already off.' });
+  expect(changeHelpers(all(), 'off', 'ghost', env)).toMatchObject({ tone: 'warn', text: 'There is no helper "ghost": the four are 1 Scout, 2 Medic, 3 Oracle, 4 Sentry.' });
   expect(changeHelpers(all(), 'off', 'all', env)).toMatchObject({ changed: true, text: 'All four helpers off: the next message uses them. Kept for next time (settings.json).' });
   expect(changeHelpers(all(), 'off', '7', env).tone).toBe('warn');
-  expect(changeHelpers(all(), 'off', '', env).text).toBe('Say which one: /helpers off 3, /helpers off rag, /helpers off all.');
+  expect(changeHelpers(all(), 'off', '', env).text).toBe('Say which one: /helpers off 3, /helpers off oracle, /helpers off all.');
   expect(changeHelpers(all(), 'maybe', '1', env).tone).toBe('warn');
   // Set where the app started, AGENTIC_HELPERS decides: nothing changes, and it says why.
   const set = changeHelpers(all(), 'off', '1', { AGENTIC_HELPERS: 'all' });
@@ -37,13 +52,32 @@ test('/helpers off 3, on rag, off all: by number or name; a helper already so, o
   expect(set.text).toStartWith('AGENTIC_HELPERS=all is set where Agentic Coder started, so it decides');
 });
 
-test('the panel: one row a helper, on or off, with what it brought to the last request', () => {
+test('the panel: one row a helper, on or off, its codename in bold, with what it brought to the last request', () => {
   const rows = helperRows(new Set(['named', 'tests', 'lsp']), [{ from: 'file', text: 'a.mjs', tokens: 640 }, { from: 'tests', text: 'npm test', tokens: 300 }, { from: 'changes', text: 'git diff', tokens: 900 }]);
-  expect(rows.map((r) => r[0])).toEqual(['1  on   Files you name', '2  on   Tests and changes', '3  off  Code by meaning', '4  on   Light checks', '']);
+  const left = (r) => (Array.isArray(r[0]) ? r[0].map((p) => p[0]).join('') : r[0]);
+  expect(rows.map(left)).toEqual(['1  on   SCOUT   Files you name', '2  on   MEDIC   Tests and changes', '3  off  ORACLE  Code by meaning', '4  on   SENTRY  Light checks', '']);
+  expect(rows.slice(0, 4).map((r) => r[0].filter((p) => p[1]).map((p) => p[0].trim()))).toEqual([['SCOUT'], ['MEDIC'], ['ORACLE'], ['SENTRY']]);
   expect(rows[0][1]).toBe(`${HELPER_INFO[0].what} · last request: 1 item, 640 tokens`);
   expect(rows[1][1]).toEndWith(' · last request: 2 items, 1.2k tokens');
   expect(rows[2][1]).toBe(HELPER_INFO[2].what);
   expect(COMMANDS.find((c) => c.name === 'helpers')).toMatchObject({ arg: '[on|off] [number|name|all]' });
+});
+
+test('on screen: the Helpers line lists each item under its codename, the panel pads the bold codename cell like any other', () => {
+  const strip = (t) => t.replace(/\x1b\[[0-9;]*m/g, '');
+  const draw = (it) => strip(renderToString(React.createElement(Item, { it, width: 120 }), { columns: 120 }));
+  const line = draw({ type: 'context', title: 'Helpers', open: true, tokens: 900, how: 'meaning', items: [
+    { from: 'tests', text: 'bun test · 2 failing', tokens: 300 }, { from: 'changes', text: 'git diff · 1 changed file', tokens: 400 },
+    { from: 'code', text: 'src/fs.mjs · readAll', close: 0.71, tokens: 150 }, { from: 'uses', text: 'readAll', tokens: 50 }] });
+  expect(line).toMatch(/Medic\s+bun test · 2 failing/);
+  expect(line).toMatch(/Medic\s+git diff · 1 changed file/);
+  expect(line).toMatch(/Oracle\s+src\/fs\.mjs · readAll\s+fit 0\.71 · 150 tokens/);
+  expect(line).toMatch(/Sentry\s+readAll/);
+  // Another context line (the memory's) keeps its own words.
+  expect(draw({ type: 'context', title: 'Context', open: true, tokens: 20, items: [{ from: 'memory', text: 'a fact', tokens: 20 }] })).toMatch(/memory\s+a fact/);
+  const panel = draw({ type: 'panel', title: 'Helpers', pad: 35, rows: helperRows(all()) }).split('\n');
+  expect(panel[1]).toBe(`${'1  on   SCOUT   Files you name'.padEnd(35)}${HELPER_INFO[0].what}`);
+  expect(panel[4]).toBe(`${'4  on   SENTRY  Light checks'.padEnd(35)}${HELPER_INFO[3].what}`);
 });
 
 test('/helpers in the app: the four listed, one switched off and kept in settings.json, all switched off', async () => {
@@ -56,7 +90,7 @@ test('/helpers in the app: the four listed, one switched off and kept in setting
     r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
       { wait: 'Welcome' },
       { type: '/helpers' }, { key: 'enter' }, { wait: 'Light checks' }, { sleep: 150 }, { snapshot: 'list' },
-      { type: '/helpers off 3' }, { key: 'enter' }, { wait: 'Kept for next time' }, { sleep: 100 },
+      { type: '/helpers off oracle' }, { key: 'enter' }, { wait: 'Kept for next time' }, { sleep: 100 },
       { type: '/helpers' }, { key: 'enter' }, { wait: '3 of 4 on' }, { sleep: 150 }, { snapshot: 'after' },
       { type: '/helpers off all' }, { key: 'enter' }, { wait: 'All four helpers off' },
       ...quit,
@@ -64,10 +98,10 @@ test('/helpers in the app: the four listed, one switched off and kept in setting
   } finally { if (was === undefined) delete process.env.AGENTIC_HELPERS; else process.env.AGENTIC_HELPERS = was; }
   await fake.close();
   expect(r.snapshots.list).toContain('Helpers · 4 of 4 on · what comes along with a request before the first step');
-  expect(r.snapshots.list).toMatch(/1\s+on\s+Files you name\s+read whole before the first step \(Read first\)/);
-  expect(r.snapshots.list).toMatch(/4\s+on\s+Light checks\s+a syntax check after every edit/);
-  expect(r.text).toContain('3 Code by meaning off: the next message uses it. Kept for next time (settings.json).');
-  expect(r.snapshots.after).toMatch(/3\s+off\s+Code by meaning/);
+  expect(r.snapshots.list).toMatch(/1\s+on\s+SCOUT\s+Files you name\s+read whole before the first step \(Read first\)/);
+  expect(r.snapshots.list).toMatch(/4\s+on\s+SENTRY\s+Light checks\s+a syntax check after every edit/);
+  expect(r.text).toContain('Oracle off: the next message uses it. Kept for next time (settings.json).');
+  expect(r.snapshots.after).toMatch(/3\s+off\s+ORACLE\s+Code by meaning/);
   expect(JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).helpers).toEqual([]);
 }, T);
 

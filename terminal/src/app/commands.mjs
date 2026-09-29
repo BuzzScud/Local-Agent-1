@@ -11,7 +11,7 @@ export const COMMANDS = [
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'rules', desc: 'What the model reads at every start, numbered; add, switch off or remove a rule', arg: '[add|off|on|remove|always|open]' },
-  { name: 'helpers', desc: 'The context helpers, numbered: what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
+  { name: 'helpers', desc: 'The context helpers (Scout, Medic, Oracle, Sentry): what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'increase', desc: 'See and move the limits up or down: context, thinking cap, tries, steps, command output, trim points' },
