@@ -9,13 +9,14 @@
 // waits while the model is answering (paused), so the two do not share the
 // graphics chip and the answer is not slowed; mostly it runs between requests. Kept
 // under ~/.agentic-coder/maps, keyed like the project map by each file's size
-// and time, so only a changed file is worked out again.
+// and time, so only a changed file is worked out again. The files are the
+// project map's (repomap.mjs codeFiles): the ones most recently worked on.
 import { readFileSync, statSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { walk } from './fs.mjs';
+import { byPath } from './fs.mjs';
 import { outline } from './outline.mjs';
-import { CODE_FILE } from './repomap.mjs';
+import { codeFiles } from './repomap.mjs';
 import { HOME } from '../../../models/index.mjs';
 import { Words, terms, WORD_TOP } from '../agent/search.mjs';
 
@@ -31,8 +32,9 @@ const MAX_FILES = 400;
 const MAX_PARTS = 4000;
 const MAX_BYTES = 300_000; // bigger files are generated code or data, not code to read
 const PART_LINES = 80; // a longer part is cut into pieces of this many lines
-const WORDING = 1500; // what the small model reads of a part: its file, its name, its first lines
+const WORDING = 1500; // what the small model reads at a time: a part's file, its name, its lines
 const BATCH = 16;
+const FORMAT = 2; // 2: a long part is read in pieces, all of it (29 Sep); 1 read its first 1,500 characters
 const SAVE_EVERY = 20; // batches: a long first build keeps what it has so far
 
 const MAP_DIR = () => join(HOME, 'maps');
@@ -60,9 +62,29 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
 // A file of one very long line (a bundle, minified code) says nothing to read.
 const minified = (text) => text.split('\n', 50).some((l) => l.length > 1500);
 
+// A part's code in pieces the small model reads whole: each at most WORDING
+// characters with its file and name on top. Before 29 Sep a part was cut at
+// WORDING, so the end of a long function was never read (15% of this repo's
+// parts, 31% of a bigger project's). The part itself stays one piece of code
+// for the model: it is found when any of its pieces is close.
+function wordings(head, lines) {
+  const room = Math.max(200, WORDING - head.length);
+  const out = [];
+  let cur = '';
+  for (const l of lines) {
+    const line = l.slice(0, room);
+    if (cur && cur.length + 1 + line.length > room) { out.push(cur); cur = line; } else cur = cur ? `${cur}\n${line}` : line;
+  }
+  if (cur) out.push(cur);
+  // A last piece of a closing brace or two says nothing on its own.
+  if (out.length > 1 && out.at(-1).replace(/\s/g, '').length < 20) out.pop();
+  return out.map((code) => `${head}${code}`);
+}
+
 // A file's parts, as the model would read them: the functions and classes;
 // a class or a long function by its methods and inner parts (its head first),
-// anything longer than PART_LINES in pieces.
+// anything longer than PART_LINES in pieces. Each with the wordings the small
+// model reads of it (one, or more for a long part).
 export function partsOf(rel, text) {
   const lines = text.split('\n');
   const all = outline(text, rel);
@@ -90,8 +112,8 @@ export function partsOf(rel, text) {
       const b = Math.min(p.end, a + PART_LINES - 1);
       const code = lines.slice(a - 1, b).join('\n');
       if (code.replace(/\s/g, '').length < 20) continue; // a blank gap or a lone brace
-      const name = p.end - p.line >= PART_LINES ? `${p.name ?? 'lines'} (lines ${a}-${b})` : p.name;
-      out.push({ name: name ?? `lines ${a}-${b}`, line: a, end: b, wording: `${rel} · ${name ?? `lines ${a}-${b}`}\n${code}`.slice(0, WORDING) });
+      const name = (p.end - p.line >= PART_LINES ? `${p.name ?? 'lines'} (lines ${a}-${b})` : p.name) ?? `lines ${a}-${b}`;
+      out.push({ name, line: a, end: b, wordings: wordings(`${rel} · ${name}\n`, code.split('\n')) });
     }
   }
   return out;
@@ -106,7 +128,7 @@ export class CodeIndex {
     Object.assign(this, { cwd, embedder, maxFiles, maxParts, paused });
     this.file = join(dir, `${sha(cwd).slice(0, 16)}.code.json`);
     this.dir = dir;
-    this.parts = []; // { rel, name, line, end, stamp, vec }
+    this.parts = []; // { rel, name, line, end, stamp, vec }: one for each wording, so a long part has several
     this.state = 'new'; // 'building' → 'ready', or 'off' (the small model did not answer)
     this.done = 0;
     this.total = 0;
@@ -130,9 +152,9 @@ export class CodeIndex {
     if (this.state !== 'ready') this.state = 'building';
     const model = this.embedder?.model?.file ?? 'unknown';
     let saved = {};
-    try { const j = JSON.parse(readFileSync(this.file, 'utf8')); if (j.model === model) saved = j.files ?? {}; } catch { /* none yet */ }
-    const files = [];
-    for (const f of walk(this.cwd)) { if (!f.dir && CODE_FILE.test(f.path)) files.push(f.path); if (files.length >= this.maxFiles) break; }
+    try { const j = JSON.parse(readFileSync(this.file, 'utf8')); if (j.model === model && j.format === FORMAT) saved = j.files ?? {}; } catch { /* none yet */ }
+    // The most recently worked on first, so maxParts leaves out the least.
+    const files = codeFiles(this.cwd, { max: this.maxFiles });
     const entries = {};
     const parts = [];
     const todo = [];
@@ -147,7 +169,7 @@ export class CodeIndex {
         let text;
         try { text = readFileSync(join(this.cwd, rel), 'utf8'); } catch { continue; }
         if (text.includes('\u0000') || minified(text)) continue;
-        entry = { stamp, parts: partsOf(rel, text).map((p) => ({ n: p.name, a: p.line, b: p.end, h: sha(p.wording).slice(0, 20), w: p.wording })) };
+        entry = { stamp, parts: partsOf(rel, text).flatMap((p) => p.wordings.map((w) => ({ n: p.name, a: p.line, b: p.end, h: sha(w).slice(0, 20), w }))) };
       }
       entries[rel] = entry;
       for (const p of entry.parts) {
@@ -167,7 +189,7 @@ export class CodeIndex {
       try {
         mkdirSync(this.dir, { recursive: true });
         const tmp = `${this.file}.${process.pid}`;
-        writeFileSync(tmp, JSON.stringify({ model, cwd: this.cwd, files: out }));
+        writeFileSync(tmp, JSON.stringify({ model, format: FORMAT, cwd: this.cwd, files: out }));
         renameSync(tmp, this.file);
       } catch { /* a read-only home: worked out again next time */ }
     };
@@ -181,7 +203,8 @@ export class CodeIndex {
       if ((i / BATCH) % SAVE_EVERY === SAVE_EVERY - 1) save();
     }
     save();
-    this.parts = parts.filter((x) => x.p.v).map(({ rel, p, stamp }) => ({ rel, name: p.n, line: p.a, end: p.b, stamp, vec: unpack(p.v) }));
+    // In the folder's order, so parts as close as each other come as before.
+    this.parts = parts.filter((x) => x.p.v).map(({ rel, p, stamp }) => ({ rel, name: p.n, line: p.a, end: p.b, stamp, vec: unpack(p.v) })).sort((x, y) => byPath(x.rel, y.rel) || x.line - y.line);
     this.state = 'ready';
   }
 
@@ -192,7 +215,10 @@ export class CodeIndex {
     if (!this.ready) return null;
     // The same words recall.mjs sends, so the embedder's cache answers the second ask.
     const [q] = await this.embedder.embed([String(text).slice(0, 2000)], { signal });
-    const scored = this.parts.map((p) => ({ rel: p.rel, name: p.name, line: p.line, end: p.end, stamp: p.stamp, close: dot(q, p.vec) })).sort((a, b) => b.close - a.close);
+    const all = this.parts.map((p) => ({ rel: p.rel, name: p.name, line: p.line, end: p.end, stamp: p.stamp, close: dot(q, p.vec) })).sort((a, b) => b.close - a.close);
+    // A long part once, by its closest piece.
+    const seen = new Set();
+    const scored = all.filter((s) => { const k = partKey(s); if (seen.has(k)) return false; seen.add(k); return true; });
     const files = new Map();
     for (const s of scored) if (!files.has(s.rel)) files.set(s.rel, s.close);
     // Every part's closeness, for a part the word search brings (Hybrid).
@@ -206,9 +232,12 @@ export class CodeIndex {
   wordSearch(text, { top = WORD_TOP } = {}) {
     if (!this.ready) return [];
     if (this.words?.parts !== this.parts) {
-      this.words = { parts: this.parts, index: new Words(this.parts.map((p) => terms(this.textOf(p, WORDING)))) };
+      // Each part once, all of its lines.
+      const seen = new Set();
+      const list = this.parts.filter((p) => { const k = partKey(p); if (seen.has(k)) return false; seen.add(k); return true; });
+      this.words = { parts: this.parts, list, index: new Words(list.map((p) => terms(this.textOf(p, Infinity)))) };
     }
-    return this.words.index.order(text, top).map((i) => { const p = this.parts[i]; return { rel: p.rel, name: p.name, line: p.line, end: p.end, stamp: p.stamp }; });
+    return this.words.index.order(text, top).map((i) => { const p = this.words.list[i]; return { rel: p.rel, name: p.name, line: p.line, end: p.end, stamp: p.stamp }; });
   }
 
   // A part as the small models read it: its file, its name, its first lines.

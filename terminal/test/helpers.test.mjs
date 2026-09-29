@@ -142,7 +142,14 @@ test('a file is cut into its parts: a class by its methods, a long part in piece
   const parts = partsOf('src/store.mjs', text);
   // The class's head is one line ("export class Store {"): too little to say anything, so left out.
   expect(parts.map((p) => `${p.name} ${p.line}-${p.end}`)).toEqual(['imports and setup 1-2', 'Store › constructor 4-6', 'Store › save 7-11', 'walk (lines 12-91) 12-91', 'walk (lines 92-171) 92-171', 'walk (lines 172-183) 172-183']);
-  expect(parts[0].wording).toStartWith('src/store.mjs · imports and setup\n');
+  expect(parts[0].wordings).toHaveLength(1);
+  expect(parts[0].wordings[0]).toStartWith('src/store.mjs · imports and setup\n');
+  // A part longer than the small model reads at a time is read in pieces, to its last line.
+  const long = parts.find((p) => p.name === 'walk (lines 12-91)');
+  expect(long.wordings.length).toBeGreaterThan(1);
+  for (const w of long.wordings) { expect(w).toStartWith('src/store.mjs · walk (lines 12-91)\n'); expect(w.length).toBeLessThanOrEqual(1500); }
+  expect(long.wordings.join('\n')).toContain('const step0 = 0;');
+  expect(long.wordings.at(-1)).toContain('const step78 = 78;'); // the part's last line
   // A comment above a function goes with that function.
   const withComment = partsOf('a.mjs', 'export function one() {\n  return 1;\n}\n\n// adds two numbers\nexport function add(a, b) {\n  return a + b;\n}\n');
   expect(withComment.map((p) => `${p.name} ${p.line}-${p.end}`)).toEqual(['one 1-4', 'add 5-9']);

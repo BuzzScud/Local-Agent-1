@@ -6,14 +6,25 @@ import { spawnSync } from 'node:child_process';
 
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv', '__pycache__', '.cache', 'coverage', '.turbo']);
 
+// A folder or file the walk leaves out: hidden ones and the bulky folders above.
+export const skipName = (name) => (name.startsWith('.') && name !== '.github' && name !== '.env.example') || SKIP.has(name);
+
+// The order walk() gives: a folder's entries by name, each folder's files
+// where the folder comes.
+export function byPath(a, b) {
+  const x = a.split('/');
+  const y = b.split('/');
+  for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i].localeCompare(y[i]);
+  return x.length - y.length;
+}
+
 export function* walk(root, dir = root, depth = 0) {
   if (depth > 12) return;
   let entries;
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const e of entries) {
-    if (e.name.startsWith('.') && e.name !== '.github' && e.name !== '.env.example') continue;
-    if (SKIP.has(e.name)) continue;
+    if (skipName(e.name)) continue;
     const p = join(dir, e.name);
     if (e.isDirectory()) { yield { path: relative(root, p), dir: true }; yield* walk(root, p, depth + 1); }
     else if (e.isFile()) yield { path: relative(root, p), dir: false };
