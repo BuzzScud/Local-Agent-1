@@ -7,7 +7,7 @@
 //
 // A line:
 //   { id, at, kind, name, code, model, effort, ctx, passed, total, secs, result, part, note, raw, page }
-//   kind    tasks · requests · bug · suite · other            (KINDS below)
+//   kind    tasks · sets · requests · bug · suite · other     (KINDS below)
 //   result  pass · fail · stopped
 //   part    true for a run of only some of the set (a rerun of two tasks): kept, never shown as "the latest full run"
 //   code    the commit under test ("7595055", "7595055+" with uncommitted changes)
@@ -24,6 +24,7 @@ import { MODELS, MODELS_DIR } from '../registry.mjs';
 
 export const KINDS = {
   tasks: ['Practice tasks', 'the 28 practice tasks, each with its own check'],
+  sets: ['Battle sets', 'the Work 28 and the New 28 on one model, each test with its own checks'],
   requests: ['Real requests', 'trigger words and blocked commands in throwaway folders'],
   bug: ['Real bugs', 'a bug from a real project, judged in the browser'],
   suite: ['Unit tests', 'bun test over both parts'],
@@ -96,7 +97,7 @@ export function readRecord(file = recordFile()) {
 // its result could not be written down. Returns the line, or null.
 export function recordTest(row, { file = recordFile(), snapshot = true, quiet = false } = {}) {
   try {
-    if (!KINDS[row?.kind] || !row.name) throw new Error('a line needs a kind (tasks, requests, bug, suite, other) and a name');
+    if (!KINDS[row?.kind] || !row.name) throw new Error('a line needs a kind (tasks, sets, requests, bug, suite, other) and a name');
     const at = row.at ?? new Date().toISOString();
     const result = row.result ?? (row.total != null && row.passed != null ? (row.passed === row.total && row.total > 0 ? 'pass' : 'fail') : 'fail');
     const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), model: row.model ?? null, effort: row.effort ?? null, ctx: row.ctx ?? null,

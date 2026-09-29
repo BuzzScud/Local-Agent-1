@@ -56,7 +56,7 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
   expect(json).not.toContain('</script>'); // a name cannot close the data block
   const data = JSON.parse(json);
   expect(data.rows[0].name).toBe('The 28 real requests </script><b>');
-  expect(Object.keys(data.kinds)).toEqual(['tasks', 'requests', 'bug', 'suite', 'other']);
+  expect(Object.keys(data.kinds)).toEqual(['tasks', 'sets', 'requests', 'bug', 'suite', 'other']);
   expect(writeSnapshot({ file, docsDir: join(dir, 'not-there') })).toBe(null);
   expect(recordData(file).rows).toHaveLength(1);
 });

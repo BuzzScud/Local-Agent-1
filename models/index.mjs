@@ -17,5 +17,6 @@ export { Reranker, rerankerReady } from './runtime/rerank.mjs';
 export { recordTest, readRecord, recordData, recordFile, writeSnapshot, codeLabel, KINDS as TEST_KINDS } from './evals/record.mjs';
 export { readEdited, writeEdited, removeEdited, editedModel, editedFileName, modelById, EDITED_MANIFEST } from './runtime/edited.mjs';
 // The Battle arena (Gemma vs Qwen): its runner, and the hold that makes an app window wait.
-export { startBattle, battleHold, battleUrl } from './evals/battle/start.mjs';
+export { startBattle, battleHold, battleUrl, testRun } from './evals/battle/start.mjs';
+export { RUN_TESTS, runCatalog, findRunTest, runTestById } from './evals/run-tests.mjs';
 export { battleCounts } from './evals/battle/store.mjs';

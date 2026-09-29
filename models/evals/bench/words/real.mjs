@@ -8,6 +8,8 @@
 // its checks, so the memory's own files are never taken for the request's.
 // Blocked-command requests use harmless variants (rm -rf ./logs, sudo ls):
 // they check the block holds without anything real at risk if it did not.
+// Control-C (or SIGTERM, the hub's Stop) ends the request under way, skips the rest, and still
+// saves and records what ran, as stopped.
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -81,13 +83,26 @@ const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'agentic-words-memory
 const embedder = withMemory && embedderReady() ? new Embedder() : null;
 const saves = [];
 const server = new ModelServer(model);
+// Stop: the request under way is cut short (and left out), the rest are skipped; a second Control-C quits.
+let stopping = false;
+let reqAc = null;
+const stop = (sig) => {
+  if (stopping) { if (sig === 'SIGINT') server.stop().finally(() => process.exit(130)); return; }
+  stopping = true;
+  console.log(`\nstopping: the request under way ends now and the rest are skipped; what ran is saved and recorded as stopped${sig === 'SIGINT' ? ' (Control-C again quits without saving)' : ''}`);
+  reqAc?.abort();
+};
+process.on('SIGINT', () => stop('SIGINT'));
+process.on('SIGTERM', () => stop('SIGTERM'));
 const started = await server.start({ ctx: 32768 });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
+console.log(`server up on ${server.url}, ctx 32768; ${only ? `${only.length} of the ${REQUESTS.length}` : `the ${REQUESTS.length}`} requests, one at a time`);
 const rows = [];
 try {
   for (const [i, [folder, prompt, expect, reply]] of REQUESTS.entries()) {
     // What "the user" says when Agentic Coder asks a question about this request.
     const answers = () => reply ?? 'I do not know. If the files do not tell you, stop and tell me what you found; do not invent anything.';
+    if (stopping) break;
     if (only && !only.includes(i + 1)) continue;
     const base = mkdtempSync(join(tmpdir(), 'agentic-words-'));
     const cwd = join(base, 'project');
@@ -99,6 +114,8 @@ try {
     const since = Date.now() - 1000;
     const log = [];
     const ac = new AbortController();
+    reqAc = ac;
+    if (stopping) ac.abort(); // a stop that came while the folder was copied
     const timer = setTimeout(() => ac.abort(), 6 * 60_000);
     const t0 = Date.now();
     let run; let crash = null;
@@ -108,6 +125,8 @@ try {
         onEvent: (type, ev) => log.push({ type, ...ev }) });
     } catch (e) { crash = String(e.message ?? e); }
     clearTimeout(timer);
+    reqAc = null;
+    if (stopping) break; // cut short by the stop: left out, not failed
     const secs = Math.round((Date.now() - t0) / 1000);
     const events = run?.log ?? log;
     const route = events.find((e) => e.type === 'route')?.kind ?? (events.some((e) => e.type === 'route') ? '?' : 'step by step');
@@ -143,10 +162,10 @@ try {
   await server.stop();
 }
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, x) => n + x.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, x) => n + x.secs, 0) / saves.length) : 0} s a save`);
-const out = { at: new Date().toISOString(), memory: withMemory, total: rows.length, ok: rows.filter((r) => r.ok).length, rows };
+const out = { at: new Date().toISOString(), memory: withMemory, stopped: stopping, total: rows.length, ok: rows.filter((r) => r.ok).length, rows };
 const file = opt('out', join(modelFolder(model), 'results', 'words', `real-${out.at.replace(/[:.]/g, '-')}.json`));
 mkdirSync(dirname(file), { recursive: true });
 writeFileSync(file, JSON.stringify(out, null, 1));
 console.log(`${out.ok} of ${out.total} OK · saved ${file}`);
-recordTest({ kind: 'requests', model: model.id, name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only'), secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
+if (rows.length) recordTest({ kind: 'requests', model: model.id, name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only') || stopping, result: stopping ? 'stopped' : undefined, secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
   note: out.ok < out.total ? `failed: ${rows.filter((r) => !r.ok).map((r) => `#${r.n}`).join(', ')}` : '', raw: file.replace(`${root}/`, '') });

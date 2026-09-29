@@ -5,8 +5,9 @@
 //                      events.jsonl, files/ with the pages it made)
 //   trash/             a deleted test, kept (nothing is removed for good)
 //   state.json         the line of tests waiting to run, and whether it is paused
-//   running.json       the hold: a battle wants or uses the memory (the app waits while it is there)
-//   runner.pid, runner.log
+//   running.json       the hold: a battle or a test run wants or uses the memory (the app waits while it is there)
+//   runs/<id>/         one test run from the hub's Tests tab (▶ Run a test): job.json, run.log (what it printed)
+//   runner.pid, runner.log, runner.token (the key the hub sends to start or stop a test run)
 // Three sets of 28 come with the repo, each copied into tests/ the first time the arena starts,
 // so your edits are yours; a deleted one is not copied again:
 //   new28/      the New 28 (n01…), written for the arena
@@ -36,6 +37,7 @@ const rank = (suite) => (RANK.includes(suite) ? RANK.indexOf(suite) : RANK.lengt
 export const paths = (home = battleHome()) => ({
   home, tests: join(home, 'tests'), battles: join(home, 'battles'), trash: join(home, 'trash'),
   state: join(home, 'state.json'), hold: join(home, 'running.json'), pid: join(home, 'runner.pid'), log: join(home, 'runner.log'), seeded: join(home, 'seeded.json'),
+  runs: join(home, 'runs'), token: join(home, 'runner.token'),
 });
 
 export const readJson = (f, d = null) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return d; } };
@@ -228,7 +230,8 @@ export function battleCounts(home = battleHome()) {
 }
 export const latestByTest = (battles) => { const m = {}; for (const b of battles) m[b.test] = b; return m; };
 
-// The hold on the memory (running.json): { pid, state: 'want' | 'running', test, title, run, of, startedAt }.
+// The hold on the memory (running.json): { pid, state: 'want' | 'running', kind: 'battle' | 'test', test, title, run, of, startedAt }.
+// A test run's hold names the test's own process once it runs, so it lasts exactly as long as the run.
 // The app reads it: while it is there, a window lets go of its model when idle and waits.
 export function readHold(home = battleHome()) {
   const h = readJson(paths(home).hold);
@@ -239,9 +242,15 @@ export function readHold(home = battleHome()) {
 export const writeHold = (h, home = battleHome()) => writeJson(paths(home).hold, h);
 export const clearHold = (home = battleHome()) => rmSync(paths(home).hold, { force: true });
 
-// What the app says while a battle holds the memory (no model named: the vote is blind).
+// What the app says while a battle holds the memory (no model named: the vote is blind), or a test
+// run from the Tests tab (that one names its model: it is one model's test).
 export function holdText(h, now = Date.now()) {
   if (!h) return null;
+  if (h.kind === 'test') {
+    if (h.state === 'want') return `a test run is about to start (${h.title})`;
+    const mins = Math.max(0, Math.floor((now - (h.startedAt ?? now)) / 60000));
+    return `a test is running (${h.title} · ${mins ? `${mins} min so far` : 'just started'})`;
+  }
   if (h.state === 'want') return `a battle is about to start (${h.title})`;
   const left = Math.max(0, Math.ceil((LIMIT_SECS * 1000 - (now - (h.startedAt ?? now))) / 60000));
   return `a battle is running (${h.title} · run ${h.run} of ${h.of} · at most ${left} min left of this run)`;
