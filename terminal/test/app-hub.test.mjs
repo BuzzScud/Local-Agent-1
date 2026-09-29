@@ -127,7 +127,11 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome to Agentic Coder' }, { sleep: 400 }, { snapshot: 'badge' },
     { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
-    { key: 'down' }, { sleep: 150 }, { key: 'enter' },
+    // the edited copy is listed last, after every model, and ↓ stops at the
+    // end of the list, so 4 presses reach it however many models there are.
+    // (No import of the models here: loading them fixes HOME before
+    // settings.test sets AGENTIC_HOME in a full run.)
+    ...[1, 2, 3, 4].flatMap(() => [{ key: 'down' }, { sleep: 150 }]), { key: 'enter' },
     { wait: 'Could not switch' }, { sleep: 300 }, { snapshot: 'after' },
     ...quit,
   ] });

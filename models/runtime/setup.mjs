@@ -60,7 +60,8 @@ export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => pr
     }
   }
   await fetchChecked({ name: m.name, url: m.url, file: modelPath(m), bytes: m.bytes, sha: m.sha256 }, say);
-  if (m.draft) await fetchChecked({ name: `${m.name}'s guessing helper`, url: m.draft.url, file: draftPath(m), bytes: m.draft.bytes, sha: m.draft.sha256 }, say);
+  // A helper inside the model file (draft.inFile) came with it.
+  if (m.draft && !m.draft.inFile) await fetchChecked({ name: `${m.name}'s guessing helper`, url: m.draft.url, file: draftPath(m), bytes: m.draft.bytes, sha: m.draft.sha256 }, say);
   // The memory's matcher. Without it the memory still works, by words.
   const e = EMBEDDERS[DEFAULT_EMBEDDER];
   if (e) await fetchChecked({ name: `${e.name}, the memory's matcher`, url: e.url, file: modelPath(e), bytes: e.bytes, sha: e.sha256 }, say);

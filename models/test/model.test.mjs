@@ -9,8 +9,8 @@ import bonsai27b from '../bonsai-2-27b/model.mjs';
 const m = bonsai27b; // the 27B's recipe: its settings are still exact
 const g = MODELS.gemma;
 
-test('Gemma 4 12B QAT is the only model and the default; the 27B stays as a recipe', () => {
-  expect(Object.keys(MODELS)).toEqual(['gemma']);
+test('Gemma 4 12B QAT is the default, Qwen3.5 9B the second model; the 27B stays as a recipe', () => {
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen']);
   expect(DEFAULT_MODEL).toBe('gemma');
   expect(g.file).toBe('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf');
   expect(g.bytes).toBe(6_716_356_800);
@@ -107,6 +107,39 @@ test('with its helper the server guesses one word ahead and checks it in the sam
   expect(needBytes(m, 32_768, { draft: false })).toBeLessThan(needBytes(m, 32_768));
 });
 
+test('Qwen3.5 9B: Low / High like Gemma, its own MTP inside the file, about twice Gemma\'s cache a token', () => {
+  const q = MODELS.qwen;
+  expect([q.name, q.file, q.bytes, q.folder]).toEqual(['Qwen3.5 9B', 'Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf', 6_874_345_824, 'qwen3.5-9b']);
+  expect(q.sha256).toBe('bb0aa4bf2acf4b6d97eca051a7af91200729e9e97449ce98785af9e70f6d703c');
+  // the MTP build won the speed test (1.12×, 29 Sep): the helper is the model file itself
+  expect(q.draft).toMatchObject({ inFile: true, file: q.file, bytes: 0, type: 'draft-mtp,ngram-simple', nMax: 1, helpsThinking: true });
+  const m1 = serverArgs(q, { ctx: 65_536, port: 17_600, draft: true });
+  expect(m1).not.toContain('-md');
+  expect(m1[m1.indexOf('--spec-type') + 1]).toBe('draft-mtp,ngram-simple');
+  expect(modelFolder(q)).toMatch(/models\/qwen3\.5-9b\/$/);
+  expect(q.thinkingLevels.map((l) => l.label)).toEqual(['Low', 'High']);
+  expect(thinkingKwargs(q, false)).toEqual({ enable_thinking: false });
+  expect(thinkingKwargs(q, true).enable_thinking).toBe(true);
+  // 8 full-attention layers, 4 kv heads of 256
+  expect(kvBytesPerToken(q)).toBe(8 * 4 * 256 * 2 * (34 / 32));
+  expect(kvBytesPerToken(q)).toBeGreaterThan(1.9 * kvBytesPerToken(g));
+  const a = serverArgs(q, { ctx: 65_536, port: 17_600, draft: false });
+  expect(a).not.toContain('-md');
+  expect(a[a.indexOf('--spec-type') + 1]).toBe('ngram-simple');
+  expect(a[a.indexOf('-np') + 1]).toBe('2');
+});
+
+test('a helper inside the model file (draft.inFile, Qwen3.5\'s own MTP layer): no -md file to load, the same guessing flags', () => {
+  const q = { ...MODELS.qwen, draft: { inFile: true, file: MODELS.qwen.file, bytes: 0, type: 'draft-mtp,ngram-simple', nMax: 1, computeBytes: 0.25e9 } };
+  const a = serverArgs(q, { ctx: 65_536, port: 17_600, draft: true });
+  for (const f of ['-md', '-ngld']) expect(a).not.toContain(f);
+  expect(a[a.indexOf('--spec-type') + 1]).toBe('draft-mtp,ngram-simple');
+  expect(a[a.indexOf('--spec-draft-n-max') + 1]).toBe('1');
+  expect(a[a.indexOf('-m') + 1]).toBe(modelPath(q));
+  // its file is the model's own, so nothing extra is counted for it
+  expect(needBytes(q, 65_536) - needBytes(q, 65_536, { draft: false })).toBeCloseTo(0.25e9 + 2 * 1 * q.fixedStateBytes, -6);
+});
+
 test('Gemma: MTP guesses one word ahead and n-grams copy what is on screen; without the helper, n-grams alone', () => {
   expect(g.draft).toMatchObject({ type: 'draft-mtp,ngram-simple', nMax: 1, ownCache: false, helpsThinking: true, bytes: 465_109_248 });
   expect(g.draft.sha256).toBe('145db9094bc0f85f1701e255a2ed216dcc9800fc8bc8631ad00905b456bd451b');
@@ -147,5 +180,5 @@ test('the memory\'s matcher: BGE-M3, in the engine\'s embedding mode, beside the
   // none of the chat model's flags
   for (const f of ['--jinja', '--reasoning-budget', '-md', '--slot-save-path', '--spec-type']) expect(a).not.toContain(f);
   // and it is not one of the models /model offers
-  expect(Object.keys(MODELS)).toEqual(['gemma']);
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen']);
 });

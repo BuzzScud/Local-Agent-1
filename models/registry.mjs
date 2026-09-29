@@ -38,8 +38,9 @@ export const DEFAULT_PORT = 17600;
 // is no longer listed: its file was removed on 28 Sep 2026 to free the disk.
 // To bring it back: import it here, add it to ALL, run `coding setup`.
 import gemma4_12b from './gemma-4-12b/model.mjs';
+import qwen35_9b from './qwen3.5-9b/model.mjs';
 
-const ALL = [gemma4_12b];
+const ALL = [gemma4_12b, qwen35_9b];
 export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
 export const DEFAULT_MODEL = 'gemma';

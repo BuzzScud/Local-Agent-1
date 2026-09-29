@@ -99,8 +99,10 @@ export function serverArgs(model, { ctx, port, draft = false }) {
     // A helper that shares the model's cache (Gemma's MTP) has no cache of
     // its own to size; a type list ("draft-mtp,ngram-simple") also uses the
     // n-gram lookup, with the model's spec sizes.
+    // A helper inside the model file (inFile: Qwen3.5's own MTP layer) needs no
+    // file of its own to load: the server finds it in the model.
     ...(draft && model.draft ? [
-      '-md', draftPath(model), '--spec-type', model.draft.type, '--spec-draft-n-max', String(model.draft.nMax), '-ngld', '99',
+      ...(model.draft.inFile ? [] : ['-md', draftPath(model)]), '--spec-type', model.draft.type, '--spec-draft-n-max', String(model.draft.nMax), ...(model.draft.inFile ? [] : ['-ngld', '99']),
       ...(model.draft.ownCache === false ? [] : ['-ctkd', 'q8_0', '-ctvd', 'q8_0']),
       ...(model.draft.ubatch ? ['-ub', String(model.draft.ubatch)] : []),
       ...(model.spec && model.draft.type.includes('ngram-simple') ? ['--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
