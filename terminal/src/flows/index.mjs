@@ -6,7 +6,7 @@
 import { readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { complete } from './llm.mjs';
+import { complete, decide } from './llm.mjs';
 import { planRename, applyRename, leftAloneNote } from './rename.mjs';
 import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
@@ -88,13 +88,47 @@ function byWords(t) {
 export async function route(ctx, text) {
   const byRules = routeByRules(text);
   if (byRules) return byRules;
-  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 80,
-    system: 'You sort a request to a coding assistant into one kind.',
-    user: `Request: ${text}\n\nKinds: question (only wants an answer), rename (rename one name everywhere), fix (something is broken), change (add or change code), other.`,
-    schema: { type: 'object', properties: { kind: { type: 'string', enum: ['question', 'rename', 'fix', 'change', 'other'] }, from: { type: 'string' }, to: { type: 'string' } }, required: ['kind'] } });
-  const k = r.json?.kind ?? 'other';
-  if (k === 'rename' && !(r.json.from && r.json.to)) return { kind: 'change' };
-  return { kind: k, from: r.json?.from, to: r.json?.to };
+  return modelSort(ctx, text);
+}
+
+// What the model is told each kind means: the paths at the top of this file.
+// The words once said only "other", and the model sorted a page to write, a
+// file to delete or a command to run as a code change: right on 59 of the 82
+// lines of the sorting check (Qwen) and 70 (Gemma); with these meanings 80 and
+// 81 (29 Sep 2026, models/evals/tools/sort-check.mjs). A page or component
+// inside the project's code is a change; a page that stands on its own is other
+// (Gemma still sorts "build a login page component in src/pages/Login.jsx" as other).
+export const KINDS = ['question', 'rename', 'fix', 'change', 'other'];
+// The meanings come before the request, so the server reads them once and keeps
+// them (only the request is new at each sort).
+export const KIND_MEANINGS = `Kinds: question (only wants an answer; nothing is changed), rename (rename one name in the code everywhere, not a file), fix (code in the project is broken and should be repaired), change (add to or change the project's code: a function, a flag, an option, a component or page inside the code), other (anything else: write a document, notes, a story or a self-contained web page; create a new file the request names; move, delete or rename files; run a command).`;
+export const SORT_SYSTEM = `You sort a request to a coding assistant into one kind.\n\n${KIND_MEANINGS}`;
+export const sortQuestion = (text) => `Request: ${text}`;
+
+// The model sorts what the word rules leave: in one pass, from the chance of
+// each kind (decide() in llm.mjs, about half the time of a written answer), or
+// in a written answer when the server cannot give the chances. `via` says which.
+// A rename also needs its two names: they are asked for on their own, and
+// without both it is worked on as a change.
+export async function modelSort(ctx, text) {
+  const ask = { instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal };
+  const d = await decide({ ...ask, system: SORT_SYSTEM, user: sortQuestion(text), options: KINDS, lead: '{"kind": "' });
+  let out;
+  if (d) out = { kind: d.pick, via: 'odds', sure: d.conf };
+  else {
+    const r = await complete({ ...ask, system: SORT_SYSTEM, user: sortQuestion(text), temperature: 0, maxTokens: 80,
+      schema: { type: 'object', properties: { kind: { type: 'string', enum: KINDS }, from: { type: 'string' }, to: { type: 'string' } }, required: ['kind'] } });
+    out = { kind: r.json?.kind ?? 'other', from: r.json?.from, to: r.json?.to, via: 'written' };
+  }
+  if (out.kind !== 'rename' || (out.from && out.to)) return out;
+  // The kind alone came back without the names (a sorted rename left them out
+  // on all 6 rename lines of the 29 Sep sorting check, and was worked on as a change).
+  const n = await complete({ ...ask, temperature: 0, maxTokens: 60,
+    system: 'You read a request to rename something in code and give the name it has now and the new name.',
+    user: `Request: ${text}\n\nThe name it has now (from) and the new name (to), each exactly as the request writes it.`,
+    schema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, required: ['from', 'to'] } });
+  const from = n.json?.from?.trim(), to = n.json?.to?.trim();
+  return from && to && from !== to ? { ...out, from, to } : { kind: 'change', via: out.via };
 }
 
 export async function renameFlow(ctx, from, to) {

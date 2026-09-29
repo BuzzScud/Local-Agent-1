@@ -3,6 +3,7 @@
 // thinking: think first, at the chat's level (Medium/High); used for writing
 // code and tests. Sorting and choosing (JSON answers) never think.
 import { streamChat } from '../agent/client.mjs';
+import { thinkingKwargs } from '../../../models/index.mjs';
 
 // Whoever wants a count of every focused call's tokens (the agent, while a
 // focused path runs, for the "done" line and the practice bench).
@@ -21,10 +22,61 @@ export const SETUP_THINK_CAP = 2048;
 // thinkCap: a smaller thinking cap for this one call (the server's
 // --reasoning-budget stays the model's thinkingBudget).
 export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap }) {
-  if (instructions) system = `${instructions}\n\nCurrent subtask (follow its output format):\n${system}`;
+  system = withInstructions(system, instructions);
   llmCalls.n++;
   llmCalls.now++;
   try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }); } finally { llmCalls.now--; }
+}
+
+const withInstructions = (system, instructions) => (instructions ? `${instructions}\n\nCurrent subtask (follow its output format):\n${system}` : system);
+
+// A pick among a few fixed words in one pass, with nothing written: the
+// chance the model gives each of `options` as the next word after `lead` (the
+// start of the answer it would write, '{"kind": "'), read from the server's
+// token probabilities. Sorting a request this way took about half the time of
+// complete() with a schema and picked the same kind on 81 to 84 of 85 lines
+// (Qwen 1.4 → 0.6 s, Gemma 2.0 → 0.9 s, 29 Sep 2026). Its confidence did NOT
+// tell right picks from wrong ones, so nothing is decided on it.
+// Returns { pick, share, conf, mass }, or null when the server cannot give the
+// chances (no /apply-template, /tokenize or probabilities) or the options hold
+// under half of them (the model meant to write something else): the caller
+// then asks with complete().
+const noOdds = new Set(); // servers that could not: not asked again
+export async function decide({ url, model, slot, system, user, instructions = '', options, lead = '', signal }) {
+  if (noOdds.has(url)) return null;
+  const post = async (path, body) => {
+    const res = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal });
+    return res.ok ? res.json() : null;
+  };
+  llmCalls.n++;
+  llmCalls.now++;
+  try {
+    const messages = [{ role: 'system', content: withInstructions(system, instructions) }, { role: 'user', content: user }];
+    const prompt = (await post('/apply-template', { messages, chat_template_kwargs: thinkingKwargs(model, false) }))?.prompt;
+    if (typeof prompt !== 'string') { noOdds.add(url); return null; }
+    // Each option written out after the lead, as the model's own tokens. The
+    // prompt ends where they first differ, so each option is one token to read,
+    // whatever the tokenizer does with the quote in front of it.
+    const toks = await Promise.all(options.map((o) => post('/tokenize', { content: prompt + lead + o, add_special: false, parse_special: true }).then((r) => r?.tokens)));
+    if (!toks.every((t) => Array.isArray(t) && t.length)) { noOdds.add(url); return null; }
+    let n = 0;
+    while (toks.every((t) => t[n] !== undefined && t[n] === toks[0][n])) n++;
+    const first = toks.map((t) => t[n]);
+    if (first.some((id) => id === undefined) || new Set(first).size !== options.length) return null;
+    const r = await post('/completion', { prompt: toks[0].slice(0, n), n_predict: 1, n_probs: 100, temperature: 0, cache_prompt: true, post_sampling_probs: false, ...(slot !== undefined ? { id_slot: slot } : {}) });
+    const top = r?.completion_probabilities?.[0]?.top_logprobs;
+    if (!Array.isArray(top)) { noOdds.add(url); return null; }
+    const p = options.map((o, i) => Math.exp(top.find((t) => t.id === first[i])?.logprob ?? -Infinity));
+    const mass = p.reduce((a, b) => a + b, 0);
+    if (!(mass >= 0.5)) return null;
+    const share = Object.fromEntries(options.map((o, i) => [o, p[i] / mass]));
+    const pick = options.reduce((a, b) => (share[b] > share[a] ? b : a));
+    for (const t of tallies) { try { t({ tokens: 1, thought: 0 }); } catch { /* a count never stops the work */ } }
+    return { pick, share, conf: share[pick], mass };
+  } catch (e) {
+    if (signal?.aborted || e.name === 'AbortError') throw e;
+    return null; // a server that cannot be asked this way is asked the old way
+  } finally { llmCalls.now--; }
 }
 
 async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }) {
