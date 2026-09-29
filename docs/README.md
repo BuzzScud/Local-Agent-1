@@ -8,9 +8,9 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 202 KB | 2026-09-29 |
 | [design rounds/permissions-command-preview-2026-09-29.html](design%20rounds/permissions-command-preview-2026-09-29.html) | page | Permissions Command Preview | 79 KB | 2026-09-29 |
 | [other/agentic-coder-move-to-bay2-plan-2026-09-29.html](other/agentic-coder-move-to-bay2-plan-2026-09-29.html) | page | Move Agentic Coder to BAY2 | 25 KB | 2026-09-29 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 170 KB | 2026-09-29 |
 | [design rounds/tests-tab-run-a-test-3-designs-2026-09-29.html](design%20rounds/tests-tab-run-a-test-3-designs-2026-09-29.html) | page | Run a test · 3 designs | 77 KB | 2026-09-29 |
 | [design rounds/settings-command-preview-2026-09-29.html](design%20rounds/settings-command-preview-2026-09-29.html) | page | Settings Command Preview | 47 KB | 2026-09-29 |
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-09-29 |
