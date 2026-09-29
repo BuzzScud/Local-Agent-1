@@ -10,7 +10,29 @@
 :root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--c-before:#3987e5;--c-after:#d95926}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:1120px;margin:0 auto;padding:28px 16px 64px}
+main{max-width:1120px;margin:0 auto;padding:28px 16px 64px;position:relative}
+/* The model picker sits in the empty space left of the page (no panel of its own): it follows the scroll there. When the window is too narrow to leave that space, it is a row of buttons under the title instead. */
+aside{margin:14px 0 4px}
+.side-h{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);margin:0 0 8px}
+.models{display:flex;flex-wrap:wrap;gap:8px}
+.models button{font:inherit;display:block;text-align:left;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.models button:hover{color:var(--ink);border-color:var(--faint)}.models button:focus-visible{outline:2px solid var(--c-before);outline-offset:1px}
+.models button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+.models .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:13px}.models .top b{font-weight:400}.models button[aria-pressed="true"] .top b{font-weight:600}
+.models .top span{color:var(--faint);font-variant-numeric:tabular-nums}.models .s,.models hr{display:none}
+.side-note{color:var(--mute);font-size:12px;margin:8px 0 0}
+@media (min-width:1580px){
+  aside{position:absolute;right:100%;top:0;bottom:0;width:212px;margin:0 8px 0 0}
+  .side-in{position:sticky;top:28px}
+  .models{flex-direction:column;gap:2px}
+  .models button{width:100%;padding:8px 10px;border-color:transparent;border-radius:10px;background:none}
+  .models button:hover{background:var(--soft);border-color:transparent}
+  .models button[aria-pressed="true"]{background:var(--soft);border-color:var(--faint)}
+  .models .top{font-size:14px}.models .top b{font-weight:500}.models button[aria-pressed="true"] .top b{font-weight:700}
+  .models .s{display:block;color:var(--mute);font-size:12px;margin-top:1px}
+  .models hr{display:block;border:0;border-top:1px solid var(--line);margin:8px 10px}
+  .side-note{margin:14px 10px 0}
+}
 h1{font-size:28px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}h2{font-size:20px;letter-spacing:-.01em;margin:40px 0 4px}h3{font-size:16px;margin:0 0 2px}p{margin:0 0 10px}a{color:inherit;text-underline-offset:3px}
 .lede{color:var(--mute);max-width:780px}.sub{color:var(--mute);font-size:14px;margin-bottom:12px;max-width:840px}
 .filters{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 4px}
@@ -41,6 +63,11 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
 <main>
 <h1>Agentic Coder test record</h1>
 <p class="lede" id="lede">Reading the record…</p>
+<aside aria-label="Model"><div class="side-in">
+<p class="side-h" id="side-h">Model</p>
+<nav class="models" id="models" aria-labelledby="side-h"></nav>
+<p class="side-note" id="sidenote"></p>
+</div></aside>
 <div class="filters" id="filters" role="group" aria-label="Which tests to show"></div>
 <div class="cards" id="cards"></div>
 <section id="trend"></section>
@@ -57,7 +84,8 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   try { data = built ? JSON.parse(built.textContent) : await (await fetch('/tests.json', { cache: 'no-store' })).json(); }
   catch { $('lede').textContent = 'The test record could not be read. Open this page from Agentic Coder with /docs, then the Tests tab.'; return; }
   const live = !built;
-  const rows = data.rows ?? [], KINDS = data.kinds ?? {};
+  const all = data.rows ?? [], KINDS = data.kinds ?? {}, models = data.models ?? [];
+  let rows = all, order = [], kind = 'all'; // the rows in view (the model picked, then the kind), the kinds in them, the kind shown
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = (iso) => { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
   const clock = (iso) => { const d = new Date(iso); const h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
@@ -68,30 +96,47 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   const result = (r) => { const [c, m] = mark(r); return `<span class="${c}">${m} ${esc(words(r))}</span>`; };
   // In the hub a results page opens in the hub; in the saved copy it is a file beside this one.
   const href = (page) => (live ? `/?tab=docs&page=${encodeURIComponent(page)}` : `../${page.split('/').map(encodeURIComponent).join('/')}`);
+  const RETIRED = { bonsai: 'Bonsai 27B' }; // a model whose file is no longer on this Mac: its runs are kept, it has no row in the panel
+  const modelName = (id) => models.find((m) => m.id === id)?.name ?? RETIRED[id] ?? id ?? '';
   const settings = (r) => [r.effort ? `effort ${r.effort}` : '', r.ctx ? `${Math.round(r.ctx / 1024)}k memory` : ''].filter(Boolean).join(' · ') || '—';
 
-  if (!rows.length) {
-    $('lede').textContent = 'Every test run on this Mac, newest first.';
-    $('cards').outerHTML = '<div class="empty">No test has been recorded yet. The 28-task check (<code>bun run eval</code>), the real requests (<code>bun run eval:words</code>) and the unit tests (<code>bun run test</code>) each add a line here when they finish.</div>';
-    return;
-  }
-  const order = Object.keys(KINDS).filter((k) => rows.some((r) => r.kind === k));
-  const first = rows[rows.length - 1];
-  $('lede').textContent = `Every test run on this Mac, newest first: ${rows.length} run${rows.length === 1 ? '' : 's'} since ${day(first.at)}. A run adds its own line when it finishes.`;
+  let pick = 'all'; // 'all' · a model's id · 'none' (a run of no one model: the unit tests, the checks)
+  try { const m = new URL(location.href).searchParams.get('model') ?? localStorage.getItem('agentic-tests-model'); if (m && (m === 'all' || m === 'none' || models.some((x) => x.id === m))) pick = m; } catch { /* no storage */ }
+  const inPick = (r) => pick === 'all' || (pick === 'none' ? !r.model : r.model === pick);
 
-  let shown = 'all';
-  try { const s = new URL(location.href).searchParams.get('kind') ?? localStorage.getItem('agentic-tests-kind'); if (s && (s === 'all' || order.includes(s))) shown = s; } catch { /* no storage */ }
+  let shown = 'all'; // the kind asked for; `kind` is what it comes to once the model is picked
+  try { const s = new URL(location.href).searchParams.get('kind') ?? localStorage.getItem('agentic-tests-kind'); if (s && (s === 'all' || s in KINDS)) shown = s; } catch { /* no storage */ }
   function filters() {
     $('filters').innerHTML = [['all', 'All', rows.length], ...order.map((k) => [k, KINDS[k][0], rows.filter((r) => r.kind === k).length])]
-      .map(([k, name, n]) => `<button type="button" data-kind="${k}" aria-pressed="${k === shown}">${esc(name)}<span>${n}</span></button>`).join('');
+      .map(([k, name, n]) => `<button type="button" data-kind="${k}" aria-pressed="${k === kind}">${esc(name)}<span>${n}</span></button>`).join('');
   }
   $('filters').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; shown = b.dataset.kind; try { localStorage.setItem('agentic-tests-kind', shown); } catch { /* no storage */ } draw(); };
 
+  // The side panel: All models, each model whose file is on this Mac, then the runs that are of no one model.
+  function side() {
+    const latest = (id) => all.find((r) => r.model === id && r.kind === 'tasks' && r.total === 28 && !r.part && r.result !== 'stopped');
+    const item = (id, name, n, sub) => `<button type="button" data-model="${esc(id)}" aria-pressed="${id === pick}"><span class="top"><b>${esc(name)}</b><span>${n}</span></span><span class="s">${esc(sub)}</span></button>`;
+    const none = all.filter((r) => !r.model).length, gone = all.filter((r) => r.model && !models.some((m) => m.id === r.model));
+    $('models').innerHTML = item('all', 'All models', all.length, 'every run')
+      + models.map((m) => { const l = latest(m.id); return item(m.id, m.name, all.filter((r) => r.model === m.id).length, l ? `28 tasks: ${l.passed} of 28 · ${day(l.at)}` : 'no full 28-task run yet'); }).join('')
+      + (none ? `<hr>${item('none', 'Not model-specific', none, 'unit tests and checks')}` : '');
+    const names = [...new Set(gone.map((r) => modelName(r.model)))];
+    $('sidenote').textContent = gone.length ? `${gone.length} run${gone.length === 1 ? '' : 's'} of ${names.join(' and ')}, no longer on this Mac, show under All models only.` : '';
+  }
+  $('models').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; pick = b.dataset.model; try { localStorage.setItem('agentic-tests-model', pick); } catch { /* no storage */ } draw(); };
+
+  const who = () => (pick === 'all' ? 'Every test run' : pick === 'none' ? 'Every run of no one model (the unit tests and checks)' : `Every run of ${modelName(pick)}`);
+  function head() {
+    if (!all.length) { $('lede').textContent = 'Every test run on this Mac, newest first.'; return; }
+    if (!rows.length) { $('lede').textContent = `${who()} on this Mac, newest first.`; return; }
+    $('lede').textContent = `${who()} on this Mac, newest first: ${rows.length} run${rows.length === 1 ? '' : 's'} since ${day(rows[rows.length - 1].at)}. A run adds its own line when it finishes.`;
+  }
+
   function cards() {
-    $('cards').innerHTML = order.filter((k) => shown === 'all' || shown === k).map((k) => {
+    $('cards').innerHTML = order.filter((k) => kind === 'all' || kind === k).map((k) => {
       const mine = rows.filter((x) => x.kind === k);
       const r = mine.find((x) => !x.part && x.result !== 'stopped') ?? mine[0]; const [c] = mark(r);
-      return `<div class="card"><div class="k">${esc(KINDS[k][0])} · latest${k === 'bug' ? '' : ' full run'}</div><div class="v ${c}">${esc(mark(r)[1])} ${esc(words(r))}</div><div class="n">${esc(r.name)}</div><div class="m">${day(r.at)} · ${clock(r.at)}${r.secs != null ? ` · ${secs(r.secs)}` : ''}${r.code ? ` · code ${esc(r.code)}` : ''}</div></div>`;
+      return `<div class="card"><div class="k">${esc(KINDS[k][0])} · latest${k === 'bug' ? '' : r.part ? ' run, part of the set' : ' full run'}</div><div class="v ${c}">${esc(mark(r)[1])} ${esc(words(r))}</div><div class="n">${esc(r.name)}</div><div class="m">${day(r.at)} · ${clock(r.at)}${r.secs != null ? ` · ${secs(r.secs)}` : ''}${r.code ? ` · code ${esc(r.code)}` : ''}${pick === 'all' && r.model ? ` · ${esc(modelName(r.model))}` : ''}</div></div>`;
     }).join('');
   }
 
@@ -117,7 +162,7 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
   }
   function trend() {
     const pts = rows.filter((r) => r.kind === 'tasks' && r.total === 28 && !r.part && r.result !== 'stopped' && (!r.effort || /^(off|low)$/i.test(r.effort))).reverse();
-    if (pts.length < 2 || (shown !== 'all' && shown !== 'tasks')) { $('trend').innerHTML = ''; return; }
+    if (pts.length < 2 || (kind !== 'all' && kind !== 'tasks')) { $('trend').innerHTML = ''; return; }
     $('trend').innerHTML = `<h2>The 28-task check over time</h2><p class="sub">Each full run of the 28 practice tasks at the default effort, oldest on the left. Point at a dot for the run behind it; every run is in the table below.</p><div class="charts">${
       line({ title: 'Tasks passed, of 28', pts, get: (p) => p.passed, fmt: (v) => `${v} of 28`, floor: Math.min(20, ...pts.map((p) => p.passed)), top: 28, cap: 'Higher is better; 28 is every task.' })}${
       line({ title: 'Seconds for all 28', pts, get: (p) => p.secs, fmt: (v) => `${v.toLocaleString()} s`, cap: 'Lower is better. One run each, so a few percent either way is run-to-run noise.' })}</div>`;
@@ -125,23 +170,37 @@ svg{display:block;width:100%;max-width:620px;height:auto;overflow:visible;margin
 
   const KEEP = 30; // unit test runs shown; the rest stay in the record
   function tables() {
-    $('tables').innerHTML = order.filter((k) => shown === 'all' || shown === k).map((k) => {
-      const all = rows.filter((r) => r.kind === k), list = k === 'suite' ? all.slice(0, KEEP) : all;
-      return `<h2>${esc(KINDS[k][0])}</h2><p class="sub">${esc(KINDS[k][1][0].toUpperCase() + KINDS[k][1].slice(1))}. ${all.length} run${all.length === 1 ? '' : 's'}${all.length > list.length ? `, the newest ${list.length} shown` : ''}.</p>
+    $('tables').innerHTML = order.filter((k) => kind === 'all' || kind === k).map((k) => {
+      const mine = rows.filter((r) => r.kind === k), list = k === 'suite' ? mine.slice(0, KEEP) : mine;
+      return `<h2>${esc(KINDS[k][0])}</h2><p class="sub">${esc(KINDS[k][1][0].toUpperCase() + KINDS[k][1].slice(1))}. ${mine.length} run${mine.length === 1 ? '' : 's'}${mine.length > list.length ? `, the newest ${list.length} shown` : ''}.</p>
 <div class="wrap"><table><thead><tr><th>When</th><th>Test</th><th>Code</th><th>Settings</th><th>Result</th><th>Time</th><th>Results page</th></tr></thead><tbody>${list.map((r) => `<tr>
 <td>${day(r.at)}<span class="q">${clock(r.at)}</span></td>
 <td class="t"><b>${esc(r.name)}</b>${r.note ? `<span>${esc(r.note)}</span>` : ''}${r.raw ? `<code>${esc(r.raw)}</code>` : ''}</td>
 <td>${r.code ? `<code>${esc(r.code)}</code>` : '—'}</td>
-<td>${esc(settings(r))}</td>
+<td>${esc(settings(r))}${pick === 'all' && r.model ? `<span class="q">${esc(modelName(r.model))}</span>` : ''}</td>
 <td class="r">${result(r)}</td>
 <td>${secs(r.secs)}${mins(r.secs) ? `<span class="q">${mins(r.secs)}</span>` : ''}</td>
 <td class="p">${r.page ? `<a href="${href(r.page)}"${live ? ' target="_top"' : ''}>open the page</a>` : '—'}</td></tr>`).join('')}</tbody></table></div>`;
     }).join('');
   }
-  function draw() { filters(); cards(); trend(); tables(); }
+  function draw() {
+    rows = all.filter(inPick);
+    order = Object.keys(KINDS).filter((k) => rows.some((r) => r.kind === k));
+    kind = shown === 'all' || order.includes(shown) ? shown : 'all';
+    side(); head();
+    if (!rows.length) {
+      $('filters').innerHTML = ''; $('trend').innerHTML = ''; $('tables').innerHTML = '';
+      $('cards').innerHTML = all.length
+        ? `<div class="empty">No run of ${esc(modelName(pick))} has been recorded yet. Run the 28-task check on it (<code>bun run eval --model ${esc(pick)}</code>) and its line will appear here.</div>`
+        : '<div class="empty">No test has been recorded yet. The 28-task check (<code>bun run eval</code>), the real requests (<code>bun run eval:words</code>) and the unit tests (<code>bun run test</code>) each add a line here when they finish.</div>';
+      return;
+    }
+    filters(); cards(); trend(); tables();
+  }
   draw();
   $('foot').innerHTML = `<h3 style="color:var(--ink)">How this record is kept</h3><ul>
 <li>The record is one file on this Mac, <code>${esc(data.file ?? '')}</code>, one line per run. The 28-task check, the real requests, a real-bug run and the unit tests each add their line when they finish; any other check adds one with <code>recordTest()</code> from <code>models/evals/record.mjs</code>.</li>
+<li>The side panel picks a model. A run is filed under the model it used (the <code>model</code> on its line). A line written before that was added is filed by the model its results folder or its words name; the unit tests and the checks are of no one model, so they sit under Not model-specific.</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;

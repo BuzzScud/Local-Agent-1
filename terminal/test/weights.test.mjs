@@ -148,7 +148,7 @@ test('the Tests tab: the page is built in, and /tests.json is the test record re
   const s = startWeightsServer({ path, docsDir: null, port: 0 });
   try {
     const page = await fetch(s.url + 'tests'); expect(page.headers.get('content-type')).toContain('text/html');
-    const html = await page.text(); for (const t of ['<title>Agentic Coder test record</title>', '<meta charset="utf-8">', "fetch('/tests.json'", '<!--DATA-->']) expect(html).toContain(t);
+    const html = await page.text(); for (const t of ['<title>Agentic Coder test record</title>', '<meta charset="utf-8">', "fetch('/tests.json'", '<!--DATA-->', 'id="models"', 'Not model-specific']) expect(html).toContain(t);
     expect((await (await fetch(s.url + 'tests.json')).json()).rows).toEqual([]); // nothing recorded yet
     const { recordTest } = await import('../../models/index.mjs');
     recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-25T21:09:27.000Z', code: 'abc1234', passed: 28, total: 28, secs: 1974 }, { snapshot: false, quiet: true });

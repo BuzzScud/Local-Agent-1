@@ -148,5 +148,5 @@ const file = opt('out', join(modelFolder(model), 'results', 'words', `real-${out
 mkdirSync(dirname(file), { recursive: true });
 writeFileSync(file, JSON.stringify(out, null, 1));
 console.log(`${out.ok} of ${out.total} OK · saved ${file}`);
-recordTest({ kind: 'requests', name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only'), secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
+recordTest({ kind: 'requests', model: model.id, name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only'), secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
   note: out.ok < out.total ? `failed: ${rows.filter((r) => !r.ok).map((r) => `#${r.n}`).join(', ')}` : '', raw: file.replace(`${root}/`, '') });

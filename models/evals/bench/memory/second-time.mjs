@@ -98,7 +98,7 @@ const out = join(root, 'models', model.folder, 'results', 'memory', `second-time
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify(result, null, 1));
 console.log(`saved ${out}`);
-if (!args.includes('--no-record')) recordTest({ kind: 'other', name: `Memory: is the second time better? (${both.length} tasks, each run twice)`, code: codeLabel(root), effort: 'low', ctx, passed: result.second.passed, total: both.length, secs: (Date.now() - t0) / 1000,
+if (!args.includes('--no-record')) recordTest({ kind: 'other', model: model.id, name: `Memory: is the second time better? (${both.length} tasks, each run twice)`, code: codeLabel(root), effort: 'low', ctx, passed: result.second.passed, total: both.length, secs: (Date.now() - t0) / 1000,
   result: broke === 0 && result.second.passed >= result.first.passed && (result.second.secs < result.first.secs || result.second.steps < result.first.steps) ? 'pass' : 'fail',
   note: `first ${result.first.passed}/${both.length} in ${result.first.secs} s and ${result.first.steps} steps; second ${result.second.passed}/${both.length} in ${result.second.secs} s and ${result.second.steps} steps; a save ${result.saveSecs} s`, raw: out.slice(root.length + 1) });
 process.exit(0);

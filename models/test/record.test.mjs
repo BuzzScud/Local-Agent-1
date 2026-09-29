@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'agentic-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
 const quiet = (file) => ({ file, snapshot: false, quiet: true });
@@ -102,4 +102,36 @@ test('where the raw results are is kept from the repo\'s top, or from ~: never w
   expect(recordTest({ kind: 'tasks', name: 'a new line', passed: 1, total: 1, raw: full }, quiet(file)).raw).toBe('models/bonsai-2-27b/results/old-run');
   expect(readRecord(file).map((r) => r.raw)).toEqual(['models/bonsai-2-27b/results/old-run', 'models/bonsai-2-27b/results/old-run']);
   expect(JSON.stringify(recordData(file))).not.toContain(homedir());
+});
+
+test('a run is filed under its model: the one it names, else its results folder, else its words, else its date; unit tests and checks are of no model', () => {
+  const at = '2026-09-29T10:00:00.000Z';
+  // a new line says so, and it is kept as written
+  const { file } = scratch();
+  expect(recordTest({ kind: 'tasks', name: 'a run', model: 'qwen', passed: 1, total: 1 }, quiet(file)).model).toBe('qwen');
+  expect(recordTest({ kind: 'suite', name: 'Unit tests' }, quiet(file)).model).toBeNull();
+  expect(readRecord(file).map((r) => r.model)).toEqual(expect.arrayContaining(['qwen', null]));
+  // an older line has none: its results folder, then the model in its words
+  expect(modelOf({ kind: 'tasks', at, name: 'x', raw: 'models/qwen3.5-9b/results/run-1' })).toBe('qwen');
+  expect(modelOf({ kind: 'tasks', at, name: 'x', raw: '~/Desktop/agentic-coder/models/gemma-4-12b/results/low-vs-high' })).toBe('gemma');
+  expect(modelOf({ kind: 'bug', at, name: 'x', raw: 'models/bonsai-2-27b/results/step3' })).toBe('bonsai');
+  expect(modelOf({ kind: 'other', at, name: 'Gemma speed probe', note: '' })).toBe('gemma');
+  expect(modelOf({ kind: 'other', at, name: 'Bonsai 27B probe' })).toBe('bonsai');
+  // both models named (a comparison), or an "other" check that names none, is of no one model
+  expect(modelOf({ kind: 'other', at, name: 'Gemma vs Qwen', note: '' })).toBeNull();
+  expect(modelOf({ kind: 'other', at, name: 'Repo check (fast)' })).toBeNull();
+  // the small matcher is no chat model, even inside a model's results folder
+  expect(modelOf({ kind: 'other', at, name: "Claude's notes: the right note comes back (BGE-M3)", raw: 'models/gemma-4-12b/results/claude-notes' })).toBeNull();
+  expect(modelOf({ kind: 'suite', at, name: 'Unit tests, both parts', raw: 'models/gemma-4-12b/results/x' })).toBeNull();
+  // a practice, request or bug run that names no model is by date: Bonsai before 28 Sep 2026, Gemma from then
+  expect(modelOf({ kind: 'tasks', at: '2026-09-26T19:05:00.000Z', name: 'The 28 practice tasks' })).toBe('bonsai');
+  expect(modelOf({ kind: 'tasks', at: '2026-09-28T22:21:00.000Z', name: 'The 1 picked practice tasks' })).toBe('gemma');
+});
+
+test('the side panel lists the models whose file is on this Mac, and the record data carries them', () => {
+  const ids = installedModels().map((m) => m.id);
+  expect(ids.every((id) => ['gemma', 'qwen'].includes(id))).toBe(true);
+  const { file } = scratch();
+  recordTest({ kind: 'tasks', name: 'a run', model: 'gemma', passed: 1, total: 1 }, quiet(file));
+  expect(recordData(file).models).toEqual(installedModels());
 });
