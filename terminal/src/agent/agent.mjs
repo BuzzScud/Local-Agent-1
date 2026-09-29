@@ -14,12 +14,13 @@ import { sortBug, kindText } from './rules.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp, sortLine } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
 import { Scratch } from '../flows/scratch.mjs';
+import { lostNames } from '../flows/blocks.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -601,6 +602,7 @@ export class Agent extends EventEmitter {
       this.emit('note', { text: `The helpers could not bring what they found (${e.message}); starting without it.`, tone: 'dim' });
     }
     let verified = false;
+    let lostChecked = false;
     let correctedAlready = false;
     let blankRetry = false;
     try {
@@ -721,6 +723,18 @@ export class Agent extends EventEmitter {
             if (out.stop) { reason = out.stop; break; }
             if (out.error) {
               this.messages.push({ role: 'user', content: auto(`${this.turn.check ? 'The named check fails' : 'The tests fail'} (output above). Find what is wrong in your change, fix it with Edit, then run ${this.turn.check ? 'the check' : 'the tests'} again.`) });
+              continue;
+            }
+          }
+          // Nothing lost: it changed files and says it is done, but a function
+          // the request never names is gone (practice task 14: perimeter()
+          // replaced area() instead of going beside it). Once per message.
+          if (this.turn.changed && !lostChecked && !signal?.aborted) {
+            lostChecked = true;
+            const lost = this.lostSinceStart();
+            if (lost) {
+              this.emit('note', { text: `Removed without being asked: ${lost}.`, tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto(`Your changes removed ${lost}, and the request does not ask for that. Put it back with Edit and keep what you added, unless the request really needs it gone; then say why in one sentence.`) });
               continue;
             }
           }
@@ -1443,6 +1457,10 @@ export class Agent extends EventEmitter {
       this.turn.changed = true;
       this.turn.testedAfterChange = false;
       this.happened?.files.add(prepared.rel);
+      // Each file as it was before this message's first change to it, for the
+      // nothing-lost check at the end (lostSinceStart). A new file has none.
+      this.turn.startTexts ??= new Map();
+      if (!this.turn.startTexts.has(prepared.rel)) this.turn.startTexts.set(prepared.rel, prepared.created ? null : prepared.before);
       // What changed this turn, for the check at the end (verifyDone).
       const hunk = (out.view?.hunk ?? []).filter((l) => l.type !== ' ').map((l) => `${l.type}${l.text}`).join('\n');
       // Up to 6,000 characters a file, 16,000 in all; anything longer is
@@ -1484,6 +1502,21 @@ export class Agent extends EventEmitter {
     return { text, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines, ms: r.ms, timedOut: r.timedOut } };
   }
 
+  // The functions this message's changes took away that the request neither
+  // names nor asks to remove (lostNames), as "area in shapes.mjs"; null when
+  // none. A function moved to another changed file is not lost.
+  lostSinceStart() {
+    const starts = this.turn?.startTexts;
+    if (!starts?.size) return null;
+    const now = new Map([...starts.keys()].map((rel) => { try { return [rel, readFileSync(join(this.cwd, rel), 'utf8')]; } catch { return [rel, '']; } }));
+    const out = [];
+    for (const [rel, before] of starts) {
+      const elsewhere = [...now].filter(([r]) => r !== rel).map(([, t]) => t);
+      for (const n of lostNames(rel, before, now.get(rel), this.turn.request ?? '', { elsewhere })) out.push(`${n} in ${rel}`);
+    }
+    return out.length ? `${out.slice(0, 4).join(', ')}${out.length > 4 ? ` and ${out.length - 4} more` : ''}` : null;
+  }
+
   // A forced-JSON check of the finished work against the request: null when
   // covered, otherwise what is missing (one short sentence). Best effort.
   async verifyDone(answer, signal) {
@@ -1492,7 +1525,7 @@ export class Agent extends EventEmitter {
     try {
       const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 220,
         system: 'You check whether a coding assistant did everything a request asked. Judge only from the request, the changes and its report.',
-        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Agentic Coder shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
+        user: `Request:\n${request.slice(0, 2000)}\n\nChanges made (diff lines, + added, - removed; a line ${CUT_MARK} means Agentic Coder shortened the change for this check, not that anything is missing):\n${this.turn.diffs.length > 16000 ? `${this.turn.diffs.slice(0, 16000)}\n${CUT_MARK}` : this.turn.diffs}\n\nIts report:\n${(answer ?? '').slice(0, 1000)}\n\nBreak the request into its distinct asks (parts, at most 6) and judge each one against the changes. A request with one ask has one part. A part is done only when it is done fully, the way the person asking would expect: a story, notes, a description or documentation that is only a sentence or two, a placeholder, a stub or a TODO counts as not done. Is every part of the request done? If something the request asks for is missing from the changes, say what in one short sentence.`,
         schema: { type: 'object', properties: { parts: { type: 'array', items: { type: 'object', properties: { part: { type: 'string' }, done: { type: 'boolean' } }, required: ['part', 'done'] }, maxItems: 6 }, done: { type: 'boolean' }, missing: { type: 'string' } }, required: ['parts', 'done', 'missing'] } });
       if (!r.json) return null;
       // Parts first: a request with several asks fails on the ones not done

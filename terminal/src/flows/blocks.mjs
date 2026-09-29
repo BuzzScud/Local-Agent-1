@@ -58,14 +58,28 @@ export function applyBlocks(blocks, read) {
 // the four tests of a 200-line file by deleting eight other functions.)
 export function guardChange(rel, before, after, task = '') {
   if (before == null) return null;
-  const lang = langFor(rel);
-  const asksRemoval = /\b(remove|delete|drop|strip|get rid of|take out|clean ?up|unused|dead code)\b/i.test(task);
-  if (lang && !asksRemoval) {
-    const gone = functionNames(before, lang).filter((n) => !functionNames(after, lang).includes(n));
-    if (gone.length) return `${rel}: the change removes ${gone.slice(0, 4).join(', ')}${gone.length > 4 ? ` and ${gone.length - 4} more` : ''}, which the task does not ask for`;
-  }
+  const gone = lostNames(rel, before, after, task);
+  if (gone.length) return `${rel}: the change removes ${gone.slice(0, 4).join(', ')}${gone.length > 4 ? ` and ${gone.length - 4} more` : ''}, which the task does not ask for`;
   const b = before.split('\n').length;
   const a = after.split('\n').length;
-  if (!asksRemoval && b - a > Math.max(20, Math.round(b * 0.25))) return `${rel}: the change removes ${b - a} more lines than it adds; keep the rest of the file as it is`;
+  if (!asksRemoval(task) && b - a > Math.max(20, Math.round(b * 0.25))) return `${rel}: the change removes ${b - a} more lines than it adds; keep the rest of the file as it is`;
   return null;
+}
+
+const asksRemoval = (task) => /\b(remove|delete|drop|strip|get rid of|take out|clean ?up|unused|dead code)\b/i.test(task);
+
+// The functions a change takes away: named in the file before, gone after,
+// when the task does not ask to remove anything. A function the task names may
+// go only when the task restructures ("rename X", "replace X with Y", "move
+// X"); "use it in formatMoney" names formatMoney but keeps it. `elsewhere`:
+// other files' texts after the change, so a function moved to another file is
+// not lost. In practice task 14 the model replaced area() with the new
+// perimeter() instead of adding it beside it.
+const restructures = (task) => /\b(rename|replace|move|swap|merge|inline|split|instead of|convert)\b/i.test(task);
+export function lostNames(rel, before, after, task = '', { elsewhere = [] } = {}) {
+  const lang = langFor(rel);
+  if (before == null || !lang || asksRemoval(task)) return [];
+  const now = new Set([after ?? '', ...elsewhere].flatMap((t) => functionNames(t, lang)));
+  const named = (n) => restructures(task) && new RegExp(`(^|[^\\w$])${n.replace(/\$/g, '\\$')}([^\\w$]|$)`).test(task);
+  return functionNames(before, lang).filter((n) => !now.has(n) && !named(n));
 }

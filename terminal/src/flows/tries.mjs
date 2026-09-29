@@ -35,7 +35,8 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
     if ((process.env.AGENTIC_DEBUG_TRIES ?? process.env.BONSAI_DEBUG_TRIES)) (await import('node:fs')).appendFileSync((process.env.AGENTIC_DEBUG_TRIES ?? process.env.BONSAI_DEBUG_TRIES), `\n===== ${label} #${i}\n${r.text}\n`);
     if (!code) { marks.push('✗'); continue; }
     const applied = apply(code);
-    if (applied?.error) { marks.push('✗'); applied.undo?.(); if (!best) best = { code, why: applied.error }; continue; }
+    // A refused try (it removed code the task keeps, broke the blocks) is shown to the next one too.
+    if (applied?.error) { marks.push('✗'); applied.undo?.(); if (!best) best = { code, why: applied.error }; last = { code, why: applied.error, detail: '' }; continue; }
     // The lsp helper (agent/helpers.mjs): JSX, TypeScript and a page's scripts are checked too.
     const broken = applied.files?.map((f) => syntaxError(f.abs, f.text, { more: Boolean(ctx.helpers?.has?.('lsp')) })).find(Boolean);
     if (broken) { marks.push('✗'); applied.undo?.(); if (!best) best = { code, why: `does not parse: ${broken}` }; continue; }

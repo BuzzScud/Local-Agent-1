@@ -14,6 +14,7 @@ import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM, stem } from './testfirst.mjs';
 import { rescueTests } from './rescue.mjs';
 import { applyChange } from './apply.mjs';
+import { guardChange } from './blocks.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { syntaxError } from '../agent/tools.mjs';
 
@@ -34,6 +35,31 @@ export function testPlan(cwd, target, files, testCmd) {
   // No test setup: a scratch-only check run directly.
   const check = js ? join(dirname(target), 'agentic-check.test.mjs') : join(dirname(target), 'agentic_check.py');
   return { rel: check, lang, throwaway: true, created: true, cmd: js ? `node --test ${check}` : `python3 ${check}` };
+}
+
+// No draft passed any of the new tests written for the task, not even with
+// the project's older tests left aside: the new tests, not the drafts, are
+// probably wrong. (Drafts that pass a new test but break an older one mean
+// the older test is stale: the rescue round handles that, so no doubt then.)
+// The reason to give up the test-first way, or null.
+export function distrustTests(candidates, versions) {
+  if (!versions.length || !candidates.length || candidates.some((c) => c.passing?.length || c.passingNew)) return null;
+  return `none of the ${versions.length} drafts passed any of the ${candidates.length} tests written for it, so the tests are probably wrong`;
+}
+
+// The tests a candidate file adds: test('…') / it('…') in JavaScript, def test_… in Python.
+export function newTestNames(text, original = '') {
+  const names = (t) => new Set([...t.matchAll(/\b(?:test|it)\s*\(\s*(['"`])(.+?)\1/g)].map((m) => m[2]).concat([...t.matchAll(/\bdef\s+(test_\w+)/g)].map((m) => m[1])));
+  const old = names(original);
+  return [...names(text)].filter((n) => !old.has(n));
+}
+
+// Did the candidate's own new test pass (older tests left aside)? Unknown
+// counts as no: a run that did not load, or failures that cannot be named.
+export function newTestPassed(rs, fresh, throwaway) {
+  if (throwaway || rs[0].ok) return rs[0].ok;
+  const failing = rs.flatMap((r) => r.failing);
+  return rs[0].total !== null && fresh.length > 0 && failing.length > 0 && !failing.some((f) => fresh.some((n) => f.includes(n)));
 }
 
 // hint: the file the planner (src/flows/multi.mjs) already chose, if any.
@@ -102,7 +128,8 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     const draftVersions = (n, slot) => tryUntilPass(ctx, {
       label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1,
       prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}${known}\n\nReply with ${want}.${SOURCE_ONLY}`,
-      apply: (code) => { const text = build(code); return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },
+      // A draft that removes functions the task keeps is no draft (practice task 14).
+      apply: (code) => { const text = build(code); const g = guardChange(target, original, text, task); if (g) return { error: g }; return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },
       check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },
     });
     // Round one: two tests and two drafts. Writing is the slow part (about 10
@@ -122,12 +149,15 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     const score = async (list) => {
     for (const c of list) {
       const passing = [];
+      const fresh = newTestNames(c.text, testOriginal);
+      c.passingNew = 0;
       for (const v of versions) {
         scratch.write(tp.rel, c.text);
         scratch.write(target, v.text);
         const rs = await runAll();
         const kept = tp.throwaway || tp.created || rs[0].total === null || rs[0].total > base.total;
         if (rs.every((r) => r.ok) && kept) passing.push(v);
+        if (newTestPassed(rs, fresh, tp.throwaway)) c.passingNew++;
         scratch.restore(target);
         scratch.restore(tp.rel);
       }
@@ -153,6 +183,12 @@ export async function changeFlow(ctx, task, { hint } = {}) {
       await score(candidates.slice(before));
     }
     ctx.emit('tries-done', { label: 'Checked tests against drafts', marks: candidates.map((c) => (c.passing.length ? '✓' : '✗')), summary: `${candidates.length} test${candidates.length === 1 ? '' : 's'}, ${versions.length} draft${versions.length === 1 ? '' : 's'}; the chosen test is passed by ${chosen.passing.length}`, secs: 0 });
+    // The guard: no draft passes any of its tests, so the tests are probably
+    // what is wrong. Fitting the code to one of them is how practice task 1
+    // failed twice (a test expecting 2 rows of 3, then code that returned the
+    // first two rows). Step by step works on the real files instead.
+    const doubt = distrustTests(candidates, versions);
+    if (doubt) return { handled: false, why: doubt };
     const testText = chosen.text;
 
     // 2. Your OK on the test.
@@ -175,6 +211,8 @@ export async function changeFlow(ctx, task, { hint } = {}) {
       prompt: ({ last }) => `Task: ${task}${known}\n\nThis test describes it and fails today:\n${digest}\n\n${fence(tp.rel, testText)}\n\n${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nChange ${target} so that every test passes (do not change the tests). Reply with ${want}.${SOURCE_ONLY}${last ? `\n\nYour previous try was wrong. It was:\n\`\`\`\n${last.code.slice(0, 2500)}\n\`\`\`\nand the tests still failed:\n${last.detail || last.why}\nDo something different this time.` : ''}`,
       apply: (code) => {
         const text = build(code);
+        const g = guardChange(target, original, text, task);
+        if (g) return { error: g };
         scratch.write(target, text);
         return { files: [{ abs: join(scratch.dir, target), text }], undo: () => scratch.restore(target), text };
       },

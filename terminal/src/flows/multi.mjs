@@ -14,7 +14,7 @@ import { complete, fence } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM } from './testfirst.mjs';
 import { rescueTests } from './rescue.mjs';
-import { testPlan } from './change.mjs';
+import { testPlan, distrustTests, newTestNames, newTestPassed } from './change.mjs';
 import { applyChange } from './apply.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { BLOCKS_FORMAT, parseBlocks, applyBlocks, guardChange } from './blocks.mjs';
@@ -123,11 +123,14 @@ export async function multiFlow(ctx, task, targets) {
     const score = async (list) => {
       for (const c of list) {
         const passing = [];
+        const fresh = newTestNames(c.text, testOriginal);
+        c.passingNew = 0;
         for (const v of versions) {
           scratch.write(tp.rel, c.text);
           writeTexts(v.texts);
           const rs = await runAll();
           if (rs.every((r) => r.ok) && kept(rs)) passing.push(v);
+          if (newTestPassed(rs, fresh, tp.throwaway)) c.passingNew++;
           restoreTexts(v.texts);
           scratch.restore(tp.rel);
         }
@@ -149,6 +152,10 @@ export async function multiFlow(ctx, task, targets) {
       await score(candidates.slice(before));
     }
     ctx.emit('tries-done', { label: 'Checked tests against drafts', marks: candidates.map((c) => (c.passing.length ? '✓' : '✗')), summary: `${candidates.length} test${candidates.length === 1 ? '' : 's'}, ${versions.length} draft${versions.length === 1 ? '' : 's'}; the chosen test is passed by ${chosen.passing.length}`, secs: 0 });
+    // The guard (see distrustTests): the tests are probably wrong. `tried`:
+    // the one-file path would write the same kind of tests, so straight to step by step.
+    const doubt = distrustTests(candidates, versions);
+    if (doubt) return { handled: false, tried: true, why: doubt };
     const testText = chosen.text;
 
     // 2. Your OK on the test.
