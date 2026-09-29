@@ -6,6 +6,9 @@
 //   path:  quit · chat · memory · follow-up · rename · fix · change · question · other · unsorted (the model sorts it)
 //   ask:   null · 'fixed' (a set question) · 'model' (the model is asked whether it is clear) · 'where'
 //   was:   where the line went before the 2026-09-27 rules (only where that changed)
+//   want:  for a line the model sorts (unsorted), the kind it should get: the sorting check
+//          (models/evals/tools/sort-check.mjs) scores it. Written 29 Sep 2026; "api" and "i need
+//          help with the export function" have none, they are unclear on purpose.
 export const LINES = [
   { set: 'yours', n: 1, prior: false, path: 'chat', ask: null, text: "hello" },
   { set: 'yours', n: 2, prior: true, path: 'quit', ask: null, text: "exit" },
@@ -92,8 +95,8 @@ export const LINES = [
   { set: 'traps', n: 2, prior: false, path: 'rename', ask: null, text: "thanks, now rename calcTotal to totalPrice" },
   { set: 'traps', n: 3, prior: false, path: 'fix', ask: 'where', text: "perfect, fix the failing date test" },
   { set: 'traps', n: 4, prior: false, path: 'unsorted', ask: null, text: "i need help with the export function in export.mjs" },
-  { set: 'traps', n: 5, prior: false, path: 'unsorted', ask: null, text: "exit the loop early in parse() when the row is empty" },
-  { set: 'traps', n: 6, prior: false, path: 'unsorted', ask: null, text: "quit using var in export.mjs" },
+  { set: 'traps', n: 5, prior: false, path: 'unsorted', ask: null, want: 'change', text: "exit the loop early in parse() when the row is empty" },
+  { set: 'traps', n: 6, prior: false, path: 'unsorted', ask: null, want: 'change', text: "quit using var in export.mjs" },
   { set: 'traps', n: 7, prior: true, path: 'fix', ask: null, text: "fix this bug in export.mjs" },
   { set: 'traps', n: 8, prior: true, path: 'question', ask: null, text: "why does export.mjs crash on an empty file?" },
   { set: 'traps', n: 9, prior: true, path: 'question', ask: null, text: "tell me about multiplication, how does it work?" },
@@ -101,11 +104,11 @@ export const LINES = [
   { set: 'traps', n: 11, prior: true, path: 'change', ask: null, text: "add a test for formatMoney and run it" },
   { set: 'traps', n: 12, prior: true, path: 'change', ask: null, text: "make this function faster: toCsv in export.mjs" },
   { set: 'traps', n: 13, prior: false, path: 'fix', ask: null, text: "run the tests and fix what fails" },
-  { set: 'traps', n: 14, prior: false, path: 'unsorted', ask: null, text: "build a login page component in src/pages/Login.jsx" },
+  { set: 'traps', n: 14, prior: false, path: 'unsorted', ask: null, want: 'change', text: "build a login page component in src/pages/Login.jsx" },
   { set: 'traps', n: 15, prior: false, path: 'other', ask: null, text: "create a new file called slug.mjs with a slugify(text) function" },
   { set: 'traps', n: 16, prior: false, path: 'change', ask: null, text: "add a settings page to the app" },
   { set: 'traps', n: 17, prior: false, path: 'change', ask: 'model', text: "make it faster" },
-  { set: 'traps', n: 18, prior: false, path: 'unsorted', ask: null, text: "install lodash and use it in export.mjs to group the rows" },
+  { set: 'traps', n: 18, prior: false, path: 'unsorted', ask: null, want: 'change', text: "install lodash and use it in export.mjs to group the rows" },
   { set: 'traps', n: 19, prior: true, path: 'question', ask: null, text: "what does this project do?" },
   { set: 'traps', n: 20, prior: true, path: 'change', ask: null, text: "add a --json flag to export.mjs that prints the rows as JSON" },
 ];

@@ -399,7 +399,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const chips = list().map((t) => `<button type="button" data-t="${t.id}" aria-pressed="${v && v.t.id === t.id}"${running ? ' disabled' : ''}>${esc(t.name)}</button>${t.pick && v && v.t.id === t.id ? `<select id="rt-n" aria-label="Which practice task"${running ? ' disabled' : ''}>${Array.from({ length: t.pick.max - t.pick.min + 1 }, (_, i) => t.pick.min + i).map((n) => `<option${n === (running ? st.job.n : taskN) ? ' selected' : ''}>${n}</option>`).join('')}</select>` : ''}`).join('');
       // Thinking: the run's own while one runs; a test that takes no model has none.
       const th = v ? thinkOf(v) : false, can = Boolean(v && v.t.think && !running);
-      const sw = `<div class="rt-think" role="group" aria-label="Thinking" title="${v && !v.t.think ? 'This test takes no model, so no thinking' : running ? 'The run under way keeps its setting' : 'Thinking off (Low) or on (High) · the T key switches it'}"><span class="rt-l">Thinking</span>${[['off', 'Off'], ['on', 'On']].map(([k, w]) => `<button type="button" data-think="${k}" aria-pressed="${(k === 'on') === th}"${can ? '' : ' disabled'}>${w}</button>`).join('')}<kbd>T</kbd></div>`;
+      const sw = `<div class="rt-think" role="group" aria-label="Thinking" title="${v && !v.t.think ? (v.t.model ? 'This test never thinks: a sort writes nothing' : 'This test takes no model, so no thinking') : running ? 'The run under way keeps its setting' : 'Thinking off (Low) or on (High) · the T key switches it'}"><span class="rt-l">Thinking</span>${[['off', 'Off'], ['on', 'On']].map(([k, w]) => `<button type="button" data-think="${k}" aria-pressed="${(k === 'on') === th}"${can ? '' : ' disabled'}>${w}</button>`).join('')}<kbd>T</kbd></div>`;
       const held = st.loaded.filter((x) => x.who !== 'this test run');
       const status = running ? (st.job.status === 'waiting' ? `<i class="busy"></i><span>${esc(st.job.waiting ?? 'Getting the memory ready…')}</span>`
         : `<i class="busy"></i><span>Running: ${esc(st.job.name)}${st.job.n != null ? ` ${st.job.n}` : ''}${st.job.modelName ? ` on ${esc(st.job.modelName)}` : ''}${st.job.think ? ', thinking on' : ''}</span>`)
@@ -419,7 +419,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const last = lastRun(t, m, j ? j.startedAt : Infinity, th);
       const other = t.model ? models.find((x) => x.id !== m) : null;
       const cnt = j?.count ?? { done: null, total: t.total };
-      const readyRe = { practice28: /^server up/, task: /^server up/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/ }[t.id];
+      const readyRe = { practice28: /^server up/, task: /^server up/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/, sorting: /^loaded in/ }[t.id];
       const loaded = !t.model || (j && (lines.some((l) => readyRe?.test(l)) || (cnt.done ?? 0) > 0 || ended));
       const secsNow = j ? Math.max(0, Math.round(((ended ? j.endedAt : j.now ?? Date.now()) - (j.runStartedAt ?? j.startedAt)) / 1000)) : 0;
       // The stages: done, the one under way, or still to come.

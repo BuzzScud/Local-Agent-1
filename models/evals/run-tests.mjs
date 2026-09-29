@@ -8,7 +8,8 @@
 //   model   true: it runs on the model picked (gemma, qwen); false: it takes none
 //   total   how many items a full run has (PASS/FAIL lines counted by `count`); null: no count
 //   think   it can run with thinking on (the tab's Thinking switch, key T): at High, the one level
-//           Gemma and Qwen have besides Low; off (Low) is the default, the way a battle runs
+//           Gemma and Qwen have besides Low; off (Low) is the default, the way a battle runs.
+//           A model test without it never thinks (the sorting check: a sort writes nothing)
 //   stop    the signal the Stop button sends first: each runner then saves what it has
 //   record  its line in the test record: kind, a name pattern, and whether it is a full run (its
 //           effort, low or high, tells a run with thinking from one without)
@@ -34,6 +35,9 @@ export const RUN_TESTS = [
   { id: 'new28', name: 'New 28', what: 'the Battle’s New 28 set, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'new28', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^The New 28', part: false } },
+  { id: 'sorting', name: 'Sorting check', what: 'how the model sorts 85 requests into a kind (question, fix, change, rename, other): right answers and seconds a sort, with a results page', model: true, think: false, total: 82, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/sort-check.mjs', args: (m) => ['--model', m],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^Sorting check$', part: false } },
   { id: 'unit', name: 'Unit tests', what: 'bun test over both parts, with the stand-in model (no real one loads)', model: false, total: null,
     script: 'models/evals/tools/run-suite.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'suite', name: '^Unit tests', part: false } },

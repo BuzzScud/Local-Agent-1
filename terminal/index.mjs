@@ -16,7 +16,10 @@ export { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './src/agen
 export { toolSchemas } from './src/agent/tools.mjs';
 export { outsidePath } from './src/agent/permissions.mjs';
 export { streamChat } from './src/agent/client.mjs';
-export { complete } from './src/flows/llm.mjs';
+export { complete, decide } from './src/flows/llm.mjs';
+// The request sorter and the lines of its test, for the sorting check (models/evals/tools/sort-check.mjs).
+export { modelSort, routeByRules, sortQuestion, KINDS as SORT_KINDS } from './src/flows/index.mjs';
+export { LINES as SORT_LINES } from './test/sort-lines.mjs';
 export { changeFlow } from './src/flows/change.mjs';
 export { fixFlow } from './src/flows/fix.mjs';
 export { Scratch } from './src/flows/scratch.mjs';

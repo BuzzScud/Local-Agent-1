@@ -60,7 +60,12 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(runCommand('new28', { model: 'gemma', models }).argv).not.toContain('--think');
   const u = runCommand('unit', { think: true, models });
   expect([u.think, u.argv.includes('--think')]).toEqual([false, false]);
-  for (const t of RUN_TESTS) expect(Boolean(t.think)).toBe(t.model);
+  for (const t of RUN_TESTS) if (!t.model) expect(Boolean(t.think)).toBe(false);
+  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting']); // a sort writes nothing, so it never thinks
+  const so = runCommand('sorting', { model: 'gemma', think: true, models });
+  expect([so.think, so.argv]).toEqual([false, ['models/evals/tools/sort-check.mjs', '--model', 'gemma']]);
+  expect(findRunTest('sorting')?.id).toBe('sorting');
+  expect(countLines(runTestById('sorting'), ['loaded in 6 s', 'PASS #1 other · odds 91% · 0.61 s · "x"', 'FAIL #2 change (should be other) · odds 77% · 0.60 s · "y"', '---- #3 change · odds 76% · 0.59 s · "api"'])).toEqual({ done: 2, passed: 1, total: 82 });
   // What /test takes for a name.
   expect(findRunTest('practice 28')?.id).toBe('practice28');
   expect(findRunTest('Work28')?.id).toBe('work28');
