@@ -1,5 +1,6 @@
-// The Battle arena (models/evals/battle/): its checks, where it keeps tests, the New 28 (each
-// fails as given and passes with its known-good answer), and the runner end to end in practice
+// The Battle arena (models/evals/battle/): its checks, where it keeps tests, the three sets that come
+// with it (New 28, Work 28, Practice 28: each test fails as given and passes with its known-good answer),
+// a Practice 28 edit saved as a copy (18b), and the runner end to end in practice
 // mode (no model): a battle, the blind vote, the hold on the memory, stop, run all, delete.
 import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -15,7 +16,7 @@ process.env.AGENTIC_BATTLE_PORT = String(PORT);
 process.env.AGENTIC_TEST_RECORD = join(HOME, 'record.jsonl');
 const { runChecks, snapshot, whyOf, scriptsParse } = await import('../evals/battle/checks.mjs');
 const store = await import('../evals/battle/store.mjs');
-const { verify } = await import('../evals/battle/verify-new28.mjs');
+const { verify, allTests } = await import('../evals/battle/verify-tests.mjs');
 
 const folder = (files) => { const d = mkdtempSync(join(tmpdir(), 'battle-work-')); for (const [f, t] of Object.entries(files)) { mkdirSync(join(d, f, '..'), { recursive: true }); writeFileSync(join(d, f), t); } return d; };
 
@@ -53,19 +54,27 @@ test('no checks means your vote decides (pass is null); a check script counts to
   expect(scriptsParse('<p>no script</p>').ok).toBe(false);
 });
 
-test('tests are kept as folders: the New 28 are copied once (without their answers), yours are saved and edited, deleting moves to trash', () => {
+test('tests are kept as folders: the three sets are copied once (without their answers), yours are saved and edited, deleting moves to trash', () => {
   const home = mkdtempSync(join(tmpdir(), 'battle-store-'));
-  expect(store.seedNew28(home)).toBe(28);
-  expect(store.seedNew28(home)).toBe(0);
+  expect(store.seedSuites(home)).toBe(84);
+  expect(store.seedSuites(home)).toBe(0);
   const list = store.listTests(home);
-  expect(list).toHaveLength(28);
+  expect(list).toHaveLength(84);
+  expect(list.map((t) => t.suite).filter((s, i, a) => a.indexOf(s) === i)).toEqual(['new28', 'work28', 'practice']);
   expect(list[0]).toMatchObject({ id: 'n01-date-one-day-early', suite: 'new28', n: 1, hasScript: true });
-  expect(existsSync(join(home, 'tests', 'n01-date-one-day-early', 'solution'))).toBe(false);
-  // Deleted, a New 28 test is not copied back.
+  expect(list[28]).toMatchObject({ id: 'w01-contract-roll', suite: 'work28', n: 1, hasScript: true });
+  // A Practice 28 test is its practice task as it is, with the replies to its questions, without its answer.
+  const p22 = list.find((t) => t.id === 'p22-vague-fix-the-bug');
+  expect(p22).toMatchObject({ suite: 'practice', n: 22, kind: 'code', prompt: 'fix the bug', hasScript: true, task: '22-vague-fix-the-bug' });
+  expect(p22.answers[0].reply).toContain('slugify');
+  expect(readFileSync(join(home, 'tests', p22.id, 'check.sh'), 'utf8')).toBe(readFileSync(join(store.PRACTICE_DIR, '22-vague-fix-the-bug', 'check.sh'), 'utf8'));
+  for (const id of ['n01-date-one-day-early', 'w01-contract-roll', 'p10-fix-off-by-one']) for (const d of ['solution', 'reference']) expect(existsSync(join(home, 'tests', id, d))).toBe(false);
+  // Deleted, a test that came with the arena is not copied back.
   store.trashTest('n28-python-dataclass', home);
-  expect(store.seedNew28(home)).toBe(0);
-  expect(store.listTests(home)).toHaveLength(27);
-  expect(readdirSync(join(home, 'trash'))[0]).toStartWith('n28-python-dataclass-');
+  store.trashTest('w28-whats-new-notes', home);
+  expect(store.seedSuites(home)).toBe(0);
+  expect(store.listTests(home)).toHaveLength(82);
+  expect(readdirSync(join(home, 'trash')).some((f) => f.startsWith('n28-python-dataclass-'))).toBe(true);
   // Yours: saved with its files; a path from outside stays inside the test's folder.
   const m = store.saveTest({ title: 'Tax', kind: 'question', prompt: 'Which function computes tax?', checks: [{ type: 'answer-has', value: 'addTax' }], ask: 'billing.mjs', files: [{ path: 'src/billing.mjs', b64: Buffer.from('export const addTax = 1;').toString('base64') }, { path: '../../escape.txt', b64: 'eA==' }] }, home);
   expect(m).toMatchObject({ kind: 'question', suite: 'mine', title: 'Tax', answers: [{ match: '.', reply: 'billing.mjs' }] });
@@ -81,7 +90,7 @@ test('tests are kept as folders: the New 28 are copied once (without their answe
 
 test('editing a New 28 test: its own check can be turned off, starter files taken out one by one, and the original put back', () => {
   const home = mkdtempSync(join(tmpdir(), 'battle-edit-'));
-  store.seedNew28(home);
+  store.seedSuites(home);
   const id = 'n01-date-one-day-early';
   store.saveTest({ id, title: 'Dates', kind: 'code', prompt: 'Fix formatDay, a new way', checks: [{ type: 'tests' }], removePaths: ['package.json', '../../escape'], useScript: false }, home);
   let t = store.listTests(home).find((x) => x.id === id);
@@ -98,7 +107,34 @@ test('editing a New 28 test: its own check can be turned off, starter files take
   expect(t.files).toEqual(['dates.mjs', 'dates.test.mjs', 'package.json']);
   expect(existsSync(join(home, 'tests', id, 'solution'))).toBe(false);
   expect(readdirSync(join(home, 'trash')).some((f) => f.startsWith(`${id}-edited-`))).toBe(true);
-  expect(() => store.resetTest('m-mine-1234', home)).toThrow('only a New 28 test');
+  expect(() => store.resetTest('m-mine-1234', home)).toThrow('only a test that came with the arena');
+});
+
+test('a Practice 28 test never changes: an edit is saved as a copy (18b, then 18c), the copy edits in place, a used letter is never given again', () => {
+  const home = mkdtempSync(join(tmpdir(), 'battle-practice-'));
+  store.seedSuites(home);
+  const id = 'p18-writing-noncode-folder';
+  const before = readFileSync(join(home, 'tests', id, 'task.txt'), 'utf8');
+  const a = store.saveTest({ id, title: 'A story in TEST.txt', kind: 'writing', prompt: 'Write a short story of three sentences in TEST.txt.', checks: [], removePaths: ['ideas.md'] }, home);
+  expect(a).toMatchObject({ id: 'p18b-writing-noncode-folder', copyOf: id, variant: 'b', n: 18, suite: 'practice', title: 'A story in TEST.txt' });
+  expect(readFileSync(join(home, 'tests', id, 'task.txt'), 'utf8')).toBe(before);
+  const list = store.listTests(home);
+  const orig = list.find((t) => t.id === id), copy = list.find((t) => t.id === a.id);
+  expect(orig.files).toContain('ideas.md');
+  expect(copy.files).not.toContain('ideas.md');
+  expect(copy.hasScript).toBe(true);
+  // The copy sits right after its original.
+  expect(list.indexOf(copy)).toBe(list.indexOf(orig) + 1);
+  // Editing the copy changes the copy; editing the original again makes 18c.
+  expect(store.saveTest({ id: a.id, title: 'A story', kind: 'writing', prompt: 'Changed again', checks: [] }, home)).toMatchObject({ id: a.id, copyOf: id, variant: 'b' });
+  expect(store.saveTest({ id, title: 'Another', kind: 'writing', prompt: 'Another change', checks: [] }, home).id).toBe('p18c-writing-noncode-folder');
+  // 18b deleted: the next copy is 18d, so an old result of 18b never shows on a new test.
+  store.trashTest(a.id, home);
+  expect(store.saveTest({ id, title: 'Third', kind: 'writing', prompt: 'A third change', checks: [] }, home).id).toBe('p18d-writing-noncode-folder');
+  // A Practice 28 test can be put back (from its practice task); a copy has no original of its own.
+  store.resetTest(id, home);
+  expect(readFileSync(join(home, 'tests', id, 'task.txt'), 'utf8')).toBe(before);
+  expect(() => store.resetTest('p18c-writing-noncode-folder', home)).toThrow('only a test that came with the arena');
 });
 
 test('what the app says while a battle holds the memory names no model (the vote is blind)', () => {
@@ -111,17 +147,22 @@ test('what the app says while a battle holds the memory names no model (the vote
   expect(existsSync(join(home, 'running.json'))).toBe(false);
 });
 
-test('the New 28: every one fails as given and passes with its known-good answer (no model)', () => {
-  const ids = readdirSync(store.NEW28_DIR).filter((id) => existsSync(join(store.NEW28_DIR, id, 'meta.json'))).sort();
-  expect(ids).toHaveLength(28);
-  const kinds = {};
-  for (const id of ids) {
-    const r = verify(id);
-    expect([id, r.failsFirst, r.passesAfter]).toEqual([id, true, true]);
-    kinds[r.kind] = (kinds[r.kind] ?? 0) + 1;
-  }
-  expect(kinds).toEqual({ code: 16, question: 5, page: 5, writing: 2 });
-}, 180_000);
+// Each set: every test fails as given and passes with its known-good answer (no model).
+for (const [suite, kindsWanted] of [['new28', { code: 16, question: 5, page: 5, writing: 2 }], ['work28', { code: 16, question: 5, page: 5, writing: 2 }], ['practice', { code: 21, question: 4, writing: 3 }]]) {
+  test(`the ${suite === 'new28' ? 'New 28' : suite === 'work28' ? 'Work 28' : 'Practice 28'}: every one fails as given and passes with its known-good answer (no model)`, () => {
+    const list = allTests().filter((t) => t.suite === suite);
+    expect(list).toHaveLength(28);
+    expect(list.map((t) => t.id.slice(0, 3))).toEqual(Array.from({ length: 28 }, (_, i) => `${suite[0]}${String(i + 1).padStart(2, '0')}`));
+    const kinds = {};
+    for (const t of list) {
+      const r = verify(t.folder, t.from);
+      expect([t.id, r.failsFirst, r.passesAfter, r.after]).toEqual([t.id, true, true, []]);
+      const kind = suite === 'practice' ? store.practiceList().find((p) => p.id === t.id).kind : r.kind;
+      kinds[kind] = (kinds[kind] ?? 0) + 1;
+    }
+    expect(kinds).toEqual(kindsWanted);
+  }, 180_000);
+}
 
 // ---------- The runner, end to end, in practice mode ----------
 let runner = null;
@@ -197,6 +238,30 @@ test('run all queues the New 28, stop pauses the line, a page test keeps its pag
   expect((await post('/api/tests/reset', { id: 'n02-csv-quoted-comma' })).status).toBe(200);
   expect((await get('/api/state')).tests.find((t) => t.id === 'n02-csv-quoted-comma')).toMatchObject({ title: 'Fix a CSV line split on a quoted comma', edited: null });
   expect((await get('/api/state')).tests.some((t) => t.id === page.body.id)).toBe(false);
+  // Run all takes the set it is given: the Work 28 here.
+  const w = await post('/api/runall', { suite: 'work28' });
+  expect(w.body.queued).toBe(28);
+  expect((await get('/api/state')).queue.slice(-28).every((id) => id.startsWith('w'))).toBe(true);
+  await post('/api/stop');
+  await until(async () => { const x = await get('/api/state'); return !x.running && x.paused; });
+  await post('/api/clearqueue');
+  // A Practice 28 edit through the page's address comes back as the copy.
+  const c = await post('/api/tests', { id: 'p05-question', title: 'Port', kind: 'question', prompt: 'Which port? Say where it is set.', checks: [] });
+  expect(c.body).toMatchObject({ id: 'p05b-question', n: 5, variant: 'b', copyOf: 'p05-question' });
+  const s2 = await get('/api/state');
+  expect(s2.tests.find((t) => t.id === 'p05-question')).toMatchObject({ edited: null, copyOf: null });
+  expect(s2.tests.find((t) => t.id === 'p05b-question')).toMatchObject({ variant: 'b', copyOf: 'p05-question', suite: 'practice' });
+  // Load has a set for each: the Work 28, the Practice 28 with your copy, and My tests holds only yours.
+  const sets = Object.fromEntries(s2.sets.map((x) => [x.id, x.ids]));
+  expect([sets.new28.length, sets.work28.length, sets.practice.length]).toEqual([28, 28, 29]);
+  expect(sets.practice).toContain('p05b-question');
+  expect((sets.mine ?? []).filter((id) => /^[nwp]\d/.test(id))).toEqual([]);
+  expect((await post('/api/load', { kind: 'set', id: 'work28' })).status).toBe(200);
+  expect((await post('/api/start')).body.queued).toBe(28);
+  await post('/api/stop');
+  await until(async () => { const x = await get('/api/state'); return !x.running && x.paused; });
+  await post('/api/clearqueue');
+  await post('/api/load', { kind: 'set', id: 'new28' }); // as the next test expects it
 }, 60_000);
 
 test('Load and Battle: what is loaded replaces the line, a set runs only the ones left, one test runs again, and the state says what is loaded', async () => {

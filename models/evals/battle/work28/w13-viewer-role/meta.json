@@ -1,0 +1,16 @@
+{
+ "id": "w13-viewer-role",
+ "n": 13,
+ "suite": "work28",
+ "title": "Add a read-only viewer role across 3 files",
+ "kind": "code",
+ "rules": [
+  "A viewer can read, nothing else",
+  "Viewer invites can be made",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

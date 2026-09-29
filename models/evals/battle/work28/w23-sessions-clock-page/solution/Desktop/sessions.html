@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Market sessions</title>
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --open: #1e7a3c; --closed: #8a8a8e; font: 16px system-ui, sans-serif; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1c1c1e; --fg: #f2f2f7; --open: #6fd08c; --closed: #8e8e93; } }
+  body { background: var(--bg); color: var(--fg); max-width: 520px; margin: 40px auto; padding: 0 16px; }
+  table { width: 100%; border-collapse: collapse; } td { padding: 8px 4px; border-bottom: 1px solid #8884; }
+  .open { color: var(--open); font-weight: 700; } .closed { color: var(--closed); }
+</style>
+</head>
+<body>
+<h1>New York <span id="now"></span></h1>
+<table id="rows"></table>
+<script>
+  const SESSIONS = [
+    { name: 'Asia', city: 'Tokyo', zone: 'Asia/Tokyo', from: 9 * 60, to: 15 * 60 },
+    { name: 'London', city: 'London', zone: 'Europe/London', from: 8 * 60, to: 16 * 60 + 30 },
+    { name: 'New York', city: 'New York', zone: 'America/New_York', from: 9 * 60 + 30, to: 16 * 60 },
+  ];
+  function partsIn(zone, d) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, weekday: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(d).map((x) => [x.type, x.value]));
+    return { day: p.weekday, mins: Number(p.hour) * 60 + Number(p.minute), text: p.hour + ':' + p.minute + ':' + p.second };
+  }
+  function tick() {
+    const d = new Date();
+    document.getElementById('now').textContent = partsIn('America/New_York', d).text;
+    document.getElementById('rows').innerHTML = SESSIONS.map((s) => {
+      const p = partsIn(s.zone, d);
+      const open = !['Sat', 'Sun'].includes(p.day) && p.mins >= s.from && p.mins < s.to;
+      return '<tr><td>' + s.name + '</td><td>' + s.city + ' ' + p.text + '</td><td class="' + (open ? 'open">Open' : 'closed">Closed') + '</td></tr>';
+    }).join('');
+  }
+  tick();
+  setInterval(tick, 1000);
+</script>
+</body>
+</html>

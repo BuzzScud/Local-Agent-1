@@ -1,0 +1,1 @@
+Rename the function fetchBars to loadBars everywhere in this project (the code, the comments and the tests). The tests must still pass.

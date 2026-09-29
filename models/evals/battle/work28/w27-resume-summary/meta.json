@@ -1,0 +1,21 @@
+{
+ "id": "w27-resume-summary",
+ "n": 27,
+ "suite": "work28",
+ "title": "Tailor a resume summary to a job",
+ "kind": "writing",
+ "rules": [
+  "SUMMARY.md: 3 sentences + a bullet per must-have",
+  "Proof from the resume, nothing made up (6 years, not 8)",
+  "resume.md and job.txt unchanged"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "SUMMARY.md"
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

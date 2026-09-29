@@ -1,0 +1,1 @@
+Using resume.md and job.txt, write SUMMARY.md: a professional summary of 3 sentences for the top of the resume, aimed at this job, then one bullet for each of the job's must-haves with the proof for it from the resume. Use only facts that are in resume.md.

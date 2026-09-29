@@ -1,0 +1,1 @@
+After a long outage the live quote feed takes minutes to come back: Backoff.next() in reconnect.mjs keeps doubling its wait past 30 seconds, and after a good connection the wait never starts over at 1 second. Fix both (the comments in the file say what it should do). The tests show what is expected; fix the code, not the tests.

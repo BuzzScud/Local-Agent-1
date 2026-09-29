@@ -1,0 +1,5 @@
+{
+  "name": "stall",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

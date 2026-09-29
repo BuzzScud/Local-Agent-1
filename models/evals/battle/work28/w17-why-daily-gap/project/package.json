@@ -1,0 +1,5 @@
+{
+  "name": "bank-gaps",
+  "type": "module",
+  "scripts": { "report": "node report.mjs" }
+}

@@ -1,0 +1,1 @@
+Those minutes are the exchange's daily maintenance break: futures stop trading from 5 PM to 6 PM New York time (config.mjs), which is 21:00 to 22:00 UTC in summer, so there are no bars to save. findGaps in gaps.mjs reports every run of missing minutes and does not know about the break, so report.mjs prints it as a gap every day.

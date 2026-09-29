@@ -1,0 +1,21 @@
+{
+ "id": "w28-whats-new-notes",
+ "n": 28,
+ "suite": "work28",
+ "title": "Write What's new from a week of commits",
+ "kind": "writing",
+ "rules": [
+  "A New and a Fixed section",
+  "One plain bullet per feat and fix",
+  "No chore or docs, no ids or scopes"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "WHATS-NEW.md"
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

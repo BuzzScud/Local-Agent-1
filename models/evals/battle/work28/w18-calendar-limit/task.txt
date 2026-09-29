@@ -1,0 +1,1 @@
+How many times a minute may this project ask the economic calendar export for data, and where is that number set? Don't change any files.

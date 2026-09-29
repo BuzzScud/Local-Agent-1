@@ -1,0 +1,5 @@
+{
+  "name": "levels",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

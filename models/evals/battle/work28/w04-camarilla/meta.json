@@ -1,0 +1,16 @@
+{
+ "id": "w04-camarilla",
+ "n": 4,
+ "suite": "work28",
+ "title": "Add Camarilla pivot levels, with a test",
+ "kind": "code",
+ "rules": [
+  "camarilla() gives all 8 levels",
+  "Rounded to 2 decimals",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,1 @@
+Trades in the micro contracts come out ten times too big: pnl('MNQZ6', 'long', 100, 110, 1) in pnl.py gives 200.0 instead of 20.0. Fix it so every contract code gets its own point value (MNQ is $2 a point, NQ $20, MES $5, ES $50). Fix the code, not the tests.

@@ -1,0 +1,5 @@
+{
+  "name": "bank",
+  "type": "module",
+  "scripts": { "bank": "node bank/run.mjs" }
+}

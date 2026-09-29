@@ -1,5 +1,5 @@
 // The Battle arena's pass checks: the ones you tick in the New test form, and a test's own
-// check.sh (the New 28 have one). Each gives { label, pass, why }. A run passes when every
+// check.sh (the tests that come with the arena have one). Each gives { label, pass, why }. A run passes when every
 // check holds; a test with no checks is decided by your vote alone (pass: null).
 //   tests         the project's tests pass (value: the command; empty = found: npm test, node --test, pytest)
 //   only-named    only the files named in the prompt, test files and new files changed

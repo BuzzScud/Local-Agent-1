@@ -1,0 +1,1 @@
+In this project, which file answers GET /api/health, and what fields does its answer have? Don't change any files.

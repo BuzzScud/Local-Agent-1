@@ -1,0 +1,7 @@
+{
+  "timezone": "America/New_York",
+  "jobs": [
+    { "name": "nightly-bank", "cron": "15 18 * * 0-4", "run": "node bank.mjs" },
+    { "name": "weekly-report", "cron": "0 9 * * 6", "run": "node report.mjs" }
+  ]
+}

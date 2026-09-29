@@ -1,0 +1,1 @@
+nextContract('NQZ6') in contracts.mjs gives NQH6, but the contract after December 2026 is March 2027: NQH7. Fix it so December always rolls into March of the next year, including the end of a decade (ESZ9 -> ESH0). The tests show what is expected; fix the code, not the tests.

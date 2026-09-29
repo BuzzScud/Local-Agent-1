@@ -1,0 +1,5 @@
+{
+  "name": "ticks",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

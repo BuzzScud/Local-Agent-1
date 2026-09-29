@@ -7,18 +7,31 @@
 //   state.json         the line of tests waiting to run, and whether it is paused
 //   running.json       the hold: a battle wants or uses the memory (the app waits while it is there)
 //   runner.pid, runner.log
-// The New 28 come with the repo (models/evals/battle/new28/): each is copied into tests/ the
-// first time the arena starts, so your edits are yours; a deleted one is not copied again.
+// Three sets of 28 come with the repo, each copied into tests/ the first time the arena starts,
+// so your edits are yours; a deleted one is not copied again:
+//   new28/      the New 28 (n01…), written for the arena
+//   work28/     the Work 28 (w01…), about the work this Mac is used for: futures, market data, the desks
+//   practice    the Practice 28 (p01…): the practice tasks that grade a model (models/evals/bench/tasks/),
+//               with a title, kind and rules from practice28.json. Those task folders are never changed:
+//               an edit of a Practice 28 test is saved as a copy with the next letter (p18 → p18b).
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, cpSync, rmSync, statSync } from 'node:fs';
 import { join, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOME } from '../../registry.mjs';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
 export const battleHome = () => join(HOME, 'battle');
 export const BATTLE_PORT = Number((process.env.AGENTIC_BATTLE_PORT ?? '') || 8758);
 export const LIMIT_SECS = 600; // each model's run stops at 10 minutes
-export const NEW28_DIR = join(dirname(fileURLToPath(import.meta.url)), 'new28');
+export const NEW28_DIR = join(HERE, 'new28');
+export const WORK28_DIR = join(HERE, 'work28');
+export const PRACTICE_DIR = join(HERE, '..', 'bench', 'tasks');
+export const PRACTICE_LIST = join(HERE, 'practice28.json');
 export const KINDS = { code: 'Code change', question: 'Question', page: 'Page', writing: 'Writing' };
+// The sets in the order the page shows them (yours, 'mine', come last).
+export const SUITES = { new28: 'New 28', work28: 'Work 28', practice: 'Practice 28', mine: 'My tests' };
+const RANK = Object.keys(SUITES);
+const rank = (suite) => (RANK.includes(suite) ? RANK.indexOf(suite) : RANK.length - 1);
 
 export const paths = (home = battleHome()) => ({
   home, tests: join(home, 'tests'), battles: join(home, 'battles'), trash: join(home, 'trash'),
@@ -37,23 +50,51 @@ export function inside(base, rel) {
   return p === resolve(base) || p.startsWith(resolve(base) + sep) ? p : null;
 }
 
-// Copies the New 28 that are not here yet (and were never deleted).
-export function seedNew28(home = battleHome(), from = NEW28_DIR) {
+// The Practice 28 as arena tests: [{ id: 'p01-json-flag', task: '1-json-flag', n, title, kind, rules }].
+export function practiceList(list = PRACTICE_LIST) {
+  return readJson(list, []).map((p) => ({ ...p, id: `p${String(p.n).padStart(2, '0')}-${p.task.replace(/^\d+-/, '')}` }));
+}
+// Writes one Practice 28 test from its practice task: the prompt, project/, check.sh and the replies
+// to its questions (answers.json) as they are; the known-good answer (reference/) stays out.
+function writePractice(p, to, from = PRACTICE_DIR) {
+  const src = join(from, p.task);
+  mkdirSync(to, { recursive: true });
+  cpSync(join(src, 'project'), join(to, 'project'), { recursive: true });
+  cpSync(join(src, 'check.sh'), join(to, 'check.sh'));
+  cpSync(join(src, 'task.txt'), join(to, 'task.txt'));
+  const answers = readJson(join(src, 'answers.json'), []);
+  writeJson(join(to, 'meta.json'), { id: p.id, n: p.n, suite: 'practice', title: p.title, kind: p.kind, rules: p.rules, checks: [], answers, home: false, created: '2026-09-29T12:00:00.000Z', task: p.task });
+}
+// Where a test that came with the repo is from: a function that writes it again, or null.
+function originalOf(id) {
+  for (const dir of [NEW28_DIR, WORK28_DIR]) {
+    const src = inside(dir, id);
+    if (src && existsSync(join(src, 'meta.json'))) return (to) => cpSync(src, to, { recursive: true, filter: (s) => !s.split(sep).includes('solution') });
+  }
+  const p = practiceList().find((x) => x.id === id);
+  return p && existsSync(join(PRACTICE_DIR, p.task)) ? (to) => writePractice(p, to) : null;
+}
+
+// Copies the tests that come with the repo and are not here yet (and were never deleted).
+export function seedSuites(home = battleHome()) {
   const P = paths(home);
   mkdirSync(P.tests, { recursive: true });
-  if (!existsSync(from)) return 0;
   const seeded = new Set(readJson(P.seeded, []));
+  const ids = [NEW28_DIR, WORK28_DIR].flatMap((dir) => (existsSync(dir) ? readdirSync(dir).filter((id) => existsSync(join(dir, id, 'meta.json'))) : []));
+  ids.push(...practiceList().map((p) => p.id));
   let n = 0;
-  for (const id of readdirSync(from).sort()) {
-    if (!existsSync(join(from, id, 'meta.json')) || seeded.has(id)) continue;
-    if (!existsSync(join(P.tests, id))) cpSync(join(from, id), join(P.tests, id), { recursive: true, filter: (s) => !s.split(sep).includes('solution') });
+  for (const id of ids.sort()) {
+    if (seeded.has(id)) continue;
+    const write = originalOf(id);
+    if (!write) continue;
+    if (!existsSync(join(P.tests, id))) write(join(P.tests, id));
     seeded.add(id); n += 1;
   }
   writeJson(P.seeded, [...seeded].sort());
   return n;
 }
 
-// Every test, New 28 first (by number), then yours (oldest first).
+// Every test: the sets that come with the repo (by number, a copy after its original), then yours (oldest first).
 export function listTests(home = battleHome()) {
   const P = paths(home);
   if (!existsSync(P.tests)) return [];
@@ -65,7 +106,21 @@ export function listTests(home = battleHome()) {
     try { prompt = readFileSync(join(P.tests, id, 'task.txt'), 'utf8').trim(); } catch {}
     out.push({ ...meta, id, prompt, files: listFiles(join(P.tests, id, 'project')), hasScript: existsSync(join(P.tests, id, 'check.sh')) });
   }
-  return out.sort((a, b) => (a.suite === b.suite ? (a.suite === 'new28' ? (a.n ?? 0) - (b.n ?? 0) : String(a.created).localeCompare(String(b.created))) : a.suite === 'new28' ? -1 : 1));
+  return out.sort((a, b) => rank(a.suite) - rank(b.suite) || (rank(a.suite) === RANK.length - 1
+    ? String(a.created).localeCompare(String(b.created))
+    : (a.n ?? 0) - (b.n ?? 0) || String(a.variant ?? '').localeCompare(String(b.variant ?? ''))));
+}
+
+// The next free letter for a copy of Practice 28 test n: b, c, … (never one used before, even by a
+// deleted copy or an old result, so a copy's results are only ever its own).
+function nextVariant(n, home = battleHome()) {
+  const P = paths(home);
+  const re = new RegExp(`(^|-)p${String(n).padStart(2, '0')}([b-z])-`);
+  const used = new Set();
+  for (const d of [P.tests, P.trash, P.battles]) { let names = []; try { names = readdirSync(d); } catch {} for (const f of names) { const m = re.exec(f); if (m) used.add(m[2]); } }
+  const free = 'bcdefghijklmnopqrstuvwxyz'.split('').find((c) => !used.has(c));
+  if (!free) throw new Error(`test ${n} has no copy letters left`);
+  return free;
 }
 
 // The starter files of a test (paths from its project folder), up to 200.
@@ -93,10 +148,19 @@ export function saveTest({ id = null, title, kind, prompt, checks = [], ask = ''
   const P = paths(home);
   if (!String(prompt ?? '').trim()) throw new Error('the test needs a prompt');
   if (!KINDS[kind]) throw new Error(`no kind ${kind}`);
-  const tid = id ?? `m-${slug(title || prompt)}-${Date.now().toString(36).slice(-4)}`;
-  const dir = join(P.tests, tid);
+  let tid = id ?? `m-${slug(title || prompt)}-${Date.now().toString(36).slice(-4)}`;
+  let dir = join(P.tests, tid);
   if (id && !existsSync(join(dir, 'meta.json'))) throw new Error('no such test');
-  const old = readJson(join(dir, 'meta.json'), {});
+  let old = readJson(join(dir, 'meta.json'), {});
+  // A Practice 28 test itself never changes (it is what grades a model): the edit becomes a copy,
+  // test 18 → 18b, with the original's files, and the original stays as it was.
+  if (id && old.suite === 'practice' && !old.copyOf) {
+    const variant = nextVariant(old.n, home);
+    tid = id.replace(/^p(\d+)-/, `p$1${variant}-`);
+    cpSync(dir, join(P.tests, tid), { recursive: true });
+    dir = join(P.tests, tid);
+    old = { ...old, id: tid, copyOf: id, variant, created: new Date().toISOString() };
+  }
   mkdirSync(join(dir, 'project'), { recursive: true });
   if (removeFiles) { rmSync(join(dir, 'project'), { recursive: true, force: true }); mkdirSync(join(dir, 'project'), { recursive: true }); }
   for (const p of removePaths) { const f = inside(join(dir, 'project'), p); if (f && f !== resolve(join(dir, 'project'))) rmSync(f, { force: true }); }
@@ -118,15 +182,16 @@ export function saveTest({ id = null, title, kind, prompt, checks = [], ask = ''
   return meta;
 }
 
-// A New 28 test as it came: your edited copy goes to trash/, the original comes back (without its answer).
-export function resetTest(id, home = battleHome(), from = NEW28_DIR) {
+// A test that came with the repo, as it came: your edited copy goes to trash/, the original comes back
+// (without its known-good answer). A copy of a Practice 28 test (18b) has no original of its own.
+export function resetTest(id, home = battleHome()) {
   const P = paths(home);
-  const src = inside(from, id);
-  if (!src || !existsSync(join(src, 'meta.json'))) throw new Error('only a New 28 test can be put back');
+  const write = originalOf(id);
+  if (!write) throw new Error('only a test that came with the arena can be put back');
   const dir = join(P.tests, id);
   mkdirSync(P.trash, { recursive: true });
   if (existsSync(dir)) renameSync(dir, join(P.trash, `${id}-edited-${Date.now()}`));
-  cpSync(src, dir, { recursive: true, filter: (s) => !s.split(sep).includes('solution') });
+  write(dir);
 }
 
 // All results go to trash/ (your votes with them): the score starts again at 0–0.

@@ -1,0 +1,21 @@
+{
+ "id": "w18-calendar-limit",
+ "n": 18,
+ "suite": "work28",
+ "title": "How often may we ask the calendar, and where is that set?",
+ "kind": "question",
+ "rules": [
+  "Says 4 a minute",
+  "Names limits.mjs",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

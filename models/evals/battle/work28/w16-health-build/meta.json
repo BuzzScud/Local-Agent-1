@@ -1,0 +1,16 @@
+{
+ "id": "w16-health-build",
+ "n": 16,
+ "suite": "work28",
+ "title": "Show the running build in /api/health",
+ "kind": "code",
+ "rules": [
+  "build = first 7 of BUILD_SHA",
+  "\"dev\" when it is not set",
+  "ok and uptime unchanged, a new test"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

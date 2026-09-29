@@ -1,0 +1,9 @@
+a1f3c2e feat(chart): Year Fib levels on every chart — the yearly high and low with their Fibonacci steps
+9b2d4e1 fix(ladder): The live feed reconnects by itself after a drop
+77c0a19 chore(deps): bump vite from 7.1.2 to 7.1.4
+5e8f210 feat(bank): Deleted days wait 30 days in the trash — restore one with a click
+c3d9b88 docs: explain the deploy steps
+e41a6f0 fix(home): This week's card shows news times in your time zone
+2b7e9c3 fix(auth): Invite links work for 7 days, and only once
+0d5a8b7 feat(options): A payoff chart for the picked spread
+f9a2c61 chore: format the code

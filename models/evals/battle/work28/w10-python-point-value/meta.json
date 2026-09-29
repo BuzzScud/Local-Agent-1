@@ -1,0 +1,16 @@
+{
+ "id": "w10-python-point-value",
+ "n": 10,
+ "suite": "work28",
+ "title": "Python: fix micro contracts priced as full ones",
+ "kind": "code",
+ "rules": [
+  "Each root gets its own point value",
+  "Unknown symbols still raise",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

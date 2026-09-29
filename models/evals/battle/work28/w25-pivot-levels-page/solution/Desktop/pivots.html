@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pivot levels</title>
+<style>
+  :root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+  body { max-width: 420px; margin: 40px auto; padding: 0 16px; }
+  .in { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  input { font: inherit; width: 100%; padding: 6px; }
+  table { width: 100%; margin-top: 16px; border-collapse: collapse; } td { padding: 5px; border-bottom: 1px solid #8884; }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<h1>Pivot levels</h1>
+<div class="in">
+  <label>High <input id="h" type="number" step="any" value="18250.25"></label>
+  <label>Low <input id="l" type="number" step="any" value="18010.5"></label>
+  <label>Close <input id="c" type="number" step="any" value="18200"></label>
+</div>
+<table id="out"></table>
+<script>
+  function update() {
+    const h = Number(document.getElementById('h').value), l = Number(document.getElementById('l').value), c = Number(document.getElementById('c').value);
+    const d = (h - l) * 1.1;
+    const rows = [['H4', c + d / 2], ['H3', c + d / 4], ['H2', c + d / 6], ['H1', c + d / 12], ['P', (h + l + c) / 3], ['L1', c - d / 12], ['L2', c - d / 6], ['L3', c - d / 4], ['L4', c - d / 2]];
+    document.getElementById('out').innerHTML = rows.map(([k, v]) => '<tr><td>' + k + '</td><td>' + v.toFixed(2) + '</td></tr>').join('');
+  }
+  for (const id of ['h', 'l', 'c']) document.getElementById(id).addEventListener('input', update);
+  update();
+</script>
+</body>
+</html>

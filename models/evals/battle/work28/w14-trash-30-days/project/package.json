@@ -1,0 +1,5 @@
+{
+  "name": "trash",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

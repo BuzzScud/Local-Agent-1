@@ -1,0 +1,21 @@
+{
+ "id": "w21-banked-contracts",
+ "n": 21,
+ "suite": "work28",
+ "title": "Which contracts are banked, and for how long?",
+ "kind": "question",
+ "rules": [
+  "Names NQ, ES, CL and GC",
+  "Says 45 days",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

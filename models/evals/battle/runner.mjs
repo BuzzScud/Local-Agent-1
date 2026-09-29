@@ -14,7 +14,7 @@ import { readFileSync, existsSync, mkdirSync, openSync, closeSync, appendFileSyn
 import { join, dirname, resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MODELS, modelPath, scanServers, stopIdleServers, recordTest, codeLabel, availableBytes, needBytes } from '../../index.mjs';
-import { battleHome, paths, BATTLE_PORT, LIMIT_SECS, readJson, writeJson, seedNew28, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
+import { battleHome, paths, BATTLE_PORT, LIMIT_SECS, readJson, writeJson, seedSuites, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -36,14 +36,17 @@ let state = readJson(P.state, { queue: [], paused: false });
 // The header's Load and Battle (design A, 29 Sep 2026): you load one test or a set, and Battle
 // puts what is loaded in line in place of whatever waited there. state.loaded is what is loaded;
 // state.batch the tests the last Battle put in line ("Test 2 of 5"). A set is the New 28, one
-// kind of them, or your own tests.
+// kind of them, the Work 28, the Practice 28 (with your copies, 18b…), or your own tests.
+const OWN = ['new28', 'work28', 'practice'];
 const SETS = {
   new28: ['All New 28', (t) => t.suite === 'new28'],
-  code: ['Code', (t) => t.suite === 'new28' && t.kind === 'code'],
-  question: ['Questions', (t) => t.suite === 'new28' && t.kind === 'question'],
-  page: ['Pages', (t) => t.suite === 'new28' && t.kind === 'page'],
-  writing: ['Writing', (t) => t.suite === 'new28' && t.kind === 'writing'],
-  mine: ['My tests', (t) => t.suite !== 'new28'],
+  code: ['New 28 · Code', (t) => t.suite === 'new28' && t.kind === 'code'],
+  question: ['New 28 · Questions', (t) => t.suite === 'new28' && t.kind === 'question'],
+  page: ['New 28 · Pages', (t) => t.suite === 'new28' && t.kind === 'page'],
+  writing: ['New 28 · Writing', (t) => t.suite === 'new28' && t.kind === 'writing'],
+  work28: ['All Work 28', (t) => t.suite === 'work28'],
+  practice: ['All Practice 28', (t) => t.suite === 'practice'],
+  mine: ['My tests', (t) => !OWN.includes(t.suite)],
 };
 const loadedNow = () => state.loaded ?? { kind: 'set', id: 'new28' };
 const saveState = () => writeJson(P.state, state);
@@ -56,7 +59,7 @@ let lastUse = Date.now();
 // A battle left half-done by an earlier runner (the Mac slept, it was stopped) is closed.
 for (const b of listBattles()) if (b.status === 'running') { b.status = 'interrupted'; writeJson(join(P.battles, b.id, 'battle.json'), b); }
 clearHold();
-seedNew28();
+seedSuites();
 log(`runner up (pid ${process.pid})${FAKE ? ', practice mode' : ''}`);
 
 // What holds a model in memory right now: [{ who }]. Kept-loaded models nobody uses are unloaded first.
@@ -184,7 +187,7 @@ function view() {
     sets: Object.entries(SETS).map(([id, [name, has]]) => ({ id, name, ids: tests.filter(has).map((t) => t.id) })).filter((x) => x.ids.length),
     running: current ? { battle: current.battle, test: current.test, side: current.side, startedAt: current.startedAt } : busy && waiting ? { waiting: true } : null,
     score,
-    tests: tests.map((t) => { const b = latest[t.id]; return { id: t.id, n: t.n ?? null, suite: t.suite, title: t.title, kind: t.kind, prompt: t.prompt, checks: t.checks ?? [], hasScript: t.hasScript, noScript: Boolean(t.noScript), edited: t.edited ?? null, rules: t.rules ?? null, ask: t.answers?.[0]?.reply ?? '', files: t.files, latest: b ? { id: b.id, at: b.at, status: b.status, vote: b.vote, order: reveal(b), runs: { A: brief(b.runs.A), B: brief(b.runs.B) } } : null }; }),
+    tests: tests.map((t) => { const b = latest[t.id]; return { id: t.id, n: t.n ?? null, variant: t.variant ?? null, copyOf: t.copyOf ?? null, suite: t.suite, title: t.title, kind: t.kind, prompt: t.prompt, checks: t.checks ?? [], hasScript: t.hasScript, noScript: Boolean(t.noScript), edited: t.edited ?? null, rules: t.rules ?? null, ask: t.answers?.[0]?.reply ?? '', files: t.files, latest: b ? { id: b.id, at: b.at, status: b.status, vote: b.vote, order: reveal(b), runs: { A: brief(b.runs.A), B: brief(b.runs.B) } } : null }; }),
   };
 }
 function battleView(id) {
@@ -281,7 +284,7 @@ http.createServer(async (req, res) => {
       case '/api/tests': {
         const meta = saveTest({ id: body.id ?? null, title: body.title, kind: body.kind, prompt: body.prompt, checks: body.checks ?? [], ask: body.ask ?? '', files: body.files ?? [], removeFiles: Boolean(body.removeFiles), removePaths: body.removePaths ?? [], useScript: body.useScript ?? null });
         if (body.run) { state.queue.push(meta.id); state.paused = false; saveState(); tick(); }
-        return send(res, 200, { ok: true, id: meta.id });
+        return send(res, 200, { ok: true, id: meta.id, n: meta.n ?? null, variant: meta.variant ?? null, copyOf: meta.copyOf ?? null });
       }
       case '/api/tests/reset': { resetTest(String(body.id ?? '')); return send(res, 200, { ok: true }); }
       case '/api/clearresults': {

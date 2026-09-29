@@ -1,0 +1,16 @@
+{
+ "id": "w15-rename-fetchbars",
+ "n": 15,
+ "suite": "work28",
+ "title": "Rename fetchBars to loadBars across 4 files",
+ "kind": "code",
+ "rules": [
+  "No fetchBars left",
+  "loadBars in all 4 files",
+  "The tests pass, none removed"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

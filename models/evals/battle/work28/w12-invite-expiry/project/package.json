@@ -1,0 +1,5 @@
+{
+  "name": "invites",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

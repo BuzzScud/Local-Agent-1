@@ -1,0 +1,16 @@
+{
+ "id": "w11-python-bad-rows",
+ "n": 11,
+ "suite": "work28",
+ "title": "Python: skip bad rows in a bars file",
+ "kind": "code",
+ "rules": [
+  "Bad rows are skipped and counted",
+  "report.py says how many",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

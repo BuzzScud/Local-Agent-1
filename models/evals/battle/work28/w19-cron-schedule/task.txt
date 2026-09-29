@@ -1,0 +1,1 @@
+When does the nightly-bank job in schedule.json run? Say the time and the days in plain words. Don't change any files.

@@ -1,0 +1,16 @@
+{
+ "id": "w03-trading-day",
+ "n": 3,
+ "suite": "work28",
+ "title": "Fix the trading day of an evening bar",
+ "kind": "code",
+ "rules": [
+  "The tests pass in New York",
+  "Right in Tokyo and London too",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

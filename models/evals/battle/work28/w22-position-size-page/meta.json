@@ -1,0 +1,30 @@
+{
+ "id": "w22-position-size-page",
+ "n": 22,
+ "suite": "work28",
+ "title": "Make a futures position size page",
+ "kind": "page",
+ "rules": [
+  "Desktop/position-size.html is saved, offline",
+  "Account, risk % and stop boxes; NQ, MNQ, ES, MES",
+  "Contracts rounded down, live",
+  "Its script is valid"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/position-size.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/position-size.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

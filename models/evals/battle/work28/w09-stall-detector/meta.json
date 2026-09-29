@@ -1,0 +1,16 @@
+{
+ "id": "w09-stall-detector",
+ "n": 9,
+ "suite": "work28",
+ "title": "Fix a feed that is called stalled too soon",
+ "kind": "code",
+ "rules": [
+  "Stalled after 15 s without a tick",
+  "Never stalled while closed",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

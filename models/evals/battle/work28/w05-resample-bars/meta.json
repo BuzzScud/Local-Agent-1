@@ -1,0 +1,16 @@
+{
+ "id": "w05-resample-bars",
+ "n": 5,
+ "suite": "work28",
+ "title": "Turn 1-minute bars into hourly bars",
+ "kind": "code",
+ "rules": [
+  "Open, high, low, close and volume right",
+  "Any bar size (5, 15, 60 minutes)",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

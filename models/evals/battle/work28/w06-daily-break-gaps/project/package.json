@@ -1,0 +1,5 @@
+{
+  "name": "gaps",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

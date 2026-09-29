@@ -1,0 +1,30 @@
+{
+ "id": "w26-fib-levels-page",
+ "n": 26,
+ "suite": "work28",
+ "title": "Make a Fibonacci retracement page",
+ "kind": "page",
+ "rules": [
+  "Desktop/fib.html is saved, offline",
+  "Swing high, swing low, up or down",
+  "0 to 100 % levels with prices, live",
+  "Its script is valid"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/fib.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/fib.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

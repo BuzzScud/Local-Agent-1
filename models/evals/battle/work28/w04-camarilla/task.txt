@@ -1,0 +1,1 @@
+Add camarilla(high, low, close) to levels.mjs and export it. It returns { h1, h2, h3, h4, l1, l2, l3, l4 }: with range = high - low, h4 = close + range * 1.1 / 2, h3 = close + range * 1.1 / 4, h2 = close + range * 1.1 / 6, h1 = close + range * 1.1 / 12, and l1 to l4 are the same distances below the close. Round every level to 2 decimals. Add a test for it.

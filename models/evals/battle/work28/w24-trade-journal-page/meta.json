@@ -1,0 +1,30 @@
+{
+ "id": "w24-trade-journal-page",
+ "n": 24,
+ "suite": "work28",
+ "title": "Make a trade journal page that remembers",
+ "kind": "page",
+ "rules": [
+  "Desktop/journal.html is saved, offline",
+  "Add trades, P&L per trade and a total",
+  "Delete a row; kept in local storage",
+  "Follows light or dark mode"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/journal.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/journal.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

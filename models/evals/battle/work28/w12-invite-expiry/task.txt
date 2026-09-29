@@ -1,0 +1,1 @@
+An invite link stops working about ten minutes after it is sent, and a used invite can be used again. Fix checkInvite in invites.mjs: an invite works until 7 days (INVITE_DAYS) after it was sent, and only once: a used invite gives { ok: false, why: 'already used' }. The tests show what is expected; fix the code, not the tests.

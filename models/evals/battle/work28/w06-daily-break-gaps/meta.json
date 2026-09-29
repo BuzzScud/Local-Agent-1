@@ -1,0 +1,16 @@
+{
+ "id": "w06-daily-break-gaps",
+ "n": 6,
+ "suite": "work28",
+ "title": "Stop the daily market break showing as a gap",
+ "kind": "code",
+ "rules": [
+  "The break alone is not a gap",
+  "Other gaps are still found",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

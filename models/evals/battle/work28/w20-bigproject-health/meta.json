@@ -1,0 +1,21 @@
+{
+ "id": "w20-bigproject-health",
+ "n": 20,
+ "suite": "work28",
+ "title": "Big project: which file answers /api/health?",
+ "kind": "question",
+ "rules": [
+  "Names src/routes/status.mjs",
+  "Names ok, build and uptime",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

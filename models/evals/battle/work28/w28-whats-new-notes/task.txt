@@ -1,0 +1,1 @@
+commits.txt lists this week's commits. Write WHATS-NEW.md for the people who use the site: a "New" section for the feat commits and a "Fixed" section for the fix commits, one bullet each in plain words (no commit ids, types, scopes or file names), and leave out the chore and docs commits.

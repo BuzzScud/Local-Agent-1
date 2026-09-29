@@ -1,0 +1,17 @@
+{
+ "id": "w14-trash-30-days",
+ "n": 14,
+ "suite": "work28",
+ "title": "Send deleted days to a 30-day trash",
+ "kind": "code",
+ "rules": [
+  "A deleted day goes to the trash",
+  "It can be put back",
+  "Gone after 30 days, not before",
+  "Tests for it, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

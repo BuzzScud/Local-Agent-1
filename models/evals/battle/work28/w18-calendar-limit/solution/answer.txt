@@ -1,0 +1,1 @@
+At most 4 times a minute. The number is set in limits.mjs, in LIMITS.calendar.perMinute; calendar.mjs passes it to makeLimiter (limiter.mjs), which makes loadWeek wait when it has already asked 4 times in the last minute.

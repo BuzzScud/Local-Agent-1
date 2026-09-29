@@ -1,0 +1,21 @@
+{
+ "id": "w17-why-daily-gap",
+ "n": 17,
+ "suite": "work28",
+ "title": "Why is there a gap at 21:00 UTC every day?",
+ "kind": "question",
+ "rules": [
+  "Says the market is closed then (the daily break)",
+  "Names findGaps",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "reconnect",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

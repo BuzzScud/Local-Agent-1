@@ -1,0 +1,1 @@
+After a deploy we can't tell which build the server is running. Add a build field to the /api/health answer in server.mjs: the first 7 characters of the BUILD_SHA environment variable, or "dev" when it is not set. Keep ok and uptime as they are, and add a test for it.

@@ -1,0 +1,30 @@
+{
+ "id": "w25-pivot-levels-page",
+ "n": 25,
+ "suite": "work28",
+ "title": "Make a Camarilla pivot levels page",
+ "kind": "page",
+ "rules": [
+  "Desktop/pivots.html is saved, offline",
+  "High, low and close boxes",
+  "H1-H4, L1-L4 and P, live, 2 decimals",
+  "Its script is valid"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/pivots.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/pivots.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

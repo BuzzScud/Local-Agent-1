@@ -1,0 +1,17 @@
+{
+ "id": "w07-calendar-429",
+ "n": 7,
+ "suite": "work28",
+ "title": "Wait and retry when the calendar says 429",
+ "kind": "code",
+ "rules": [
+  "Waits Retry-After seconds (5 if none)",
+  "At most 3 tries, then throws",
+  "Other errors throw at once",
+  "A new test, and the tests pass"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

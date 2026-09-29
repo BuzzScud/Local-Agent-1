@@ -1,0 +1,5 @@
+{
+  "name": "bars",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

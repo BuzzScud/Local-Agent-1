@@ -1,0 +1,1 @@
+Add a viewer role: a viewer can read (GET /api/bars) but cannot write, invite or see the users. Add it in roles.mjs, let makeInvite in invite.mjs make viewer invites, and add a test that a viewer can GET /api/bars but not POST to it. Owners and members keep what they can do today.

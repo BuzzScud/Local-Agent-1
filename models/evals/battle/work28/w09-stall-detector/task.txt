@@ -1,0 +1,1 @@
+The Ladder flags the tick feed as stalled after less than a second without a tick. isStalled in stall.mjs should only say yes after more than 15 seconds (STALL_SECS) without a tick while the market is open, and never while it is closed; no tick at all yet while open counts as stalled. Fix it; the tests show what is expected (fix the code, not the tests).

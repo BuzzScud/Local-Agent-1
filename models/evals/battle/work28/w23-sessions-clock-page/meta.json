@@ -1,0 +1,30 @@
+{
+ "id": "w23-sessions-clock-page",
+ "n": 23,
+ "suite": "work28",
+ "title": "Make a market sessions clock page",
+ "kind": "page",
+ "rules": [
+  "Desktop/sessions.html is saved, offline",
+  "Asia, London and New York, open or closed",
+  "Real time zones, updates every second",
+  "Follows light or dark mode"
+ ],
+ "checks": [
+  {
+   "type": "saved",
+   "value": "Desktop/sessions.html"
+  },
+  {
+   "type": "scripts-valid",
+   "value": "Desktop/sessions.html"
+  },
+  {
+   "type": "offline",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": true,
+ "created": "2026-09-29T12:00:00.000Z"
+}

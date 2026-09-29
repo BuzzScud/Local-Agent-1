@@ -1,0 +1,21 @@
+{
+ "id": "w19-cron-schedule",
+ "n": 19,
+ "suite": "work28",
+ "title": "When does the nightly bank run? (a cron line)",
+ "kind": "question",
+ "rules": [
+  "Says 6:15 PM, New York time",
+  "Says Sunday to Thursday",
+  "No file changed"
+ ],
+ "checks": [
+  {
+   "type": "no-change",
+   "value": ""
+  }
+ ],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

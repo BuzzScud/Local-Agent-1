@@ -1,0 +1,16 @@
+{
+ "id": "w08-reconnect-backoff",
+ "n": 8,
+ "suite": "work28",
+ "title": "Fix the live feed's reconnect wait",
+ "kind": "code",
+ "rules": [
+  "Doubles from 1 s, never past 30 s",
+  "Starts over after a good connection",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

@@ -1,0 +1,16 @@
+{
+ "id": "w12-invite-expiry",
+ "n": 12,
+ "suite": "work28",
+ "title": "Fix invites that expire in minutes and work twice",
+ "kind": "code",
+ "rules": [
+  "Works for 7 days",
+  "Works only once",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

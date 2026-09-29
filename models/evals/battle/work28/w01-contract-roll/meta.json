@@ -1,0 +1,16 @@
+{
+ "id": "w01-contract-roll",
+ "n": 1,
+ "suite": "work28",
+ "title": "Fix a futures roll that stays in the old year",
+ "kind": "code",
+ "rules": [
+  "The tests pass",
+  "Z9 rolls into H0",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

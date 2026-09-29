@@ -1,0 +1,1 @@
+The nightly-bank job runs at 6:15 PM (18:15) New York time, Sunday through Thursday: the cron line "15 18 * * 0-4" means minute 15 of hour 18 on weekdays 0 to 4, and 0 is Sunday. It does not run on Friday or Saturday.

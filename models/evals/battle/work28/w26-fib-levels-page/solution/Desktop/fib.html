@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fibonacci levels</title>
+<style>
+  :root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+  body { max-width: 420px; margin: 40px auto; padding: 0 16px; }
+  input, select { font: inherit; padding: 6px; width: 100%; }
+  label { display: block; margin: 8px 0; }
+  table { width: 100%; margin-top: 16px; border-collapse: collapse; } td { padding: 5px; border-bottom: 1px solid #8884; }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<h1>Fibonacci retracement</h1>
+<label>Swing high <input id="hi" type="number" step="any" value="18400"></label>
+<label>Swing low <input id="lo" type="number" step="any" value="18000"></label>
+<label>The move was <select id="dir"><option value="up">up</option><option value="down">down</option></select></label>
+<table id="out"></table>
+<script>
+  const LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+  function update() {
+    const hi = Number(document.getElementById('hi').value), lo = Number(document.getElementById('lo').value);
+    const up = document.getElementById('dir').value === 'up';
+    const from = up ? hi : lo, span = up ? lo - hi : hi - lo;
+    document.getElementById('out').innerHTML = LEVELS.map((f) => '<tr><td>' + (f * 100).toFixed(1) + ' %</td><td>' + (from + span * f).toFixed(2) + '</td></tr>').join('');
+  }
+  for (const id of ['hi', 'lo', 'dir']) document.getElementById(id).addEventListener('input', update);
+  update();
+</script>
+</body>
+</html>

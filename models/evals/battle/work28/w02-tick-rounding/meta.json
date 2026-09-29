@@ -1,0 +1,16 @@
+{
+ "id": "w02-tick-rounding",
+ "n": 2,
+ "suite": "work28",
+ "title": "Fix prices like 2345.7000000000003",
+ "kind": "code",
+ "rules": [
+  "The tests pass",
+  "Clean prices for every symbol",
+  "The test file is unchanged"
+ ],
+ "checks": [],
+ "answers": [],
+ "home": false,
+ "created": "2026-09-29T12:00:00.000Z"
+}

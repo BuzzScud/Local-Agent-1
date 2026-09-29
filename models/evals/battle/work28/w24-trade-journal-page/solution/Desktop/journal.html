@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trade journal</title>
+<style>
+  :root { color-scheme: light dark; font: 15px system-ui, sans-serif; }
+  body { max-width: 760px; margin: 32px auto; padding: 0 16px; }
+  form { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  input, select, button { font: inherit; padding: 5px 8px; }
+  table { width: 100%; border-collapse: collapse; } td, th { padding: 6px; border-bottom: 1px solid #8884; text-align: left; }
+  .num { text-align: right; }
+</style>
+</head>
+<body>
+<h1>Trade journal</h1>
+<form id="f">
+  <input id="sym" placeholder="Symbol" required>
+  <select id="side"><option value="long">Long</option><option value="short">Short</option></select>
+  <input id="entry" type="number" step="any" placeholder="Entry" required>
+  <input id="exit" type="number" step="any" placeholder="Exit" required>
+  <input id="qty" type="number" min="1" value="1" placeholder="Contracts" required>
+  <button>Add</button>
+</form>
+<table>
+  <thead><tr><th>Symbol</th><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">Qty</th><th class="num">P&amp;L (pts)</th><th></th></tr></thead>
+  <tbody id="rows"></tbody>
+  <tfoot><tr><th colspan="5">Total</th><th class="num" id="total"></th><th></th></tr></tfoot>
+</table>
+<script>
+  const KEY = 'trade-journal';
+  let trades = [];
+  try { trades = JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { trades = []; }
+  const pnl = (t) => (t.side === 'long' ? t.exit - t.entry : t.entry - t.exit) * t.qty;
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(trades)); } catch (e) {} };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function draw() {
+    document.getElementById('rows').innerHTML = trades.map((t, i) => '<tr><td>' + esc(t.sym) + '</td><td>' + t.side + '</td><td class="num">' + t.entry + '</td><td class="num">' + t.exit + '</td><td class="num">' + t.qty + '</td><td class="num">' + pnl(t).toFixed(2) + '</td><td><button data-i="' + i + '">Delete</button></td></tr>').join('');
+    document.getElementById('total').textContent = trades.reduce((s, t) => s + pnl(t), 0).toFixed(2);
+  }
+  document.getElementById('f').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = (id) => document.getElementById(id).value;
+    trades.push({ sym: v('sym').trim().toUpperCase(), side: v('side'), entry: Number(v('entry')), exit: Number(v('exit')), qty: Number(v('qty')) });
+    save(); draw(); e.target.reset();
+  });
+  document.getElementById('rows').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-i]');
+    if (b) { trades.splice(Number(b.dataset.i), 1); save(); draw(); }
+  });
+  draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+The nightly bank (bank/run.mjs) saves four contracts, NQ, ES, CL and GC, and keeps them for 45 days: both come from bank/config.mjs (CONTRACTS and KEEP_DAYS). The old/ folder says NQ and ES for 30 days, but it is the first version and nothing uses it any more.

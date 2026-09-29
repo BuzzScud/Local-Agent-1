@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Position size</title>
+<style>
+  :root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+  body { max-width: 420px; margin: 40px auto; padding: 0 16px; }
+  label { display: block; margin: 12px 0 4px; }
+  input, select { font: inherit; width: 100%; padding: 6px; }
+  .out { margin-top: 20px; font-size: 20px; }
+</style>
+</head>
+<body>
+<h1>Position size</h1>
+<label>Account size ($) <input id="account" type="number" value="50000"></label>
+<label>Risk per trade (%) <input id="risk" type="number" value="1" step="0.1"></label>
+<label>Stop (points) <input id="stop" type="number" value="20" step="0.25"></label>
+<label>Contract
+  <select id="sym">
+    <option value="20">NQ ($20 a point)</option>
+    <option value="2">MNQ ($2 a point)</option>
+    <option value="50">ES ($50 a point)</option>
+    <option value="5">MES ($5 a point)</option>
+  </select>
+</label>
+<div class="out">At risk: <b id="dollars"></b><br>Contracts: <b id="contracts"></b></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  function update() {
+    const risk = Number($('account').value) * Number($('risk').value) / 100;
+    const perContract = Number($('stop').value) * Number($('sym').value);
+    $('dollars').textContent = '$' + risk.toFixed(2);
+    $('contracts').textContent = perContract > 0 ? Math.floor(risk / perContract) : 0;
+  }
+  for (const id of ['account', 'risk', 'stop', 'sym']) $(id).addEventListener('input', update);
+  update();
+</script>
+</body>
+</html>

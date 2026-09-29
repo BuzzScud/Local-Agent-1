@@ -1,0 +1,1 @@
+Every day the gap report says about 60 minutes are missing, starting at 21:00 UTC. Why? Explain in a few sentences what those missing minutes are and which function reports them. Don't change any files.

@@ -82,6 +82,8 @@ for (const e of log) {
 }
 const answer = run.finalText ?? '';
 writeFileSync(join(dir, 'answer.txt'), answer);
+// The questions it asked you, where the Practice 28 checks look for them ("fix the bug" must ask first).
+writeFileSync(join(dir, 'asked.txt'), (run.asked ?? []).map((a) => a.question).join('\n'));
 const checked = runChecks({ checks: meta.checks ?? [], script: !meta.noScript && existsSync(join(test, 'check.sh')) ? join(test, 'check.sh') : null, work, before, answer, prompt });
 // The pages it made or changed, kept for the page (its own copy, so it opens offline).
 const pages = [...checked.files.added, ...checked.files.changed].filter((f) => /\.html?$/i.test(f)).slice(0, 6);

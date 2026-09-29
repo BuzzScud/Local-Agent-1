@@ -1,0 +1,14 @@
+Full-Stack Engineer, Trading Tools (remote)
+We build the screens our traders live in all day.
+
+Must have:
+- React and TypeScript
+- Node.js services
+- PostgreSQL
+- Real-time data (WebSockets or similar)
+
+Nice to have:
+- Python for data work
+- Kubernetes
+
+8+ years of experience preferred.

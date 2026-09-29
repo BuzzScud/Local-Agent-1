@@ -98,6 +98,7 @@ code { font: 12px var(--mono); }
 .lm-i.t { grid-template-columns: 24px minmax(0, 1fr) auto; }
 .lm-i.t b { font-weight: 550; }
 .lm-num { font-size: 11.5px; color: var(--ink3); font-variant-numeric: tabular-nums; text-align: right; }
+.lm-g { position: sticky; top: 0; z-index: 1; background: var(--surface); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; padding: 5px 10px 2px 44px; }
 .lm-res { display: flex; gap: 7px; align-items: baseline; font-size: 11.5px; white-space: nowrap; color: var(--ink3); }
 .lm-res .run { color: var(--b); font-weight: 650; }
 .rs { font-weight: 700; } .rs.ok { color: var(--ok); } .rs.bad { color: var(--bad); } .rs.warn { color: var(--warn); } .rs.done { color: var(--ink2); }
@@ -380,6 +381,11 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   const human = (s) => { const r = Math.max(0, whole(s)); return r < 60 ? `${r} s` : `${Math.floor(r / 60)} min ${String(r % 60).padStart(2, '0')} s`; };
   const md = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
   const kindName = { code: 'Code change', question: 'Question', page: 'Page', writing: 'Writing' };
+  // The sets that come with the arena, then yours. A copy of a Practice 28 test has a letter (18b).
+  const OWN = ['new28', 'work28', 'practice'];
+  const SUITE_NAME = { new28: 'New 28', work28: 'Work 28', practice: 'Practice 28', mine: 'My tests' };
+  const suiteOf = (t) => (OWN.includes(t?.suite) ? t.suite : 'mine');
+  const numOf = (t) => (t?.n ? `${t.n}${t.variant ?? ''}` : '');
   const KINDS = [['read', 'read / look'], ['edit', 'change a file'], ['bash', 'run a command'], ['ask', 'asked you'], ['tries', 'tries (tests, drafts)'], ['error', 'a step that failed'], ['answer', 'writing its answer']];
   const SHORT = { gemma: 'Gemma', qwen: 'Qwen' };
   const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* no storage */ } } };
@@ -447,7 +453,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   // What is loaded: its name, its tests, how many are not done yet.
   function loadInfo() {
     const L = loadedNow();
-    if (L.kind === 'test') { const t = testById(L.id); return t ? { name: `${t.n ? `${t.n}. ` : ''}${t.title}`, ids: [t.id], left: isDone(t) ? 0 : 1 } : null; }
+    if (L.kind === 'test') { const t = testById(L.id); return t ? { name: `${t.n ? `${OWN.includes(t.suite) ? `${SUITE_NAME[t.suite]} · ` : ''}${numOf(t)}. ` : ''}${t.title}`, ids: [t.id], left: isDone(t) ? 0 : 1 } : null; }
     const s = (S.st.sets ?? []).find((x) => x.id === L.id);
     return s ? { name: s.name, ids: s.ids, left: s.ids.filter((id) => !isDone(testById(id))).length } : null;
   }
@@ -498,7 +504,9 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     };
     const sets = (S.st.sets ?? []).map((x) => { const done = x.ids.filter((id) => isDone(testById(id))).length;
       return `<button class="lm-i${L.kind === 'set' && L.id === x.id ? ' on' : ''}" role="menuitem" data-act="load" data-kind="set" data-id="${esc(x.id)}"><b>${esc(x.name)}</b><span class="lm-n">${x.ids.length} test${x.ids.length > 1 ? 's' : ''}</span><span class="lm-d">${done ? `${done} of ${x.ids.length} run` : 'not run yet'}</span></button>`; }).join('');
-    const one = tests().map((t) => `<button class="lm-i t${L.kind === 'test' && L.id === t.id ? ' on' : ''}${t.id === S.sel ? ' sel' : ''}" role="menuitem" data-act="load" data-kind="test" data-id="${esc(t.id)}"><span class="lm-num">${t.n ?? '·'}</span><b>${esc(t.title)}</b><span class="lm-res">${res(t)}</span></button>`).join('');
+    const item = (t) => `<button class="lm-i t${L.kind === 'test' && L.id === t.id ? ' on' : ''}${t.id === S.sel ? ' sel' : ''}" role="menuitem" data-act="load" data-kind="test" data-id="${esc(t.id)}"><span class="lm-num">${numOf(t) || '·'}</span><b>${esc(t.title)}</b><span class="lm-res">${res(t)}</span></button>`;
+    // Grouped by set: the numbers 1 to 28 come once in each.
+    const one = [...OWN, 'mine'].map((k) => { const ts = tests().filter((t) => suiteOf(t) === k); return ts.length ? `<div class="lm-g">${SUITE_NAME[k]}</div>${ts.map(item).join('')}` : ''; }).join('');
     return `<div class="lm" role="menu"><div class="lm-h">Sets · several tests, one after the other</div>${sets}
       <div class="lm-h">One test · click to load it and see its results below</div><div class="lm-tests scroll">${one}</div>
       <div class="lm-f"><button class="btn" data-act="new">+ New test</button><button class="btn" data-act="edittests">Edit tests</button><span class="lm-key">A = Model A · B = Model B · ✓ pass · ✗ fail · ■ stopped</span></div></div>`;
@@ -520,7 +528,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     const isRun = st.running && st.running.test === t.id;
     const acts = isRun ? '<button class="btn stop" data-act="stop">■ Stop</button>' : `<button class="btn" data-act="edit">Edit</button>${qi >= 0 ? `<button class="btn" data-act="unqueue">In line (#${qi + 1}) · remove</button>` : `<button class="btn${t.latest ? '' : ' pri'}" data-act="run">${t.latest ? 'Run again' : 'Run'}</button>`}`;
     const rules = rulesOf(t);
-    return `<div class="titlerow"><h2><span class="t">${esc(t.title)}</span><span class="chip">${kindName[t.kind] ?? t.kind}</span>${t.suite === 'new28' ? `<span class="chip">New 28 · ${t.n}</span>` : ''}</h2><div class="acts">${acts}</div>
+    return `<div class="titlerow"><h2><span class="t">${esc(t.title)}</span><span class="chip">${kindName[t.kind] ?? t.kind}</span>${OWN.includes(t.suite) ? `<span class="chip">${SUITE_NAME[t.suite]} · ${numOf(t)}</span>` : ''}${t.copyOf ? `<span class="chip">your copy of ${t.n}</span>` : ''}</h2><div class="acts">${acts}</div>
       <div class="line2"><span class="prompt${S.openPrompt ? ' open' : ''}">${esc(t.prompt)}</span><button class="more" data-act="prompt">${S.openPrompt ? 'less' : 'full prompt'}</button><div class="rules">${rules.length ? rules.map((x) => `<span class="chip" data-tip="${esc(x)}">${esc(x)}</span>`).join('') : '<span class="chip plain">no checks: your vote decides</span>'}</div></div></div>`;
   }
 
@@ -669,7 +677,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     const rules = rulesOf(t);
     const qi = S.st.queue.indexOf(t.id);
     const waitingHere = S.st.running?.waiting && S.st.running;
-    return `<div class="panelmsg"><span class="chip" style="justify-self:start">${t.suite === 'new28' ? `New 28 · test ${t.n}` : 'My tests'} · ${kindName[t.kind] ?? t.kind} · not run yet</span><h2>${esc(t.title)}</h2><div class="prompt-full">${esc(t.prompt)}</div>
+    return `<div class="panelmsg"><span class="chip" style="justify-self:start">${OWN.includes(t.suite) ? `${SUITE_NAME[t.suite]} · test ${numOf(t)}` : 'My tests'} · ${kindName[t.kind] ?? t.kind} · not run yet</span><h2>${esc(t.title)}</h2><div class="prompt-full">${esc(t.prompt)}</div>
       <div class="rules" style="max-width:none;flex-wrap:wrap">${rules.length ? rules.map((x) => `<span class="chip">${esc(x)}</span>`).join('') : '<span class="chip plain">no checks: your vote decides</span>'}</div>
       <div class="kv"><span>Starter files</span><span>${t.files?.length ? `${t.files.slice(0, 8).map(esc).join(', ')}${t.files.length > 8 ? ` and ${t.files.length - 8} more` : ''}` : 'none (an empty folder)'}</span><span>How it runs</span><span>both models, one after the other · 1 run each · Low · each stopped at 10 min · which is A or B stays hidden until you vote</span></div>
       <div style="display:flex;gap:8px;align-items:center">${qi >= 0 ? `<button class="btn" data-act="unqueue">In line (#${qi + 1}) · remove</button><span class="picked">${waitingHere ? esc(S.st.waiting ?? '') : ''}</span>` : '<button class="btn pri" data-act="run">Run this battle</button>'}<button class="btn" data-act="edit">Edit</button></div></div>`;
@@ -697,7 +705,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     writing: [['saved', 'The file is saved', 'where the text should end up', true, 'e.g. README.md'], ['file-has', 'The file mentions…', 'words it must have', false, '']],
   };
   let F = null;
-  const blankForm = () => ({ id: null, prompt: '', name: '', nameTouched: false, kind: null, files: [], oldFiles: [], removed: [], rows: null, rowsKind: null, ask: '', hasScript: false, useScript: true, rules: [], suite: 'mine', n: null, edited: null });
+  const blankForm = () => ({ id: null, prompt: '', name: '', nameTouched: false, kind: null, files: [], oldFiles: [], removed: [], rows: null, rowsKind: null, ask: '', hasScript: false, useScript: true, rules: [], suite: 'mine', n: null, variant: null, copyOf: null, edited: null });
   const guessKind = (p) => (/\b(html|page|web ?page|site)\b/i.test(p) ? 'page' : /\?\s*$|^(what|which|why|how|where|who|when|explain|is|does|do|can)\b/i.test(p.trim()) ? 'question' : /\b(write|draft) (a|an|the)? ?(story|readme|notes?|changelog|poem|letter|summary)\b/i.test(p) ? 'writing' : 'code');
   const kindNow = () => F.kind || guessKind(F.prompt);
   // A name from the prompt: its verb and the file it names ("Make timer.html"), else its first words.
@@ -728,7 +736,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
           ${chips ? `<div class="files">${chips}</div>` : ''}${gone}
         </div></div>
         <div class="stp"><div class="sh"><span class="no">3</span>How do we know it worked?</div><div class="sb scroll">
-          <div class="checks">${F.hasScript ? `<div class="check${script ? ' on' : ''}" data-act="script"><span class="bx">✓</span><span class="ct">Its own check${script ? '' : ' (off)'}</span><span class="cd">${script ? `this New 28 test's check script: ${esc((F.rules ?? []).join(' · ') || 'its rules')}` : 'off: it no longer runs. Turn it off when you change what the test asks.'}</span></div>` : ''}${rows.map((r, i) => `<div class="check${r.on ? ' on' : ''}" data-act="check" data-i="${i}"><span class="bx">✓</span><span class="ct">${esc(r.t)}</span><span class="cd">${esc(r.d)}</span>${r.ph && r.on ? `<input type="text" data-val="${i}" value="${esc(r.val)}" placeholder="${esc(r.ph)}">` : ''}</div>`).join('')}</div>
+          <div class="checks">${F.hasScript ? `<div class="check${script ? ' on' : ''}" data-act="script"><span class="bx">✓</span><span class="ct">Its own check${script ? '' : ' (off)'}</span><span class="cd">${script ? `this test's own check script: ${esc((F.rules ?? []).join(' · ') || 'its rules')}` : 'off: it no longer runs. Turn it off when you change what the test asks.'}</span></div>` : ''}${rows.map((r, i) => `<div class="check${r.on ? ' on' : ''}" data-act="check" data-i="${i}"><span class="bx">✓</span><span class="ct">${esc(r.t)}</span><span class="cd">${esc(r.d)}</span>${r.ph && r.on ? `<input type="text" data-val="${i}" value="${esc(r.val)}" placeholder="${esc(r.ph)}">` : ''}</div>`).join('')}</div>
           <div class="vonly">${any ? 'Every ticked check must hold. Your vote decides which did it better.' : 'No checks ticked: only your vote decides.'}</div>
         </div></div>
       </div>`;
@@ -740,19 +748,20 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   }
   // Edit tests: a window over the page, every test on the left, the one you pick on the right.
   const modalEl = $('#modal');
-  const listOrder = () => [...tests().filter((t) => t.suite === 'new28'), ...tests().filter((t) => t.suite !== 'new28')];
+  const listOrder = () => [...OWN, 'mine'].flatMap((k) => tests().filter((t) => suiteOf(t) === k));
   function modalView() {
     const list = listOrder();
     const idx = list.findIndex((t) => t.id === F.id);
-    const row = (t) => `<button class="mrow${t.id === F.id ? ' sel' : ''}" data-act="mpick" data-id="${esc(t.id)}"><span class="no">${t.n ?? ''}</span><span class="ti">${esc(t.title)}</span>${t.edited ? '<span class="tag">edited</span>' : ''}</button>`;
-    const n28 = list.filter((t) => t.suite === 'new28'), mine = list.filter((t) => t.suite !== 'new28');
+    const row = (t) => `<button class="mrow${t.id === F.id ? ' sel' : ''}" data-act="mpick" data-id="${esc(t.id)}"><span class="no">${numOf(t)}</span><span class="ti">${esc(t.title)}</span>${t.copyOf ? '<span class="tag">copy</span>' : t.edited ? '<span class="tag">edited</span>' : ''}</button>`;
+    const group = (k) => { const ts = list.filter((t) => suiteOf(t) === k); return k === 'mine' ? `<div class="mgroup">My tests</div>${ts.length ? ts.map(row).join('') : '<div class="mnone">none yet: + New test adds one</div>'}` : ts.length ? `<div class="mgroup">${SUITE_NAME[k]}</div>${ts.map(row).join('')}` : ''; };
+    const keeps = F.suite === 'practice' && !F.copyOf;
     const name = F.nameTouched ? F.name : nameFrom(F.prompt);
     return `<div class="mback" data-act="mclose"></div>
       <div class="modal" role="dialog" aria-modal="true" aria-label="Edit tests">
         <div class="mhead"><b>Edit tests</b><span class="sub">pick a test on the left; nothing changes until you press Save</span><span class="fill"></span><button class="mx" data-act="mclose" aria-label="Close">✕</button></div>
         <div class="mbody">
-          <div class="mlist scroll">${n28.length ? `<div class="mgroup">New 28</div>${n28.map(row).join('')}` : ''}<div class="mgroup">My tests</div>${mine.length ? mine.map(row).join('') : '<div class="mnone">none yet: + New test adds one</div>'}</div>
-          <div class="mform"><div class="mtitle"><h3>${esc(name || 'Untitled test')}</h3><span class="chip">${F.suite === 'new28' ? `New 28 · test ${F.n}` : 'My tests'}</span>${F.edited ? `<span class="chip">edited ${esc(new Date(F.edited).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>` : ''}${dirty() ? '<span class="chip unsaved">not saved yet</span>' : ''}<span class="fill"></span>${F.suite === 'new28' && F.edited ? '<button class="btn" data-act="mreset">Put back the original</button>' : ''}<button class="btn stop" data-act="delete">Delete test</button></div>${formSteps()}</div>
+          <div class="mlist scroll">${[...OWN, 'mine'].map(group).join('')}</div>
+          <div class="mform"><div class="mtitle"><h3>${esc(name || 'Untitled test')}</h3><span class="chip">${OWN.includes(F.suite) ? `${SUITE_NAME[F.suite]} · test ${F.n}${F.variant ?? ''}` : 'My tests'}</span>${keeps ? `<span class="chip" data-tip="The Practice 28 grade a model, so they never change: Save makes your copy of test ${F.n} (${F.n}b, ${F.n}c …) with your changes.">Save makes a copy · test ${F.n} stays as it is</span>` : ''}${F.copyOf ? `<span class="chip">your copy of test ${F.n}</span>` : ''}${F.edited ? `<span class="chip">edited ${esc(new Date(F.edited).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>` : ''}${dirty() ? '<span class="chip unsaved">not saved yet</span>' : ''}<span class="fill"></span>${OWN.includes(F.suite) && F.edited && !F.copyOf ? '<button class="btn" data-act="mreset">Put back the original</button>' : ''}<button class="btn stop" data-act="delete">Delete test</button></div>${formSteps()}</div>
         </div>
         <div class="mfoot"><button class="btn" data-act="mprev"${idx <= 0 ? ' disabled' : ''}>‹ Previous</button><button class="btn" data-act="mnext"${idx < 0 || idx >= list.length - 1 ? ' disabled' : ''}>Next ›</button><span class="help">${idx + 1} of ${list.length} · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Close</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div>
       </div>`;
@@ -762,7 +771,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   function loadForm(t) {
     F = blankForm();
     if (!t) return;
-    Object.assign(F, { id: t.id, prompt: t.prompt, name: t.title, nameTouched: true, kind: t.kind, oldFiles: t.files ?? [], ask: t.ask ?? '', hasScript: t.hasScript, useScript: !t.noScript, rules: t.rules ?? [], suite: t.suite, n: t.n, edited: t.edited });
+    Object.assign(F, { id: t.id, prompt: t.prompt, name: t.title, nameTouched: true, kind: t.kind, oldFiles: t.files ?? [], ask: t.ask ?? '', hasScript: t.hasScript, useScript: !t.noScript, rules: t.rules ?? [], suite: t.suite, n: t.n, variant: t.variant, copyOf: t.copyOf, edited: t.edited });
     rowsNow();
     const have = new Map((t.checks ?? []).map((c) => [c.type, c.value]));
     for (const r of F.rows) { r.on = have.has(r.type); r.val = have.get(r.type) ?? r.val; }
@@ -827,7 +836,8 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
       const files = [];
       for (const f of F.files) files.push({ path: strip ? f.path.split('/').slice(1).join('/') : f.path, b64: toB64(await f.file.arrayBuffer()) });
       const r = await api('/api/tests', { id: F.id, title: F.nameTouched ? F.name : nameFrom(F.prompt), kind: k, prompt: F.prompt, checks, ask: F.ask, files, removePaths: F.removed, useScript: F.hasScript ? F.useScript : null, run });
-      toast(run ? 'Saved. It runs now: one model, then the other.' : 'Saved.');
+      const copied = r.copyOf && r.copyOf === F.id;
+      toast(copied ? `Saved as test ${r.n}${r.variant}, your copy. Test ${r.n} stays as it was.${run ? ' It runs now.' : ''}` : run ? 'Saved. It runs now: one model, then the other.' : 'Saved.');
       if (S.modal && !run) { await poll(true); loadForm(testById(r.id)); drawModal(); return; }
       S.modal = false; drawModal();
       S.sel = r.id; store.set('battle-sel', r.id); S.view = 'test'; F = null;

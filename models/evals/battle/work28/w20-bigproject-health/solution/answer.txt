@@ -1,0 +1,1 @@
+GET /api/health is answered by health() in src/routes/status.mjs (src/routes/index.mjs maps the route to it, and it needs no sign-in). Its answer has three fields: ok (true), build (BUILD_SHA from src/config.mjs, or "dev") and uptime (seconds since the server started). src/lib/health-old.mjs is an old version that is no longer used.

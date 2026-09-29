@@ -1,0 +1,5 @@
+{
+  "name": "bank",
+  "type": "module",
+  "scripts": { "test": "node --test" }
+}

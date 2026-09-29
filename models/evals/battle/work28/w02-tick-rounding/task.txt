@@ -1,0 +1,1 @@
+roundToTick in ticks.mjs gives prices like 2345.7000000000003 for gold (GC). A price rounded to its tick must come out clean: roundToTick('GC', 2345.67) is exactly 2345.7 and roundToTick('CL', 71.234) is exactly 71.23. Fix it for every symbol in TICK; fix the code, not the tests.

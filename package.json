@@ -18,7 +18,7 @@
     "eval": "node models/evals/bench/run.mjs",
     "eval:words": "node models/evals/bench/words/real.mjs",
     "eval:verify": "zsh models/evals/tools/verify-tasks.sh",
-    "battle:verify": "node models/evals/battle/verify-new28.mjs",
+    "battle:verify": "node models/evals/battle/verify-tests.mjs",
     "eval:notes": "node models/evals/bench/memory/claude-notes.mjs",
     "eval:recall": "node models/evals/bench/memory/recall.mjs",
     "docs": "node docs/tools/sync-docs.mjs",

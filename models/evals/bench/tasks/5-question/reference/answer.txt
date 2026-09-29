@@ -1,0 +1,1 @@
+The server listens on port 8790. It is set in src/config.mjs (config.port), which uses the MONITOR_PORT environment variable when it is set and 8790 otherwise; src/server.mjs passes config.port to listen().

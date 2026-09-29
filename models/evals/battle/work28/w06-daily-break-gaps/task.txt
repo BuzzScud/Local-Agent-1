@@ -1,0 +1,1 @@
+findGaps in gaps.mjs finds the minutes missing from a day of 1-minute bars, but the market closes every day from 21:00 to 21:59 UTC, so every day shows a false gap there. Leave out a gap whose missing minutes all fall between 21:00 and 21:59 UTC; a gap with any missing minute outside that hour is still reported, whole, as before. Add a test for it.
