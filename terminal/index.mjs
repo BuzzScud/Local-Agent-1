@@ -6,6 +6,8 @@
 //   - the flows and their scratch copy, for the probes that watch a flow work;
 //   - the memory: the facts, and bringing them back for a request;
 //   - the context helpers: which are on, and the code search, for the bench.
+//   - the saved settings and the limits /effort keeps, for a probe that runs
+//     the way the app does (models/evals/tools/long-task.mjs).
 export { runHeadless } from './src/headless.mjs';
 export { Agent, claimsAlreadyThere } from './src/agent/agent.mjs';
 export { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './src/agent/prompt.mjs';
@@ -23,3 +25,5 @@ export { notesDir, readNotes, leftOut, holdsSecret, bestPart, recallClaude, clau
 export { CLAUDE_RULES } from './src/agent/claude-rules.mjs';
 export { helpersOn, HELPER_NAMES, CODENAMES, codenameOf } from './src/agent/helpers.mjs';
 export { CodeIndex } from './src/tools/codeindex.mjs';
+export { loadSettings } from './src/app/store.mjs';
+export { readLimits, modelWithLimits } from './src/app/limits.mjs';
