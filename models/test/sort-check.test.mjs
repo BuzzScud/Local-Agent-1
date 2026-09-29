@@ -5,7 +5,7 @@
 // naming that page.
 import { test, expect, afterAll } from 'bun:test';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -30,8 +30,8 @@ const server = createServer(async (req, res) => {
 const url = await new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(`http://127.0.0.1:${server.address().port}`)));
 afterAll(() => server.close());
 
-const run = (out) => new Promise((ok) => {
-  const child = spawn(NODE, [join(REPO, 'models', 'evals', 'tools', 'sort-check.mjs'), '--model', 'gemma', '--url', url, '--out', out], { cwd: REPO, env: { ...process.env, AGENTIC_DOCS: DOCS, AGENTIC_TEST_RECORD: RECORD, AGENTIC_HOME: HOME } });
+const run = (out, extra = ['--model', 'gemma', '--url', url, '--out', out]) => new Promise((ok) => {
+  const child = spawn(NODE, [join(REPO, 'models', 'evals', 'tools', 'sort-check.mjs'), ...extra], { cwd: REPO, env: { ...process.env, AGENTIC_DOCS: DOCS, AGENTIC_TEST_RECORD: RECORD, AGENTIC_HOME: HOME } });
   let text = '';
   child.stdout.on('data', (d) => { text += d; }); child.stderr.on('data', (d) => { text += d; });
   child.on('exit', (code) => ok({ code, text }));
@@ -75,4 +75,17 @@ test('the next run has the one before it beside it on its page', async () => {
   expect(html).toContain('"label":"Before"');
   expect(html).toContain('"label":"This run"');
   expect(html).toContain('Before (');
+}, 60_000);
+
+test("--rebuild draws a run's page again from its saved results, with no model and no new line in the record", async () => {
+  const out2 = join(HOME, 'results', 'sort-check-b');
+  const lines = readFileSync(RECORD, 'utf8').trim().split('\n').length;
+  const { page } = JSON.parse(readFileSync(join(out2, 'summary.json'), 'utf8'));
+  writeFileSync(join(DOCS, page), 'old');
+  const r = await run(out2, ['--rebuild', out2]);
+  expect(r.code).toBe(0);
+  expect(r.text).toContain(`results page drawn again: ${page}`);
+  const html = readFileSync(join(DOCS, page), 'utf8');
+  expect(html).toContain('"label":"Before"');
+  expect(readFileSync(RECORD, 'utf8').trim().split('\n').length).toBe(lines);
 }, 60_000);

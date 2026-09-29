@@ -12,6 +12,8 @@
 //   node models/evals/tools/sort-check.mjs --model gemma [--url http://127.0.0.1:PORT --slot 1] [--out dir]
 //   --url: sort on a server that is already up (no model is loaded or stopped)
 //   --no-record: a look only; no line in the test record and no results page
+//   node models/evals/tools/sort-check.mjs --rebuild <a run's folder>: draws that run's page again
+//   from its saved results (no model, no new line in the record)
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,11 +36,63 @@ const LINES = SORT_LINES.filter((l) => SORT_KINDS.includes(l.path) || l.path ===
 const wantOf = (l) => (SORT_KINDS.includes(l.path) ? l.path : l.want ?? null);
 const total = LINES.filter(wantOf).length;
 
-const now = new Date();
 const pad = (n) => String(n).padStart(2, '0');
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
+
+// The run before this one on the same model (a finished one, in a sort-check-* folder beside
+// this run's), for the page's Before column.
+function previous(out, summary) {
+  let best = null;
+  const beside = dirname(out);
+  for (const d of readdirSync(beside)) {
+    const dir = join(beside, d);
+    if (!d.startsWith('sort-check-') || dir === out || !existsSync(join(dir, 'summary.json')) || !existsSync(join(dir, 'rows.json'))) continue;
+    try {
+      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
+      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
+      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
+    } catch { /* a folder being written, or a broken one: skipped */ }
+  }
+  return best;
+}
+
+// A run's results page, from what it saved (rows.json, summary.json), with the run before it.
+function writePage(out, rows, summary, prev) {
+  const at = new Date(summary.started);
+  const fmt = (ms) => `${(ms / 1000).toFixed(1)} s`;
+  const full = !summary.stopped;
+  const verdict = `${!full ? `Stopped after ${summary.lines} of ${summary.of} lines: ` : summary.pass ? 'Passed: ' : 'Failed: '}${summary.right} of ${summary.right + summary.wrong} right, ${fmt(summary.medianMs ?? 0)} a sort.`
+    + (prev ? ` Before (${prev.s.sub}): ${prev.s.right} of ${prev.s.total} right, ${fmt(prev.s.medianMs ?? 0)} a sort.` : '');
+  writeFileSync(docsPath(summary.page), buildSortPage({
+    title: `Sorting check · ${summary.name}`,
+    dateline: `${at.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}, ${pad(at.getHours())}:${pad(at.getMinutes())} · code ${summary.code} · ${summary.lines} requests · ${Math.round(summary.secs)} s · Mac load ${summary.load}`,
+    verdict,
+    chips: [{ text: `At most ${MAX_WRONG} of ${summary.total} wrong: ${summary.wrong} wrong`, ok: full ? summary.pass : null }, { text: `Sorted in one pass: ${summary.odds} of ${summary.lines}`, ok: null }],
+    models: [{ id: summary.model, name: summary.name, columns: [...(prev ? [{ label: prev.s.label === 'This run' ? 'Before' : prev.s.label, sub: prev.s.sub, rows: prev.rows }] : []), { label: 'This run', sub: summary.sub, rows }] }],
+    method: [
+      `Every request of the sort test (<code>terminal/test/sort-lines.mjs</code>) goes to the model, even the ones the word rules sort in the app: ${LINES.length} requests, ${total} with a kind to get. The kind the word rules give a line is its answer; ${LINES.filter((l) => l.path === 'unsorted' && l.want).length} of the ${LINES.filter((l) => l.path === 'unsorted').length} lines the rules leave to the model have a kind written for this check, the others are unclear on purpose and are only shown.`,
+      'The model sorts each one the way the app does (<code>modelSort()</code>): in one pass, from the chance it gives each kind, with nothing written; a rename is then asked for its two names, and a server that cannot give the chances is asked for a written answer instead.',
+      `On its own server with the app's settings, ${CTX.toLocaleString('en-US')} tokens of memory, the side slot the app sorts in. Your instructions are left out (the app puts them in front of the question) so runs compare.`,
+      'Seconds are the whole sort as the app waits for it, the tokenizer calls included; they grow when the Mac is busy (its load is in the line at the top). The percentage beside a pick is the model’s chance for it; it is not used to decide anything (on 29 Sep it did not tell right picks from wrong ones).',
+      `Pass: at most ${MAX_WRONG} of the ${total} wrong (95%). Before is the finished run before this one on the same model.`,
+    ],
+    raw: [relative(root, out)],
+  }));
+}
+
+if (args.includes('--rebuild')) {
+  const dir = opt('rebuild');
+  const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
+  if (!summary.page) { console.error(`${dir} has no results page to draw again`); process.exit(2); }
+  if (!existsSync(DOCS_DIR)) { console.error(`the DOCS folder is not here (${DOCS_DIR})`); process.exit(2); }
+  writePage(dir, JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')), summary, previous(dir, summary));
+  console.log(`results page drawn again: ${summary.page}`);
+  process.exit(0);
+}
+
+const now = new Date();
 const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
-const results = join(root, 'models', modelFolder(model), 'results');
-const out = opt('out') ?? join(results, `sort-check-${stamp}`);
+const out = opt('out') ?? join(modelFolder(model), 'results', `sort-check-${stamp}`); // modelFolder is the model's own folder, whole
 mkdirSync(out, { recursive: true });
 
 // Stop (the Tests tab's Stop button sends SIGTERM): the line under way ends, and what is done is kept.
@@ -84,71 +138,34 @@ const sortSecs = (Date.now() - s0) / 1000;
 if (srv) { try { await srv.stop(); } catch {} }
 if (broke) console.error(`stopped: the model's server did not answer (${broke})`);
 
-const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 const scored = rows.filter((r) => r.want);
 const right = scored.filter((r) => r.kind === r.want).length, wrong = scored.length - right;
 const full = rows.length === LINES.length;
 const pass = full && wrong <= MAX_WRONG;
 const code = codeLabel();
 const secs = (Date.now() - t0) / 1000;
+const look = args.includes('--no-record');
+const docs = !look && existsSync(DOCS_DIR);
 const summary = {
   model: model.id, name: model.name, code, started: new Date(t0).toISOString(), finished: new Date().toISOString(), secs, sortSecs,
   lines: rows.length, of: LINES.length, total, right, wrong, pass, stopped: !full,
   medianMs: median(rows.map((r) => r.ms)), odds: rows.filter((r) => r.via === 'odds').length,
   load: Math.round(loadavg()[0] * 10) / 10, // how busy the Mac was at the end: the seconds depend on it
   label: 'This run', sub: `${now.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} ${pad(now.getHours())}:${pad(now.getMinutes())} · ${code}`,
+  page: docs ? `tests/agentic-coder-sorting-check-${model.id}-${stamp}.html` : '',
 };
 writeFileSync(join(out, 'rows.json'), JSON.stringify(rows, null, 2));
 writeFileSync(join(out, 'summary.json'), JSON.stringify(summary, null, 2));
-
-// The run before this one on the same model (a finished one, in a sort-check-* folder beside
-// this run's), for the page's Before column.
-function previous() {
-  let best = null;
-  const beside = dirname(out);
-  for (const d of readdirSync(beside)) {
-    const dir = join(beside, d);
-    if (!d.startsWith('sort-check-') || dir === out || !existsSync(join(dir, 'summary.json')) || !existsSync(join(dir, 'rows.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written, or a broken one: skipped */ }
-  }
-  return best;
-}
-const prev = previous();
-let page = '';
-const look = args.includes('--no-record');
+const prev = previous(out, summary);
 if (look) console.log('a look only: no results page, no line in the test record');
-else if (existsSync(DOCS_DIR)) {
-  const fmt = (ms) => `${(ms / 1000).toFixed(1)} s`;
-  const verdict = `${!full ? `Stopped after ${rows.length} of ${LINES.length} lines: ` : pass ? 'Passed: ' : 'Failed: '}${right} of ${scored.length} right, ${fmt(summary.medianMs ?? 0)} a sort.`
-    + (prev ? ` Before (${prev.s.sub}): ${prev.s.right} of ${prev.s.total} right, ${fmt(prev.s.medianMs ?? 0)} a sort.` : '');
-  page = `tests/agentic-coder-sorting-check-${model.id}-${stamp}.html`;
-  writeFileSync(docsPath(page), buildSortPage({
-    title: `Sorting check · ${model.name}`,
-    dateline: `${now.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}, ${pad(now.getHours())}:${pad(now.getMinutes())} · code ${code} · ${rows.length} requests · ${Math.round(secs)} s · Mac load ${summary.load}`,
-    verdict,
-    chips: [{ text: `At most ${MAX_WRONG} of ${total} wrong: ${wrong} wrong`, ok: full ? pass : null }, { text: `Sorted in one pass: ${summary.odds} of ${rows.length}`, ok: null }],
-    models: [{ id: model.id, name: model.name, columns: [...(prev ? [{ label: prev.s.label === 'This run' ? 'Before' : prev.s.label, sub: prev.s.sub, rows: prev.rows }] : []), { label: 'This run', sub: summary.sub, rows }] }],
-    method: [
-      `Every request of the sort test (<code>terminal/test/sort-lines.mjs</code>) goes to the model, even the ones the word rules sort in the app: ${LINES.length} requests, ${total} with a kind to get. The kind the word rules give a line is its answer; ${LINES.filter((l) => l.path === 'unsorted' && l.want).length} of the ${LINES.filter((l) => l.path === 'unsorted').length} lines the rules leave to the model have a kind written for this check, the others are unclear on purpose and are only shown.`,
-      'The model sorts each one the way the app does (<code>modelSort()</code>): in one pass, from the chance it gives each kind, with nothing written; a rename, and a server that cannot give the chances, are asked for a written answer instead.',
-      `On its own server with the app's settings, ${CTX.toLocaleString('en-US')} tokens of memory, the side slot the app sorts in. Your instructions are left out (the app puts them in front of the question) so runs compare.`,
-      'Seconds are the whole sort as the app waits for it, the tokenizer calls included; they grow when the Mac is busy (its load is in the line at the top). The percentage beside a pick is the model’s chance for it; it is not used to decide anything (on 29 Sep it did not tell right picks from wrong ones).',
-      `Pass: at most ${MAX_WRONG} of the ${total} wrong (95%). Before is the finished run before this one on the same model.`,
-    ],
-    raw: [relative(root, out)],
-  }));
-  console.log(`results page: ${page}`);
-} else console.log(`no results page: the DOCS folder is not here (${DOCS_DIR})`);
+else if (docs) { writePage(out, rows, summary, prev); console.log(`results page: ${summary.page}`); }
+else console.log(`no results page: the DOCS folder is not here (${DOCS_DIR})`);
 
 if (!look) recordTest({
   kind: 'other', name: 'Sorting check', model: model.id, ctx: CTX, passed: right, total: scored.length, secs, part: !full,
   result: !full ? 'stopped' : pass ? 'pass' : 'fail',
   note: `${right} of ${scored.length} sorted right (${wrong} wrong; pass at most ${MAX_WRONG}); ${summary.medianMs != null ? (summary.medianMs / 1000).toFixed(2) : '?'} s a sort; ${summary.odds} of ${rows.length} in one pass.${prev ? ` Before: ${prev.s.right} of ${prev.s.total}.` : ''}${broke ? ` Stopped: ${broke}.` : ''}`,
-  raw: relative(root, out), page,
+  raw: relative(root, out), page: summary.page,
 });
 console.log(`Sorting check on ${model.name}: ${right} of ${scored.length} right · ${pass ? 'PASSED' : full ? 'FAILED' : 'STOPPED'}`);
 process.exit(broke ? 1 : 0);

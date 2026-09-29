@@ -54,7 +54,7 @@ td.req{max-width:0;width:48%;overflow:hidden;text-overflow:ellipsis}
 .pager{display:flex;align-items:center;gap:10px;margin-top:auto}.pager button{font:inherit;font-size:13px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer}
 .pager button:disabled{background:var(--soft);color:var(--mute);cursor:default}.pager span{font-size:13px;color:var(--mute)}
 .fill{flex:1;min-height:0;overflow:hidden}
-ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 6px}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 6px}ul.how code{overflow-wrap:anywhere}
 code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
 @media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card{padding:7px 12px}.card .v{font-size:20px}th,td{padding:5px 10px}}
 @media (max-width:760px),(max-height:520px){body{overflow:auto;height:auto}.panel{overflow:visible}.fill{overflow:visible}td.req{white-space:normal}.table-wrap{overflow-x:auto}}
