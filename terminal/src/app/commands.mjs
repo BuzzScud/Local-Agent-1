@@ -21,6 +21,7 @@ export const COMMANDS = [
   { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
   { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Agentic Coder page' },
   { name: 'tests', desc: 'Open the hub on the test record: every test run and its result' },
+  { name: 'test', desc: 'Run a test on this model from the hub: pick it, press Run, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
   { name: 'battle', desc: 'Open the hub on the Battle tab: Gemma vs Qwen on the New 28, Work 28, Practice 28 or tests you make, one model at a time, a blind vote' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
   { name: 'update', desc: 'Restart on new Agentic Coder code, keeping this conversation · /update memory saves to memory now', arg: '[memory]' },

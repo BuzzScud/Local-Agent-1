@@ -73,7 +73,9 @@ bun run check              # is anything here that should not be? secrets, packa
 ```
 
 Every test run adds a line to the test record (`~/.agentic-coder/tests/record.jsonl`); the hub shows it on its
-Tests tab: `/settings` → Tests (or `/tests`) in Agentic Coder, or `coding hub tests`.
+Tests tab: `/settings` → Tests (or `/tests`) in Agentic Coder, or `coding hub tests`. Its first tab, **▶ Run a test**
+(`/test` in Agentic Coder), runs one test on one model from the page: pick the model and the test, press Run, and
+watch it live; it keeps going if you close Agentic Coder, and Stop is there while it runs.
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 

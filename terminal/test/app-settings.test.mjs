@@ -12,9 +12,9 @@ import { helpData } from '../src/app/help.mjs';
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 60 }]).flat();
 
-test('the / menu holds 12 commands and /settings the other 13; every one is still a command, and the Help page lists both parts', () => {
+test('the / menu holds 13 commands and /settings the other 13; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
-  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'resume', 'model', 'morning', 'settings', 'exit']);
+  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'resume', 'model', 'test', 'morning', 'settings', 'exit']);
   expect([...IN_SETTINGS]).toEqual(['meters', 'helpers', 'rules', 'instructions', 'memory', 'weights', 'docs', 'tests', 'battle', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {
@@ -24,6 +24,7 @@ test('the / menu holds 12 commands and /settings the other 13; every one is stil
   expect(menu.length + IN_SETTINGS.size).toBe(COMMANDS.length); // nothing lost, nothing in both
   expect(matchCommands('/doc')).toEqual([]); // half a hidden name finds nothing
   expect(matchCommands('/se').map((c) => c.name)).toEqual(['settings']);
+  expect(matchCommands('/te').map((c) => c.name)).toEqual(['test']); // /tests (the record) is in /settings
   const h = helpData();
   expect(h.commands.filter((c) => c.settings).map((c) => c.name).sort()).toEqual([...IN_SETTINGS].sort());
   expect(h.settings.flatMap((g) => g.names)).toEqual([...IN_SETTINGS]);

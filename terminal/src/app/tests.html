@@ -84,6 +84,52 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 .empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);max-width:780px}
 @media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none;min-height:637px}.detail{overflow:visible}}
 @media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-when{width:92px!important}.col-time,.col-pg,td.tm,td.pg,th.tm,th.pg{display:none}}
+/* ▶ Run a test (the hub only): the test picked, a Run button, the stages it goes through and what it prints, live. Design 3 of 29 Sep 2026. */
+.tabs button.runtab{color:var(--ink)}.tabs button.runtab i{font-style:normal;color:var(--c-before);font-size:11px;margin-right:5px}
+#runpane{gap:12px}
+.rt-box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
+.rt-top{flex:none;display:flex;align-items:center;gap:10px 14px;padding:10px 14px;flex-wrap:wrap}
+.rt-l{font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--mute)}
+.rt-chips{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.rt-chips button{font:inherit;font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--mute);cursor:pointer;white-space:nowrap}
+.rt-chips button:hover:not(:disabled){color:var(--ink);border-color:var(--faint)}
+.rt-chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.rt-chips button:disabled{cursor:default}
+.rt-chips select{font:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.rt-status{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:7px;min-width:0}
+.rt-status span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rt-status i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--up)}.rt-status i.busy{background:var(--warn)}
+.rt-go{margin-left:auto;font:inherit;font-weight:650;font-size:15px;border:0;border-radius:11px;padding:9px 20px;cursor:pointer;white-space:nowrap;background:var(--c-before);color:#fff}
+.rt-go:hover:not(:disabled){filter:brightness(1.07)}.rt-go.stop{background:var(--down)}
+.rt-go:disabled{background:var(--soft);color:var(--mute);cursor:default}
+.rt-err{flex-basis:100%;margin:0;font-size:13px;color:var(--down)}
+.rt-main{flex:1;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px}
+.rt-stages{padding:12px 16px;display:flex;flex-direction:column;overflow:hidden}
+.rt-stg{display:flex;gap:10px;align-items:flex-start;padding:6px 0}
+.rt-stg>i{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:700;color:var(--mute);margin-top:1px}
+.rt-stg.did>i{background:var(--up);border-color:var(--up);color:var(--card)}
+.rt-stg.cur>i{border-color:var(--c-before);color:var(--c-before)}
+.rt-stg.skip>i{border-style:dashed}
+.rt-stg b{display:block;font-size:14px;font-weight:600}
+.rt-stg span{display:block;font-size:12.5px;color:var(--mute);overflow-wrap:anywhere}
+.rt-bar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden;margin-top:6px}
+.rt-bar>div{height:100%;background:var(--c-before);transition:width .25s}
+.rt-res{margin-top:6px;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.rt-res .v{font-size:24px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.2}
+.rt-res .m{color:var(--mute);font-size:12.5px;margin-top:3px;overflow-wrap:anywhere}
+.rt-res button{font:inherit;font-size:12.5px;color:var(--c-before);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.rt-clock{margin-top:auto;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.rt-clock b{display:block;color:var(--ink);font-size:20px;letter-spacing:-.01em}
+.rt-term{background:#18191d;border:1px solid #2e3037;border-radius:14px;color:#e7e5df;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.rt-bar2{flex:none;display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid #2e3037;color:#8e8b84;font-size:12px}
+.rt-bar2>i{width:10px;height:10px;border-radius:50%;background:#3a3c44}
+.rt-bar2>span{margin-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rt-bar2 em{font-style:normal;font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#e8b765;background:rgba(232,183,101,.12);border-radius:6px;padding:2px 7px;margin-left:auto;white-space:nowrap}
+.rt-bar2 em.live{color:#7fd092;background:rgba(127,208,146,.12)}
+.rt-out{flex:1;min-height:0;overflow:hidden;padding:10px 14px;display:flex;flex-direction:column;justify-content:flex-end;font:12.5px/1.5 ui-monospace,"SF Mono",Menlo,monospace}
+.rt-out>div{flex:none;white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.rt-out .d{color:#8e8b84}.rt-out .g{color:#7fd092;font-weight:600}.rt-out .r{color:#f08a74;font-weight:600}.rt-out .y{color:#e8b765}.rt-out .p{color:#7fa9ec}.rt-out .w{color:#fff}
+@media (max-width:899px),(max-height:559px){.rt-main{grid-template-columns:1fr}.rt-out{min-height:320px;max-height:420px}.rt-out>div{white-space:pre-wrap;word-break:break-all}}
 </style>
 </head>
 <body>
@@ -97,6 +143,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 </div></aside>
 <div class="tabs" id="tabs" role="tablist" aria-label="Which tests to show"></div>
 <div class="stage">
+<section class="pane" id="runpane" role="tabpanel" aria-label="Run a test" hidden></section>
 <section class="pane" id="overview" role="tabpanel"><div class="cards" id="cards"></div><section id="trend"></section></section>
 <section class="pane" id="kindpane" role="tabpanel" hidden>
 <div class="khead"><h2 id="kname"></h2><p class="sub" id="ksub"></p></div>
@@ -120,7 +167,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   try { data = built ? JSON.parse(built.textContent) : await (await fetch('/tests.json', { cache: 'no-store' })).json(); }
   catch { $('lede').textContent = 'The test record could not be read. Open this page from Agentic Coder with /docs, then the Tests tab.'; return; }
   const live = !built;
-  const all = data.rows ?? [], KINDS = data.kinds ?? {}, models = data.models ?? [];
+  let all = data.rows ?? [], KINDS = data.kinds ?? {}, models = data.models ?? []; // read again after a run from ▶ Run a test ends
   let rows = all, order = [], kind = 'all'; // the rows in view (the model picked, then the kind), the kinds in them, the tab shown
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = (iso) => { const d = new Date(iso); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
@@ -141,15 +188,18 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   const inPick = (r) => pick === 'all' || (pick === 'none' ? !r.model : r.model === pick);
 
   // The tab asked for (`kind` is what it comes to once the model is picked): 'all' is the overview, 'about' is how the record is kept.
-  const valid = (s) => s === 'all' || s === 'about' || s in KINDS;
+  const valid = (s) => s === 'all' || s === 'about' || (live && s === 'run') || s in KINDS;
   let shown = 'all';
   try { const s = location.hash.slice(1) || new URL(location.href).searchParams.get('kind') || localStorage.getItem('agentic-tests-kind'); if (s && valid(s)) shown = s; } catch { /* no storage */ }
-  const tabList = () => ['all', ...order, 'about'];
+  // ▶ Run a test comes first, in the hub only (a saved copy of the page has no runner to ask).
+  const tabList = () => [...(live ? ['run'] : []), 'all', ...order, 'about'];
   function go(k) { shown = k; page = 0; sel = 0; try { localStorage.setItem('agentic-tests-kind', k); history.replaceState(null, '', '#' + k); } catch { /* no storage */ } draw(); }
   function tabs() {
     const n = (k) => (k === 'all' ? rows.length : rows.filter((r) => r.kind === k).length);
     const name = (k) => (k === 'all' ? 'Overview' : k === 'about' ? 'How it is kept' : KINDS[k][0]);
-    $('tabs').innerHTML = tabList().map((k) => `<button type="button" role="tab" data-kind="${k}" aria-selected="${k === kind}">${esc(name(k))}${k === 'about' ? '' : `<span>${n(k)}</span>`}</button>`).join('');
+    $('tabs').innerHTML = tabList().map((k) => (k === 'run'
+      ? `<button type="button" role="tab" class="runtab" data-kind="run" aria-selected="${kind === 'run'}"><i>▶</i>Run a test</button>`
+      : `<button type="button" role="tab" data-kind="${k}" aria-selected="${k === kind}">${esc(name(k))}${k === 'about' ? '' : `<span>${n(k)}</span>`}</button>`)).join('');
   }
   $('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.kind); };
 
@@ -267,7 +317,8 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   new ResizeObserver(() => { if (!$('kindpane').hidden) table(); }).observe($('rowsbox'));
 
   document.addEventListener('keydown', (e) => {
-    if (e.metaKey || e.ctrlKey || e.altKey || !rows.length) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('select, input, textarea')) return;
+    if (!rows.length && kind !== 'run') return;
     const t = tabList(), at = t.indexOf(kind);
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); go(t[(at + (e.key === 'ArrowRight' ? 1 : t.length - 1)) % t.length]); return; }
     if (/^[1-9]$/.test(e.key) && +e.key <= t.length) { go(t[+e.key - 1]); return; }
@@ -278,16 +329,182 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); sel = e.key === 'Home' ? 0 : n - 1; table(); }
   });
 
+  // The record read again (a run from ▶ Run a test has just added its line).
+  async function reloadRecord() {
+    try { const d = await (await fetch('/tests.json', { cache: 'no-store' })).json(); data = d; all = d.rows ?? []; KINDS = d.kinds ?? {}; models = d.models ?? []; draw(); } catch { /* the next visit reads it */ }
+  }
+
+  // ---------- ▶ Run a test (in the hub only): one test on one model ----------
+  // The Battle arena's runner runs it (it holds the memory, and a run keeps going when the Agentic Coder
+  // window closes); this pane asks the hub (/tests/run.json, /tests/run, /tests/stop) and shows it live:
+  // the stages, what it prints, and its result once its line is in the record. Nothing starts by itself.
+  const RT = (() => {
+    if (!live) return null;
+    const box = $('runpane');
+    let st = { up: false, job: null, loaded: [], battle: false, catalog: [], fake: false };
+    let err = '', sending = '', timer = null, wasLive = false, sigTop = '', sigBody = '';
+    const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { /* no storage */ } return null; };
+    const q = new URL(location.href).searchParams;
+    let testId = q.get('test') || store('agentic-tests-run-test') || 'practice28';
+    let taskN = Number(q.get('n')) || Number(store('agentic-tests-run-n')) || 10;
+    const isLive = (j) => Boolean(j && (j.status === 'waiting' || j.status === 'running'));
+    const oneModel = () => models.some((m) => m.id === pick);
+    const list = () => st.catalog.filter((t) => (pick === 'none' ? !t.model : oneModel() ? t.model : false));
+    const testOf = (id) => st.catalog.find((t) => t.id === id);
+    const shortName = (name) => String(name ?? '').split(' ')[0];
+    const mmss = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
+    // Its earlier line in the record (before `before`), for this model: the full runs only.
+    function lastRun(t, m, before = Infinity) {
+      const re = new RegExp(t.record.name);
+      return all.find((r) => r.kind === t.record.kind && re.test(r.name) && Boolean(r.part) === t.record.part && (t.model ? r.model === m : !r.model) && r.result !== 'stopped' && new Date(r.at).getTime() < before) ?? null;
+    }
+    const brief = (r) => (r ? `${mark(r)[1]} ${words(r)} · ${day(r.at)}` : 'never');
+    // What the pane shows: the run going now (whatever is picked), else the last run if it is of the
+    // picked test and model, else the picked test ready to run.
+    function shown() {
+      if (isLive(st.job)) return { job: st.job, t: testOf(st.job.test), m: st.job.model };
+      const t = testOf(testId) && list().some((x) => x.id === testId) ? testOf(testId) : list()[0];
+      if (!t) return null;
+      const m = t.model ? pick : null;
+      const j = st.job && st.job.test === t.id && (st.job.model ?? null) === m && (t.id !== 'task' || st.job.n === taskN) ? st.job : null;
+      return { job: j, t, m };
+    }
+    function line(l) {
+      let h = esc(l);
+      if (/^(PASS|OK)\b/.test(l)) h = h.replace(/^(PASS|OK)/, '<span class="g">$1</span>');
+      else if (/^FAIL\b/.test(l)) h = h.replace(/^FAIL/, '<span class="r">FAIL</span>');
+      else if (/^NONE\b/.test(l)) h = h.replace(/^NONE/, '<span class="y">NONE</span>');
+      else if (/^(recorded in the test record|saved|thinking o|.* of \d+ (OK|passed))/.test(l)) h = `<span class="w">${h}</span>`;
+      else if (/^(stopping|not recorded)/.test(l)) h = `<span class="y">${h}</span>`;
+      else if (/^\s{2,}/.test(l)) h = `<span class="d">${h}</span>`;
+      return `<div>${h || ' '}</div>`;
+    }
+    function top(v) {
+      const running = isLive(st.job);
+      const chips = list().map((t) => `<button type="button" data-t="${t.id}" aria-pressed="${v && v.t.id === t.id}"${running ? ' disabled' : ''}>${esc(t.name)}</button>${t.pick && v && v.t.id === t.id ? `<select id="rt-n" aria-label="Which practice task"${running ? ' disabled' : ''}>${Array.from({ length: t.pick.max - t.pick.min + 1 }, (_, i) => t.pick.min + i).map((n) => `<option${n === (running ? st.job.n : taskN) ? ' selected' : ''}>${n}</option>`).join('')}</select>` : ''}`).join('');
+      const held = st.loaded.filter((x) => x.who !== 'this test run');
+      const status = running ? (st.job.status === 'waiting' ? `<i class="busy"></i><span>${esc(st.job.waiting ?? 'Getting the memory ready…')}</span>`
+        : `<i class="busy"></i><span>Running: ${esc(st.job.name)}${st.job.n != null ? ` ${st.job.n}` : ''}${st.job.modelName ? ` on ${esc(st.job.modelName)}` : ''}</span>`)
+        : st.battle ? '<i class="busy"></i><span>A battle is running (the Battle tab): Run waits until it ends or you stop it there</span>'
+        : `<i></i><span>Loaded now: ${held.length ? held.map((x) => `${esc(x.model)} (${esc(x.who)}${/window/.test(x.who) ? ': it lets go when you press Run' : ''})`).join(', ') : 'nothing'}</span>`;
+      const label = running ? (st.job.stopping || sending === 'stop' ? 'Stopping' : '■ Stop') : sending === 'run' ? 'Starting' : v ? `▶ Run${v.t.model ? ` on ${shortName(modelName(v.m))}` : ''}` : '▶ Run';
+      const off = sending || (running && st.job.stopping) || (!running && (st.battle || !v));
+      return `<div class="rt-box rt-top"><span class="rt-l">Test</span><div class="rt-chips" id="rt-chips">${chips}</div><span class="rt-status">${status}</span>
+        <button type="button" class="rt-go${running ? ' stop' : ''}" id="rt-go"${off ? ' disabled' : ''}>${label}</button>${err ? `<p class="rt-err">${esc(err)}</p>` : ''}</div>`;
+    }
+    function body(v) {
+      const { job: j, t, m } = v;
+      const running = isLive(j), ended = j && !running;
+      const lines = j?.lines ?? [];
+      const last = lastRun(t, m, j ? j.startedAt : Infinity);
+      const other = t.model ? models.find((x) => x.id !== m) : null;
+      const cnt = j?.count ?? { done: null, total: t.total };
+      const readyRe = { practice28: /^server up/, task: /^server up/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/ }[t.id];
+      const loaded = !t.model || (j && (lines.some((l) => readyRe?.test(l)) || (cnt.done ?? 0) > 0 || ended));
+      const secsNow = j ? Math.max(0, Math.round(((ended ? j.endedAt : j.now ?? Date.now()) - (j.runStartedAt ?? j.startedAt)) / 1000)) : 0;
+      // The stages: done, the one under way, or still to come.
+      const phase = !j ? -1 : j.status === 'waiting' ? 0 : !loaded ? 1 : running ? 2 : 3;
+      const cls = (k) => (k < phase || (ended && k <= 3) ? 'did' : k === phase ? 'cur' : '');
+      let shownN = 0; // stages are numbered as shown (a test that takes no model has one fewer)
+      const stage = (k, title, text, skip) => { shownN += 1; return `<div class="rt-stg ${skip ? 'skip did' : cls(k)}"><i>${skip || cls(k) === 'did' ? '✓' : shownN}</i><div style="min-width:0;flex:1"><b>${title}</b><span>${text}</span></div></div>`; };
+      const pct = cnt.total && cnt.done != null ? Math.min(100, Math.round((cnt.done / cnt.total) * 100)) : t.minutes && j ? Math.min(100, Math.round((secsNow / (t.minutes * 60)) * 100)) : null;
+      const doing = j && phase >= 2
+        ? `${cnt.done != null ? `${cnt.done} of ${cnt.total} done · ${cnt.passed} passed` : t.minutes ? `${mmss(secsNow)} of at most ${t.minutes} min` : ended ? 'finished' : `running · ${mmss(secsNow)}`}${pct != null ? `<div class="rt-bar"><div style="width:${pct}%"></div></div>` : ''}`
+        : `${esc(t.what)}${last?.secs ? ` · about ${Math.max(1, Math.round(last.secs / 60))} min last time` : ''}`;
+      const recText = ended ? (j.result?.recorded ? `in the record: ${esc(j.result.recorded)}` : j.status === 'stopped' ? 'stopped: what ran is in the record as stopped' : st.fake ? 'a practice run: nothing is recorded' : 'no line was recorded') : 'its line lands in the record when it ends';
+      const stages = (t.model
+        ? stage(0, 'Free the memory', phase === 0 ? esc(j.waiting ?? 'waiting') : phase > 0 ? 'nothing else holds a model' : 'unloads a model nobody uses; an open Agentic Coder window lets go of its own once its reply ends')
+          + stage(1, `Load ${esc(modelName(m))}`, phase > 1 || ended ? (t.id === 'work28' || t.id === 'new28' ? 'each test loads it for itself' : 'loaded') : phase === 1 ? 'loading…' : 'one model at a time, like a battle')
+        : stage(0, 'No model needed', 'it starts at once and holds no memory', true))
+        + stage(2, esc(t.name) + (t.pick ? ` ${j?.n ?? taskN}` : ''), doing)
+        + stage(3, 'In the record', recText);
+      // Its result, once it ended.
+      let res = '';
+      if (ended) {
+        const rec = /— (\d+) of (\d+), ([\d,]+) s$/.exec(j.result?.recorded ?? '');
+        const p = cnt.done != null ? [cnt.passed, cnt.done] : rec ? [Number(rec[1]), Number(rec[2])] : null;
+        const good = p && p[0] === p[1] && p[1] > 0 && j.status !== 'stopped';
+        const big = j.status === 'stopped' ? `■ stopped${p ? ` · ${p[0]} of ${p[1]}` : ''}` : p ? `${good ? '✓' : '✗'} ${p[0]} of ${p[1]}${cnt.total && p[1] < cnt.total ? ` (${cnt.total} in all)` : ''}` : j.status === 'done' ? '✓ finished' : '✗ it ended with an error';
+        res = `<div class="rt-res"><div class="v ${j.status === 'stopped' ? 'stop' : good || (!p && j.status === 'done') ? 'ok' : 'bad'}">${big}</div>
+          <div class="m">${j.status === 'stopped' ? 'Stopped' : 'Finished'} after ${mmss(secsNow)}${j.result?.why && j.status === 'failed' && !p ? ` · ${esc(j.result.why)}` : ''}</div>
+          <div class="m">Before this: ${esc(brief(last))}${other ? ` · ${esc(shortName(other.name))}’s latest: ${esc(brief(lastRun(t, other.id)))}` : ''}</div>
+          ${KINDS[t.record.kind] ? `<div class="m"><button type="button" data-kind="${t.record.kind}">open it in ${esc(KINDS[t.record.kind][0])} ›</button></div>` : ''}</div>`;
+      }
+      const clockTxt = running ? `${j.status === 'waiting' ? 'waiting' : 'running'}<b>${mmss(secsNow)}</b>${last?.secs && j.status === 'running' ? (last.secs > secsNow ? `about ${Math.max(1, Math.round((last.secs - secsNow) / 60))} min left, going by last time` : 'past last time’s length') : 'you can close Agentic Coder: it keeps going'}`
+        : ended ? `${j.status === 'stopped' ? 'stopped' : 'finished'} ${day(new Date(j.endedAt).toISOString())} ${clock(new Date(j.endedAt).toISOString())}<b>${mmss(secsNow)}</b>Press ▶ Run to run it again.`
+        : 'nothing running<b>—</b>Nothing starts by itself: only ▶ Run starts a run, and ■ Stop is there while it goes.';
+      const cmd = t.command?.[t.model ? m : 'none'] ?? '';
+      const out = j ? lines.map(line).join('') || '<div><span class="d">(nothing printed yet)</span></div>'
+        : `<div><span class="p">%</span> <span class="w">${esc(t.id === 'task' ? cmd.replace(/--only \d+/, `--only ${taskN}`) : cmd)}</span></div><div> </div><div><span class="d">That is what ▶ Run starts, from the repo’s top. What it prints comes here, live.</span></div>${last ? `<div><span class="d">Last time on this ${t.model ? 'model' : 'Mac'}: ${esc(brief(last))}${last.secs ? `, ${esc(mmss(last.secs))}` : ''}.</span></div>` : ''}`;
+      const tag = st.fake ? 'practice mode: no model' : running ? 'live' : ended ? `its last run` : 'what it runs';
+      return `<div class="rt-main"><div class="rt-box rt-stages">${stages}${res}<div class="rt-clock">${clockTxt}</div></div>
+        <div class="rt-term"><div class="rt-bar2"><i></i><i></i><i></i><span>${esc(t.model ? modelName(m) : 'No model')} · ${esc(t.name)}${t.pick ? ` ${j?.n ?? taskN}` : ''}</span><em class="${running ? 'live' : ''}">${esc(tag)}</em></div><div class="rt-out" id="rt-out">${out}</div></div></div>`;
+    }
+    function render() {
+      if (box.hidden) return;
+      if (!st.catalog.length) { box.innerHTML = `<div class="empty">${err ? esc(err) : 'Asking the test runner…'}</div>`; sigTop = sigBody = ''; return; }
+      if (!isLive(st.job) && !(pick === 'none' || oneModel())) { box.innerHTML = `<div class="empty"><b>Pick one model on the left to run a test.</b> A run tests one model at a time${models.length ? `: ${models.map((x) => esc(x.name)).join(' or ')}` : ''}. The unit tests and the repo check take none: they are under Not model-specific.</div>`; sigTop = sigBody = ''; return; }
+      const v = shown();
+      const a = top(v), b = v ? body(v) : '<div class="empty">No test to run here.</div>';
+      if (!box.querySelector('.rt-top') || !box.querySelector('.rt-main, .empty')) { box.innerHTML = a + b; sigTop = a; sigBody = b; return; }
+      if (a !== sigTop) { box.querySelector('.rt-top').outerHTML = a; sigTop = a; }
+      if (b !== sigBody) { box.querySelector('.rt-main, .empty').outerHTML = b; sigBody = b; }
+    }
+    async function poll() {
+      clearTimeout(timer); timer = null;
+      if (box.hidden) return;
+      try {
+        const r = await fetch('/tests/run.json', { cache: 'no-store' });
+        const d = await r.json().catch(() => ({}));
+        if (d.catalog) st.catalog = d.catalog;
+        if (!r.ok) err = d.error ? `${d.error[0].toUpperCase()}${d.error.slice(1)}.` : `The hub said ${r.status}.`;
+        else { st = { ...st, ...d }; if (err.startsWith('The hub') || err.startsWith('The Battle runner')) err = ''; }
+      } catch (e) { err = `The hub is not answering (${e.message}). Is Agentic Coder still open? A run already going keeps going.`; }
+      const now = isLive(st.job);
+      if (wasLive && !now) reloadRecord(); // its line is in the record now
+      wasLive = now;
+      render();
+      if (!box.hidden && !document.hidden) timer = setTimeout(poll, now || sending ? 1000 : 4000);
+    }
+    async function send(path, payload) {
+      err = ''; sending = path === '/tests/run' ? 'run' : 'stop'; render();
+      try {
+        const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload ?? {}) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) err = d.error ? `${d.error[0].toUpperCase()}${d.error.slice(1)}.` : `The hub said ${r.status}.`;
+        else if (sending === 'stop' && st.job) st.job.stopping = true;
+      } catch (e) { err = `The hub is not answering (${e.message}).`; }
+      sending = '';
+      poll();
+    }
+    box.addEventListener('click', (e) => {
+      const c = e.target.closest('#rt-chips button');
+      if (c && !c.disabled) { testId = c.dataset.t; store('agentic-tests-run-test', testId); err = ''; render(); return; }
+      const k = e.target.closest('.rt-res button[data-kind]');
+      if (k) { go(k.dataset.kind); return; }
+      if (e.target.closest('#rt-go') && !e.target.closest('#rt-go').disabled) {
+        if (isLive(st.job)) send('/tests/stop');
+        else { const v = shown(); if (v) send('/tests/run', { test: v.t.id, model: v.t.model ? pick : null, n: v.t.pick ? taskN : null }); }
+      }
+    });
+    box.addEventListener('change', (e) => { if (e.target.id === 'rt-n') { taskN = Number(e.target.value); store('agentic-tests-run-n', String(taskN)); render(); } });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && !box.hidden) poll(); });
+    return { show() { render(); poll(); }, hide() { clearTimeout(timer); timer = null; }, render };
+  })();
+
   function draw() {
     rows = all.filter(inPick);
     order = Object.keys(KINDS).filter((k) => rows.some((r) => r.kind === k));
-    kind = shown === 'all' || shown === 'about' || order.includes(shown) ? shown : 'all';
+    kind = shown === 'all' || shown === 'about' || (live && shown === 'run') || order.includes(shown) ? shown : 'all';
     side(); head();
+    $('runpane').hidden = kind !== 'run';
+    if (kind === 'run') { tabs(); $('overview').hidden = true; $('kindpane').hidden = true; $('foot').hidden = true; RT.show(); return; }
+    RT?.hide();
     if (!rows.length) {
-      kind = 'all'; $('tabs').innerHTML = ''; $('trend').innerHTML = '';
+      kind = 'all'; if (live) tabs(); else $('tabs').innerHTML = ''; $('trend').innerHTML = '';
       $('overview').hidden = false; $('kindpane').hidden = true; $('foot').hidden = true;
       $('cards').innerHTML = all.length
-        ? `<div class="empty">No run of ${esc(modelName(pick))} has been recorded yet. Run the 28-task check on it (<code>bun run eval --model ${esc(pick)}</code>) and its line will appear here.</div>`
+        ? `<div class="empty">No run of ${esc(modelName(pick))} has been recorded yet. ${live && pick !== 'all' ? 'Run one from ▶ Run a test' : `Run the 28-task check on it (<code>bun run eval --model ${esc(pick)}</code>)`} and its line will appear here.</div>`
         : '<div class="empty">No test has been recorded yet. The 28-task check (<code>bun run eval</code>), the real requests (<code>bun run eval:words</code>) and the unit tests (<code>bun run test</code>) each add a line here when they finish.</div>';
       return;
     }
@@ -300,7 +517,8 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 <li>The side panel picks a model. A run is filed under the model it used (the <code>model</code> on its line). A line written before that was added is filed by the model its results folder or its words name; the unit tests and the checks are of no one model, so they sit under Not model-specific.</li>
 <li>Each kind of test has its own tab. It shows as many runs as fit the window and pages through the rest, newest first; pick a run to see all of it (its notes, the code it ran on, its settings, its raw results and its results page).</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
-<li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li></ul>
+<li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li>
+<li>${live ? '▶ Run a test runs one test on the model picked (or, under Not model-specific, the unit tests or the repo check). The Battle arena\'s runner runs it: it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile, and the run keeps going if you close the window. Nothing starts by itself; its line lands here when it ends. <code>/test</code> in Agentic Coder opens it.' : 'In the hub this page also has ▶ Run a test, to run one test on one model from the page.'}</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;
   draw();
 })();

@@ -8,6 +8,8 @@
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /flow             the Flow tab: how Agentic Coder works as a flow diagram (flow.html, drawn by scripts/flow-page.mjs)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
+//   /tests/run.json, POST /tests/run, POST /tests/stop   the Tests tab's ▶ Run a test: one test on one model,
+//                     run by the Battle arena's runner (it keeps going when this window closes)
 //   /battle           the Battle tab: the arena's own page (Gemma vs Qwen), started when it is not up (models/evals/battle/)
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `cli docs/` at the top of the repo on this Mac (older
@@ -25,7 +27,7 @@ import instructionsHtml from './instructions.html' with { type: 'text' };
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
-import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle, testRun, runCatalog } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 
 const DOCS_NAMES = ['cli docs', 'agentic-coder DOCS', 'bonsai-code DOCS'];
@@ -72,6 +74,32 @@ export function listDocs(dir) {
 // the real hub had opened, and Weights said the model was missing (27 Sep).
 const envPort = Number((process.env.AGENTIC_HUB_PORT ?? process.env.BONSAI_HUB_PORT) || NaN);
 export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 8757;
+
+// The Tests tab's ▶ Run a test. The runs themselves are the Battle arena runner's (it holds the
+// memory, and a run keeps going when this window closes); this passes the page's asks along with
+// the runner's key. Only this hub's own page may start or stop one (no other site, no rebinding).
+const noStore = { 'cache-control': 'no-store' };
+async function runRoute(req, url) {
+  const o = req.headers.get('origin');
+  if (url.hostname !== '127.0.0.1' || (o && o !== url.origin) || ['cross-site', 'same-site'].includes(req.headers.get('sec-fetch-site'))) return Response.json({ error: 'Open the Tests tab from this local hub.' }, { status: 403, headers: noStore });
+  try {
+    if (url.pathname === '/tests/run.json' && req.method === 'GET') {
+      const r = await testRun();
+      return Response.json({ up: r.up, ...(r.body ?? { job: null, loaded: [], battle: false }), catalog: runCatalog(Object.keys(MODELS)) }, { status: r.status >= 400 ? r.status : 200, headers: noStore });
+    }
+    if ((url.pathname === '/tests/run' || url.pathname === '/tests/stop') && req.method === 'POST') {
+      if (!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type') ?? '')) return Response.json({ error: 'Send JSON.' }, { status: 415, headers: noStore });
+      let body = {};
+      try { body = await req.json(); } catch {}
+      const r = url.pathname === '/tests/run'
+        ? await testRun({ method: 'POST', path: '/api/testrun', body: { test: body.test, model: body.model, n: body.n }, start: true })
+        : await testRun({ method: 'POST', path: '/api/teststop' });
+      if (!r.up) return Response.json({ error: 'no test is running' }, { status: 409, headers: noStore });
+      return Response.json(r.body ?? {}, { status: r.status, headers: noStore });
+    }
+  } catch (e) { return Response.json({ error: `The test runner did not answer: ${e.message}` }, { status: 502, headers: noStore }); }
+  return Response.json({ error: 'not found' }, { status: 404, headers: noStore });
+}
 
 // onEdits: called after a save or revert of the edited copy (the app shows a
 // note and lights the weights badge). Editing endpoints:
@@ -128,6 +156,7 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome);
       if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
+      if (url.pathname.startsWith('/tests/')) return runRoute(req, url);
       if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });
       if (url.pathname === '/model') {

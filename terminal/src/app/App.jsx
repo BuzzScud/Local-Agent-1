@@ -14,7 +14,7 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { commandPrefix } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, battleCounts, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -310,7 +310,8 @@ export function App({ opts, win, onRestart }) {
   };
   // The hub in the browser (/weights, /docs, /help): one small server per
   // window, closed with it. Answers { server, url } or null after a warning.
-  const openHub = (tab) => {
+  // extra: more of the hub's address (/test: run=1, the model and test to pick).
+  const openHub = (tab, extra = {}) => {
     // The hub always serves and edits the ORIGINAL model file: each save
     // rebuilds the copy from a fresh clone of it plus the whole edit list.
     const base = MODELS[model.edited ? model.edited.base : DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
@@ -322,7 +323,8 @@ export function App({ opts, win, onRestart }) {
       } else { setEditedSaved(null); push({ type: 'note', text: 'The edited copy was removed. The original was never touched.', tone: 'dim' }); }
     };
     try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits, cwd }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
-    const url = `${weightsRef.current.url}?tab=${tab}`;
+    const more = Object.entries(extra).filter(([, v]) => v != null && v !== '').map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('');
+    const url = `${weightsRef.current.url}?tab=${tab}${more}`;
     if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
     return { server: weightsRef.current, url };
   };
@@ -614,7 +616,7 @@ export function App({ opts, win, onRestart }) {
         if (b.reloading) return;
         b.reloading = true;
         setBattle(null);
-        await b.switchModel(b.model, () => `The battle is over: ${b.model.name} is loaded again.`);
+        await b.switchModel(b.model, () => `The ${b.what ?? 'battle'} is over: ${b.model.name} is loaded again.`);
         b.released = false; b.reloading = false;
         // The model is back (switchModel has finished): a message typed meanwhile goes now.
         const q = queuedRef.current;
@@ -623,10 +625,11 @@ export function App({ opts, win, onRestart }) {
       }
       if (!h || S.current.starting || S.current.live !== IDLE || !serverRef.current?.port) return;
       b.released = true;
+      b.what = /^a test/.test(h) ? 'test run' : 'battle';
       setBattle(h);
       setStarting(true); setStartPhase('waiting');
       await serverRef.current.stop({ keep: false }).catch(() => {});
-      push({ type: 'note', text: `${b.model.name} is unloaded for now: ${h}. It loads again by itself when the battle is over; a message you send meanwhile waits for it.`, tone: 'dim' });
+      push({ type: 'note', text: `${b.model.name} is unloaded for now: ${h}. It loads again by itself when the ${b.what} is over; a message you send meanwhile waits for it.`, tone: 'dim' });
     }, 3000);
     return () => clearInterval(tick);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1075,6 +1078,20 @@ export function App({ opts, win, onRestart }) {
         // (the hub starts it), so a battle keeps going when this window closes.
         const hub = openHub('battle'); if (!hub) break;
         push({ type: 'note', text: `Battle opened in the browser at ${hub.url} · Gemma vs Qwen, one model at a time, each run stopped at 10 min · while a battle runs, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
+        break;
+      }
+      case 'test': {
+        // The hub's Tests tab on ▶ Run a test, with this window's model picked: pick a test (or name
+        // one: /test practice 28, /test work28, /test 12 for practice task 12) and press Run. The run is
+        // the Battle arena runner's: this window lets go of its model while it runs, and it keeps
+        // going when this window closes.
+        const num = /^(?:task\s*)?(\d{1,2})$/i.exec(arg);
+        const t = arg ? (findRunTest(arg) ?? (num ? RUN_TESTS.find((x) => x.id === 'task') : null)) : null;
+        if (arg && !t) { push({ type: 'note', text: `No test called "${arg}". Try one of: ${RUN_TESTS.map((x) => x.name.toLowerCase()).join(', ')}, or a practice task's number (/test 12). /test alone opens the list.`, tone: 'warn' }); break; }
+        const mine = model.edited ? model.edited.base : model.id;
+        const hub = openHub('tests', { run: '1', model: t && !t.model ? 'none' : MODELS[mine] ? mine : '', test: t?.id, n: num && t?.id === 'task' ? num[1] : '' });
+        if (!hub) break;
+        push({ type: 'note', text: `Run a test opened in the browser at ${hub.url} · ${t ? `${t.name}${num && t.id === 'task' ? ` ${num[1]}` : ''} is picked` : 'pick a test'}${t && !t.model ? '' : ` on ${model.name}`}, then press Run · while it runs, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
         break;
       }
       case 'tests': {
