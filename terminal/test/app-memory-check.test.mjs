@@ -84,3 +84,26 @@ test('a copy kept loaded at another size restarts at the size you picked, and /s
     expect(r.text).not.toContain('was already loaded at 256k');
   } finally { try { old.kill('SIGKILL'); } catch {} }
 }, 120_000);
+
+// 29 Sep: every /effort restart warned "the Mac may slow down", counted right
+// after the old server stopped, before macOS had handed its memory back. Now
+// what it held counts as free, as the panel counts it: going down from 64k to
+// 32k can never be short, whatever this Mac has free.
+test('an /effort restart counts the memory the old server gives back: 64k → 32k never warns, and /stats shows it checked', async () => {
+  const { cwd, env, home } = withStandIns();
+  writeFileSync(join(home, 'settings.json'), JSON.stringify({ limits: { context: 65536 } }));
+  const r = await runInPty({ cwd, env, cols: COLS, args: ['--no-flows'], timeoutMs: 120_000, steps: [
+    { wait: '? for shortcuts', ms: 45_000 }, { waitGone: 'Starting Gemma', ms: 60_000 },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
+    // past Embedder, Retriever and Reranker to Context, then 64k → 32k
+    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 80 },
+    { key: 'enter' }, { wait: 'Restarting Gemma' },
+    { wait: 'restarted: context 32k', ms: 45_000 }, { sleep: 300 },
+    { type: '/stats' }, { key: 'enter' }, { wait: 'Context 32k', ms: 15_000 }, { sleep: 200 }, { snapshot: 'stats' },
+    ...quit,
+  ] });
+  const after = r.text.slice(r.text.indexOf('Restarting Gemma'));
+  expect(after).toContain('restarted: context 32k');
+  expect(after).not.toContain('may slow down');
+  expect(r.snapshots.stats).toMatch(/Context 32k: needs [\d.]+ GB, [\d.]+ GB free\./);
+}, 150_000);

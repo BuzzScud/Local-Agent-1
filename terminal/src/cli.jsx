@@ -222,8 +222,9 @@ if (opts.print) {
     // Another copy of the model loaded (a practice-test run, a speed test): a
     // script never waits, so it starts anyway and says so.
     for (const o of otherCopies(model)) process.stderr.write(`· ${o.who} (port ${o.port ?? '?'}, ${(o.bytes / 1e9).toFixed(1)} GB) still has ${model.name} loaded, so both may be slow\n`);
-    // A context you picked is used as asked; said when it does not fit.
-    if (!opts.ctx && limits.context) {
+    // A context you picked is used as asked; said when it does not fit. A
+    // copy already loaded is shared (server.start), so nothing loads to check.
+    if (!opts.ctx && limits.context && !scanServers().some((e) => e.model === model.file)) {
       const chk = contextCheck(model, ctx, { draft: hasDraft(model) });
       if (!chk.fits) process.stderr.write(`· ${chk.note}\n`);
     }

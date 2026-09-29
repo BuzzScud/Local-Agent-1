@@ -61,6 +61,23 @@ export const draftBytes = (m) => (m.draft ? filePart(m, m.draft.bytes) + m.draft
 // model has one (coding setup fetches it) unless it is switched off with AGENTIC_HELPER=off.
 export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
 
+// Free memory for a start that first stops a running model server (an
+// /effort restart, a copy kept loaded at another size): what is free now plus
+// what that server's start took, counted BEFORE it stops. Measured right after
+// it exits, macOS had handed back little of it yet: on 29 Sep Qwen3.5 9B,
+// restarted from 64k to 32k, saw 3.9 GB free and took only 0.6 GB of it, so
+// every /effort restart warned although nothing was short.
+export const freeWithHandBack = (m, ctx, { draft = false, available = availableBytes() } = {}) => available + needBytes(m, ctx, { draft });
+
+// What a search model (the embedder, the reranker) holds while loaded: its
+// measured loadedBytes (model.mjs), else its file and the working space.
+export const loadedBytesOf = (m) => m.loadedBytes ?? m.bytes + OVERHEAD;
+
+// The search models that are on but not loaded yet: each starts at the first
+// search, beside the model, so a start counts them too. One already loaded is
+// in what the Mac uses now. isLoaded(model) says which are.
+export const searchBytes = (models, isLoaded) => models.filter((m) => m && !isLoaded(m)).reduce((n, m) => n + loadedBytesOf(m), 0);
+
 // effort 'high': the model mostly thinks, which the guessing helper barely
 // speeds up, so when memory is short the helper (1.84 GB) goes before the
 // memory does — dropping 32k to 16k would only save ~0.6 GB (the per-token
@@ -96,14 +113,15 @@ export function topMemoryUsers(n = 3, psText = null) {
 // restart: it is used as asked, and when it does not fit the note says by how
 // much and what is using the memory (the user's pick, 28 Sep: start anyway,
 // say so). draft: whether the speed helper comes along (needBytes' own
-// default when left out).
-export function contextCheck(m, ctx, { draft, available = availableBytes(), users } = {}) {
-  const need = needBytes(m, ctx, { draft });
+// default when left out). search: the search models still to load (searchBytes).
+export function contextCheck(m, ctx, { draft, available = availableBytes(), users, search = 0 } = {}) {
+  const need = needBytes(m, ctx, { draft }) + search;
   const gb = (b) => (b / 1e9).toFixed(1);
   const size = `Context ${Math.round(ctx / 1024)}k`;
-  if (available >= need) return { fits: true, need, available, note: `${size}: needs ${gb(need)} GB, ${gb(available)} GB free.` };
+  const needs = `${gb(need)} GB${search ? ` (${gb(search)} for search)` : ''}`;
+  if (available >= need) return { fits: true, need, available, note: `${size}: needs ${needs}, ${gb(available)} GB free.` };
   const top = (users ?? topMemoryUsers(3)).map((u) => `${u.name} ${gb(u.bytes)} GB`).join(' · ');
-  return { fits: false, need, available, note: `${size} needs ${gb(need)} GB and ${gb(available)} GB is free: the Mac may slow down.${top ? ` Using the most: ${top}.` : ''} Close some, or lower it in /effort.` };
+  return { fits: false, need, available, note: `${size} needs ${needs} and ${gb(available)} GB is free: the Mac may slow down.${top ? ` Using the most: ${top}.` : ''} Close some, or lower it in /effort.` };
 }
 
 export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes(), effort } = {}) {

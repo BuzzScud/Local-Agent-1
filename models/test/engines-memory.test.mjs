@@ -2,8 +2,8 @@
 // finding another copy of the model already loaded (28 Sep 2026).
 import { test, expect } from 'bun:test';
 import { join } from 'node:path';
-import { ENGINES, DEFAULT_ENGINE, ENGINE, SERVER_BIN, engineOf, serverBinOf, MODELS, DEFAULT_MODEL, HOME, modelPath } from '../registry.mjs';
-import { contextCheck, needBytes, appName, topMemoryUsers } from '../runtime/memory.mjs';
+import { ENGINES, DEFAULT_ENGINE, ENGINE, SERVER_BIN, engineOf, serverBinOf, MODELS, DEFAULT_MODEL, HOME, modelPath, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER } from '../registry.mjs';
+import { contextCheck, needBytes, freeWithHandBack, loadedBytesOf, searchBytes, appName, topMemoryUsers } from '../runtime/memory.mjs';
 import { otherCopies } from '../runtime/server.mjs';
 import bonsai from '../bonsai-2-27b/model.mjs';
 
@@ -42,6 +42,26 @@ test('a context you picked is checked: it fits, or the note says by how much and
   expect(short.note).toBe(`Context 64k needs ${gb(need)} GB and 2.8 GB is free: the Mac may slow down. Using the most: Google Chrome 2.3 GB · Safari 1.1 GB. Close some, or lower it in /effort.`);
   // The speed helper counts when it comes along.
   expect(contextCheck(gemma, 65536, { draft: true, available: 0, users: [] }).need).toBeGreaterThan(need);
+});
+
+test('a restart counts what the running server gives back as free; the search models still to load count as needed (29 Sep)', () => {
+  const gb = (b) => (b / 1e9).toFixed(1);
+  // Counted before the old server stops: free now + what its start took.
+  const back = freeWithHandBack(gemma, 65536, { draft: true, available: 3.9e9 });
+  expect(back).toBeCloseTo(3.9e9 + needBytes(gemma, 65536, { draft: true }), -3);
+  // So going down from 64k to 32k never warns, whatever else is open.
+  expect(contextCheck(gemma, 32768, { draft: true, available: back, users: [] }).fits).toBe(true);
+  // The embedder and the reranker, at what each holds while loaded; one already loaded is not counted again.
+  const bge = EMBEDDERS[DEFAULT_EMBEDDER], rr = RERANKERS[DEFAULT_RERANKER];
+  expect([loadedBytesOf(bge), loadedBytesOf(rr)]).toEqual([1.1e9, 1.2e9]);
+  expect(searchBytes([bge, rr], () => false)).toBeCloseTo(2.3e9, -3);
+  expect(searchBytes([bge, rr], (m) => m === bge)).toBe(1.2e9);
+  expect(searchBytes([], () => false)).toBe(0);
+  const need = needBytes(gemma, 65536, { draft: false });
+  const short = contextCheck(gemma, 65536, { draft: false, available: need + 1e9, search: 2.3e9, users: [] });
+  expect(short).toMatchObject({ fits: false, need: need + 2.3e9 });
+  expect(short.note).toBe(`Context 64k needs ${gb(need + 2.3e9)} GB (2.3 for search) and ${gb(need + 1e9)} GB is free: the Mac may slow down. Close some, or lower it in /effort.`);
+  expect(contextCheck(gemma, 65536, { draft: false, available: need + 3e9, search: 2.3e9 }).note).toBe(`Context 64k: needs ${gb(need + 2.3e9)} GB (2.3 for search), ${gb(need + 3e9)} GB free.`);
 });
 
 test('what a start takes: the share of the model files macOS keeps in use (measured for Gemma), all of an unmeasured model\'s', () => {

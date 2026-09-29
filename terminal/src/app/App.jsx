@@ -14,7 +14,7 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, freeWithHandBack, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -42,7 +42,7 @@ import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
-import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, defaultLimits, showLimit, effortNote, defaultLevelId } from './limits.mjs';
+import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, defaultLimits, showLimit, effortNote, defaultLevelId } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -361,6 +361,7 @@ export function App({ opts, win, onRestart }) {
     setStarting(true); setStartPhase('loading');
     try {
       const oldPid = cur?.child?.pid ?? cur?.shared?.pid;
+      const mem = memoryForRestart(); // before the old server stops: what it gives back counts as free
       await cur?.stop();
       stopIdleServers(); // a server we only attached to (kept loaded earlier) is freed too
       // Wait for the old one to really exit: two 27Bs never fit side by side.
@@ -368,10 +369,11 @@ export function App({ opts, win, onRestart }) {
       await waitForBattle();
       await waitForOthers(next);
       const fixed = limitsRef.current.context;
-      const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined });
+      const available = Math.max(mem.free, availableBytes());
+      const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined, available });
       // A context you picked is checked on a restart too: used as asked, said when it does not fit.
       if (fixed) {
-        const chk = contextCheck(next, fixed, { draft: hasDraft(next) });
+        const chk = contextCheck(next, fixed, { draft: hasDraft(next), available, search: mem.search(limitsRef.current) });
         c.reason = chk.note;
         if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
       }
@@ -495,14 +497,23 @@ export function App({ opts, win, onRestart }) {
     ];
     setPicker({ kind: 'settings', title: 'Permissions', blurb: `Saved for ${at.replace(homedir(), '~')}. Each row opens; /permissions test <command> tries one.`, groups: [{ group: 'What Agentic Coder may do here', rows }], rows, index: 0 });
   };
+  // Memory for /effort's panel and for a restart, counted one way for both:
+  // what is free now plus what the model server holds (a restart hands it
+  // back first), and search(values): the search models those values turn on
+  // that are not loaded yet.
+  const memoryForRestart = () => {
+    const cur = serverRef.current;
+    const free = cur?.port ? freeWithHandBack(cur.model, cur.ctx ?? agent.ctx, { draft: Boolean(cur.draft) }) : availableBytes();
+    const loaded = new Set(scanServers().map((e) => e.model));
+    return { free, search: (values) => searchBytes(searchModels(agent, values), (m) => loaded.has(m.file)) };
+  };
   // /effort, one panel: Effort on top, then every limit that can move, with
   // what each value costs; ←→ moves, enter saves all of it.
-  // The memory Gemma holds now counts as free: a restart hands it back first.
   const openEffortLimits = () => {
-    const freeBytes = availableBytes() + (serverRef.current?.port ? needBytes(model, agent.ctx, { draft: false }) : 0);
+    const mem = memoryForRestart();
     const levels = model.thinkingLevels ?? [];
     const level = Math.max(0, levels.findIndex((l) => l.id === thinkingLevel(model, agent.thinking, agent.effort).id));
-    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
+    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes: mem.free, searchBytes: mem.search, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
   };
   askRef.current = (p) => new Promise((resolve) => {
     // Not over something you are doing: typing, or another menu open. Asked
@@ -746,7 +757,9 @@ export function App({ opts, win, onRestart }) {
       let running = runningServer(model);
       // Kept loaded at another size than the one you picked, with no other
       // window on it: it restarts at yours (before, it kept the old size until coding stop).
+      let freeBefore = 0; // what is free with that copy's memory back (freeWithHandBack)
       if (picked && running?.linger && running.ctx !== picked && !(running.users ?? []).some((p) => p !== process.pid)) {
+        freeBefore = freeWithHandBack(model, running.ctx, { draft: Boolean(running.draft) });
         stopServer(running);
         await exited(running.pid);
         running = null;
@@ -763,9 +776,11 @@ export function App({ opts, win, onRestart }) {
         memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
       }
       // A context you picked is used as asked, checked against what is free now
-      // (before loading): said when it does not fit, and shown by /stats.
+      // (before loading) with the search models still to load: said when it
+      // does not fit, and shown by /stats.
       if (picked && !running) {
-        const chk = contextCheck(model, size, { draft: hasDraft(model) });
+        const loaded = new Set(scanServers().map((e) => e.model));
+        const chk = contextCheck(model, size, { draft: hasDraft(model), available: Math.max(freeBefore, availableBytes()), search: searchBytes(searchModels(agent, limitsRef.current), (m) => loaded.has(m.file)) });
         memoryNote.current = chk.note;
         if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
       }

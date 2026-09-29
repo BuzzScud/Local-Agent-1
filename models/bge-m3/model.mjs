@@ -16,6 +16,10 @@ export default {
   bytes: 634_553_760,
   pooling: 'cls',
   ctx: 2048,
+  // What it holds while loaded, measured as the reranker's (29 Sep, this Mac,
+  // -c 2048): its 0.63 GB file + 0.40 GB working memory = 1.03 GB, with a
+  // margin. The memory check counts it while it is not loaded yet.
+  loadedBytes: 1.1e9,
   dims: 1024,
   // A fact comes back when it is this close to the request (1 = the same
   // meaning), and no further than `margin` behind the closest one. Both were

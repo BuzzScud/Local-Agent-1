@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, showLimit, limitNote, effortNote, defaultLevelId } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -75,6 +75,21 @@ test('each value says what it costs; the changes read as from → to', () => {
   expect(showLimit('timeoutSecs', 300)).toBe('5 min');
   expect(showLimit('summarizeAt', 0.85)).toBe('85%');
   expect(limitChanges(defaultLimits(model), v)).toEqual([{ id: 'context', label: 'Context', from: 'auto', to: '128k', restart: true }]);
+});
+
+test('the Context row counts the search models still to load, from the values in the panel, as the start does', () => {
+  const v = { ...defaultLimits(model), context: 65536 };
+  const env = { model, freeBytes: 12e9, tps: 13, pps: 130, ctxNow: 32768, values: v, draft: false };
+  const need = Number(/needs ([\d.]+) GB/.exec(limitNote('context', env))[1]);
+  const seen = [];
+  const note = limitNote('context', { ...env, searchBytes: (values) => { seen.push(values); return 2.3e9; } });
+  expect(seen[0]).toBe(v); // what the panel shows now: turning the reranker off there counts at once
+  expect(note.startsWith(`needs ${(need + 2.3).toFixed(1)} GB (2.3 search) of 12.0 free · a full re-read`)).toBe(true);
+  expect(limitNote('context', { ...env, freeBytes: (need + 1) * 1e9, searchBytes: () => 2.3e9 })).toMatch(/^⚠ needs /);
+  expect(limitNote('context', { ...env, searchBytes: () => 0 })).toBe(limitNote('context', env));
+  // Off, or nowhere to use one (no memory, no code search): none to load.
+  expect(searchModels({ memory: {}, helpers: new Set() }, { ...v, embedder: 'off', reranker: 'off' })).toEqual([]);
+  expect(searchModels({ memory: null, helpers: new Set() }, { ...v, reranker: 'off' })).toEqual([]);
 });
 
 test('Effort row: the note names the cap in use, Reset all goes to the model default, and the Thinking cap says High only while Effort is Low', () => {

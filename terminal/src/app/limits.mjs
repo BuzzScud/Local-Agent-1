@@ -5,7 +5,7 @@
 // value costs (said next to it in the panel). Saved as "limits" in
 // settings.json; only the ones moved off their default are kept, so a new
 // default reaches you.
-import { needBytes, hasDraft, thinkingLevel, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
+import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
 import { SEARCH } from '../agent/search.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
@@ -28,7 +28,7 @@ export const LIMITS = [
     note: (v) => {
       if (v === 'off') return 'words only: the code search (Oracle) pauses';
       if (!embedderReady(EMBEDDERS[v])) return `⚠ not on this Mac: coding setup downloads it (${mb(EMBEDDERS[v].bytes)})`;
-      return 'finds pieces by meaning · ~214 MB';
+      return `finds pieces by meaning · ~${mb(loadedBytesOf(EMBEDDERS[v]))}`;
     },
   },
   {
@@ -51,7 +51,7 @@ export const LIMITS = [
       const m = RERANKERS[v];
       if (!rerankerReady(m)) return `⚠ not on this Mac: coding setup downloads it (${mb(m.bytes)})`;
       const last = e.lastRerank ? ` · last ${(e.lastRerank.ms / 1000).toFixed(1)} s` : '';
-      return `reads the best ${m.pool} with your request · ~2 s a search, ~1.1 GB${last}`;
+      return `reads the best ${m.pool} with your request · ~2 s a search, ~${mb(loadedBytesOf(m))}${last}`;
     },
   },
   {
@@ -63,10 +63,12 @@ export const LIMITS = [
     note: (v, e) => {
       if (!v) return '32k, or 16k when memory is short';
       // With the speed helper when it comes along, as the start checks (a test says which).
-      const need = needBytes(e.model, v, { draft: e.draft ?? hasDraft(e.model) }) / 1e9;
+      // The search models still to load count too, as the start's check counts them.
+      const search = e.searchBytes ? e.searchBytes(e.values) / 1e9 : 0;
+      const need = needBytes(e.model, v, { draft: e.draft ?? hasDraft(e.model) }) / 1e9 + search;
       const free = e.freeBytes != null ? e.freeBytes / 1e9 : null;
       const short = free != null && need > free;
-      return `${short ? '⚠ ' : ''}needs ${need.toFixed(1)} GB${free != null ? ` of ${free.toFixed(1)} free` : ''} · a full re-read ~${mins((v * 0.78) / (e.pps || READ_TPS))}`;
+      return `${short ? '⚠ ' : ''}needs ${need.toFixed(1)} GB${search ? ` (${search.toFixed(1)} search)` : ''}${free != null ? ` of ${free.toFixed(1)} free` : ''} · a full re-read ~${mins((v * 0.78) / (e.pps || READ_TPS))}`;
     },
   },
   {
@@ -233,6 +235,17 @@ export function applySearch(agent, values, { make = { embedder: (m) => new Embed
   if (!ready.reranker(RERANKERS[r])) return `${RERANKERS[r].name} is not on this Mac yet, so the reranker stays off: run coding setup (${mb(RERANKERS[r].bytes)}), then save it again in /effort.`;
   agent.reranker = make.reranker(RERANKERS[r]);
   return null;
+}
+
+// The search models these values turn on, as applySearch picks them: the
+// embedder only where one is used (the memory, or the code search), the
+// reranker when it is on; each only when its file is on this Mac.
+export function searchModels(agent, values) {
+  const e = EMBEDDERS[values.embedder], r = RERANKERS[values.reranker];
+  return [
+    values.embedder !== 'off' && e && (agent.memory || agent.helpers?.has?.('rag')) && embedderReady(e) ? e : null,
+    values.reranker !== 'off' && r && rerankerReady(r) ? r : null,
+  ].filter(Boolean);
 }
 
 // The limits the agent reads while it works (they take effect at once).
