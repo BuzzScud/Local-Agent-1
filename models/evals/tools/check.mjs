@@ -172,6 +172,10 @@ async function privateOnGitHub({ offline }) {
   } catch { return look('GitHub could not be reached'); }
 }
 
+// Addresses no one can own: the example domains kept for docs and tests (with their
+// subdomains), and one-letter stand-ins such as a@b.co in a test's cases.
+const madeUpMail = (a) => /@(?:[a-z0-9-]+\.)*example\.(?:com|net|org)$|\.(?:test|example|invalid|localhost)$/i.test(a) || /^[a-z]@(?:[a-z]\.)+[a-z]{2,3}$/i.test(a);
+
 function secretsInFiles({ files }) {
   const hits = [], paths = [], mail = new Set();
   const me = homedir();
@@ -183,7 +187,7 @@ function secretsInFiles({ files }) {
     const text = buf.toString('utf8');
     for (const s of findSecrets(text)) hits.push(`${f}:${s.line}  ${s.what} (${s.show})`);
     if (text.includes(`${me}/`)) paths.push(f);
-    for (const m of text.matchAll(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}\b/g)) if (!/@(example\.com|x\.com|users\.noreply\.github\.com|anthropic\.com)$|^git@github\.com$/.test(m[0]) && !/\.(png|jpg|svg|mjs|js)$/.test(m[0])) mail.add(`${m[0]} in ${f}`);
+    for (const m of text.matchAll(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}\b/g)) if (!/@(example\.com|x\.com|users\.noreply\.github\.com|anthropic\.com)$|^git@github\.com$/.test(m[0]) && !madeUpMail(m[0]) && !/\.(png|jpg|svg|mjs|js)$/.test(m[0])) mail.add(`${m[0]} in ${f}`);
   }
   if (hits.length) return wrong(`${hits.length} secret-looking value${hits.length > 1 ? 's' : ''} in the files`, few(hits, 8));
   const notes = [paths.length ? `your home folder's path is written in ${paths.length} file${paths.length > 1 ? 's' : ''} (fine while the repo is private): ${few(paths, 3).join(', ')}` : '',
