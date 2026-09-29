@@ -12,9 +12,9 @@ import { helpData } from '../src/app/help.mjs';
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 60 }]).flat();
 
-test('the / menu holds 13 commands and /settings the other 14; every one is still a command, and the Help page lists both parts', () => {
+test('the / menu holds 14 commands and /settings the other 14; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
-  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'resume', 'model', 'test', 'morning', 'settings', 'exit']);
+  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'rewind', 'resume', 'model', 'test', 'morning', 'settings', 'exit']);
   expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'helpers', 'rules', 'instructions', 'memory', 'weights', 'docs', 'tests', 'battle', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {

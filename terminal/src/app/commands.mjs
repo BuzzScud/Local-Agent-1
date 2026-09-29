@@ -14,6 +14,7 @@ export const COMMANDS = [
   { name: 'instructions', desc: 'Edit general and planning instructions in the hub; saves apply to the next task' },
   { name: 'rules', desc: 'What the model reads at every start, numbered; add, switch off or remove a rule', arg: '[add|off|on|remove|always|open]' },
   { name: 'helpers', desc: 'The context helpers (Scout, Medic, Oracle, Sentry): what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
+  { name: 'rewind', desc: 'Put the files and the conversation back to before one of your messages (esc twice)' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'stats', desc: 'Speed, memory and context used' },

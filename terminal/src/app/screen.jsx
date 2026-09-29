@@ -199,7 +199,7 @@ export function Item({ it, width, model, cwd, loaded }) {
     case 'tool': return <ToolView it={it} width={width} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'note': {
-      const color = it.tone === 'error' ? C.bad : it.tone === 'warn' ? C.warn : C.dim;
+      const color = it.tone === 'error' ? C.bad : it.tone === 'warn' ? C.warn : it.tone === 'ok' ? C.ok : C.dim;
       return <Row mark={it.tone === 'error' ? '✗' : '·'} markColor={color}><Text color={color}>{it.text}</Text></Row>;
     }
     case 'bash': return (
@@ -467,7 +467,7 @@ function PermissionPrompt({ app }) {
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
-  const SHOW = 13; // the whole / menu (the rest is in /settings)
+  const SHOW = 14; // the whole / menu (the rest is in /settings)
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
   return (
@@ -613,6 +613,61 @@ function ChoicePicker({ app }) {
       })}
       <Text> </Text>
       <Text color={C.dim}>↑↓ to choose · enter to select · esc to go back</Text>
+    </Box>
+  );
+}
+
+// /rewind: your messages, newest first (a window of them when there are
+// many), then what to put back to before the one picked and what that does.
+function RewindPicker({ app }) {
+  const pk = app.picker;
+  const cut = (t, w) => { const one = t.split('\n')[0]; return one.length > w || t.includes('\n') ? `${one.slice(0, Math.max(1, w - 1))}…` : one; };
+  if (pk.stage === 'choose') {
+    const m = pk.items[pk.index];
+    const w = Math.max(...pk.options.map((o) => o.label.length)) + 2;
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+        <Text bold wrap="truncate-end">Rewind to before "{cut(m.text, app.width - 30)}"</Text>
+        <Text> </Text>
+        {pk.options.map((o, i) => {
+          const on = i === pk.choice;
+          return (
+            <Text key={o.id}>
+              <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {i + 1}. {o.label.padEnd(w)}</Text>
+              <Text color={C.dim}>{o.note}</Text>
+            </Text>
+          );
+        })}
+        <Text> </Text>
+        {pk.lines.map((l, i) => <Text key={i} color={l.tone === 'warn' ? C.warn : l.tone === 'dim' ? C.dim : undefined} wrap="wrap">{l.text}</Text>)}
+        <Text> </Text>
+        <Text color={C.dim}>↑↓ to choose · enter to select · esc to go back</Text>
+      </Box>
+    );
+  }
+  const view = Math.max(3, Math.min(pk.items.length, app.rows - 14));
+  const top = Math.max(0, Math.min(pk.index - Math.floor(view / 2), pk.items.length - view));
+  const noteW = Math.max(...pk.items.map((m) => m.note.length));
+  const longest = Math.max(...pk.items.map((m) => m.text.split('\n')[0].length + (m.text.includes('\n') ? 1 : 0)));
+  const textW = Math.max(12, Math.min(longest, 70, app.width - noteW - 12));
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Rewind</Text>
+      <Text color={C.dim}>Put the files the model changed, and the conversation, back to before one of your messages.</Text>
+      <Text> </Text>
+      {top > 0 ? <Text color={C.dim}>  ↑ {top} newer</Text> : null}
+      {pk.items.slice(top, top + view).map((m, i) => {
+        const on = top + i === pk.index;
+        return (
+          <Text key={m.n} wrap="truncate-end">
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {cut(m.text, textW).padEnd(textW)}</Text>
+            <Text color={C.dim}>  {m.note}</Text>
+          </Text>
+        );
+      })}
+      {top + view < pk.items.length ? <Text color={C.dim}>  ↓ {pk.items.length - top - view} older</Text> : null}
+      <Text> </Text>
+      <Text color={C.dim}>↑↓ to choose · enter to see what goes back · esc to close</Text>
     </Box>
   );
 }
@@ -987,6 +1042,8 @@ export function Screen({ app }) {
         <LimitsPicker app={app} />
       ) : app.picker?.kind === 'settings' ? (
         <SettingsPicker app={app} />
+      ) : app.picker?.kind === 'rewind' ? (
+        <RewindPicker app={app} />
       ) : app.picker ? (
         <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={width}>
           <Text bold>{app.picker.title}</Text>

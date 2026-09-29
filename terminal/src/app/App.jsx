@@ -32,6 +32,7 @@ import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
+import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
 import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
 import { changePermissions, summary as permSummary, settingsValue, modeWord } from './perms.mjs';
 import { countTries } from './live.mjs';
@@ -222,10 +223,16 @@ export function App({ opts, win, onRestart }) {
   const fold = (f) => { const s = folds.current; s.list.push(f); if (s.list.length > 50) s.list.shift(); s.back = 0; };
   const exitArmed = useRef(0);
   const escArmed = useRef(0);
+  const rewindArmed = useRef(0);
   const sessionRef = useRef({ id: newSessionId(), title: null, items: [] });
   const filesRef = useRef(null);
   const queuedRef = useRef(null);
   const answerRef = useRef(null); // resolves Agentic Coder's question with what you type next
+
+  // /rewind (rewind.mjs): copies of the folder around each message and
+  // command, in AGENTIC_HOME/rewind. AGENTIC_REWIND=off leaves them out.
+  const rewindRef = useRef(undefined);
+  if (rewindRef.current === undefined) rewindRef.current = (process.env.AGENTIC_REWIND ?? process.env.BONSAI_REWIND) === 'off' ? null : new Rewind({ home: HOME, session: sessionRef.current.id });
 
   // The agent lives for the whole session.
   const agentRef = useRef(null);
@@ -246,7 +253,7 @@ export function App({ opts, win, onRestart }) {
       // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
       memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
       // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
-      helpers, embedder, ranker: embedder,
+      helpers, embedder, ranker: embedder, rewind: rewindRef.current,
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
@@ -426,6 +433,56 @@ export function App({ opts, win, onRestart }) {
   };
   // /permissions alone: its five rows, each with what it holds now; enter opens
   // one (a list, or the start-up mode picker) by running its typed form.
+  // /rewind and esc twice on an empty prompt: your messages, newest first,
+  // then what to put back to before the one you pick.
+  const openRewind = () => {
+    const rw = rewindRef.current;
+    if (agent.busy || S.current.live.phase === 'working') { flash('Wait for Agentic Coder to finish, or press esc first'); return; }
+    if (!rw) { push({ type: 'note', text: 'Rewind is off here (AGENTIC_REWIND=off).', tone: 'dim' }); return; }
+    const items = rw.list().map((m) => ({ ...m, talk: rw.messageIndex(agent.messages, m.n) > 0 }));
+    if (!items.length) { push({ type: 'note', text: 'Nothing to rewind yet: once you send a message, /rewind (or esc twice) can put things back to before it.', tone: 'dim' }); return; }
+    setNotice(null); // "Press esc again to rewind" has done its job
+    setPicker({ kind: 'rewind', stage: 'list', items: items.map((m) => ({ ...m, note: rowNote(m) })), index: 0 });
+  };
+  const chooseRewind = (pk) => {
+    const rw = rewindRef.current;
+    const m = pk.items[pk.index];
+    const plan = rw.plan(m.n);
+    if (!plan) { setPicker(null); return; }
+    const options = rewindChoices(plan, m.talk);
+    setPicker({ ...pk, stage: 'choose', options, choice: 0, lines: planLines(plan, m.talk) });
+  };
+  const applyRewind = async (pk, what) => {
+    setPicker(null);
+    if (what === 'cancel') return;
+    const rw = rewindRef.current;
+    const m = pk.items[pk.index];
+    const said = m.text.split('\n')[0].slice(0, 60) + (m.text.length > 60 || m.text.includes('\n') ? '…' : '');
+    if (what === 'both' || what === 'files') {
+      const r = await rw.restore(m.n);
+      if (r) {
+        if (r.put.length) push({ type: 'note', text: `Put back ${r.put.length === 1 ? '1 file' : `${r.put.length} files`} to before "${said}": ${names(r.put.map((f) => f.rel), 8)}`, tone: 'ok' });
+        for (const f of r.skip) push({ type: 'note', text: `Left alone: ${f.rel} (${f.why})`, tone: 'warn' });
+        for (const f of r.failed) push({ type: 'note', text: `Could not put back ${f.rel}: ${f.why}`, tone: 'error' });
+        // Files only: the model is told with your next message, so it reads them again.
+        if (what === 'files' && r.put.length) pendingContext.current.push(`[The user put these files back to how they were before their message "${said}": ${names(r.put.map((f) => f.rel), 12)}. Your later changes to them are gone; read a file again before you change it.]`);
+      }
+    }
+    if (what === 'both' || what === 'talk') {
+      const at = rw.messageIndex(agent.messages, m.n);
+      if (at > 0 && agent.cutBefore(at)) {
+        // What happened in those messages is not a lesson any more.
+        agent.lessons = agent.lessons.filter((l) => !(l.at >= m.at));
+        rw.dropFrom(m.n);
+        pendingContext.current = [];
+        push({ type: 'divider', text: `rewound to before: ${said}` });
+        if (what === 'talk') push({ type: 'note', text: 'The files stay as they are now.', tone: 'dim' });
+        setInput((s) => withUndo(s, { value: m.text, cursor: m.text.length }));
+        saveNow();
+      } else push({ type: 'note', text: 'That message is no longer in the conversation (it was summarized since), so the conversation stays.', tone: 'warn' });
+    }
+  };
+
   const openPermissions = () => {
     const at = agent.cwd;
     const v = permSummary(at, { session: agent.allowedPrefixes });
@@ -559,8 +616,17 @@ export function App({ opts, win, onRestart }) {
     abortRef.current = ac;
     setPlaceholder(pick(PLACEHOLDERS));
     autoRef.current.cancel(); // a save in the background steps aside
-    agent.send(content, { signal: ac.signal });
+    agent.send(content, { signal: ac.signal, shown });
   }, [agent, cwd, push]);
+
+  // /rewind's first copy of this folder, and the clean-up of copies no
+  // conversation has used for a week, both in the background.
+  useEffect(() => {
+    const rw = rewindRef.current;
+    if (!rw) return;
+    rw.warm(cwd).catch(() => {});
+    pruneRewind(HOME).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Agent events → screen.
   useEffect(() => {
@@ -774,6 +840,7 @@ export function App({ opts, win, onRestart }) {
       agent.messages = s.messages;
       agent.messages[0] = { role: 'system', content: agent.messages[0].content };
       sessionRef.current = { id: s.id, title: s.title, items: s.items ?? [] };
+      rewindRef.current?.setSession(s.id);
       push({ type: 'divider', text: `resumed: ${s.title}` }, ...(s.items ?? []).map(({ key, ...rest }) => rest));
       if (s.mode) setMode(s.mode);
     } catch (e) { push({ type: 'note', text: `Could not open that conversation: ${e.message}`, tone: 'error' }); }
@@ -918,6 +985,7 @@ export function App({ opts, win, onRestart }) {
           itemsRef.current = [{ key: 'welcome', type: 'welcome' }];
           setItems(itemsRef.current);
           win?.clear();
+          rewindRef.current?.setSession(sessionRef.current.id);
           if (back) push({ type: 'note', text: `Back in ${short(opts.cwd)}, the folder Agentic Coder was started in.`, tone: 'dim' });
         }
         break;
@@ -1095,6 +1163,9 @@ export function App({ opts, win, onRestart }) {
         if (r.text) push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
         break;
       }
+      case 'rewind':
+        openRewind();
+        break;
       case 'resume': {
         const list = listSessions(cwd);
         if (!list.length) { push({ type: 'note', text: 'No earlier conversations in this folder.', tone: 'dim' }); break; }
@@ -1412,6 +1483,27 @@ export function App({ opts, win, onRestart }) {
       }
       return;
     }
+    // /rewind: ↑↓ a message, enter shows what would go back; then ↑↓ or a
+    // number picks what to put back, esc goes back to the list.
+    if (cur.picker?.kind === 'rewind') {
+      const pk = cur.picker;
+      if (pk.stage === 'list') {
+        const n = pk.items.length;
+        if (key.upArrow) setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
+        else if (key.downArrow || key.tab) setPicker({ ...pk, index: Math.min(n - 1, pk.index + 1) });
+        else if (key.return) chooseRewind(pk);
+        else if (key.escape || (key.ctrl && ch === 'c')) setPicker(null);
+        return;
+      }
+      const n = pk.options.length;
+      if (key.upArrow) setPicker({ ...pk, choice: (pk.choice + n - 1) % n });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, choice: (pk.choice + 1) % n });
+      else if (key.return) applyRewind(pk, pk.options[pk.choice].id);
+      else if (/^[1-9]$/.test(ch) && Number(ch) <= n) applyRewind(pk, pk.options[Number(ch) - 1].id);
+      else if (key.escape) setPicker({ ...pk, stage: 'list' });
+      else if (key.ctrl && ch === 'c') setPicker(null);
+      return;
+    }
     // /settings: ↑↓ a row, enter runs its command, esc goes back
     if (cur.picker?.kind === 'settings') {
       const pk = cur.picker;
@@ -1451,7 +1543,12 @@ export function App({ opts, win, onRestart }) {
         if (Date.now() - escArmed.current < 1500) { setInput((s) => withUndo(s, { value: '', cursor: 0 })); return; } // ctrl+z brings it back
         escArmed.current = Date.now();
         flash('Press esc again to clear', 1500);
+        return;
       }
+      // On an empty prompt, esc twice opens /rewind (as in Claude Code).
+      if (rewindArmed.current && Date.now() - rewindArmed.current < 1500) { rewindArmed.current = 0; openRewind(); return; }
+      rewindArmed.current = Date.now();
+      if (rewindRef.current?.points.length) flash('Press esc again to rewind', 1500);
       return;
     }
     if (key.tab && key.shift) { const m = MODES[(MODES.indexOf(cur.mode) + 1) % MODES.length]; setMode(m); return; }

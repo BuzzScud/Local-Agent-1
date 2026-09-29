@@ -38,7 +38,7 @@ export const KEYS = [
     ['(selecting)', 'selected text is copied to the clipboard at once: “copied N chars to clipboard”'],
     ['delete · typing · paste', 'with text selected: remove it · replace it · replace it'],
     ['← → · esc', 'with text selected: jump to its start or end · keep the text, drop the selection'],
-    ['esc twice', 'clear the whole prompt'],
+    ['esc twice', 'clear the whole prompt; on an empty prompt: /rewind, to put files and the conversation back to before one of your messages'],
     ['ctrl+c', 'clear the whole prompt (on an empty prompt: press twice to quit)'],
     ['ctrl+z · ctrl+y', 'undo · redo the last change: a word typed, a delete, a paste, a clear'],
   ] },

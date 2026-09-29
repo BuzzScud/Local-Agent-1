@@ -41,8 +41,18 @@ uncommitted).
 | ↑ ↓ | earlier prompts |
 | `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
 | ctrl+c twice | quit (the conversation is saved) |
+| esc twice | on an empty prompt: `/rewind` |
 
-Commands: `/help /clear /compact /btw /effort /mode /math /resume /model /morning /settings /exit` — and typing `exit` quits too.
+Commands: `/help /clear /compact /btw /effort /mode /math /rewind /resume /model /test /morning /settings /exit` — and typing `exit` quits too.
+
+**/rewind** puts things back to before one of your messages: the files the model changed, the conversation, or
+both. Before each message and when its work ends, the folder is copied into a private store
+(`~/.agentic-coder/rewind/`, a git folder of its own: the project's git, its staging and stashes are never
+touched), and again around each command the model runs. Only the model's changes go back: its edits and what
+its commands changed. A file that changed while it worked but by neither, or that you (or another window)
+changed since, is left alone and named. In the home folder, or a folder of more than 25,000 files, only the
+text before each Edit or Write is kept. Copies go 7 days after a conversation was last used;
+`AGENTIC_REWIND=off` turns it off.
 `/settings` holds the rest in one menu: Setup (permissions, status bar, helpers, rules, instructions, memory),
 Pages (weights, docs, tests, battle: the hub in the browser) and Tools (stats, doctor, init, update).
 Each of those still works typed in full (`/doctor`, `/memory undo`); it just is not in the `/` list.

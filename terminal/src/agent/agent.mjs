@@ -237,7 +237,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null }) {
     super();
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
@@ -263,6 +263,8 @@ export class Agent extends EventEmitter {
     // every search chooses by meaning alone, as it always has.
     this.search = { retriever: 'meaning', ...(search ?? {}) };
     this.reranker = reranker;
+    // /rewind (app/rewind.mjs): copies of the project around each message and command.
+    this.rewind = rewind;
     this.lessons = []; // what happened in each turn, for the next save (lessons.mjs)
     // When Agentic Coder started the server itself it has two slots: the
     // conversation stays in 0, side requests (sorting, tries) use 1.
@@ -292,6 +294,7 @@ export class Agent extends EventEmitter {
   moveTo(dir) {
     const before = tokensOf(this.messages[0].content);
     this.cwd = dir;
+    this.rewind?.moved(dir);
     this.testCmd = this.verify ? testCommand(dir) : null;
     this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir).text, git: gitSummary(dir), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
@@ -359,6 +362,8 @@ export class Agent extends EventEmitter {
     const pick = one ? (/^(yes|y|ok|okay|sure|yep|go)\b/i.test(said) ? found[0] : null) : found.find((d) => said === tilde(d) || said === d);
     if (!pick) return null;
     this.moveTo(pick);
+    // /rewind copies the new folder before anything in it changes.
+    try { await this.rewind?.whenMoved(); } catch {}
     this.emit('note', { text: `Working in ${tilde(pick)} now: its tests and AGENTS.md, and commands can only change files there.`, tone: 'dim' });
     return { moved: pick };
   }
@@ -459,16 +464,41 @@ export class Agent extends EventEmitter {
   // work itself, the memory: a message that corrects Agentic Coder counts against
   // the facts the last turn used, and when the turn ends what happened is
   // written down, for the facts' trust and for the next save.
-  async send(text, { signal } = {}) {
+  // shown: the message as you typed it (what /rewind lists and puts back).
+  async send(text, { signal, shown } = {}) {
     this.corrected(text);
     this.turn = null;
-    this.happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [] };
+    const happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [] };
+    this.happened = happened;
     const warn = (ev) => { if (ev?.tone === 'warn' || ev?.tone === 'error') this.happened?.warnings.push(String(ev.text).slice(0, 200)); };
     this.on('note', warn);
+    // The folder as it is before this message, for /rewind.
+    let point = null;
+    if (this.rewind) {
+      const slow = setTimeout(() => this.emit('note', { text: 'Saving a copy of this folder first, for /rewind (only the first message waits for it)…', tone: 'dim' }), 1500);
+      try { point = await this.rewind.begin({ cwd: this.cwd, text: shown ?? String(text), at: happened.at }); } catch { point = null; } finally { clearTimeout(slow); }
+    }
     let reason;
-    try { reason = await this.work(text, { signal }); } finally { this.off('note', warn); }
+    try { reason = await this.work(text, { signal }); } finally {
+      this.off('note', warn);
+      if (point) { try { await this.rewind.finish(point, { files: happened.files, message: happened.message }); } catch { /* this message cannot be rewound */ } }
+    }
     this.settle(reason);
     return reason;
+  }
+
+  // /rewind: the conversation goes back to before messages[at] (a message
+  // of yours). What the model knew from after it goes with it.
+  cutBefore(at) {
+    if (!(at > 0 && at < this.messages.length)) return false;
+    this.messages.length = at;
+    this.turn = null;
+    this.todos = null;
+    this.keptWrite = null;
+    this.readFiles = new Set();
+    this.mapGiven = this.messages.some((m) => m.role === 'tool' && String(m.content).startsWith('Code files in the project'));
+    this.ctxUsed = this.messages.reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : '') + tokensOf(m.reasoning_content ?? ''), 0) + 1300;
+    return true;
   }
 
   async work(text, { signal } = {}) {
@@ -486,6 +516,7 @@ export class Agent extends EventEmitter {
     const started = Date.now();
     const turnStart = this.messages.length;
     this.messages.push({ role: 'user', content: text });
+    if (this.happened) this.happened.message = this.messages.at(-1);
     this.emit('turn-start', { started });
     if (isSmallTalk(text)) { this.happened.small = true; return this.chat(text, started, signal); }
     // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
@@ -1495,7 +1526,13 @@ export class Agent extends EventEmitter {
     this.emit('tool-running', { id, name: call.name, ...shown });
     let out;
     const aside = call.name === 'Bash' && this.turn?.question && !isReadOnly(args.command);
-    try { out = aside ? await this.runAside(args.command, signal) : await execute(call.name, args, prepared, env); } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
+    // /rewind: the text before the model's edit, and a copy around its commands.
+    if ((call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.rewind?.edited(prepared.abs, prepared.created ? null : prepared.before);
+    try {
+      out = aside ? await this.runAside(args.command, signal)
+        : call.name === 'Bash' && this.rewind ? await this.rewind.around(() => execute(call.name, args, prepared, env))
+        : await execute(call.name, args, prepared, env);
+    } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
     // A command the fence stopped, in a message a note of Claude's came with: back to the note.
     if (this.claudeCame && out.error && /outside the project folder/.test(String(out.text))) out.text += ' If the note that came with the request answers it, answer from the note now.';
     if (readKey && !out.error) Object.assign(out, { readKey, mtime });
