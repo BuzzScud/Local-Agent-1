@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en" class="nojs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code search plan</title>
+<script>document.documentElement.className = 'js';</script>
+<style>
+  :root {
+    --bg: #faf9f7; --card: #ffffff; --text: #1f1e1c; --muted: #6b6862; --line: #e6e3de;
+    --soft: #f3f1ed;
+    --green-bg: #e3f2e6; --green: #1e6b34;
+    --amber-bg: #fbefd9; --amber: #8a5a0b;
+    --red-bg: #f8e3e1; --red: #9b2c24;
+    --grey-bg: #eeece8; --grey: #5f5c57;
+    --blue-bg: #e8eefb; --blue: #2c4f9e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1917; --card: #242320; --text: #ecebe8; --muted: #a19e98; --line: #3a3834;
+      --soft: #2c2b28;
+      --green-bg: #1f3a26; --green: #8fd4a2;
+      --amber-bg: #3d3018; --amber: #e9c27a;
+      --red-bg: #43231f; --red: #f0a79f;
+      --grey-bg: #33312d; --grey: #b8b5ae;
+      --blue-bg: #243049; --blue: #a9c1f5;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 1400px; margin: 0 auto; padding: 18px 24px 24px; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  h1 { font-size: 21px; margin: 0; font-weight: 680; letter-spacing: -0.01em; }
+  .dateline { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 16px; }
+  nav button { font: inherit; font-size: 14px; padding: 6px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  nav button[aria-selected=true] { background: var(--text); color: var(--bg); border-color: var(--text); }
+  nav button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .nojs nav { display: none; }
+  .js section[hidden] { display: none; }
+  .nojs section { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+
+  section h2 { font-size: 22px; line-height: 1.3; margin: 0 0 6px; font-weight: 650; }
+  section h3 { font-size: 17px; margin: 0 0 8px; font-weight: 650; }
+  p { margin: 0 0 12px; }
+  .lead { font-size: 17px; max-width: 1000px; margin-bottom: 16px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  code { font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  .cols.wide-left { grid-template-columns: 1.2fr 1fr; }
+
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; white-space: nowrap; }
+  .card .big { font-size: 30px; font-weight: 680; margin: 2px 0 2px; line-height: 1.15; }
+  .card .big small { font-size: 16px; color: var(--muted); font-weight: 500; }
+  .card p { font-size: 14.5px; margin: 0; color: var(--muted); }
+
+  .tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .tag.green { background: var(--green-bg); color: var(--green); }
+  .tag.amber { background: var(--amber-bg); color: var(--amber); }
+  .tag.red { background: var(--red-bg); color: var(--red); }
+  .tag.grey { background: var(--grey-bg); color: var(--grey); }
+  .tag.blue { background: var(--blue-bg); color: var(--blue); }
+
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin: 0 0 14px; }
+  .soft { background: var(--soft); border-radius: 12px; padding: 14px 18px; margin: 0 0 14px; }
+  .soft > b, .box > b { display: block; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin: 0 0 12px; font-size: 15.5px; }
+  th { text-align: left; font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.nums td:not(:first-child), table.nums th:not(:first-child) { text-align: right; white-space: nowrap; }
+  table.nums td:first-child { font-weight: 600; }
+
+  /* bars: how many of 25 */
+  .bars { display: grid; gap: 9px; margin: 2px 0 10px; }
+  .bar { display: grid; grid-template-columns: 250px 1fr 52px; gap: 12px; align-items: center; font-size: 15px; }
+  .bar .track { height: 14px; border-radius: 7px; background: var(--grey-bg); overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 7px; background: var(--blue); }
+  .bar .fill.red { background: var(--red); }
+  .bar .fill.amber { background: var(--amber); }
+  .bar .fill.green { background: var(--green); }
+  .bar b { text-align: right; }
+
+  /* plan rows */
+  .plan { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+  .plan .r { display: grid; grid-template-columns: 34px 1.3fr 1.2fr 1fr 110px; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: start; font-size: 15px; }
+  .plan .r:last-child { border-bottom: 0; }
+  .plan .r.head { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; padding-top: 9px; padding-bottom: 9px; }
+  .plan .n { width: 26px; height: 26px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .plan .r.dropped { opacity: .75; }
+  .plan .r.dropped .n { background: var(--grey-bg); color: var(--grey); }
+  .plan strong { display: block; }
+  .plan .sub { color: var(--muted); font-size: 14px; }
+
+  /* the two-layer flow */
+  .flow { display: flex; align-items: stretch; gap: 6px; margin: 4px 0 10px; }
+  .step { flex: 1 1 0; min-width: 0; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 14.5px; line-height: 1.4; }
+  .step.new { background: var(--blue-bg); border-color: transparent; }
+  .step .who { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; margin-bottom: 2px; }
+  .step.new .who { color: var(--blue); }
+  .arrow { display: flex; align-items: center; color: var(--muted); font-size: 18px; flex: 0 0 auto; }
+  .arrow::after { content: "→"; }
+
+  .detail { display: grid; grid-template-columns: 136px 1fr; gap: 6px 14px; font-size: 15px; margin: 0; }
+  .detail dt { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; padding-top: 2px; }
+  .detail dd { margin: 0; }
+
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 4px 0 12px; }
+  ol.steps li { counter-increment: s; position: relative; padding: 0 0 9px 38px; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 26px; height: 26px; border-radius: 50%; background: var(--grey-bg); color: var(--grey); font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  .opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .opt { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .opt h3 { margin-bottom: 4px; }
+  .opt .cost { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+
+  footer { margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+  @media (max-width: 1100px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .plan .r { grid-template-columns: 34px 1fr 1fr; }
+    .plan .r > :nth-child(4), .plan .r > :nth-child(5) { grid-column: 2 / -1; }
+    .plan .r.head { display: none; }
+  }
+  @media (max-width: 700px) {
+    main { padding: 14px 16px 20px; }
+    .cols, .cols.wide-left, .opts { grid-template-columns: 1fr; gap: 16px; }
+    .cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .card .big { font-size: 24px; }
+    .bar { grid-template-columns: 1fr 44px; }
+    .bar .track { grid-column: 1 / -1; grid-row: 2; }
+    .flow { flex-direction: column; }
+    .arrow::after { content: "↓"; }
+    .arrow { justify-content: center; }
+    .plan .r { grid-template-columns: 30px 1fr; }
+    .plan .r > :nth-child(n+3) { grid-column: 2 / -1; }
+    .detail { grid-template-columns: 1fr; }
+    table.nums { font-size: 13.5px; }
+    table.nums td, table.nums th { padding: 6px 4px; }
+    table.nums th { white-space: normal; font-size: 11px; letter-spacing: 0.02em; vertical-align: bottom; }
+    table.nums td:first-child { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Code search plan</h1>
+  <span class="dateline">Agentic Coder · 29 Sep 2026 · a plan: nothing in the app changes until you pick a step</span>
+</header>
+<nav role="tablist" aria-label="Sections"></nav>
+
+<section id="now" data-tab="Where it stands">
+  <h2>It finds the right code for this repo about 6 times in 10, and almost never for MAIN2026</h2>
+  <p class="lead">A new test asks the search 50 questions about real code, each with the one function that answers it: 25 about this repo and 25 about MAIN2026. It counts how often that function is among the pieces Gemma is handed before its first step.</p>
+  <div class="cards">
+    <div class="card"><div class="label">Agentic Coder</div><div class="big">15 <small>of 25</small></div><p>right function handed to the model</p></div>
+    <div class="card"><div class="label">MAIN2026</div><div class="big">1 <small>of 25</small></div><p>right function handed to the model</p></div>
+    <div class="card"><div class="label">Files it reads</div><div class="big">99 <small>of ~5,500</small></div><p>in MAIN2026; 263 of ~640 in this repo</p></div>
+    <div class="card"><div class="label">With the reranker</div><div class="big">16 <small>of 50</small></div><p>the same as without it, and 2–4 s slower</p></div>
+  </div>
+  <div class="cols wide-left">
+    <div>
+      <table class="nums">
+        <thead><tr><th></th><th>Its file read at all</th><th>First</th><th>Top 3</th><th>Handed</th></tr></thead>
+        <tbody>
+          <tr><td>Agentic Coder</td><td>24 / 25</td><td>12</td><td>15</td><td>15</td></tr>
+          <tr><td>MAIN2026</td><td>1 / 25</td><td>1</td><td>1</td><td>1</td></tr>
+          <tr><td>Both</td><td>25 / 50</td><td>13</td><td>16</td><td>16</td></tr>
+          <tr><td class="muted" style="font-weight:400">Both, reranked</td><td class="muted">25 / 50</td><td class="muted">13</td><td class="muted">17</td><td class="muted">16</td></tr>
+        </tbody>
+      </table>
+      <p class="small muted">"First" and "Top 3": where the right function lands in the search's order. "Handed": it is among the up to 8 pieces from up to 3 files the model is given, the app's own rule.</p>
+    </div>
+    <div class="soft">
+      <b>Two things I said earlier that the test corrects</b>
+      <p><strong>MAIN2026 is worse than I said.</strong> I said its index held about 200 files. It holds 99: its busiest files are big pages, and 99 of them fill the 4,000-piece limit. 24 of the 25 questions were about files it never reads. I rated it 4 of 10; it is closer to 1.</p>
+      <p style="margin:0"><strong>The reranker does not help here.</strong> On the 12 earlier questions it moved the top 3 from 8 to 10. On these 50 it moved top 3 from 16 to 17 and "handed" not at all, while adding 2–4 s to every search. It stays off, and it leaves the plan.</p>
+    </div>
+  </div>
+</section>
+
+<section id="misses" data-tab="Why it misses">
+  <h2>Two problems: MAIN2026 is barely read, and in this repo the bar and the test code get in the way</h2>
+  <p class="lead">The 34 misses, sorted by what went wrong. Each kind has a different fix, which is why the plan has separate steps.</p>
+  <div class="cols">
+    <div class="box">
+      <b>The 34 misses</b>
+      <div class="bars">
+        <div class="bar"><span>File never read (MAIN2026)</span><span class="track"><span class="fill red" style="width:96%"></span></span><b>24</b></div>
+        <div class="bar"><span>File never read (this repo)</span><span class="track"><span class="fill red" style="width:4%"></span></span><b>1</b></div>
+        <div class="bar"><span>Just under the bar: nothing handed</span><span class="track"><span class="fill amber" style="width:12%"></span></span><b>3</b></div>
+        <div class="bar"><span>Another file looked closer</span><span class="track"><span class="fill amber" style="width:16%"></span></span><b>4</b></div>
+        <div class="bar"><span>Right file, its opening piece won</span><span class="track"><span class="fill amber" style="width:4%"></span></span><b>1</b></div>
+        <div class="bar"><span>Found, but 18th behind a copy</span><span class="track"><span class="fill amber" style="width:4%"></span></span><b>1</b></div>
+      </div>
+      <p class="small muted" style="margin:0">Bars are out of 25. Red: fixed only by reading more files. Amber: fixed by searching better.</p>
+    </div>
+    <div>
+      <div class="soft">
+        <b>What the amber ones have in common</b>
+        <p><strong>The bar.</strong> The app only hands code over when the best match scores at least 0.58. Three questions scored 0.55–0.56, so Gemma got nothing, even though in one of them the right function was 3rd.</p>
+        <p><strong>Test and practice code.</strong> In 4 of the 10 misses in this repo, the top result was a test, a practice project or a report script, not the app's own code. One answer was found only 18th, behind a copy of it in the test bench.</p>
+        <p style="margin:0"><strong>Missing context.</strong> A function carries only its own name and file. Once, the file's opening comment (which says what the file is for) beat the function it describes.</p>
+      </div>
+      <p class="small muted">Searching by meaning takes about 30 thousandths of a second, so every fix here can be generous with how much it looks at.</p>
+    </div>
+  </div>
+</section>
+
+<section id="plan" data-tab="The plan">
+  <h2>Four steps, biggest first, each kept only if the 50 questions say it helped</h2>
+  <p class="lead">Every step is run through the same test before and after. A step that does not move its number is taken back out.</p>
+  <div class="plan">
+    <div class="r head"><span></span><span>Step</span><span>What it fixes</span><span>The number it should move</span><span>Cost</span></div>
+    <div class="r"><span class="n">1</span><span><strong>Reach every file</strong><span class="sub">A short card for every code file; full pieces made for a file when a question lands on it</span></span><span>The 25 questions about files never read (24 in MAIN2026)</span><span>MAIN2026 read at all: 1 → 25 of 25. Handed: 1 → at least half</span><span>~half a day</span></div>
+    <div class="r"><span class="n">2</span><span><strong>App code first, with its context</strong><span class="sub">Tests and practice code count a little less; each piece carries its file's opening comment</span></span><span>The 5 misses where test code or a file's opening piece won</span><span>This repo handed: 15 → 18 or more, nothing else lower</span><span>~2 hours</span></div>
+    <div class="r"><span class="n">3</span><span><strong>Set the bar with evidence</strong><span class="sub">Add 10 questions that should bring nothing, then move the 0.58 bar</span></span><span>The 3 questions just under the bar</span><span>Handed up by up to 3, with no code handed on the 10 "nothing" questions</span><span>~1 hour</span></div>
+    <div class="r"><span class="n">4</span><span><strong>Try a search model made for code</strong><span class="sub">Qwen3-Embedding 0.6B, the same size as today's model</span></span><span>The 4 misses where another file looked closer</span><span>Top 3 and handed up by 3 or more, or it is dropped</span><span>~1 hour, 640 MB</span></div>
+    <div class="r dropped"><span class="n">–</span><span><strong>Reranker on for code</strong><span class="sub">Dropped after the test</span></span><span>—</span><span>Measured: handed 16 → 16, top 3 16 → 17</span><span>2–4 s a search</span></div>
+  </div>
+  <p class="small muted" style="margin-top:12px">Later, not planned yet: bring along the code a found function calls; re-read a file right after the model edits it; a faster first build.</p>
+</section>
+
+<section id="reach" data-tab="Step 1 · Reach">
+  <h2>Step 1: a card for every file, full detail where the question lands</h2>
+  <p class="lead">Today the search reads full detail for the ~100–260 files it has room for, and nothing at all for the rest. The idea: a two-line card for every file, so any file can be found, and full detail only for the files a question actually needs.</p>
+  <div class="flow">
+    <div class="step"><div class="who">Your question</div>"the settings are lost when I reload the page"</div>
+    <span class="arrow"></span>
+    <div class="step new"><div class="who">New · every file's card</div>Its path, the names it defines and its first lines. 5,500 cards in MAIN2026</div>
+    <span class="arrow"></span>
+    <div class="step new"><div class="who">New · the closest files</div>The 3 files whose cards are closest to the question</div>
+    <span class="arrow"></span>
+    <div class="step"><div class="who">Full detail</div>Their functions, from the index, or made then and kept</div>
+    <span class="arrow"></span>
+    <div class="step"><div class="who">Gemma</div>Handed the right function before its first step</div>
+  </div>
+  <div class="cols">
+    <dl class="detail">
+      <dt>Why</dt><dd>24 of the 25 MAIN2026 questions were about files the index never read. No amount of better searching fixes a file that is not there.</dd>
+      <dt>Already there</dt><dd>The file ranker already makes one card per file for 400 files, and the app already pauses indexing while the model answers.</dd>
+      <dt>Cost</dt><dd>About half a day to build. The first card pass over MAIN2026 takes about 5–10 minutes in the background, once. A question that lands on a file not read yet waits a few seconds the first time.</dd>
+    </dl>
+    <dl class="detail">
+      <dt>Done when</dt><dd>MAIN2026's files read at all goes from 1 to 25 of 25, and handed from 1 to at least 12 of 25. This repo does not drop below 15.</dd>
+      <dt>Risk</dt><dd>A card holds only a file's first lines, so a file whose opening says little may be missed. The test shows that before anything is kept.</dd>
+      <dt>Not changed</dt><dd>Small projects: they already fit whole, so they work as today.</dd>
+    </dl>
+  </div>
+</section>
+
+<section id="better" data-tab="Steps 2–4">
+  <h2>Steps 2–4: search better within the files it reads</h2>
+  <p class="lead">These aim at the 10 misses in this repo, where the right file was read but the answer did not reach Gemma.</p>
+  <div class="cols">
+    <div class="box">
+      <b>2 · App code first, with its context</b>
+      <ol class="steps">
+        <li>Code in test folders, practice projects and report scripts scores a little lower, so it wins only when it is clearly closer.</li>
+        <li>Each piece the search reads starts with its file's opening comment (a line or two on what the file is for), not only the file's name.</li>
+        <li>The index is rebuilt once. The model is still handed the same code.</li>
+      </ol>
+      <p class="small muted" style="margin:0">Anthropic published the second idea, adding a piece's context before indexing it, and reported about a third fewer misses. It wrote that context with a large model; this uses the comment already in the file, at no cost. Done when: handed 15 → 18 or more in this repo.</p>
+    </div>
+    <div>
+      <div class="box">
+        <b>3 · Set the bar with evidence</b>
+        <p style="margin-bottom:8px">Three questions scored 0.55–0.56 against a 0.58 bar and got nothing. When the bar was set, questions about nothing in the project scored up to 0.54, so lowering it blindly would hand Gemma unrelated code. First add 10 questions that should bring nothing, then move the bar only as far as those allow.</p>
+      </div>
+      <div class="box">
+        <b>4 · Try a search model made for code</b>
+        <p style="margin:0">Today's model, BGE-M3, learned mostly from ordinary writing. Qwen3-Embedding 0.6B is the same size and learned from code too. It gets one run on the same 50 questions and is kept only if it wins by 3 or more. It is a download and a comparison. Nothing changes if it loses.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="test" data-tab="The test">
+  <h2>The ruler: 50 questions, each with the one function that answers it</h2>
+  <p class="lead">Built today, so every step in this plan gets a clear yes or no. It runs the real search on the real folders, with the real small model, and counts the same four things every time.</p>
+  <div class="cols">
+    <div>
+      <dl class="detail">
+        <dt>This repo</dt><dd>25 questions: the 12 from the earlier reranker test, and 13 about functions picked at random from the app's code, each written after reading the function.</dd>
+        <dt>MAIN2026</dt><dd>25 questions about functions picked at random from its app code. They stay on this Mac: the project is private, so the test record and this page show only counts.</dd>
+        <dt>Mix</dt><dd>Problems ("/meters on does not turn the meters on"), "where does…" questions, and a few that name the function exactly.</dd>
+        <dt>Time</dt><dd>About 14 minutes the first time (it builds both indexes), a few minutes after that.</dd>
+      </dl>
+    </div>
+    <div>
+      <div class="soft">
+        <b>Run it</b>
+        <p style="margin-bottom:6px"><code>bun run eval:code</code> · the four counts for each project</p>
+        <p style="margin-bottom:6px"><code>bun run eval:code -- --rerank</code> · the same, with and without the reranker</p>
+        <p style="margin:0"><code>bun run eval:code -- --check</code> · only checks that every question still points at code that exists (it caught one today: a function had moved to another file)</p>
+      </div>
+      <p class="small muted" style="margin:0"><strong>What it cannot tell:</strong> I wrote the questions, and your own wording will differ. 25 per project is enough to see a change of 3 or more, not 1. It has no questions that should bring nothing yet (step 3 adds them). Each run goes in the test record.</p>
+    </div>
+  </div>
+</section>
+
+<section id="call" data-tab="Your call">
+  <h2>Your call</h2>
+  <p class="lead">Each option ends with the same 50 questions run again, and a short report of what moved.</p>
+  <div class="opts">
+    <div class="opt"><h3>A · Reach only (step 1)</h3><p>The biggest change: MAIN2026 goes from almost unsearched to searchable. This repo stays as it is.</p><div class="cost">~half a day · one background card pass per big project</div></div>
+    <div class="opt"><h3>B · The quick fixes (steps 2 and 3)</h3><p>This repo's misses: test code counts less, pieces carry their file's comment, and the bar is set with evidence.</p><div class="cost">~3 hours · one index rebuild</div></div>
+    <div class="opt"><h3>C · All four, in order</h3><p>Reach, then the quick fixes, then the code model, each kept only if the test agrees.</p><div class="cost">~1 day · a 640 MB download for step 4</div></div>
+    <div class="opt"><h3>D · Leave it here</h3><p>The test stays, so any later change to the search can be measured.</p><div class="cost">Nothing</div></div>
+  </div>
+</section>
+
+<footer>Test run 29 Sep 2026, 23:08 · BGE-M3 search, Qwen3-Reranker 0.6B compared · 834 s · in the test record · keys 1–7 or ← → switch tabs</footer>
+</main>
+<script>
+  const sections = [...document.querySelectorAll('section[data-tab]')];
+  const nav = document.querySelector('nav');
+  const buttons = sections.map((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.textContent = `${i + 1} · ${s.dataset.tab}`;
+    b.addEventListener('click', () => show(i));
+    nav.appendChild(b);
+    return b;
+  });
+  function show(i, push = true) {
+    sections.forEach((s, k) => { s.hidden = k !== i; buttons[k].setAttribute('aria-selected', String(k === i)); });
+    if (push) history.replaceState(null, '', `#${sections[i].id}`);
+  }
+  const start = sections.findIndex((s) => `#${s.id}` === location.hash);
+  show(start < 0 ? 0 : start, false);
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const at = sections.findIndex((s) => !s.hidden);
+    if (/^[1-9]$/.test(e.key) && Number(e.key) <= sections.length) show(Number(e.key) - 1);
+    else if (e.key === 'ArrowRight') show(Math.min(sections.length - 1, at + 1));
+    else if (e.key === 'ArrowLeft') show(Math.max(0, at - 1));
+  });
+</script>
+</body>
+</html>
