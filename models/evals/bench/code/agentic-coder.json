@@ -1,0 +1,32 @@
+{
+ "name": "Agentic Coder",
+ "folder": ".",
+ "about": "Questions about this repo, each with the function that answers it. The first 12 are the 29 Sep reranker bake-off's (models/evals/dev/experiments/rerank-bakeoff/code-labels.json; looksLikeEvent has since moved to facts.mjs); the other 13 were picked at random from terminal/src and models/runtime (29 Sep), and the question written after reading the function. find: a line the right piece must hold, for a function long enough to be read in several pieces.",
+ "questions": [
+  {"q": "where are the saved memory facts matched to a request", "file": "terminal/src/agent/recall.mjs", "name": "recall"},
+  {"q": "how are code files ranked before the model reads them", "file": "terminal/src/agent/rank.mjs", "name": "rankFiles"},
+  {"q": "cache of texts the embedder already turned into numbers", "file": "models/runtime/embed.mjs", "name": "embed"},
+  {"q": "server flags for a model that only compares meanings", "file": "models/runtime/server.mjs", "name": "serverArgs"},
+  {"q": "save the effort and the limits from the panel", "file": "terminal/src/app/App.jsx", "name": "saveEffortLimits"},
+  {"q": "move a limit one step up or down", "file": "terminal/src/app/limits.mjs", "name": "moveLimit"},
+  {"q": "switch a context helper on or off by its codename", "file": "terminal/src/app/helpers.mjs", "name": "changeHelpers"},
+  {"q": "share the token ceiling between the helpers", "file": "terminal/src/agent/helpers.mjs", "name": "shareOut"},
+  {"q": "give the model the uncommitted changes as a diff", "file": "terminal/src/agent/helpers.mjs", "name": "gitChanges"},
+  {"q": "find where each name in the request is defined and used", "file": "terminal/src/agent/helpers.mjs", "name": "whoUses"},
+  {"q": "store the vectors as one byte per number with a scale", "file": "terminal/src/tools/codeindex.mjs", "name": "pack"},
+  {"q": "skip a memory that only says what happened", "file": "terminal/src/agent/facts.mjs", "name": "looksLikeEvent"},
+  {"q": "the change flow counts its new test as passing even when that new test failed", "file": "terminal/src/flows/change.mjs", "name": "newTestPassed"},
+  {"q": "the reranker won't load and says only 0.9 GB of memory is free", "file": "models/runtime/rerank.mjs", "name": "start"},
+  {"q": "when checking a page in the browser, start the site with vite or next from its package scripts", "file": "terminal/src/flows/pagecheck.mjs", "name": "serveFromPackage"},
+  {"q": "renaming a variable also changed the word inside a comment and a string", "file": "terminal/src/flows/rename.mjs", "name": "textMask"},
+  {"q": "add another look for the working animation next to the orbit dots", "file": "terminal/src/ui/theme.mjs", "name": "SPINNERS"},
+  {"q": "find which TCP ports already have a server listening so a command cannot take them", "file": "terminal/src/tools/sandbox.mjs", "name": "listeningPorts"},
+  {"q": "why does the model start with 16k context instead of 32k when little memory is free", "file": "models/runtime/memory.mjs", "name": "chooseContext"},
+  {"q": "the model sent a Write with the content but no file path, and the text was lost", "file": "terminal/src/agent/agent.mjs", "name": "keepWrite"},
+  {"q": "neverRule misses the blocked command when it comes after a semicolon", "file": "terminal/src/agent/permissions.mjs", "name": "neverRule"},
+  {"q": "tryUntilPass uses the same temperature on every try", "file": "terminal/src/flows/tries.mjs", "name": "tryUntilPass"},
+  {"q": "/meters on does not turn the meters on", "file": "terminal/src/app/App.jsx", "name": "runSlash", "find": "case 'meters':"},
+  {"q": "the memory should be tidied once a day, merging duplicate facts", "file": "terminal/src/agent/lessons.mjs", "name": "tidyDue"},
+  {"q": "a fix quietly deleted a function we still need; catch functions that disappeared from the file", "file": "terminal/src/flows/blocks.mjs", "name": "lostNames"}
+ ]
+}

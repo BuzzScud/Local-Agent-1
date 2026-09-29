@@ -21,6 +21,7 @@
     "battle:verify": "node models/evals/battle/verify-tests.mjs",
     "eval:notes": "node models/evals/bench/memory/claude-notes.mjs",
     "eval:recall": "node models/evals/bench/memory/recall.mjs",
+    "eval:code": "node models/evals/bench/code/search.mjs",
     "docs": "node docs/tools/sync-docs.mjs",
     "check": "node models/evals/tools/check.mjs",
     "build": "bun build --compile --minify terminal/src/cli.jsx --outfile dist/agentic-coder && chmod 755 dist/agentic-coder",

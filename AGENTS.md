@@ -61,7 +61,11 @@
   is kept inside it, and the app tests run with `AGENTIC_MEMORY_SAVE=off` unless they test saving.
   A practice run (`bun run eval`) runs without the memory, so it measures the same thing every
   time; `memory: true` in `runHeadless` turns it on. `bun run eval:recall` is the check that the
-  right fact comes back (20 facts, 30 requests, the real small model).
+  right fact comes back (20 facts, 30 requests, the real small model). `bun run eval:code` is
+  the same for the code search: questions about real projects, each with the function that
+  answers it, on the real folder with the real small model (`--rerank` compares the reranker,
+  `--check` only checks the questions still point at code). This repo's questions are in
+  `models/evals/bench/code/`; a private project's stay on the Mac in `~/.agentic-coder/evals/code/`.
   After a task it ASKS before saving (the user's pick, 28 Sep 2026); "update memory" and `/update memory` save at once.
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
   scan staged files before a push. `bun run check` does that scan and more (the history,
