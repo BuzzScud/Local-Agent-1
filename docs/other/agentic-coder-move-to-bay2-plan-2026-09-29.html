@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Move Agentic Coder to BAY2</title>
+<style>
+  :root {
+    --bg: #faf9f7; --card: #ffffff; --text: #1f1e1c; --muted: #6b6862; --line: #e6e3de;
+    --soft: #f3f1ed;
+    --green-bg: #e3f2e6; --green: #1e6b34;
+    --grey-bg: #eeece8; --grey: #5f5c57;
+    --blue-bg: #e8eefb; --blue: #2c4f9e;
+    --amber-bg: #fbf0dc; --amber: #8a5a0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1917; --card: #242320; --text: #ecebe8; --muted: #a19e98; --line: #3a3834;
+      --soft: #2c2b28;
+      --green-bg: #1f3a26; --green: #8fd4a2;
+      --grey-bg: #33312d; --grey: #b8b5ae;
+      --blue-bg: #243049; --blue: #a9c1f5;
+      --amber-bg: #3d3018; --amber: #f0c878;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 1400px; margin: 0 auto; padding: 18px 24px 24px; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  h1 { font-size: 21px; margin: 0; font-weight: 680; letter-spacing: -0.01em; }
+  .dateline { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0 16px; }
+  nav button { font: inherit; font-size: 14px; padding: 6px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+  nav button[aria-selected=true] { background: var(--text); color: var(--bg); border-color: var(--text); }
+  nav button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  section h2 { font-size: 22px; line-height: 1.3; margin: 0 0 6px; font-weight: 650; }
+  section h3 { font-size: 17px; margin: 0 0 8px; font-weight: 650; }
+  p { margin: 0 0 12px; }
+  .lead { font-size: 17px; max-width: 1040px; margin-bottom: 16px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  code { font: 13.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; overflow-wrap: anywhere; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  .cols3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; white-space: nowrap; }
+  .card .big { font-size: 26px; font-weight: 680; margin: 2px 0 2px; line-height: 1.2; }
+  .card p { font-size: 14.5px; margin: 0; color: var(--muted); }
+
+  .tag { display: inline-block; font-size: 12.5px; font-weight: 600; padding: 1px 9px; border-radius: 999px; white-space: nowrap; }
+  .tag.green { background: var(--green-bg); color: var(--green); }
+  .tag.grey  { background: var(--grey-bg);  color: var(--grey); }
+  .tag.blue  { background: var(--blue-bg);  color: var(--blue); }
+  .tag.amber { background: var(--amber-bg); color: var(--amber); }
+
+  .picture { background: var(--soft); border-radius: 12px; padding: 12px 16px; margin: 0 0 14px; font-size: 15.5px; }
+  .picture > b { display: block; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; font-weight: 600; }
+
+  ol.steps { padding-left: 0; list-style: none; margin: 4px 0 10px; }
+  ol.steps li { position: relative; padding: 0 0 9px 38px; font-size: 15.5px; line-height: 1.45; }
+  ol.steps li .n {
+    position: absolute; left: 0; top: 0;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--grey-bg); color: var(--grey);
+    font-size: 13.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps li .n.you { background: var(--blue-bg); color: var(--blue); }
+  .phase { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin: 4px 0 8px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 0 0 12px; font-size: 15px; }
+  th { text-align: left; font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td .sub { display: block; font-size: 13.5px; color: var(--muted); }
+  table.where td:nth-child(2), table.where th:nth-child(2) { width: 90px; text-align: right; white-space: nowrap; }
+  table.speed td:nth-child(2), table.speed td:nth-child(3),
+  table.speed th:nth-child(2), table.speed th:nth-child(3) { width: 150px; text-align: right; }
+  table.speed td:nth-child(4), table.speed th:nth-child(4) { width: 110px; }
+  table.speed td b { font-size: 16.5px; }
+
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .box h3 { display: flex; align-items: center; gap: 8px; }
+  .box ul { margin: 0; padding-left: 18px; }
+  .box li { font-size: 15px; margin-bottom: 8px; line-height: 1.45; }
+  .box li:last-child { margin-bottom: 0; }
+
+  .opt { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; display: flex; flex-direction: column; }
+  .opt .big { font-size: 17px; font-weight: 650; margin: 2px 0 4px; }
+  .opt p { font-size: 15px; margin: 0 0 8px; }
+  .opt .foot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .foot-note { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+  @media (max-width: 900px) {
+    main { padding: 16px 16px 40px; }
+    .cols, .cols3, .grid2 { grid-template-columns: 1fr; gap: 14px; }
+    .cards { grid-template-columns: 1fr 1fr; }
+    th, td { padding: 7px 6px; }
+    table.speed td:nth-child(2), table.speed td:nth-child(3),
+    table.speed th:nth-child(2), table.speed th:nth-child(3) { width: auto; }
+    table.speed td:nth-child(4), table.speed th:nth-child(4) { display: none; }
+    table.where td:nth-child(2), table.where th:nth-child(2) { width: 64px; }
+    table { font-size: 14px; }
+    td { overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Move Agentic Coder to BAY2</h1>
+  <span class="dateline">the plan · nothing has moved yet · 29 Sep 2026 · keys 1–6 or ← →</span>
+</header>
+
+<nav role="tablist">
+  <button role="tab" id="tab-plan" aria-controls="plan" aria-selected="true" data-t="plan">1 · The plan</button>
+  <button role="tab" id="tab-steps" aria-controls="steps" aria-selected="false" data-t="steps">2 · Steps</button>
+  <button role="tab" id="tab-speed" aria-controls="speed" aria-selected="false" data-t="speed">3 · Speed</button>
+  <button role="tab" id="tab-changes" aria-controls="changes" aria-selected="false" data-t="changes">4 · What changes</button>
+  <button role="tab" id="tab-risks" aria-controls="risks" aria-selected="false" data-t="risks">5 · Risks + undo</button>
+  <button role="tab" id="tab-call" aria-controls="call" aria-selected="false" data-t="call">6 · Your call</button>
+</nav>
+
+<!-- 1 -->
+<section id="plan" role="tabpanel" aria-labelledby="tab-plan">
+  <h2>Everything Agentic Coder uses goes on BAY2. The Mac keeps only shortcuts and the <code>coding</code> command.</h2>
+  <p class="lead">You picked: shortcuts + a drive check, everything including the worktrees, and keep the Mac copies until you say delete. With BAY2 plugged in, every path works as it does today. With it out, <code>coding</code> says the drive isn't plugged in and stops.</p>
+
+  <div class="cards">
+    <div class="card"><div class="label">Moves to BAY2</div><div class="big">15.7 GB</div><p>about 46,000 files</p></div>
+    <div class="card"><div class="label">BAY2 free after</div><div class="big">~37 GB</div><p>of 53 GB free now</p></div>
+    <div class="card"><div class="label">Agentic Coder off</div><div class="big">30–40 min</div><p>copy, compare, test</p></div>
+    <div class="card"><div class="label">Mac space back</div><div class="big">15.7 GB</div><p>when you say delete the old copies</p></div>
+  </div>
+
+  <div class="cols" style="grid-template-columns:1.45fr 1fr">
+    <div>
+      <h3>Where each thing goes</h3>
+      <table class="where">
+        <thead><tr><th>On the Mac now</th><th>Size</th><th>On BAY2</th></tr></thead>
+        <tbody>
+          <tr><td><code>~/.agentic-coder</code><span class="sub">models, engine, sessions, warm caches, test record, logs</span></td><td>15.1 GB</td><td><code>BAY2/agentic-coder/app-data</code></td></tr>
+          <tr><td><code>~/Desktop/agentic-coder</code><span class="sub">the code, cli docs (with gemma-docs and memory-about-you), the app</span></td><td>0.32 GB</td><td><code>BAY2/agentic-coder/agentic-coder</code></td></tr>
+          <tr><td>14 worktrees in <code>~/worktrees</code><span class="sub">agentic-*, bonsai-*, gemma-tests, run-a-test</span></td><td>0.27 GB</td><td><code>BAY2/agentic-coder/worktrees/</code></td></tr>
+          <tr><td><code>~/.local/bin/coding</code><span class="sub">the command you type</span></td><td>3 KB</td><td>stays on the Mac, gets the drive check</td></tr>
+        </tbody>
+      </table>
+      <p class="muted small">A shortcut (symlink) goes in each old place, so every script, note and worktree that names <code>~/.agentic-coder</code> or <code>~/Desktop/agentic-coder</code> still finds it.</p>
+    </div>
+    <div>
+      <div class="picture">
+        <b>BAY2 plugged in</b>
+        Everything works as today. Models take about 20 s longer to start, and saving a warm cache takes a few seconds (tab 3).
+      </div>
+      <div class="picture">
+        <b>BAY2 out</b>
+        <code>coding</code> prints: <em>“Agentic Coder is on BAY2, which isn't plugged in. Plug it in and run coding again.”</em> The shortcuts lead nowhere until the drive is back.
+      </div>
+      <div class="picture">
+        <b>The Mac copies</b>
+        They're moved, not deleted, into <code>SEP/agentic-coder backups/2026-09-29-before-bay2/</code> with a README on putting them back. That's the same disk, so the move is instant. They're deleted only when you say so.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="steps" role="tabpanel" aria-labelledby="tab-steps" hidden>
+  <h2>Step by step</h2>
+  <p class="muted small" style="margin-bottom:10px"><span class="tag blue">blue</span> = you do it · <span class="tag grey">grey</span> = I do it, and each one is checked before the next starts</p>
+  <div class="cols">
+    <div>
+      <div class="phase">Before</div>
+      <ol class="steps">
+        <li><span class="n you">1</span><strong>You say go</strong> when you're done with Agentic Coder for a while. Nothing waits in the background, and I stop nothing that's running.</li>
+        <li><span class="n">2</span><strong>Check that nothing uses the files:</strong> no model server, app or hub. I also tell the other sessions working there (e9 is building in <code>run-a-test</code> now) and wait until they're idle.</li>
+        <li><span class="n">3</span><strong>Write down the before state:</strong> file counts and bytes, the git status of the repo and all 14 worktrees, and checksums of the 5 model files.</li>
+      </ol>
+      <div class="phase">Move</div>
+      <ol class="steps">
+        <li><span class="n">4</span><strong>Copy everything to BAY2</strong> with <code>ditto</code>, which keeps links, permissions and dates. It takes about 10–15 min. Unsaved work moves exactly as it is.</li>
+        <li><span class="n">5</span><strong>Compare every file byte for byte</strong>, model files included (about 5 min).</li>
+        <li><span class="n">6</span><strong>Move the Mac originals</strong> into the backups folder, with a README on putting them back.</li>
+        <li><span class="n">7</span><strong>Put the shortcuts</strong> in the old places.</li>
+      </ol>
+    </div>
+    <div>
+      <ol class="steps" style="margin-top:29px">
+        <li><span class="n">8</span><strong>Add the drive check</strong> to <code>coding</code>, in the installed copy and in the repo's launcher file (a reinstall uses that one). It names no drive, so it's safe in the public repo.</li>
+        <li><span class="n">9</span><strong>Tell git that BAY2 treats “Foo” and “foo” as different names</strong> (<code>core.ignorecase false</code>), then check each git status matches step 3.</li>
+      </ol>
+      <div class="phase">Check</div>
+      <ol class="steps">
+        <li><span class="n">10</span><strong>Run the full test suite from the drive</strong> (544 tests, 109 s on the Mac today) and rebuild the app from it.</li>
+        <li><span class="n">11</span><strong>Unplug check:</strong> unmount BAY2, confirm <code>coding</code> shows the message, mount it again, confirm it starts. This is done away from 17:45, when the Ladder backup runs.</li>
+        <li><span class="n you">12</span><strong>You start a model once</strong> (open <code>coding</code> and ask anything) and see the new start time. I don't start one myself, since it takes the GPU.</li>
+        <li><span class="n">13</span><strong>Update the notes</strong> with the new layout and report back.</li>
+      </ol>
+      <div class="phase">Later</div>
+      <ol class="steps">
+        <li><span class="n you">14</span><strong>You say delete:</strong> the old copies go to the Trash, and 15.7 GB comes back once the Trash is emptied.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="speed" role="tabpanel" aria-labelledby="tab-speed" hidden>
+  <h2>Speed: reading is fine, writing is slow</h2>
+  <div class="cols" style="grid-template-columns:1.5fr 1fr">
+    <div>
+      <table class="speed">
+        <thead><tr><th></th><th>Mac now</th><th>BAY2</th><th>From</th></tr></thead>
+        <tbody>
+          <tr><td>Reading files (higher is better)</td><td><b>2.3 GB/s</b></td><td><b>0.30 GB/s</b></td><td><span class="tag green">measured</span></td></tr>
+          <tr><td>Writing files (higher is better)</td><td><b>fast</b></td><td><b>31 MB/s</b></td><td><span class="tag green">measured</span></td></tr>
+          <tr><td>Starting Qwen, 6.9 GB (lower is better)</td><td><b>6 s</b></td><td><b>~26 s</b></td><td><span class="tag grey">estimate</span></td></tr>
+          <tr><td>Starting Gemma, 7.2 GB (lower is better)<span class="sub">model + its speed-up helper</span></td><td><b>a few s</b></td><td><b>+~21 s</b></td><td><span class="tag grey">estimate</span></td></tr>
+          <tr><td>Saving one warm cache, ~100 MB (lower is better)</td><td><b>instant</b></td><td><b>~3 s</b></td><td><span class="tag grey">estimate</span></td></tr>
+          <tr><td>Rebuilding the app after a code change (lower is better)</td><td><b>0.2 s</b></td><td><b>~2 s</b></td><td><span class="tag grey">estimate</span></td></tr>
+          <tr><td>Full test suite (lower is better)</td><td><b>109 s</b></td><td><b>step 10</b></td><td><span class="tag grey">to measure</span></td></tr>
+          <tr><td>Answers once a model is loaded</td><td><b>same</b></td><td><b>same*</b></td><td><span class="tag grey">expected</span></td></tr>
+        </tbody>
+      </table>
+      <p class="foot-note">Measured today: BAY2 read a 1.8 GB Ladder backup file already on the drive at 304 MB/s, and wrote 1 GB at 31 MB/s. The Mac read a model file at 2.3 GB/s. Estimates = size ÷ those speeds. Qwen's 6 s start was measured on 29 Sep. *Unless the Mac runs short of memory and has to reread parts of the model from the drive.</p>
+    </div>
+    <div>
+      <div class="picture">
+        <b>Day to day</b>
+        The first question after a model starts waits about 20 s longer. After that it answers at the same speed, because the model runs from memory, not from the drive.
+      </div>
+      <div class="picture">
+        <b>The slow part is writing</b>
+        BAY2 writes at 31 MB/s, about a USB stick's speed. Big writes (warm caches, app rebuilds, the first copy) are where you'll feel it. Option C on tab 6 keeps the warm caches on the Mac.
+      </div>
+      <div class="picture">
+        <b>The drive itself</b>
+        USB, 60 GB, APFS. It tells “Foo” and “foo” apart, unlike the Mac. Programs can run from it: it's mounted without a block on running them (checked).
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="changes" role="tabpanel" aria-labelledby="tab-changes" hidden>
+  <h2>What changes, and what doesn't</h2>
+  <div class="cols3">
+    <div class="box">
+      <h3><span class="tag green">Same</span> Works as today</h3>
+      <ul>
+        <li>Every path you and the scripts use: <code>~/.agentic-coder</code>, <code>~/Desktop/agentic-coder</code>, <code>~/worktrees/…</code>. The shortcuts lead to the drive.</li>
+        <li><strong>The command fence, tested on BAY2 today:</strong> commands can write inside a project there, other folders on BAY2 stay blocked, and bun and git run.</li>
+        <li>The trusted-folder list follows shortcuts, so the repo stays trusted.</li>
+        <li>The 9 worktrees whose <code>node_modules</code> point at the repo, and <code>~/.agentic/memory</code>, which points at memory-about-you.</li>
+        <li>Starting <code>coding</code> from your home folder (42 of your 46 recent starts).</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3><span class="tag amber">Changes</span> With BAY2 plugged in</h3>
+      <ul>
+        <li><strong>When started inside the repo or a worktree</strong>, the app sees the real path <code>/Volumes/BAY2/…</code>. So it:
+          <ul>
+            <li>skips your home <code>AGENTS.md</code>, because it only looks upward from the real path</li>
+            <li>doesn't list that folder's older sessions (there is 1)</li>
+            <li>asks once to trust each worktree</li>
+          </ul>
+          Option A on tab 6 fixes all three.</li>
+        <li><strong>Time Machine</strong> backs up both folders today, to drive “1”. It skips BAY2, so your sessions, the test record and memory-about-you would have only one copy. See option B.</li>
+        <li>git is told the drive is case-sensitive (step 9).</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3><span class="tag grey">Stops</span> With BAY2 out</h3>
+      <ul>
+        <li><code>coding</code>, <code>coding hub</code> and the Agentic Coder app. <code>coding</code> says why.</li>
+        <li>Every page in <code>cli docs</code>, including gemma-docs, morning briefs and memory-about-you (Agentic Coder's memory about you).</li>
+        <li><code>/repo-morning</code> can't save its brief there.</li>
+        <li>Claude and Codex sessions working in those folders. Sessions that start from your home folder still start.</li>
+        <li>Nothing else on the Mac uses these folders. No scheduled job points at them (checked).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="risks" role="tabpanel" aria-labelledby="tab-risks" hidden>
+  <h2>Risks, and how to undo it</h2>
+  <div class="cols" style="grid-template-columns:1.6fr 1fr">
+    <table>
+      <thead><tr><th>Risk</th><th>What happens</th><th>What protects it</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Pulling the cable</strong> while a model runs</td><td>The model server crashes and the answer in progress is lost.</td><td>Ejecting first: macOS refuses to eject while the files are in use, so it tells you.</td></tr>
+        <tr><td><strong>BAY2 comes back as “BAY2 1”</strong></td><td>The shortcuts point at the wrong place, and <code>coding</code> says it isn't plugged in.</td><td>It only happens if something writes to <code>/Volumes/BAY2</code> while the drive is out. The 17:45 Ladder backup checks for the drive first. The 23:30 Spirograph job points at a script that no longer exists, so it does nothing.</td></tr>
+        <tr><td><strong>A name in the wrong case</strong> (Foo vs foo)</td><td>Works on the Mac, fails on the drive.</td><td>The full test suite and the rebuild on the drive (step 10) would show it.</td></tr>
+        <tr><td><strong>The drive fails or gets lost</strong></td><td>Sessions, memory and the test record exist only there.</td><td>The old copies are kept until you say. Option B adds Time Machine. The code is on GitHub.</td></tr>
+        <tr><td><strong>Working in an old copy</strong> by mistake</td><td>The old worktrees share git's data with the drive copies.</td><td>They sit in the backups folder, and the README says not to use them.</td></tr>
+      </tbody>
+    </table>
+    <div>
+      <div class="picture">
+        <b>Undo: about a minute</b>
+        <ol style="margin:4px 0 0; padding-left:20px">
+          <li>Remove the shortcuts.</li>
+          <li>Move the old copies back (instant, same disk).</li>
+          <li>Remove the drive check from <code>coding</code>.</li>
+        </ol>
+        <p style="margin:8px 0 0">Nothing on BAY2 has to be deleted to undo it. If you've worked on the drive since, those changes get copied back first.</p>
+      </div>
+      <div class="picture">
+        <b>While it runs</b>
+        Agentic Coder is off for about 30–40 minutes. Other projects (Orbit, MAIN2026, the Ladder) aren't touched.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="call" role="tabpanel" aria-labelledby="tab-call" hidden>
+  <h2>Your call: four extras, then the go-ahead</h2>
+  <p class="muted" style="margin-bottom:14px">The plan on tabs 1–5 works without any of these. I'll ask about them in one question after you've read this.</p>
+  <div class="grid2">
+    <div class="opt">
+      <div class="label">Option A</div>
+      <div class="big">The app uses the path you typed</div>
+      <p>When the folder you start in (<code>~/Desktop/agentic-coder</code>) is the same folder as the real <code>/Volumes/BAY2/…</code>, the app keeps the name you used. That fixes all three items under “Changes”: the home AGENTS.md, the older sessions and the trust prompts.</p>
+      <div class="foot">Cost: about 10 lines in <code>terminal/src/cli.jsx</code> plus a test. It goes to the public repo only when you say commit.</div>
+    </div>
+    <div class="opt">
+      <div class="label">Option B</div>
+      <div class="big">Time Machine backs up BAY2 too</div>
+      <p>External drives are left out of Time Machine by default. Taking BAY2 off that list keeps a second copy of your sessions, memory and test record, as there is today.</p>
+      <div class="foot">Cost: one setting you change yourself (System Settings → Time Machine → Options), or a command that needs your password. The first backup copies ~16 GB to drive “1”.</div>
+    </div>
+    <div class="opt">
+      <div class="label">Option C</div>
+      <div class="big">Keep the warm caches on the Mac</div>
+      <p>The <code>slots</code> folder (0.6 GB) is what gets written most. Keeping it on the Mac avoids the ~3 s per save.</p>
+      <div class="foot">Cost: one shortcut pointing back to the Mac. That 0.6 GB stays on the Mac, and it's only a cache.</div>
+    </div>
+    <div class="opt">
+      <div class="label">Option D</div>
+      <div class="big">Also move the engine sources</div>
+      <p><code>prism-llama.cpp</code> (1.0 GB) and <code>mlxfast</code> (67 MB) are the sources the model engine was built from. The built engine already moves with app-data.</p>
+      <div class="foot">Cost: +1.1 GB on BAY2. Rebuilding the engine would then need the drive too.</div>
+    </div>
+  </div>
+</section>
+
+</main>
+<script>
+(function(){
+  var tabs=[].slice.call(document.querySelectorAll('nav button'));
+  function show(id){
+    if(!document.getElementById(id)) id=tabs[0].dataset.t;
+    tabs.forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.t===id));});
+    [].slice.call(document.querySelectorAll('section')).forEach(function(s){s.hidden=s.id!==id;});
+    try{history.replaceState(null,'','#'+id);}catch(e){}
+  }
+  tabs.forEach(function(b){b.addEventListener('click',function(){show(b.dataset.t);});});
+  document.addEventListener('keydown',function(e){
+    var i=tabs.findIndex(function(b){return b.getAttribute('aria-selected')==='true';});
+    if(e.key==='ArrowRight'&&i<tabs.length-1)show(tabs[i+1].dataset.t);
+    if(e.key==='ArrowLeft'&&i>0)show(tabs[i-1].dataset.t);
+    var n=parseInt(e.key,10); if(n>=1&&n<=tabs.length)show(tabs[n-1].dataset.t);
+  });
+  show((location.hash||'').slice(1)||tabs[0].dataset.t);
+})();
+</script>
+</body>
+</html>
