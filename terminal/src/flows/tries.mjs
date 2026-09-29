@@ -8,7 +8,8 @@ import { syntaxError } from '../agent/tools.mjs';
 // the first try (a second round continues the temperature schedule, so its
 // tries differ from the first round's).
 // raw: hand the whole reply to apply (edit blocks), not just its first code fence.
-export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, apply, check, temperature = 0.7, maxTokens = 2500, stopEarly, slot, from = 1, raw = false }) {
+// thinkCap: think at most this much per try (writing tests, drafts; see llm.mjs).
+export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, apply, check, temperature = 0.7, maxTokens = 2500, stopEarly, slot, from = 1, raw = false, thinkCap }) {
   let passes = 0;
   let first = null;
   let last = null; // the latest wrong try and why, shown to the next one
@@ -26,7 +27,7 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
     const temp = i === 1 ? Math.min(temperature, 0.3) : Math.min(1, temperature + 0.05 * (i - 2));
     let r;
     try {
-      r = await complete({ url: ctx.url, model: ctx.model, slot: slot ?? ctx.slot, system, user: p, temperature: temp, maxTokens, signal: ctx.signal, onToken: (n) => show(n), thinking: ctx.thinking, effort: ctx.effort });
+      r = await complete({ url: ctx.url, model: ctx.model, slot: slot ?? ctx.slot, system, user: p, temperature: temp, maxTokens, signal: ctx.signal, onToken: (n) => show(n), thinking: ctx.thinking, effort: ctx.effort, thinkCap });
     } catch (e) {
       if (ctx.signal?.aborted) break;
       throw e;

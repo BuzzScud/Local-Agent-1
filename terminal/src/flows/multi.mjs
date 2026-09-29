@@ -10,7 +10,7 @@ import { readResults, failureDigest } from './results.mjs';
 import { projectFiles, filesInText, fileHints, isTestFile, relatedData, testsFor } from './localize.mjs';
 import { SHOW_WHOLE_MAX, langFor } from './units.mjs';
 import { tryUntilPass } from './tries.mjs';
-import { complete, fence } from './llm.mjs';
+import { complete, fence, SETUP_THINK_CAP } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM } from './testfirst.mjs';
 import { rescueTests } from './rescue.mjs';
@@ -102,7 +102,7 @@ export async function multiFlow(ctx, task, targets) {
     const writeTexts = (texts) => { for (const [rel, text] of texts) scratch.write(rel, text); };
     const restoreTexts = (texts) => { for (const rel of texts.keys()) scratch.restore(rel); };
     const draftVersions = (n, slot) => tryUntilPass(ctx, {
-      label: 'Drafting changes', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, maxTokens: 3000, raw: true,
+      label: 'Drafting changes', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, maxTokens: 3000, raw: true, thinkCap: SETUP_THINK_CAP,
       prompt: `${shownAll}${dataBlock}\n\nTask: ${task}${known}\n\n${BLOCKS_FORMAT}${SOURCE_ONLY}`,
       apply: fromBlocks,
       check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },

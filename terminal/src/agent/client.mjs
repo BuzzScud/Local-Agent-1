@@ -4,7 +4,7 @@ import { thinkingKwargs } from '../../../models/index.mjs';
 
 // toolChoice 'none' keeps the tool list in the prompt (so the saved reading of
 // the instructions still matches) but lets the model only write text.
-export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, slot, signal, extra }) {
+export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra }) {
   const body = {
     model: 'coding',
     messages,
@@ -17,6 +17,9 @@ export async function* streamChat({ url, messages, tools, toolChoice = 'auto', t
   };
   // Which of the server's slots keeps this conversation (see server.mjs).
   if (slot !== undefined) body.id_slot = slot;
+  // A smaller thinking cap for this call than the server's --reasoning-budget
+  // (llama-server ends the thinking there, as it does at the server's cap).
+  if (thinking && thinkCap) body.thinking_budget_tokens = thinkCap;
   if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; body.parallel_tool_calls = false; }
   if (extra) Object.assign(body, extra);
   const res = await fetch(`${url}/v1/chat/completions`, {

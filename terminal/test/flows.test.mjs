@@ -14,14 +14,15 @@ import { Scratch } from '../src/flows/scratch.mjs';
 import { excerpts } from '../src/flows/excerpts.mjs';
 import { spawnSync } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
+import { SETUP_THINK_CAP } from '../src/flows/llm.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const copy = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project'); cpSync(join(import.meta.dir, name), d, { recursive: true }); return d; };
 
-async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots, testTimeoutMs } = {}) {
+async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots, testTimeoutMs, thinking = false } = {}) {
   const fake = await startFakeServer(replies);
   const events = [];
-  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode, maxTries: 4, slots, testTimeoutMs,
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking, mode, maxTries: 4, slots, testTimeoutMs,
     ask: async (req) => { events.push({ type: 'ask', name: req.name, req }); return { choice: typeof answer === 'function' ? answer(req) : answer }; } });
   for (const t of ['assistant', 'tool', 'note', 'tries-done', 'route']) agent.on(t, (e) => events.push({ type: t, ...e }));
   const reason = await agent.send(prompt);
@@ -404,4 +405,23 @@ test('a fix described only by what it looks like asks where first; one that poin
   expect(await questionFor({ cwd: tmpdir() }, 'the symbol search dropdown is hidden behind the EMA legend on the price chart, fix it')).toEqual({ question: WHERE_QUESTION, options: [] }); // a set question: nothing to pick from
   for (const t of ['The tests fail. Find the bug and fix it.', 'The tests in this project fail. Find the bug and fix it (fix the code, not the tests).', 'Fix the crash when the summary is empty in report.mjs', 'the list is hidden, fix it. This check must pass: `node check.mjs`', 'add a --json flag to export.mjs'])
     expect([t, wantsWhere(t)]).toEqual([t, false]);
+});
+
+test('thinking on: writing tests and drafting think at most SETUP_THINK_CAP; the tries keep the whole cap', async () => {
+  expect(SETUP_THINK_CAP).toBeLessThan(model.thinkingBudget);
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project');
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
+  const change = await run(cwd, 'add a --json flag to export.mjs that prints the rows as JSON', [{ text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }, { text: 'never used' }], { thinking: true });
+  expect(change.reason).toBe('done');
+  const capped = change.fake.requests.filter((r) => r.thinking_budget_tokens !== undefined);
+  // Two tests and two drafts, each with the smaller cap and room for it.
+  expect(capped.map((r) => r.thinking_budget_tokens)).toEqual([SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP]);
+  expect(capped.every((r) => r.chat_template_kwargs.enable_thinking && r.max_tokens < 1200 + model.thinkingBudget)).toBe(true);
+
+  const fix = await run(bigCopy(), 'The tests fail. Fix it.', [{ text: '{"function": "median"}' }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: medianWrong }, { text: 'I looked; it needs more than median.' }], { thinking: true });
+  expect(fix.events.filter((e) => e.type === 'tries-done').map((e) => e.label)).toEqual(['Trying fixes', 'Trying wider fixes']);
+  const tries = fix.fake.requests.filter((r) => r.chat_template_kwargs?.enable_thinking && !r.tools);
+  expect(tries.length).toBe(6);
+  expect(tries.every((r) => r.thinking_budget_tokens === undefined)).toBe(true);
 });

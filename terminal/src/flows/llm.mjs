@@ -12,13 +12,21 @@ export const tallies = new Set();
 // (the code search waits for them, tools/codeindex.mjs).
 export const llmCalls = { n: 0, now: 0 };
 
-export async function complete({ url, model, slot, system, user, temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort }) {
+// Writing tests and drafting (the work before the tries) think at most this
+// much; the tries keep the model's whole cap. On practice task 28 at High
+// every one of those calls thought to the 4,096 cap (about 4 min each), and
+// the run used its 30 minutes before its first try (low-vs-high-2026-09-29).
+export const SETUP_THINK_CAP = 2048;
+
+// thinkCap: a smaller thinking cap for this one call (the server's
+// --reasoning-budget stays the model's thinkingBudget).
+export async function complete({ url, model, slot, system, user, temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap }) {
   llmCalls.n++;
   llmCalls.now++;
-  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort }); } finally { llmCalls.now--; }
+  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }); } finally { llmCalls.now--; }
 }
 
-async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort }) {
+async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }) {
   const t0 = Date.now();
   const think = Boolean(thinking) && !schema;
   const base = think ? model.thinkingSampling ?? model.sampling : model.sampling;
@@ -27,8 +35,9 @@ async function ask({ url, model, slot, system, user, temperature, maxTokens, sch
   let text = '';
   let tokens = 0;
   let thought = 0;
-  const budget = think ? model.thinkingBudget ?? 2048 : 0;
-  for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, slot, signal, extra })) {
+  const full = model.thinkingBudget ?? 2048;
+  const budget = think ? Math.min(full, thinkCap ?? full) : 0;
+  for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, thinkCap: think && budget < full ? budget : undefined, slot, signal, extra })) {
     if (ev.type === 'text') { text += ev.text; tokens++; onToken?.(tokens + thought); }
     if (ev.type === 'reasoning') { thought++; onToken?.(tokens + thought); }
   }

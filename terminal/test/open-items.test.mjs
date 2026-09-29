@@ -17,7 +17,7 @@ import { runCommand } from '../src/tools/run.mjs';
 import { sandboxAvailable, forgetPorts } from '../src/tools/sandbox.mjs';
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
-import { complete } from '../src/flows/llm.mjs';
+import { complete, SETUP_THINK_CAP } from '../src/flows/llm.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
@@ -236,4 +236,20 @@ test('code and tests are written at the chosen thinking level; sorting never thi
   expect(code.temperature).toBe(model.thinkingSampling.temperature);
   expect(sort.chat_template_kwargs).toEqual({ enable_thinking: false });
   expect(plain.chat_template_kwargs).toEqual({ enable_thinking: false });
+});
+
+test('a smaller thinking cap for one call goes with that call; the server\'s cap is never raised', async () => {
+  const fake = await startFakeServer([{ text: 'a' }, { text: 'b' }, { text: 'c' }]);
+  await complete({ url: fake.url, model, system: 's', user: 'u', thinking: true, effort: 'high', maxTokens: 100, thinkCap: SETUP_THINK_CAP });
+  await complete({ url: fake.url, model, system: 's', user: 'u', thinking: true, effort: 'high', maxTokens: 100, thinkCap: model.thinkingBudget * 2 });
+  await complete({ url: fake.url, model, system: 's', user: 'u', maxTokens: 100, thinkCap: SETUP_THINK_CAP });
+  await fake.close();
+  const [small, big, off] = fake.requests;
+  expect(SETUP_THINK_CAP).toBeLessThan(model.thinkingBudget);
+  expect(small.thinking_budget_tokens).toBe(SETUP_THINK_CAP);
+  expect(small.max_tokens).toBe(100 + SETUP_THINK_CAP);
+  expect(big.thinking_budget_tokens).toBeUndefined();
+  expect(big.max_tokens).toBe(100 + model.thinkingBudget);
+  expect(off.thinking_budget_tokens).toBeUndefined();
+  expect(off.max_tokens).toBe(100);
 });

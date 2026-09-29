@@ -9,7 +9,7 @@ import { readResults, failureDigest, assertionDetail } from './results.mjs';
 import { projectFiles, filesInText, pickFile, isTestFile, testsFor, relatedData } from './localize.mjs';
 import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, findFunction, functionNames, isWholeFile, splice, langFor } from './units.mjs';
 import { tryUntilPass } from './tries.mjs';
-import { complete, fence } from './llm.mjs';
+import { complete, fence, SETUP_THINK_CAP } from './llm.mjs';
 import { mergeTest } from './testfile.mjs';
 import { testWriter, CODE_SYSTEM, stem } from './testfirst.mjs';
 import { rescueTests } from './rescue.mjs';
@@ -126,7 +126,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     };
     const versions = [];
     const draftVersions = (n, slot) => tryUntilPass(ctx, {
-      label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1,
+      label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, thinkCap: SETUP_THINK_CAP,
       prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}${known}\n\nReply with ${want}.${SOURCE_ONLY}`,
       // A draft that removes functions the task keeps is no draft (practice task 14).
       apply: (code) => { const text = build(code); const g = guardChange(target, original, text, task); if (g) return { error: g }; return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },

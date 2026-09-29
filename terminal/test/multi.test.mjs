@@ -11,16 +11,17 @@ import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { parseBlocks, applyBlocks, guardChange } from '../src/flows/blocks.mjs';
 import { planFiles } from '../src/flows/multi.mjs';
 import { startFakeServer } from './fake-server.mjs';
+import { SETUP_THINK_CAP } from '../src/flows/llm.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const TASKS = join(import.meta.dir, '..', '..', 'models', 'evals', 'bench', 'tasks');
 const copyTask = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-multi-')), 'project'); cpSync(join(TASKS, name, 'project'), d, { recursive: true }); return d; };
 const check = (name, cwd) => spawnSync('/bin/zsh', [join(TASKS, name, 'check.sh')], { cwd, encoding: 'utf8', timeout: 60_000 });
 
-async function run(cwd, prompt, replies, { answer = 'yes' } = {}) {
+async function run(cwd, prompt, replies, { answer = 'yes', thinking = false } = {}) {
   const fake = await startFakeServer(replies);
   const events = [];
-  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'ask', maxTries: 4,
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking, mode: 'ask', maxTries: 4,
     ask: async (req) => { events.push({ type: 'ask', name: req.name, req }); return { choice: typeof answer === 'function' ? answer(req) : answer }; } });
   for (const t of ['assistant', 'tool', 'note', 'tries-done', 'route']) agent.on(t, (e) => events.push({ type: t, ...e }));
   const reason = await agent.send(prompt);
@@ -102,6 +103,15 @@ test('multi-file change: one test, edit blocks over three files, your OK per fil
   expect(final.text).toBe('Adds a symbol option used by the formatter and the report. Changed config.mjs, format.mjs, report.mjs and added a test to report.test.mjs; all 3 tests pass.');
   const c = check('19-multifile-symbol', cwd);
   expect([c.status, c.stdout + c.stderr]).toEqual([0, '']);
+}, 30_000);
+
+test('multi-file change with thinking on: the tests and the drafts are written with the smaller thinking cap', async () => {
+  const cwd = copyTask('19-multifile-symbol');
+  const task = readFileSync(join(TASKS, '19-multifile-symbol', 'task.txt'), 'utf8').trim();
+  const replies = [{ text: SYMBOL_TEST }, { text: SYMBOL_TEST }, { text: BLOCKS }, { text: BLOCKS }, { text: 'Adds a symbol option used by the formatter and the report.' }];
+  const { reason, fake } = await run(cwd, task, replies, { thinking: true });
+  expect(reason).toBe('done');
+  expect(fake.requests.filter((r) => r.thinking_budget_tokens !== undefined).map((r) => r.thinking_budget_tokens)).toEqual([SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP]);
 }, 30_000);
 
 test('multi-file change: a draft whose blocks do not match is dropped; saying no to the test stops everything', async () => {

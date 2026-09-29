@@ -5,7 +5,7 @@
 import { basename } from 'node:path';
 import { readResults } from './results.mjs';
 import { tryUntilPass } from './tries.mjs';
-import { fence } from './llm.mjs';
+import { fence, SETUP_THINK_CAP } from './llm.mjs';
 
 export const CODE_SYSTEM = 'You are an expert programmer. Reply with only the requested code in one fenced code block, nothing else.';
 export const stem = (rel) => basename(rel).replace(/\.[^.]+$/, '');
@@ -50,7 +50,7 @@ export function testWriter({ ctx, scratch, tp, task, lang, sources, dataBlock = 
   };
   let written = 0;
   const writeTests = (want, max, label = 'Writing tests', extra = '', merge) => tryUntilPass(ctx, {
-    label, max, want, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200, slot, from: written + 1,
+    label, max, want, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200, slot, from: written + 1, thinkCap: SETUP_THINK_CAP,
     // Two tests that cannot even load the code: this is not a job for a test.
     stopEarly: () => brokenTests >= 2 && !candidates.length,
     prompt: ({ best }) => `${testAsk}${coverage}${extra}${best?.why ? `\n\nAn earlier try was no good: ${best.why}` : ''}`,
