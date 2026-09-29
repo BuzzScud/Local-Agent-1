@@ -55,7 +55,9 @@ search pauses), **Retriever** Meaning or Hybrid (meaning + a word search, merged
 **Reranker** Off or Qwen3 0.6B (reads your request with the best 15 pieces: ~2 s for each search that
 brings something, ~7 s on a whole request in the 29 Sep check with its first start, and ~1.1 GB; downloaded by
 `coding setup`). How many pieces come along is still each search's own rule; the Retriever and the
-Reranker only choose which. They apply from the next message with no restart, and `coding -p` follows
+Reranker only choose which. With less than ~1.2 GB of memory free the reranker is not started and the
+search says why, once; one another window uses is shared, and left running when you turn yours off. The hub's
+Instructions page ("Try a request") follows the same rows. They apply from the next message with no restart, and `coding -p` follows
 them. Measured on 29 Sep, Hybrid changed nothing and the reranker helped only the code search, so both
 start off (`models/qwen3-reranker-0.6b/README.md`).
 ←→ moves a row, one enter saves all of it (a new context or thinking cap restarts the model once, so it waits while a reply is running or the model is still starting, and then changes nothing), esc keeps everything as it was.

@@ -58,7 +58,7 @@ test('choose with a reranker: the same number come, the reranker says which; one
   expect(rr.calls[0].texts).toHaveLength(4); // all of them fit the pool of 15
   const down = await search.choose({ query: 'q', byMeaning: ['a', 'b', 'c'], n: 1, text: (k) => texts[k], reranker: fakeReranker([], { fail: true }) });
   expect(down.picked).toEqual(['a']);
-  expect(down.note).toContain('did not answer');
+  expect(down.note).toContain('The reranker was not used (not running)');
   expect(search.howChosen(c)).toBe('by meaning, reranked');
   expect(search.howChosen({ order: 'hybrid', reranked: false })).toBe('by meaning + words');
   // stopped (esc): it stops too
@@ -136,4 +136,38 @@ test('the reranker runs in the engine\'s reranking mode, on its own server', () 
   expect(args).toContain('--rerank');
   expect(args.slice(args.indexOf('-c'), args.indexOf('-c') + 2)).toEqual(['-c', String(m.ctx)]);
   expect(args).not.toContain('--jinja');
+});
+
+test('the reranker: with too little memory free it stays off and says why; a server that is gone is started again; one another window uses is left running', async () => {
+  const { Reranker } = await import('../../models/index.mjs');
+  const m = RERANKERS[DEFAULT_RERANKER];
+  await expect(new Reranker(m).start({ free: () => 0.5e9 })).rejects.toThrow('only 0.5 GB of memory is free and it needs about 1.2 GB');
+  // its server gone: the call fails, and the next one starts (or shares) a server again
+  const r = new Reranker(m);
+  r.server = { url: 'http://127.0.0.1:1', port: 1 };
+  await expect(r.scores('q', ['a'])).rejects.toThrow();
+  expect(r.server).toBe(null);
+  // turned off while another window uses it: it is kept for that window
+  let asked = null;
+  const shared = new Reranker(m);
+  shared.server = { port: 17655, stop: async (o) => { asked = o; } };
+  await shared.stop({ keep: false, others: () => [process.pid, 999999] });
+  expect(asked).toEqual({ keep: true });
+  const own = new Reranker(m);
+  own.server = { port: 17656, stop: async (o) => { asked = o; } };
+  await own.stop({ keep: false, others: () => [process.pid] });
+  expect(asked).toEqual({ keep: false }); // no one else on it: stopped, its memory handed back
+});
+
+test('the code search hands back the index it searched, so Embedder Off saved mid-request cannot pull it away', async () => {
+  const { Agent } = await import('../src/agent/agent.mjs');
+  const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
+  const d = mkdtempSync(join(tmpdir(), 'agentic-search-mid-'));
+  writeFileSync(join(d, 'billing.mjs'), '// Money in.\nexport function invoiceTotal(lines) {\n  return lines.reduce((s, l) => s + l.amount, 0);\n}\n');
+  const agent = new Agent({ url: 'http://127.0.0.1:1', model: MODELS[DEFAULT_MODEL], cwd: d, system: 's', helpers: ['rag'], embedder: new FakeEmbedder(), indexDir: mkdtempSync(join(tmpdir(), 'agentic-search-mid-maps-')) });
+  await agent.codeSearch().build();
+  const found = await agent.findCode('the invoice total', undefined);
+  agent.codeIndex = null; // what applySearch does for Embedder Off
+  expect(found.index).toBeTruthy();
+  expect(found.index.textOf(found.parts[0])).toContain('invoiceTotal');
 });

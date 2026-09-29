@@ -4,7 +4,10 @@ import { projectNotes, systemPrompt, gitSummary, isHomeFolder } from '../agent/p
 import { toolSchemas } from '../agent/tools.mjs';
 import { TOP, recall, recallNotes, looksLikeEvent } from '../agent/recall.mjs';
 import { memoryDirs, readFacts } from '../agent/facts.mjs';
-import { MODELS, thinkingKwargs, Embedder, embedderReady, EMBEDDERS, DEFAULT_EMBEDDER } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, thinkingKwargs, Embedder, embedderReady, EMBEDDERS, DEFAULT_EMBEDDER, Reranker, rerankerReady, RERANKERS } from '../../../models/index.mjs';
+import { loadSettings } from './store.mjs';
+import { readLimits } from './limits.mjs';
+import { howChosen } from '../agent/search.mjs';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 // What the model receives besides the system prompt, read from the same code the agent runs.
@@ -39,7 +42,13 @@ export function instructionsData(cwd, home) {
 // The small matching model, as the agent uses it. It is not started until the first search; the model server
 // then keeps it loaded for 30 minutes and shares it with any other window. Tests replace this.
 let embedder;
-export const recallHooks = { embedder: () => (embedder ??= embedderReady() ? new Embedder() : null) };
+let reranker;
+export const recallHooks = {
+  embedder: () => (embedder ??= embedderReady() ? new Embedder() : null),
+  // /effort's Search rows as the app saved them, and the reranker they name (started at its first use).
+  search: (cwd) => readLimits(loadSettings(cwd), MODELS[DEFAULT_MODEL]),
+  reranker: (id) => (reranker?.model?.id === id ? reranker : (reranker = RERANKERS[id] && rerankerReady(RERANKERS[id]) ? new Reranker(RERANKERS[id]) : null)),
+};
 
 // "Try a request": which saved facts would be attached to it, found the way the agent finds them.
 // mark: false, so trying a request never counts as using a fact.
@@ -47,9 +56,13 @@ async function tryRequest(cwd, text) {
   const request = String(text ?? '').trim().slice(0, 1000);
   if (!request) throw Object.assign(new Error('Type a request first.'), { status: 400 });
   const model = EMBEDDERS[DEFAULT_EMBEDDER];
-  const r = await recall(cwd, request, { embedder: recallHooks.embedder(), signal: AbortSignal.timeout(60_000), mark: false, near: 3 });
+  // Found the way the agent finds them: with /effort's Search rows (Embedder, Retriever, Reranker).
+  const s = recallHooks.search(cwd);
+  const off = s.embedder === 'off';
+  const r = await recall(cwd, request, { embedder: off ? null : recallHooks.embedder(), retriever: s.retriever, reranker: s.reranker !== 'off' ? recallHooks.reranker(s.reranker) : null, signal: AbortSignal.timeout(60_000), mark: false, near: 3 });
+  const rows = off ? 'Embedder is Off in /effort, so by words.' : r.chosen && (r.chosen.order === 'hybrid' || r.chosen.reranked) ? `/effort's Search rows: chosen ${howChosen(r.chosen, r.how)}.` : null;
   const row = (f) => ({ kind: f.kind, text: f.text.replace(/\s+/g, ' ').slice(0, 240), close: f.close });
-  return { request, how: r.how, ms: r.ms, note: r.note ?? null, cut: r.how === 'meaning' ? model.cut : null,
+  return { request, how: r.how, ms: r.ms, note: [rows, r.note].filter(Boolean).join(' ') || null, cut: r.how === 'meaning' ? model.cut : null,
     attached: r.facts.map(row), near: (r.near ?? []).map(row), goesAlong: recallNotes(r.facts) };
 }
 

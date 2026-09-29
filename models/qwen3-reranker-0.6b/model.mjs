@@ -21,6 +21,9 @@ export default {
   // template (~300 tokens; a 2,000-character request fits too). Measured 29
   // Sep: 8k took 1.56 GB and 2k 1.08 GB with the same choices and speed.
   ctx: 2048,
+  // What it holds while loaded (measured 1.08 GB at -c 2048), with a margin:
+  // with less free than this it is not started (rerank.mjs).
+  loadedBytes: 1.2e9,
   // How many of the search's best it reads, and how much of each. 25 pieces
   // of 1,500 characters took ~4 s and chose no better than 15 of 700 (~1.9 s).
   pool: 15,

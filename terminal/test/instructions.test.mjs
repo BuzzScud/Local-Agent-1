@@ -124,8 +124,12 @@ test('the reply limit and thinking switch on the page are what a real request ca
 test('Try a request shows which saved facts would be attached, with closeness, and never counts as using them', async () => {
  const dirs = memoryDirs(home);
  applyChanges(dirs.project, { add: [{ kind: 'project', text: 'Run the tests with `node --test`.' }, { kind: 'project', text: 'Every page about Agentic Coder is saved in the DOCS folder.' }] }, { today: '2026-09-26' });
- const before = JSON.stringify(readFacts(dirs.project)), original = recallHooks.embedder;
+ const before = JSON.stringify(readFacts(dirs.project)), original = recallHooks.embedder, originalSearch = recallHooks.search;
  recallHooks.embedder = () => new FakeEmbedder();
+ // /effort's Search rows as saved: the defaults here, whatever this Mac's settings.json holds
+ const { defaultLimits } = await import('../src/app/limits.mjs');
+ const { MODELS: M, DEFAULT_MODEL: D } = await import('../../models/index.mjs');
+ recallHooks.search = () => defaultLimits(M[D]);
  const s = startWeightsServer({path:null,docsDir:null,port:0,cwd:home,instructionsHome:home});
  const post = (data, extra = {}) => fetch(s.url + 'instructions/recall', {method:'POST',headers:{'content-type':'application/json',...extra},body:JSON.stringify(data)});
  try {
@@ -138,5 +142,9 @@ test('Try a request shows which saved facts would be attached, with closeness, a
   expect((await post({request:'   '})).status).toBe(400);
   expect((await post({request:'x'},{'sec-fetch-site':'cross-site'})).status).toBe(403);
   expect('near' in await recall(home, 'check the suite', { embedder: new FakeEmbedder(), mark: false })).toBe(false); // the agent's own call is unchanged
- } finally { recallHooks.embedder = original; s.stop(); }
+ // found the way the agent finds them: with Embedder Off in /effort, by words, and it says why
+ recallHooks.search = () => ({ ...defaultLimits(M[D]), embedder: 'off' });
+ const w = await (await post({request:'where are the tests run, node test'})).json();
+ expect(w.how).toBe('words'); expect(w.note).toContain('Embedder is Off in /effort');
+ } finally { recallHooks.embedder = original; recallHooks.search = originalSearch; s.stop(); }
 });

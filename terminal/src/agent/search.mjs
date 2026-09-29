@@ -94,7 +94,7 @@ export async function choose({ query, byMeaning, byWords = null, n, key = (p) =>
     return { picked, order, reranked: true, ms: Date.now() - t0 };
   } catch (e) {
     if (signal?.aborted || e.name === 'AbortError') throw e;
-    return { picked: list.slice(0, n), order, reranked: false, ms: Date.now() - t0, note: `The reranker did not answer (${e.message}); the search's own order was used.` };
+    return { picked: list.slice(0, n), order, reranked: false, ms: Date.now() - t0, note: `The reranker was not used (${e.message}); the search's own order was used.` };
   }
 }
 

@@ -287,13 +287,18 @@ function leftovers({ files }) {
 }
 
 async function modelFiles({ fast }) {
-  const { MODELS, DEFAULT_MODEL, MODELS_DIR, modelPath, draftPath, readEdited } = await import('../../index.mjs');
+  const { MODELS, DEFAULT_MODEL, EMBEDDERS, RERANKERS, MODELS_DIR, modelPath, draftPath, readEdited } = await import('../../index.mjs');
   const m = MODELS[DEFAULT_MODEL];
-  const want = [[m.name, modelPath(m), m.sha256], ...(m.draft ? [[`${m.name}'s guessing helper`, draftPath(m), m.draft.sha256]] : [])];
+  // The default model and its helper, then the small models (the memory's
+  // matcher, the search's reranker, which `coding setup` downloads too).
+  const want = [[m.name, modelPath(m), m.sha256], ...(m.draft && !m.draft.inFile ? [[`${m.name}'s guessing helper`, draftPath(m), m.draft.sha256]] : []),
+    ...[...Object.values(EMBEDDERS), ...Object.values(RERANKERS)].map((x) => [x.name, modelPath(x), x.sha256])];
   const missing = want.filter(([, file]) => !existsSync(file));
-  if (missing.length === want.length) return look('the model is not on this Mac yet (coding setup)');
+  if (!existsSync(want[0][1])) return look('the model is not on this Mac yet (coding setup)');
   let edited = null; try { edited = readEdited?.()?.file ?? null; } catch { /* no edited copy */ }
-  const known = new Set([...want.map(([, file]) => file.split('/').pop()), edited, 'edited.json'].filter(Boolean));
+  // Every file the registry names is one the code uses (the other models in /model too).
+  const named = Object.values(MODELS).flatMap((x) => [modelPath(x), x.draft && !x.draft.inFile ? draftPath(x) : null]);
+  const known = new Set([...want.map(([, file]) => file), ...named].filter(Boolean).map((file) => file.split('/').pop()).concat([edited, 'edited.json'].filter(Boolean)));
   const extra = existsSync(MODELS_DIR) ? readdirSync(MODELS_DIR).filter((f) => !f.startsWith('.') && !f.endsWith('.part') && !known.has(f)).map((f) => `${f} (${(statSync(join(MODELS_DIR, f)).size / 1e9).toFixed(2)} GB) is in ${tilde(MODELS_DIR)} but the code does not use it`) : [];
   if (fast) return skipped('not checked (--fast)');
   const bad = [];

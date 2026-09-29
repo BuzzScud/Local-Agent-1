@@ -325,7 +325,10 @@ export class Agent extends EventEmitter {
     if (!index) return null;
     index.build(); // with everything already worked out, it is ready at once
     if (!index.ready) return { waiting: true, done: index.done, total: index.total, off: index.state === 'off' };
-    return index.search(text, { signal });
+    const found = await index.search(text, { signal });
+    // The index goes with what it found: /effort's Embedder Off, saved while
+    // this request runs, drops this.codeIndex, not this search's own.
+    return found && { ...found, index };
   }
 
   // Outside a project, a request naming one ("the chart bug in MAIN2026") asks
@@ -1094,7 +1097,7 @@ export class Agent extends EventEmitter {
         // How many parts come along is the meaning's rule; which ones, /effort's
         // Retriever and Reranker rows (search.mjs). On Meaning with no reranker
         // these are the closest parts, as always.
-        const index = this.codeIndex;
+        const index = found.index;
         const n = found.parts.filter((x) => x.close >= Math.max(CUT, best - MARGIN)).slice(0, 8).length;
         const hybrid = this.search?.retriever === 'hybrid';
         const chosen = await choose({ query: text, byMeaning: found.parts, byWords: hybrid ? index.wordSearch(text) : null, n, key: partKey, text: (p) => index.textOf(p, this.reranker?.model?.chars), retriever: this.search?.retriever, reranker: this.reranker, signal });

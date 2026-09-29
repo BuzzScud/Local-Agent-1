@@ -53,7 +53,10 @@ and the reranker which ones, as the app does.
 
 Memory: the reranker's server holds ~1.1 GB while it is loaded (measured with
 `-c 2048`; 1.56 GB with `-c 8192`, same choices and speed). It is started at
-the first request after the row is turned on and stopped when it is turned off.
+the first request after the row is turned on and stopped when it is turned off
+(unless another window still uses it). With less than 1.2 GB free it is not
+started: the search goes on in its own order and says why, once. Measured on the
+M4 with Gemma (32k) and BGE-M3 loaded: 1.58 GB free before it, 0.83 GB after.
 
 A whole request with Gemma (29 Sep, the big-project question practice task, run as
 `coding -p` does): the same answer and the same pieces as with the rows off, 49 s
