@@ -50,6 +50,17 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(() => runCommand('practice28', { model: 'bonsai', models })).toThrow('pick a model');
   expect(() => runCommand('nope', { model: 'gemma', models })).toThrow('no test "nope"');
   expect(runCommand('unit', { models }).argv).toEqual(['models/evals/tools/run-suite.mjs']);
+  // Thinking on (the tab's switch): at High, in each runner's own words; a test with no model takes none.
+  expect(runCommand('practice28', { model: 'gemma', think: true, models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'gemma', '--think', 'on', '--effort', 'high', '--set', '28']);
+  expect(runCommand('task', { model: 'qwen', n: 5, think: true, models }).argv.slice(-6)).toEqual(['--think', 'on', '--effort', 'high', '--only', '5']);
+  expect(runCommand('requests', { model: 'gemma', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
+  expect(runCommand('long', { model: 'gemma', think: true, models }).argv).toContain('high');
+  expect(runCommand('long', { model: 'gemma', models }).argv.join(' ')).toContain('--effort low');
+  expect(runCommand('work28', { model: 'gemma', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
+  expect(runCommand('new28', { model: 'gemma', models }).argv).not.toContain('--think');
+  const u = runCommand('unit', { think: true, models });
+  expect([u.think, u.argv.includes('--think')]).toEqual([false, false]);
+  for (const t of RUN_TESTS) expect(Boolean(t.think)).toBe(t.model);
   // What /test takes for a name.
   expect(findRunTest('practice 28')?.id).toBe('practice28');
   expect(findRunTest('Work28')?.id).toBe('work28');
@@ -63,6 +74,8 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(JSON.parse(JSON.stringify(cat))).toEqual(cat);
   expect(cat.find((t) => t.id === 'requests').command.qwen).toBe('node models/evals/bench/words/real.mjs --model qwen');
   expect(cat.find((t) => t.id === 'check').command.none).toBe('node models/evals/tools/check.mjs --fast');
+  expect(cat.find((t) => t.id === 'requests').commandThink.qwen).toBe('node models/evals/bench/words/real.mjs --model qwen --think on');
+  expect(cat.find((t) => t.id === 'check').commandThink).toBeUndefined();
   // Progress from what it printed so far.
   expect(countLines(runTestById('practice28'), ['server up', '    · Plan()', 'PASS  think=off  1-json-flag', 'FAIL  think=off  10-fix', 'thinking off: 1/2 passed'])).toEqual({ done: 2, passed: 1, total: 28 });
   expect(countLines(runTestById('requests'), ['OK   #1 [code] "hello"', 'FAIL #2 [code] "x"'])).toEqual({ done: 2, passed: 1, total: 28 });
@@ -83,7 +96,7 @@ test('a Battle set on one model: a line per test, the checks as the arena runs t
   const out = join(HOME, 'sets-a');
   const r = await collect(runSet(['--set', 'work28', '--only', 'w01,w02', '--out', out]));
   expect(r.code).toBe(0);
-  expect(r.out).toContain('Gemma 4 12B QAT · Work 28 · 2 tests, one at a time, each stops at 10 minutes · practice run: no model');
+  expect(r.out).toContain('Gemma 4 12B QAT · Work 28 · thinking off (Low) · 2 tests, one at a time, each stops at 10 minutes · practice run: no model');
   expect(r.out).toMatch(/^(PASS|FAIL)  w01-contract-roll\s+\d+s\s+\d+ steps/m);
   expect(r.out).toMatch(/^(PASS|FAIL)  w02-tick-rounding/m);
   expect(r.out).toMatch(/Work 28 on Gemma: \d of 2 passed/);
@@ -95,6 +108,17 @@ test('a Battle set on one model: a line per test, the checks as the arena runs t
   expect(line.note).toContain('practice run: no model ran');
   expect(new RegExp(runTestById('work28').record.name).test(line.name)).toBe(true);
   expect((await collect(runSet(['--set', 'nope']))).code).toBe(2);
+}, 60_000);
+
+test('a Battle set with thinking on: each test is asked for it, and the record says High', async () => {
+  const out = join(HOME, 'sets-think');
+  const r = await collect(runSet(['--set', 'new28', '--only', 'n01', '--think', 'on', '--out', out]));
+  expect(r.code).toBe(0);
+  expect(r.out).toContain('· New 28 · thinking on (High) · 1 test,');
+  expect(JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')).thinking).toBe(true);
+  expect(JSON.parse(readFileSync(join(out, 'n01-date-one-day-early', 'result.json'), 'utf8')).thinking).toBe(true);
+  const line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.kind === 'sets' && x.name.startsWith('The New 28 (1 picked)'));
+  expect(line.effort).toBe('high');
 }, 60_000);
 
 test('a Battle set stopped part way: the test under way is left out, the rest skipped, and the line says stopped', async () => {
@@ -156,7 +180,7 @@ test('run.mjs --set 28 on the stand-in, stopped during its first task: that task
 test('real.mjs on the stand-in, stopped during its first request: it says so, saves an empty run as stopped, records nothing', async () => {
   const home = await standInHome();
   const out = join(home, 'words.json');
-  const child = spawn(NODE, [join(REPO, 'models', 'evals', 'bench', 'words', 'real.mjs'), '--model', 'gemma', '--only', '1,2', '--out', out], { cwd: REPO, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_TEST_RECORD: join(home, 'record.jsonl'), FAKE_LLAMA_REPLY_MS: '20000' } });
+  const child = spawn(NODE, [join(REPO, 'models', 'evals', 'bench', 'words', 'real.mjs'), '--model', 'gemma', '--only', '1,2', '--think', 'on', '--out', out], { cwd: REPO, env: { ...process.env, AGENTIC_HOME: home, AGENTIC_TEST_RECORD: join(home, 'record.jsonl'), FAKE_LLAMA_REPLY_MS: '20000' } });
   let seen = '';
   child.stdout.on('data', (d) => { seen += d; if (/server up/.test(seen) && !child.stopSent) { child.stopSent = true; setTimeout(() => child.kill('SIGTERM'), 1500); } });
   const t0 = Date.now();
@@ -165,7 +189,7 @@ test('real.mjs on the stand-in, stopped during its first request: it says so, sa
   // Not the 20 s the stand-in holds its reply: a request already stopped is not sent (it was, for "hello").
   expect(Date.now() - t0).toBeLessThan(12_000);
   expect(seen).toContain('server up on http://127.0.0.1:');
-  expect(seen).toContain('2 of the 28 requests, one at a time');
+  expect(seen).toContain('thinking on (High); 2 of the 28 requests, one at a time');
   expect(seen).toContain('stopping: the request under way ends now');
   expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ stopped: true, total: 0 });
   expect(existsSync(join(home, 'record.jsonl'))).toBe(false);
@@ -212,6 +236,20 @@ test('Practice 28 on Gemma: it holds the memory as a test run (named, on its own
   expect(done.lines.at(-1)).toBe('not recorded in the test record: a practice run (no model ran)');
   expect(existsSync(join(HOME, 'battle', 'running.json'))).toBe(false);
   expect(JSON.parse(readFileSync(join(HOME, 'battle', 'state.json'), 'utf8')).job.status).toBe('done');
+}, 60_000);
+
+test('thinking on: the run is asked for it, its title (and so the app\'s waiting line) says so, and a test with no model ignores it', async () => {
+  expect((await post('/api/testrun', { test: 'work28', model: 'qwen', think: true }, { 'x-agentic-key': key() })).status).toBe(200);
+  const s = await until(async () => { const x = await get('/api/testrun'); return x.job?.test === 'work28' && x.job.status === 'running' && x.job.lines.length ? x : null; });
+  expect(s.job).toMatchObject({ model: 'qwen', think: true });
+  expect(s.job.id).toMatch(/-work28-qwen-think$/);
+  expect(s.job.lines[0]).toContain('thinking on (High)');
+  expect(JSON.parse(readFileSync(join(HOME, 'battle', 'running.json'), 'utf8')).title).toBe('Work 28 on Qwen3.5 9B · thinking on');
+  await post('/api/teststop', {}, { 'x-agentic-key': key() });
+  await idle();
+  await post('/api/testrun', { test: 'check', think: true }, { 'x-agentic-key': key() });
+  await idle();
+  expect((await get('/api/testrun')).job).toMatchObject({ test: 'check', think: false, status: 'done' });
 }, 60_000);
 
 test('Stop: the run is told to stop, saves what it has, and ends as stopped; a run with no model holds no memory', async () => {

@@ -2,7 +2,8 @@
 // time, each the way the arena runs it (run-one.mjs: Low, the context helpers, a throwaway copy of
 // the test's files, its own checks, 10 minutes at most once the model is loaded). The hub's
 // ▶ Run a test starts it; it runs from Terminal too:
-//   node models/evals/battle/run-set.mjs --model gemma --set work28 [--only w01,w05] [--out dir]
+//   node models/evals/battle/run-set.mjs --model gemma --set work28 [--only w01,w05] [--out dir] [--think on]
+// --think on: thinking on, at High (a battle runs Low); each test still stops at 10 minutes.
 // It plays your copies in the arena (~/.agentic-coder/battle/tests/), so an edit made there is what
 // runs. One line per test as it ends, then a line in the test record (Battle sets). Raw results:
 // models/<model>/results/sets/<set>-<time>/<test>/ (result.json, events.jsonl, run.log, files/).
@@ -27,6 +28,7 @@ const model = MODELS[opt('model')];
 const set = opt('set');
 if (!model || !SETS.includes(set)) { console.error(`usage: run-set.mjs --model <${Object.keys(MODELS).join('|')}> --set <${SETS.join('|')}> [--only w01,w05]`); process.exit(2); }
 const only = opt('only', null)?.split(',').map((s) => s.trim()).filter(Boolean);
+const thinking = opt('think', 'off') === 'on';
 
 seedSuites();
 const P = paths();
@@ -57,7 +59,7 @@ function playOne(t) {
     mkdirSync(out, { recursive: true });
     const fd = openSync(join(out, 'run.log'), 'w');
     const env = { ...process.env }; delete env.FORCE_COLOR;
-    child = spawn(process.execPath, [join(HERE, FAKE ? 'fake-one.mjs' : 'run-one.mjs'), '--model', model.id, '--test', join(P.tests, t.id), '--out', out, '--timeout', String(LIMIT_SECS)], { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
+    child = spawn(process.execPath, [join(HERE, FAKE ? 'fake-one.mjs' : 'run-one.mjs'), '--model', model.id, '--test', join(P.tests, t.id), '--out', out, '--timeout', String(LIMIT_SECS), ...(thinking ? ['--think', 'on'] : [])], { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
     closeSync(fd);
     // Loading is not counted in its 10 minutes: past that and a margin, it is stopped hard.
     const guard = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, (LIMIT_SECS + 150) * 1000);
@@ -82,7 +84,7 @@ const whyOf = (r) => {
 };
 const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')} s`;
 const name = SUITES[set];
-console.log(`${model.name} · ${name} · ${tests.length} test${tests.length === 1 ? '' : 's'}, one at a time, each stops at 10 minutes${FAKE ? ' · practice run: no model' : ''}`);
+console.log(`${model.name} · ${name} · thinking ${thinking ? 'on (High)' : 'off (Low)'} · ${tests.length} test${tests.length === 1 ? '' : 's'}, one at a time, each stops at 10 minutes${FAKE ? ' · practice run: no model' : ''}`);
 const rows = [];
 const t0 = Date.now();
 for (const t of tests) {
@@ -98,10 +100,10 @@ for (const t of tests) {
 }
 const passed = rows.filter((r) => r.pass).length;
 const secs = rows.reduce((s, r) => s + r.secs, 0);
-writeFileSync(join(outDir, 'summary.json'), JSON.stringify({ model: model.id, set, only: only ?? null, fake: FAKE, stopped: stopping, at: new Date(t0).toISOString(), passed, total: rows.length, secs, rows }, null, 1));
+writeFileSync(join(outDir, 'summary.json'), JSON.stringify({ model: model.id, set, thinking, only: only ?? null, fake: FAKE, stopped: stopping, at: new Date(t0).toISOString(), passed, total: rows.length, secs, rows }, null, 1));
 console.log(`${name} on ${model.name.split(' ')[0]}: ${passed} of ${rows.length} passed${stopping ? ' · stopped' : ''} · ${clock(secs)} of test time, ${clock((Date.now() - t0) / 1000)} in all`);
 const failed = rows.filter((r) => !r.pass).map((r) => r.id);
-if (rows.length) recordTest({ kind: 'sets', model: model.id, name: `The ${name}${only ? ` (${rows.length} picked)` : ''}, one model`, code: codeLabel(REPO), effort: 'low', ctx: 32768,
+if (rows.length) recordTest({ kind: 'sets', model: model.id, name: `The ${name}${only ? ` (${rows.length} picked)` : ''}, one model`, code: codeLabel(REPO), effort: thinking ? 'high' : 'low', ctx: 32768,
   passed, total: rows.length, secs, part: Boolean(only) || stopping, result: stopping ? 'stopped' : undefined,
   note: [FAKE ? 'practice run: no model ran' : '', failed.length ? `failed: ${failed.join(', ')}` : ''].filter(Boolean).join(' · '), raw: outDir });
 console.log(`saved ${outDir}/summary.json`);

@@ -92,7 +92,7 @@ async function runRoute(req, url) {
       let body = {};
       try { body = await req.json(); } catch {}
       const r = url.pathname === '/tests/run'
-        ? await testRun({ method: 'POST', path: '/api/testrun', body: { test: body.test, model: body.model, n: body.n }, start: true })
+        ? await testRun({ method: 'POST', path: '/api/testrun', body: { test: body.test, model: body.model, n: body.n, think: body.think === true }, start: true })
         : await testRun({ method: 'POST', path: '/api/teststop' });
       if (!r.up) return Response.json({ error: 'no test is running' }, { status: 409, headers: noStore });
       return Response.json(r.body ?? {}, { status: r.status, headers: noStore });

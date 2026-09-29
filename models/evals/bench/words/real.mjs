@@ -2,7 +2,9 @@
 // the real model in throwaway copies of three kinds of folder, everything
 // auto-approved. Records where each went, how long, errors, file changes,
 // blocked commands, and whether it wrote tests for something that isn't code.
-//   node models/evals/bench/words/real.mjs [--out file.json] [--only 1,5] [--memory]
+//   node models/evals/bench/words/real.mjs [--out file.json] [--only 1,5] [--memory] [--think on|off]
+// --think on: with thinking on (High; the default is off, Low). Each request then gets 12 minutes
+// instead of 6, since thinking first takes time of its own.
 // --memory: with Agentic Coder's memory on, as the app has it (a throwaway one, empty
 // at the start; Claude's notes off). What a request taught is saved after
 // its checks, so the memory's own files are never taken for the request's.
@@ -77,6 +79,9 @@ const approve = (req) => !(req.name === 'Bash' && SERVICES.test(String(req.args?
 
 const only = opt('only', null)?.split(',').map(Number);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
+const thinking = opt('think', 'off') === 'on';
+const effort = thinking ? 'high' : undefined;
+const limitMin = thinking ? 12 : 6;
 const withMemory = args.includes('--memory');
 const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'agentic-words-memory-')) : null;
 // One small model for the whole run, stopped with it.
@@ -96,7 +101,7 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 const started = await server.start({ ctx: 32768 });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
-console.log(`server up on ${server.url}, ctx 32768; ${only ? `${only.length} of the ${REQUESTS.length}` : `the ${REQUESTS.length}`} requests, one at a time`);
+console.log(`server up on ${server.url}, ctx 32768, thinking ${thinking ? 'on (High)' : 'off (Low)'}; ${only ? `${only.length} of the ${REQUESTS.length}` : `the ${REQUESTS.length}`} requests, one at a time`);
 const rows = [];
 try {
   for (const [i, [folder, prompt, expect, reply]] of REQUESTS.entries()) {
@@ -116,11 +121,11 @@ try {
     const ac = new AbortController();
     reqAc = ac;
     if (stopping) ac.abort(); // a stop that came while the folder was copied
-    const timer = setTimeout(() => ac.abort(), 6 * 60_000);
+    const timer = setTimeout(() => ac.abort(), limitMin * 60_000);
     const t0 = Date.now();
     let run; let crash = null;
     try {
-      run = await runHeadless({ prompt, cwd, url: server.url, model, thinking: false, ctx: 32768, autoApprove: true, approve, answers, signal: ac.signal, slots, warm: !!slots,
+      run = await runHeadless({ prompt, cwd, url: server.url, model, thinking, effort, ctx: 32768, autoApprove: true, approve, answers, signal: ac.signal, slots, warm: !!slots,
         memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: false } : false,
         onEvent: (type, ev) => log.push({ type, ...ev }) });
     } catch (e) { crash = String(e.message ?? e); }
@@ -146,8 +151,8 @@ try {
       if (x.startsWith('notRun:')) { const re = new RegExp(x.slice(7)); const ran = bash.filter((b) => re.test(b.cmd) && !b.error); if (ran.length) fails.push(`RAN a blocked command: ${ran.map((b) => b.cmd).join('; ')}`); }
     }
     if (crash && !fails.some((f) => f.startsWith('crashed'))) fails.push(`crashed: ${crash}`);
-    if (ac.signal.aborted) fails.push('took over 6 minutes');
-    if (secs > 6 * 60 + 20) fails.push(`kept going ${secs - 360}s past the 6-minute limit`);
+    if (ac.signal.aborted) fails.push(`took over ${limitMin} minutes`);
+    if (secs > limitMin * 60 + 20) fails.push(`kept going ${secs - limitMin * 60}s past the ${limitMin}-minute limit`);
     const outside = bash.filter((b) => !b.error && outsidePath(b.cmd, cwd)).map((b) => b.cmd);
     const outsideReads = events.filter((e) => e.type === 'tool' && !e.error && ['Read', 'List', 'Search'].includes(e.label) && /^(~|\/(?!dev\/))/.test(String(e.arg)) && !String(e.arg).startsWith(cwd)).map((e) => `${e.label} ${e.arg}`);
     if (outside.length || outsideReads.length) fails.push(`LEFT its folder: ${[...outside, ...outsideReads].join('; ')}`);
@@ -162,10 +167,10 @@ try {
   await server.stop();
 }
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, x) => n + x.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, x) => n + x.secs, 0) / saves.length) : 0} s a save`);
-const out = { at: new Date().toISOString(), memory: withMemory, stopped: stopping, total: rows.length, ok: rows.filter((r) => r.ok).length, rows };
+const out = { at: new Date().toISOString(), memory: withMemory, thinking, stopped: stopping, total: rows.length, ok: rows.filter((r) => r.ok).length, rows };
 const file = opt('out', join(modelFolder(model), 'results', 'words', `real-${out.at.replace(/[:.]/g, '-')}.json`));
 mkdirSync(dirname(file), { recursive: true });
 writeFileSync(file, JSON.stringify(out, null, 1));
 console.log(`${out.ok} of ${out.total} OK · saved ${file}`);
-if (rows.length) recordTest({ kind: 'requests', model: model.id, name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: 'low', passed: out.ok, total: out.total, part: args.includes('--only') || stopping, result: stopping ? 'stopped' : undefined, secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
+if (rows.length) recordTest({ kind: 'requests', model: model.id, name: `The ${out.total} real requests${withMemory ? ', with the memory on' : ''}`, at: out.at, code: codeLabel(root), effort: thinking ? 'high' : 'low', passed: out.ok, total: out.total, part: args.includes('--only') || stopping, result: stopping ? 'stopped' : undefined, secs: rows.reduce((s, r) => s + (r.secs ?? 0), 0),
   note: out.ok < out.total ? `failed: ${rows.filter((r) => !r.ok).map((r) => `#${r.n}`).join(', ')}` : '', raw: file.replace(`${root}/`, '') });

@@ -1,5 +1,6 @@
 // One model, one Battle test: the arena's runner starts this once per model per battle.
-//   node models/evals/battle/run-one.mjs --model gemma --test <tests/id> --out <battles/id/A> [--timeout 600] [--ctx 32768]
+//   node models/evals/battle/run-one.mjs --model gemma --test <tests/id> --out <battles/id/A> [--timeout 600] [--ctx 32768] [--think on]
+// --think on (a one-model run from the Tests tab): thinking on, at High; a battle never passes it.
 // It runs the way a practice task runs (models/evals/bench/run.mjs): the same settings, Low
 // (thinking off), the context helpers as the app has them, on a throwaway copy of the
 // test's files; a test that is about the home folder (a page saved "to my Desktop") runs
@@ -22,6 +23,7 @@ const test = opt('test');
 const out = opt('out');
 const limitMs = Number(opt('timeout', LIMIT_SECS)) * 1000;
 const ctx = Number(opt('ctx', 32768));
+const thinking = opt('think', 'off') === 'on';
 if (!model || !test || !out) { console.error('usage: run-one.mjs --model <id> --test <dir> --out <dir>'); process.exit(2); }
 mkdirSync(join(out, 'files'), { recursive: true });
 
@@ -60,7 +62,7 @@ try {
   timer = setTimeout(() => { why = 'time'; ac.abort(); }, limitMs);
   if (meta.home) process.env.HOME = work;
   const answers = (q) => { const hit = (meta.answers ?? []).find((r) => new RegExp(r.match, 'i').test(q)); emit({ type: 'asked', text: q, reply: hit?.reply ?? null }); return hit ? hit.reply : 'I do not know. If the files do not tell you, decide for yourself and say what you chose.'; };
-  run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking: false, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: true, flows: true, helpers, embedder, prewarm: true,
+  run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort: thinking ? 'high' : undefined, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: true, flows: true, helpers, embedder, prewarm: true,
     onEvent: (type, ev) => {
       if (type === 'tool') emit({ type: 'step', label: ev.label, arg: String(ev.arg ?? '').replace(/\s+/g, ' ').slice(0, 120), kind: ev.error ? 'error' : (KIND[ev.label] ?? 'read'), err: ev.error ? String(ev.error).slice(0, 160) : '' });
       if (type === 'note') emit({ type: 'note', text: ev.text });
@@ -89,7 +91,7 @@ const checked = runChecks({ checks: meta.checks ?? [], script: !meta.noScript &&
 const pages = [...checked.files.added, ...checked.files.changed].filter((f) => /\.html?$/i.test(f)).slice(0, 6);
 for (const f of pages) { const to = join(out, 'files', f); mkdirSync(dirname(to), { recursive: true }); cpSync(join(work, f), to); }
 const result = {
-  model: model.id, pass: checked.pass, checks: checked.checks, reason: run.reason, stopped: why === 'stopped', overLimit: why === 'time',
+  model: model.id, thinking, pass: checked.pass, checks: checked.checks, reason: run.reason, stopped: why === 'stopped', overLimit: why === 'time',
   secs: Math.round((run.secs ?? 0) * 10) / 10, steps, stepCount: run.steps ?? steps.length, errors: run.toolErrors ?? steps.filter((s) => s.kind === 'error').length,
   tps: run.tps ? Math.round(run.tps * 10) / 10 : null, outTokens: run.outTokens ?? null, answer, diffs, pages, asked: (run.asked ?? []).map((a) => a.question),
   changed: checked.files,

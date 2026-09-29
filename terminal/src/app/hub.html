@@ -68,11 +68,11 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   const $ = (s) => document.querySelector(s);
   const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own');
   let docs = null; // { dir, missing, pinned: { harness, structure }, pages: [{ file, title, kind, size, saved }] }
-  // /test in Agentic Coder opens ?tab=tests&run=1&model=…&test=…&n=…: the Tests tab on ▶ Run a test with
+  // /test in Agentic Coder opens ?tab=tests&run=1&model=…&test=…&n=…(&think=on): the Tests tab on ▶ Run a test with
   // those picked. Taken once, then dropped from the address (the Tests button opens the record as usual).
   let runAsk = (() => {
     const q = new URL(location.href); if (!q.searchParams.has('run')) return null;
-    const a = new URLSearchParams(); for (const k of ['model', 'test', 'n']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
+    const a = new URLSearchParams(); for (const k of ['model', 'test', 'n', 'think']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
     q.searchParams.delete('run'); history.replaceState(null, '', q); return a;
   })();
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';

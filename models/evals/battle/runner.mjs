@@ -165,7 +165,7 @@ async function runBattle(testId) {
 
 // ---------- A test run from the Tests tab (▶ Run a test): one test, one model ----------
 // job: the run now or the last one, kept in state.json so the tab still shows it after a restart.
-//   { id, test, name, n, model, modelName, status: 'waiting' | 'running' | 'done' | 'failed' | 'stopped' | 'interrupted',
+//   { id, test, name, n, model, modelName, think, status: 'waiting' | 'running' | 'done' | 'failed' | 'stopped' | 'interrupted',
 //     startedAt, runStartedAt, endedAt, pid, dir, result: { done, passed, total, code, recorded } }
 let job = state.job ?? null;
 let jobChild = null;
@@ -187,7 +187,7 @@ function finishJob(code) {
   saveJob();
   log(`test run ${job.id} ${job.status}${code != null ? ` (exit ${code})` : ''}`);
 }
-const jobTitle = (j) => `${j.name}${j.n != null ? ` ${j.n}` : ''}${j.model ? ` on ${j.modelName}` : ''}`;
+const jobTitle = (j) => `${j.name}${j.n != null ? ` ${j.n}` : ''}${j.model ? ` on ${j.modelName}` : ''}${j.think ? ' · thinking on' : ''}`;
 async function runJob(cmd) {
   const t = cmd.test;
   const title = jobTitle(job);
@@ -197,7 +197,7 @@ async function runJob(cmd) {
   job.waiting = null;
   const fd = openSync(join(job.dir, 'run.log'), 'w');
   const env = { ...process.env }; delete env.FORCE_COLOR;
-  const argv = FAKE ? [join(HERE, 'fake-test.mjs'), '--test', t.id, '--model', job.model ?? 'none', '--n', String(job.n ?? '')] : [join(REPO, cmd.argv[0]), ...cmd.argv.slice(1)];
+  const argv = FAKE ? [join(HERE, 'fake-test.mjs'), '--test', t.id, '--model', job.model ?? 'none', '--n', String(job.n ?? ''), '--think', job.think ? 'on' : 'off'] : [join(REPO, cmd.argv[0]), ...cmd.argv.slice(1)];
   const child = spawn(FAKE ? process.execPath : NODE, argv, { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
   closeSync(fd);
   jobChild = child;
@@ -211,13 +211,13 @@ async function runJob(cmd) {
   jobChild = null;
   finishJob(code);
 }
-function startJob({ test, model, n }) {
+function startJob({ test, model, n, think }) {
   if (busy) return { code: 409, error: jobLive() ? 'a test is running: stop it first' : 'a battle is running (the Battle tab): stop it first' };
   let cmd;
-  try { cmd = runCommand(String(test ?? ''), { model, n, models: IDS }); } catch (e) { return { code: 400, error: e.message }; }
+  try { cmd = runCommand(String(test ?? ''), { model, n, think: think === true, models: IDS }); } catch (e) { return { code: 400, error: e.message }; }
   const t = cmd.test;
-  const id = `${stamp()}-${t.id}${cmd.n != null ? `-${cmd.n}` : ''}${t.model ? `-${model}` : ''}`;
-  job = { id, test: t.id, name: t.name, n: cmd.n, model: t.model ? model : null, modelName: t.model ? MODELS[model].name : null, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
+  const id = `${stamp()}-${t.id}${cmd.n != null ? `-${cmd.n}` : ''}${t.model ? `-${model}` : ''}${cmd.think ? '-think' : ''}`;
+  job = { id, test: t.id, name: t.name, n: cmd.n, model: t.model ? model : null, modelName: t.model ? MODELS[model].name : null, think: cmd.think, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
   busy = true; stopAsked = false; lastUse = Date.now();
   runJob(cmd).catch((e) => { log(`test run ${id}: ${e.stack ?? e.message}`); if (jobLive()) finishJob(null); })
     .finally(() => { busy = false; jobChild = null; waiting = null; if (!job?.pid || !alive(job.pid)) clearHold(); stopAsked = false; lastUse = Date.now(); setTimeout(tick, 500); });

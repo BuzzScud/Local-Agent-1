@@ -73,11 +73,11 @@ test('the hub passes the Tests tab\'s asks along with the key: the list, a run s
   const evil = await fetch(`${H}/tests/run`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://evil.example' }, body: '{"test":"unit"}' });
   expect(evil.status).toBe(403);
   expect((await fetch(`${H}/tests/run`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{"test":"unit"}' })).status).toBe(415);
-  const ok = await fetch(`${H}/tests/run`, { method: 'POST', headers: { 'content-type': 'application/json', origin: H }, body: JSON.stringify({ test: 'task', model: 'gemma', n: 12 }) });
+  const ok = await fetch(`${H}/tests/run`, { method: 'POST', headers: { 'content-type': 'application/json', origin: H }, body: JSON.stringify({ test: 'task', model: 'gemma', n: 12, think: true }) });
   expect(ok.status).toBe(200);
   await idle();
   const j = (await get('/api/testrun')).job;
-  expect(j).toMatchObject({ test: 'task', n: 12, status: 'done' });
+  expect(j).toMatchObject({ test: 'task', n: 12, think: true, status: 'done' }); // the switch's choice goes along
   expect(j.lines.join('\n')).toContain('12-feature-currency');
   // The page: the tab and its pane, and it asks the hub (never the runner's address) for everything.
   const page = await (await fetch(`${H}/tests`)).text();

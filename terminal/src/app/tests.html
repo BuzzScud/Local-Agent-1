@@ -88,7 +88,9 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 .tabs button.runtab{color:var(--ink)}.tabs button.runtab i{font-style:normal;color:var(--c-before);font-size:11px;margin-right:5px}
 #runpane{gap:12px}
 .rt-box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
-.rt-top{flex:none;display:flex;align-items:center;gap:10px 14px;padding:10px 14px;flex-wrap:wrap}
+/* Two rows that stay put: the tests, then thinking and what is loaded; Run on the right of both. */
+.rt-top{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 14px;padding:10px 14px}
+.rt-row{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;min-width:0}
 .rt-l{font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--mute)}
 .rt-chips{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 .rt-chips button{font:inherit;font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--mute);cursor:pointer;white-space:nowrap}
@@ -96,13 +98,20 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 .rt-chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .rt-chips button:disabled{cursor:default}
 .rt-chips select{font:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
-.rt-status{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:7px;min-width:0}
+.rt-think{display:flex;align-items:center;gap:4px}.rt-think .rt-l{margin-right:4px}
+.rt-think button{font:inherit;font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--mute);cursor:pointer;white-space:nowrap}
+.rt-think button:hover:not(:disabled){color:var(--ink);border-color:var(--faint)}
+.rt-think button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.rt-think button:disabled{cursor:default}
+.rt-think kbd{font:600 11px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--mute);background:var(--card);margin-left:3px}
+.rt-status{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 220px}
 .rt-status span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rt-status i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--up)}.rt-status i.busy{background:var(--warn)}
-.rt-go{margin-left:auto;font:inherit;font-weight:650;font-size:15px;border:0;border-radius:11px;padding:9px 20px;cursor:pointer;white-space:nowrap;background:var(--c-before);color:#fff}
+.rt-go{grid-column:2;grid-row:1 / span 2;font:inherit;font-weight:650;font-size:15px;border:0;border-radius:11px;padding:9px 20px;cursor:pointer;white-space:nowrap;background:var(--c-before);color:#fff}
 .rt-go:hover:not(:disabled){filter:brightness(1.07)}.rt-go.stop{background:var(--down)}
 .rt-go:disabled{background:var(--soft);color:var(--mute);cursor:default}
-.rt-err{flex-basis:100%;margin:0;font-size:13px;color:var(--down)}
+.rt-err{grid-column:1 / -1;margin:0;font-size:13px;color:var(--down)}
+@media (max-width:600px){.rt-top{grid-template-columns:minmax(0,1fr)}.rt-go{grid-column:1;grid-row:auto;justify-self:start}}
 .rt-main{flex:1;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px}
 .rt-stages{padding:12px 16px;display:flex;flex-direction:column;overflow:hidden}
 .rt-stg{display:flex;gap:10px;align-items:flex-start;padding:6px 0}
@@ -347,16 +356,22 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     const q = new URL(location.href).searchParams;
     let testId = q.get('test') || store('agentic-tests-run-test') || 'practice28';
     let taskN = Number(q.get('n')) || Number(store('agentic-tests-run-n')) || 10;
+    // Thinking: off (Low, the way a battle runs) or on (High). The switch, or the T key, sets it; kept here.
+    let think = (q.get('think') ?? store('agentic-tests-run-think')) === 'on';
+    const thinkOf = (v) => (v.job ? Boolean(v.job.think) : Boolean(v.t.think && think));
+    const thinkWords = (on) => (on ? 'thinking on (High)' : 'thinking off (Low)');
     const isLive = (j) => Boolean(j && (j.status === 'waiting' || j.status === 'running'));
     const oneModel = () => models.some((m) => m.id === pick);
     const list = () => st.catalog.filter((t) => (pick === 'none' ? !t.model : oneModel() ? t.model : false));
     const testOf = (id) => st.catalog.find((t) => t.id === id);
     const shortName = (name) => String(name ?? '').split(' ')[0];
     const mmss = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
-    // Its earlier line in the record (before `before`), for this model: the full runs only.
-    function lastRun(t, m, before = Infinity) {
+    // Its earlier line in the record (before `before`), for this model and thinking on or off (its
+    // effort, High or Low): the full runs only.
+    function lastRun(t, m, before = Infinity, th = false) {
       const re = new RegExp(t.record.name);
-      return all.find((r) => r.kind === t.record.kind && re.test(r.name) && Boolean(r.part) === t.record.part && (t.model ? r.model === m : !r.model) && r.result !== 'stopped' && new Date(r.at).getTime() < before) ?? null;
+      const effort = (r) => (r.effort === 'high' || r.effort === 'medium' ? 'high' : 'low');
+      return all.find((r) => r.kind === t.record.kind && re.test(r.name) && Boolean(r.part) === t.record.part && (t.model ? r.model === m && effort(r) === (th ? 'high' : 'low') : !r.model) && r.result !== 'stopped' && new Date(r.at).getTime() < before) ?? null;
     }
     const brief = (r) => (r ? `${mark(r)[1]} ${words(r)} · ${day(r.at)}` : 'never');
     // What the pane shows: the run going now (whatever is picked), else the last run if it is of the
@@ -366,7 +381,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const t = testOf(testId) && list().some((x) => x.id === testId) ? testOf(testId) : list()[0];
       if (!t) return null;
       const m = t.model ? pick : null;
-      const j = st.job && st.job.test === t.id && (st.job.model ?? null) === m && (t.id !== 'task' || st.job.n === taskN) ? st.job : null;
+      const j = st.job && st.job.test === t.id && (st.job.model ?? null) === m && (t.id !== 'task' || st.job.n === taskN) && Boolean(st.job.think) === Boolean(t.think && think) ? st.job : null;
       return { job: j, t, m };
     }
     function line(l) {
@@ -382,21 +397,26 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     function top(v) {
       const running = isLive(st.job);
       const chips = list().map((t) => `<button type="button" data-t="${t.id}" aria-pressed="${v && v.t.id === t.id}"${running ? ' disabled' : ''}>${esc(t.name)}</button>${t.pick && v && v.t.id === t.id ? `<select id="rt-n" aria-label="Which practice task"${running ? ' disabled' : ''}>${Array.from({ length: t.pick.max - t.pick.min + 1 }, (_, i) => t.pick.min + i).map((n) => `<option${n === (running ? st.job.n : taskN) ? ' selected' : ''}>${n}</option>`).join('')}</select>` : ''}`).join('');
+      // Thinking: the run's own while one runs; a test that takes no model has none.
+      const th = v ? thinkOf(v) : false, can = Boolean(v && v.t.think && !running);
+      const sw = `<div class="rt-think" role="group" aria-label="Thinking" title="${v && !v.t.think ? 'This test takes no model, so no thinking' : running ? 'The run under way keeps its setting' : 'Thinking off (Low) or on (High) · the T key switches it'}"><span class="rt-l">Thinking</span>${[['off', 'Off'], ['on', 'On']].map(([k, w]) => `<button type="button" data-think="${k}" aria-pressed="${(k === 'on') === th}"${can ? '' : ' disabled'}>${w}</button>`).join('')}<kbd>T</kbd></div>`;
       const held = st.loaded.filter((x) => x.who !== 'this test run');
       const status = running ? (st.job.status === 'waiting' ? `<i class="busy"></i><span>${esc(st.job.waiting ?? 'Getting the memory ready…')}</span>`
-        : `<i class="busy"></i><span>Running: ${esc(st.job.name)}${st.job.n != null ? ` ${st.job.n}` : ''}${st.job.modelName ? ` on ${esc(st.job.modelName)}` : ''}</span>`)
+        : `<i class="busy"></i><span>Running: ${esc(st.job.name)}${st.job.n != null ? ` ${st.job.n}` : ''}${st.job.modelName ? ` on ${esc(st.job.modelName)}` : ''}${st.job.think ? ', thinking on' : ''}</span>`)
         : st.battle ? '<i class="busy"></i><span>A battle is running (the Battle tab): Run waits until it ends or you stop it there</span>'
         : `<i></i><span>Loaded now: ${held.length ? held.map((x) => `${esc(x.model)} (${esc(x.who)}${/window/.test(x.who) ? ': it lets go when you press Run' : ''})`).join(', ') : 'nothing'}</span>`;
       const label = running ? (st.job.stopping || sending === 'stop' ? 'Stopping' : '■ Stop') : sending === 'run' ? 'Starting' : v ? `▶ Run${v.t.model ? ` on ${shortName(modelName(v.m))}` : ''}` : '▶ Run';
       const off = sending || (running && st.job.stopping) || (!running && (st.battle || !v));
-      return `<div class="rt-box rt-top"><span class="rt-l">Test</span><div class="rt-chips" id="rt-chips">${chips}</div><span class="rt-status">${status}</span>
-        <button type="button" class="rt-go${running ? ' stop' : ''}" id="rt-go"${off ? ' disabled' : ''}>${label}</button>${err ? `<p class="rt-err">${esc(err)}</p>` : ''}</div>`;
+      return `<div class="rt-box rt-top"><div class="rt-row"><span class="rt-l">Test</span><div class="rt-chips" id="rt-chips">${chips}</div></div>
+        <button type="button" class="rt-go${running ? ' stop' : ''}" id="rt-go"${off ? ' disabled' : ''}>${label}</button>
+        <div class="rt-row">${sw}<span class="rt-status">${status}</span></div>${err ? `<p class="rt-err">${esc(err)}</p>` : ''}</div>`;
     }
     function body(v) {
       const { job: j, t, m } = v;
       const running = isLive(j), ended = j && !running;
       const lines = j?.lines ?? [];
-      const last = lastRun(t, m, j ? j.startedAt : Infinity);
+      const th = thinkOf(v);
+      const last = lastRun(t, m, j ? j.startedAt : Infinity, th);
       const other = t.model ? models.find((x) => x.id !== m) : null;
       const cnt = j?.count ?? { done: null, total: t.total };
       const readyRe = { practice28: /^server up/, task: /^server up/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/ }[t.id];
@@ -414,7 +434,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const recText = ended ? (j.result?.recorded ? `in the record: ${esc(j.result.recorded)}` : j.status === 'stopped' ? 'stopped: what ran is in the record as stopped' : st.fake ? 'a practice run: nothing is recorded' : 'no line was recorded') : 'its line lands in the record when it ends';
       const stages = (t.model
         ? stage(0, 'Free the memory', phase === 0 ? esc(j.waiting ?? 'waiting') : phase > 0 ? 'nothing else holds a model' : 'unloads a model nobody uses; an open Agentic Coder window lets go of its own once its reply ends')
-          + stage(1, `Load ${esc(modelName(m))}`, phase > 1 || ended ? (t.id === 'work28' || t.id === 'new28' ? 'each test loads it for itself' : 'loaded') : phase === 1 ? 'loading…' : 'one model at a time, like a battle')
+          + stage(1, `Load ${esc(modelName(m))}`, `${phase > 1 || ended ? (t.id === 'work28' || t.id === 'new28' ? 'each test loads it for itself' : 'loaded') : phase === 1 ? 'loading…' : 'one model at a time, like a battle'} · ${thinkWords(th)}`)
         : stage(0, 'No model needed', 'it starts at once and holds no memory', true))
         + stage(2, esc(t.name) + (t.pick ? ` ${j?.n ?? taskN}` : ''), doing)
         + stage(3, 'In the record', recText);
@@ -427,18 +447,18 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
         const big = j.status === 'stopped' ? `■ stopped${p ? ` · ${p[0]} of ${p[1]}` : ''}` : p ? `${good ? '✓' : '✗'} ${p[0]} of ${p[1]}${cnt.total && p[1] < cnt.total ? ` (${cnt.total} in all)` : ''}` : j.status === 'done' ? '✓ finished' : '✗ it ended with an error';
         res = `<div class="rt-res"><div class="v ${j.status === 'stopped' ? 'stop' : good || (!p && j.status === 'done') ? 'ok' : 'bad'}">${big}</div>
           <div class="m">${j.status === 'stopped' ? 'Stopped' : 'Finished'} after ${mmss(secsNow)}${j.result?.why && j.status === 'failed' && !p ? ` · ${esc(j.result.why)}` : ''}</div>
-          <div class="m">Before this: ${esc(brief(last))}${other ? ` · ${esc(shortName(other.name))}’s latest: ${esc(brief(lastRun(t, other.id)))}` : ''}</div>
+          <div class="m">Before this: ${esc(brief(last))}${other ? ` · ${esc(shortName(other.name))}’s latest: ${esc(brief(lastRun(t, other.id, Infinity, th)))}` : ''}</div>
           ${KINDS[t.record.kind] ? `<div class="m"><button type="button" data-kind="${t.record.kind}">open it in ${esc(KINDS[t.record.kind][0])} ›</button></div>` : ''}</div>`;
       }
       const clockTxt = running ? `${j.status === 'waiting' ? 'waiting' : 'running'}<b>${mmss(secsNow)}</b>${last?.secs && j.status === 'running' ? (last.secs > secsNow ? `about ${Math.max(1, Math.round((last.secs - secsNow) / 60))} min left, going by last time` : 'past last time’s length') : 'you can close Agentic Coder: it keeps going'}`
         : ended ? `${j.status === 'stopped' ? 'stopped' : 'finished'} ${day(new Date(j.endedAt).toISOString())} ${clock(new Date(j.endedAt).toISOString())}<b>${mmss(secsNow)}</b>Press ▶ Run to run it again.`
         : 'nothing running<b>—</b>Nothing starts by itself: only ▶ Run starts a run, and ■ Stop is there while it goes.';
-      const cmd = t.command?.[t.model ? m : 'none'] ?? '';
+      const cmd = (th && t.commandThink ? t.commandThink : t.command)?.[t.model ? m : 'none'] ?? '';
       const out = j ? lines.map(line).join('') || '<div><span class="d">(nothing printed yet)</span></div>'
         : `<div><span class="p">%</span> <span class="w">${esc(t.id === 'task' ? cmd.replace(/--only \d+/, `--only ${taskN}`) : cmd)}</span></div><div> </div><div><span class="d">That is what ▶ Run starts, from the repo’s top. What it prints comes here, live.</span></div>${last ? `<div><span class="d">Last time on this ${t.model ? 'model' : 'Mac'}: ${esc(brief(last))}${last.secs ? `, ${esc(mmss(last.secs))}` : ''}.</span></div>` : ''}`;
       const tag = st.fake ? 'practice mode: no model' : running ? 'live' : ended ? `its last run` : 'what it runs';
       return `<div class="rt-main"><div class="rt-box rt-stages">${stages}${res}<div class="rt-clock">${clockTxt}</div></div>
-        <div class="rt-term"><div class="rt-bar2"><i></i><i></i><i></i><span>${esc(t.model ? modelName(m) : 'No model')} · ${esc(t.name)}${t.pick ? ` ${j?.n ?? taskN}` : ''}</span><em class="${running ? 'live' : ''}">${esc(tag)}</em></div><div class="rt-out" id="rt-out">${out}</div></div></div>`;
+        <div class="rt-term"><div class="rt-bar2"><i></i><i></i><i></i><span>${esc(t.model ? modelName(m) : 'No model')} · ${esc(t.name)}${t.pick ? ` ${j?.n ?? taskN}` : ''}${th ? ' · thinking on' : ''}</span><em class="${running ? 'live' : ''}">${esc(tag)}</em></div><div class="rt-out" id="rt-out">${out}</div></div></div>`;
     }
     function render() {
       if (box.hidden) return;
@@ -480,14 +500,23 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     box.addEventListener('click', (e) => {
       const c = e.target.closest('#rt-chips button');
       if (c && !c.disabled) { testId = c.dataset.t; store('agentic-tests-run-test', testId); err = ''; render(); return; }
+      const tb = e.target.closest('.rt-think button');
+      if (tb && !tb.disabled) { setThink(tb.dataset.think === 'on'); return; }
       const k = e.target.closest('.rt-res button[data-kind]');
       if (k) { go(k.dataset.kind); return; }
       if (e.target.closest('#rt-go') && !e.target.closest('#rt-go').disabled) {
         if (isLive(st.job)) send('/tests/stop');
-        else { const v = shown(); if (v) send('/tests/run', { test: v.t.id, model: v.t.model ? pick : null, n: v.t.pick ? taskN : null }); }
+        else { const v = shown(); if (v) send('/tests/run', { test: v.t.id, model: v.t.model ? pick : null, n: v.t.pick ? taskN : null, think: thinkOf(v) }); }
       }
     });
     box.addEventListener('change', (e) => { if (e.target.id === 'rt-n') { taskN = Number(e.target.value); store('agentic-tests-run-n', String(taskN)); render(); } });
+    function setThink(on) { think = on; store('agentic-tests-run-think', on ? 'on' : 'off'); err = ''; render(); }
+    // T switches thinking (not while a run goes, nor for a test that takes no model).
+    document.addEventListener('keydown', (e) => {
+      if (box.hidden || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.target.closest?.('select, input, textarea') || (e.key !== 't' && e.key !== 'T')) return;
+      const v = shown();
+      if (v && v.t.think && !isLive(st.job)) { e.preventDefault(); setThink(!think); }
+    });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !box.hidden) poll(); });
     return { show() { render(); poll(); }, hide() { clearTimeout(timer); timer = null; }, render };
   })();
@@ -518,7 +547,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 <li>Each kind of test has its own tab. It shows as many runs as fit the window and pages through the rest, newest first; pick a run to see all of it (its notes, the code it ran on, its settings, its raw results and its results page).</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li>
-<li>${live ? '▶ Run a test runs one test on the model picked (or, under Not model-specific, the unit tests or the repo check). The Battle arena\'s runner runs it: it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile, and the run keeps going if you close the window. Nothing starts by itself; its line lands here when it ends. <code>/test</code> in Agentic Coder opens it.' : 'In the hub this page also has ▶ Run a test, to run one test on one model from the page.'}</li></ul>
+<li>${live ? '▶ Run a test runs one test on the model picked, with thinking off (Low, the way a battle runs) or on (High): the Thinking switch, or the T key (or, under Not model-specific, the unit tests or the repo check). The Battle arena\'s runner runs it: it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile, and the run keeps going if you close the window. Nothing starts by itself; its line lands here when it ends. <code>/test</code> in Agentic Coder opens it.' : 'In the hub this page also has ▶ Run a test, to run one test on one model from the page.'}</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;
   draw();
 })();
