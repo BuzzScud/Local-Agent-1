@@ -567,7 +567,7 @@ export async function execute(name, args, prepared, env) {
       };
     }
     case 'Bash': {
-      // Output lines and the timeout move with /increase (env.bash).
+      // Output lines and the timeout move with /effort (env.bash).
       const timeoutMs = env.bash?.timeoutMs ?? 120_000;
       const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal });
       const body = r.lines.join('\n');

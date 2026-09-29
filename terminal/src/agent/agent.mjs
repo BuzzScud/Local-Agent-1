@@ -792,7 +792,7 @@ export class Agent extends EventEmitter {
           if (s2?.text || s2?.keepGoing) { repeats = 0; repeatKey = null; errorsInRow = 0; }
         }
         if (repeats === 2) this.messages.push({ role: 'user', content: auto('You already did exactly this step. Do something different, or finish.') });
-        if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/increase moves this).`, tone: 'warn' }); }
+        if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/effort moves this).`, tone: 'warn' }); }
       }
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';

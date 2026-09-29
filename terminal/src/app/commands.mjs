@@ -5,7 +5,7 @@ export const COMMANDS = [
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
-  { name: 'effort', desc: 'Pick the effort: low, medium or high (also in /model)', arg: '[low|medium|high]', picker: true },
+  { name: 'effort', desc: 'Effort and limits in one panel: thinking, context, tries, steps, output', arg: '[low|medium|high]', picker: true },
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
@@ -14,7 +14,6 @@ export const COMMANDS = [
   { name: 'helpers', desc: 'The context helpers (Scout, Medic, Oracle, Sentry): what comes along with a request before the first step; switch one on or off', arg: '[on|off] [number|name|all]' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
-  { name: 'increase', desc: 'See and move the limits up or down: context, thinking cap, tries, steps, command output, trim points' },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },

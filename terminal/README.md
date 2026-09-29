@@ -47,6 +47,10 @@ Commands: `/help /clear /compact /effort /mode /init /resume /model /stats /mete
 **Effort** is how much the model thinks before it acts: Off (the default), Medium or High,
 set with `/effort`, in `/model`, or `--effort` at start. `/think` and `--think` still work.
 
+`/effort` alone shows Effort on top and every limit that can move under it: context,
+thinking cap, tries, steps, command output, timeout, and the trim and summarize points, each with what a value costs.
+←→ moves a row, one enter saves all of it (a new context or thinking cap restarts the model once), esc keeps everything as it was.
+
 ## Memory
 
 Agentic Coder remembers on its own. The model itself does not change; what it knows about you

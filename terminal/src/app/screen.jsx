@@ -11,7 +11,7 @@ import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEX
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
-import { LIMITS, showLimit, limitNote, isDefault } from './limits.mjs';
+import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -570,7 +570,7 @@ const START_PHASE = {
   waiting: 'waiting for memory ',
 };
 
-// /effort, /mode, /meters alone: their choices as a menu, like Claude Code's.
+// /mode and /meters alone: their choices as a menu, like Claude Code's.
 // The ❯ starts on the one in use; ↑↓ or a number, enter picks, esc goes back.
 function ChoicePicker({ app }) {
   const pk = app.picker;
@@ -596,30 +596,51 @@ function ChoicePicker({ app }) {
   );
 }
 
-// /increase: every limit that can move, its value between ◀ ▶, and what that
-// value costs. ↻ marks the two that restart the model; • a value not saved yet.
+// /effort, one panel: the Effort row, then every limit that can move, each
+// value between ◀ ▶ with what it costs. ↻ marks the two that restart
+// the model; • a value not saved yet. Thinking cap is dimmed while Effort is Low.
 function LimitsPicker({ app }) {
   const pk = app.picker;
-  const lw = Math.max(...LIMITS.map((l) => l.label.length)) + 2;
-  const vw = Math.max(...LIMITS.map((l) => showLimit(l.id, pk.values[l.id]).length)) + 1;
-  const env = { ...pk.env, values: pk.values };
-  const reset = pk.index === LIMITS.length;
+  const levels = pk.model.thinkingLevels ?? [];
+  const lv = levels[pk.level];
+  const off = lv ? 1 : 0; // the Effort row, when the model has levels
+  const effortOn = lv ? !!lv.effort : undefined;
+  const lw = Math.max(...LIMITS.map((l) => l.label.length), off ? 'Effort'.length : 0) + 2;
+  const vw = Math.max(...LIMITS.map((l) => showLimit(l.id, pk.values[l.id]).length), ...levels.map((l) => l.label.length)) + 1;
+  const env = { ...pk.env, values: pk.values, effortOn };
+  const reset = pk.index === off + LIMITS.length;
+  const onEffort = off && pk.index === 0;
+  const effortUnsaved = pk.level !== pk.savedLevel;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>Limits</Text>
-      <Text color={C.dim} wrap="truncate-end">←→ moves a limit; its cost is on the right. Kept for next time.</Text>
+      <Text bold>Effort and limits</Text>
+      <Text color={C.dim} wrap="truncate-end">←→ moves a row; its cost is on the right. Kept for next time.</Text>
       <Text> </Text>
+      {lv ? (
+        <>
+          <Text wrap="truncate-end">
+            <Text color={onEffort ? C.accent : undefined} bold={onEffort}>{onEffort ? '❯' : ' '} {'Effort'.padEnd(lw)}</Text>
+            <Text color={onEffort && pk.level > 0 ? C.accent : C.faint}>◀ </Text>
+            <Text color={effortUnsaved ? C.accent : undefined} bold={effortUnsaved}>{lv.label.padEnd(vw)}</Text>
+            <Text color={onEffort && pk.level < levels.length - 1 ? C.accent : C.faint}>▶ </Text>
+            <Text color={effortUnsaved ? C.accent : C.faint}>{effortUnsaved ? '•' : ' '}</Text>
+            <Text color={C.dim}>{'  '}{lv.id === defaultLevelId(pk.model) ? 'default · ' : ''}{effortNote(lv, pk.values.thinking)}</Text>
+          </Text>
+          <Text color={C.faint}>{'─'.repeat(Math.max(0, app.width - 4))}</Text>
+        </>
+      ) : null}
       {LIMITS.map((l, i) => {
-        const on = i === pk.index;
+        const on = off + i === pk.index;
         const v = pk.values[l.id];
         const steps = l.steps(pk.model);
         const unsaved = v !== pk.saved[l.id];
         const note = limitNote(l.id, env);
+        const idle = l.id === 'thinking' && effortOn === false; // not used while Effort is Low
         return (
           <Text key={l.id} wrap="truncate-end">
-            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {l.label.padEnd(lw)}</Text>
+            <Text color={on ? C.accent : idle ? C.dim : undefined} bold={on}>{on ? '❯' : ' '} {l.label.padEnd(lw)}</Text>
             <Text color={on && v !== steps[0] ? C.accent : C.faint}>◀ </Text>
-            <Text color={unsaved ? C.accent : undefined} bold={unsaved}>{showLimit(l.id, v).padEnd(vw)}</Text>
+            <Text color={unsaved ? C.accent : idle ? C.dim : undefined} bold={unsaved}>{showLimit(l.id, v).padEnd(vw)}</Text>
             <Text color={on && v !== steps.at(-1) ? C.accent : C.faint}>▶ </Text>
             <Text color={unsaved ? C.accent : C.faint}>{unsaved ? '•' : ' '}</Text>
             <Text color={C.dim}>{l.restart ? '↻ ' : '  '}</Text>
@@ -630,10 +651,10 @@ function LimitsPicker({ app }) {
       <Text> </Text>
       <Text wrap="truncate-end">
         <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {'Reset all'.padEnd(lw)}</Text>
-        <Text color={C.dim}>enter here: every limit back to its default</Text>
+        <Text color={C.dim}>enter here: every row back to its default</Text>
       </Text>
       <Text> </Text>
-      <Text color={C.dim} wrap="truncate-end">↑↓ choose · ←→ lower/raise · enter saves · esc cancels · ↻ restarts model</Text>
+      <Text color={C.dim} wrap="truncate-end">↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model</Text>
     </Box>
   );
 }

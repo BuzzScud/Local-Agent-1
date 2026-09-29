@@ -1,10 +1,10 @@
-// /increase: the limits that move up and down (src/app/limits.mjs), and that
-// the agent and its tools really follow them.
+// /effort (one panel): the effort and the limits that move up and down
+// (src/app/limits.mjs), and that the agent and its tools really follow them.
 import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, showLimit, limitNote } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, showLimit, limitNote, effortNote, defaultLevelId } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -15,8 +15,10 @@ import { startFakeServer } from './fake-server.mjs';
 const model = MODELS[DEFAULT_MODEL];
 const project = () => { const d = mkdtempSync(join(tmpdir(), 'agentic-limits-')); cpSync(join(import.meta.dir, '..', 'demo-project'), d, { recursive: true }); return d; };
 
-test('/increase is a command, and every limit has a default on one of its own steps', () => {
-  expect(COMMANDS.some((c) => c.name === 'increase')).toBe(true);
+test('/effort is the one command for the panel (/increase is gone), and every limit has a default on one of its own steps', () => {
+  expect(COMMANDS.some((c) => c.name === 'increase')).toBe(false);
+  // /effort alone opens the panel, so it runs at once from the "/" menu
+  expect(COMMANDS.find((c) => c.name === 'effort').picker).toBe(true);
   const d = defaultLimits(model);
   expect(d).toEqual({ context: 0, thinking: model.thinkingBudget, tries: 8, steps: 40, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85 });
   for (const l of LIMITS) expect(l.steps(model)).toContain(d[l.id]);
@@ -73,6 +75,23 @@ test('each value says what it costs; the changes read as from → to', () => {
   expect(limitChanges(defaultLimits(model), v)).toEqual([{ id: 'context', label: 'Context', from: 'auto', to: '128k', restart: true }]);
 });
 
+test('Effort row: the note names the cap in use, Reset all goes to the model default, and the Thinking cap says High only while Effort is Low', () => {
+  const [low, high] = model.thinkingLevels;
+  expect(effortNote(low, 4096)).toBe('answers straight away (fastest)');
+  expect(effortNote(high, 4096)).toBe('thinks first; stopped at 4,096 tokens');
+  expect(effortNote(high, 8192)).toBe('thinks first; stopped at 8,192 tokens'); // the cap moved in the same panel
+  expect(effortNote({ id: 'x', label: 'X' }, 4096)).toBe(''); // a level without a note
+  expect(defaultLevelId(model)).toBe('low'); // Gemma starts on Low (thinkingDefault false)
+  const env = { model, freeBytes: 12e9, tps: 13, pps: 130, ctxNow: 32768, values: defaultLimits(model) };
+  expect(limitNote('thinking', { ...env, effortOn: false })).toBe('High only: not used while Effort is Low');
+  expect(limitNote('thinking', { ...env, effortOn: true })).toBe('up to ~5 min per think (High only)');
+  expect(limitNote('thinking', env)).toBe('up to ~5 min per think (High only)'); // no Effort row: as before
+  // on Low the too-big warning waits: it is not used, and shows again on High
+  const big = { ...env, values: { ...env.values, context: 16384, thinking: 8192 } };
+  expect(limitNote('thinking', { ...big, effortOn: false })).toBe('High only: not used while Effort is Low');
+  expect(limitNote('thinking', { ...big, effortOn: true })).toBe('⚠ too big for a 16k context: raise Context first');
+});
+
 test('the thinking cap reaches the model copy; the registry model is never changed', () => {
   const was = model.thinkingBudget;
   const m = modelWithLimits(model, { thinking: 8192 });
@@ -82,7 +101,7 @@ test('the thinking cap reaches the model copy; the registry model is never chang
   expect(modelWithLimits(model, { thinking: was })).toBe(model);
 });
 
-test('the agent stops after the steps /increase set, and says where to move it', async () => {
+test('the agent stops after the steps /effort set, and says where to move it', async () => {
   const cwd = project();
   const fake = await startFakeServer(Array.from({ length: 10 }, () => ({ tool: { name: 'List', args: { path: '.' } } })));
   const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }) });
@@ -93,10 +112,10 @@ test('the agent stops after the steps /increase set, and says where to move it',
   await fake.close();
   expect(reason).toBe('limit');
   expect(fake.requests.length).toBe(3);
-  expect(notes).toContain('Stopped after 3 steps (/increase moves this).');
+  expect(notes).toContain('Stopped after 3 steps (/effort moves this).');
 });
 
-test('Bash shows the output lines and stops at the timeout /increase set', async () => {
+test('Bash shows the output lines and stops at the timeout /effort set', async () => {
   const cwd = project();
   const cut = await execute('Bash', { command: 'seq 1 100' }, {}, { cwd, bash: { maxLines: 10, timeoutMs: 120_000 } });
   expect(cut.view.lines).toEqual(['1', '2', '3', '4', '5', '… 90 lines cut …', '96', '97', '98', '99', '100']);

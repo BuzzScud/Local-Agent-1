@@ -9,7 +9,8 @@ const arg = (n) => process.argv[process.argv.indexOf(n) + 1];
 const port = Number(arg('--port'));
 const slotDir = arg('--slot-save-path');
 const t0 = Date.now();
-// A test that checks how it was started names a file to note its arguments in.
+// A test that checks how it was started names a file to note its arguments in;
+// one that needs a reply still running sets FAKE_LLAMA_REPLY_MS (below).
 if (process.env.FAKE_LLAMA_ARGS) appendFileSync(process.env.FAKE_LLAMA_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 createServer(async (req, res) => {
@@ -28,6 +29,7 @@ createServer(async (req, res) => {
   if (m?.[1] === 'restore') { await wait(1500); if (!existsSync(join(slotDir, j.filename))) { res.statusCode = 400; res.end('{"error":{"message":"no file"}}'); return; } res.end('{"n_restored":1}'); return; }
   if (!j.stream) { res.end(JSON.stringify({ choices: [{ message: { content: '' } }] })); return; }
   res.setHeader('content-type', 'text/event-stream');
+  await wait(Number(process.env.FAKE_LLAMA_REPLY_MS ?? 0)); // a test holds the reply open with this
   const text = 'Hello from the stand-in model.';
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`);
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);

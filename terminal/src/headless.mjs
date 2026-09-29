@@ -55,7 +55,7 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
       return { choice: autoApprove && (!approve || approve(req)) ? 'yes' : 'no' };
     },
   });
-  // The limits /increase saved (coding -p passes them; the practice bench does not).
+  // The limits /effort saved (coding -p passes them; the practice bench does not).
   if (limits) applyLimits(agent, limits);
   // coding -p started the server itself: restore (or read) the instructions first.
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});

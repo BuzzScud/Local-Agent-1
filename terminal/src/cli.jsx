@@ -200,7 +200,7 @@ if (opts.print) {
   if (!opts.prompt) { process.stderr.write('coding -p needs a prompt\n'); process.exit(2); }
   if (!(await ensureTrusted(opts.cwd))) process.exit(2);
   const settings = loadSettings(opts.cwd);
-  // The limits /increase saved: the context and thinking cap for the server, the rest for the agent.
+  // The limits /effort saved: the context and thinking cap for the server, the rest for the agent.
   const limits = readLimits(settings, modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]);
   const model = modelWithLimits(modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL], limits);
   let server = null;

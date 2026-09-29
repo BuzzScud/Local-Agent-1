@@ -92,7 +92,7 @@ export function topMemoryUsers(n = 3, psText = null) {
   return [...byApp].map(([name, bytes]) => ({ name, bytes })).sort((a, b) => b.bytes - a.bytes).slice(0, n);
 }
 
-// The check for a context you picked (/increase or --ctx), at every start and
+// The check for a context you picked (/effort or --ctx), at every start and
 // restart: it is used as asked, and when it does not fit the note says by how
 // much and what is using the memory (the user's pick, 28 Sep: start anyway,
 // say so). draft: whether the speed helper comes along (needBytes' own
@@ -103,7 +103,7 @@ export function contextCheck(m, ctx, { draft, available = availableBytes(), user
   const size = `Context ${Math.round(ctx / 1024)}k`;
   if (available >= need) return { fits: true, need, available, note: `${size}: needs ${gb(need)} GB, ${gb(available)} GB free.` };
   const top = (users ?? topMemoryUsers(3)).map((u) => `${u.name} ${gb(u.bytes)} GB`).join(' · ');
-  return { fits: false, need, available, note: `${size} needs ${gb(need)} GB and ${gb(available)} GB is free: the Mac may slow down.${top ? ` Using the most: ${top}.` : ''} Close some, or lower it in /increase.` };
+  return { fits: false, need, available, note: `${size} needs ${gb(need)} GB and ${gb(available)} GB is free: the Mac may slow down.${top ? ` Using the most: ${top}.` : ''} Close some, or lower it in /effort.` };
 }
 
 export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes(), effort } = {}) {

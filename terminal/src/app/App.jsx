@@ -38,7 +38,7 @@ import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
-import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, defaultLimits, showLimit } from './limits.mjs';
+import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, defaultLimits, showLimit, effortNote, defaultLevelId } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -104,7 +104,7 @@ export function App({ opts, win, onRestart }) {
   // The model can change while the window is open (/model switches to the
   // edited copy and back), so it is state; the last pick is kept in settings.
   const [model, setModel] = useState(() => modelById(opts.modelId) ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL]);
-  // The limits /increase moves (limits.mjs), kept in settings.json. `model`
+  // The limits /effort moves (limits.mjs), kept in settings.json. `model`
   // stays the registry's; the agent and the server get it with the thinking cap.
   const limitsRef = useRef(null);
   limitsRef.current ??= readLimits(settings, model);
@@ -276,14 +276,11 @@ export function App({ opts, win, onRestart }) {
 
   const setMode = useCallback((m) => { agent.mode = m; setModeState(m); }, [agent]);
 
-  // The menus that /effort, /mode and /meters open when typed alone: a
-  // title, a line on what it sets, the options with what each does, the one
-  // in use. applyChoice is also what the typed forms use, so both say the same.
+  // The menus that /mode and /meters open when typed alone: a title, a line
+  // on what it sets, the options with what each does, the one in use.
+  // applyChoice is also what the typed forms use, so both say the same.
+  // (/effort opens the Effort and limits panel instead: openEffortLimits.)
   const choiceMenu = (id) => {
-    if (id === 'effort') {
-      const now = thinkingLevel(model, agent.thinking, agent.effort);
-      return { title: 'Effort', blurb: 'How much Agentic Coder thinks before it acts. Kept for next time.', what: 'effort', current: now.id, options: (model.thinkingLevels ?? []).map((l) => ({ id: l.id, label: l.label, note: l.note ?? '' })) };
-    }
     if (id === 'memory-save') return { title: 'Remember for next time?', blurb: 'What Agentic Coder learned in that task is listed above. /memory undo takes a save back.', what: 'memory', current: 'save', options: [{ id: 'save', label: 'Save', note: 'read at every start from now on' }, { id: 'skip', label: 'Skip', note: 'nothing is saved; /update memory saves later' }] };
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
@@ -309,7 +306,7 @@ export function App({ opts, win, onRestart }) {
   // /model picked a different set of weights: only the model server restarts;
   // the window, the conversation and the history all stay. About 40 s: the
   // new weights never reuse a saved warm-up, so the instructions are re-read.
-  // /increase uses it too, to restart on a new context or thinking cap (`done` is its note).
+  // /effort uses it too, to restart on a new context or thinking cap (`done` is its note).
   const switchModel = async (next, done) => {
     if (S.current.live !== IDLE) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
     const cur = serverRef.current;
@@ -351,10 +348,19 @@ export function App({ opts, win, onRestart }) {
       const n = next.edited?.edits.length ?? 0;
       if (done) push({ type: 'note', text: done(agent.ctx), tone: 'dim' });
       else push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
-    } catch (e) { push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /increase to try again.` : `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' }); }
+    } catch (e) { push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /effort to try again.` : `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' }); }
     setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
+  // /effort, one panel: Effort on top, then every limit that can move, with
+  // what each value costs; ←→ moves, enter saves all of it.
+  // The memory Gemma holds now counts as free: a restart hands it back first.
+  const openEffortLimits = () => {
+    const freeBytes = availableBytes() + (serverRef.current?.port ? needBytes(model, agent.ctx, { draft: false }) : 0);
+    const levels = model.thinkingLevels ?? [];
+    const level = Math.max(0, levels.findIndex((l) => l.id === thinkingLevel(model, agent.thinking, agent.effort).id));
+    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx } });
+  };
   askRef.current = (p) => new Promise((resolve) => {
     // Not over something you are doing: typing, or another menu open. Asked
     // again at the next pause.
@@ -365,12 +371,7 @@ export function App({ opts, win, onRestart }) {
   });
   const applyChoice = (id, value) => {
     if (id === 'memory-save') { const p = pendingSaveRef.current; pendingSaveRef.current = null; p?.resolve(value === 'save'); return; }
-    if (id === 'effort') {
-      const lv = (model.thinkingLevels ?? []).find((l) => l.id === value); if (!lv) return;
-      const on = !!lv.effort;
-      setThinking(on, on ? lv.id : undefined);
-      push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.`, tone: 'dim' });
-    } else if (id === 'mode') {
+    if (id === 'mode') {
       const o = MODE_OPTIONS.find((x) => x.id === value); if (!o) return;
       setMode(o.id);
       push({ type: 'note', text: `Mode is ${o.label.toLowerCase()}: Agentic Coder ${o.note}.`, tone: 'dim' });
@@ -381,13 +382,22 @@ export function App({ opts, win, onRestart }) {
       push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
     }
   };
-  // /increase saved: the agent's limits change at once; a new context or
+  // What the note after an effort change says; a level's note can name the
+  // thinking cap, so it is given the cap in use.
+  const sayEffort = (lv, cap) => push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${effortNote(lv, cap) || 'thinks before each step'}.`, tone: 'dim' });
+  // The Effort and limits panel saved (`levelId` is null when the model has no
+  // levels): the effort and the agent's limits change at once; a new context or
   // thinking cap restarts the model server (the window and conversation stay).
-  const saveLimits = (next) => {
+  // All of it or none: a restart is refused in the middle of a reply.
+  const saveEffortLimits = (levelId, next) => {
+    const lv = levelId ? (model.thinkingLevels ?? []).find((l) => l.id === levelId) : null;
+    const effortChanged = !!lv && lv.id !== thinkingLevel(model, agent.thinking, agent.effort).id;
     const changes = limitChanges(limitsRef.current, next);
-    if (!changes.length) { push({ type: 'note', text: 'Limits unchanged.', tone: 'dim' }); return; }
+    if (!effortChanged && !changes.length) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
     const restart = changes.some((c) => c.restart);
-    if (restart && !opts.url && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then save the context or thinking cap again in /increase.', tone: 'warn' }); return; }
+    if (restart && !opts.url && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then save again in /effort. Nothing was changed.', tone: 'warn' }); return; }
+    if (effortChanged) { setThinking(!!lv.effort, lv.effort ? lv.id : undefined); sayEffort(lv, next.thinking); }
+    if (!changes.length) return;
     limitsRef.current = next;
     applyLimits(agent, next);
     saveSettings({ limits: limitsToSave(next, model) });
@@ -528,7 +538,7 @@ export function App({ opts, win, onRestart }) {
     let alive = true;
     (async () => {
       if (opts.url) { setStarting(false); return; }
-      // --ctx wins; then the context /increase saved; then what fits (chooseContext).
+      // --ctx wins; then the context /effort saved; then what fits (chooseContext).
       let size = opts.ctx ?? (limitsRef.current.context || undefined);
       const picked = !opts.ctx && limitsRef.current.context;
       // A model still loaded from an earlier start (or another window) is used
@@ -572,7 +582,7 @@ export function App({ opts, win, onRestart }) {
       try {
         st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
         const want = !opts.ctx && limitsRef.current.context;
-        if (want && st.shared && st.ctx !== want) push({ type: 'note', text: `${model.name} was already loaded at ${Math.round(st.ctx / 1024)}k, so it runs at that. Your /increase context (${Math.round(want / 1024)}k) applies after coding stop, or save it again in /increase.`, tone: 'warn' });
+        if (want && st.shared && st.ctx !== want) push({ type: 'note', text: `${model.name} was already loaded at ${Math.round(st.ctx / 1024)}k, so it runs at that. Your /effort context (${Math.round(want / 1024)}k) applies after coding stop, or save it again in /effort.`, tone: 'warn' });
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
@@ -805,11 +815,11 @@ export function App({ opts, win, onRestart }) {
         break;
       case 'effort':
       case 'think': { // /think is the old name, still accepted
-        // Alone: a menu of the levels, like Claude Code's. With a word:
+        // Alone: the Effort and limits panel. With a word:
         // /effort low|medium|high, or on|off ("off" and "xhigh" are the old
         // names for low and high).
         const levels = model.thinkingLevels ?? [];
-        if (!arg.trim() && levels.length) { openChoice('effort'); break; }
+        if (!arg.trim() && levels.length) { openEffortLimits(); break; }
         const a = arg.toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high');
         const picked = levels.find((l) => l.id === a);
         if (a && !picked && !/^(on|yes|true|1|no|false|0)$/i.test(a)) {
@@ -819,8 +829,7 @@ export function App({ opts, win, onRestart }) {
         const on = picked ? !!picked.effort : a ? /^(on|yes|true|1)$/i.test(a) : !agent.thinking;
         const eff = on && picked?.effort ? picked.id : undefined;
         setThinking(on, eff);
-        const lv = thinkingLevel(model, on, eff ?? agent.effort);
-        push({ type: 'note', text: `Effort is ${lv.label.toLowerCase()}: it ${lv.note ?? 'thinks before each step'}.`, tone: 'dim' });
+        sayEffort(thinkingLevel(model, on, eff ?? agent.effort), limitsRef.current.thinking);
         break;
       }
       case 'mode': {
@@ -938,13 +947,6 @@ export function App({ opts, win, onRestart }) {
         setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => m.id === model.id)), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
         break;
       }
-      case 'increase': {
-        // Every limit that can move, with what each value costs; ←→ moves, enter saves.
-        // The memory Gemma holds now counts as free: a restart hands it back first.
-        const freeBytes = availableBytes() + (serverRef.current?.port ? needBytes(model, agent.ctx, { draft: false }) : 0);
-        setPicker({ kind: 'limits', index: 0, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx } });
-        break;
-      }
       case 'stats':
         push({ type: 'panel', title: 'Stats', pad: 20, rows: [
           ['model', `${model.name}${model.edited ? ` · ${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(model.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`],
@@ -953,7 +955,7 @@ export function App({ opts, win, onRestart }) {
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
           ['written so far', `${(stats.outTokens ?? 0).toLocaleString()} tokens in ${stats.requests ?? 0} replies`],
           ['memory', `${ramGb ? `${ramGb.toFixed(1)} GB` : '—'}${memoryNote.current ? ` · ${memoryNote.current}` : ''}`],
-          ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /increase moves them`],
+          ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /effort moves them`],
           ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
           ['server', serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
         ] });
@@ -1149,18 +1151,26 @@ export function App({ opts, win, onRestart }) {
       }
       return;
     }
-    // /increase: ↑↓ a limit, ←→ lower / raise it, enter saves (on the last row: every limit back to its default), esc keeps them
+    // /effort: ↑↓ a row (Effort first, then the limits), ←→ lower / raise it, enter saves all of it (on the last row: everything back to its default), esc keeps them
     if (cur.picker?.kind === 'limits') {
       const pk = cur.picker;
-      const rows = LIMITS.length + 1;
+      const levels = model.thinkingLevels ?? [];
+      const off = levels.length ? 1 : 0; // the Effort row, when the model has levels
+      const rows = off + LIMITS.length + 1;
+      const step = key.rightArrow ? 1 : -1;
       if (key.upArrow) setPicker({ ...pk, index: (pk.index + rows - 1) % rows });
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % rows });
-      else if ((key.leftArrow || key.rightArrow) && pk.index < LIMITS.length) setPicker({ ...pk, values: moveLimit(pk.values, LIMITS[pk.index].id, key.rightArrow ? 1 : -1, model) });
-      else if (key.return) { setPicker(null); saveLimits(pk.index === LIMITS.length ? defaultLimits(model) : pk.values); }
-      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Limits kept as they were.', tone: 'dim' }); }
+      else if ((key.leftArrow || key.rightArrow) && off && pk.index === 0) setPicker({ ...pk, level: Math.max(0, Math.min(levels.length - 1, pk.level + step)) });
+      else if ((key.leftArrow || key.rightArrow) && pk.index >= off && pk.index < rows - 1) setPicker({ ...pk, values: moveLimit(pk.values, LIMITS[pk.index - off].id, step, model) });
+      else if (key.return) {
+        setPicker(null);
+        if (pk.index === rows - 1) saveEffortLimits(off ? defaultLevelId(model) : null, defaultLimits(model));
+        else saveEffortLimits(off ? levels[pk.level]?.id : null, pk.values);
+      }
+      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Effort and limits kept as they were.', tone: 'dim' }); }
       return;
     }
-    // A choice menu (/effort, /mode, /meters): ↑↓ or a number, enter picks, esc goes back unchanged
+    // A choice menu (/mode, /meters): ↑↓ or a number, enter picks, esc goes back unchanged
     if (cur.picker?.kind === 'choice') {
       const pk = cur.picker;
       const n = pk.options.length;

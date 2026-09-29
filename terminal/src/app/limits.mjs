@@ -1,8 +1,9 @@
-// /increase: the limits you can move up and down, in one place. Each has the
-// steps it moves through, its default, how it reads, and what a value costs
-// (said next to it in the panel). Saved as "limits" in settings.json; only the
-// ones moved off their default are kept, so a new default reaches you.
-import { needBytes, hasDraft } from '../../../models/index.mjs';
+// /effort (one panel): the effort, then the limits you can move up and down,
+// in one place. Each limit has the steps it moves through, its default, how it
+// reads, and what a value costs (said next to it in the panel). Saved as
+// "limits" in settings.json; only the ones moved off their default are kept,
+// so a new default reaches you.
+import { needBytes, hasDraft, thinkingLevel } from '../../../models/index.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
 const mins = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`);
@@ -34,7 +35,10 @@ export const LIMITS = [
     show: (v) => `${v.toLocaleString()} tokens`,
     note: (v, e) => {
       const ctx = e.values.context || e.ctxNow || 16384;
-      if (2048 + v > ctx * 0.5) return `⚠ too big for a ${k(ctx)} context: raise Context first`;
+      // The panel says so when Effort is Low: the cap is only used on High.
+      const low = e.effortOn === false;
+      if (!low && 2048 + v > ctx * 0.5) return `⚠ too big for a ${k(ctx)} context: raise Context first`;
+      if (low) return 'High only: not used while Effort is Low';
       return `up to ~${mins(v / (e.tps || WRITE_TPS))} per think (High only)`;
     },
   },
@@ -82,6 +86,13 @@ export const LIMITS = [
   },
 ];
 const byId = Object.fromEntries(LIMITS.map((l) => [l.id, l]));
+
+// The Effort row's levels, read the way the panel and its save note say them.
+// A level's note can name the thinking cap ("stopped at 4,096 tokens"); the
+// cap moves in the same panel, so the number shown is the one in use.
+export const effortNote = (level, cap) => (level?.note ?? '').replace(/[\d,]+ tokens/, `${(cap ?? 0).toLocaleString()} tokens`);
+// The level a model starts on: what Reset all puts Effort back to.
+export const defaultLevelId = (model) => thinkingLevel(model, model.thinkingDefault ?? true, model.thinkingEffort).id;
 
 export function defaultLimits(model) {
   return Object.fromEntries(LIMITS.map((l) => [l.id, l.def(model)]));

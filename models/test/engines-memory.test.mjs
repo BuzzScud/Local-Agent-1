@@ -39,7 +39,7 @@ test('a context you picked is checked: it fits, or the note says by how much and
   expect(ok.note).toBe(`Context 64k: needs ${gb(need)} GB, ${gb(need + 1e9)} GB free.`);
   const short = contextCheck(gemma, 65536, { draft: false, available: 2.8e9, users: [{ name: 'Google Chrome', bytes: 2.3e9 }, { name: 'Safari', bytes: 1.1e9 }] });
   expect(short.fits).toBe(false);
-  expect(short.note).toBe(`Context 64k needs ${gb(need)} GB and 2.8 GB is free: the Mac may slow down. Using the most: Google Chrome 2.3 GB · Safari 1.1 GB. Close some, or lower it in /increase.`);
+  expect(short.note).toBe(`Context 64k needs ${gb(need)} GB and 2.8 GB is free: the Mac may slow down. Using the most: Google Chrome 2.3 GB · Safari 1.1 GB. Close some, or lower it in /effort.`);
   // The speed helper counts when it comes along.
   expect(contextCheck(gemma, 65536, { draft: true, available: 0, users: [] }).need).toBeGreaterThan(need);
 });

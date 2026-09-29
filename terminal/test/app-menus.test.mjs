@@ -31,29 +31,30 @@ test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', a
   expect(JSON.stringify(fake.requests.at(-1).messages)).toContain('The user ran `echo shell-ok`');
 }, T);
 
-test('/effort alone opens a menu like Claude Code: arrows or a number pick, esc goes back unchanged, "/eff" + enter opens it too', async () => {
+test('/effort alone opens the Effort and limits panel: ←→ moves Effort, enter saves it, esc goes back unchanged, "/eff" + enter opens it too', async () => {
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/effort' }, { key: 'enter' },
-    { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { snapshot: 'menu' },
-    { key: 'down' }, { sleep: 100 }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is high' },
-    { type: '/effort' }, { key: 'enter' }, { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { snapshot: 'again' },
-    { key: 'esc' }, { wait: 'Kept effort as high' }, { sleep: 200 }, { snapshot: 'back' },
-    { type: '/eff' }, { key: 'enter' }, { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { type: '1' }, { wait: 'Effort is low' },
-    { type: '/eff' }, { key: 'enter' }, { wait: 'How much Agentic Coder thinks before it acts' }, { sleep: 200 }, { type: '2' }, { sleep: 300 },
+    { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'menu' },
+    { key: 'right' }, { sleep: 100 }, { snapshot: 'moved' }, { key: 'enter' }, { wait: 'Effort is high' },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'again' },
+    { key: 'left' }, { sleep: 100 }, { key: 'esc' }, { wait: 'kept as they were' }, { sleep: 200 }, { snapshot: 'back' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { snapshot: 'kept' }, { key: 'left' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Effort is low' },
+    { type: '/eff' }, { key: 'enter' }, { wait: 'moves a row' }, { sleep: 200 }, { key: 'right' }, { sleep: 100 }, { key: 'enter' }, { sleep: 300 },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toMatch(/❯ 1\. Low\s+answers straight away \(fastest\)\s+✔ in use/);
-  expect(r.snapshots.menu).toMatch(/ 2\. High\s+thinks first/);
+  expect(r.snapshots.menu).toMatch(/❯ Effort\s+◀ Low\s+▶\s+default · answers straight away \(fastest\)/);
   expect(r.snapshots.menu).not.toContain('Medium'); // Gemma has no effort dial
-  expect(r.snapshots.menu).toContain('↑↓ to choose · enter to select · esc to go back');
-  expect(r.snapshots.moved).toMatch(/❯ 2\. High/);
-  expect(r.snapshots.again).toMatch(/❯ 2\. High\s+thinks first[^\n]*✔ in use/); // opens on the level in use
-  expect(r.snapshots.back).not.toContain('How much Agentic Coder thinks before it acts'); // esc closed it
+  expect(r.snapshots.menu).toContain('↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model');
+  expect(r.snapshots.moved).toMatch(/❯ Effort\s+◀ High\s+▶ •\s+thinks first/); // moved, not saved yet: the •
+  expect(r.snapshots.again).toMatch(/❯ Effort\s+◀ High\s+▶\s+thinks first/); // opens on the level in use
+  expect(r.snapshots.back).not.toContain('←→ moves a row'); // esc closed it
+  expect(r.snapshots.kept).toMatch(/❯ Effort\s+◀ High\s+▶\s+thinks first/); // …and left High as it was
   expect(r.text).toContain('Effort is high: it thinks first');
+  expect(r.text).toContain('Effort is low: it answers straight away');
   const sent = fake.requests.find((q) => q.stream && q.tools);
   expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' }); // High reached the model
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
