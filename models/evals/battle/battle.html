@@ -199,9 +199,6 @@ code { font: 12px var(--mono); }
 .d3 .vote .fill { flex: 1; }
 
 /* ---------- The new test: three steps on one screen ---------- */
-.nt { padding: 14px 18px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; min-height: 0; }
-.nt h2 { margin: 0; font-size: 18px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.nt h2 span { font-size: 13px; font-weight: 400; color: var(--ink3); }
 .steps3 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
 .stp { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; min-width: 0; box-shadow: var(--shadow); }
 .stp .sh { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 14.5px; }
@@ -230,9 +227,6 @@ code { font: 12px var(--mono); }
 .check .ct { font-size: 13.5px; } .check .cd { grid-column: 2; font-size: 12px; color: var(--ink3); }
 .check input[type=text] { grid-column: 2; padding: 5px 9px; font-size: 13px; background: var(--surface); }
 .vonly { font-size: 12.5px; color: var(--ink3); }
-.ntfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ntfoot .fill { flex: 1; }
-.ntfoot .help { color: var(--ink3); font-size: 12.5px; }
 .moreopt { font-size: 12.5px; color: var(--ink2); }
 .moreopt summary { cursor: pointer; color: var(--accent); list-style: none; }
 .moreopt summary::-webkit-details-marker { display: none; }
@@ -266,7 +260,6 @@ body.compact .lane > div { padding-top: 5px; padding-bottom: 5px; }
 body.compact .lfoot { padding: 4px 12px; }
 body.compact .lfoot .long { display: none; }
 body.compact .tch { padding: 5px 14px; }
-body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
 
 /* Narrow windows: one column; the page scrolls there (a phone can't fit it all). */
 @media (max-width: 1100px) {
@@ -301,7 +294,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
 #app::-webkit-scrollbar { display: none; }
 .view { grid-template-rows: auto minmax(0, 1fr); min-height: 560px; }
 #main { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); position: relative; }
-#main > .nt, #main > .panelmsg { grid-row: 1 / -1; }
+#main > .panelmsg { grid-row: 1 / -1; }
 #main > .panelmsg { align-content: start; }
 .live.A::before { background: var(--a); }
 .chip.plain::before { content: none; }
@@ -333,7 +326,10 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
 .rmline { font-size: 12.5px; color: var(--ink2); }
 .link { border: none; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
 .stp .sb.scroll { overflow: auto; }
-/* Edit tests: a window over the page. */
+/* Edit tests and New test: windows over the page. New test is a smaller one, the three steps in it. */
+.modal.newm { inset: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(1220px, 96vw); height: min(800px, 94vh); }
+.mform1 { display: grid; min-height: 0; padding: 14px 18px; }
+.mform1 .steps3 { min-height: 0; }
 #modal { display: none; }
 #modal.on { display: block; }
 .mback { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; }
@@ -360,7 +356,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
 .chip.unsaved { background: var(--warn-soft); color: var(--warn); }
 .mfoot { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
 .mfoot .help { font-size: 12.5px; color: var(--ink3); margin-left: 6px; }
-@media (max-width: 900px) { .mbody { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); } .mlist { border-right: none; border-bottom: 1px solid var(--line); } .modal { inset: 8px; } .mform .steps3 { grid-template-columns: 1fr; overflow: auto; } }
+@media (max-width: 900px) { .mbody { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); } .mlist { border-right: none; border-bottom: 1px solid var(--line); } .modal, .modal.newm { inset: 8px; transform: none; width: auto; height: auto; } .mform .steps3, .mform1 .steps3 { grid-template-columns: 1fr; overflow: auto; } }
 #toast { position: fixed; left: 50%; bottom: 16px; translate: -50% 0; z-index: 60; background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 10px; font-size: 13px; max-width: min(480px, calc(100vw - 32px)); box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
 #toast.on { opacity: 1; transform: none; }
 #toast.bad { background: var(--bad); color: #fff; }
@@ -741,15 +737,20 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
         </div></div>
       </div>`;
   }
-  // + New test: in the page.
-  function formView() {
-    return `<div class="nt"><h2>New test <span>Three steps. It runs on both models, one after the other: 1 run each, Low, each stopped at 10 min.</span></h2>${formSteps()}
-      <div class="ntfoot"><span class="help">Saved in <code>~/.agentic-coder/battle/tests/</code> as a folder you can also edit by hand.</span><span class="fill"></span><button class="btn" data-act="cancel">Cancel</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div></div>`;
+  // + New test: a window over the page with the three steps, and Save.
+  function newModalView() {
+    return `<div class="mback" data-act="mclose"></div>
+      <div class="modal newm" role="dialog" aria-modal="true" aria-label="New test">
+        <div class="mhead"><b>New test</b><span class="sub">Three steps. It runs on both models, one after the other: 1 run each, Low, each stopped at 10 min.</span><span class="fill"></span><button class="mx" data-act="mclose" aria-label="Close">✕</button></div>
+        <div class="mform1">${formSteps()}</div>
+        <div class="mfoot"><span class="help">Saved in <code>~/.agentic-coder/battle/tests/</code>, a folder you can also edit by hand · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Cancel</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div>
+      </div>`;
   }
   // Edit tests: a window over the page, every test on the left, the one you pick on the right.
   const modalEl = $('#modal');
   const listOrder = () => [...OWN, 'mine'].flatMap((k) => tests().filter((t) => suiteOf(t) === k));
   function modalView() {
+    if (S.modal === 'new') return newModalView();
     const list = listOrder();
     const idx = list.findIndex((t) => t.id === F.id);
     const row = (t) => `<button class="mrow${t.id === F.id ? ' sel' : ''}" data-act="mpick" data-id="${esc(t.id)}"><span class="no">${numOf(t)}</span><span class="ti">${esc(t.title)}</span>${t.copyOf ? '<span class="tag">copy</span>' : t.edited ? '<span class="tag">edited</span>' : ''}</button>`;
@@ -778,10 +779,11 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     for (const [type, value] of have) if (!F.rows.some((r) => r.type === type)) F.rows.push({ type, t: CHECKS[type]?.label ?? type, d: 'kept from this test', on: true, ph: value ? ' ' : '', val: value });
     F.base = snapshotF();
   }
-  function openForm() { F = blankForm(); S.view = 'form'; S.full = null; drawMain(true); $('#f-prompt')?.focus(); }
+  // S.modal: 'new' (New test), 'edit' (Edit tests) or false.
+  function openForm() { F = blankForm(); S.modal = 'new'; drawModal(); $('#f-prompt', modalEl)?.focus(); }
   function openModal(id) {
     const t = testById(id) ?? listOrder()[0]; if (!t) { toast('No tests yet: + New test adds one.', true); return; }
-    loadForm(t); S.modal = true; drawModal(); $('#f-prompt', modalEl)?.focus();
+    loadForm(t); S.modal = 'edit'; drawModal(); $('#f-prompt', modalEl)?.focus();
     const sel = modalEl.querySelector('.mrow.sel'); sel?.scrollIntoView({ block: 'center' });
   }
   function drawModal() {
@@ -794,7 +796,8 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   const drawForm = () => (S.modal ? drawModal() : drawMain(true));
   const leaveOk = () => !dirty() || confirm(`You changed "${F.nameTouched ? F.name : nameFrom(F.prompt)}". Leave it without saving?`);
   function modalGo(id) { if (!id || id === F.id) return; keepForm(); if (!leaveOk()) return; loadForm(testById(id)); drawModal(); modalEl.querySelector('.mrow.sel')?.scrollIntoView({ block: 'nearest' }); }
-  function closeModal() { keepForm(); if (!leaveOk()) return; S.modal = false; F = null; drawModal(); }
+  // Closing asks first when something typed would be lost: a new test not saved, or changes to one.
+  function closeModal() { keepForm(); if (S.modal === 'new' ? !confirmLeave() : !leaveOk()) return; S.modal = false; F = null; drawModal(); }
   function keepForm() {
     const root = S.modal ? modalEl : mainEl;
     const p = $('#f-prompt', root), n = $('#f-name', root), a = $('#f-ask', root);
@@ -828,7 +831,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     const checks = rowsNow().filter((r) => r.on).map((r) => ({ type: r.type, value: r.val }));
     const miss = rowsNow().find((r) => r.on && r.ph && r.ph.trim() && !String(r.val).trim() && ['answer-has', 'file-has', 'page-has', 'saved'].includes(r.type));
     if (miss) { toast(`"${miss.t.replace('…', '')}" needs something to look for, or untick it.`, true); return; }
-    const btns = root.querySelectorAll('.ntfoot .btn, .mfoot .btn'); btns.forEach((b) => { b.disabled = true; });
+    const btns = root.querySelectorAll('.mfoot .btn'); btns.forEach((b) => { b.disabled = true; });
     try {
       // A folder dropped whole keeps its top folder name out: the files land at the project's top.
       const tops = new Set(F.files.map((f) => f.path.split('/')[0]));
@@ -838,7 +841,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
       const r = await api('/api/tests', { id: F.id, title: F.nameTouched ? F.name : nameFrom(F.prompt), kind: k, prompt: F.prompt, checks, ask: F.ask, files, removePaths: F.removed, useScript: F.hasScript ? F.useScript : null, run });
       const copied = r.copyOf && r.copyOf === F.id;
       toast(copied ? `Saved as test ${r.n}${r.variant}, your copy. Test ${r.n} stays as it was.${run ? ' It runs now.' : ''}` : run ? 'Saved. It runs now: one model, then the other.' : 'Saved.');
-      if (S.modal && !run) { await poll(true); loadForm(testById(r.id)); drawModal(); return; }
+      if (S.modal === 'edit' && !run) { await poll(true); loadForm(testById(r.id)); drawModal(); return; }
       S.modal = false; drawModal();
       S.sel = r.id; store.set('battle-sel', r.id); S.view = 'test'; F = null;
       await poll(true);
@@ -848,7 +851,6 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
   // ---------- Drawing ----------
   function fades() { for (const el of document.querySelectorAll('.scroll')) el.classList.toggle('more', el.scrollTop + el.clientHeight < el.scrollHeight - 2); }
   function mainKey() {
-    if (S.view === 'form') return 'form';
     const t = testById(S.sel); if (!t) return 'none';
     const d = S.det;
     const live = d?.live ? `${d.live.side}:${d.live.events.length}:${d.live.events.some((e) => e.text === 'loaded')}` : '';
@@ -858,7 +860,6 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
     const key = mainKey();
     if (!force && key === S.mainKey) { tickClocks(); return; }
     S.mainKey = key;
-    if (S.view === 'form') { mainEl.innerHTML = formView(); fades(); return; }
     const t = testById(S.sel);
     const keep = [...mainEl.querySelectorAll('.tbody')].map((b) => b.scrollTop);
     const sameTest = mainEl.dataset.test === S.sel;
@@ -921,7 +922,6 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
       // Load a set, or one test (which also shows its results below).
       if (act === 'load') {
         const one = el.dataset.kind === 'test';
-        if (one && S.view === 'form' && !confirmLeave()) return;
         await api('/api/load', { kind: el.dataset.kind, id: el.dataset.id });
         S.loadOpen = false;
         if (one) { S.view = 'test'; F = null; S.sel = el.dataset.id; store.set('battle-sel', S.sel); S.hl = null; S.full = null; S.openPrompt = false; }
@@ -930,9 +930,9 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
       // Battle: what is loaded goes in line, in place of whatever waited there.
       // The results below follow the battle that starts.
       if (act === 'battle') { const r = await api('/api/start', {}); toast(r.queued > 1 ? `${r.queued} tests in line, one battle at a time.` : 'In line. It starts when the memory is free.'); S.view = 'test'; F = null; S.sel = null; S.hl = null; S.full = null; await poll(true); if (S.sel) store.set('battle-sel', S.sel); }
-      if (act === 'new') { if (S.view === 'form' && !confirmLeave()) return; openForm(); }
-      if (act === 'edit' || act === 'edittests') { if (S.view === 'form' && !confirmLeave()) return; if (S.view === 'form') { S.view = 'test'; drawMain(true); } openModal(act === 'edit' ? S.sel : S.sel ?? null); }
-      if (act === 'cancel') { S.view = 'test'; F = null; drawMain(true); }
+      // A window opens over the page: the Load list and the ⋯ menu close first.
+      if (act === 'new') { S.loadOpen = false; S.clearOpen = false; drawBand(); openForm(); }
+      if (act === 'edit' || act === 'edittests') { S.loadOpen = false; S.clearOpen = false; drawBand(); openModal(S.sel); }
       if (act === 'run') { await api('/api/run', { id: S.sel }); toast('In line. It starts when the memory is free.'); await poll(true); }
       if (act === 'unqueue') { await api('/api/unqueue', { id: S.sel }); await poll(true); }
       if (act === 'stop') { if (confirm('Stop the battle that is running? The line of tests waiting is paused too.')) { await api('/api/stop', {}); await poll(true); } }
@@ -961,7 +961,7 @@ body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
         await poll(true);
         if (S.modal && next) { loadForm(testById(next.id)); drawModal(); } else { S.modal = false; F = null; drawModal(); S.view = 'test'; drawMain(true); }
       }
-      // The Edit tests window
+      // The New test and Edit tests windows
       if (act === 'mclose') closeModal();
       if (act === 'mpick') modalGo(el.dataset.id);
       if (act === 'mprev' || act === 'mnext') { const list = listOrder(); const i = list.findIndex((t) => t.id === F.id); modalGo(list[i + (act === 'mnext' ? 1 : -1)]?.id); }
