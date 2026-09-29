@@ -10,60 +10,83 @@
 :root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c674;--accent:#5a9ceb;--tint:rgba(90,156,235,.12)}
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:1120px;margin:0 auto;padding:28px 16px 64px}
-h1{font-size:28px;line-height:1.15;letter-spacing:-.02em;margin:0 0 6px}h2{font-size:20px;letter-spacing:-.01em;margin:40px 0 4px}p{margin:0 0 10px}
-.lede{color:var(--mute);max-width:780px;overflow-wrap:anywhere}.sub{color:var(--mute);font-size:14px;margin-bottom:12px;max-width:840px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
-.card .k{color:var(--mute);font-size:13px}.card .v{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
+/* One container that fits the window, like the Tests tab: the title and the tabs stay put, and each tab fills the space under them. A list shows as many facts as fit and pages through the rest; the fact picked in it is shown in full beside it, with what you can do to it. A small window (a phone) scrolls instead. */
+main{max-width:1120px;margin:0 auto;padding:22px 16px 16px;display:flex;flex-direction:column;min-height:100vh}
+@media (min-width:900px) and (min-height:560px){html,body{height:100%;overflow:hidden}main{height:100vh;min-height:0}}
+h1{font-size:26px;line-height:1.15;letter-spacing:-.02em;margin:0 0 4px}h2{font-size:18px;letter-spacing:-.01em;margin:0}h3{font-size:15px;margin:0 0 2px}p{margin:0 0 10px}
+.lede{color:var(--mute);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sub{color:var(--mute);font-size:14px;margin:0}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0;flex:none}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.tabs button:hover{color:var(--ink);border-color:var(--faint)}.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
+.tabs button span{color:var(--faint);font-weight:400;margin-left:5px}
+.stage{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:14px}
+.pane{flex:1;min-height:0;display:flex;flex-direction:column}.pane[hidden]{display:none}
+/* Overview: one card per memory and two more, then the last changes, which take the rest of the height. */
+#overview{gap:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;flex:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0;cursor:pointer;font:inherit;color:inherit;text-align:left;display:flex;flex-direction:column;justify-content:flex-start}
+.card:hover{border-color:var(--faint)}.card:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.card .k{color:var(--mute);font-size:13px}.card .v{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
 .card .m{color:var(--mute);font-size:12.5px;margin-top:4px;overflow-wrap:anywhere}
-.wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;table-layout:fixed}
-/* The same columns in every table, so the two memories line up. */
-col.c-kind{width:170px}col.c-trust{width:150px}col.c-used{width:140px}col.c-act{width:222px}
-th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:none}
-thead th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft);white-space:nowrap}
-td.t .x{display:block;overflow-wrap:anywhere}td.t .q{display:block;color:var(--mute);font-size:12.5px;margin-top:3px}
-td.t ol{margin:4px 0 0;padding-left:20px;color:var(--mute);font-size:13.5px}
-td.n{white-space:nowrap}td.a{white-space:nowrap;text-align:right}
+.recent{flex:1;min-height:0}
+.rhead{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line);flex:none;min-width:0}.rhead h2{font-size:16px}
+.rhead .said{margin-left:auto}
+.log{list-style:none;padding:0;margin:0;flex:1;min-height:0;overflow:hidden}.log li{padding:8px 14px;border-bottom:1px solid var(--line);font-size:14px;display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;white-space:nowrap}
+.log li span:last-child{overflow:hidden;text-overflow:ellipsis}.log .w{color:var(--mute);font-variant-numeric:tabular-nums}
+/* A list tab: one line per fact on the left, the picked fact in full on the right, the pages under the rows. */
+.khead{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;flex:none;min-width:0}.khead .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.khead .kbar{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none}.khead .kbar[hidden]{display:none}
+.split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.rows{flex:1;min-height:0;overflow:hidden}
+table{border-collapse:collapse;width:100%;table-layout:fixed;font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:39px}
+thead th{font-size:13px;color:var(--mute);font-weight:600;background:var(--soft);height:36px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--soft)}tbody tr[aria-selected="true"]{background:var(--soft)}tbody tr[aria-selected="true"] td.t{font-weight:600}
+td .q{color:var(--mute);font-size:12.5px;margin-left:6px}td .rule{color:var(--mute)}
+.pager{flex:none;display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--line);background:var(--card)}
+.pager button{border-radius:999px;color:var(--ink);white-space:nowrap}
+.pager .at{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}.pager .keys{margin-left:auto;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nothing{padding:22px 16px;color:var(--mute)}
+.detail{padding:16px 18px;overflow:auto}
+.detail .k{color:var(--mute);font-size:13px}.detail .fact{font-size:15px;line-height:1.45;margin:8px 0 10px;overflow-wrap:anywhere;white-space:pre-wrap}
+.detail ol{margin:0 0 12px;padding-left:20px;color:var(--mute);font-size:13.5px}
+.detail dl{margin:0 0 14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;font-size:13.5px}.detail dt{color:var(--mute)}.detail dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--mute);white-space:nowrap}
 .chip.always,.chip.pinned{background:var(--tint);border-color:transparent;color:var(--accent)}
 .pos{color:var(--up);font-weight:600}.neg{color:var(--down);font-weight:600}
 button{font:inherit;font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--mute);cursor:pointer}
-button:hover{color:var(--ink);border-color:var(--faint)}button.go{color:var(--ink);border-color:var(--ink)}
-button:disabled{opacity:.5;cursor:default}
-textarea{font:inherit;width:100%;min-height:74px;padding:8px 10px;border:1px solid var(--faint);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
-.row-actions{display:flex;gap:6px;margin-top:8px}
-details{margin-top:14px}summary{cursor:pointer;color:var(--mute);font-size:14px}
-.log{list-style:none;padding:0;margin:0}.log li{padding:8px 14px;border-bottom:1px solid var(--line);font-size:14px;display:grid;grid-template-columns:150px 1fr;gap:12px}
-.log li:last-child{border-bottom:none}.log .w{color:var(--mute);font-variant-numeric:tabular-nums;white-space:nowrap}
-.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 12px}
-.said{font-size:13.5px;color:var(--mute)}.said.bad{color:var(--down)}
-.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);margin-top:18px;max-width:780px}
-.foot{margin-top:40px;color:var(--mute);font-size:13px;max-width:860px}.foot li{margin:3px 0}
+button:hover:not(:disabled){color:var(--ink);border-color:var(--faint)}button.go{color:var(--ink);border-color:var(--ink)}
+button:disabled{background:var(--soft);color:var(--mute);cursor:default}
+textarea{font:inherit;width:100%;min-height:120px;margin:8px 0 0;padding:8px 10px;border:1px solid var(--faint);border-radius:8px;background:var(--bg);color:var(--ink);resize:vertical}
+.row-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.said{font-size:13.5px;color:var(--mute);margin:10px 0 0;min-height:1em}.said.bad{color:var(--down)}.rhead .said,.kbar .said{margin:0}
+.about{max-width:860px;color:var(--mute);font-size:14px;overflow:auto}.about li{margin:4px 0}.about h3{color:var(--ink);font-size:16px;margin:0 0 6px}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);max-width:780px}
 code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
-/* Narrow windows: each fact is a block of its own, so nothing scrolls sideways. */
-@media (max-width:900px){
-  thead,colgroup{display:none}table,tbody,tr,td{display:block}
-  tr{padding:12px 14px;border-bottom:1px solid var(--line)}tr:last-child{border-bottom:none}
-  td{padding:0;border:none}td.t{min-width:0}
-  td.n{display:inline-block;margin:8px 14px 0 0;vertical-align:top}td.n:empty{display:none}
-  td.n .q{display:inline !important;margin-left:6px}
-  td.a{text-align:left;margin-top:10px;white-space:normal}
-  td.n:nth-of-type(3)::before{content:"trust ";color:var(--mute);font-weight:400}
-  td.n:nth-of-type(4)::before{content:"used ";color:var(--mute)}
-}
-@media (max-width:600px){h1{font-size:24px}.log li{grid-template-columns:1fr;gap:2px}.card .v{font-size:20px}}
+@media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none}.recent{flex:none}.log{overflow:visible}}
+@media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-used,td.u,th.u{display:none}.log li{grid-template-columns:1fr;gap:2px;white-space:normal}.khead{flex-wrap:wrap}.khead .kbar{margin-left:0}}
 </style>
 </head>
 <body>
 <main>
 <h1>Agentic Coder memory</h1>
 <p class="lede" id="lede">Reading the memory…</p>
-<div class="cards" id="cards"></div>
-<div id="parts"></div>
-<section id="changes"></section>
-<section class="foot" id="foot"></section>
+<div class="tabs" id="tabs" role="tablist" aria-label="Which part of the memory to show"></div>
+<div class="stage">
+<section class="pane" id="overview" role="tabpanel"><div class="cards" id="cards"></div>
+<div class="box recent"><div class="rhead"><h2>Last changes</h2><button type="button" id="undo1">Take back the last save</button><span class="said" id="said1" role="status"></span></div><ul class="log" id="recent"></ul></div>
+</section>
+<section class="pane" id="listpane" role="tabpanel" hidden>
+<div class="khead"><h2 id="kname"></h2><p class="sub" id="ksub"></p><div class="kbar" id="kbar" hidden><span class="said" id="said2" role="status"></span><button type="button" id="undo2">Take back the last save</button></div></div>
+<div class="split">
+<div class="box"><div class="rows" id="rowsbox"><table><colgroup id="cols"></colgroup><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+<div class="pager"><button type="button" id="prev">‹ Previous</button><span class="at" id="at"></span><button type="button" id="next">Next ›</button><span class="keys">↑ ↓ pick · page up / down · ← → tabs</span></div></div>
+<div class="box detail" id="detail" aria-live="polite"></div>
+</div>
+</section>
+<section class="pane about" id="foot" role="tabpanel" hidden></section>
+</div>
 </main>
 <script>
 (async function () {
@@ -72,12 +95,23 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   const KIND = { you: 'about you', project: 'project', worked: 'worked', failed: 'failed', mistake: 'mistake', recipe: 'recipe' };
   const TITLE = { you: 'About you', project: 'This project' };
   const WHAT = { add: 'saved', replace: 'replaced', retire: 'taken out of use', restore: 'brought back', edit: 'edited by you', undo: 'a save taken back', trust: 'trust changed', pin: 'pinned', unpin: 'unpinned' };
-  let data; let editing = null; let said = '';
-  const when = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); };
+  const UNDOABLE = ['add', 'replace', 'retire', 'restore', 'edit'];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+  const clock = (iso) => { const d = new Date(iso); if (isNaN(d)) return ''; const h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+  const when = (iso) => `${day(iso)} · ${clock(iso)}`;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const worth = (a, b) => Number(b.always) - Number(a.always) || Number(b.pinned) - Number(a.pinned) || b.trust - a.trust || b.used - a.used;
+  const sign = (n) => `${n > 0 ? '+' : ''}${n}`;
+  const trustCls = (n) => (n > 0 ? 'pos' : n < 0 ? 'neg' : '');
+
+  let data; let tab = 'all'; let editing = null; let said = '';
+  const sel = {}; const picked = {}; // per list tab: the place picked in its list, and that item's key (a save keeps the same fact picked)
+  let page = 0, per = 12;
 
   async function load() {
     try { data = await (await fetch('/memory.json', { cache: 'no-store' })).json(); } catch { $('lede').textContent = 'The memory could not be read. Open this page from Agentic Coder with /memory open.'; return; }
+    try { const h = decodeURIComponent(location.hash.slice(1)); if (h) tab = h; } catch { /* keep the overview */ }
     draw();
   }
   async function send(path, body) {
@@ -85,67 +119,182 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     try {
       const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
       const j = await r.json();
-      if (!r.ok) { said = j.error || 'that did not work'; draw(true); return false; }
+      if (!r.ok) { said = j.error || 'that did not work'; draw(); return false; }
       data = j.data; editing = null; draw();
       return true;
-    } catch { said = 'Agentic Coder is not answering. Is its window still open?'; draw(true); return false; }
+    } catch { said = 'Agentic Coder is not answering. Is its window still open?'; draw(); return false; }
   }
 
-  function factRow(where, f, retired) {
-    const key = `${where}/${f.id}`;
-    const trust = f.always ? '' : `<span class="${f.trust > 0 ? 'pos' : f.trust < 0 ? 'neg' : ''}">${f.trust > 0 ? '+' : ''}${f.trust}</span><span class="q" style="display:block;color:var(--mute);font-size:12.5px">${f.passed} passed · ${f.failed} failed</span>`;
-    const chips = `<span class="chip${f.always ? ' always' : ''}">${f.always ? 'always' : KIND[f.kind] || esc(f.kind)}</span>${f.pinned ? ' <span class="chip pinned">pinned</span>' : ''}`;
-    const body = editing === key
-      ? `<textarea id="edit" aria-label="The fact">${esc(f.text)}</textarea><div class="row-actions"><button class="go" data-do="save" data-k="${esc(key)}">Save</button><button data-do="cancel">Cancel</button></div>`
-      : `<span class="x">${esc(f.text)}</span>${f.steps?.length ? `<ol>${f.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}<span class="q">${retired ? esc(f.retired || 'taken out of use') : `${f.from ? `from ${esc(f.from)} · ` : ''}saved ${esc(f.saved || '')}`}</span>`;
-    const acts = retired
-      ? `<button data-do="restore" data-k="${esc(key)}">Bring back</button>`
-      : `<button data-do="pin" data-k="${esc(key)}" data-on="${f.pinned ? 0 : 1}">${f.pinned ? 'Unpin' : 'Pin'}</button> <button data-do="edit" data-k="${esc(key)}">Edit</button> <button data-do="retire" data-k="${esc(key)}">Take out</button>`;
-    return `<tr><td class="t">${body}</td><td class="n">${chips}</td><td class="n">${trust}</td><td class="n">${f.always ? 'every start' : `${f.used}${f.last ? `<span class="q" style="display:block;color:var(--mute);font-size:12.5px">last ${esc(f.last)}</span>` : ''}`}</td><td class="a">${acts}</td></tr>`;
+  // What each list tab holds, newest or most worth first, one key per item.
+  const facts = () => data.parts.flatMap((p) => p.facts);
+  const gone = () => data.parts.flatMap((p) => p.retired.map((f) => ({ ...f, where: p.where })));
+  const changes = () => data.log.filter((l) => l.what !== 'trust');
+  const textOf = () => new Map(data.parts.flatMap((p) => [...p.facts, ...p.retired].map((f) => [`${p.where}/${f.id}`, f.text])));
+  function list(t) {
+    if (t === 'you' || t === 'project') { const p = data.parts.find((x) => x.where === t); return p ? [...p.facts].sort(worth).map((f) => ({ ...f, where: t, key: `${t}/${f.id}` })) : []; }
+    if (t === 'retired') return gone().map((f) => ({ ...f, key: `${f.where}/${f.id}` }));
+    if (t === 'changes') return changes().map((l, i) => ({ ...l, key: `${l.at}/${i}` }));
+    return [];
   }
-  const worth = (a, b) => Number(b.always) - Number(a.always) || Number(b.pinned) - Number(a.pinned) || b.trust - a.trust || b.used - a.used;
+  const tabList = () => ['all', ...data.parts.map((p) => p.where), 'retired', 'changes', 'about'];
+  const canUndo = () => changes().some((l) => UNDOABLE.includes(l.what));
 
-  function draw(keepScroll) {
-    const y = window.scrollY;
-    const all = data.parts.flatMap((p) => p.facts);
-    const gone = data.parts.flatMap((p) => p.retired);
-    const top = [...all].filter((f) => !f.always && f.trust > 0).sort((a, b) => b.trust - a.trust || b.used - a.used)[0];
-    const textOf = new Map(data.parts.flatMap((p) => [...p.facts, ...p.retired].map((f) => [`${p.where}/${f.id}`, f.text])));
-    const last = data.log.find((l) => l.what !== 'trust');
-    $('lede').textContent = all.length
-      ? `${plural(all.length, 'fact')} in use for ${data.cwd}. A fact comes back when a request fits it; the rules marked "always" are read at every start.`
-      : `Nothing saved yet for ${data.cwd}. Agentic Coder saves what it learns after a task and when you quit.`;
-    $('cards').innerHTML = data.parts.map((p) => `<div class="card"><div class="k">${TITLE[p.where]}</div><div class="v">${plural(p.facts.length, 'fact')}</div><div class="m">${esc(p.dir || '')}</div></div>`).join('')
-      + `<div class="card"><div class="k">Most trusted</div><div class="v">${top ? `${top.trust > 0 ? '+' : ''}${top.trust}` : '–'}</div><div class="m">${top ? esc(top.text.length > 90 ? `${top.text.slice(0, 89)}…` : top.text) : 'no fact has passed a check yet'}</div></div>`
-      + `<div class="card"><div class="k">Taken out of use</div><div class="v">${gone.length}</div><div class="m">kept, and can be brought back</div></div>`;
-    $('parts').innerHTML = data.parts.map((p) => {
-      const head = '<colgroup><col><col class="c-kind"><col class="c-trust"><col class="c-used"><col class="c-act"></colgroup><thead><tr><th>Fact</th><th>Kind</th><th>Trust</th><th>Used</th><th></th></tr></thead>';
-      const rows = [...p.facts].sort(worth).map((f) => factRow(p.where, f, false)).join('');
-      const old = p.retired.map((f) => factRow(p.where, f, true)).join('');
-      return `<h2>${TITLE[p.where]}</h2><p class="sub">${p.where === 'you' ? 'How you like to work. It follows you into every project.' : 'Where things are here, what worked, what failed, and mistakes to avoid.'}</p>`
-        + (rows ? `<div class="wrap"><table>${head}<tbody>${rows}</tbody></table></div>` : '<div class="empty">Nothing here yet.</div>')
-        + (old ? `<details${p.retired.some((f) => editing === `${p.where}/${f.id}`) ? ' open' : ''}><summary>${plural(p.retired.length, 'fact')} taken out of use</summary><div class="wrap" style="margin-top:10px"><table>${head}<tbody>${old}</tbody></table></div></details>` : '');
-    }).join('');
-    const changes = data.log.filter((l) => l.what !== 'trust').slice(0, 12);
-    $('changes').innerHTML = `<h2>Last changes</h2><div class="bar"><button id="undo"${changes.some((l) => ['add', 'replace', 'retire', 'restore', 'edit'].includes(l.what)) ? '' : ' disabled'}>Take back the last save</button><span class="said${said ? ' bad' : ''}" role="status">${esc(said)}</span></div>`
-      + (changes.length ? `<div class="wrap"><ul class="log">${changes.map((l) => `<li><span class="w">${esc(when(l.at))}</span><span>${WHAT[l.what] || esc(l.what)} · ${TITLE[l.where]}${textOf.get(`${l.where}/${l.id}`) ? `: ${esc(textOf.get(`${l.where}/${l.id}`))}` : l.id ? `: <code>${esc(l.id)}</code>` : ''}${l.reason ? ` <span style="color:var(--mute)">(${esc(l.reason)})</span>` : ''}</span></li>`).join('')}</ul></div>` : '<div class="empty">No change yet.</div>');
-    $('foot').innerHTML = `<ul><li>Trust goes up by 1 when the task passed its check after a fact was used, down by 1 when it failed or Agentic Coder got stuck, and down by 2 when you corrected or stopped Agentic Coder. At ${data.retireAt} a fact is taken out of use, unless it is pinned.</li><li>A fact not used in ${data.unusedDays} days, or about a file that is gone, is taken out of use when the memory is tidied.</li><li>The facts are plain files in the folders named above: they can be edited or deleted by hand as well.</li></ul>`;
-    if (keepScroll || editing) window.scrollTo(0, y);
-    const ta = $('edit'); if (ta) ta.focus();
+  function tabs() {
+    const n = { you: data.parts.find((p) => p.where === 'you')?.facts.length, project: data.parts.find((p) => p.where === 'project')?.facts.length, retired: gone().length, changes: changes().length };
+    const name = { all: 'Overview', you: 'About you', project: 'This project', retired: 'Taken out', changes: 'Changes', about: 'How it works' };
+    $('tabs').innerHTML = tabList().map((t) => `<button type="button" role="tab" data-tab="${t}" aria-selected="${t === tab}">${name[t]}${n[t] != null ? `<span>${n[t]}</span>` : ''}</button>`).join('');
   }
+  $('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.tab); };
+  function go(t) {
+    if (!tabList().includes(t)) t = 'all';
+    if (t !== tab) { editing = null; said = ''; }
+    tab = t;
+    try { history.replaceState(null, '', t === 'all' ? location.pathname + location.search : `#${t}`); } catch { /* a file page */ }
+    draw();
+  }
+
+  // Overview: one card per memory, the most trusted fact, the ones taken out; a card opens its tab. The last changes fill the rest.
+  function overview() {
+    const all = facts();
+    const top = all.filter((f) => !f.always && f.trust > 0).sort((a, b) => b.trust - a.trust || b.used - a.used)[0];
+    $('cards').innerHTML = data.parts.map((p) => `<button type="button" class="card" data-tab="${p.where}"><div class="k">${TITLE[p.where]}</div><div class="v">${plural(p.facts.length, 'fact')}</div><div class="m">${esc(p.dir || '')}</div></button>`).join('')
+      + `<button type="button" class="card" data-tab="${top ? top.where ?? data.parts.find((p) => p.facts.includes(top))?.where : 'you'}"><div class="k">Most trusted</div><div class="v">${top ? sign(top.trust) : '–'}</div><div class="m">${top ? esc(top.text.length > 90 ? `${top.text.slice(0, 89)}…` : top.text) : 'no fact has passed a check yet'}</div></button>`
+      + `<button type="button" class="card" data-tab="retired"><div class="k">Taken out of use</div><div class="v">${gone().length}</div><div class="m">kept, and can be brought back</div></button>`;
+    const texts = textOf();
+    const c = changes();
+    $('recent').innerHTML = c.length ? c.slice(0, fits() ? 40 : 12).map((l) => `<li><span class="w">${esc(when(l.at))}</span><span title="${esc(texts.get(`${l.where}/${l.id}`) ?? '')}">${WHAT[l.what] || esc(l.what)} · ${TITLE[l.where]}${texts.get(`${l.where}/${l.id}`) ? `: ${esc(texts.get(`${l.where}/${l.id}`))}` : l.id ? `: <code>${esc(l.id)}</code>` : ''}</span></li>`).join('') : '<li class="nothing">No change yet.</li>';
+    trim();
+    $('undo1').disabled = !canUndo();
+    $('said1').textContent = said; $('said1').className = `said${said ? ' bad' : ''}`;
+  }
+  // A line the box cuts through is left out, so the list ends on a whole line.
+  function trim() {
+    if (!fits()) return;
+    const box = $('recent'); const bottom = box.getBoundingClientRect().bottom;
+    for (const li of box.querySelectorAll('li')) li.hidden = li.getBoundingClientRect().bottom > bottom + 0.5;
+  }
+  new ResizeObserver(() => { if (!$('overview').hidden) { for (const li of $('recent').querySelectorAll('li')) li.hidden = false; trim(); } }).observe($('recent'));
+  $('cards').onclick = (e) => { const c = e.target.closest('.card'); if (c) go(c.dataset.tab); };
+
+  // A list tab. As many lines as fit the box make a page (one line each, so every page holds the same number); the picked one is shown in full beside them.
+  const fits = () => matchMedia('(min-width:900px) and (min-height:560px)').matches;
+  function fit() {
+    if (!fits()) { per = 15; return; }
+    const box = $('rowsbox'), th = box.querySelector('thead').offsetHeight || 36;
+    per = Math.max(3, Math.floor((box.clientHeight - th) / 39));
+  }
+  const HEAD = {
+    fact: ['<col><col style="width:156px"><col style="width:84px"><col class="col-used" style="width:112px">', '<tr><th>Fact</th><th>Kind</th><th>Trust</th><th class="u">Used</th></tr>'],
+    retired: ['<col><col style="width:120px"><col class="col-used" style="width:200px">', '<tr><th>Fact</th><th>Memory</th><th class="u">Why</th></tr>'],
+    changes: ['<col style="width:150px"><col style="width:150px"><col>', '<tr><th>When</th><th>What</th><th>Fact</th></tr>'],
+  };
+  const chips = (f) => `<span class="chip${f.always ? ' always' : ''}">${f.always ? 'always' : KIND[f.kind] || esc(f.kind)}</span>${f.pinned ? ' <span class="chip pinned">pinned</span>' : ''}`;
+  const chip = (f) => `<span class="chip${f.always ? ' always' : f.pinned ? ' pinned' : ''}">${f.always ? 'always' : KIND[f.kind] || esc(f.kind)}${f.pinned ? ' · pinned' : ''}</span>`;
+  function row(t, x, i) {
+    const on = `data-i="${i}" aria-selected="${i === sel[t]}"`;
+    if (t === 'changes') { const txt = textOf().get(`${x.where}/${x.id}`); return `<tr ${on}><td>${day(x.at)}<span class="q">${clock(x.at)}</span></td><td>${WHAT[x.what] || esc(x.what)}</td><td class="t" title="${esc(txt ?? '')}">${txt ? esc(txt) : x.id ? `<code>${esc(x.id)}</code>` : ''}<span class="q">${TITLE[x.where]}</span></td></tr>`; }
+    if (t === 'retired') return `<tr ${on}><td class="t" title="${esc(x.text)}">${esc(x.text)}</td><td>${TITLE[x.where]}</td><td class="u">${esc(x.retired || 'taken out of use')}</td></tr>`;
+    return `<tr ${on}><td class="t" title="${esc(x.text)}">${esc(x.text)}</td><td>${chip(x)}</td><td>${x.always ? '<span class="rule">rule</span>' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span>`}</td><td class="u">${x.always ? '<span class="rule">every start</span>' : x.used}</td></tr>`;
+  }
+  function detail(t, x, n) {
+    if (!x) { $('detail').innerHTML = ''; return; }
+    const status = `<p class="said${said ? ' bad' : ''}" role="status">${esc(said)}</p>`;
+    if (t === 'changes') {
+      const txt = textOf().get(`${x.where}/${x.id}`);
+      $('detail').innerHTML = `<div class="k">Change ${sel[t] + 1} of ${n}</div><h3 style="margin:6px 0 2px">${WHAT[x.what] || esc(x.what)}</h3><div class="k">${esc(when(x.at))} · ${TITLE[x.where]}</div>${txt ? `<p class="fact">${esc(txt)}</p>` : ''}<dl>${x.id ? `<dt>Fact</dt><dd><code>${esc(x.id)}</code></dd>` : ''}${x.reason ? `<dt>Why</dt><dd>${esc(x.reason)}</dd>` : ''}</dl>`;
+      return;
+    }
+    const k = x.key;
+    const body = editing === k
+      ? `<textarea id="edit" aria-label="The fact">${esc(x.text)}</textarea><div class="row-actions"><button class="go" data-do="save" data-k="${esc(k)}">Save</button><button data-do="cancel">Cancel</button></div>`
+      : `<p class="fact">${esc(x.text)}</p>${x.steps?.length ? `<ol>${x.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : ''}`;
+    const dl = t === 'retired'
+      ? [['Memory', TITLE[x.where]], ['Why', esc(x.retired || 'taken out of use')], ['Trust', `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span> · ${x.passed} passed · ${x.failed} failed`], ['Saved', esc(x.saved || '—')]]
+      : [
+        ['Trust', x.always ? 'a rule, read at every start' : `<span class="${trustCls(x.trust)}">${sign(x.trust)}</span> · ${x.passed} passed · ${x.failed} failed`],
+        ['Used', x.always ? 'every start' : `${plural(x.used, 'time')}${x.last ? ` · last ${esc(x.last)}` : ''}`],
+        x.from ? ['From', esc(x.from)] : null,
+        ['Saved', esc(x.saved || '—')],
+      ].filter(Boolean);
+    const acts = t === 'retired'
+      ? `<button data-do="restore" data-k="${esc(k)}">Bring back</button>`
+      : `<button data-do="pin" data-k="${esc(k)}" data-on="${x.pinned ? 0 : 1}">${x.pinned ? 'Unpin' : 'Pin'}</button><button data-do="edit" data-k="${esc(k)}">Edit</button><button data-do="retire" data-k="${esc(k)}">Take out</button>`;
+    $('detail').innerHTML = `<div class="k">${t === 'retired' ? 'Taken out' : TITLE[t]} · ${sel[t] + 1} of ${n}</div><div style="margin-top:6px">${chips(x)}</div>${body}<dl>${dl.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('')}</dl>${editing === k ? '' : `<div class="row-actions">${acts}</div>`}${status}`;
+  }
+  const SUB = {
+    you: (n) => `How you like to work. It follows you into every project. ${plural(n, 'fact')}, rules first, then the most trusted.`,
+    project: (n) => `Where things are here, what worked, what failed, and mistakes to avoid. ${plural(n, 'fact')}, rules first, then the most trusted.`,
+    retired: (n) => `${plural(n, 'fact')} out of use: kept, and each can be brought back.`,
+    changes: (n) => `${plural(n, 'change')}, newest first.`,
+  };
+  const NAME = { you: 'About you', project: 'This project', retired: 'Taken out of use', changes: 'Changes' };
+  function table() {
+    const items = list(tab); fit();
+    // Keep the same item picked across a save (it may have moved in the list).
+    if (picked[tab]) { const at = items.findIndex((x) => x.key === picked[tab]); if (at >= 0) sel[tab] = at; }
+    sel[tab] = Math.min(Math.max(0, sel[tab] ?? 0), Math.max(0, items.length - 1));
+    const pages = Math.max(1, Math.ceil(items.length / per));
+    page = Math.floor(sel[tab] / per);
+    const from = page * per, part = items.slice(from, from + per);
+    const head = HEAD[tab === 'you' || tab === 'project' ? 'fact' : tab];
+    $('kname').textContent = NAME[tab]; $('ksub').textContent = SUB[tab](items.length);
+    $('kbar').hidden = tab !== 'changes'; $('undo2').disabled = !canUndo();
+    $('said2').textContent = tab === 'changes' ? said : ''; $('said2').className = `said${said ? ' bad' : ''}`;
+    $('cols').innerHTML = head[0]; $('thead').innerHTML = head[1];
+    $('tbody').innerHTML = items.length ? part.map((x, i) => row(tab, x, from + i)).join('') : `<tr><td class="nothing" colspan="4">${tab === 'changes' ? 'No change yet.' : tab === 'retired' ? 'No fact has been taken out of use.' : 'Nothing here yet.'}</td></tr>`;
+    $('at').textContent = items.length ? `Page ${page + 1} of ${pages} · ${from + 1}–${from + part.length} of ${items.length}` : '';
+    $('prev').textContent = tab === 'changes' ? '‹ Newer' : '‹ Previous'; $('next').textContent = tab === 'changes' ? 'Older ›' : 'Next ›';
+    $('prev').disabled = page === 0; $('next').disabled = page >= pages - 1;
+    picked[tab] = items[sel[tab]]?.key;
+    detail(tab, items[sel[tab]], items.length);
+    const ta = $('edit'); if (ta && document.activeElement !== ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }
+  const pick = (i) => { sel[tab] = i; picked[tab] = list(tab)[i]?.key; if (editing && editing !== picked[tab]) editing = null; said = ''; table(); };
+  $('tbody').onclick = (e) => { const tr = e.target.closest('tr[data-i]'); if (tr) pick(+tr.dataset.i); };
+  const turn = (d) => pick(Math.min(Math.max(0, (page + d) * per), list(tab).length - 1));
+  $('prev').onclick = () => turn(-1); $('next').onclick = () => turn(1);
+  new ResizeObserver(() => { if (!$('listpane').hidden) table(); }).observe($('rowsbox'));
 
   document.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.id === 'undo') return void send('/memory/undo');
+    if (b.id === 'undo1' || b.id === 'undo2') return void send('/memory/undo');
     const act = b.dataset.do; if (!act) return;
     const [where, id] = (b.dataset.k || '/').split('/');
-    if (act === 'edit') { editing = b.dataset.k; said = ''; draw(true); }
-    else if (act === 'cancel') { editing = null; draw(true); }
+    if (act === 'edit') { editing = b.dataset.k; said = ''; draw(); }
+    else if (act === 'cancel') { editing = null; draw(); }
     else if (act === 'save') send('/memory/edit', { where, id, text: $('edit').value });
     else if (act === 'pin') send('/memory/pin', { where, id, pinned: b.dataset.on === '1' });
     else if (act === 'retire') send('/memory/retire', { where, id });
     else if (act === 'restore') send('/memory/restore', { where, id });
   });
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || !data || /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
+    const t = tabList(), at = t.indexOf(tab);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); go(t[(at + (e.key === 'ArrowRight' ? 1 : t.length - 1)) % t.length]); return; }
+    if (/^[1-9]$/.test(e.key) && +e.key <= t.length) { go(t[+e.key - 1]); return; }
+    if ($('listpane').hidden) return;
+    const n = list(tab).length; if (!n) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); pick(Math.min(Math.max(0, sel[tab] + (e.key === 'ArrowDown' ? 1 : -1)), n - 1)); }
+    else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); turn(e.key === 'PageDown' ? 1 : -1); }
+    else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); pick(e.key === 'Home' ? 0 : n - 1); }
+  });
+
+  function draw() {
+    if (!tabList().includes(tab)) tab = 'all';
+    const all = facts();
+    $('lede').textContent = all.length
+      ? `${plural(all.length, 'fact')} in use for ${data.cwd}. A fact comes back when a request fits it; the rules marked "always" are read at every start.`
+      : `Nothing saved yet for ${data.cwd}. Agentic Coder saves what it learns after a task and when you quit.`;
+    tabs();
+    $('overview').hidden = tab !== 'all'; $('listpane').hidden = tab === 'all' || tab === 'about'; $('foot').hidden = tab !== 'about';
+    if (tab === 'all') overview(); else if (tab !== 'about') table();
+    $('foot').innerHTML = `<h3>How the memory is kept</h3><ul>
+<li>Trust goes up by 1 when the task passed its check after a fact was used, down by 1 when it failed or Agentic Coder got stuck, and down by 2 when you corrected or stopped Agentic Coder. At ${data.retireAt} a fact is taken out of use, unless it is pinned.</li>
+<li>A fact not used in ${data.unusedDays} days, or about a file that is gone, is taken out of use when the memory is tidied.</li>
+<li>Every change here goes through the same store as Agentic Coder's own saves, so it is in the Changes tab and "Take back the last save" undoes it.</li>
+<li>The facts are plain files in ${data.parts.map((p) => `<code>${esc(p.dir || '')}</code>`).join(' and ')}: they can be edited or deleted by hand as well.</li></ul>
+<p>Nothing on this page loads from the internet.</p>`;
+  }
   await load();
 })();
 </script>
