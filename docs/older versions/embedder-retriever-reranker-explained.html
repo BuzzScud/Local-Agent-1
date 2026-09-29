@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embedder, retriever, reranker</title>
+<style>
+  :root {
+    --bg: #faf9f7; --card: #ffffff; --text: #1f1e1c; --muted: #6b6862; --line: #e6e3de;
+    --soft: #f3f1ed;
+    --green-bg: #e3f2e6; --green: #1e6b34;
+    --amber-bg: #fbefd9; --amber: #8a5a00;
+    --grey-bg: #eeece8; --grey: #5f5c57;
+    --blue-bg: #e8eefb; --blue: #2c4f9e;
+    --far: #c9c5be;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1917; --card: #242320; --text: #ecebe8; --muted: #a19e98; --line: #3a3834;
+      --soft: #2c2b28;
+      --green-bg: #1f3a26; --green: #8fd4a2;
+      --amber-bg: #3d3019; --amber: #f0c070;
+      --grey-bg: #33312d; --grey: #b8b5ae;
+      --blue-bg: #243049; --blue: #a9c1f5;
+      --far: #5a5751;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 780px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 16px; letter-spacing: -0.01em; }
+  h2 { font-size: 24px; line-height: 1.3; margin: 56px 0 12px; }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 19px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  code, .mono { font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* the three parts */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 28px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; }
+  .card .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .card .big { font-size: 20px; font-weight: 650; margin: 4px 0 8px; line-height: 1.25; }
+  .card p { font-size: 15px; margin: 0 0 10px; color: var(--muted); }
+  .card .foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+  .card .foot span:first-child { color: var(--muted); }
+
+  .tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .tag.green { background: var(--green-bg); color: var(--green); }
+  .tag.amber { background: var(--amber-bg); color: var(--amber); }
+  .tag.grey  { background: var(--grey-bg);  color: var(--grey); }
+  .tag.blue  { background: var(--blue-bg);  color: var(--blue); }
+
+  .picture { background: var(--soft); border-radius: 12px; padding: 14px 18px; margin: 12px 0 18px; }
+  .picture > b { display: block; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; font-weight: 600; }
+  .picture ul { margin: 0; padding-left: 20px; }
+  .picture li { margin-bottom: 6px; }
+  .picture li:last-child { margin-bottom: 0; }
+
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 8px 0 18px; }
+  ol.steps li { counter-increment: s; position: relative; padding: 0 0 10px 40px; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 1px;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--grey-bg); color: var(--grey);
+    font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* pipeline */
+  .pipe { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 14px 0 8px; }
+  .lane { margin-bottom: 18px; }
+  .lane:last-child { margin-bottom: 0; }
+  .lane .name { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 8px; }
+  .flow { display: flex; align-items: stretch; gap: 6px; }
+  .step { flex: 1 1 0; min-width: 0; background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; font-size: 14px; line-height: 1.4; }
+  .step.part { background: var(--blue-bg); border-color: transparent; }
+  .step .who { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; margin-bottom: 3px; }
+  .step.part .who { color: var(--blue); }
+  .arrow { display: flex; align-items: center; color: var(--muted); font-size: 18px; flex: 0 0 auto; }
+  .arrow::after { content: "→"; }
+  .flow-note { font-size: 15px; color: var(--muted); margin: 0 0 18px; }
+
+  /* meaning map */
+  figure { margin: 14px 0 18px; }
+  .map { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .map svg { display: block; width: 100%; height: auto; }
+  .map text { font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; fill: var(--text); }
+  .map text.dim { fill: var(--muted); }
+  .map text.note { fill: var(--muted); font-size: 13px; letter-spacing: 0.03em; text-transform: uppercase; font-weight: 600; }
+  .map .near { fill: var(--text); }
+  .map .far { fill: var(--far); }
+  .map .q { fill: var(--blue); }
+  .map .ring { fill: var(--blue-bg); stroke: var(--blue); stroke-width: 1.5; stroke-dasharray: 6 5; }
+  figcaption { font-size: 15px; color: var(--muted); margin-top: 8px; }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 14px; font-size: 16px; }
+  th { text-align: left; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.rank td:nth-child(2), table.rank td:nth-child(3),
+  table.rank th:nth-child(2), table.rank th:nth-child(3) { text-align: center; width: 150px; }
+  .rk { display: inline-block; min-width: 44px; padding: 1px 8px; border-radius: 999px; font-size: 14px; font-weight: 600; background: var(--grey-bg); color: var(--grey); }
+  .rk.sent { background: var(--green-bg); color: var(--green); }
+  td .sub { display: block; font-size: 14px; color: var(--muted); }
+
+  /* have / not built rows */
+  .have { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin: 12px 0 14px; }
+  .have .r { display: grid; grid-template-columns: 120px 110px 1fr; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); align-items: start; }
+  .have .r:last-child { border-bottom: 0; }
+  .have .r > b { white-space: nowrap; }
+  .have .r p { margin: 0; font-size: 15px; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 14px; }
+  .opt { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; }
+  .opt .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .opt .big { font-size: 18px; font-weight: 650; margin: 2px 0 6px; }
+  .opt p { font-size: 15px; margin: 0 0 8px; }
+  .opt .foot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+
+  dl.words { margin: 10px 0 0; }
+  dl.words div { display: grid; grid-template-columns: 170px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  dl.words dt { font-weight: 600; }
+  dl.words dd { margin: 0; }
+
+  footer { margin-top: 56px; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+  footer .mono { font-size: 13px; word-break: break-all; }
+
+  @media (max-width: 640px) {
+    main { padding: 32px 16px 48px; }
+    h1 { font-size: 28px; }
+    .cards, .two { grid-template-columns: 1fr; }
+    .flow { flex-direction: column; }
+    .arrow { justify-content: center; }
+    .arrow::after { content: "↓"; }
+    .have .r { grid-template-columns: 1fr; gap: 4px; }
+    dl.words div { grid-template-columns: 1fr; gap: 2px; }
+    table.rank td:nth-child(2), table.rank td:nth-child(3),
+    table.rank th:nth-child(2), table.rank th:nth-child(3) { width: 84px; }
+    table { font-size: 15px; }
+    th, td { padding: 8px 6px; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <h1>Embedder, retriever, reranker</h1>
+  <p class="lead">An LLM can only use what is in its prompt. It cannot see your whole project at once. When the answer sits somewhere in a big pile (thousands of functions, hundreds of notes), these three parts choose the few pieces worth showing it.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">Embedder</div>
+      <div class="big">Turns text into a meaning address</div>
+      <p>The address is a list of numbers. Texts that mean similar things get addresses close together, even if they use different words.</p>
+      <div class="foot"><span>Speed</span><span>very fast</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Retriever</div>
+      <div class="big">Finds the closest addresses</div>
+      <p>It compares the question's address with every stored one and keeps a short list, say the top 30. It is quick but rough.</p>
+      <div class="foot"><span>Speed</span><span>very fast</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Reranker</div>
+      <div class="big">Reads the short list carefully</div>
+      <p>It reads the question and each piece together, scores how well each one answers it, and puts the best few on top.</p>
+      <div class="foot"><span>Speed</span><span>slower</span></div>
+    </div>
+  </div>
+
+  <div class="picture">
+    <b>The everyday picture: a library</b>
+    <ul>
+      <li><strong>Embedder:</strong> a librarian who shelves every book by topic, so books about the same thing sit side by side. Your question gets a spot on the shelf too.</li>
+      <li><strong>Retriever:</strong> you walk to your question's spot and grab the 30 nearest books. That's fast, but some of them only sit nearby by accident.</li>
+      <li><strong>Reranker:</strong> you sit down, skim each of those 30 with your question in mind, and keep the best 5.</li>
+      <li><strong>The LLM:</strong> reads those 5 and writes the answer.</li>
+    </ul>
+  </div>
+
+  <h2>How they fit together</h2>
+  <div class="pipe">
+    <div class="lane">
+      <div class="name">Once, ahead of time</div>
+      <div class="flow">
+        <div class="step"><div class="who">The pile</div>Your code, notes, docs, cut into pieces</div>
+        <div class="arrow"></div>
+        <div class="step part"><div class="who">Embedder</div>Gives each piece an address</div>
+        <div class="arrow"></div>
+        <div class="step"><div class="who">Index</div>All the addresses, saved</div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="name">Every question</div>
+      <div class="flow">
+        <div class="step"><div class="who">Question</div>“Why does sign-in fail?”</div>
+        <div class="arrow"></div>
+        <div class="step part"><div class="who">Embedder</div>Gives the question an address</div>
+        <div class="arrow"></div>
+        <div class="step part"><div class="who">Retriever</div>10,000 pieces → top 30</div>
+        <div class="arrow"></div>
+        <div class="step part"><div class="who">Reranker</div>Top 30 → best 5</div>
+        <div class="arrow"></div>
+        <div class="step"><div class="who">LLM</div>Reads the 5, answers</div>
+      </div>
+    </div>
+  </div>
+  <p class="flow-note">The blue boxes are the three parts. The pile is embedded only once. After that, only new or changed pieces need a new address.</p>
+
+  <h3>What a “meaning address” looks like</h3>
+  <figure>
+    <div class="map">
+      <svg viewBox="0 0 660 320" role="img" aria-label="A map where pieces about sign-in sit close to the question and unrelated pieces sit far away">
+        <circle class="ring" cx="210" cy="168" r="140" fill-opacity="0.6"/>
+        <text class="note" x="210" y="18" text-anchor="middle">Retriever’s short list</text>
+        <text class="note" x="530" y="18" text-anchor="middle">Far away = unrelated</text>
+
+        <circle class="near" cx="135" cy="110" r="5"/><text x="145" y="114">sign-in screen</text>
+        <circle class="near" cx="225" cy="80" r="5"/><text x="235" y="84">login help page</text>
+        <circle class="near" cx="265" cy="132" r="5"/><text x="275" y="136">checkPassword()</text>
+        <circle class="near" cx="260" cy="210" r="5"/><text x="270" y="214">login test</text>
+        <circle class="near" cx="110" cy="222" r="5"/><text x="120" y="226">resetPassword()</text>
+        <circle class="near" cx="165" cy="268" r="5"/><text x="175" y="272">clearSessions()</text>
+
+        <circle class="q" cx="210" cy="168" r="8"/><text x="222" y="173" font-weight="700">your question</text>
+
+        <circle class="far" cx="480" cy="80" r="5"/><text class="dim" x="490" y="84">chart colours</text>
+        <circle class="far" cx="545" cy="155" r="5"/><text class="dim" x="555" y="159">CSV export</text>
+        <circle class="far" cx="450" cy="235" r="5"/><text class="dim" x="460" y="239">dark mode switch</text>
+        <circle class="far" cx="535" cy="290" r="5"/><text class="dim" x="545" y="294">price feed</text>
+      </svg>
+    </div>
+    <figcaption>This map is flat, with 2 numbers per address. Real addresses have about 1,000 numbers each (BGE-M3 uses 1,024), but the rule is the same: close together means similar meaning.</figcaption>
+  </figure>
+
+  <h2>Why two steps? Why not only the careful one?</h2>
+  <p>The difference comes down to one thing. <strong>The embedder reads the question and each piece separately. The reranker reads them together.</strong></p>
+  <ol class="steps">
+    <li><strong>Reading separately</strong> means every piece's address can be made ahead of time. When you ask something, only your question is new. Comparing it with 10,000 saved addresses is simple math and takes milliseconds.</li>
+    <li><strong>Reading together</strong> gives much sharper judgement. The reranker can notice that “<em>after a password reset</em>” is the important part of the question. But nothing can be prepared ahead, so every piece costs a full read when you ask.</li>
+    <li><strong>Rough numbers:</strong> running the reranker on all 10,000 pieces would take minutes. Letting the retriever cut them to 30 first takes milliseconds, and the reranker then finishes the 30 in under a second.</li>
+  </ol>
+  <p>The retriever is a wide net: fast and rough. The reranker is a fine sieve: slow and sharp. Used together, the search is both fast and sharp.</p>
+
+  <h3>An example (made-up numbers)</h3>
+  <p class="muted">The question is “Why does sign-in fail after a password reset?”. Only the top 3 pieces go to the LLM.</p>
+  <table class="rank">
+    <thead><tr><th>Piece of code</th><th>Retriever’s order</th><th>Reranker’s order</th></tr></thead>
+    <tbody>
+      <tr><td>Sign-in screen<span class="sub">full of the word “sign-in”</span></td><td><span class="rk sent">1st</span></td><td><span class="rk">5th</span></td></tr>
+      <tr><td>Login help page<span class="sub">text for users, not code</span></td><td><span class="rk sent">2nd</span></td><td><span class="rk">6th</span></td></tr>
+      <tr><td>checkPassword()<span class="sub">checks the password at sign-in</span></td><td><span class="rk sent">3rd</span></td><td><span class="rk sent">2nd</span></td></tr>
+      <tr><td>resetPassword()<span class="sub">where the reset happens</span></td><td><span class="rk">4th</span></td><td><span class="rk sent">1st</span></td></tr>
+      <tr><td>Login test<span class="sub">a test for signing in</span></td><td><span class="rk">5th</span></td><td><span class="rk">4th</span></td></tr>
+      <tr><td>clearSessions()<span class="sub">logs out old sessions after a reset</span></td><td><span class="rk">6th</span></td><td><span class="rk sent">3rd</span></td></tr>
+    </tbody>
+  </table>
+  <p>Without the reranker, the LLM gets the screen, the help page and checkPassword(). It never sees the two pieces where the bug most likely lives. The retriever was fooled because “sign-in” and “login” appear everywhere. The reranker read the question and the code together and caught “after a reset”.</p>
+
+  <h2>In a coding agent like Agentic Coder</h2>
+  <p>The pile here is your project. The pieces are functions and file parts, plus Agentic Coder's memory notes.</p>
+  <ol class="steps">
+    <li>When a project opens, the embedder gives every function an address and saves them. Next time, only changed files get new ones.</li>
+    <li>You type a request, and the request gets an address too.</li>
+    <li>The retriever pulls out the 20 or 30 closest functions.</li>
+    <li>A reranker would put them in order with your request in mind.</li>
+    <li>The best few go into Gemma's prompt before it takes its first step.</li>
+  </ol>
+
+  <div class="picture">
+    <b>Why this matters more for a small local model</b>
+    Gemma's working memory is small, and every extra piece costs reading time. One wrong file wastes tokens and seconds, and it can send Gemma down the wrong path. Better picks mean fewer steps.
+  </div>
+
+  <div class="picture">
+    <b>The coding twist: exact names</b>
+    Meaning search is good at questions like “where do we handle sign-in?”. It is bad at exact strings such as a function name, an error message, or <code>ERR_TOKEN_EXPIRED</code>. Plain word search (like grep) nails those. Good code tools use both. Word search finds exact names, meaning search finds ideas, and a reranker merges the two lists into one order. This is called <em>hybrid search</em>.
+  </div>
+
+  <h3>What Agentic Coder already has</h3>
+  <p class="muted small">This comes from our notes of 26–28 Sep. I did not re-check it in the code for this page.</p>
+  <div class="have">
+    <div class="r">
+      <b>Embedder</b><span><span class="tag green">Have</span></span>
+      <p>BGE-M3 runs on your Mac and is about 600&nbsp;MB. Two things use it: <strong>Oracle</strong> (code search by meaning) and memory (finding the right note for a request).</p>
+    </div>
+    <div class="r">
+      <b>Retriever</b><span><span class="tag green">Have</span></span>
+      <p>Oracle keeps the closest functions above a cut-off score. “Read first” reads up to 3 of the closest files whole. <strong>Scout</strong> reads the files you name. Gemma can also search by words itself.</p>
+    </div>
+    <div class="r">
+      <b>Reranker</b><span><span class="tag grey">Not built</span></span>
+      <p>The 26 Sep plan had one idea: the embedder orders, then the big model checks the top 5. It was never run.</p>
+    </div>
+  </div>
+  <p>The 26 Sep matching test already shows the trade-off. It used the same 20 notes and 30 requests. <strong>BGE-M3 got 23 right and 1 wrong in 17&nbsp;ms.</strong> <strong>The 27B model, picking by itself, got 25 right and 1 wrong in 3.5&nbsp;s.</strong> The careful reader was better but about 200 times slower. That is exactly why a reranker only looks at a short list.</p>
+
+  <h3>If we ever add a reranker (your call, nothing started)</h3>
+  <div class="two">
+    <div class="opt">
+      <div class="label">Option A</div>
+      <div class="big">A small reranker model</div>
+      <p>For example bge-reranker-v2-m3, from the same family as BGE-M3 and about the same size. llama.cpp, which already runs BGE-M3, has a reranking mode.</p>
+      <div class="foot">Cost: one download of about 600 MB. It adds well under a second per request. Not tried yet.</div>
+    </div>
+    <div class="opt">
+      <div class="label">Option B</div>
+      <div class="big">Gemma as the reranker</div>
+      <p>Show Gemma the top 20 and ask it to keep the best 5. There is nothing new to download.</p>
+      <div class="foot">Cost: a few seconds per request, and it takes up Gemma's slot while it picks.</div>
+    </div>
+  </div>
+
+  <h2>In general: where you meet these</h2>
+  <ol class="steps">
+    <li><strong>“Chat with your files”</strong> tools and company help bots use an embedder, a retriever and often a reranker. The whole recipe is called <em>RAG</em>: look things up first, then write the answer.</li>
+    <li><strong>Web search engines</strong> use the same two-step idea at huge scale. A fast first pass covers billions of pages, then heavier rankers sort the top ones.</li>
+    <li><strong>Code editors like Cursor</strong> index your codebase with an embedder, so the chat can find the relevant code.</li>
+    <li><strong>Claude Code</strong>, the tool writing this page, uses no embedder at all. It searches with plain word search and file lists, reads what it finds, and decides what matters. The big model is its own retriever and reranker. That works well with a strong model but takes more steps and tokens. With a smaller local model like Gemma, an embedder and a reranker can do part of that work for it, cheaply.</li>
+  </ol>
+
+  <h2>Words you'll see</h2>
+  <dl class="words">
+    <div><dt>Embedding, vector</dt><dd>The meaning address: a list of numbers.</dd></div>
+    <div><dt>Chunk</dt><dd>One piece of the pile, such as a function or a paragraph.</dd></div>
+    <div><dt>Index, vector database</dt><dd>Where all the addresses are saved.</dd></div>
+    <div><dt>Similarity score</dt><dd>How close two addresses are. Higher means closer in meaning.</dd></div>
+    <div><dt>Top-k</dt><dd>“Keep the k best”, for example top 30 or top 5.</dd></div>
+    <div><dt>RAG</dt><dd>Retrieval-augmented generation: look it up first, then answer.</dd></div>
+    <div><dt>Hybrid search</dt><dd>Word search and meaning search used together.</dd></div>
+    <div><dt>Bi-encoder, cross-encoder</dt><dd>The technical names for “reads separately” (embedder) and “reads together” (reranker).</dd></div>
+  </dl>
+
+  <footer>
+    <p>Written 29 Sep 2026. The Agentic Coder facts come from our notes of 26–28 Sep and were not re-checked in the code. The ranks in the sign-in example are made up to show the idea.</p>
+    <p class="mono">~/Desktop/embedder-retriever-reranker-explained.html<br>copy: ~/Desktop/agentic-coder/agentic-coder DOCS/diagrams/</p>
+  </footer>
+
+</main>
+</body>
+</html>
