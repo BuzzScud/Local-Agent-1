@@ -8,7 +8,10 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 204 KB | 2026-09-29 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 216 KB | 2026-09-29 |
+| [tests/agentic-coder-sorting-check-gemma-2026-09-29-1846.html](tests/agentic-coder-sorting-check-gemma-2026-09-29-1846.html) | page | Sorting check · Gemma 4 12B QAT | 57 KB | 2026-09-29 |
+| [tests/agentic-coder-sorting-check-qwen-2026-09-29-1844.html](tests/agentic-coder-sorting-check-qwen-2026-09-29-1844.html) | page | Sorting check · Qwen3.5 9B | 57 KB | 2026-09-29 |
+| [tests/agentic-coder-sorting-decision-model-2026-09-29.html](tests/agentic-coder-sorting-decision-model-2026-09-29.html) | page | Sorting a request: the decision-model idea | 185 KB | 2026-09-29 |
 | [design rounds/permissions-command-preview-2026-09-29.html](design%20rounds/permissions-command-preview-2026-09-29.html) | page | Permissions Command Preview | 79 KB | 2026-09-29 |
 | [other/agentic-coder-move-to-bay2-plan-2026-09-29.html](other/agentic-coder-move-to-bay2-plan-2026-09-29.html) | page | Move Agentic Coder to BAY2 | 25 KB | 2026-09-29 |
 | [design rounds/tests-tab-run-a-test-3-designs-2026-09-29.html](design%20rounds/tests-tab-run-a-test-3-designs-2026-09-29.html) | page | Run a test · 3 designs | 77 KB | 2026-09-29 |
