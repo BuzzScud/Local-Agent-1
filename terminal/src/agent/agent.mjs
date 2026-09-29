@@ -1289,6 +1289,9 @@ export class Agent extends EventEmitter {
     const local = new AbortController();
     const onAbort = () => local.abort();
     signal?.addEventListener('abort', onAbort, { once: true });
+    // Stopped already (during the warm-up, say): the listener above never fires then, so the
+    // request would go out and run to its end. It is not sent.
+    if (signal?.aborted) local.abort();
     this.emit('waiting');
     this.answering = (this.answering ?? 0) + 1;
     try {
