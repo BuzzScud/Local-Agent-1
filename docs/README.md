@@ -8,10 +8,12 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 309 KB | 2026-09-30 |
+| [tests/agentic-coder-done-check-qwen-2026-09-30-1627.html](tests/agentic-coder-done-check-qwen-2026-09-30-1627.html) | page | Done check · Qwen3.5 9B | 33 KB | 2026-09-30 |
 | [diagrams/agentic-coder-question-walkthrough-2026-09-30-v2.html](diagrams/agentic-coder-question-walkthrough-2026-09-30-v2.html) | page | Question Walkthrough | 47 KB | 2026-09-30 |
+| [tests/agentic-coder-done-check-qwen-2026-09-30-1541.html](tests/agentic-coder-done-check-qwen-2026-09-30-1541.html) | page | Done check · Qwen3.5 9B | 30 KB | 2026-09-30 |
 | [tests/agentic-coder-who-decides-app-vs-model-gemma-2026-09-30-1619.html](tests/agentic-coder-who-decides-app-vs-model-gemma-2026-09-30-1619.html) | page | Who decides: App vs Model · Gemma 4 12B QAT | 14 KB | 2026-09-30 |
 | [tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html](tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html) | page | Who decides: App vs Model · Qwen3.5 9B | 14 KB | 2026-09-30 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 303 KB | 2026-09-30 |
 | [diagrams/agentic-coder-structure-2026-09-30.html](diagrams/agentic-coder-structure-2026-09-30.html) | page | Agentic Coder folder structure | 614 KB | 2026-09-30 |
 | [tests/agentic-coder-weights-reader-check-2026-09-30-1506.html](tests/agentic-coder-weights-reader-check-2026-09-30-1506.html) | page | Weights reader check | 10 KB | 2026-09-30 |
 | [tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html](tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html) | page | Remote check · Gemma 4 12B QAT | 12 KB | 2026-09-30 |
