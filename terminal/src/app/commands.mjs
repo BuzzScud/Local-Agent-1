@@ -22,7 +22,7 @@ export const COMMANDS = [
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'mouse', desc: 'Drag to highlight the text you are typing in the prompt box: copied at once, delete removes it', arg: '[on|off]', picker: true },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
-  { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
+  { name: 'weights', desc: "See the models' weights in the browser (the hub)" },
   { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Agentic Coder page' },
   { name: 'arena', desc: 'Open the hub on the Arena: run a test on one model, or battle Gemma and Qwen with it (the New 28, Work 28, Practice 28, tests you make, the checks), one model at a time' },
   { name: 'test', desc: 'Pick a test in the Arena for this model: press Run there, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
@@ -47,7 +47,7 @@ export const SETTINGS = [
     { name: 'memory', label: 'Memory', note: 'what it remembers about you and this project' },
   ] },
   { group: 'Pages · the hub in the browser', rows: [
-    { name: 'weights', label: 'Weights', note: "the model's weights, layer by layer" },
+    { name: 'weights', label: 'Weights', note: "each model's weights, alone or side by side" },
     { name: 'docs', label: 'Docs', note: 'the diagrams and every Agentic Coder page' },
     { name: 'arena', label: 'Arena', note: 'run a test on one model, or battle two' },
     { name: 'tests', label: 'Test record', note: 'every test run and its result, in the Arena' },

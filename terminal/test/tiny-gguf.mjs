@@ -40,3 +40,20 @@ export function tinyModel() {
     ],
   });
 }
+
+// Rows of the block types Gemma and Qwen use: [weights in a block, bytes in a block,
+// where its fp16 scale (and floor) sit]. Every other byte is a stored number, and any
+// byte is a valid one, so they are random.
+export const BLOCKS = { Q4_0: [2, 32, 18, [0]], Q8_0: [8, 32, 34, [0]], Q4_K: [12, 256, 144, [0, 2]], Q5_K: [13, 256, 176, [0, 2]], Q6_K: [14, 256, 210, [208]] };
+export function blockRows(name, rows, perRow = 2) {
+  const [, , bytes, at] = BLOCKS[name]; const out = Buffer.alloc(rows * perRow * bytes); let s = 0;
+  for (let b = 0; b < rows * perRow; b++) { const p = b * bytes; for (let j = 0; j < bytes; j++) out[p + j] = Math.floor(rnd() * 256); for (const a of at) out.writeUInt16LE(SCALES[s++ % SCALES.length], p + a); }
+  return out;
+}
+// One matrix of each of those types, 5 rows of 2 blocks, plus a plain-number vector.
+export function tinyBlockModel() {
+  return gguf({
+    kv: [['general.architecture', 8, 'qwen35'], ['qwen35.embedding_length', 4, 64]],
+    tensors: [...Object.entries(BLOCKS).map(([name, [type, w]]) => ({ name: `blk.0.${name.toLowerCase()}.weight`, dims: [w * 2, 5], type, data: blockRows(name, 5) })), { name: 'blk.0.attn_norm.weight', dims: [64], type: 0, data: Buffer.alloc(64 * 4) }],
+  });
+}

@@ -35,6 +35,9 @@ export { CodeIndex, partsOf, partKey, CUT as CODE_CUT, MARGIN as CODE_MARGIN } f
 // How the pieces that come along are chosen, for the code search check (models/evals/bench/code/).
 export { choose } from './src/agent/search.mjs';
 export { loadSettings } from './src/app/store.mjs';
+// The Weights tab's file reader, for the weights reader check (models/evals/tools/reader-check.mjs)
+// and the edited copy check, which reads the words an edit changes (models/evals/tools/edited-check.mjs).
+export { weightsCore } from './src/app/weights-core.mjs';
 // panelData: the Arena's control panel (/effort's rows, their steps and notes), which its runner hands to the page.
 export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX, panelData } from './src/app/limits.mjs';
 // pickCards, designNotes and scoreCard: which cards go along with a request, for the UI component battle's card pick (models/evals/bench/design/components.mjs).

@@ -1,8 +1,10 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
 //   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure (its two pages: Structure and Flow) · Arena · Memory · Instructions · All docs · Help
-//   /weights          the weights viewer (weights.html, built in)
-//   /model.json       the model file's name and size; /model with a Range header, its bytes
+//   /weights          the weights viewer (weights.html, built in): every model in /model, one alone or side by side
+//   /models.json      those models: each one's file, size, tags (default, in use now, not on this Mac) and edited copy
+//   /model/<id>       with a Range header, that model's bytes
+//   /model.json       the first model file's name and size; /model with a Range header, its bytes (a page opened on one file)
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned structure page (and a harness page kept there, under All docs)
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
@@ -34,7 +36,8 @@ import { memoryRoute } from './memory-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { flowRoute } from './flow-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
-import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, modelPath, readEdited, readEditedAll, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
+import { loadSettings } from './store.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 import { findDocsDir } from './docs-dir.mjs';
 
@@ -78,42 +81,70 @@ export function listDocs(dir) {
 const envPort = Number((process.env.AGENTIC_HUB_PORT ?? process.env.BONSAI_HUB_PORT) || NaN);
 export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 8757;
 
-// onEdits: called after a save or revert of the edited copy (the app shows a
-// note and lights the weights badge). Editing endpoints:
-//   GET  /edits.json    what is saved: the manifest, or { saved: null }
-//   POST /edits/save    { edits } → a fresh clone of the original + all edits
-//   POST /edits/revert  deletes the copy and its manifest
+// onEdits: called after a save or revert of an edited copy (the app shows a
+// note and lights the weights badge). Each model has its own copy. Editing endpoints:
+//   GET  /edits.json    what is saved: { saved: the first model's manifest or null, all: { model id: manifest } }
+//   POST /edits/save    { model, edits } → a fresh clone of that model's original + all edits
+//   POST /edits/revert  { model } → deletes that model's copy and its manifest
+// (with no model named: the model whose file this hub was started on)
+// models: the models the Weights tab shows (the /model list).
 // onDesign: called when the Instructions page saves a design style (the app's
 // window uses it from its next page request).
 // cwd: the folder whose memory the Memory tab shows.
-export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits, onDesign, cwd = process.cwd(), instructionsHome }) {
+export function startWeightsServer({ path, models = Object.values(MODELS), docsDir = findDocsDir(), port = HUB_PORT, onEdits, onDesign, cwd = process.cwd(), instructionsHome }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
   const size = missing ? 0 : statSync(path).size;
   const name = path ? basename(path) : '';
   const model = MODELS[DEFAULT_MODEL];
+  const noStore = { 'cache-control': 'no-store' };
+  // The models as the Weights tab shows them, read each time: the tags are the Harness
+  // tab's (the model /model saved last is the one in use), and a file can arrive or go.
+  const modelsData = () => {
+    const want = String(loadSettings(cwd).model ?? '').replace(/-edited$/, '');
+    const inUse = models.some((m) => m.id === want) ? want : (models.some((m) => m.id === DEFAULT_MODEL) ? DEFAULT_MODEL : models[0]?.id ?? null);
+    const edited = readEditedAll();
+    return { inUse, models: models.map((m) => {
+      const file = modelPath(m); const there = existsSync(file);
+      return { id: m.id, name: m.name, by: m.by ?? '', file: m.file, size: there ? statSync(file).size : 0, missing: !there,
+        tags: [m.id === DEFAULT_MODEL ? 'default' : '', m.id === inUse ? 'in use now' : '', there ? '' : 'not on this Mac'].filter(Boolean), edited: edited[m.id] ?? null };
+    }) };
+  };
+  // A file's bytes by range: 206 with exactly what was asked, 416 without a range (whole-file reads are not offered).
+  const bytesOf = (req, file) => {
+    const total = statSync(file).size;
+    const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.get('range') || '');
+    if (!range) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${total}` } });
+    const a = Number(range[1]); const b = range[2] === '' ? total - 1 : Math.min(total - 1, Number(range[2]));
+    if (a > b || a >= total) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${total}` } });
+    return new Response(Bun.file(file).slice(a, b + 1), { status: 206, headers: { 'content-type': 'application/octet-stream', 'content-length': String(b - a + 1), 'content-range': `bytes ${a}-${b}/${total}`, 'accept-ranges': 'bytes' } });
+  };
   const serve = (p) => Bun.serve({
     hostname: '127.0.0.1', port: p,
     async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname.startsWith('/edits')) {
         const bad = (m, code = 400) => Response.json({ error: m }, { status: code, headers: { 'cache-control': 'no-store' } });
-        if (url.pathname === '/edits.json' && req.method === 'GET') return Response.json({ saved: readEdited() }, { headers: { 'cache-control': 'no-store' } });
+        if (url.pathname === '/edits.json' && req.method === 'GET') return Response.json({ saved: readEdited(DEFAULT_MODEL), all: readEditedAll() }, { headers: noStore });
+        // Which model an edit is for: the one named, which must be in the list; with none named, the file this hub was started on.
+        let body = {}; if (req.method === 'POST') { try { body = (await req.json()) ?? {}; } catch { if (url.pathname === '/edits/save') return bad('the request body is not JSON'); } }
+        const named = body.model != null ? models.find((m) => m.id === body.model) : null;
+        if (body.model != null && !named) return bad(`no model called ${String(body.model).slice(0, 40)} in /model`, 404);
+        const src = named ? modelPath(named) : path; const base = named ? named.id : DEFAULT_MODEL;
         if (url.pathname === '/edits/save' && req.method === 'POST') {
-          if (missing) return bad('the model file is not on this Mac yet', 404);
-          let edits; try { ({ edits } = await req.json()); } catch { return bad('the request body is not JSON'); }
+          if (!src || !existsSync(src)) return bad('the model file is not on this Mac yet', 404);
           try {
-            const file = editedFileName(model);
-            const r = await applyEdits({ src: path, dest: join(MODELS_DIR, file), edits });
-            const saved = { base: DEFAULT_MODEL, file, saved: new Date().toISOString(), edits };
+            const file = editedFileName(named ?? model);
+            const r = await applyEdits({ src, dest: join(MODELS_DIR, file), edits: body.edits });
+            const saved = { base, file, saved: new Date().toISOString(), edits: body.edits };
             writeEdited(saved);
             onEdits?.({ kind: 'save', saved, rowsChanged: r.rowsChanged });
             return Response.json({ ok: true, saved, rowsChanged: r.rowsChanged, bytesChanged: r.bytesChanged });
           } catch (e) { return bad(e.message); }
         }
         if (url.pathname === '/edits/revert' && req.method === 'POST') {
-          const was = removeEdited();
-          onEdits?.({ kind: 'revert', was });
+          const was = removeEdited(base);
+          onEdits?.({ kind: 'revert', was, base });
           return Response.json({ ok: true });
         }
         return bad('not found', 404);
@@ -147,13 +178,15 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });
+      if (url.pathname === '/models.json') return Response.json(modelsData(), { headers: noStore });
+      if (url.pathname.startsWith('/model/')) {
+        const m = models.find((x) => x.id === decodeURIComponent(url.pathname.slice(7)));
+        if (!m || !existsSync(modelPath(m))) return new Response(m ? 'that model file is not on this Mac yet' : 'no such model', { status: 404 });
+        return bytesOf(req, modelPath(m));
+      }
       if (url.pathname === '/model') {
         if (missing) return new Response('the model file is not on this Mac yet', { status: 404 });
-        const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.get('range') || '');
-        if (!range) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
-        const a = Number(range[1]); const b = range[2] === '' ? size - 1 : Math.min(size - 1, Number(range[2]));
-        if (a > b || a >= size) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
-        return new Response(Bun.file(path).slice(a, b + 1), { status: 206, headers: { 'content-type': 'application/octet-stream', 'content-length': String(b - a + 1), 'content-range': `bytes ${a}-${b}/${size}`, 'accept-ranges': 'bytes' } });
+        return bytesOf(req, path);
       }
       if (url.pathname === '/docs.json') return Response.json(listDocs(docsDir), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname.startsWith('/docs/')) {

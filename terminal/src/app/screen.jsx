@@ -876,13 +876,16 @@ function ModelPicker({ app }) {
       <Text> </Text>
       {pk.models.map((m, i) => {
         const on = i === pk.index;
-        const desc = m.edited
-          ? `${(m.bytes / 1e9).toFixed(1)} GB · ${m.edited.edits.length} edit${m.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(m.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-          : `${(m.bytes / 1e9).toFixed(1)} GB · on this Mac`;
+        // the names in one column, however long the longest is (an edited copy's is its model's plus " · edited")
+        const nameW = Math.max(16, ...pk.models.map((x) => x.name.length + 2));
+        const descOf = (x) => (x.edited
+          ? `${(x.bytes / 1e9).toFixed(1)} GB · ${x.edited.edits.length} edit${x.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(x.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+          : `${(x.bytes / 1e9).toFixed(1)} GB · on this Mac`);
+        const desc = descOf(m); const descW = Math.max(24, ...pk.models.map((x) => descOf(x).length + 2));
         return (
           <Text key={m.id}>
-            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {m.name.padEnd(16)}</Text>
-            <Text color={C.dim}>{desc.padEnd(24)}</Text>
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {m.name.padEnd(nameW)}</Text>
+            <Text color={C.dim}>{desc.padEnd(descW)}</Text>
             {m.name === app.modelName ? <Text color={C.ok}>✔ in use</Text> : null}
           </Text>
         );

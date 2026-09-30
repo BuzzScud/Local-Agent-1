@@ -16,7 +16,7 @@ export { setup, RUNTIME } from './runtime/setup.mjs';
 export { Embedder, embedderReady } from './runtime/embed.mjs';
 export { Reranker, rerankerReady } from './runtime/rerank.mjs';
 export { recordTest, readRecord, recordData, recordFile, writeSnapshot, codeLabel, sideBySide, KINDS as TEST_KINDS } from './evals/record.mjs';
-export { readEdited, writeEdited, removeEdited, editedModel, editedFileName, modelById, EDITED_MANIFEST } from './runtime/edited.mjs';
+export { readEdited, readEditedAll, writeEdited, removeEdited, editedModel, editedModels, editedFileName, editedManifest, modelById, EDITED_MANIFEST } from './runtime/edited.mjs';
 // The Arena (a test on one model, or a battle of Gemma and Qwen): its runner, and the hold that makes an app window wait.
 export { startBattle, battleHold, battleUrl } from './evals/battle/start.mjs';
 export { RUN_TESTS, runCatalog, findRunTest, runTestById } from './evals/run-tests.mjs';

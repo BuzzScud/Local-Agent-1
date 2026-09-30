@@ -81,8 +81,9 @@ export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) 
 // A server open to the network instead of this Mac only.
 export const listensWide = (text) => /['"`]0\.0\.0\.0['"`]|hostname:\s*['"`](?!127\.0\.0\.1|localhost)[^'"`]+['"`]|--host['"`],\s*['"`](?!127\.0\.0\.1)[^'"`]+['"`]/.test(text);
 // Code built from text while running. The one known use reads the weights
-// page's own script, which is part of the repo.
-export const BUILDS_CODE_OK = ['terminal/src/app/gguf-edit.mjs'];
+// page's own script, which is part of the repo (the edit writer and the weights
+// reader check both get it from there).
+export const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
 export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text);
 
 // ---- which files are the app ---------------------------------------------------------------
@@ -292,7 +293,7 @@ function leftovers({ files }) {
 }
 
 async function modelFiles({ fast }) {
-  const { MODELS, DEFAULT_MODEL, EMBEDDERS, RERANKERS, MODELS_DIR, modelPath, draftPath, readEdited } = await import('../../index.mjs');
+  const { MODELS, DEFAULT_MODEL, EMBEDDERS, RERANKERS, MODELS_DIR, modelPath, draftPath, readEditedAll } = await import('../../index.mjs');
   const m = MODELS[DEFAULT_MODEL];
   // The default model and its helper, then the small models (the memory's
   // matcher, the search's reranker, which `coding setup` downloads too).
@@ -300,16 +301,17 @@ async function modelFiles({ fast }) {
     ...[...Object.values(EMBEDDERS), ...Object.values(RERANKERS)].map((x) => [x.name, modelPath(x), x.sha256])];
   const missing = want.filter(([, file]) => !existsSync(file));
   if (!existsSync(want[0][1])) return look('the model is not on this Mac yet (coding setup)');
-  let edited = null; try { edited = readEdited?.()?.file ?? null; } catch { /* no edited copy */ }
+  // each model may have an edited copy of its own, beside its manifest
+  let edited = []; try { edited = Object.values(readEditedAll?.() ?? {}).map((e) => e.file); } catch { /* no edited copy */ }
   // Every file the registry names is one the code uses (the other models in /model too).
   const named = Object.values(MODELS).flatMap((x) => [modelPath(x), x.draft && !x.draft.inFile ? draftPath(x) : null]);
-  const known = new Set([...want.map(([, file]) => file), ...named].filter(Boolean).map((file) => file.split('/').pop()).concat([edited, 'edited.json'].filter(Boolean)));
+  const known = new Set([...want.map(([, file]) => file), ...named].filter(Boolean).map((file) => file.split('/').pop()).concat([...edited, 'edited.json', ...Object.keys(MODELS).map((id) => `edited-${id}.json`)]));
   const extra = existsSync(MODELS_DIR) ? readdirSync(MODELS_DIR).filter((f) => !f.startsWith('.') && !f.endsWith('.part') && !known.has(f)).map((f) => `${f} (${(statSync(join(MODELS_DIR, f)).size / 1e9).toFixed(2)} GB) is in ${tilde(MODELS_DIR)} but the code does not use it`) : [];
   if (fast) return skipped('not checked (--fast)');
   const bad = [];
   for (const [name, file, sha] of want) if (existsSync(file) && (await sha256(file)) !== sha) bad.push(`${name} is not the file the repo names (${tilde(file)})`);
   if (bad.length) return wrong('a model file is not the real one', bad);
-  const notes = [...missing.map(([name]) => `${name} is not on this Mac`), edited ? `${edited} is your own edited copy of the weights` : '', ...extra].filter(Boolean);
+  const notes = [...missing.map(([name]) => `${name} is not on this Mac`), ...edited.map((f) => `${f} is your own edited copy of the weights`), ...extra].filter(Boolean);
   const text = `${want.length - missing.length} model file${want.length - missing.length > 1 ? 's' : ''} match the fingerprints (SHA-256) written in the repo`;
   return extra.length || missing.length ? look(text, notes) : fine(text, notes);
 }

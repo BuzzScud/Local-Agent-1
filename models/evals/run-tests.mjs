@@ -89,12 +89,18 @@ export const RUN_TESTS = [
   { id: 'components', name: 'UI component battle', what: 'your UI component requests in three parts: which design cards each one gets (no model), the pages built with the design folder on, and again with it off; run it on both models for the battle, with a results page and a blind vote', model: true, think: true, total: null, lines: componentLines, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/design/components.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'other', name: '^UI component battle$', part: false } },
+  { id: 'edited', name: 'Edited copy vs original', what: 'this model’s edited copy (the Weights tab’s Save the copy) against the model itself, one after the other: six fixed questions and one for each word your edits change, side by side, with a results page (it needs a copy of this model saved)', model: true, think: false, total: null, count: '^(PASS|FAIL|ASKED)\\s',
+    script: 'models/evals/tools/edited-check.mjs', args: (m) => ['--model', m],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^Edited copy vs original$', part: false } },
   { id: 'unit', name: 'Unit tests', what: 'bun test over both parts, with the stand-in model (no real one loads)', model: false, total: null,
     script: 'models/evals/tools/run-suite.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'suite', name: '^Unit tests', part: false } },
   { id: 'check', name: 'Repo check', what: 'is anything in the repo that should not be: secrets, packages, where the code connects (the fast one: no model files, no unit tests)', model: false, total: null,
     script: 'models/evals/tools/check.mjs', args: () => ['--fast'],
     stop: 'SIGTERM', record: { kind: 'check', name: '^Repo check', part: false } },
+  { id: 'reader', name: 'Weights reader check', what: 'the Weights tab reads every model file on this Mac exactly as llama.cpp does: a few matrices of every storage type each file keeps, weight for weight, with a results page (the first run fetches llama.cpp’s reader through uv)', model: false, total: null, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/reader-check.mjs', args: () => [],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^Weights reader check$', part: false } },
 ];
 
 export const runTestById = (id) => RUN_TESTS.find((t) => t.id === id) ?? null;

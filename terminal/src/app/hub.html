@@ -212,7 +212,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     }
     setTab(tab);
     setView(tab === 'structure' && !page ? (view === 'flow' ? 'flow' : 'structure') : null);
-    if (tab === 'weights') return show('/weights', 'the model\'s weights');
+    if (tab === 'weights') return show('/weights', 'each model\'s weights, alone or side by side');
     if (tab === 'help') return show('/help', 'every command, key and setting');
     if (tab === 'instructions') return show('/instructions', 'general behavior and planning');
     if (tab === 'harness' && !page) return show('/harness', 'one harness, every model beside the others');

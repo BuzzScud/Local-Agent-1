@@ -15,7 +15,7 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -117,9 +117,9 @@ export function App({ opts, win, onRestart }) {
   // stays the registry's; the agent and the server get it with the thinking cap.
   const limitsRef = useRef(null);
   limitsRef.current ??= readLimits(settings, model);
-  // What the Weights tab last saved (the edited copy's manifest): feeds the
-  // weights badge in the lower right.
-  const [editedSaved, setEditedSaved] = useState(readEdited);
+  // What the Weights tab has saved (each model's edited copy, by model): feeds
+  // the weights badge in the lower right.
+  const [editedSaved, setEditedSaved] = useState(readEditedAll);
   // New Agentic Coder code on main since this start: the "Update available" badge,
   // and /update, which restarts this window on it.
   const [update, setUpdate] = useState(null);
@@ -371,10 +371,10 @@ export function App({ opts, win, onRestart }) {
     const base = MODELS[model.edited ? model.edited.base : DEFAULT_MODEL] ?? MODELS[DEFAULT_MODEL];
     const onEdits = (e) => {
       if (e.kind === 'save') {
-        setEditedSaved(e.saved);
+        setEditedSaved((all) => ({ ...all, [e.saved.base]: e.saved }));
         const n = e.saved.edits.length;
-        push({ type: 'note', text: `Saved ${model.name} · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
-      } else { setEditedSaved(null); push({ type: 'note', text: 'The edited copy was removed. The original was never touched.', tone: 'dim' }); }
+        push({ type: 'note', text: `Saved ${MODELS[e.saved.base]?.name ?? model.name} · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
+      } else { setEditedSaved((all) => { const rest = { ...all }; delete rest[e.base]; return rest; }); push({ type: 'note', text: `${MODELS[e.base]?.name ? `${MODELS[e.base].name}’s` : 'The'} edited copy was removed. The original was never touched.`, tone: 'dim' }); }
     };
     // The design style picked on the Instructions page: this window uses it from the next page request, as /design style does.
     const onDesign = (next) => { settings.design = next; if (agentRef.current) agentRef.current.designSaved = next; };
@@ -450,7 +450,6 @@ export function App({ opts, win, onRestart }) {
     const runs = readRecord();
     const last = runs[0];
     const bc = battleCounts();
-    const file = modelPath(model);
     const value = {
       meters: S.current.meters ? 'on' : 'off',
       mouse: S.current.mouse ? 'on' : 'off',
@@ -459,7 +458,7 @@ export function App({ opts, win, onRestart }) {
       rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
       instructions: ins ? `${steps(ins.sections.general)} general · ${steps(ins.sections.planning)} planning` : 'could not read',
       memory: dirs ? `${facts(dirs.you)} about you · ${facts(dirs.project)} here` : 'off here',
-      weights: existsSync(file) ? `${model.name} · ${(statSync(file).size / 1e9).toFixed(2)} GB` : 'file not here yet',
+      weights: (() => { const here = Object.values(MODELS).filter((m) => existsSync(modelPath(m))); return here.length > 1 ? here.map((m) => m.name).join(' · ') : here.length ? `${here[0].name} · ${(statSync(modelPath(here[0])).size / 1e9).toFixed(2)} GB` : 'no model file here yet'; })(),
       docs: docs.missing ? 'DOCS folder not found' : n(docs.pages.length, 'page'),
       tests: last ? `${n(runs.length, 'run')} · last ${last.total != null ? `${last.passed}/${last.total}` : last.result}` : 'no runs yet',
       arena: battleHold() ? 'something is running there' : `${n(bc.tests, 'test')} · ${n(bc.battles, 'run')}`,
@@ -1306,12 +1305,11 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'model': {
-        // The model list and the thinking level in one picker. The edited
-        // copy, when one is saved, is one more row.
+        // The model list and the thinking level in one picker. Each model's
+        // edited copy, when one is saved, is one more row after the models.
         const levels = model.thinkingLevels ?? [];
         const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
-        const edited = editedModel();
-        const models = [...Object.values(MODELS), ...(edited ? [edited] : [])];
+        const models = [...Object.values(MODELS), ...editedModels()];
         setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => m.id === model.id)), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
         break;
       }
@@ -1369,16 +1367,17 @@ export function App({ opts, win, onRestart }) {
       case 'weights':
       case 'docs': {
         // The hub in the browser: the same server as `coding weights` / `coding docs`,
-        // inside this window. /weights opens it on the model's weights, /docs on
-        // the harness diagram with structure and every page one tab away.
-        const path = modelPath(model);
-        if (cmd === 'weights' && !existsSync(path)) { push({ type: 'note', text: `The model file is not here yet (${path}). Run coding setup first.`, tone: 'warn' }); break; }
+        // inside this window. /weights opens it on the models' weights (every model in
+        // /model, one alone or side by side), /docs on the harness diagram with
+        // structure and every page one tab away.
+        const here = Object.values(MODELS).filter((m) => existsSync(modelPath(m)));
+        if (cmd === 'weights' && !here.length) { push({ type: 'note', text: `No model file is here yet (${modelPath(MODELS[DEFAULT_MODEL])}). Run coding setup first.`, tone: 'warn' }); break; }
         const hub = openHub(cmd === 'docs' ? 'harness' : 'weights'); if (!hub) break;
         const w = hub.server; const url = hub.url;
         if (cmd === 'docs') {
           const d = listDocs(w.docsDir);
           push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (cli docs at the top of the repo; set AGENTIC_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
-        } else push({ type: 'note', text: `Weights of ${w.name} (${(w.size / 1e9).toFixed(2)} GB) opened in the browser at ${url} · it stays up while this window is open`, tone: 'dim' });
+        } else push({ type: 'note', text: `Weights of ${here.map((m) => m.name).join(' and ')} opened in the browser at ${url} · it stays up while this window is open`, tone: 'dim' });
         break;
       }
       case 'meters': {
@@ -1890,9 +1889,9 @@ export function App({ opts, win, onRestart }) {
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),
     weightsBadge: model.edited
-      ? (editedSaved && editedSaved.saved !== model.edited.saved ? '✱ newer edits saved · /model to reload'
+      ? (editedSaved[model.edited.base] && editedSaved[model.edited.base].saved !== model.edited.saved ? '✱ newer edits saved · /model to reload'
         : `✱ on edited weights (${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'})`)
-      : (editedSaved ? '✱ edited weights ready · /model to switch' : null),
+      : (Object.keys(editedSaved).length ? '✱ edited weights ready · /model to switch' : null),
   };
   return <Screen app={app} />;
 }

@@ -21,8 +21,8 @@ test('/settings → Weights starts the viewer inside the window: the note names 
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toMatch(/❯ Weights\s+Gemma 4 12B QAT · 0\.00 GB\s+the model's weights/); // the row names the file it opens
-  expect(r.text).toContain('Weights of gemma-4-12B-it-qat-UD-Q4_K_XL.gguf (0.00 GB) opened in the browser at http://127.0.0.1:');
+  expect(r.snapshots.menu).toMatch(/❯ Weights\s+Gemma 4 12B QAT · 0\.00 GB\s+each model's weights/); // the row names the model whose file is here
+  expect(r.text).toContain('Weights of Gemma 4 12B QAT opened in the browser at http://127.0.0.1:'); // the models whose files are on this Mac
   expect(served.facts).toEqual({ name: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', size: 8 });
   expect(served.page).toContain('<title>Agentic Coder Weights</title>');
   expect(served.hub).toContain('<title>Agentic Coder Hub</title>');
@@ -145,6 +145,32 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   // note, which proves the picker really tried it in place (no app restart).
   expect(r.text).toContain('Could not switch:');
   expect(r.snapshots.after).toContain('✱ on edited weights (1 edit)');
+}, T);
+
+test('edited weights, one copy per model: the picker lists each after the models, and picking the second model\'s copy is that model edited', async () => {
+  const { cwd, env, base } = setup();
+  const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
+  for (const [id, file, edits] of [['gemma', 'gemma-4-12B-it-qat-UD-Q4_K_XL', 1], ['qwen', 'Qwen3.5-9B-MTP-UD-Q5_K_XL', 2]]) {
+    writeFileSync(join(models, `${file}.gguf`), 'stand-in'); writeFileSync(join(models, `${file}-edited.gguf`), 'stand-in-edited');
+    writeFileSync(join(models, `edited-${id}.json`), JSON.stringify({ base: id, file: `${file}-edited.gguf`, saved: '2026-09-30T14:32:00.000Z', edits: Array.from({ length: edits }, (_, i) => ({ op: 'scale', tensor: 'blk.0.ffn_up.weight', row: i, k: 0.5 })) }));
+  }
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Recent activity' }, { sleep: 400 }, { snapshot: 'badge' },
+    { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
+    // the copies come after every model, in the models' order: the last row is the second model's
+    ...[1, 2, 3, 4, 5].flatMap(() => [{ key: 'down' }, { sleep: 150 }]), { key: 'enter' },
+    { wait: 'Could not switch' }, { sleep: 300 }, { snapshot: 'after' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.badge).toContain('✱ edited weights ready · /model to switch');
+  // each row: the name, then (after a gap, whatever the name's length) its size and what it is
+  const rows = r.snapshots.picker.split('\n').filter((l) => /GB · /.test(l)).map((l) => l.replace(/[❯│]/g, '').trim().split(/\s{2,}/).slice(0, 2).map((x) => x.replace(/saved .*/, 'saved')));
+  expect(rows).toEqual([['Gemma 4 12B QAT', '6.7 GB · on this Mac'], ['Qwen3.5 9B', '6.9 GB · on this Mac'], ['Gemma 4 12B QAT · edited', '0.0 GB · 1 edit · saved'], ['Qwen3.5 9B · edited', '0.0 GB · 2 edits · saved']]);
+  expect(r.snapshots.picker).toContain('1 edit · saved'); expect(r.snapshots.picker).toContain('2 edits · saved');
+  expect(r.text).toContain('Could not switch:');
+  expect(r.snapshots.after).toContain('✱ on edited weights (2 edits)'); // Qwen's copy, with Qwen's two edits
 }, T);
 
 

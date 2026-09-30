@@ -130,11 +130,13 @@ if (process.argv[2] === 'hub' || OLD_HUB.includes(process.argv[2])) {
   if (!HUB_TABS[name]) { process.stderr.write(`coding hub: no tab called ${name}. Tabs: ${Object.keys(HUB_TABS).join(', ')}.\n`); process.exit(1); }
   const { existsSync } = await import('node:fs');
   const path = modelPath(MODELS[DEFAULT_MODEL]);
-  if (name === 'weights' && !existsSync(path)) { process.stderr.write(`coding hub: the model file is not here yet (${path}). Run coding setup first, or open another tab (coding hub docs).\n`); process.exit(1); }
+  // The Weights tab shows every model in /model whose file is on this Mac.
+  const here = Object.values(MODELS).filter((m) => existsSync(modelPath(m)));
+  if (name === 'weights' && !here.length) { process.stderr.write(`coding hub: no model file is here yet (${path}). Run coding setup first, or open another tab (coding hub docs).\n`); process.exit(1); }
   const { startWeightsServer } = await import('./app/weights.mjs');
   const s = startWeightsServer({ path, cwd: process.cwd() });
   const url = `${s.url}?tab=${HUB_TABS[name]}`;
-  process.stdout.write(`Agentic Coder hub: ${s.name} (${(s.size / 1e9).toFixed(2)} GB) and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
+  process.stdout.write(`Agentic Coder hub: ${here.length ? `the weights of ${here.map((m) => m.name).join(' and ')}` : 'no model file yet'}, and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
   if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
   process.on('SIGINT', () => { s.stop(); process.exit(0); });
   await new Promise(() => {});
