@@ -26,6 +26,12 @@ rebuild() {
   fi
   [ -n "$changed" ] || return 0
   mkdir -p "$(dirname "$APP")" "$(dirname "$LOG")"
+  # A package the code now needs and this Mac does not have yet (one added to
+  # package.json, like the Claude API's SDK) is installed first, as the installer does.
+  if ! (cd "$REPO" && "$BUN" -e 'const p = require("./package.json"); process.exit(Object.keys(p.dependencies ?? {}).every((d) => require("fs").existsSync(`node_modules/${d}/package.json`)) ? 0 : 1)') >/dev/null 2>&1; then
+    printf '\033[2m↻ Installing the packages Agentic Coder now needs…\033[0m\n' >&2
+    (cd "$REPO" && "$BUN" install) >"$LOG.install" 2>&1 || printf '\033[33m! bun install failed (see %s)\033[0m\n' "$(echo "$LOG.install" | sed "s|^$HOME|~|")" >&2
+  fi
   tmp="$APP.$$"
   if (cd "$REPO" && "$BUN" build --compile --minify terminal/src/cli.jsx --outfile "$tmp") >"$LOG" 2>&1; then
     # bun leaves the file open to every account on the Mac; only you may change the app
