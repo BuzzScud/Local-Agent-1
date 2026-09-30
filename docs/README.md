@@ -70,7 +70,8 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [design rounds/agentic-coder-docs-merge-before-after-2026-09-30.html](design%20rounds/agentic-coder-docs-merge-before-after-2026-09-30.html) | page | One Docs Folder | 22 KB | 2026-09-30 |
 | [tests/agentic-coder-web-check-qwen-2026-09-30-1751.html](tests/agentic-coder-web-check-qwen-2026-09-30-1751.html) | page | Web check · Qwen3.5 9B | 10 KB | 2026-09-30 |
 | [tests/agentic-coder-web-check-gemma-2026-09-30-1753.html](tests/agentic-coder-web-check-gemma-2026-09-30-1753.html) | page | Web check · Gemma 4 12B QAT | 10 KB | 2026-09-30 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 321 KB | 2026-09-30 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 319 KB | 2026-09-30 |
+| [tests/agentic-coder-subagent-check-qwen-2026-09-30-1823.html](tests/agentic-coder-subagent-check-qwen-2026-09-30-1823.html) | page | Subagent check · Qwen3.5 9B | 9 KB | 2026-09-30 |
 | [older versions/agentic-coder-web-check-qwen-2026-09-30-1747.html](older%20versions/agentic-coder-web-check-qwen-2026-09-30-1747.html) | page | Web check · Qwen3.5 9B | 10 KB | 2026-09-30 |
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-09-30 |
 | [tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html](tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html) | page | Who decides: App vs Model · Qwen3.5 9B | 14 KB | 2026-09-30 |

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subagent check · Qwen3.5 9B</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.panel[hidden]{display:none}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small{display:block;color:var(--faint);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.what{white-space:normal;color:var(--mute);font-size:13.5px;min-width:260px}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--faint)}.small{font-size:13px;margin:0}
+ol.list{margin:0;padding-left:22px;columns:2 360px;column-gap:32px}ol.list li{margin:0 0 6px;break-inside:avoid}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 7px}ul.how code{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card .v{font-size:20px}th,td{padding:5px 10px}ul.how li{margin:0 0 4px}}
+@media (max-width:760px),(max-height:560px){body{overflow:auto;height:auto}.panel{overflow:visible}.table-wrap{overflow-x:auto}td.what{min-width:220px}}
+</style>
+</head>
+<body>
+<header><h1>Subagent check · Qwen3.5 9B</h1><span class="date">Sep 30 18:23 · 127a694+</span></header>
+<div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true" data-tab="result">1 · Result</button><button type="button" role="tab" aria-selected="false" data-tab="checks">2 · The checks</button><button type="button" role="tab" aria-selected="false" data-tab="how">3 · How it was measured</button></div>
+<main class="panel" id="p-result"><p class="verdict">Yes: all 5 checks passed. The model handed work to a helper that found the answer on the server’s side slot, the conversation’s place on the main slot was kept, a read-only helper changed nothing, a general one made its change, and esc stopped a helper in the window.</p><div class="chips"><span class="chip ok">✓ pass: all 5 checks</span><span class="chip">Sep 30 18:23 · 127a694+</span></div><div class="cards"><div class="card"><div class="k">Checks passed · higher is better</div><div class="v">5 of 5</div><div class="s">no run before this one</div></div><div class="card"><div class="k">An explore helper, start to answer · lower is faster</div><div class="v">77 s</div><div class="s">coding -p, the model loading included</div></div><div class="card"><div class="k">Read again after the helper · lower is faster</div><div class="v">138 tokens</div><div class="s">what the conversation’s next step had to process: small when its place was kept</div></div></div><ol class="list"><li><span class="ok">✓</span> an explore helper finds a function for it <span class="dim">· 77 s</span></li><li><span class="ok">✓</span> its requests ran on the side slot, and the conversation’s place was kept <span class="dim">· 0.0 s</span></li><li><span class="ok">✓</span> an explore helper told to change a file cannot <span class="dim">· 36 s</span></li><li><span class="ok">✓</span> a general helper makes a change <span class="dim">· 255 s</span></li><li><span class="ok">✓</span> in the window, esc stops a helper at work <span class="dim">· 90 s</span></li></ol><p class="dim small">Tab 2 has what each check showed.</p></main>
+<main class="panel" id="p-checks" hidden><div class="table-wrap"><table><thead><tr><th>#</th><th>Check</th><th>Result</th><th class="num">Seconds<small>lower is faster</small></th><th>What it showed</th></tr></thead><tbody><tr><td class="dim">1</td><td><b>an explore helper finds a function for it</b></td><td class="ok">✓ passed</td><td class="num">77 s</td><td class="what">tools: Explore(Find computeTax function definition) · answered &quot;The function `computeTax` is defined in **`src/billing/tax.mjs`** on *&quot; in 76.9 s</td></tr><tr><td class="dim">2</td><td><b>its requests ran on the side slot, and the conversation’s place was kept</b></td><td class="ok">✓ passed</td><td class="num">0.0 s</td><td class="what">2 requests on slot 1 · 4 on slot 0 · the conversation&#39;s next step processed 138 tokens</td></tr><tr><td class="dim">3</td><td><b>an explore helper told to change a file cannot</b></td><td class="ok">✓ passed</td><td class="num">36 s</td><td class="what">notes.mjs unchanged · tools: Explore(Adding &#39;second&#39; to NOTES list in notes.mjs) · answered &quot;The Agent successfully identified that `NOTES` in `notes.mjs` currentl&quot; in 36.2 s</td></tr><tr><td class="dim">4</td><td><b>a general helper makes a change</b></td><td class="ok">✓ passed</td><td class="num">255 s</td><td class="what">notes.mjs: &quot;export const NOTES = [&#39;first&#39;, &#39;second&#39;];&quot; · tools: Agent(Add &#39;second&#39; to NOTES list in notes.mjs) · answered &quot;Done.&quot; in 255.0 s</td></tr><tr><td class="dim">5</td><td><b>in the window, esc stops a helper at work</b></td><td class="ok">✓ passed</td><td class="num">90 s</td><td class="what">its line showed its first step · esc stopped it: Interrupted</td></tr></tbody></table></div></main>
+<main class="panel" id="p-how" hidden><ul class="how"><li>The model: Qwen3.5 9B, with Who decides on Model (the Agent tool is offered then), through <b>coding -p --yes</b> (thinking off, no memory), in a throwaway home whose engine and model files are links to the ones in ~/.agentic-coder. The prompts ask for a helper by name, so each check measures what a helper does, not whether the model thinks of one.</li><li>The project: a few small files, one of them defining computeTax on a known line, and notes.mjs for the general helper to change.</li><li>The side slot: the model server’s own log says which slot each request ran in; the helpers’ requests must be on slot 1 while the conversation stays on slot 0, and the conversation’s next request must process only what is new.</li><li>The window: the real app in a pseudo-terminal (the tests’ own driver); once the helper’s line shows its first step, esc must stop it and the turn.</li><li>Nothing in ~/.agentic-coder was written but this run’s line in the test record. The Mac’s load at the end: 4.9. Code: 127a694+.</li><li>Raw results, on this Mac: <code>models/qwen3.5-9b/results/agents-check-2026-09-30-1823</code></li></ul></main>
+<script>
+const tabs = [...document.querySelectorAll('[data-tab]')];
+const show = (id) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === id))); document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + id; }); try { history.replaceState(null, '', '#' + id); } catch {} };
+tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+addEventListener('keydown', (e) => { if (e.metaKey || e.ctrlKey || e.altKey) return; const n = Number(e.key); if (n >= 1 && n <= tabs.length) show(tabs[n - 1].dataset.tab); });
+const fromHash = () => { if (tabs.some((b) => '#' + b.dataset.tab === location.hash)) show(location.hash.slice(1)); };
+addEventListener('hashchange', fromHash);
+fromHash();
+</script>
+</body>
+</html>
