@@ -1,5 +1,5 @@
 // Plays the practice tasks against the real model and checks each result.
-//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--set 28 | --only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank]
+//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--set 28 | --only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank] [--prompt old|new] [--no-record]
 // --set 28: the 28 practice tasks that grade a model (29, the notes page, is an extra); its line in
 // the test record is a full run of the 28. --only picks tasks by number (a part of the set).
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
@@ -16,6 +16,10 @@
 // --memory: with Agentic Coder's memory on (a throwaway one, empty at the start):
 // the rules that are always read, facts brought back, and a save after each
 // task, once its files were checked. Does the memory make anything worse?
+// --prompt old|new: the system prompt from before 30 Sep 2026 (AGENTIC_PROMPT=old:
+// no Work habits, notes unlabelled, 6,000 characters of notes) or today's; the
+// record line and summary.json name it. --no-record: no line in the test record
+// (Prompt old vs new, models/evals/tools/prompt-ab.mjs, records one line for both).
 import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -58,6 +62,12 @@ const codes = (sep) => [...helpers].map((h) => CODENAMES[h]).join(sep) || 'off';
 // What the Helpers line brought, counted by codename: "Scout 1, Medic 2".
 const byCode = (items) => Object.entries(Object.groupBy(items.filter((x) => !x.skipped), (x) => codenameOf(x.from))).map(([c, xs]) => `${c} ${xs.length}`).join(', ');
 const flowsOn = opt('flows', 'on') !== 'off';
+const promptArg = opt('prompt', null);
+if (promptArg && !['old', 'new'].includes(promptArg)) { console.error(`--prompt old or new, not "${promptArg}"`); process.exit(1); }
+if (promptArg === 'old') process.env.AGENTIC_PROMPT = 'old';
+else if (promptArg === 'new') delete process.env.AGENTIC_PROMPT;
+const promptUsed = process.env.AGENTIC_PROMPT === 'old' ? 'old' : 'new';
+const noRecord = args.includes('--no-record');
 // --claude (with --memory): Claude's notes are looked in as well, where they are.
 const withClaude = withMemory && args.includes('--claude');
 const memoryHome = withMemory ? mkdtempSync(join(tmpdir(), 'agentic-eval-memory-')) : null;
@@ -81,7 +91,7 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 const started = await server.start({ ctx });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
-console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}`);
+console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}`);
 const results = [];
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const tdir = opt('out', join(modelFolder(base), 'results', 'runs', stamp));
@@ -144,12 +154,12 @@ try {
 }
 const file = join(tdir, 'summary.json');
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
-writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
+writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, prompt: promptUsed, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
+  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);

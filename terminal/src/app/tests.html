@@ -640,7 +640,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const last = lastRun(t, m, j ? j.startedAt : Infinity, th);
       const other = t.model ? models.find((x) => x.id !== m) : null;
       const cnt = j?.count ?? { done: null, total: t.total };
-      const readyRe = { practice28: /^server up/, task: /one at a time/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/, mine: /one at a time/, sorting: /^loaded in/ }[t.id];
+      const readyRe = { practice28: /^server up/, task: /one at a time/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/, mine: /one at a time/, sorting: /^loaded in/, prompt: /^server up/ }[t.id];
       const c = t.pick ? choiceOf(v) : null;
       const loaded = !t.model || (j && (lines.some((l) => readyRe?.test(l)) || (cnt.done ?? 0) > 0 || ended));
       const secsNow = j ? Math.max(0, Math.round(((ended ? j.endedAt : j.now ?? Date.now()) - (j.runStartedAt ?? j.startedAt)) / 1000)) : 0;
