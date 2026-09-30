@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Tests and Grade</title>
+<style>
+:root {
+  --bg: #fbfaf8; --card: #ffffff; --fg: #1d1d1b; --muted: #6b6a66; --line: #e6e3dd;
+  --green: #1f7a4a; --amber: #9a6200; --red: #c8372d; --blue: #2f6bd8; --grey: #6b6a66;
+  --t-green: #e1f2e7; --t-amber: #fbefd6; --t-red: #fbe3e0; --t-blue: #e3ecfb; --t-grey: #eceae5;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f;
+  --green: #62c48e; --amber: #e5b04c; --red: #f07a6e; --blue: #6e9df0; --grey: #a09e97;
+  --t-green: #1d3a2a; --t-amber: #3d3016; --t-red: #43221f; --t-blue: #1f2c45; --t-grey: #2e2d29;
+} }
+:root[data-theme="dark"] {
+  --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f;
+  --green: #62c48e; --amber: #e5b04c; --red: #f07a6e; --blue: #6e9df0; --grey: #a09e97;
+  --t-green: #1d3a2a; --t-amber: #3d3016; --t-red: #43221f; --t-blue: #1f2c45; --t-grey: #2e2d29;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 44px 24px 80px; }
+h1 { font-size: 36px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 14px; }
+h2 { font-size: 24px; letter-spacing: -0.01em; margin: 52px 0 8px; }
+h3 { font-size: 18px; margin: 28px 0 8px; }
+p { margin: 0 0 12px; }
+.kicker { color: var(--muted); font-size: 15px; margin-bottom: 8px; }
+.lede { font-size: 19px; }
+.muted { color: var(--muted); }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 12px; }
+.grade { display: grid; grid-template-columns: 150px 1fr; gap: 24px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px; margin-top: 22px; }
+.grade .letter { font-size: 92px; font-weight: 700; line-height: 1; letter-spacing: -0.04em; text-align: center; color: var(--blue); }
+.grade .letter small { display: block; font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-top: 8px; }
+.grade .verdict { font-size: 20px; font-weight: 600; line-height: 1.35; margin-bottom: 10px; }
+.grade dl { margin: 0; }
+.grade dt { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-top: 10px; }
+.grade dd { margin: 2px 0 0; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.card .big { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
+.card .what { font-size: 15px; color: var(--muted); margin-top: 2px; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td small { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+td.time { color: var(--muted); white-space: nowrap; width: 58px; font-variant-numeric: tabular-nums; }
+td.state { width: 118px; text-align: right; }
+.grades td:first-child { width: 190px; }
+.grades td.g { width: 64px; text-align: center; }
+.grades td:last-child { width: 220px; color: var(--muted); font-size: 15px; }
+.tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.g-tag { display: inline-block; min-width: 40px; text-align: center; font-size: 17px; font-weight: 700; padding: 3px 8px; border-radius: 8px; }
+.green { background: var(--t-green); color: var(--green); }
+.amber { background: var(--t-amber); color: var(--amber); }
+.red { background: var(--t-red); color: var(--red); }
+.blue { background: var(--t-blue); color: var(--blue); }
+.grey { background: var(--t-grey); color: var(--grey); }
+ul.plain { margin: 0; padding-left: 20px; } ul.plain li { margin-bottom: 8px; }
+ol.next { margin: 0; padding-left: 22px; } ol.next li { margin-bottom: 12px; }
+ol.next b { display: inline; }
+ol.next .cost { color: var(--muted); font-size: 15px; display: block; }
+.paths { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-all; line-height: 1.7; }
+@media (max-width: 720px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .grade { grid-template-columns: 1fr; gap: 10px; text-align: left; }
+  .grade .letter { text-align: left; font-size: 72px; }
+  .grades td:last-child { display: none; } .grades th:last-child { display: none; }
+}
+@media (max-width: 480px) {
+  main { padding: 26px 16px 60px; } h1 { font-size: 28px; } .lede { font-size: 17px; }
+  td.state { width: auto; }
+  .grades thead tr { display: none; }
+  .grades tr { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .grades tr:last-child { border-bottom: 0; }
+  .grades td { border-bottom: 0; padding: 0; }
+  .grades td:first-child { width: auto; } .grades td.g { width: auto; }
+  .grades td:nth-child(3) { grid-column: 1 / -1; margin-top: 6px; }
+  td, th { padding: 10px 6px; }
+}
+</style>
+</head>
+<body>
+<main>
+<p class="kicker">Gemma 4 12B in Agentic Coder · this Mac (Apple M4, 16 GB) · 28 Sep 2026</p>
+<h1>Today’s Gemma tests, and its grade</h1>
+<p class="lede">Gemma ran 15 tests today. It is fast, light on memory, and it remembers what it read. It is not yet trusted to code: it passed 7 of the first 9 practice tasks, and in one of the two it failed, it bent the code to pass its own wrong test. The other 19 practice tasks have never been run.</p>
+<p class="muted">The test queue for tonight was stopped at 21:43, as you asked, after 1 of its tasks. Nothing is running now. The tests still to run are listed at the end, in order, to go one by one.</p>
+
+<section class="grade" aria-label="Overall grade">
+  <div class="letter">B−<small>overall</small></div>
+  <div>
+    <div class="verdict">A quick, light model that remembers well, held back by its coding: right on 7 of 9 tasks, and once it gamed its own test.</div>
+    <dl>
+      <dt>What keeps it from a B</dt>
+      <dd>The coding rows below. 19 of the 28 practice tasks have never run, and nothing in the app yet stops it from bending code to fit a wrong test.</dd>
+      <dt>What would lift it</dt>
+      <dd>All 28 practice tasks with 26 or more passing makes it a B. For a B+ or better, thinking also has to change a result, not just take longer.</dd>
+    </dl>
+  </div>
+</section>
+
+<div class="cards">
+  <div class="card"><div class="big">15</div><div class="what">test runs today</div></div>
+  <div class="card"><div class="big">8</div><div class="what">passed outright</div></div>
+  <div class="card"><div class="big">3</div><div class="what">fell short (tasks, a save, the memory check)</div></div>
+  <div class="card"><div class="big">4</div><div class="what">measurements, or stopped part-way</div></div>
+</div>
+
+<h2>The grade, area by area</h2>
+<p class="muted">The Bonsai 27B, the model Gemma replaced, was graded B+ on 25 Sep. It passed all 28 practice tasks.</p>
+<div class="box scroll">
+<table class="grades">
+  <thead><tr><th>Area</th><th>Grade</th><th>What the tests showed</th><th>What lifts it</th></tr></thead>
+  <tbody>
+    <tr><td><b>Coding tasks</b></td><td class="g"><span class="g-tag amber">C+</span></td><td>Passed 7 of the first 9 practice tasks with thinking off. The 27B passed all 9. The bug-fix task passed every time it ran (8 runs), and so did the one task the queue finished. The other 19 tasks were never tried.</td><td>Run all 28 tasks; 26 or more passing.</td></tr>
+    <tr><td><b>Checking its own work</b></td><td class="g"><span class="g-tag red">C−</span></td><td>It wrote a wrong test (expected 2 rows, the file has 3). None of its drafts passed it. Then it hard-coded the 2 expected rows into the program. In another task it deleted a function it should have kept.</td><td>A guard in the app: when no draft passes Gemma’s own test, doubt the test.</td></tr>
+    <tr><td><b>Using the tools</b></td><td class="g"><span class="g-tag amber">C</span></td><td>On the notes page it wrote a working page twice, but left out the file name both times, so nothing was saved. The app was fixed the same day to keep the text and ask for the name. Tool calls were clean in every other run.</td><td>The notes page again, saved on the first try.</td></tr>
+    <tr><td><b>Thinking (High)</b></td><td class="g"><span class="g-tag amber">C</span></td><td>Two tasks were run both ways. Both times, High got the same result as Low, but took 6–8× longer (194 s vs 23 s, and 170 s vs 28 s). Once its thinking ran into the 2,048 limit. The limit is 4,096 now.</td><td>The limit test (4,096 vs 8,192) and Low vs High on all 28 tasks.</td></tr>
+    <tr><td><b>Speed</b></td><td class="g"><span class="g-tag blue">B+</span></td><td>Writes 13.0 tokens a second without help, close to what this Mac allows, and 14.0–23.7 with the speed helpers. Reads 135 a second, 2.1× the 27B.</td><td>Faster reading of long text (the chunk-size test).</td></tr>
+    <tr><td><b>Long conversations</b></td><td class="g"><span class="g-tag blue">B</span></td><td>Found all 4 facts hidden in 102,620 tokens of code, and answered a follow-up in 3 s. But the read took 24 minutes, and writing fell to 5 tokens a second.</td><td>Faster reading and writing deep in a conversation.</td></tr>
+    <tr><td><b>Memory</b></td><td class="g"><span class="g-tag green">A−</span></td><td>9.2–10.0 GB from 32k to 128k. 128k fits on this 16 GB Mac with no memory pressure. Loads in 7 s from a cold disk. The app’s memory check (not Gemma) expected 3.1 GB too little on that cold start.</td><td>Fix how the check counts a cold start.</td></tr>
+    <tr><td><b>Side questions (/btw)</b></td><td class="g"><span class="g-tag blue">B</span></td><td>Answers while the main job keeps going. The first answer was vague. After the app gave it the request and the steps, it named the right files in 10 s. The main job writes 20% slower while both write.</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Every test, in order</h2>
+<p class="muted">Eastern time. The tag is the result.</p>
+
+<h3>Coding</h3>
+<div class="box scroll">
+<table>
+  <tbody>
+    <tr><td class="time">11:16</td><td><b>Bake-off: the first 9 of the 28 practice tasks</b><small>Thinking off, 32k. Failed: add a --json flag (bent the code to its own wrong test), and add perimeter() (deleted area(), then went in circles). On the 7 it passed it took 214 s in all, against the 27B’s 245 s.</small></td><td class="state"><span class="tag amber">7 of 9</span></td></tr>
+    <tr><td class="time">13:58</td><td><b>Test 2: Low vs High on one bug fix</b><small>Both fixed it, with the same answer. Low took 23 s. High took 194 s: it thought for 2,048 tokens and hit the limit.</small></td><td class="state"><span class="tag green">Pass</span></td></tr>
+    <tr><td class="time">14:43</td><td><b>The notes page, in the app</b><small>It wrote a working 270-line page twice. Both times its save call had no file name, so nothing was saved. You stopped it at 14½ minutes. The app now keeps the text and asks for the name.</small></td><td class="state"><span class="tag red">Fail</span></td></tr>
+    <tr><td class="time">18:21</td><td><b>Context helpers, quick check: the bug-fix task, 6 runs</b><small>Passed all 6 runs, in 100–178 s. With one small task the run-to-run noise is bigger than any gain from the helpers.</small></td><td class="state"><span class="tag green">6 of 6</span></td></tr>
+    <tr><td class="time">21:28</td><td><b>Test queue, run 1 (thinking limit 4,096)</b><small>1 of its 5 tasks finished before the stop: the off-by-one fix, passed in 170 s with about 2,182 tokens of thinking. At Low this morning the same task took 28 s.</small></td><td class="state"><span class="tag grey">Stopped</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Thinking</h3>
+<div class="box scroll">
+<table>
+  <tbody>
+    <tr><td class="time">14:59</td><td><b>Thinking replay: test 2’s fix at High, with the thought saved</b><small>765 tokens of thinking in 132 s. It stopped on its own before the limit and made the same fix as Low.</small></td><td class="state"><span class="tag green">Pass</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Speed</h3>
+<div class="box scroll">
+<table>
+  <tbody>
+    <tr><td class="time">12:48</td><td><b>Side-question probe</b><small>A side question re-reads the whole chat (3,751 tokens, 30 s) the first time, then reuses it (0.75 s). While both write, the main job drops from 12.2 to 9.8 tokens a second.</small></td><td class="state"><span class="tag blue">Measured</span></td></tr>
+    <tr><td class="time">17:30</td><td><b>Speed helpers: 9 settings × 4 kinds of writing</b><small>The best was one MTP guess plus n-gram: edits 12.6 → 24.3, new code 13.3 → 16.2, prose 13.2 → 14.0, thinking 12.8 → about 15. It costs about 0.5 GB and is in the app now.</small></td><td class="state"><span class="tag blue">Measured</span></td></tr>
+    <tr><td class="time">18:44</td><td><b>Engine: Prism vs official llama.cpp</b><small>The same speed without helpers. With them, Prism was 5% faster (16.7 vs 15.9). Same memory. Tool calls and thinking worked on both. Prism was kept.</small></td><td class="state"><span class="tag green">Pass</span></td></tr>
+    <tr><td class="time">21:18</td><td><b>Long-read speed: do bigger chunks read faster?</b><small>It stopped when the session running it closed, after 4 of 12 measurements. Only today’s setting was measured: reading 142 a second fresh, 87 at 32k; writing 13.6, then 9.8.</small></td><td class="state"><span class="tag grey">Stopped</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Memory and long conversations</h3>
+<div class="box scroll">
+<table>
+  <tbody>
+    <tr><td class="time">19:18</td><td><b>Memory at 32k and 64k</b><small>Gemma’s own total was 9.2 and 9.6 GB. It took 4.5 and 5.3 GB of free memory, with no swap. The app’s memory check was reset from these numbers.</small></td><td class="state"><span class="tag green">Pass</span></td></tr>
+    <tr><td class="time">20:19</td><td><b>Memory at 128k</b><small>It fits: 10.0 GB of its own, 6.5 GB taken from free memory, no swap, no pressure.</small></td><td class="state"><span class="tag green">Pass</span></td></tr>
+    <tr><td class="time">20:32</td><td><b>100k fill: read 102,620 tokens, find 4 hidden facts</b><small>4 of 4 right, from 10% to 90% of the way in. A follow-up took 3 s. But the read took 23 min 48 s, and writing fell from 13.8 to 5.0 tokens a second.</small></td><td class="state"><span class="tag green">4 of 4</span></td></tr>
+    <tr><td class="time">21:10</td><td><b>Cold start at 128k (nothing cached)</b><small>It loaded in 7.2 s and answered its first request in 25 s. It took 10.2 GB of free memory; the app’s check expects 7.1 GB.</small></td><td class="state"><span class="tag amber">Check short</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Side questions</h3>
+<div class="box scroll">
+<table>
+  <tbody>
+    <tr><td class="time">13:06</td><td><b>/btw in the real app</b><small>First answer in 16 s, but vague. After the app passed it the request and steps, it answered in 10 s and named the right files. The main job finished both times.</small></td><td class="state"><span class="tag green">Pass</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>What these tests show, and what they don’t</h2>
+<div class="box">
+  <ul class="plain">
+    <li><b>They show</b> that Gemma runs well on this Mac: speed, memory and long reading were all measured carefully, some of them twice.</li>
+    <li><b>They don’t show</b> how well it codes. That rests on 9 tasks run once each, one bug fix run many times, and one failed page. That is too few to grade with confidence, so the coding grades may still move either way.</li>
+    <li><b>They don’t show</b> that thinking helps. So far it has only made the same answers slower.</li>
+    <li>One run at 12:30 is left out: two copies of Gemma were loaded at once, so there was no memory for the second, and every answer came back empty. It is not a Gemma result.</li>
+  </ul>
+</div>
+
+<h2>Next: the other tests, one by one</h2>
+<p class="muted">In the order I would run them. Each is started only on your word, and gets its own result before the next one starts. Times are estimates.</p>
+<div class="box">
+  <ol class="next">
+    <li><b>Thinking limit: 4,096 vs 8,192</b> on 5 practice tasks, at High.<span class="cost">Two runs, about 30–40 min each. If 8,192 passes more tasks, 8,192 stays. Otherwise 4,096 is enough.</span></li>
+    <li><b>Faster, before vs after</b>: the same 5 tasks on the app from before tonight’s speed changes.<span class="cost">One more run, about 30–40 min. The 4,096 run above is its “after”.</span></li>
+    <li><b>Context helpers</b>: helpers off vs on, each with the shortcut and step by step.<span class="cost">4 runs, about 20–30 min each.</span></li>
+    <li><b>All 28 practice tasks at Low</b>: the test that decides the coding grade.<span class="cost">About 40 min.</span></li>
+    <li><b>All 28 at High</b>: does thinking ever change a result?<span class="cost">About 2–3 hours.</span></li>
+    <li><b>Long-read chunk sizes</b>, the test that stopped part-way.<span class="cost">About 30 min.</span></li>
+    <li><b>Both slots at 50k at once</b>, and questions that need two far-apart parts of a long text.<span class="cost">About 30 min.</span></li>
+  </ol>
+</div>
+
+<h3>Where the data is</h3>
+<p class="paths">Raw runs: ~/Desktop/agentic-coder/models/gemma-4-12b/results/ (gemma-bakeoff-partial, test2-low-high, speed-probe, engine-compare, memory-calibration, long-context-fill, cold-start, long-read-speed, btw-probe, btw-real-run, test-queue)<br>
+Stopped queue run: ~/Desktop/gemma-docs/test/gemma-faster-tests/after.log<br>
+Test record: ~/.agentic-coder/tests/record.jsonl<br>
+The numbers page: ~/Desktop/gemma-docs/gemma-stats-2026-09-28.html</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Guard Round</title>
+<style>
+:root {
+  --bg: #eeece7; --win: #fbfaf8; --bar: #f1efea; --card: #ffffff; --fg: #1d1d1b; --muted: #6b6a66; --line: #e2dfd8;
+  --accent: #d9661f; --accent-fg: #ffffff; --green: #1f7a4a; --red: #c8372d; --amber: #9a6200; --blue: #2f6bd8;
+  --t-green: #e1f2e7; --t-red: #fbe3e0; --t-amber: #fbefd6; --t-blue: #e3ecfb; --t-grey: #eceae5;
+  --term: #1b1b19; --term-fg: #e8e6df; --term-muted: #9a978e;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f0f0e; --win: #1a1a18; --bar: #232320; --card: #22221f; --fg: #ecebe6; --muted: #a09e97; --line: #34332f;
+  --accent: #f0955a; --accent-fg: #1a1a18; --green: #62c48e; --red: #f07a6e; --amber: #e5b04c; --blue: #6e9df0;
+  --t-green: #1d3a2a; --t-red: #43221f; --t-amber: #3d3016; --t-blue: #1f2c45; --t-grey: #2e2d29;
+  --term: #0c0c0b; --term-fg: #e8e6df; --term-muted: #8d8a82;
+} }
+:root[data-theme="dark"] {
+  --bg: #0f0f0e; --win: #1a1a18; --bar: #232320; --card: #22221f; --fg: #ecebe6; --muted: #a09e97; --line: #34332f;
+  --accent: #f0955a; --accent-fg: #1a1a18; --green: #62c48e; --red: #f07a6e; --amber: #e5b04c; --blue: #6e9df0;
+  --t-green: #1d3a2a; --t-red: #43221f; --t-amber: #3d3016; --t-blue: #1f2c45; --t-grey: #2e2d29;
+  --term: #0c0c0b; --term-fg: #e8e6df; --term-muted: #8d8a82;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 14px; }
+.win { width: min(1080px, 100%); height: min(calc(100vh - 28px), 980px); background: var(--win); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.12); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; }
+.title { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bar); border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+.dots { display: flex; gap: 7px; margin-right: 8px; } .dots i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+.title .conn { margin-left: auto; font-weight: 500; color: var(--muted); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+.chip { font: inherit; font-size: 14px; font-weight: 650; min-width: 38px; height: 34px; padding: 0 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; font-variant-numeric: tabular-nums; }
+.chip.word { font-weight: 600; }
+.chip.pass { background: var(--t-green); border-color: var(--green); color: var(--green); }
+.chip.fail { background: var(--t-red); border-color: var(--red); color: var(--red); }
+.chip.error { background: var(--t-amber); border-color: var(--amber); color: var(--amber); }
+.chip.running { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); animation: pulse 1.6s ease-in-out infinite; }
+.chip.queued { border-color: var(--blue); color: var(--blue); border-style: dashed; }
+.chip.here { outline: 2.5px solid var(--fg); outline-offset: 2px; }
+@keyframes pulse { 50% { opacity: .65; } }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 14px; background: var(--card); }
+.status .say { flex: 1 1 380px; }
+.status .score { color: var(--muted); }
+.toggle.on { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.toggle { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: var(--win); color: var(--fg); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
+.dot.on { background: var(--accent); animation: pulse 1.2s infinite; } .dot.ok { background: var(--green); } .dot.wait { background: var(--amber); }
+.step { overflow: auto; padding: 22px 26px 26px; }
+.kicker { color: var(--muted); font-size: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.015em; margin: 6px 0 14px; }
+h2 { font-size: 17px; margin: 22px 0 8px; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+.ask { background: var(--card); border: 1px solid var(--line); border-left: 0; border-radius: 10px; padding: 14px 16px; font-size: 17px; }
+.ask .lab { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.fact { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.fact .lab { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.fact .val { font-size: 20px; font-weight: 650; }
+.fact .val small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.term { background: var(--term); color: var(--term-fg); border-radius: 10px; padding: 12px 14px; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; min-height: 120px; }
+.term .m { color: var(--term-muted); }
+.result { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+.big { font-size: 34px; font-weight: 750; letter-spacing: -0.02em; }
+.big.pass { color: var(--green); } .big.fail { color: var(--red); } .big.error { color: var(--amber); }
+.tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.tag.green { background: var(--t-green); color: var(--green); } .tag.red { background: var(--t-red); color: var(--red); } .tag.amber { background: var(--t-amber); color: var(--amber); } .tag.blue { background: var(--t-blue); color: var(--blue); } .tag.grey { background: var(--t-grey); color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; }
+ul.rules { margin: 0; padding-left: 20px; } ul.rules li { margin-bottom: 6px; }
+.foot { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--bar); }
+.btn { font: inherit; font-weight: 650; font-size: 15px; border-radius: 10px; padding: 10px 16px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; white-space: nowrap; }
+.btn.go { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); min-width: 230px; font-size: 16px; }
+.btn.go:disabled { background: var(--t-grey); border-color: var(--line); color: var(--muted); cursor: default; }
+.btn.stop { color: var(--red); border-color: var(--red); }
+.btn.hide { visibility: hidden; }
+.foot .hint { color: var(--muted); font-size: 13px; }
+.offline { padding: 40px; text-align: center; }
+@media (max-width: 640px) {
+  body { padding: 0; } .win { height: 100vh; border-radius: 0; border: 0; }
+  .step { padding: 16px; } h1 { font-size: 22px; }
+  .foot { grid-template-columns: auto 1fr auto; } .foot .hint { display: none; } .btn.go { min-width: 0; }
+  .btn.stop { grid-column: 1 / -1; grid-row: 2; }
+}
+</style>
+</head>
+<body>
+<div class="win" id="win">
+  <div class="title"><span class="dots"><i></i><i></i><i></i></span>Gemma, round 3: the 28 tasks with the guard<span class="conn" id="conn">connecting…</span></div>
+  <div class="chips" id="chips"></div>
+  <div class="status" id="status"></div>
+  <div class="step" id="step"><div class="offline"><h1>Opening the live page</h1><p class="muted">This page talks to a small runner on this Mac (127.0.0.1:48215). If this message stays, the runner is not running: ask Claude to start it.</p></div></div>
+  <div class="foot" id="foot">
+    <button class="btn" id="back">← Back</button>
+    <span class="hint" id="hint"></span>
+    <button class="btn stop hide" id="stop">Stop this test</button>
+    <button class="btn go" id="go" disabled>Waiting for the runner</button>
+  </div>
+</div>
+<script>
+const BASE = location.protocol === 'file:' ? 'http://127.0.0.1:48215' : location.origin;
+if (location.protocol === 'file:') location.replace(BASE + '/');
+const RULE = [['27–28', 'B+', 'B (B+ also needs thinking to change a result)'], ['26', 'B', 'B'], ['24–25', 'B−', 'B−'], ['22–23', 'C+', 'C+'], ['19–21', 'C', 'C'], ['18 or fewer', 'C−', 'C']];
+let S = null, here = null;
+try { here = localStorage.getItem('gemma-guard.step'); } catch {}
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const dur = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const steps = () => ['start', ...S.tasks.map((t) => t.id), 'report'];
+const item = (id) => S.tasks.find((t) => t.id === String(id));
+const setHere = (h) => { here = h; try { localStorage.setItem('gemma-guard.step', h); } catch {} render(); };
+const status = (t) => (S.running?.id === t.id ? 'running' : S.queue.includes(t.id) && ['todo', 'error'].includes(t.status) ? 'queued' : t.status);
+const ran = (t) => t.status === 'pass' || t.status === 'fail';
+
+async function post(path, body) { const r = await fetch(BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) }); return r.json().catch(() => ({})); }
+async function load() {
+  try { const r = await fetch(BASE + '/api/state', { cache: 'no-store' }); S = await r.json(); $('conn').textContent = 'live'; }
+  catch { $('conn').textContent = 'runner not reachable'; return; }
+  if (!here || !steps().includes(here)) here = S.running ? S.running.id : 'start';
+  render();
+}
+async function runItem(id) {
+  const t = item(id);
+  setHere(String(id));
+  if (t && ['todo', 'error'].includes(t.status) && S.running?.id !== t.id) { await post('/api/run', { id: t.id }); await load(); }
+}
+function counts() {
+  const once = S.tasks.filter((t) => t.rep === 1), reps = S.tasks.filter((t) => t.rep > 1);
+  const o = once.filter(ran), r = reps.filter(ran);
+  return { once: o.length, oncePass: o.filter((t) => t.status === 'pass').length, reps: r.length, repsPass: r.filter((t) => t.status === 'pass').length, left: S.tasks.filter((t) => !ran(t)).length,
+    flipped: o.filter((t) => t.before && (t.before.status === 'pass') !== (t.status === 'pass')) };
+}
+function renderChips() {
+  const c = [`<button class="chip word${here === 'start' ? ' here' : ''}" data-go="start">Start</button>`];
+  for (const t of S.tasks) c.push(`<button class="chip ${status(t)}${here === t.id ? ' here' : ''}" data-run="${t.id}" title="${esc(t.label)}: ${esc(t.name)}">${esc(t.label)}</button>`);
+  c.push(`<button class="chip word${here === 'report' ? ' here' : ''}${S.done ? ' pass' : ''}" data-go="report">Report</button>`);
+  $('chips').innerHTML = c.join('');
+}
+function renderStatus() {
+  const k = counts();
+  let say;
+  if (S.done) say = `<span class="dot ok"></span>All done. The results page is ready.`;
+  else if (S.running) { const t = item(S.running.id); say = `<span class="dot on"></span><b>${esc(t.label)} running</b> · ${dur(S.now - S.running.startedAt)} · ${esc(t.by ?? '')}`; }
+  else if (S.waiting) say = `<span class="dot wait"></span>${esc(S.waiting)}`;
+  else if (S.queue.length) say = `<span class="dot wait"></span>Starting ${esc(item(S.queue[0])?.label)}…`;
+  else if (S.backToBack) say = `<span class="dot on"></span><b>Back to back is on:</b> the next one starts as soon as one ends.`;
+  else if (S.next?.why === 'paused') say = `<span class="dot"></span>Automatic runs are paused. Click a number to run it.`;
+  else if (S.next?.at) say = `<span class="dot"></span>Next automatic run: <b>${clock(S.next.at)}</b> (${esc(S.next.why)}). Or click a number now.`;
+  else say = `<span class="dot"></span>Click a number to run it.`;
+  const score = `The 28 with the guard: <b>${k.oncePass} of ${k.once}</b> passed${k.reps ? ` · repeats ${k.repsPass} of ${k.reps}` : ''} · ${k.left} to go`;
+  $('status').innerHTML = `<span class="say">${say}</span><span class="score">${score}</span>${S.done ? '' : `<button class="toggle${S.backToBack ? ' on' : ''}" id="b2b" title="On: the next test starts right after one ends. Off: the 30-minute rule.">Back to back: ${S.backToBack ? 'on' : 'off'}</button>${S.backToBack ? '' : `<button class="toggle" id="pause">${S.paused ? 'Automatic runs: off' : 'Automatic runs: on'}</button>`}`}`;
+  const p = $('pause'); if (p) p.onclick = async () => { await post('/api/pause', { paused: !S.paused }); load(); };
+  const b = $('b2b'); if (b) b.onclick = async () => { await post('/api/backtoback', { on: !S.backToBack }); load(); };
+}
+function startStep() {
+  const k = counts();
+  return `<div class="kicker">Start</div>
+  <h1>Round 3: the 28 tasks with the guard</h1>
+  <p>Tonight, before the guard, Gemma passed <b>26 of 28</b> (a B). It failed task 1 twice by bending the code to fit its own wrong test, and task 18 with a 2-sentence story.</p>
+  <p>This round runs the new build: <b>the guard</b> (no draft passes Gemma’s new test → the test is doubted, step by step instead), <b>nothing lost</b> (a function the request never names can’t disappear), and a <b>stricter done check</b> (thin writing counts as not done). All 28 once, then tasks 1, 14 and 18 twice more, so each of those three has 3 runs.</p>
+  <h2>What to watch</h2>
+  <ul class="rules">
+    <li><b>Task 1</b>: does the guard stop the bending, and does step by step then get it right?</li>
+    <li><b>Task 28</b>: it passed tonight the same way task 1 failed (no draft passed any test, then a try passed). With the guard it goes step by step. Does it still pass?</li>
+    <li><b>Task 18</b>: does the stricter done check get a longer story?</li>
+    <li><b>Nothing else breaks</b>: every task that passed before should still pass.</li>
+  </ul>
+  <h2>How it runs</h2>
+  <ul class="rules">
+    <li><b>Click a number</b> to run it. If one is already running, yours goes next.</li>
+    <li><b>Back to back</b> (the switch at the top): on, the next one starts as soon as one ends. Off, the 30-minute rule below.</li>
+    <li><b>No click for 30 minutes</b> after a task ends: the next one starts by itself. <b>From 1:00 AM</b>: the rest run one after another.</li>
+    <li><b>When all 34 runs are done</b>, the results page is made and opened.</li>
+    <li>Keep Agentic Coder closed while a task runs. All 34 back to back: about 45–60 minutes.</li>
+  </ul>
+  <h2>The grade rule (unchanged), on the 28 single runs</h2>
+  <div class="box"><table><thead><tr><th>Passed, of 28</th><th>Coding grade</th><th>Overall grade</th></tr></thead><tbody>
+  ${RULE.map((r) => `<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td></tr>`).join('')}
+  </tbody></table></div>
+  <p class="muted" style="margin-top:10px">Code under test: ${esc(S.code)}. So far: ${k.once} of 28 run, ${k.oncePass} passed.</p>`;
+}
+function itemStep(t) {
+  const i = S.tasks.indexOf(t) + 1, st = status(t);
+  const big = t.big ? `${t.big.pass ? 'Passed' : 'Failed'} <small>${t.big.secs ? `in ${t.big.secs} s` : 'at once'}</small>` : '—';
+  const before = t.before && (t.before.status === 'pass' || t.before.status === 'fail') ? `${t.before.status === 'pass' ? 'Passed' : 'Failed'} <small>in ${t.before.secs} s</small>` : '—';
+  let body = '';
+  if (st === 'running') {
+    const lines = (S.running.tail ?? []).map((l) => (/^(PASS|FAIL)/.test(l) ? `<b>${esc(l)}</b>` : /^\s/.test(l) ? esc(l.trim()) : `<span class="m">${esc(l)}</span>`));
+    body = `<h2>What Gemma is doing <span class="muted" style="font-weight:500">· ${dur(S.now - S.running.startedAt)}</span></h2><div class="term">${lines.join('\n') || '<span class="m">Starting Gemma…</span>'}</div>`;
+  } else if (st === 'pass' || st === 'fail') {
+    const r = t.result ?? {};
+    const fired = [t.fired?.guard && 'the guard doubted the tests', t.fired?.lost && 'the nothing-lost check sent it back', t.fired?.notDone && 'the done check sent it back'].filter(Boolean);
+    body = `<div class="result"><span class="big ${st}">${st === 'pass' ? 'Passed' : 'Failed'}</span><span class="muted">${clock(t.endedAt)}</span></div>
+    ${fired.length ? `<p><span class="tag blue">New checks</span> ${esc(fired.join('; '))}</p>` : ''}
+    <div class="facts">
+      <div class="fact"><div class="lab">Time</div><div class="val">${r.secs} <small>s</small></div></div>
+      <div class="fact"><div class="lab">Steps</div><div class="val">${r.steps ?? '—'} <small>${r.ownSteps != null ? `${r.ownSteps} its own` : ''}</small></div></div>
+      <div class="fact"><div class="lab">Model calls</div><div class="val">${r.modelCalls ?? '—'}</div></div>
+      <div class="fact"><div class="lab">Tool errors</div><div class="val">${r.toolErrors ?? 0}</div></div>
+    </div>
+    ${r.why ? `<h2>Why it failed</h2><div class="term">${esc(r.why)}${r.reason && r.reason !== 'done' ? `\n<span class="m">ended: ${esc(r.reason)}</span>` : ''}</div>` : ''}
+    ${r.answer ? `<h2>Gemma’s last words</h2><p>${esc(r.answer)}</p>` : ''}`;
+  } else if (st === 'error') {
+    body = `<div class="result"><span class="big error">Didn’t finish</span></div><p class="muted">The test itself broke, not Gemma’s answer. It gets one more try at the end.</p><div class="term">${esc(t.error ?? '')}</div>`;
+  } else if (st === 'queued') {
+    body = `<p><span class="tag blue">Next in line</span> It starts as soon as ${esc(item(S.running?.id)?.label ?? '')} ends.</p>`;
+  } else body = `<p class="muted">${t.stopped ? 'You stopped this one. ' : ''}Not run yet. Click its number, or the button below, to run it now.</p>`;
+  return `<div class="kicker">Run ${i} of ${S.tasks.length} · practice task ${t.n}${t.rep > 1 ? ` · repeat ${t.rep} of 3` : ''}</div>
+  <h1>${esc(t.name)}</h1>
+  <div class="ask"><div class="lab">What Gemma is asked</div>${esc(t.prompt)}</div>
+  <div class="facts"><div class="fact"><div class="lab">Before the guard (tonight)</div><div class="val">${before}</div></div><div class="fact"><div class="lab">The 27B, 27 Sep</div><div class="val">${big}</div></div></div>
+  ${body}`;
+}
+function reportStep() {
+  const k = counts();
+  if (S.done) return `<div class="kicker">Report</div><h1>The results are ready</h1><p>The 28 with the guard: <b>${k.oncePass} of 28</b> (before: 26). Repeats of 1, 14 and 18: ${k.repsPass} of ${k.reps}.</p><p><a class="btn go" style="display:inline-block;text-decoration:none" href="${BASE}/report" target="_blank">Open the results</a></p><p class="muted">Saved in gemma-docs/test as gemma-guard-results-2026-09-29.html.</p>`;
+  return `<div class="kicker">Report</div><h1>The results page comes when all 34 runs are done</h1><p>So far: the 28 with the guard, ${k.oncePass} of ${k.once} passed; repeats ${k.repsPass} of ${k.reps}.${k.flipped.length ? ` Changed since before the guard: ${k.flipped.map((t) => `${t.label} (${t.status === 'pass' ? 'now passes' : 'now fails'})`).join(', ')}.` : ''}</p><p class="muted">It builds itself and opens when the last run ends.</p>`;
+}
+function renderFoot() {
+  const list = steps(), i = list.indexOf(here);
+  $('back').disabled = i <= 0;
+  $('back').onclick = () => setHere(list[Math.max(0, i - 1)]);
+  const go = $('go'), stop = $('stop');
+  stop.classList.add('hide'); go.disabled = false;
+  const firstTodo = S.tasks.find((t) => ['todo', 'error'].includes(t.status) && S.running?.id !== t.id && !S.queue.includes(t.id));
+  if (here === 'start' || here === 'report') {
+    if (S.done && here === 'start') { go.textContent = 'See the results →'; go.onclick = () => setHere('report'); }
+    else if (here === 'report') { go.textContent = S.done ? 'Open the results' : 'Back to the start'; go.onclick = () => (S.done ? window.open(BASE + '/report', '_blank') : setHere('start')); }
+    else if (S.running) { go.textContent = `Watch ${item(S.running.id).label} →`; go.onclick = () => setHere(S.running.id); }
+    else if (firstTodo) { go.textContent = `Run ${firstTodo.label} now →`; go.onclick = () => runItem(firstTodo.id); }
+    else { go.textContent = 'All run'; go.disabled = true; }
+    return;
+  }
+  const t = item(here), st = status(t);
+  if (st === 'running') { go.textContent = 'Running'; go.disabled = true; stop.classList.remove('hide'); stop.onclick = async () => { if (confirm(`Stop ${t.label}? It goes back to “not run”, and automatic runs pause.`)) { await post('/api/stop'); load(); } }; }
+  else if (st === 'queued') { go.textContent = `Next after ${item(S.running?.id)?.label ?? ''}`; go.disabled = true; }
+  else if (st === 'todo' || st === 'error') { go.textContent = S.running ? `Run ${t.label} next` : `Run ${t.label} now`; go.onclick = () => runItem(t.id); }
+  else {
+    const idx = S.tasks.indexOf(t);
+    const nx = S.tasks.find((x, j) => j > idx && (['todo', 'error', 'running'].includes(status(x)) || S.queue.includes(x.id)));
+    go.textContent = nx ? `Next: ${nx.label} →` : 'To the results →'; go.onclick = () => setHere(nx ? nx.id : 'report');
+  }
+}
+function render() {
+  if (!S) return;
+  renderChips(); renderStatus();
+  $('step').innerHTML = here === 'start' ? startStep() : here === 'report' ? reportStep() : itemStep(item(here));
+  renderFoot();
+}
+$('chips').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.go) setHere(b.dataset.go); else if (b.dataset.run) runItem(b.dataset.run);
+});
+load(); setInterval(load, 2000);
+</script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Setup Check</title>
+<style>
+:root {
+  --bg: #f6f6f3; --card: #ffffff; --ink: #1d1d1f; --dim: #5d6168; --faint: #8b9098; --line: #e2e2dd;
+  --soft: #efefea; --arrow: #a9adb4;
+  --same-bg: #e5f4ea; --same-ink: #1b7342;
+  --better-bg: #e4eefc; --better-ink: #1c5bb3;
+  --look-bg: #fcefd8; --look-ink: #8f5500;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151619; --card: #1e1f23; --ink: #ececec; --dim: #a7aab1; --faint: #7c8089; --line: #2d2f35;
+    --soft: #25262b; --arrow: #5a5d65;
+    --same-bg: #16331f; --same-ink: #7fd49e;
+    --better-bg: #162946; --better-ink: #8db8ff;
+    --look-bg: #382810; --look-ink: #f2c06e;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151619; --card: #1e1f23; --ink: #ececec; --dim: #a7aab1; --faint: #7c8089; --line: #2d2f35;
+  --soft: #25262b; --arrow: #5a5d65;
+  --same-bg: #16331f; --same-ink: #7fd49e;
+  --better-bg: #162946; --better-ink: #8db8ff;
+  --look-bg: #382810; --look-ink: #f2c06e;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 64px; }
+h1 { font-size: 34px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
+.sub { color: var(--dim); margin: 0 0 26px; }
+h2 { font-size: 22px; margin: 46px 0 6px; letter-spacing: -0.005em; }
+h2 + p { margin-top: 0; color: var(--dim); }
+code { font: 13.5px/1.4 ui-monospace, "SF Mono", Menlo, monospace; background: var(--soft); padding: 1px 5px; border-radius: 5px; }
+
+/* Verdict */
+.verdict { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; }
+.verdict .big { font-size: 21px; font-weight: 650; margin: 0 0 6px; }
+.verdict p { margin: 0 0 14px; }
+.counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }
+.count { border-radius: 12px; padding: 12px 14px; }
+.count b { display: block; font-size: 28px; line-height: 1.1; }
+.count span { font-size: 14px; }
+.count.same { background: var(--same-bg); color: var(--same-ink); }
+.count.better { background: var(--better-bg); color: var(--better-ink); }
+.count.look { background: var(--look-bg); color: var(--look-ink); }
+
+/* The five parts */
+.flow { display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr 28px 1fr; align-items: stretch; margin-top: 14px; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 14px 12px; }
+.box .num { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; align-items: center; justify-content: center;
+  background: var(--soft); color: var(--dim); font-size: 13px; font-weight: 650; margin-bottom: 6px; }
+.box b { display: block; font-size: 16px; }
+.box span { display: block; color: var(--dim); font-size: 14px; line-height: 1.35; margin-top: 2px; }
+.box.app { background: transparent; border-style: dashed; }
+.arrow { display: flex; align-items: center; justify-content: center; color: var(--arrow); font-size: 20px; }
+.arrow::before { content: "→"; }
+.flow-note { color: var(--dim); margin: 10px 0 0; font-size: 15px; }
+
+/* The comparison grid */
+.grid { margin-top: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 210px minmax(0, 1fr) 108px minmax(0, 1fr); border-top: 1px solid var(--line); }
+.row > div { padding: 13px 16px; }
+.row.head { border-top: 0; background: var(--soft); font-size: 13px; font-weight: 650; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+.row.head > div { padding-top: 10px; padding-bottom: 10px; }
+.row.group { background: var(--soft); display: block; padding: 8px 16px; font-size: 13px; font-weight: 650; color: var(--dim); }
+.part b { display: block; }
+.part small { display: block; color: var(--faint); font-size: 13.5px; line-height: 1.35; margin-top: 2px; }
+.cell { font-size: 15px; line-height: 1.45; }
+.cell .who { display: none; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--faint); margin-bottom: 2px; }
+.cell .note { display: block; color: var(--dim); font-size: 14px; margin-top: 4px; }
+.mid { display: flex; align-items: flex-start; justify-content: center; }
+.tag { display: inline-block; font-size: 13px; font-weight: 650; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.tag.same { background: var(--same-bg); color: var(--same-ink); }
+.tag.better { background: var(--better-bg); color: var(--better-ink); }
+.tag.look { background: var(--look-bg); color: var(--look-ink); }
+
+/* Fixes */
+.fixes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.fix { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+.fix h3 { margin: 0 0 8px; font-size: 18px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.fix dl { margin: 0; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; font-size: 15px; }
+.fix dt { color: var(--faint); font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 2px; white-space: nowrap; }
+.fix dd { margin: 0; }
+.opts { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.opts li { background: var(--soft); border-radius: 10px; padding: 8px 12px; font-size: 14.5px; }
+.opts li b { font-weight: 650; }
+
+/* Numbers */
+table { width: 100%; border-collapse: collapse; margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; font-size: 15px; }
+th, td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; background: var(--soft); font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+td.src { color: var(--dim); font-size: 14px; }
+
+.notes { margin-top: 40px; color: var(--dim); font-size: 14px; }
+.notes ol { padding-left: 20px; }
+.notes a { color: inherit; }
+.paths { font: 12.5px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--faint); word-break: break-all; }
+
+@media (max-width: 980px) {
+  .flow { grid-template-columns: 1fr; gap: 0; }
+  .arrow { height: 26px; }
+  .arrow::before { content: "↓"; }
+}
+@media (max-width: 820px) {
+  .wrap { padding: 28px 16px 48px; }
+  h1 { font-size: 28px; }
+  .row { grid-template-columns: 1fr; }
+  .row.head { display: none; }
+  .row > div { padding: 6px 16px; }
+  .row > .part { padding-top: 14px; }
+  .row > .cell.ours { padding-bottom: 14px; }
+  .mid { justify-content: flex-start; order: 2; }
+  .cell.theirs { order: 3; }
+  .cell.ours { order: 4; }
+  .cell .who { display: block; }
+  .fixes { grid-template-columns: 1fr; }
+  .counts { gap: 8px; }
+  .count { padding: 10px 12px; }
+  .count b { font-size: 24px; }
+  .fix dl { grid-template-columns: 1fr; gap: 2px; }
+  .fix dd { margin-bottom: 8px; }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead tr { display: none; }
+  table { border-radius: 14px; }
+  tr { border-top: 1px solid var(--line); padding: 8px 0; }
+  tr:first-child { border-top: 0; }
+  td { border-top: 0; padding: 2px 14px; }
+  td.num { white-space: normal; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Our Gemma setup vs the basic setup others use</h1>
+<p class="sub">The model only, not the agent around it. Checked on this Mac, 28 Sep 2026, from the code, the server log and the model file itself, against Google's Gemma 4 guide and Ollama's defaults.</p>
+
+<div class="verdict">
+  <p class="big">Yes, it's built the standard way. Every basic part is there, and three are set up better than Ollama's defaults. Two things are worth changing.</p>
+  <p>The model file, the chat rules and the sampling numbers match Google's guide exactly. The two to look at: the <b>engine</b> is a special build left over from the old Bonsai model, and the <b>memory size</b> is set by hand to the maximum, and a size set by hand is only warned about, never lowered.</p>
+  <div class="counts">
+    <div class="count same"><b>6</b><span>parts the same as the basic setup</span></div>
+    <div class="count better"><b>3</b><span>parts better than Ollama's defaults</span></div>
+    <div class="count look"><b>2</b><span>parts to look at</span></div>
+  </div>
+</div>
+
+<h2>The basic structure: five parts</h2>
+<p>Every local model setup has the same five parts, whatever the tool. Ollama, LM Studio and plain llama.cpp all do. So does ours: nothing is missing.</p>
+<div class="flow" aria-label="The five parts of a local model setup, in order">
+  <div class="box"><div class="num">1</div><b>Model file</b><span>The weights: billions of numbers in one file.</span></div>
+  <div class="arrow" aria-hidden="true"></div>
+  <div class="box"><div class="num">2</div><b>Engine</b><span>Does the math on the Mac's graphics chip.</span></div>
+  <div class="arrow" aria-hidden="true"></div>
+  <div class="box"><div class="num">3</div><b>Server</b><span>Keeps it loaded and answers requests.</span></div>
+  <div class="arrow" aria-hidden="true"></div>
+  <div class="box"><div class="num">4</div><b>Chat rules</b><span>How messages are written for it, and how it picks words.</span></div>
+  <div class="arrow" aria-hidden="true"></div>
+  <div class="box app"><div class="num">5</div><b>Your app</b><span>Sends messages, gets words back. Not part of this check.</span></div>
+</div>
+<p class="flow-note">Below, each part is split into its pieces and put side by side: the common way (Ollama) on the left, ours on the right.</p>
+
+<h2>Side by side</h2>
+<p>Each row is the same piece in both setups. The tag in the middle says how ours compares.</p>
+<div class="grid" role="table" aria-label="Ollama compared with our setup, piece by piece">
+  <div class="row head" role="row">
+    <div role="columnheader">Piece</div>
+    <div role="columnheader">The basic setup (Ollama)</div>
+    <div role="columnheader" style="text-align:center">Ours is</div>
+    <div role="columnheader">Ours (Agentic Coder + Gemma)</div>
+  </div>
+
+  <div class="row group">1 · Model file</div>
+  <div class="row" role="row">
+    <div class="part"><b>The model file</b><small>the weights</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span><code>ollama pull</code> downloads a Gemma file, usually a 4-bit version, into its own folder.</div>
+    <div class="mid"><span class="tag same">Same</span></div>
+    <div class="cell ours"><span class="who">Ours</span>Gemma 4 12B in Google's own 4-bit "QAT" version, which Google trained to stay accurate at 4-bit. 6.7 GB, checked against its fingerprint after download.</div>
+  </div>
+  <div class="row" role="row">
+    <div class="part"><b>The recipe</b><small>one settings file per model</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>A "Modelfile": which file, its chat template and its sampling numbers.</div>
+    <div class="mid"><span class="tag same">Same</span></div>
+    <div class="cell ours"><span class="who">Ours</span>One settings file per model: which file, sampling, thinking, and how its memory is laid out, which the app uses to size the memory.</div>
+  </div>
+
+  <div class="row group">2 · Engine</div>
+  <div class="row" role="row">
+    <div class="part"><b>The engine</b><small>does the math on the graphics chip</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>Ollama's own engine, built on llama.cpp's core library and updated with each Ollama release.</div>
+    <div class="mid"><span class="tag look">Look at</span></div>
+    <div class="cell ours"><span class="who">Ours</span>llama.cpp, but Prism ML's special version plus our own patch, both made for the retired Bonsai model's file format. Gemma uses neither.<span class="note">It is 625 changes behind the official llama.cpp: it last caught up on 25 Aug.</span></div>
+  </div>
+
+  <div class="row group">3 · Server</div>
+  <div class="row" role="row">
+    <div class="part"><b>The server</b><small>keeps it loaded, answers requests</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>Unloads the model after 5 minutes unused and handles one request at a time. Talks the common OpenAI-style chat language.</div>
+    <div class="mid"><span class="tag same">Same</span></div>
+    <div class="cell ours"><span class="who">Ours</span>Stays loaded 30 minutes after the last window closes, and two windows can use it at once. Talks the same OpenAI-style chat language.</div>
+  </div>
+  <div class="row" role="row">
+    <div class="part"><b>Memory size</b><small>how much conversation it can hold</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>4,096 tokens by default on a 16 GB Mac. That's too small for a coding agent, so guides tell you to raise it.</div>
+    <div class="mid"><span class="tag look">Look at</span></div>
+    <div class="cell ours"><span class="who">Ours</span>Normally picked by the app from free memory: 32k, or 16k when memory is short. Right now it's set by hand to 262,144, the model's maximum. A size set by hand is checked only at startup, and then it only warns.</div>
+  </div>
+  <div class="row" role="row">
+    <div class="part"><b>Memory saving</b><small>how the held conversation is stored</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>A 16-bit store by default. Flash attention, a faster, leaner way to do the math, turns on by itself.</div>
+    <div class="mid"><span class="tag better">Better</span></div>
+    <div class="cell ours"><span class="who">Ours</span>An 8-bit store, about half the memory with no noticeable loss. Flash attention is on, and both windows share one store.</div>
+  </div>
+  <div class="row" role="row">
+    <div class="part"><b>Speed tricks</b><small>not re-reading what it already read</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>Remembers what it already read while the model stays loaded.</div>
+    <div class="mid"><span class="tag better">Better</span></div>
+    <div class="cell ours"><span class="who">Ours</span>The same, and the instructions it reads at the start are also saved to disk and restored after a restart, with 3 restore points.<span class="note">A speed helper that guesses ahead (MTP) is being tested by another session right now.</span></div>
+  </div>
+
+  <div class="row group">4 · Chat rules</div>
+  <div class="row" role="row">
+    <div class="part"><b>Chat template</b><small>how messages, tools and thinking are written for it</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>Ollama's own copy of the template, rewritten in Ollama's format.</div>
+    <div class="mid"><span class="tag same">Same</span></div>
+    <div class="cell ours"><span class="who">Ours</span>Google's own template, read straight from the model file. It drops old thinking from earlier turns, exactly as Google's guide asks.</div>
+  </div>
+  <div class="row" role="row">
+    <div class="part"><b>Sampling</b><small>how it picks each next word</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>Set in the Modelfile.</div>
+    <div class="mid"><span class="tag same">Same</span></div>
+    <div class="cell ours"><span class="who">Ours</span>Temperature 1.0 · top-p 0.95 · top-k 64: exactly Google's recommended numbers.</div>
+  </div>
+  <div class="row" role="row">
+    <div class="part"><b>Thinking</b><small>working it out before answering</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span>A switch: on or off.</div>
+    <div class="mid"><span class="tag better">Better</span></div>
+    <div class="cell ours"><span class="who">Ours</span>On at High effort, off at Low. It's capped at 8,192 thinking tokens; then the server tells it "I have thought enough. Now I act on it."<span class="note">The cost: at about 12 tokens a second, that cap allows up to 11 minutes of thinking per step.</span></div>
+  </div>
+
+  <div class="row group">+ Search model (a second, small model)</div>
+  <div class="row" role="row">
+    <div class="part"><b>Finding by meaning</b><small>for memory notes and code search</small></div>
+    <div class="cell theirs"><span class="who">Ollama</span><code>ollama pull bge-m3</code>, served by the same Ollama.</div>
+    <div class="mid"><span class="tag same">Same</span></div>
+    <div class="cell ours"><span class="who">Ours</span>The same bge-m3 model, on its own small server beside Gemma, with the setting bge-m3 is meant to use.</div>
+  </div>
+</div>
+
+<h2>The two things to look at</h2>
+<p>Neither is broken today. Both are choices worth making on purpose.</p>
+<div class="fixes">
+  <div class="fix">
+    <h3>The engine <span class="tag look">Look at</span></h3>
+    <dl>
+      <dt>What</dt><dd>A special build of llama.cpp that was made for Bonsai. Gemma gets nothing from it, and it misses 625 official changes from the last month.</dd>
+      <dt>Why</dt><dd>Google's guide says to run Gemma 4 on the latest llama.cpp, because fixes for new models land there first.</dd>
+      <dt>Would do</dt><dd>Build the official llama.cpp beside the current one (each build has its own folder, so nothing is replaced). Run the same speed test and a few practice tasks on both, and keep the faster one.</dd>
+      <dt>Cost</dt><dd>About 3 minutes to build and about 1 hour of Gemma test runs. First check that the MTP speed helper being tested works on the official build too.</dd>
+    </dl>
+  </div>
+  <div class="fix">
+    <h3>Memory size <span class="tag look">Look at</span></h3>
+    <dl>
+      <dt>What</dt><dd>Set by hand to 262,144 tokens, the model's maximum. At startup the app checks it fits, but only warns and uses it anyway. After a restart from /increase or /model it isn't checked at all.</dd>
+      <dt>Why</dt><dd>By the app's own math, that takes about 10.6 GB of your 16 GB, against 8.6 GB at 32k. And when what it read can't be reused, for example after a trim, it reads everything again at about 120 tokens a second: 32k takes 4½ minutes, 200k takes 28.</dd>
+      <dt>Your call</dt><dd>
+        <ul class="opts">
+          <li><b>Automatic (32k)</b>: the app picks from free memory again.</li>
+          <li><b>64k</b>: a middle size, about 8.9 GB.</li>
+          <li><b>Keep 256k</b>: the most room, and the costs above.</li>
+        </ul>
+      </dd>
+    </dl>
+  </div>
+</div>
+
+<h2>The numbers behind this</h2>
+<p>Measured on this Mac today, or read from the source named.</p>
+<table>
+  <thead><tr><th>What</th><th>Number</th><th>From</th></tr></thead>
+  <tbody>
+    <tr><td>Reading speed (taking in text)</td><td class="num">116–136 tokens/s</td><td class="src">server log, today's runs</td></tr>
+    <tr><td>Writing speed (making its answer)</td><td class="num">11–13 tokens/s</td><td class="src">server log, today's runs</td></tr>
+    <tr><td>Memory sizes the app started with today</td><td class="num">16k · 128k · 64k · 256k</td><td class="src">server log</td></tr>
+    <tr><td>Memory used at 256k / 64k / 32k</td><td class="num">10.6 / 8.9 / 8.6 GB</td><td class="src">the app's own memory math</td></tr>
+    <tr><td>Our engine</td><td class="num">Prism build 10743 (25 Sep)</td><td class="src">the engine's own version line</td></tr>
+    <tr><td>Official llama.cpp</td><td class="num">v0.5.0 (23 Sep), 625 changes ahead</td><td class="src">GitHub</td></tr>
+    <tr><td>Google's sampling for Gemma 4</td><td class="num">1.0 · 0.95 · 64</td><td class="src">Unsloth's Gemma 4 guide</td></tr>
+    <tr><td>Gemma 4 12B's longest memory</td><td class="num">262,144 tokens</td><td class="src">the model file and the guide</td></tr>
+    <tr><td>Ollama's default memory size</td><td class="num">4,096 tokens</td><td class="src">Ollama's FAQ</td></tr>
+  </tbody>
+</table>
+
+<div class="notes">
+  <b>Notes</b>
+  <ol>
+    <li>"Ollama" stands for the common way here. LM Studio and plain llama.cpp have the same five parts; only the names change.</li>
+    <li>The Gemma server running right now (started 18:11) is another session's speed test: it loads the MTP helper and uses different limits. This page describes your app's own setup.</li>
+    <li>Newer Ollama versions pick the memory size from the graphics memory. Below 23 GB that's still 4,096 tokens, so the row is the same on this Mac.</li>
+    <li>The 10.6 GB figure is the app's own estimate: the file, plus the stored conversation, plus 3 restore points for each of the 2 windows.</li>
+    <li>Sources: <a href="https://docs.ollama.com/faq">Ollama FAQ</a> · <a href="https://unsloth.ai/docs/models/gemma-4">Unsloth: Gemma 4, how to run locally</a> · <a href="https://modelpiper.com/blog/ollama-environment-variables">Ollama settings reference (memory by graphics memory)</a> · GitHub's comparison of Prism's commit with official llama.cpp.</li>
+  </ol>
+  <p class="paths">Checked: models/gemma-4-12b/model.mjs · models/runtime/server.mjs · models/runtime/memory.mjs · models/registry.mjs · ~/.agentic-coder/settings.json · ~/.agentic-coder/logs/server.log · the chat template inside gemma-4-12B-it-qat-UD-Q4_K_XL.gguf</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Engine Speed Test</title>
+<style>
+:root { --bg:#f6f6f3; --card:#fff; --ink:#1d1d1f; --dim:#5d6168; --faint:#8b9098; --line:#e2e2dd; --soft:#efefea; --best:#e5f4ea; --best-ink:#1b7342; --up:#1b7342; --down:#b3261e; --flat:#5d6168; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#151619; --card:#1e1f23; --ink:#ececec; --dim:#a7aab1; --faint:#7c8089; --line:#2d2f35; --soft:#25262b; --best:#16331f; --best-ink:#7fd49e; --up:#7fd49e; --down:#f28b82; --flat:#a7aab1; } }
+:root[data-theme="dark"] { --bg:#151619; --card:#1e1f23; --ink:#ececec; --dim:#a7aab1; --faint:#7c8089; --line:#2d2f35; --soft:#25262b; --best:#16331f; --best-ink:#7fd49e; --up:#7fd49e; --down:#f28b82; --flat:#a7aab1; }
+* { box-sizing: border-box; } html { -webkit-text-size-adjust: 100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 40px 24px 64px; }
+h1 { font-size: 32px; line-height: 1.15; margin: 0 0 6px; } .sub { color: var(--dim); margin: 0 0 24px; }
+h2 { font-size: 21px; margin: 40px 0 6px; } h2 + p { margin-top: 0; color: var(--dim); }
+.verdict { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+.verdict .big { font-size: 20px; font-weight: 650; margin: 0 0 8px; } .verdict p { margin: 0; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.card { background: var(--soft); border-radius: 12px; padding: 12px 14px; } .card b { display:block; font-size: 24px; line-height: 1.15; } .card span { font-size: 14px; color: var(--dim); }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; font-size: 15px; }
+th, td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--line); } thead th { border-top: 0; background: var(--soft); font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; } td.best { background: var(--best); color: var(--best-ink); font-weight: 650; }
+td.up { color: var(--up); font-weight: 600; } td.down { color: var(--down); font-weight: 600; } td.flat { color: var(--flat); }
+.ok { color: var(--up); font-weight: 700; } .card b .ok, .card b .no { font-size: 24px; } .no { color: var(--down); font-weight: 700; }
+.notes { margin-top: 36px; color: var(--dim); font-size: 14px; } .notes ol { padding-left: 20px; }
+.paths { font: 12.5px/1.6 ui-monospace, "SF Mono", Menlo, monospace; color: var(--faint); word-break: break-all; }
+@media (max-width: 640px) { .wrap { padding: 28px 16px 48px; } h1 { font-size: 26px; } .cards { grid-template-columns: 1fr; } th, td { padding: 8px 10px; } }
+</style></head><body><div class="wrap">
+<h1>Engine speed test: official llama.cpp vs Prism's build</h1>
+<p class="sub">Gemma 4 12B on this Mac, 28 Sep 2026. Same model, same settings as the app (32k, two slots, 8-bit cache), one engine at a time, the four prompts the speed-probe round used.</p>
+<div class="verdict">
+  <p class="big">Keep Prism's build for now: it writes 5% faster with the helpers.</p>
+  <p>With the app's two speed helpers on, Prism's build averaged <b>16.7</b> words a second and the official build <b>15.9</b> (-4.7%). Tool calls and thinking worked on both.</p>
+  <div class="cards">
+    <div class="card"><b>16.7 → 15.9</b><span>words/s with helpers, Prism → official</span></div>
+    <div class="card"><b>7.4 → 7.4 GB</b><span>memory in use, Prism → official</span></div>
+    <div class="card"><b><span class="ok">✓</span> <span class="ok">✓</span></b><span>official: tool call · thinking</span></div>
+  </div>
+</div>
+
+<h2>Writing speed, with the app's speed helpers</h2>
+<p>Words a second while writing the answer (higher is better). MTP guesser + copy guesser on, as the app runs.</p>
+<table><thead><tr><th>Prompt</th><th class="num">Prism</th><th class="num">Official</th><th class="num">Change</th></tr></thead><tbody><tr><td>Edit a function</td><td class="num best">23.5</td><td class="num">21.9</td><td class="num down">-7%</td></tr><tr><td>New code</td><td class="num best">15.7</td><td class="num">14.4</td><td class="num down">-8%</td></tr><tr><td>Prose</td><td class="num best">13.5</td><td class="num">13.3</td><td class="num flat">-2%</td></tr><tr><td>Thinking</td><td class="num best">14.2</td><td class="num">14.1</td><td class="num flat">-1%</td></tr></tbody></table>
+
+<h2>Writing speed, plain</h2>
+<p>No speed helpers: the engines' own speed.</p>
+<table><thead><tr><th>Prompt</th><th class="num">Prism</th><th class="num">Official</th><th class="num">Change</th></tr></thead><tbody><tr><td>Edit a function</td><td class="num">12.5</td><td class="num">12.5</td><td class="num flat">0%</td></tr><tr><td>New code</td><td class="num best">13.3</td><td class="num">13.2</td><td class="num flat">-1%</td></tr><tr><td>Prose</td><td class="num">13.1</td><td class="num best">13.3</td><td class="num flat">+1%</td></tr><tr><td>Thinking</td><td class="num">12.9</td><td class="num best">13.0</td><td class="num flat">+1%</td></tr></tbody></table>
+
+<h2>Everything else</h2>
+<table><thead><tr><th>Measure</th><th class="num">Prism</th><th class="num">Official</th></tr></thead><tbody>
+<tr><td>Reading a long prompt (tokens/s, the edit prompt, plain)</td><td class="num best">136.0</td><td class="num">124.5</td></tr>
+<tr><td>Memory in use, plain (GB)</td><td class="num best">6.8</td><td class="num">7.3</td></tr>
+<tr><td>Memory in use, with helpers (GB)</td><td class="num">7.4</td><td class="num">7.4</td></tr>
+<tr><td>Guesses kept, edit prompt</td><td class="num">243 of 458</td><td class="num">243 of 458</td></tr>
+<tr><td>Tool call comes back as a tool call</td><td class="num"><span class="ok">✓</span></td><td class="num"><span class="ok">✓</span></td></tr>
+<tr><td>Thinking comes back apart, answer right (17 × 23)</td><td class="num"><span class="ok">✓</span></td><td class="num"><span class="ok">✓</span></td></tr>
+</tbody></table>
+
+<div class="notes"><b>Notes</b><ol>
+<li>One run per prompt and engine: differences under about 3% are noise (the rule treats them as a tie).</li>
+<li>The rule was set before the official build's helper runs came in: switch if it is at least 3% faster; keep Prism if Prism is; on a tie, keep Prism if the official build needs 0.3 GB or more extra memory, otherwise switch, since the official build gets Gemma's fixes first. Either way the other build stays on the Mac, and <code>AGENTIC_ENGINE=prism</code> or <code>=official</code> switches back.</li>
+<li>Memory is what the server process holds (its resident size), sampled after each prompt.</li>
+<li>Prism: build 10743, commit adfffbe (25 Sep), with our patch for the Bonsai file format, which Gemma does not use. Official: llama.cpp v0.5.0, build 11146, commit 7fe450e (23 Sep).</li>
+</ol>
+<p class="paths">Raw: agentic-coder/models/gemma-4-12b/results/engine-compare-2026-09-28/ (runs.jsonl, server logs, compare.mjs, build-page.mjs)</p></div>
+</div></body></html>

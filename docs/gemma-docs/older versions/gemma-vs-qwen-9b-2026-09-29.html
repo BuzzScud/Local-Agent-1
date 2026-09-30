@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gemma vs Qwen 9B</title>
+<style>
+:root{--bg:#fcfcfb;--ink:#1d1d1b;--ink2:#5c5b57;--mut:#8a8984;--line:#e4e3de;--card:#ffffff;--gemma:#2a78d6;--qwen:#eb6834;--gemma-t:#2a78d61f;--qwen-t:#eb68341f;--win:#e8f3e8;--grid:#ecebe7;
+--file:#8b8a85;--cache:var(--x);--state:#c9c8c2;--helper:#6f5bd1}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1a1a19;--ink:#ecebe7;--ink2:#b3b2ad;--mut:#8a8984;--line:#34342f;--card:#222220;--gemma:#3987e5;--qwen:#d95926;--gemma-t:#3987e526;--qwen-t:#d9592626;--win:#1f3322;--grid:#2c2c29;--file:#77766f;--state:#4a4a45;--helper:#8b7ae0}}
+:root[data-theme=dark]{--bg:#1a1a19;--ink:#ecebe7;--ink2:#b3b2ad;--mut:#8a8984;--line:#34342f;--card:#222220;--gemma:#3987e5;--qwen:#d95926;--gemma-t:#3987e526;--qwen-t:#d9592626;--win:#1f3322;--grid:#2c2c29;--file:#77766f;--state:#4a4a45;--helper:#8b7ae0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
+h1{font-size:30px;line-height:1.2;margin:0 0 4px}
+.sub{color:var(--ink2);margin:0 0 16px}
+.verdict{font-size:17px;max-width:860px;margin:0 0 28px}
+h2{font-size:20px;margin:40px 0 12px}
+h3{margin:0;font-size:19px}
+h4{margin:18px 0 8px;font-size:14px;color:var(--ink2);font-weight:600}
+h4 small{font-weight:400;color:var(--mut)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+.panel header{display:flex;gap:12px;align-items:center}
+.panel header p{margin:0;color:var(--ink2);font-size:14px}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}
+.gemma .dot{background:var(--gemma)}.qwen .dot{background:var(--qwen)}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0 0}
+.kv div{background:var(--bg);border-radius:10px;padding:10px 12px}
+.kv dt{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.kv dd{margin:2px 0 0;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.kv small{font-size:12px;font-weight:400;color:var(--ink2);display:block}
+.stack{display:grid;gap:4px}
+.blk{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:3px}
+.blk i{height:14px;border-radius:3px}
+.gemma .blk i.fixed{background:var(--gemma-t);box-shadow:inset 0 0 0 1px var(--gemma)}
+.qwen .blk i.fixed{background:var(--qwen-t);box-shadow:inset 0 0 0 1px var(--qwen)}
+.gemma .blk i.full{background:var(--gemma)}.qwen .blk i.full{background:var(--qwen)}
+.stack-cap{font-size:13px;color:var(--ink2);margin:8px 0 0}
+.bar{display:flex;gap:2px;height:22px;background:var(--grid);border-radius:6px;overflow:hidden}
+.seg{height:100%}.seg.file{background:var(--file)}.seg.state{background:var(--state)}.seg.helper{background:var(--helper)}
+.gemma .seg.cache{background:var(--gemma)}.qwen .seg.cache{background:var(--qwen)}
+.bar-legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--ink2);margin-top:8px}
+.bar-legend .tot{margin-left:auto;color:var(--ink);font-weight:600}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.sw.file{background:var(--file)}.sw.state{background:var(--state)}.sw.helper{background:var(--helper)}
+.gemma .sw.cache{background:var(--gemma)}.qwen .sw.cache{background:var(--qwen)}
+.key{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin:12px 0 0}
+.key i{display:inline-block;width:18px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+.key .k-full{background:var(--ink2)}.key .k-fixed{box-shadow:inset 0 0 0 1px var(--ink2)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+th,td{padding:10px 14px;text-align:left;vertical-align:top;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+thead th{border-top:0;font-size:14px;color:var(--ink2)}
+thead th .dot{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:0}
+.cmp th:first-child{width:300px;font-weight:500}
+.cmp th small{display:block;color:var(--mut);font-weight:400;font-size:13px}
+td small{color:var(--ink2);font-size:13px}
+tr.grp th{background:var(--bg);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding:8px 14px}
+td.win{background:var(--win);font-weight:600}
+.na{color:var(--mut)}
+.muted{color:var(--mut);font-size:14px}
+.chart{width:100%;height:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
+.chart .grid{stroke:var(--grid)}.chart .ax{fill:var(--mut);font-size:12px}
+.chart .ref{stroke:var(--mut);stroke-dasharray:4 4}
+.chart .ln{fill:none;stroke-width:2.5}.chart .ln.gemma{stroke:var(--gemma)}.chart .ln.qwen{stroke:var(--qwen)}
+.chart .pt{stroke:var(--card);stroke-width:2}.chart .pt.gemma{fill:var(--gemma)}.chart .pt.qwen{fill:var(--qwen)}
+.chart .meas{fill:var(--card);stroke-width:2.5}.chart .meas.gemma{stroke:var(--gemma)}.chart .meas.qwen{stroke:var(--qwen)}
+.chart .lab{font-size:13px;font-weight:600;fill:var(--ink)}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--ink2);margin:8px 0 0;flex-wrap:wrap}
+.legend b{display:inline-block;width:18px;height:3px;vertical-align:4px;margin-right:6px}
+.legend .lg{background:var(--gemma)}.legend .lq{background:var(--qwen)}
+.legend .lm{width:10px;height:10px;border:2.5px solid var(--ink2);border-radius:2px;background:none;vertical-align:-1px}
+.notes{color:var(--ink2);font-size:15px;padding-left:20px}
+.notes li{margin:6px 0}
+.src{font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mut);word-break:break-all;margin-top:28px}
+@media (max-width:760px){main{padding:20px 16px 48px}.pair{grid-template-columns:1fr}.cmp th:first-child{width:auto}th,td{padding:8px 10px}.kv dd{font-size:17px}}
+</style></head><body><main>
+<h1>Gemma 4 12B vs Qwen3.5 9B</h1>
+<p class="sub">The two models in Agentic Coder's /model, side by side · 29 Sep 2026</p>
+<p class="verdict">Same file size and the same app limits. Qwen is smaller (9B vs 12B), reads prompts faster and loads quickly, but has no speed helper and its cache costs about twice as much per token, so it uses <b>less</b> memory up to about 223k tokens and <b>more</b> past that. Gemma has our B grade on the 28 tasks; Qwen has not been graded yet.</p>
+
+<div class="pair">
+<section class="panel gemma">
+    <header><span class="dot"></span><div><h3>Gemma 4 12B QAT</h3><p>Google · Gemma 4 · quantization-aware 4-bit</p></div></header>
+    <dl class="kv">
+      <div><dt>Parameters</dt><dd>12B</dd></div>
+      <div><dt>File</dt><dd>6.7 GB <small>4-bit QAT</small></dd></div>
+      <div><dt>Max context</dt><dd>256k <small>tokens</small></dd></div>
+      <div><dt>Cache per token</dt><dd>8.7 KB</dd></div>
+    </dl>
+    <h4>Layers <small>48 = 8 blocks of 6</small></h4>
+    <div class="stack gemma"><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:6"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div></div><p class="stack-cap">Each row: 5 sliding-window layers + 1 layer that keeps every token</p>
+    <h4>Memory at your context (64k)</h4>
+    <div class="bar" role="img" aria-label="Gemma 4 12B QAT: 9.8 GB of 16 GB at 64k">
+    <span class="seg file" style="width:41.97723%" title="Model file: 6.7 GB"></span><span class="seg cache" style="width:3.5651584%" title="Cache for 64k: 0.6 GB"></span><span class="seg state" style="width:9.9375%" title="Running state + working space: 1.6 GB"></span><span class="seg helper" style="width:5.7819328%" title="Speed helper (MTP): 0.9 GB"></span>
+  </div>
+  <div class="bar-legend"><span><b class="sw file"></b>file 6.7</span><span><b class="sw cache"></b>cache 0.6</span><span><b class="sw state"></b>state + work 1.6</span><span><b class="sw helper"></b>helper 0.9</span><span class="tot">9.8 of 16 GB</span></div>
+  </section>
+<section class="panel qwen">
+    <header><span class="dot"></span><div><h3>Qwen3.5 9B</h3><p>Alibaba Qwen · Qwen3.5 · Feb 2026</p></div></header>
+    <dl class="kv">
+      <div><dt>Parameters</dt><dd>9B</dd></div>
+      <div><dt>File</dt><dd>6.7 GB <small>5-bit</small></dd></div>
+      <div><dt>Max context</dt><dd>256k <small>tokens</small></dd></div>
+      <div><dt>Cache per token</dt><dd>17.4 KB</dd></div>
+    </dl>
+    <h4>Layers <small>32 = 8 blocks of 4</small></h4>
+    <div class="stack qwen"><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div><div class="blk" style="--n:4"><i class="fixed"></i><i class="fixed"></i><i class="fixed"></i><i class="full"></i></div></div><p class="stack-cap">Each row: 3 DeltaNet layers + 1 layer that keeps every token</p>
+    <h4>Memory at your context (64k)</h4>
+    <div class="bar" role="img" aria-label="Qwen3.5 9B: 8.4 GB of 16 GB at 64k">
+    <span class="seg file" style="width:42.1480014%" title="Model file: 6.7 GB"></span><span class="seg cache" style="width:7.1303168%" title="Cache for 64k: 1.1 GB"></span><span class="seg state" style="width:3.4375000000000004%" title="Running state + working space: 0.6 GB"></span>
+  </div>
+  <div class="bar-legend"><span><b class="sw file"></b>file 6.7</span><span><b class="sw cache"></b>cache 1.1</span><span><b class="sw state"></b>state + work 0.6</span><span class="tot">8.4 of 16 GB</span></div>
+  </section>
+</div>
+<div class="key"><span><i class="k-full"></i>keeps every token (its cache grows with the context)</span><span><i class="k-fixed"></i>fixed size, whatever the context</span></div>
+
+<h2>Memory by context size</h2>
+<svg viewBox="0 0 760 320" class="chart" role="img" aria-label="Memory each model takes by context size">
+    <line x1="48" x2="640" y1="280" y2="280" class="grid"/><text x="40" y="284" class="ax" text-anchor="end">0</text><line x1="48" x2="640" y1="214" y2="214" class="grid"/><text x="40" y="218" class="ax" text-anchor="end">4</text><line x1="48" x2="640" y1="148" y2="148" class="grid"/><text x="40" y="152" class="ax" text-anchor="end">8</text><line x1="48" x2="640" y1="82" y2="82" class="grid"/><text x="40" y="86" class="ax" text-anchor="end">12</text><line x1="48" x2="640" y1="16" y2="16" class="grid"/><text x="40" y="20" class="ax" text-anchor="end">16</text><text x="48" y="298" class="ax" text-anchor="middle">16k</text><text x="196" y="298" class="ax" text-anchor="middle">32k</text><text x="344" y="298" class="ax" text-anchor="middle">64k</text><text x="492" y="298" class="ax" text-anchor="middle">128k</text><text x="640" y="298" class="ax" text-anchor="middle">256k</text>
+    <text x="48" y="316" class="ax">context (tokens)</text>
+    <text x="8" y="12" class="ax">GB</text>
+    <line x1="48" x2="640" y1="148" y2="148" class="ref"/>
+    <text x="646" y="152" class="ax">~8 GB free at a</text><text x="646" y="166" class="ax">typical start</text>
+    <path d="M48.0,125.3 L196.0,123.0 L344.0,118.3 L492.0,108.9 L640.0,90.0" class="ln gemma"/><path d="M48.0,154.9 L196.0,150.2 L344.0,140.8 L492.0,122.0 L640.0,84.4" class="ln qwen"/>
+    <circle cx="48" cy="125.32780566400001" r="4.5" class="pt gemma"><title>Gemma 4 12B QAT at 16k: 9.4 GB (estimate)</title></circle><circle cx="196" cy="122.97480112000001" r="4.5" class="pt gemma"><title>Gemma 4 12B QAT at 32k: 9.5 GB (estimate)</title></circle><circle cx="344" cy="118.26879203200001" r="4.5" class="pt gemma"><title>Gemma 4 12B QAT at 64k: 9.8 GB (estimate)</title></circle><circle cx="492" cy="108.856773856" r="4.5" class="pt gemma"><title>Gemma 4 12B QAT at 128k: 10.4 GB (estimate)</title></circle><circle cx="640" cy="90.032737504" r="4.5" class="pt gemma"><title>Gemma 4 12B QAT at 256k: 11.5 GB (estimate)</title></circle><circle cx="48" cy="154.948267216" r="4.5" class="pt qwen"><title>Qwen3.5 9B at 16k: 7.6 GB (estimate)</title></circle><circle cx="196" cy="150.242258128" r="4.5" class="pt qwen"><title>Qwen3.5 9B at 32k: 7.9 GB (estimate)</title></circle><circle cx="344" cy="140.830239952" r="4.5" class="pt qwen"><title>Qwen3.5 9B at 64k: 8.4 GB (estimate)</title></circle><circle cx="492" cy="122.00620359999999" r="4.5" class="pt qwen"><title>Qwen3.5 9B at 128k: 9.6 GB (estimate)</title></circle><circle cx="640" cy="84.35813089600002" r="4.5" class="pt qwen"><title>Qwen3.5 9B at 256k: 11.9 GB (estimate)</title></circle>
+    <rect x="191" y="123.53" width="10" height="10" rx="2" class="meas gemma"><title>Gemma 4 12B QAT at 32k: 9.2 GB measured</title></rect><rect x="339" y="117.42499999999998" width="10" height="10" rx="2" class="meas gemma"><title>Gemma 4 12B QAT at 64k: 9.6 GB measured</title></rect><rect x="487" y="110" width="10" height="10" rx="2" class="meas gemma"><title>Gemma 4 12B QAT at 128k: 10.0 GB measured</title></rect><rect x="339" y="138.15427630399998" width="10" height="10" rx="2" class="meas qwen"><title>Qwen3.5 9B at 64k: 8.3 GB measured</title></rect>
+    <text x="648" y="102.032737504" class="lab gemma">Gemma 11.5</text>
+    <text x="648" y="80.35813089600002" class="lab qwen">Qwen 11.9</text>
+  </svg>
+<div class="legend"><span><b class="lg"></b>Gemma 4 12B (with its helper)</span><span><b class="lq"></b>Qwen3.5 9B</span><span><b class="lm"></b>measured on this Mac</span><span>dots: the app's estimate, whole model</span></div>
+
+<h2>Stat by stat</h2>
+<table class="cmp"><thead><tr><th></th><th><span class="dot" style="background:var(--gemma)"></span>Gemma 4 12B</th><th><span class="dot" style="background:var(--qwen)"></span>Qwen3.5 9B</th></tr></thead><tbody><tr class="grp"><th colspan="3">Size</th></tr><tr><th>Parameters</th><td class="">12 billion</td><td class="">9 billion</td></tr><tr><th>Model file<small>what is downloaded</small></th><td class="">6.7 GB <small>4-bit QAT (UD-Q4_K_XL)</small></td><td class="">6.7 GB <small>5-bit (UD-Q5_K_XL)</small></td></tr><tr><th>Speed helper file<small>guesses words ahead</small></th><td class="">0.5 GB <small>Google's MTP</small></td><td class=""><span class="na">none in this file</span></td></tr><tr><th>Layers</th><td class="">48</td><td class="">32</td></tr><tr class="grp"><th colspan="3">Context</th></tr><tr><th>Longest context<small>the model can take</small></th><td class="">256k</td><td class="">256k <small>(up to ~1M with stretching; not in the app)</small></td></tr><tr><th>Layers that remember every token<small>these grow with context</small></th><td class="">8 of 48</td><td class="">8 of 32</td></tr><tr><th>The other layers<small>fixed size</small></th><td class="">40 sliding-window (last 1,024 tokens)</td><td class="">24 DeltaNet (a running summary)</td></tr><tr><th>Cache per token<small>8-bit, as the app runs it</small></th><td class="win">8.7 KB</td><td class="">17.4 KB</td></tr><tr><th>Memory at 32k<small>whole model, estimate</small></th><td class="">9.5 GB <small>measured 9.2</small></td><td class="win">7.9 GB</td></tr><tr><th>Memory at 64k<small>whole model, estimate</small></th><td class="">9.8 GB <small>measured 9.6</small></td><td class="win">8.4 GB <small>measured 8.3</small></td></tr><tr><th>Memory at 128k<small>whole model, estimate</small></th><td class="">10.4 GB <small>measured 10.0</small></td><td class="win">9.6 GB</td></tr><tr><th>Memory at 256k<small>whole model, estimate</small></th><td class="win">11.5 GB</td><td class="">11.9 GB</td></tr><tr class="grp"><th colspan="3">Limits</th></tr><tr><th>Effort levels</th><td class="">Low · High</td><td class="">Low · High</td></tr><tr><th>Thinking cap<small>model default · yours</small></th><td class="">4,096 · 8,192 tokens</td><td class="">4,096 · 8,192 tokens</td></tr><tr><th>Conversations at once<small>slots</small></th><td class="">2</td><td class="">2</td></tr><tr><th>Both loaded at once</th><td class=""><span class="na">no: on 29 Sep, Qwen at 64k + Gemma at 16k ran the GPU out of memory</span></td><td class=""><span class="na">same</span></td></tr><tr class="grp"><th colspan="3">Speed on this Mac</th></tr><tr><th>Reads a prompt<small>tokens / second</small></th><td class="">~127</td><td class="win">~190</td></tr><tr><th>Writes<small>tokens / second, plain</small></th><td class="">~13.2 <small>16.7 with its helpers</small></td><td class="">~12.0 <small>no helper</small></td></tr><tr><th>Loads<small>already cached</small></th><td class=""><span class="na">not timed</span></td><td class="">6.0 s</td></tr><tr class="grp"><th colspan="3">Quality</th></tr><tr><th>Our 28 practice tasks</th><td class="">B · 26 of 28 tasks</td><td class=""><span class="na">not run yet</span></td></tr><tr><th>MMLU-Pro<small>the maker's own number</small></th><td class=""><span class="na">not in our notes</span></td><td class="">82.5 <small>Qwen, full precision</small></td></tr></tbody></table>
+
+<h2>The app's limits <small class="muted">· the same for both models (/effort → limits)</small></h2>
+<table><thead><tr><th>Limit</th><th>Yours now</th><th>Default</th><th>Steps you can pick</th></tr></thead><tbody><tr><th>Context</th><td><b>64k</b></td><td>auto</td><td class="muted">auto · 16k · 32k · 64k · 128k · 256k</td></tr><tr><th>Thinking cap</th><td><b>8,192 tokens</b></td><td>4,096 tokens (both)</td><td class="muted">1,024 tokens · 2,048 tokens · 4,096 tokens · 8,192 tokens</td></tr><tr><th>Tries per fix</th><td><b>12</b></td><td>8</td><td class="muted">2 · 4 · 8 · 12 · 16</td></tr><tr><th>Steps per request</th><td><b>60</b></td><td>40</td><td class="muted">20 · 40 · 60 · 80 · 120</td></tr><tr><th>Command output</th><td>80 lines</td><td>80 lines</td><td class="muted">40 lines · 80 lines · 160 lines · 320 lines</td></tr><tr><th>Command timeout</th><td><b>5 min</b></td><td>2 min</td><td class="muted">60 s · 2 min · 5 min · 10 min</td></tr><tr><th>Trim at</th><td>78%</td><td>78%</td><td class="muted">60% · 70% · 78% · 85%</td></tr><tr><th>Summarize at</th><td>85%</td><td>85%</td><td class="muted">80% · 85% · 90%</td></tr></tbody></table>
+
+<h2>What these numbers do and do not show</h2>
+<ul class="notes">
+<li>Memory rows and the chart are the app's own estimate of the whole model (file + cache + running state + helper + working space). Where a square marker or "measured" appears, it was measured on this Mac: Gemma's are 0.3 GB under the estimate.</li>
+<li>Gemma's speeds were measured on 28 Sep; Qwen's in one quick check on 29 Sep (answered "42" to 6×7, called the Read tool when asked to open a file, and at High wrote 1,927 tokens in 149 s on a one-line maths question). One run each: a first look, not a benchmark.</li>
+<li>Gemma's write speed of 16.7 uses its MTP helper; Qwen's file has no helper yet (Unsloth has a separate MTP build of it).</li>
+<li>Qwen has not done our 28 practice tasks, so there is no grade to compare yet. Its MMLU-Pro is Qwen's own figure, not ours.</li>
+<li>The app's limits belong to Agentic Coder, not to a model: switching in /model keeps them. Only the thinking cap's default comes from the model, and both use 4,096.</li>
+</ul>
+<p class="src">Built by models/qwen3.5-9b/results/compare-page-2026-09-29/build-page.mjs from models/*/model.mjs, models/runtime/memory.mjs, terminal/src/app/limits.mjs, ~/.agentic-coder/settings.json, models/qwen3.5-9b/results/quick-check-2026-09-29/check.json and Gemma's 28 Sep results.</p>
+</main></body></html>

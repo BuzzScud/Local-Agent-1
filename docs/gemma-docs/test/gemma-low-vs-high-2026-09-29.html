@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Low vs High</title>
+<style>
+:root { --bg: #fbfaf8; --card: #fff; --fg: #1d1d1b; --muted: #6b6a66; --line: #e6e3dd; --green: #1f7a4a; --amber: #9a6200; --red: #c8372d; --blue: #2f6bd8; --orange: #d9661f;
+  --t-green: #e1f2e7; --t-amber: #fbefd6; --t-red: #fbe3e0; --t-blue: #e3ecfb; --t-grey: #eceae5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f; --green: #62c48e; --amber: #e5b04c; --red: #f07a6e; --blue: #6e9df0; --orange: #f0955a;
+  --t-green: #1d3a2a; --t-amber: #3d3016; --t-red: #43221f; --t-blue: #1f2c45; --t-grey: #2e2d29; } }
+:root[data-theme="dark"] { --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f; --green: #62c48e; --amber: #e5b04c; --red: #f07a6e; --blue: #6e9df0; --orange: #f0955a;
+  --t-green: #1d3a2a; --t-amber: #3d3016; --t-red: #43221f; --t-blue: #1f2c45; --t-grey: #2e2d29; }
+* { box-sizing: border-box; } html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 44px 24px 80px; }
+h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 14px; } h2 { font-size: 23px; margin: 46px 0 8px; }
+p { margin: 0 0 12px; } .muted { color: var(--muted); } .kicker { color: var(--muted); font-size: 15px; margin-bottom: 8px; } .lede { font-size: 19px; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+.verdict { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-top: 20px; }
+.verdict .big { font-size: 22px; font-weight: 650; line-height: 1.3; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; } .card .big { font-size: 28px; font-weight: 650; } .card .what { font-size: 15px; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; } th { text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
+td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } tr:last-child td { border-bottom: 0; } td small { display: block; color: var(--muted); font-size: 14px; }
+.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.green { background: var(--t-green); color: var(--green); } .amber { background: var(--t-amber); color: var(--amber); } .red { background: var(--t-red); color: var(--red); } .blue { background: var(--t-blue); color: var(--blue); } .grey { background: var(--t-grey); color: var(--muted); }
+.legend { display: flex; gap: 18px; font-size: 14px; color: var(--muted); margin-bottom: 6px; } .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; }
+svg { width: 100%; height: auto; display: block; } svg .grid { stroke: var(--line); } svg .tick { fill: var(--muted); font-size: 12px; } svg .lab { fill: var(--fg); font-size: 15px; } svg .val { fill: var(--fg); font-size: 13px; } svg .strong { font-weight: 650; }
+svg .c-blue { fill: var(--blue); } svg .c-orange { fill: var(--orange); }
+ul { padding-left: 20px; } li { margin-bottom: 8px; }
+.paths { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); word-break: break-all; }
+.scroll { overflow-x: auto; }
+@media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { main { padding: 26px 16px 60px; } h1 { font-size: 27px; } td, th { padding: 8px 5px; } .hide-s { display: none; } }
+</style>
+</head>
+<body>
+<main>
+<p class="kicker">Gemma 4 12B in Agentic Coder · the two hardest practice tasks · built Sep 29, 2026, 1:12 AM</p>
+<h1>Low vs High: does thinking help on the hardest tasks?</h1>
+<p class="lede">Tasks 1 and 28, one run each with thinking off (Low) and on (High), one after another on the same code.</p>
+
+<section class="verdict">
+  <div class="big">Thinking made it worse: at High, Gemma passed task 28 in only 0 of 1 runs (Low: 1 of 1) — it ran out of its 30 minutes while still writing tests: too slow, not a wrong answer.</div>
+  <p class="muted" style="margin:10px 0 0">By the rule set before the run, this does not meet the B+ condition: High has to pass something Low fails, and lose nothing. The overall grade stays B.</p>
+</section>
+
+<div class="cards">
+  <div class="card"><div class="big">2/2</div><div class="what">passed at Low</div></div>
+  <div class="card"><div class="big">1/2</div><div class="what">passed at High</div></div>
+  <div class="card"><div class="big">5.3×</div><div class="what">as long at High</div></div>
+  <div class="card"><div class="big">8,081</div><div class="what">thinking tokens per finished High run</div></div>
+</div>
+
+<h2>What stood out</h2>
+<div class="box"><ul>
+<li><b>Task 1:</b> at High, Gemma’s tests were right the first time: its tests and drafts agreed at once, 5 calls to the model against 25 at Low, where every test was wrong and the guard had to send it step by step. Thinking made the work better, but each call was slow enough that it still took 2.0× as long.</li>
+<li><b>Task 28:</b> at High, the tests and drafts still disagreed after two rounds (as at Low), and with a think before every call the 30 minutes ran out before a change was tried. At Low the same path finished in 2.7 min.</li>
+</ul></div>
+
+<h2>Each task, run by run</h2>
+<div class="box scroll"><table><thead><tr><th>Task</th><th>Setting</th><th class="n">Run 1</th><th class="n">Passed</th></tr></thead><tbody>
+<tr><td rowspan="2"><b>1. Add a --json flag, with a test</b><small>Gemma’s worst task: failed twice before the guard; once 220 s step by step; the 27B: 139 s</small></td><td><b>Low</b><small>thinking off</small></td><td class="n"><span class="tag green">Pass</span><small>4.6 min</small></td><td class="n"><b>1 of 1</b></td></tr>
+<tr><td><b>High</b><small>thinking on, up to 4,096 tokens a step</small></td><td class="n"><span class="tag green">Pass</span><small>9.0 min</small></td><td class="n"><b>1 of 1</b></td></tr>
+<tr><td rowspan="2"><b>28. Python: a change across 2 files</b><small>the slowest task for both models; its drafts never pass the tests on the first go; the 27B: 295 s</small></td><td><b>Low</b><small>thinking off</small></td><td class="n"><span class="tag green">Pass</span><small>2.7 min</small></td><td class="n"><b>1 of 1</b></td></tr>
+<tr><td><b>High</b><small>thinking on, up to 4,096 tokens a step</small></td><td class="n"><span class="tag red">Fail</span><small>29.8 min</small></td><td class="n"><b>0 of 1</b></td></tr>
+</tbody></table></div>
+
+<h2>Time per run</h2>
+<div class="box">
+  <div class="legend"><span><i style="background:var(--blue)"></i>Low (average)</span><span><i style="background:var(--orange)"></i>High (average)</span></div>
+  <svg viewBox="0 0 720 166" role="img" aria-label="Average time per run, Low against High"><line x1="150" x2="150" y1="8" y2="140" class="grid"/><text x="150" y="158" class="tick" text-anchor="middle">0 s</text><line x1="224.69654528478057" x2="224.69654528478057" y1="8" y2="140" class="grid"/><text x="224.69654528478057" y="158" class="tick" text-anchor="middle">5 min</text><line x1="299.39309056956114" x2="299.39309056956114" y1="8" y2="140" class="grid"/><text x="299.39309056956114" y="158" class="tick" text-anchor="middle">10 min</text><line x1="374.08963585434174" x2="374.08963585434174" y1="8" y2="140" class="grid"/><text x="374.08963585434174" y="158" class="tick" text-anchor="middle">15 min</text><line x1="448.7861811391223" x2="448.7861811391223" y1="8" y2="140" class="grid"/><text x="448.7861811391223" y="158" class="tick" text-anchor="middle">20 min</text><line x1="523.4827264239029" x2="523.4827264239029" y1="8" y2="140" class="grid"/><text x="523.4827264239029" y="158" class="tick" text-anchor="middle">25 min</text><line x1="598.1792717086835" x2="598.1792717086835" y1="8" y2="140" class="grid"/><text x="598.1792717086835" y="158" class="tick" text-anchor="middle">30 min</text><text x="138" y="38" class="lab" text-anchor="end">Task 1</text><rect x="150" y="16" width="68.22284469343293" height="20" rx="3" class="c-blue"/><text x="224.22284469343293" y="31" class="val">4.6 min</text><rect x="150" y="40" width="134.20479302832246" height="20" rx="3" class="c-orange"/><text x="290.20479302832246" y="55" class="val strong">9.0 min</text><text x="138" y="102" class="lab" text-anchor="end">Task 28</text><rect x="150" y="80" width="40.33613445378151" height="20" rx="3" class="c-blue"/><text x="196.3361344537815" y="95" class="val">2.7 min</text><rect x="150" y="104" width="444.44444444444434" height="20" rx="3" class="c-orange"/><text x="600.4444444444443" y="119" class="val strong">29.8 min</text></svg>
+</div>
+
+<h2>What each run did</h2>
+<div class="box scroll"><table><thead><tr><th>Run</th><th class="n">Result</th><th class="n hide-s">Model calls</th><th class="n hide-s">Steps</th><th class="n">Thinking</th></tr></thead><tbody>
+<tr><td><b>Task 1 · Low · run 1</b><small>Writing tests: ✓✓ · Drafting versions: ✓✓ · Writing tests: ✓ · Drafting versions: ✓✓ · Writing simpler tests: ✓✓ · Checked tests against drafts: ✗✗✗✗✗</small></td><td class="n"><span class="tag green">Pass</span><small>4.6 min</small></td><td class="n hide-s">25</td><td class="n hide-s">19</td><td class="n">0<small>tokens</small></td></tr>
+<tr><td><b>Task 1 · High · run 1</b><small>Writing tests: ✓✓ · Drafting versions: ✓✓ · Checked tests against drafts: ✓✓</small></td><td class="n"><span class="tag green">Pass</span><small>9.0 min</small></td><td class="n hide-s">5</td><td class="n hide-s">6</td><td class="n">8,081<small>tokens</small></td></tr>
+<tr><td><b>Task 28 · Low · run 1</b><small>Writing tests: ✓✓ · Drafting changes: ✓✓ · Writing tests: ✓ · Drafting changes: ✓✓ · Writing simpler tests: ✓✓ · Checked tests against drafts: ✗✗✗✗✗ · Trying changes: ✗✓</small></td><td class="n"><span class="tag green">Pass</span><small>2.7 min</small></td><td class="n hide-s">12</td><td class="n hide-s">8</td><td class="n">0<small>tokens</small></td></tr>
+<tr><td><b>Task 28 · High · run 1</b><small>Writing tests: ✓✓ · Drafting changes: ✓✓ · Writing tests: ✓ · Drafting changes: ✓✓ · Writing simpler tests:  · Checked tests against drafts: ✗✗✗ · Trying changes: </small><small>ran out of its 30 minutes (the check then found: no new test)</small></td><td class="n"><span class="tag red">Fail</span><small>29.8 min</small></td><td class="n hide-s">8</td><td class="n hide-s">4</td><td class="n">—<small>not counted (cut off)</small></td></tr>
+</tbody></table></div>
+
+<h2>What this shows, and what it doesn’t</h2>
+<div class="box"><ul>
+  <li>Same code for every run (main 78b6dd7, the guard build), 32k, the app’s helpers, 30 minutes allowed per run. Low and High ran in turn, so both met the same Mac.</li>
+  <li>High thinks before every call to the model, capped at 4,096 tokens a call (the model’s default; your app’s setting allows 8,192).</li>
+  <li>Two tasks and one run each, as asked: a single pass or fail can be chance, so this shows a big difference, not a small one. The other 26 tasks were not run at High.</li>
+</ul></div>
+
+<h2>Next, your call</h2>
+<div class="box"><ul>
+  <li><b>Keep Low as the default.</b> High was 5.3× slower and lost task 28 to the time limit.</li>
+  <li><b>Task 18 at High</b>, 3 runs: the one task Low still fails by chance (a two-sentence story). About 10 minutes.</li>
+  <li><b>The thinking cap at 8,192</b> (your app’s setting): it would think longer still, so only worth trying with more than 30 minutes a run.</li>
+</ul></div>
+
+<p class="paths" style="margin-top:28px">Runs: ~/Desktop/agentic-coder/models/gemma-4-12b/results/low-vs-high-2026-09-29/runs/ · code: ~/worktrees/gemma-lowhigh-78b6dd7 (main 78b6dd7) · each run is also in the test record</p>
+</main>
+</body>
+</html>

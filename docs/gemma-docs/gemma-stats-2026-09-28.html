@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma 4 12B Stats</title>
+<style>
+:root {
+  --bg: #fbfaf8; --card: #ffffff; --fg: #1d1d1b; --muted: #6b6a66; --line: #e6e3dd; --soft: #f3f1ec;
+  --blue: #2f6bd8; --orange: #d9661f; --red: #c8372d; --green: #1f7a4a; --amber: #a86a00;
+  --best: #e5f3ea; --worst: #fbe7e4; --inuse: #fff6ec;
+  --tag-green: #e1f2e7; --tag-amber: #fbefd6; --tag-red: #fbe3e0; --tag-grey: #eceae5; --tag-blue: #e3ecfb;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f; --soft: #262622;
+  --blue: #6e9df0; --orange: #f0955a; --red: #f07a6e; --green: #62c48e; --amber: #e5b04c;
+  --best: #1d3a2a; --worst: #43221f; --inuse: #33281c;
+  --tag-green: #1d3a2a; --tag-amber: #3d3016; --tag-red: #43221f; --tag-grey: #2e2d29; --tag-blue: #1f2c45;
+} }
+:root[data-theme="dark"] {
+  --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f; --soft: #262622;
+  --blue: #6e9df0; --orange: #f0955a; --red: #f07a6e; --green: #62c48e; --amber: #e5b04c;
+  --best: #1d3a2a; --worst: #43221f; --inuse: #33281c;
+  --tag-green: #1d3a2a; --tag-amber: #3d3016; --tag-red: #43221f; --tag-grey: #2e2d29; --tag-blue: #1f2c45;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 40px 24px 80px; }
+h1 { font-size: 40px; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 12px; }
+h2 { font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 6px; scroll-margin-top: 16px; }
+h3 { font-size: 17px; margin: 28px 0 8px; }
+p { margin: 0 0 12px; }
+.lede { font-size: 19px; max-width: 800px; }
+.muted, .sub { color: var(--muted); }
+.sub { margin-bottom: 18px; max-width: 800px; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 8px; }
+nav a { color: var(--fg); text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 14px; font-size: 14px; }
+nav a:hover { border-color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+.card .big { font-size: 32px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; }
+.card .big small { font-size: 16px; font-weight: 500; color: var(--muted); }
+.card .what { margin-top: 4px; }
+.card .more { color: var(--muted); font-size: 14px; margin-top: 4px; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 12px; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; font-size: 14px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: bottom; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th small, td small { display: block; font-size: 13px; color: var(--muted); font-weight: 400; }
+td small.bad, .bad { color: var(--red); }
+.n { text-align: right; white-space: nowrap; }
+.nowrap { white-space: nowrap; }
+td.best { background: var(--best); font-weight: 650; }
+td.worst { background: var(--worst); font-weight: 650; }
+tr.inuse td:first-child b::after { content: " ●"; color: var(--orange); }
+td.up { color: var(--green); font-weight: 600; }
+td.down { color: var(--red); font-weight: 600; }
+.area { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.small-t td, .small-t th { padding: 8px 10px; }
+.runs td.time { color: var(--muted); white-space: nowrap; width: 64px; }
+.runs td:last-child { width: 120px; }
+.tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.tag.green { background: var(--tag-green); color: var(--green); }
+.tag.amber { background: var(--tag-amber); color: var(--amber); }
+.tag.red { background: var(--tag-red); color: var(--red); }
+.tag.grey { background: var(--tag-grey); color: var(--muted); }
+.tag.blue { background: var(--tag-blue); color: var(--blue); }
+code { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+svg { width: 100%; height: auto; display: block; }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+svg .ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 4; opacity: .6; }
+svg .tick { fill: var(--muted); font-size: 12px; }
+svg .lab { fill: var(--fg); font-size: 14px; }
+svg .val { fill: var(--fg); font-size: 13px; }
+svg .val.strong { font-weight: 650; }
+svg .val.bad { fill: var(--red); font-weight: 650; }
+svg .c-blue { fill: var(--blue); } svg .c-orange { fill: var(--orange); } svg .c-red { fill: var(--red); }
+svg .line-orange { fill: none; stroke: var(--orange); stroke-width: 2.5; stroke-linejoin: round; }
+svg .dot-orange { fill: var(--orange); stroke: var(--card); stroke-width: 1.5; }
+svg .est { stroke: var(--fg); stroke-width: 2.5; }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 14px; color: var(--muted); margin: 0 0 8px; }
+.legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.legend i.line { height: 3px; width: 18px; vertical-align: 3px; }
+.legend i.tick { width: 3px; height: 14px; vertical-align: -2px; background: var(--fg); }
+.caption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } .two > div { min-width: 0; }
+ol.notes { color: var(--muted); font-size: 14px; padding-left: 20px; }
+ol.notes li { margin-bottom: 6px; }
+ul.plain { padding-left: 20px; margin: 0; } ul.plain li { margin-bottom: 8px; }
+.paths { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); word-break: break-all; }
+@media (max-width: 860px) { .cards { grid-template-columns: repeat(2, 1fr); } .two { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  main { padding: 24px 16px 60px; } h1 { font-size: 30px; } h2 { font-size: 22px; } .lede { font-size: 17px; }
+  .cards { grid-template-columns: 1fr; } .card .big { font-size: 28px; }
+  th, td { padding: 8px 8px; } .runs td:last-child { width: auto; }
+  .scroll table { min-width: 520px; } .scroll table.runs { min-width: 0; }
+}
+</style>
+</head>
+<body>
+<main>
+<p class="muted">Agentic Coder · measured on this Mac (Apple M4, 16 GB) · 28 Sep 2026</p>
+<h1>Gemma 4 12B, the stats</h1>
+<p class="lede">Gemma reads fast, writes at a steady 13.0 tokens a second (up to 23.7 with the speed helpers), and fits in memory all the way to 128k. The weak spot is proof that it codes well: it has only done 9 of the 28 practice tasks so far, and passed 7. The full test is not run yet.</p>
+<p class="sub">Every number here comes from a saved run from today. A token is about ¾ of a word. Three more tests were queued tonight and stopped at 21:43, to run one by one; they are listed at the end.</p>
+<nav>
+  <a href="#glance">At a glance</a><a href="#vs">Gemma vs the 27B</a><a href="#speed">Speed</a><a href="#long">Long conversations</a><a href="#memory">Memory</a><a href="#runs">Every test today</a><a href="#next">Not measured yet</a>
+</nav>
+
+<h2 id="glance">At a glance</h2>
+<div class="cards">
+  <div class="card"><div class="big">13.0 <small>→ 14.0–23.7</small></div><div class="what">tokens a second, writing</div><div class="more">Plain, then with the speed helpers now in the app.</div></div>
+  <div class="card"><div class="big">135 <small>→ 51</small></div><div class="what">tokens a second, reading</div><div class="more">At the start of a conversation, then 100k tokens in.</div></div>
+  <div class="card"><div class="big">7 <small>of 9</small></div><div class="what">practice tasks passed</div><div class="more">The first 9 of 28, thinking off. The 27B passed all 9.</div></div>
+  <div class="card"><div class="big">4 <small>of 4</small></div><div class="what">hidden facts found in 102,620 tokens</div><div class="more">From 10% to 90% of the way in.</div></div>
+  <div class="card"><div class="big">9.2–10.0 <small>GB</small></div><div class="what">Gemma’s own memory, 32k to 128k</div><div class="more">About 7.2 GB of it is the model file.</div></div>
+  <div class="card"><div class="big">7 <small>s</small></div><div class="what">to load from a cold disk</div><div class="more">2.5–4 s when the file is already cached.</div></div>
+</div>
+
+<h2 id="vs">Gemma vs the 27B</h2>
+<p class="sub">Gemma replaced Bonsai 27B as the app’s model today. The shaded cell is the better one in each row.</p>
+<div class="box scroll"><table class="launch"><thead><tr><th></th><th class="n">Gemma 4 12B<small>today’s model</small></th><th class="n">Bonsai 27B<small>the old model</small></th><th class="n">Gemma vs 27B</th></tr></thead><tbody><tr><td><span class="area">Coding</span><b>Practice tasks passed</b><small>the first 9 of the 28, thinking off, 32k</small></td><td class="n">7 of 9</td><td class="n best">9 of 9</td><td class="n down">−2 tasks</td></tr><tr><td><span class="area">Coding</span><b>Time on the 7 both passed</b><small>seconds, all 7 together</small></td><td class="n best">214 s</td><td class="n">245 s</td><td class="n up">−13%</td></tr><tr><td><span class="area">Coding</span><b>All 28 practice tasks</b><small>the full set</small></td><td class="n"><span class="tag grey">not run yet</span></td><td class="n best">28 of 28</td><td class="n ">—</td></tr><tr><td><span class="area">Speed</span><b>Reading</b><small>tokens a second, short prompt</small></td><td class="n best">127</td><td class="n">61</td><td class="n up">2.1×</td></tr><tr><td><span class="area">Speed</span><b>Writing, plain</b><small>tokens a second</small></td><td class="n best">13.2</td><td class="n">10.4</td><td class="n up">+27%</td></tr><tr><td><span class="area">Speed</span><b>Writing, with its helper</b><small>tokens a second²</small></td><td class="n best">14.0–23.7<small>by kind of writing</small></td><td class="n">13.8</td><td class="n up">+2% to +72%</td></tr><tr><td><span class="area">Memory</span><b>Memory at 32k</b><small>the app’s own formula, same for both³</small></td><td class="n best">7.55 GB</td><td class="n">11.92 GB</td><td class="n up">−37%</td></tr></tbody></table></div>
+
+<h2 id="speed">Speed</h2>
+<p class="sub">Writing speed is what you feel while it works. The speed helpers guess the next word; Gemma checks each guess and keeps only what it would have written anyway, so the text is the same, just faster.</p>
+<div class="box">
+  <h3 style="margin-top:0">Writing speed, plain vs with the helpers now in use</h3>
+  <div class="legend"><span><i style="background:var(--blue)"></i>Plain</span><span><i style="background:var(--orange)"></i>MTP 1 guess + n-gram (in use)</span></div>
+  <svg viewBox="0 0 720 272" role="img" aria-label="Writing speed, plain against with the speed helpers, by kind of writing"><line x1="130" x2="130" y1="10" y2="246" class="grid"/><text x="130" y="264" class="tick" text-anchor="middle">0</text><line x1="231.92307692307693" x2="231.92307692307693" y1="10" y2="246" class="grid"/><text x="231.92307692307693" y="264" class="tick" text-anchor="middle">5</text><line x1="333.84615384615387" x2="333.84615384615387" y1="10" y2="246" class="grid"/><text x="333.84615384615387" y="264" class="tick" text-anchor="middle">10</text><line x1="435.7692307692307" x2="435.7692307692307" y1="10" y2="246" class="grid"/><text x="435.7692307692307" y="264" class="tick" text-anchor="middle">15</text><line x1="537.6923076923077" x2="537.6923076923077" y1="10" y2="246" class="grid"/><text x="537.6923076923077" y="264" class="tick" text-anchor="middle">20</text><line x1="639.6153846153846" x2="639.6153846153846" y1="10" y2="246" class="grid"/><text x="639.6153846153846" y="264" class="tick" text-anchor="middle">25</text><text x="118" y="37" class="lab" text-anchor="end">Edit a function</text><rect x="130" y="16" width="255.8269762783858" height="18" rx="3" class="c-blue"/><text x="391.8269762783858" y="30" class="val">12.6</text><rect x="130" y="38" width="483.1179749982639" height="18" rx="3" class="c-orange"/><text x="619.1179749982639" y="52" class="val strong">23.7</text><text x="118" y="95" class="lab" text-anchor="end">New code</text><rect x="130" y="74" width="270.89886345343376" height="18" rx="3" class="c-blue"/><text x="406.89886345343376" y="88" class="val">13.3</text><rect x="130" y="96" width="329.9933009562694" height="18" rx="3" class="c-orange"/><text x="465.9933009562694" y="110" class="val strong">16.2</text><text x="118" y="153" class="lab" text-anchor="end">Prose</text><rect x="130" y="132" width="268.51436258854454" height="18" rx="3" class="c-blue"/><text x="404.51436258854454" y="146" class="val">13.2</text><rect x="130" y="154" width="285.56523207039766" height="18" rx="3" class="c-orange"/><text x="421.56523207039766" y="168" class="val strong">14.0</text><text x="118" y="211" class="lab" text-anchor="end">Thinking</text><rect x="130" y="190" width="263.07982013556733" height="18" rx="3" class="c-blue"/><text x="399.07982013556733" y="204" class="val">12.9</text><rect x="130" y="212" width="301.2721344060242" height="18" rx="3" class="c-orange"/><text x="437.2721344060242" y="226" class="val strong">14.8</text></svg>
+  <p class="caption">Tokens a second, the average of 2 runs each, 32k. Edits gain the most: much of an edit repeats text that is already in the file.</p>
+</div>
+
+<h3>Every helper setting tried</h3>
+<p class="sub">Tokens a second, first run shown. Shaded = best in that column; <span style="color:var(--orange)">●</span> = the setting in the app now. Memory here is the server’s resident size with short prompts, so it is lower than the totals in the Memory section.</p>
+<div class="box scroll"><table class="launch"><thead><tr><th>Setting</th><th class="n">Edit a function</th><th class="n">New code</th><th class="n">Prose</th><th class="n">Thinking</th><th class="n">Memory (most)</th></tr></thead><tbody><tr><td><b>Plain (no helper)</b></td><td class="n">12.6</td><td class="n">13.3</td><td class="n">13.2</td><td class="n">12.8</td><td class="n">7.38 GB</td></tr><tr><td><b>n-gram (repeats what is already there)</b></td><td class="n best">25.0</td><td class="n">13.3</td><td class="n">13.3</td><td class="n">11.7</td><td class="n">7.28 GB</td></tr><tr><td><b>n-gram, shorter match</b></td><td class="n">12.1</td><td class="n">12.1</td><td class="n">12.7</td><td class="n">11.0</td><td class="n best">7.01 GB</td></tr><tr><td><b>n-gram, remembering</b></td><td class="n">14.9<small>2nd run 47.2¹</small></td><td class="n">13.3<small>2nd run 26.8¹</small></td><td class="n">13.3</td><td class="n">13.1</td><td class="n">7.27 GB</td></tr><tr><td><b>MTP, 1 guess</b></td><td class="n">12.5</td><td class="n">15.7<small>2nd run 8.6</small></td><td class="n">13.6<small>2nd run 10.9</small></td><td class="n">15.4</td><td class="n">7.77 GB</td></tr><tr><td><b>MTP, 2 guesses</b></td><td class="n">11.0</td><td class="n">15.5</td><td class="n">12.0</td><td class="n best">15.9</td><td class="n">7.71 GB</td></tr><tr><td><b>MTP, 3 guesses</b></td><td class="n">8.8</td><td class="n">14.3</td><td class="n">9.9</td><td class="n">13.6</td><td class="n">7.73 GB</td></tr><tr class="inuse"><td><b>MTP 1 guess + n-gram (in use)</b></td><td class="n">24.3</td><td class="n best">16.2</td><td class="n best">14.0</td><td class="n">15.4</td><td class="n">7.89 GB</td></tr><tr><td><b>MTP 2 guesses + n-gram</b></td><td class="n">20.7<small>1 run</small></td><td class="n">15.2<small>1 run</small></td><td class="n">12.5<small>1 run</small></td><td class="n">15.2<small>1 run</small></td><td class="n">7.87 GB</td></tr></tbody></table></div>
+
+<div>
+  <div>
+    <h3>Why only 1 guess at a time</h3>
+    <div class="box scroll"><table class="launch small-t"><thead><tr><th>Words checked at once</th><th class="n">1</th><th class="n">2</th><th class="n">3</th><th class="n">4</th><th class="n">5</th><th class="n">8</th><th class="n">16</th></tr></thead><tbody><tr><td><b>Short conversation</b><small>time, against checking 1</small></td><td class="n">1.00×</td><td class="n best">1.19×</td><td class="n">1.73×</td><td class="n">2.37×</td><td class="n">3.57×</td><td class="n">4.87×</td><td class="n">3.07×</td></tr><tr><td><b>8k tokens in</b><small>time, against checking 1</small></td><td class="n">1.00×</td><td class="n best">1.37×</td><td class="n">1.93×</td><td class="n">2.61×</td><td class="n">3.81×</td><td class="n">5.32×</td><td class="n">4.27×</td></tr></tbody></table></div>
+    <p class="caption">Checking 2 words costs Gemma only 1.19× the time of 1, so one guess pays. Checking 4 costs 2.4×, so longer guesses lose time when they miss.</p>
+  </div>
+  <div>
+    <h3>The engine: Prism vs official llama.cpp</h3>
+    <div class="box scroll"><table class="launch"><thead><tr><th>Writing</th><th class="n">Prism (in use)</th><th class="n">Official v0.5.0</th><th class="n">Prism vs official</th></tr></thead><tbody><tr><td><b>Edit a function</b><small>no helper</small></td><td class="n best">12.5</td><td class="n">12.5</td><td class="n up">+0.2%</td></tr><tr><td><b>New code</b><small>no helper</small></td><td class="n best">13.3</td><td class="n">13.2</td><td class="n up">+0.6%</td></tr><tr><td><b>Prose</b><small>no helper</small></td><td class="n">13.1</td><td class="n best">13.3</td><td class="n down">−1.2%</td></tr><tr><td><b>Thinking</b><small>no helper</small></td><td class="n">12.9</td><td class="n best">13.0</td><td class="n down">−1.0%</td></tr><tr><td><b>Edit a function</b><small>with the helpers</small></td><td class="n best">23.5</td><td class="n">21.9</td><td class="n up">+7.0%</td></tr><tr><td><b>New code</b><small>with the helpers</small></td><td class="n best">15.7</td><td class="n">14.4</td><td class="n up">+8.9%</td></tr><tr><td><b>Prose</b><small>with the helpers</small></td><td class="n best">13.5</td><td class="n">13.3</td><td class="n up">+1.8%</td></tr><tr><td><b>Thinking</b><small>with the helpers</small></td><td class="n best">14.2</td><td class="n">14.1</td><td class="n up">+0.8%</td></tr></tbody></table></div>
+    <p class="caption">Same memory on both. Tool calls and thinking worked on both.</p>
+  </div>
+</div>
+
+<h2 id="long">Long conversations</h2>
+<p class="sub">The 100k test: Gemma read 102,620 tokens of the app’s own code with 4 facts hidden in it, then answered questions about them.</p>
+<div class="box">
+  <h3 style="margin-top:0">Reading speed as the text grows</h3>
+  <div class="legend"><span><i class="line" style="background:var(--orange)"></i>Tokens a second, measured every 2,048 tokens</span><span><i class="line" style="background:var(--muted)"></i>32k and 64k marks</span></div>
+  <svg viewBox="0 0 720 300" role="img" aria-label="Reading speed falls from 135 to 51 tokens a second as the text grows to 100k tokens"><line x1="50" x2="700" y1="260" y2="260" class="grid"/><text x="42" y="264" class="tick" text-anchor="end">0</text><line x1="50" x2="700" y1="219.33333333333334" y2="219.33333333333334" class="grid"/><text x="42" y="223.33333333333334" class="tick" text-anchor="end">25</text><line x1="50" x2="700" y1="178.66666666666669" y2="178.66666666666669" class="grid"/><text x="42" y="182.66666666666669" class="tick" text-anchor="end">50</text><line x1="50" x2="700" y1="138" y2="138" class="grid"/><text x="42" y="142" class="tick" text-anchor="end">75</text><line x1="50" x2="700" y1="97.33333333333334" y2="97.33333333333334" class="grid"/><text x="42" y="101.33333333333334" class="tick" text-anchor="end">100</text><line x1="50" x2="700" y1="56.66666666666666" y2="56.66666666666666" class="grid"/><text x="42" y="60.66666666666666" class="tick" text-anchor="end">125</text><line x1="50" x2="700" y1="16" y2="16" class="grid"/><text x="42" y="20" class="tick" text-anchor="end">150</text><text x="50" y="286" class="tick" text-anchor="middle">0</text><text x="204.76190476190476" y="286" class="tick" text-anchor="middle">25k</text><text x="359.5238095238095" y="286" class="tick" text-anchor="middle">50k</text><text x="514.2857142857142" y="286" class="tick" text-anchor="middle">75k</text><text x="669.047619047619" y="286" class="tick" text-anchor="middle">100k</text><text x="375" y="300" class="tick" text-anchor="middle">tokens read so far</text><line x1="252.8495238095238" x2="252.8495238095238" y1="16" y2="260" class="ref"/><text x="256.8495238095238" y="26" class="tick">32k</text><line x1="455.6990476190476" x2="455.6990476190476" y1="16" y2="260" class="ref"/><text x="459.6990476190476" y="26" class="tick">64k</text><polyline points="75.4,40.4 88.0,51.8 100.7,61.5 113.4,68.1 126.1,76.2 138.8,79.4 151.4,84.3 164.1,89.2 176.8,94.1 189.5,97.3 202.1,102.2 214.8,125.0 227.5,110.3 240.2,112.0 252.9,116.9 265.5,118.5 278.2,121.7 290.9,125.0 303.6,128.2 316.2,129.9 328.9,133.1 341.6,134.7 354.3,138.0 367.0,141.3 379.6,144.5 392.3,144.5 405.0,146.1 417.7,147.8 430.3,151.0 443.0,152.6 455.7,154.3 468.4,154.3 481.1,157.5 493.7,159.1 506.4,160.8 519.1,160.8 531.8,164.0 544.5,165.7 557.1,167.3 569.8,167.3 582.5,168.9 595.2,170.5 607.8,172.2 620.5,172.2 633.2,175.4 645.9,175.4 658.6,177.0 671.2,177.0" class="line-orange"/><circle cx="75.4" cy="40.4" r="3.5" class="dot-orange"/><circle cx="126.1" cy="76.2" r="3.5" class="dot-orange"/><circle cx="176.8" cy="94.1" r="3.5" class="dot-orange"/><circle cx="227.5" cy="110.3" r="3.5" class="dot-orange"/><circle cx="278.2" cy="121.7" r="3.5" class="dot-orange"/><circle cx="328.9" cy="133.1" r="3.5" class="dot-orange"/><circle cx="379.6" cy="144.5" r="3.5" class="dot-orange"/><circle cx="430.3" cy="151.0" r="3.5" class="dot-orange"/><circle cx="481.1" cy="157.5" r="3.5" class="dot-orange"/><circle cx="531.8" cy="164.0" r="3.5" class="dot-orange"/><circle cx="582.5" cy="168.9" r="3.5" class="dot-orange"/><circle cx="633.2" cy="175.4" r="3.5" class="dot-orange"/><circle cx="671.2" cy="177.0" r="3.5" class="dot-orange"/><text x="83.36238095238096" y="32.39999999999999" class="val strong">135/s</text><text x="667.2328571428571" y="167.04" class="val strong" text-anchor="end">51/s</text></svg>
+  <p class="caption">Reading slows as the text grows: 135 a second at the start, 51 near the end. The whole read took 23 min 48 s. A follow-up question reused all of it and answered in 3 s.</p>
+</div>
+<div>
+  <div>
+    <h3>Writing slows down too</h3>
+    <div class="box scroll"><table class="launch"><thead><tr><th>Tokens already in the conversation</th><th class="n">Writing<small>tokens a second</small></th><th class="n">Reading<small>tokens a second</small></th></tr></thead><tbody><tr><td><b>0 (a fresh start)</b><small>no helper, engine bench</small></td><td class="n">13.6</td><td class="n">142<small>2,048 tokens</small></td></tr><tr><td><b>8k</b><small>with the helper, in the fill test</small></td><td class="n">13.8</td><td class="n">133<small>average over 8k</small></td></tr><tr><td><b>8k</b><small>no helper, engine bench</small></td><td class="n">12.0</td><td class="n"><small>—</small></td></tr><tr><td><b>32k</b><small>no helper, engine bench</small></td><td class="n">9.8</td><td class="n">87<small>2,048 tokens</small></td></tr><tr><td><b>100k</b><small>with the helper, in the fill test</small></td><td class="n">5.0</td><td class="n">72<small>average over the whole read</small></td></tr></tbody></table></div>
+  </div>
+  <div>
+    <h3>It found every hidden fact</h3>
+    <div class="box scroll"><table class="launch"><thead><tr><th>Hidden fact</th><th class="n">Where in the text</th><th>Gemma’s answer</th><th class="n">Right?</th></tr></thead><tbody><tr><td>What is the release codename for this checkout?</td><td class="n">10% in</td><td class="nowrap"><code>harbor-lantern</code></td><td class="n"><span class="tag green">Yes</span></td></tr><tr><td>In models/gemma-4-12b/model.mjs, what is the value of thinkingBudget?</td><td class="n">31% in</td><td class="nowrap"><code>4096</code></td><td class="n"><span class="tag green">Yes</span></td></tr><tr><td>What is the fixture seed for the replay tests?</td><td class="n">50% in</td><td class="nowrap"><code>90417</code></td><td class="n"><span class="tag green">Yes</span></td></tr><tr><td>When does the maintenance window start?</td><td class="n">90% in</td><td class="nowrap"><code>03:47 UTC</code></td><td class="n"><span class="tag green">Yes</span></td></tr></tbody></table></div>
+  </div>
+</div>
+
+<h2 id="memory">Memory</h2>
+<p class="sub">Gemma’s own total includes the model file. Most of the file stays shared with macOS, so less comes out of free memory. The app checks that number before it starts Gemma.</p>
+<div class="box">
+  <div class="legend"><span><i style="background:var(--blue)"></i>Taken from free memory</span><span><i style="background:var(--red)"></i>More than the check expects</span><span><i class="tick"></i>What the app’s check expects</span></div>
+  <svg viewBox="0 0 720 258" role="img" aria-label="Memory taken from free memory at each size, against the app's estimate"><line x1="130" x2="130" y1="8" y2="232" class="grid"/><text x="130" y="250" class="tick" text-anchor="middle">0 GB</text><line x1="224.54545454545456" x2="224.54545454545456" y1="8" y2="232" class="grid"/><text x="224.54545454545456" y="250" class="tick" text-anchor="middle">2 GB</text><line x1="319.0909090909091" x2="319.0909090909091" y1="8" y2="232" class="grid"/><text x="319.0909090909091" y="250" class="tick" text-anchor="middle">4 GB</text><line x1="413.6363636363636" x2="413.6363636363636" y1="8" y2="232" class="grid"/><text x="413.6363636363636" y="250" class="tick" text-anchor="middle">6 GB</text><line x1="508.1818181818182" x2="508.1818181818182" y1="8" y2="232" class="grid"/><text x="508.1818181818182" y="250" class="tick" text-anchor="middle">8 GB</text><line x1="602.7272727272727" x2="602.7272727272727" y1="8" y2="232" class="grid"/><text x="602.7272727272727" y="250" class="tick" text-anchor="middle">10 GB</text><text x="118" y="32" class="lab" text-anchor="end">32k, warm</text><rect x="130" y="18" width="211.78181818181815" height="20" rx="3" class="c-blue"/><line x1="427.3454545454545" x2="427.3454545454545" y1="12" y2="44" class="est"/><text x="349.78181818181815" y="33" class="val">4.5</text><text x="118" y="76" class="lab" text-anchor="end">64k, warm</text><rect x="130" y="62" width="249.60000000000002" height="20" rx="3" class="c-blue"/><line x1="440.58181818181816" x2="440.58181818181816" y1="56" y2="88" class="est"/><text x="387.6" y="77" class="val">5.3</text><text x="118" y="120" class="lab" text-anchor="end">128k, warm</text><rect x="130" y="106" width="309.1636363636364" height="20" rx="3" class="c-blue"/><line x1="467.5272727272727" x2="467.5272727272727" y1="100" y2="132" class="est"/><text x="475.5272727272727" y="121" class="val">6.5</text><text x="118" y="164" class="lab" text-anchor="end">128k, cold disk</text><rect x="130" y="150" width="483.12727272727284" height="20" rx="3" class="c-red"/><line x1="467.5272727272727" x2="467.5272727272727" y1="144" y2="176" class="est"/><text x="621.1272727272728" y="165" class="val bad">10.2 (est. 7.1)</text><text x="118" y="208" class="lab" text-anchor="end">100k filled</text><rect x="130" y="194" width="216.5090909090909" height="20" rx="3" class="c-blue"/><line x1="467.5272727272727" x2="467.5272727272727" y1="188" y2="220" class="est"/><text x="354.5090909090909" y="209" class="val">4.6</text></svg>
+</div>
+<div class="box scroll" style="margin-top:12px"><table class="launch"><thead><tr><th>Memory size</th><th class="n">Gemma’s own total<small>at most</small></th><th class="n">Taken from free memory<small>at most</small></th><th class="n">The app’s check expects</th><th class="n">Swap</th></tr></thead><tbody><tr><td><b>32k, warm</b><small>measured 19:22</small></td><td class="n">9.2 GB</td><td class="n">4.5 GB</td><td class="n">6.3 GB<small>covers it</small></td><td class="n">none</td></tr><tr><td><b>64k, warm</b><small>measured 19:18</small></td><td class="n">9.6 GB</td><td class="n">5.3 GB</td><td class="n">6.6 GB<small>covers it</small></td><td class="n">none</td></tr><tr><td><b>128k, warm</b><small>measured 20:19</small></td><td class="n">10.0 GB</td><td class="n">6.5 GB</td><td class="n">7.1 GB<small>covers it</small></td><td class="n">none</td></tr><tr><td><b>128k, cold disk</b><small>measured 21:10</small></td><td class="n">9.7 GB</td><td class="n worst">10.2 GB</td><td class="n">7.1 GB<small class="bad">3.1 GB short</small></td><td class="n">none</td></tr><tr><td><b>100k filled</b><small>measured 20:32</small></td><td class="n">9.9 GB</td><td class="n">4.6 GB</td><td class="n">7.1 GB<small>covers it</small></td><td class="n">+1.21 GB</td></tr></tbody></table></div>
+<p class="caption">Pressure stayed normal in every run. The 100k fill’s swap came from other programs (not proven). The cold start is the one case the check misses: with nothing cached, the whole file comes out of free memory. On a 16 GB Mac, 128k still fit.</p>
+
+<h2 id="runs">Every Gemma test today</h2>
+<p class="sub">In the order they ran (Eastern time).</p>
+<div class="box scroll"><table class="runs"><thead><tr><th>Time</th><th>Test</th><th>Result</th></tr></thead><tbody><tr><td class="time">11:16</td><td><b>Bake-off: the first 9 of the 28 practice tasks</b><small>Thinking off, 32k. Failed 2: one faked its own test, one got stuck re-reading.</small></td><td><span class="tag amber">7 of 9</span></td></tr><tr><td class="time">12:48</td><td><b>/btw probe: a side question while Gemma works</b><small>A side question re-reads the whole chat (3,751 tokens, 30 s). Writing drops from 12.2 to 9.8 while both write.</small></td><td><span class="tag blue">Measured</span></td></tr><tr><td class="time">13:06</td><td><b>/btw in the real app</b><small>Answered in 16 s, then 10 s after a fix; the main job finished both times.</small></td><td><span class="tag green">Pass</span></td></tr><tr><td class="time">13:58</td><td><b>Test 2: Low vs High on one bug fix</b><small>Both fixed it. Low 23 s, High 194 s; High thought 2,048 tokens and hit the cap, so the cap went to 4,096.</small></td><td><span class="tag green">Pass</span></td></tr><tr><td class="time">14:43</td><td><b>The notes page, in the app</b><small>Wrote a working page twice, but saved nothing: its Write call had no file name. Fixed the same day.</small></td><td><span class="tag red">Fail</span></td></tr><tr><td class="time">14:59</td><td><b>Thinking replay (test 2, High)</b><small>765 thinking tokens in 132 s, stopped by itself; same fix as Low.</small></td><td><span class="tag green">Pass</span></td></tr><tr><td class="time">17:30</td><td><b>Speed probe: 9 helper settings × 4 kinds of writing</b><small>MTP 1 guess + n-gram was best; it is now in the app.</small></td><td><span class="tag blue">Measured</span></td></tr><tr><td class="time">18:21</td><td><b>Context-helper smoke runs: 1 practice task, 6 runs</b><small>Passed all 6 (100–178 s). Too few to call a speed change.</small></td><td><span class="tag green">6 of 6</span></td></tr><tr><td class="time">18:44</td><td><b>Engine: Prism vs official llama.cpp</b><small>Prism writes 4.7% faster with the helpers; same memory. Prism kept.</small></td><td><span class="tag green">Pass</span></td></tr><tr><td class="time">19:18</td><td><b>Memory at 32k and 64k</b><small>Gemma’s own total 9.2 / 9.6 GB; the app’s memory check was re-set from this.</small></td><td><span class="tag green">Pass</span></td></tr><tr><td class="time">20:19</td><td><b>Memory at 128k</b><small>Fits: 10.0 GB own total, 6.5 GB taken from free memory, no swap.</small></td><td><span class="tag green">Pass</span></td></tr><tr><td class="time">20:32</td><td><b>100k fill: read 102,620 tokens, find 4 hidden facts</b><small>4 of 4 right, but the read took 23 min 48 s and writing fell to 5 tokens a second.</small></td><td><span class="tag green">4 of 4</span></td></tr><tr><td class="time">21:10</td><td><b>Cold start at 128k (nothing cached)</b><small>Loaded in 7.2 s, but took 10.2 GB of free memory; the check expects 7.1.</small></td><td><span class="tag amber">Check short</span></td></tr><tr><td class="time">21:18</td><td><b>Long-read speed bench (chunk sizes)</b><small>Stopped with its session after 4 of 12 measurements; only today’s setting was measured.</small></td><td><span class="tag grey">Stopped</span></td></tr><tr><td class="time">21:28</td><td><b>Test queue: thinking cap 4k vs 8k, faster before/after, helpers ×4</b><small>Stopped at 21:43 on your word, to run the tests one by one. 1 task finished: the off-by-one fix at High, passed in 170 s.</small></td><td><span class="tag grey">Stopped</span></td></tr></tbody></table></div>
+
+<h2 id="next">Not measured yet</h2>
+<div class="box">
+  <ul class="plain">
+    <li><span class="tag grey">Next</span> <b>Thinking cap, 4,096 vs 8,192 tokens</b> on 5 practice tasks. If 8,192 passes more, it stays at 8,192.</li>
+    <li><span class="tag grey">Next</span> <b>Faster, before vs after</b>: tonight’s speed changes on the same 5 tasks. Its results page is made when it ends.</li>
+    <li><span class="tag grey">Next</span> <b>Context helpers</b>: 4 runs, helpers off and on, shortcut and step by step.</li>
+    <li><span class="tag grey">Not run</span> <b>All 28 practice tasks</b>, and Low vs High thinking on all 28. This is the number that would say how well Gemma codes.</li>
+    <li><span class="tag grey">Not run</span> <b>Both slots at 50k at once</b>, and questions that need two far-apart parts of a long text.</li>
+    <li><span class="tag grey">Stopped</span> <b>Long-read chunk sizes</b>: can a bigger chunk make reading faster? 4 of 12 measurements done.</li>
+  </ul>
+</div>
+
+<h3>Notes</h3>
+<ol class="notes">
+  <li>The n-gram “remembering” setting keeps what it saw in the first run, so its second run (47.2 on edits) is not a fair repeat. The first run is shown.</li>
+  <li>The 27B’s helper speed is from the harness page and was not saved by kind of writing. Gemma’s range is prose (lowest) to edits (highest).</li>
+  <li>Both memory numbers use the app’s formula from the morning, before it was re-set from measurements. The measured numbers are in the Memory section.</li>
+  <li>Bake-off failures: 1-json-flag: wrote a 2-row test, then hard-coded 2 trades to pass it; 14-notests-perimeter: replaced area() with perimeter(), then got stuck re-reading.</li>
+  <li>One more run at 12:30 (questions about your own work, with and without Claude’s notes) never really ran: two copies of Gemma were loaded at once and there was no room in memory, so every answer came back empty. It is not a Gemma score and is left out.</li>
+  <li>The 128k runs used ~4k-token prompts except the 100k fill. The memory is set aside when Gemma loads, so the size is right, but speed at depth comes only from the fill test.</li>
+</ol>
+
+<h3>Where the numbers come from</h3>
+<p class="paths">~/Desktop/agentic-coder/models/gemma-4-12b/results/ — speed-probe-2026-09-28/runs.jsonl · bench-batch.md · engine-compare-2026-09-28/runs.jsonl · long-context-fill-2026-09-28/fill-summary.json · memory-calibration-2026-09-28/runs.jsonl · cold-start-2026-09-28/cold-summary.json · long-read-speed-2026-09-28/bench-q8.jsonl · test2-low-high-2026-09-28/summary.json · btw-probe-2026-09-28/results.txt · gemma-bakeoff-partial-2026-09-28/ · ~/.agentic-coder/tests/record.jsonl<br>Rebuild: node models/gemma-4-12b/results/stats-2026-09-28/build-page.mjs</p>
+</main>
+</body>
+</html>

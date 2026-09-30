@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hub tab for both models: 2 designs</title>
+<style>
+/* The hub's own tokens (terminal/src/app/hub.html), plus the three "who does it" colours. */
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-ink: #fff;
+  --model: #b45309; --modelbg: #fbf0e2; --harnessbg: #eaf1fb; --ok: #1c8558; --bad: #b3261e; --warn: #9a6400;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --model: #f4a35c; --modelbg: #2a2017; --harnessbg: #16212f; --ok: #4fc38d; --bad: #ff8b82; --warn: #e2b04a; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --model: #f4a35c; --modelbg: #2a2017; --harnessbg: #16212f; --ok: #4fc38d; --bad: #ff8b82; --warn: #e2b04a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; color-scheme: light dark; }
+[hidden] { display: none !important; }
+code { font-family: var(--mono); font-size: .9em; background: var(--panel); padding: 1px 5px; border-radius: 5px; }
+
+/* the hub's header, as in the app */
+header.hub { display: flex; align-items: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); height: 44px; flex: none; }
+header.hub h1 { font-size: 15px; margin: 0 14px 0 4px; font-weight: 600; white-space: nowrap; }
+header.hub > button { font: inherit; color: var(--ink2); background: none; border: none; border-radius: 8px; padding: 7px 12px; white-space: nowrap; }
+header.hub > button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 8px 8px 0 0; }
+header.hub > button:disabled { opacity: .55; }
+header.hub .spacer { flex: 1; }
+header.hub .pv { color: var(--ink3); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; color: var(--ink2); background: none; border: none; padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--page); }
+header.hub > button.info { color: var(--accent); font-size: 12px; cursor: pointer; padding: 6px 8px; }
+header.hub > button.info:hover { background: var(--panel); }
+.real { position: absolute; top: 50px; right: 12px; width: 470px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; z-index: 5; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); font-size: 13px; }
+.real p { margin: 0 0 8px; } .real p:last-child { margin: 0; }
+
+main { flex: 1; min-height: 0; overflow: auto; scrollbar-width: none; }
+main::-webkit-scrollbar { display: none; }
+.d { height: 100%; }
+h1, h2, h3, h4, h5, p { margin: 0; }
+.d h1 { font-size: 21px; font-weight: 680; letter-spacing: -.01em; white-space: nowrap; }
+.d h2 { font-size: 18px; font-weight: 650; }
+.d h3 { font-size: 14.5px; font-weight: 650; }
+.lead { color: var(--ink2); margin: 2px 0 8px; max-width: 1150px; }
+.sub { color: var(--ink2); font-size: 13px; margin: 2px 0 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+
+/* who does a part: one colour each, everywhere */
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex: none; }
+.dot.model { background: var(--model); } .dot.harness { background: var(--accent); } .dot.you { background: var(--ink3); }
+.legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink2); margin: 0 0 10px; }
+.legend span, .who span { display: inline-flex; align-items: center; white-space: nowrap; }
+.who { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink3); }
+.who em { font-style: normal; text-transform: none; letter-spacing: 0; margin-left: 4px; }
+
+/* the model chips and tags: the same for every model */
+.chips { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; white-space: nowrap; }
+.chip em, .tag { font-style: normal; font-size: 11px; color: var(--ink3); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; margin-left: 7px; line-height: 17px; white-space: nowrap; }
+.chip em.live, .tag.live { color: var(--ok); border-color: currentColor; }
+
+/* the pair: both models, the same card, row for row. The two cards share one
+   set of row lines (subgrid), so a row is the same height in both whatever it holds. */
+.pairtitle { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; margin: 12px 0 6px; }
+.pairtitle span { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink2); font-size: 12.5px; margin-left: 6px; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 12px; row-gap: 0; }
+.mc { display: grid; grid-template-rows: subgrid; grid-row: span calc(var(--rows) + 1); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px 4px; min-width: 0; }
+.mc header { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; padding-bottom: 4px; }
+.mc header b { font-size: 15px; font-weight: 650; white-space: nowrap; }
+.mc .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; border-top: 1px solid var(--line); min-height: 42px; padding: 3px 0; }
+.mc .k { color: var(--ink2); font-size: 13px; line-height: 1.25; }
+.mc .k small, .grid th small { display: block; color: var(--ink3); font-size: 11px; font-weight: 400; }
+.mc .v { text-align: right; font-variant-numeric: tabular-nums; font-size: 13.5px; max-width: 46ch; }
+.mc .v b { font-size: 16px; font-weight: 650; }
+.mc .row.long { grid-template-columns: minmax(0, 1fr); gap: 3px; align-items: start; align-content: start; padding: 6px 0 8px; }
+.mc .row.long .v { text-align: left; max-width: none; color: var(--ink); line-height: 1.4; }
+.mc .lines { display: flex; flex-wrap: wrap; gap: 6px; } .mc .lines span { white-space: nowrap; background: var(--panel); border-radius: 6px; padding: 1px 8px; font-size: 13px; }
+.mc .said { display: flex; align-items: baseline; gap: 2px; } .mc .said + .said { margin-top: 3px; color: var(--ink2); }
+.okc { color: var(--ok); } .noc { color: var(--bad); }
+.mc .v.best::before { content: "better"; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ok); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-right: 8px; vertical-align: 2px; }
+
+/* layouts */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.two.wideLeft { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 16px; }
+.stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
+
+/* the five steps in a row (design 1) */
+.steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr) 22px) minmax(0, 1fr); align-items: stretch; }
+.steps .arr { align-self: center; justify-self: center; font-style: normal; color: var(--ink3); font-size: 16px; }
+.step { display: flex; flex-direction: column; gap: 6px; }
+.step h3 { display: flex; align-items: center; gap: 8px; }
+.n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--ink3); font-size: 12px; font-weight: 600; flex: none; font-variant-numeric: tabular-nums; }
+.step p { color: var(--ink2); font-size: 13px; flex: 1; }
+.sameline { color: var(--ink2); font-size: 13px; margin: 10px 0 0; }
+.sameline b { color: var(--ink); font-weight: 600; }
+
+/* step 3 */
+.chain { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.chain li { display: flex; align-items: baseline; gap: 4px; border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px; font-size: 13px; color: var(--ink2); }
+.chain li b { color: var(--ink); font-weight: 600; }
+.chain li.model { background: var(--modelbg); } .chain li.harness { background: var(--harnessbg); }
+.chain li .dot { transform: translateY(-1px); margin-right: 8px; }
+.chain.arrows { gap: 22px; }
+.chain.arrows li + li { position: relative; }
+.chain.arrows li + li::before { content: "↓"; position: absolute; top: -21px; left: 50%; color: var(--ink3); font-size: 13px; }
+.round { margin: 10px 0 0; border: 1px dashed var(--line); border-radius: 9px; padding: 8px 12px; color: var(--ink2); font-size: 13px; text-align: center; }
+.round b { color: var(--ink); font-weight: 600; }
+
+/* tables */
+.grid { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+.grid th, .grid td { text-align: left; padding: 6px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+.grid thead th { border-top: none; color: var(--ink3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; padding-top: 0; }
+.grid thead th small { text-transform: none; letter-spacing: 0; }
+.grid tbody th { font-weight: 500; color: var(--ink); }
+.grid td { color: var(--ink2); }
+.grid td.best { color: var(--ink); font-weight: 650; }
+.diff th:first-child { width: 36%; } .diff td { width: 32%; }
+.cmp { margin-top: 6px; } .cmp thead th { padding-top: 4px; } .cmp th:first-child { width: 44%; } .cmp td { white-space: nowrap; }
+.tasks th, .tasks td { padding: 4px 8px; white-space: nowrap; }
+.tasks tbody th { overflow: hidden; text-overflow: ellipsis; max-width: 0; width: 100%; }
+.tasks td.num { color: var(--ink3); text-align: right; width: 28px; }
+.tasks .mark { display: inline-block; width: 34px; font-size: 11.5px; }
+.tasks td.ok .mark { color: var(--ok); } .tasks td.no .mark { color: var(--bad); font-weight: 600; }
+.tasksTwo { gap: 22px; }
+.foot { color: var(--ink3); font-size: 12px; margin: 8px 0 0; }
+.opus { table-layout: fixed; } .opus th:first-child { width: 31%; } .opus th:last-child, .opus td:last-child { width: 112px; white-space: nowrap; }
+.st { display: inline-block; font-size: 11px; border: 1px solid currentColor; border-radius: 999px; padding: 0 8px; line-height: 18px; white-space: nowrap; color: var(--ink3); font-weight: 500; }
+.st.done { color: var(--ok); } .st.open { color: var(--warn); } .st.has { color: var(--ink2); }
+
+/* small lists */
+.same { margin: 6px 0 0; }
+.same div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; font-size: 13px; }
+.same dt { color: var(--ink); font-weight: 500; } .same dd { margin: 0; color: var(--ink2); }
+.plug { display: grid; grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr) 14px minmax(0, 1fr) 14px minmax(0, 1.25fr); align-items: stretch; gap: 4px; margin: 8px 0; }
+.plug > div { border: 1px solid var(--line); border-radius: 9px; padding: 6px 9px; background: var(--harnessbg); display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.plug > div.m { background: var(--modelbg); }
+.plug small { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink3); }
+.plug b { font-size: 13px; font-weight: 600; line-height: 1.25; } .plug span { font-size: 11.5px; color: var(--ink2); line-height: 1.25; }
+.plug > i { align-self: center; font-style: normal; color: var(--ink3); text-align: center; }
+.verdict dl { margin: 6px 0 0; }
+.verdict dl div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; border-top: 1px solid var(--line); padding: 6px 0; font-size: 13px; }
+.verdict dt { color: var(--ink3); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; padding-top: 2px; }
+.verdict dd { margin: 0; color: var(--ink2); } .verdict dd b { color: var(--ink); font-weight: 600; }
+.four { list-style: none; margin: 6px 0 0; padding: 0; }
+.four li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; border-top: 1px solid var(--line); padding: 6px 0; font-size: 13px; }
+.four b { font-weight: 600; } .four p { color: var(--ink2); margin-top: 1px; } .four .st { margin-left: 6px; }
+.what { margin: 0 0 4px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.what li { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 8px 12px; color: var(--ink2); font-size: 13.5px; }
+
+/* a narrow panel: the task tables keep the full width, the totals and verdict sit under them */
+.view { container: view / inline-size; }
+@container view (max-width: 1150px) {
+  .two.wideLeft.res { grid-template-columns: minmax(0, 1fr); }
+  .two.wideLeft.res > .stack { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+}
+@container view (max-width: 900px) { .two.wideLeft { grid-template-columns: minmax(0, 1fr); } }
+
+/* design 1 · Tabs */
+.d1 { max-width: 1560px; margin: 0 auto; padding: 14px 24px 16px; }
+.d1 .top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.d1 .dateline { color: var(--ink3); font-size: 13px; } .grow { flex: 1; }
+.d1 nav { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 12px; }
+.d1 nav button { font: inherit; font-size: 14px; padding: 6px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.d1 nav button[aria-selected="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* design 2 · Board */
+.d2 { display: grid; grid-template-columns: 356px minmax(0, 1fr); }
+.rail { border-right: 1px solid var(--line); background: var(--surface); padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow: auto; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+.railtop { display: grid; gap: 8px; padding: 0 6px 8px; }
+.rail h5 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; margin: 10px 6px 2px; }
+.rail button { font: inherit; text-align: left; color: var(--ink); background: none; border: 1px solid transparent; border-radius: 10px; cursor: pointer; padding: 7px 10px; width: 100%; }
+.rail button:hover { background: var(--panel); }
+.rail button[aria-selected="true"] { background: var(--panel); border-color: var(--line); }
+.rail .plain { font-weight: 500; }
+.stepbtn { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; }
+.stepbtn .body { display: grid; gap: 3px; }
+.stepbtn b { font-weight: 600; font-size: 14px; }
+.stepbtn .txt { color: var(--ink2); font-size: 12.5px; line-height: 1.35; }
+.stepbtn .who { font-size: 10.5px; gap: 10px; }
+.stage { padding: 16px 24px; min-width: 0; min-height: 0; overflow: auto; scrollbar-width: none; }
+.stage::-webkit-scrollbar { display: none; }
+.stage .view { max-width: 1420px; }
+.d2 .view > .two { margin-top: 12px; }
+
+@media (max-width: 1100px) {
+  .steps { grid-template-columns: 1fr; gap: 8px; } .steps .arr { display: none; }
+  .two, .two.wideLeft, .d2 { grid-template-columns: minmax(0, 1fr); }
+  .rail { border-right: none; border-bottom: 1px solid var(--line); overflow: visible; }
+  .d { height: auto; }
+  header.hub { overflow-x: auto; scrollbar-width: none; } header.hub::-webkit-scrollbar { display: none; }
+  header.hub h1, header.hub > button:disabled { display: none; }
+}
+@media (max-width: 640px) {
+  .pair, .plug { grid-template-columns: minmax(0, 1fr); } .plug > i { display: none; }
+  .d1, .stage { padding-left: 16px; padding-right: 16px; }
+  .tasksTwo { grid-template-columns: minmax(0, 1fr); }
+}
+
+</style>
+</head>
+<body>
+<header class="hub">
+  <h1>Agentic Coder hub</h1>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Weights</button>
+  <button class="on">Harness</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Structure</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Flow</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Tests</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Battle</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Memory</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Instructions</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">All docs</button>
+  <button disabled title="Not part of this preview: only the Harness tab is drawn">Help</button>
+  <span class="spacer"></span>
+  <span class="pv">Preview</span>
+  <span class="seg" id="seg"><button data-d="d1" aria-pressed="true">Design 1 · Tabs</button><button data-d="d2" aria-pressed="false">Design 2 · Board</button></span>
+  <button class="info" id="infoBtn" aria-expanded="false">What’s real here?</button>
+</header>
+<div class="real" id="real" hidden>
+  <p><b>Real:</b> every number and name. They are read from your two model settings cards, your settings file (qwen in use, 64k, thinking up to 8,192), the app’s own memory sizing, last night’s 24-task run, the sorting check of 29 Sep and the quick checks. The steps and limits were checked against the code today.</p>
+  <p><b>Not real yet:</b> this is a picture of the tab, not the tab. The other hub tabs at the top do nothing here, and the two “Design” buttons exist only in this preview. In the app the tab would read the model list live.</p>
+</div>
+<main>
+<div class="d d1" id="d1">
+  <div class="top"><h1>The harness</h1><span class="dateline">one set of steps, whichever model is the brain</span><span class="grow"></span><span class="chips"><span class="chip"><i class="dot model"></i>Gemma 4 12B QAT <em>default</em></span><span class="chip"><i class="dot model"></i>Qwen3.5 9B <em class="live">in use now</em></span></span></div>
+  <nav role="tablist"><button role="tab" data-v="flow" aria-selected="true">1 · The flow</button><button role="tab" data-v="step3" aria-selected="false">2 · Step 3</button><button role="tab" data-v="diff" aria-selected="false">3 · Differences</button><button role="tab" data-v="results" aria-selected="false">4 · Results</button><button role="tab" data-v="opus" aria-selected="false">5 · More like Opus 5.5</button></nav>
+  <section class="view" data-v="flow"><h2>One request, from start to done</h2><p class="lead">The coloured dots show who does each part. The model only writes. The harness decides what gets written to your files, and when.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><div class="steps"><section class="card step"><h3><span class="n">1</span>You ask</h3><p>You type a request and press Enter.</p><span class="who"><span><i class="dot you"></i>you</span></span></section><i class="arr">→</i><section class="card step"><h3><span class="n">2</span>It sorts</h3><p>Word rules pick the kind: rename, fix, change, several files, question or step by step. The model is asked only when no rule fits.</p><span class="who"><span><i class="dot harness"></i>harness</span><span><i class="dot model"></i>model <em>sometimes</em></span></span></section><i class="arr">→</i><section class="card step"><h3><span class="n">3</span>It works</h3><p>Fix and change take a shortcut built for them. Rename needs no model at all. Everything else goes step by step.</p><span class="who"><span><i class="dot model"></i>model</span><span><i class="dot harness"></i>harness</span></span></section><i class="arr">→</i><section class="card step"><h3><span class="n">4</span>It checks</h3><p>Before any change it asks for your OK. Afterwards it runs the project’s tests and checks that every part of your request was done.</p><span class="who"><span><i class="dot you"></i>you</span><span><i class="dot harness"></i>harness</span><span><i class="dot model"></i>model</span></span></section><i class="arr">→</i><section class="card step"><h3><span class="n">5</span>Done</h3><p>The model writes a sentence on what changed. The harness adds the files it touched and how many tests pass.</p><span class="who"><span><i class="dot model"></i>model</span><span><i class="dot harness"></i>harness</span></span></section></div><p class="sameline"><b>The same whichever model is loaded:</b> the 5 steps · the 8 tools · the 3 safety gates · 40 steps and 8 tries at most · your OK before any change. Only one model is loaded at a time on this Mac; <code>/model</code> swaps them.</p><h4 class="pairtitle">The model in steps 2 to 5 is one of these two</h4><div class="pair" style="--rows:5"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Tasks passed<small>of 24 · higher = better</small></span><span class="v"><b>22</b> of 24</span></div><div class="row"><span class="k">Time for the 24 tasks<small>lower = faster</small></span><span class="v"><b>113 min</b></span></div><div class="row"><span class="k">Reading speed<small>tokens a second · higher = faster</small></span><span class="v"><b>127</b></span></div><div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v"><b>14.2</b></span></div><div class="row"><span class="k">Memory to run at 64k<small>GB · lower = better</small></span><span class="v"><b>9.1</b> GB</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Tasks passed<small>of 24 · higher = better</small></span><span class="v best"><b>24</b> of 24</span></div><div class="row"><span class="k">Time for the 24 tasks<small>lower = faster</small></span><span class="v best"><b>59 min</b></span></div><div class="row"><span class="k">Reading speed<small>tokens a second · higher = faster</small></span><span class="v best"><b>190</b></span></div><div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v best"><b>16.4</b></span></div><div class="row"><span class="k">Memory to run at 64k<small>GB · lower = better</small></span><span class="v best"><b>8.4</b> GB</span></div>
+  </article></div></section><section class="view" data-v="step3" hidden><h2>Inside step 3: how the work gets done</h2><p class="lead">Two ways, picked by the sorting step. Both are the same for Gemma and Qwen.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><div class="two"><section class="card half"><h3>The shortcut, for fix and change</h3>
+  <p class="sub">The model never edits your files. It writes tests and drafts, and the harness keeps only what passes.</p>
+  <ol class="chain">
+    <li class="model"><i class="dot model"></i><span><b>The model writes a test</b> that should fail today and pass once the work is done. For a fix, the project’s own failing test does this job.</span></li>
+    <li class="model"><i class="dot model"></i><span><b>The model drafts two versions</b> of the change.</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>The harness picks the test the drafts agree with.</b> If no draft passes any test, it stops trusting the tests and goes step by step.</span></li>
+    <li class="model"><i class="dot model"></i><span><b>The model tries changes until one passes that test:</b> up to 8 tries, each checked by the harness.</span></li>
+    <li class="you"><i class="dot you"></i><span><b>You OK it.</b> “Before I change anything: change convert.mjs (+1 −1). Go ahead?”</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>The harness writes the change</b> and runs the tests again. A change that removed something you didn’t ask to remove is sent back.</span></li>
+  </ol></section><section class="card half"><h3>Step by step, for everything else</h3>
+  <p class="sub">The model asks for one tool at a time. The harness decides whether it runs.</p>
+  <ol class="chain arrows">
+    <li class="model"><i class="dot model"></i><span><b>The model picks one tool:</b> Read, List, Search, Edit, Write, Bash, a to-do list, or a question to you.</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>3 safety gates.</b> Blocked words (rm -rf, sudo, git push). Your OK. A fence that keeps commands inside the project.</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>The harness runs it</b> and hands the result back to the model.</span></li>
+  </ol>
+  <p class="round">Round and round, <b>up to 40 steps</b>. It ends when the model answers instead of asking for a tool. It stops itself if it <b>repeats the same step</b> or hits <b>5 errors in a row</b>.</p></section></div><h4 class="pairtitle">What differs at this step</h4><div class="pair" style="--rows:4"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v"><b>14.2</b></span></div><div class="row"><span class="k">Thinking it used<small>tokens over the 24 tasks</small></span><span class="v"><b>67,443</b></span></div><div class="row"><span class="k">Times it was asked<small>model calls over the 24 tasks</small></span><span class="v"><b>105</b></span></div><div class="row"><span class="k">Its maker’s settings<small>temperature · top-p · top-k</small></span><span class="v">1.0 · 0.95 · 64</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v best"><b>16.4</b></span></div><div class="row"><span class="k">Thinking it used<small>tokens over the 24 tasks</small></span><span class="v"><b>29,653</b></span></div><div class="row"><span class="k">Times it was asked<small>model calls over the 24 tasks</small></span><span class="v"><b>143</b></span></div><div class="row"><span class="k">Its maker’s settings<small>temperature · top-p · top-k</small></span><span class="v">0.7 · 0.8 · 20</span></div>
+  </article></div></section><section class="view" data-v="diff" hidden><h2>Where the two models differ, and where they don’t</h2><p class="lead">The harness is one set of code. These are the only places the model changes anything. The better number in a row is bold.</p><div class="two wideLeft"><div><table class="grid diff"><thead><tr><th>What differs</th><th>Gemma 4 12B QAT</th><th>Qwen3.5 9B</th></tr></thead><tbody>
+  <tr><th>Made by</th><td>Google</td><td>Alibaba’s Qwen team</td></tr><tr><th>Model file<small>GB on disk</small></th><td>6.72 GB</td><td>6.87 GB</td></tr><tr><th>Speed helper<small>guesses the next words</small></th><td>a separate file (0.47 GB)</td><td>inside the model file</td></tr><tr><th>Memory each token takes<small>KB · lower = better</small></th><td class="best">8.7 KB</td><td>17.4 KB</td></tr><tr><th>Memory to run at 64k<small>GB · lower = better</small></th><td>9.1 GB</td><td class="best">8.4 GB</td></tr><tr><th>Reading speed<small>tokens a second · higher = faster</small></th><td>127</td><td class="best">190</td></tr><tr><th>Writing speed<small>tokens a second · higher = faster</small></th><td>14.2</td><td class="best">16.4</td></tr><tr><th>Its maker’s settings<small>temperature · top-p · top-k</small></th><td>1.0 · 0.95 · 64</td><td>0.7 · 0.8 · 20</td></tr><tr><th>The same, while thinking<small>temperature · top-p · top-k</small></th><td>1.0 · 0.95 · 64</td><td>0.6 · 0.95 · 20</td></tr><tr><th>Sorting check<small>of 82 requests · higher = better</small></th><td class="best">81 of 82</td><td>80 of 82</td></tr><tr><th>In /model</th><td>default</td><td>in use now</td></tr>
+  </tbody></table></div><div class="stack"><section class="card"><h3>The same for both</h3><dl class="same"><div><dt>The 5 steps</dt><dd>ask, sort, work, check, done</dd></div><div><dt>The 8 tools</dt><dd>Read, List, Search, Edit, Write, Bash, to-do list, a question to you</dd></div><div><dt>The 3 safety gates</dt><dd>blocked words, your OK, the fence around the project</dd></div><div><dt>The limits</dt><dd>40 steps, 8 tries, stops on a repeated step or 5 errors in a row</dd></div><div><dt>Thinking</dt><dd>Low or High; High thinks up to 4,096 tokens a reply (your setting: 8,192)</dd></div><div><dt>Longest conversation</dt><dd>256k tokens; yours is set to 64k</dd></div></dl></section><section class="card"><h3>Where a model plugs in</h3>
+  <div class="plug"><div><small>same</small><b>The harness</b><span>every screen, tool and check</span></div><i>→</i><div><small>same</small><b>One door</b><span>the only way to the model side</span></div><i>→</i><div><small>same</small><b>The engine</b><span>your build of llama.cpp</span></div><i>→</i><div class="m"><small>the brain</small><b>Gemma 4 12B QAT<br>or Qwen3.5 9B</b><span>one loaded at a time</span></div></div>
+  <p class="sub">A model is one settings card and two lines in the model list. A third model added there would show up on this tab by itself.</p></section></div></div></section><section class="view" data-v="results" hidden><h2>The same 24 tasks on both</h2><p class="lead">Each task is graded by a check the model never sees.</p><div class="two wideLeft res"><div><div class="two tasksTwo"><table class="grid tasks"><thead><tr><th>#</th><th>Task</th><th>Gemma<small>min:sec</small></th><th>Qwen3.5<small>min:sec</small></th></tr></thead><tbody><tr><td class="num">1</td><th title="Add a --json flag + a test">Add a --json flag + a test</th><td class="ok"><span class="mark">pass</span><span class="t">5:57</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:11</span></td></tr><tr><td class="num">2</td><th title="Fix a failing test">Fix a failing test</th><td class="ok"><span class="mark">pass</span><span class="t">0:49</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:23</span></td></tr><tr><td class="num">7</td><th title="Question: the tax code">Question: the tax code</th><td class="ok best"><span class="mark">pass</span><span class="t">0:05</span></td><td class="ok"><span class="mark">pass</span><span class="t">0:13</span></td></tr><tr><td class="num">8</td><th title="Rename a method">Rename a method</th><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td></tr><tr><td class="num">9</td><th title="Rename a constant">Rename a constant</th><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td></tr><tr><td class="num">10</td><th title="Fix an off-by-one count">Fix an off-by-one count</th><td class="ok"><span class="mark">pass</span><span class="t">1:37</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:55</span></td></tr><tr><td class="num">11</td><th title="Fix prices sorted as text">Fix prices sorted as text</th><td class="ok"><span class="mark">pass</span><span class="t">0:40</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:21</span></td></tr><tr><td class="num">12</td><th title="Add a currency option">Add a currency option</th><td class="ok"><span class="mark">pass</span><span class="t">8:45</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:41</span></td></tr><tr><td class="num">13</td><th title="Add a Python function">Add a Python function</th><td class="ok"><span class="mark">pass</span><span class="t">6:27</span></td><td class="ok best"><span class="mark">pass</span><span class="t">3:19</span></td></tr><tr><td class="num">14</td><th title="Add perimeter(), no tests">Add perimeter(), no tests</th><td class="ok"><span class="mark">pass</span><span class="t">6:10</span></td><td class="ok best"><span class="mark">pass</span><span class="t">3:59</span></td></tr><tr><td class="num">15</td><th title="Fix Fahrenheit, no tests">Fix Fahrenheit, no tests</th><td class="ok"><span class="mark">pass</span><span class="t">4:03</span></td><td class="ok best"><span class="mark">pass</span><span class="t">2:06</span></td></tr><tr><td class="num">16</td><th title="Write a short story">Write a short story</th><td class="ok"><span class="mark">pass</span><span class="t">0:55</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:28</span></td></tr></tbody></table><table class="grid tasks"><thead><tr><th>#</th><th>Task</th><th>Gemma<small>min:sec</small></th><th>Qwen3.5<small>min:sec</small></th></tr></thead><tbody><tr><td class="num">17</td><th title="Write notes about an API">Write notes about an API</th><td class="ok"><span class="mark">pass</span><span class="t">0:38</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:24</span></td></tr><tr><td class="num">18</td><th title="A story, in a no-code folder">A story, in a no-code folder</th><td class="ok"><span class="mark">pass</span><span class="t">1:29</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:44</span></td></tr><tr><td class="num">19</td><th title="A symbol option, 3 files">A symbol option, 3 files</th><td class="ok"><span class="mark">pass</span><span class="t">7:13</span></td><td class="ok best"><span class="mark">pass</span><span class="t">2:36</span></td></tr><tr><td class="num">20</td><th title="A new argument, 2 files">A new argument, 2 files</th><td class="ok"><span class="mark">pass</span><span class="t">8:46</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:44</span></td></tr><tr><td class="num">21</td><th title="A big file, two places">A big file, two places</th><td class="no"><span class="mark">fail</span><span class="t">14:39</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:38</span></td></tr><tr><td class="num">22</td><th title="A bare “fix the bug”">A bare “fix the bug”</th><td class="ok"><span class="mark">pass</span><span class="t">5:44</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:25</span></td></tr><tr><td class="num">23</td><th title="The one word “api”">The one word “api”</th><td class="ok"><span class="mark">pass</span><span class="t">3:49</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:55</span></td></tr><tr><td class="num">24</td><th title="A bare “fix the test”">A bare “fix the test”</th><td class="ok"><span class="mark">pass</span><span class="t">1:36</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:58</span></td></tr><tr><td class="num">25</td><th title="Question: a big project">Question: a big project</th><td class="ok"><span class="mark">pass</span><span class="t">1:12</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:55</span></td></tr><tr><td class="num">26</td><th title="A change in a big project">A change in a big project</th><td class="ok"><span class="mark">pass</span><span class="t">11:17</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:59</span></td></tr><tr><td class="num">27</td><th title="Minus sign before the $">Minus sign before the $</th><td class="ok"><span class="mark">pass</span><span class="t">6:38</span></td><td class="ok best"><span class="mark">pass</span><span class="t">4:41</span></td></tr><tr><td class="num">28</td><th title="A Python change, 2 files">A Python change, 2 files</th><td class="no"><span class="mark">fail</span><span class="t">14:40</span></td><td class="ok best"><span class="mark">pass</span><span class="t">13:17</span></td></tr></tbody></table></div>
+  <p class="foot">Last night, 30 Sep: the same 24 practice tasks on both, thinking on (High), 32k, 15 minutes a task at most. The faster time in each row is bold. Tasks 8 and 9 are renames: the app does those itself, with no model.</p></div><div class="stack"><section class="card"><h3>The totals</h3><table class="grid cmp"><thead><tr><th></th><th>Gemma 4 12B QAT</th><th>Qwen3.5 9B</th></tr></thead><tbody><tr><th>Tasks passed<small>of 24 · higher = better</small></th><td><b>22</b> of 24</td><td class="best"><b>24</b> of 24</td></tr><tr><th>Time for the 24 tasks<small>lower = faster</small></th><td><b>113 min</b></td><td class="best"><b>59 min</b></td></tr><tr><th>A typical task<small>the middle one · lower = faster</small></th><td><b>3 min 56 s</b></td><td class="best"><b>1 min 33 s</b></td></tr></tbody></table></section><section class="card verdict"><h3>Which model, when</h3>
+  <dl>
+    <div><dt>Faster</dt><dd><b>Qwen, about 1.9×.</b> 59 min against 113 min for the same 24 tasks. It writes and thinks about half as much per task.</dd></div>
+    <div><dt>Passes more</dt><dd><b>Qwen, by a little.</b> 24 against 22. Gemma’s two misses were the 15-minute limit, not wrong code.</dd></div>
+    <div><dt>Watch</dt><dd><b>Qwen said “done” when it wasn’t.</b> Three times on the pages you tried by hand on 29 Sep. Nothing in the 24 tasks catches that.</dd></div>
+    <div><dt>Not tested</dt><dd>Thinking off on the full set. Page and design work: the component battle is built, not run.</dd></div>
+    <div><dt>So</dt><dd><b>Qwen for small fixes and features a test can check.</b> No verdict yet for pages and design.</dd></div>
+  </dl></section></div></div></section><section class="view" data-v="opus" hidden><h2>More like Opus 5.5: what has been copied since 28 Sep</h2><p class="lead">Each row of the Opus 5.5 picture, next to what this harness does today. It is the same for both models, because all of it lives in the harness.</p><div class="two wideLeft"><div><table class="grid opus"><thead><tr><th>Opus 5.5</th><th>This harness today, with either model</th><th>Status</th></tr></thead><tbody><tr><th>1 · Gets a task</th><td>You type a request.</td><td><span class="st has">has it</span></td></tr><tr><th>2 · Thinking at the top setting</th><td>High turns thinking on, up to 4,096 tokens a reply (yours: 8,192).</td><td><span class="st done">built 28 Sep</span></td></tr><tr><th>2 · Room for up to 1 million tokens</th><td>64k is your setting. Both models can go to 256k.</td><td><span class="st done">built 28 Sep</span></td></tr><tr><th>2 · A sealed box, safety checks on</th><td>The fence, blocked words, your OK and your saved /permissions rules.</td><td><span class="st has">has it</span></td></tr><tr><th>3 · Think, use one tool, read, repeat</th><td>The same loop, up to 40 steps, plus a shortcut Opus doesn’t have.</td><td><span class="st has">has it</span></td></tr><tr><th>4 · Graded by hidden tests</th><td>The guard: the harness stops trusting a test that no draft can pass.</td><td><span class="st done">built 29 Sep</span></td></tr><tr><th>5 · Each test run 5 times</th><td>Once or twice so far: 24 tasks on both models, 28 on Gemma.</td><td><span class="st open">still open</span></td></tr><tr><th>Memory · old parts squeezed</th><td>When nearly full, the model writes its notes and carries on.</td><td><span class="st has">has it</span></td></tr><tr><th>When it stops</th><td>It answers, goes in circles, hits 40 steps, or you press Esc.</td><td><span class="st has">has it</span></td></tr><tr><th>Safety net · a backup model</th><td>None. Only one model fits in 16 GB at a time.</td><td><span class="st skip">skip</span></td></tr><tr><th>Watchers on every turn</th><td>None. They would need a second model reading every step.</td><td><span class="st skip">skip</span></td></tr><tr><th>Teams of agents</th><td>One model, one step at a time. Two answers at once gained nothing here.</td><td><span class="st skip">skip</span></td></tr></tbody></table></div><div class="stack"><section class="card"><h3>The four worth copying: where they stand</h3><ol class="four"><li><span class="n">1</span><div><b>Score it the way Opus is scored</b> <span class="st open">partly</span><p>24 and 28 tasks have been run, once or twice each. Five runs a task is still to do.</p></div></li><li><span class="n">2</span><div><b>A grader the model can’t bend</b> <span class="st done">built</span><p>The guard is in the harness, so it covers Gemma and Qwen alike. Round 3 with it: Gemma 27 of 28.</p></div></li><li><span class="n">3</span><div><b>Turn thinking up</b> <span class="st done">built</span><p>High is there for both. Last night’s run used it: Gemma 22 of 24, Qwen 24 of 24.</p></div></li><li><span class="n">4</span><div><b>More room to remember</b> <span class="st done">built</span><p>64k is in use. It costs Qwen twice the memory per token (17.4 KB against 8.7).</p></div></li></ol></section></div></div></section>
+</div>
+<div class="d d2" id="d2" hidden>
+  <aside class="rail" role="tablist">
+    <div class="railtop"><h1>The harness</h1><span class="chips"><span class="chip"><i class="dot model"></i>Gemma 4 12B QAT <em>default</em></span><span class="chip"><i class="dot model"></i>Qwen3.5 9B <em class="live">in use now</em></span></span></div>
+    <button role="tab" class="plain" data-v="over" aria-selected="true">Overview</button>
+    <h5>One request, from start to done</h5>
+    <button role="tab" class="stepbtn" data-v="s1" aria-selected="false"><span class="n">1</span><span class="body"><b>You ask</b><span class="txt">You type a request and press Enter.</span><span class="who"><span><i class="dot you"></i>you</span></span></span></button><button role="tab" class="stepbtn" data-v="s2" aria-selected="false"><span class="n">2</span><span class="body"><b>It sorts</b><span class="txt">Rules pick the kind of job. The model is asked only when no rule fits.</span><span class="who"><span><i class="dot harness"></i>harness</span><span><i class="dot model"></i>model <em>sometimes</em></span></span></span></button><button role="tab" class="stepbtn" data-v="s3" aria-selected="false"><span class="n">3</span><span class="body"><b>It works</b><span class="txt">A shortcut for fixes and changes. Step by step for everything else.</span><span class="who"><span><i class="dot model"></i>model</span><span><i class="dot harness"></i>harness</span></span></span></button><button role="tab" class="stepbtn" data-v="s4" aria-selected="false"><span class="n">4</span><span class="body"><b>It checks</b><span class="txt">Your OK before a change. The tests and a completeness check after.</span><span class="who"><span><i class="dot you"></i>you</span><span><i class="dot harness"></i>harness</span><span><i class="dot model"></i>model</span></span></span></button><button role="tab" class="stepbtn" data-v="s5" aria-selected="false"><span class="n">5</span><span class="body"><b>Done</b><span class="txt">The model’s sentence, then the harness’s facts.</span><span class="who"><span><i class="dot model"></i>model</span><span><i class="dot harness"></i>harness</span></span></span></button>
+    <h5>Compare</h5>
+    <button role="tab" class="plain" data-v="diff" aria-selected="false">Differences</button><button role="tab" class="plain" data-v="results" aria-selected="false">Results</button><button role="tab" class="plain" data-v="opus" aria-selected="false">More like Opus 5.5</button>
+  </aside>
+  <div class="stage"><section class="view" data-v="over"><h2>One harness, two models</h2><p class="lead">The steps on the left are the same code whichever model is loaded. Pick a step to see what happens in it, and how the two models compare right there.</p><div class="pair" style="--rows:6"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Tasks passed<small>of 24 · higher = better</small></span><span class="v"><b>22</b> of 24</span></div><div class="row"><span class="k">Time for the 24 tasks<small>lower = faster</small></span><span class="v"><b>113 min</b></span></div><div class="row"><span class="k">A typical task<small>the middle one · lower = faster</small></span><span class="v"><b>3 min 56 s</b></span></div><div class="row"><span class="k">Reading speed<small>tokens a second · higher = faster</small></span><span class="v"><b>127</b></span></div><div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v"><b>14.2</b></span></div><div class="row"><span class="k">Memory to run at 64k<small>GB · lower = better</small></span><span class="v"><b>9.1</b> GB</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Tasks passed<small>of 24 · higher = better</small></span><span class="v best"><b>24</b> of 24</span></div><div class="row"><span class="k">Time for the 24 tasks<small>lower = faster</small></span><span class="v best"><b>59 min</b></span></div><div class="row"><span class="k">A typical task<small>the middle one · lower = faster</small></span><span class="v best"><b>1 min 33 s</b></span></div><div class="row"><span class="k">Reading speed<small>tokens a second · higher = faster</small></span><span class="v best"><b>190</b></span></div><div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v best"><b>16.4</b></span></div><div class="row"><span class="k">Memory to run at 64k<small>GB · lower = better</small></span><span class="v best"><b>8.4</b> GB</span></div>
+  </article></div><div class="two"><section class="card"><h3>The same for both</h3><dl class="same"><div><dt>The 5 steps</dt><dd>ask, sort, work, check, done</dd></div><div><dt>The 8 tools</dt><dd>Read, List, Search, Edit, Write, Bash, to-do list, a question to you</dd></div><div><dt>The 3 safety gates</dt><dd>blocked words, your OK, the fence around the project</dd></div><div><dt>The limits</dt><dd>40 steps, 8 tries, stops on a repeated step or 5 errors in a row</dd></div><div><dt>Thinking</dt><dd>Low or High; High thinks up to 4,096 tokens a reply (your setting: 8,192)</dd></div><div><dt>Longest conversation</dt><dd>256k tokens; yours is set to 64k</dd></div></dl></section><section class="card"><h3>Where a model plugs in</h3>
+  <div class="plug"><div><small>same</small><b>The harness</b><span>every screen, tool and check</span></div><i>→</i><div><small>same</small><b>One door</b><span>the only way to the model side</span></div><i>→</i><div><small>same</small><b>The engine</b><span>your build of llama.cpp</span></div><i>→</i><div class="m"><small>the brain</small><b>Gemma 4 12B QAT<br>or Qwen3.5 9B</b><span>one loaded at a time</span></div></div>
+  <p class="sub">A model is one settings card and two lines in the model list. A third model added there would show up on this tab by itself.</p></section></div></section><section class="view" data-v="s1" hidden><h2>1 · You ask</h2><p class="lead">Nothing has been sent to a model yet.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><ul class="what"><li>You type a request and press Enter. <code>@file</code> adds a file, <code>!cmd</code> runs a command, <code>/cmd</code> is an app command.</li><li>The request goes to whichever model is picked in <code>/model</code>. Only one is loaded at a time on this Mac.</li><li>If the other model is loaded, the app stops it first and starts the one you picked.</li><li>Saved facts that fit the request are added to it before the work starts.</li></ul><h4 class="pairtitle">The two models at this step</h4><div class="pair" style="--rows:3"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Model file<small>GB on disk</small></span><span class="v"><b>6.72</b> GB</span></div><div class="row"><span class="k">Speed helper<small>guesses the next words</small></span><span class="v">a separate file, 0.47 GB</span></div><div class="row"><span class="k">Memory to run at 64k<small>GB · lower = better</small></span><span class="v"><b>9.1</b> GB</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Model file<small>GB on disk</small></span><span class="v"><b>6.87</b> GB</span></div><div class="row"><span class="k">Speed helper<small>guesses the next words</small></span><span class="v">inside the model file</span></div><div class="row"><span class="k">Memory to run at 64k<small>GB · lower = better</small></span><span class="v best"><b>8.4</b> GB</span></div>
+  </article></div></section><section class="view" data-v="s2" hidden><h2>2 · It sorts</h2><p class="lead">The harness decides which path the request takes. The model is a fallback here.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><ul class="what"><li>Word rules look at your request first and pick the kind: rename, fix, change, several files, question or step by step.</li><li>A “thanks” gets a quick reply with no tools. A bare “fix the bug” with nothing failing gets a question first.</li><li>Only when no rule fits is the model asked, and it answers in a fixed form the harness can read.</li><li>The verdict shows in dim text under your request: <code>Sorted as: fix · shortcut</code>.</li></ul><h4 class="pairtitle">The two models at this step</h4><div class="pair" style="--rows:2"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Sorting check<small>of 82 requests · higher = better</small></span><span class="v best"><b>81</b> of 82</span></div><div class="row"><span class="k">Time to sort one request<small>seconds · lower = faster</small></span><span class="v"><b>1.4</b> s</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Sorting check<small>of 82 requests · higher = better</small></span><span class="v"><b>80</b> of 82</span></div><div class="row"><span class="k">Time to sort one request<small>seconds · lower = faster</small></span><span class="v best"><b>1.1</b> s</span></div>
+  </article></div><h4 class="pairtitle">One real task at this step <span>“toFahrenheit() in convert.mjs gives wrong answers. Fix it.” · last night’s run</span></h4><div class="pair" style="--rows:1"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">It was sorted as<small>the dim line under your request</small></span><span class="v"><code>fix · shortcut</code></span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">It was sorted as<small>the dim line under your request</small></span><span class="v"><code>fix · shortcut</code></span></div>
+  </article></div></section><section class="view" data-v="s3" hidden><h2>3 · It works</h2><p class="lead">Two ways, picked by the sorting step. Both are the same for Gemma and Qwen.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><div class="two"><section class="card half"><h3>The shortcut, for fix and change</h3>
+  <p class="sub">The model never edits your files. It writes tests and drafts, and the harness keeps only what passes.</p>
+  <ol class="chain">
+    <li class="model"><i class="dot model"></i><span><b>The model writes a test</b> that should fail today and pass once the work is done. For a fix, the project’s own failing test does this job.</span></li>
+    <li class="model"><i class="dot model"></i><span><b>The model drafts two versions</b> of the change.</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>The harness picks the test the drafts agree with.</b> If no draft passes any test, it stops trusting the tests and goes step by step.</span></li>
+    <li class="model"><i class="dot model"></i><span><b>The model tries changes until one passes that test:</b> up to 8 tries, each checked by the harness.</span></li>
+    <li class="you"><i class="dot you"></i><span><b>You OK it.</b> “Before I change anything: change convert.mjs (+1 −1). Go ahead?”</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>The harness writes the change</b> and runs the tests again. A change that removed something you didn’t ask to remove is sent back.</span></li>
+  </ol></section><section class="card half"><h3>Step by step, for everything else</h3>
+  <p class="sub">The model asks for one tool at a time. The harness decides whether it runs.</p>
+  <ol class="chain arrows">
+    <li class="model"><i class="dot model"></i><span><b>The model picks one tool:</b> Read, List, Search, Edit, Write, Bash, a to-do list, or a question to you.</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>3 safety gates.</b> Blocked words (rm -rf, sudo, git push). Your OK. A fence that keeps commands inside the project.</span></li>
+    <li class="harness"><i class="dot harness"></i><span><b>The harness runs it</b> and hands the result back to the model.</span></li>
+  </ol>
+  <p class="round">Round and round, <b>up to 40 steps</b>. It ends when the model answers instead of asking for a tool. It stops itself if it <b>repeats the same step</b> or hits <b>5 errors in a row</b>.</p></section></div><h4 class="pairtitle">The two models at this step</h4><div class="pair" style="--rows:4"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v"><b>14.2</b></span></div><div class="row"><span class="k">Thinking it used<small>tokens over the 24 tasks</small></span><span class="v"><b>67,443</b></span></div><div class="row"><span class="k">Times it was asked<small>model calls over the 24 tasks</small></span><span class="v"><b>105</b></span></div><div class="row long"><span class="k">On a real task, the Fahrenheit fix, the app printed</span><span class="v"><span class="lines"><span>Writing tests: ✓✓</span><span>Drafting versions: ✓✓</span><span>Checked tests against drafts: ✓✓</span></span></span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Writing speed<small>tokens a second · higher = faster</small></span><span class="v best"><b>16.4</b></span></div><div class="row"><span class="k">Thinking it used<small>tokens over the 24 tasks</small></span><span class="v"><b>29,653</b></span></div><div class="row"><span class="k">Times it was asked<small>model calls over the 24 tasks</small></span><span class="v"><b>143</b></span></div><div class="row long"><span class="k">On a real task, the Fahrenheit fix, the app printed</span><span class="v"><span class="lines"><span>Writing tests: ✗✓✗</span><span>Drafting versions: ✓✓</span><span>Checked tests against drafts: ✓</span></span></span></div>
+  </article></div></section><section class="view" data-v="s4" hidden><h2>4 · It checks</h2><p class="lead">The harness and you decide what is kept. The model is asked once whether the work is complete.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><ul class="what"><li>Before any change is written, you get one question that shows what will change. You say yes, or say what to do instead.</li><li>After the change, the harness runs the project’s tests again.</li><li>It compares the change with your request. If a part is missing, the work is sent back once.</li><li>A change that removed something you didn’t ask to remove is sent back too.</li></ul><h4 class="pairtitle">The two models at this step</h4><div class="pair" style="--rows:2"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Tasks passed<small>of 24 · higher = better</small></span><span class="v"><b>22</b> of 24</span></div><div class="row"><span class="k">What it missed</span><span class="v">task 21 and task 28: the 15-minute limit</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Tasks passed<small>of 24 · higher = better</small></span><span class="v best"><b>24</b> of 24</span></div><div class="row"><span class="k">What it missed</span><span class="v">nothing</span></div>
+  </article></div><h4 class="pairtitle">One real task at this step <span>“toFahrenheit() in convert.mjs gives wrong answers. Fix it.” · last night’s run</span></h4><div class="pair" style="--rows:2"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row long"><span class="k">It asked you</span><span class="v">“Before I change anything: change convert.mjs (+1 −1). Go ahead?”</span></div><div class="row"><span class="k">The hidden check, after your yes</span><span class="v"><b class="okc">passed</b></span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row long"><span class="k">It asked you</span><span class="v">“Before I change anything: change convert.mjs (+1 −1). Go ahead?”</span></div><div class="row"><span class="k">The hidden check, after your yes</span><span class="v"><b class="okc">passed</b></span></div>
+  </article></div></section><section class="view" data-v="s5" hidden><h2>5 · Done</h2><p class="lead">What you read at the end, and how long it took to get there.</p><p class="legend"><span><i class="dot model"></i>the model, the brain (writes the words and code)</span><span><i class="dot harness"></i>the harness (the code around it)</span><span><i class="dot you"></i>you</span></p><ul class="what"><li>The model writes a sentence on what changed.</li><li>The harness adds the files it touched and how many tests pass, then <code>Worked for 41s</code>.</li><li>The harness’s lines are facts. The model’s sentence is its own claim, so it is the part to read with care.</li><li>After a task it asks before saving anything it learned to its memory.</li></ul><h4 class="pairtitle">The two models at this step</h4><div class="pair" style="--rows:3"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row"><span class="k">Time for the 24 tasks<small>lower = faster</small></span><span class="v"><b>113 min</b></span></div><div class="row"><span class="k">A typical task<small>the middle one · lower = faster</small></span><span class="v"><b>3 min 56 s</b></span></div><div class="row"><span class="k">Known weak spot</span><span class="v">runs out of time on the two longest tasks</span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row"><span class="k">Time for the 24 tasks<small>lower = faster</small></span><span class="v best"><b>59 min</b></span></div><div class="row"><span class="k">A typical task<small>the middle one · lower = faster</small></span><span class="v best"><b>1 min 33 s</b></span></div><div class="row"><span class="k">Known weak spot</span><span class="v">said “done” when it was not, 3 times by hand</span></div>
+  </article></div><h4 class="pairtitle">One real task at this step <span>“toFahrenheit() in convert.mjs gives wrong answers. Fix it.” · last night’s run</span></h4><div class="pair" style="--rows:2"><article class="mc" data-model="gemma">
+    <header><b>Gemma 4 12B QAT</b><span class="tags"><span class="tag">default</span></span></header>
+    <div class="row long"><span class="k">What it said at the end</span><span class="v"><span class="said"><i class="dot model"></i><span>It changes the formula to add 32 instead of subtracting it when converting temperatures.</span></span><span class="said"><i class="dot harness"></i><span>Changed convert.mjs (checked with a throwaway test, not added to your project).</span></span></span></div><div class="row"><span class="k">Worked for<small>lower = faster</small></span><span class="v"><b>4 min 03 s</b></span></div>
+  </article><article class="mc" data-model="qwen">
+    <header><b>Qwen3.5 9B</b><span class="tags"><span class="tag live">in use now</span></span></header>
+    <div class="row long"><span class="k">What it said at the end</span><span class="v"><span class="said"><i class="dot model"></i><span>This change converts the temperature conversion formula from Celsius to Fahrenheit to Fahrenheit to Celsius.</span></span><span class="said"><i class="dot harness"></i><span>Changed convert.mjs (checked with a throwaway test, not added to your project).</span></span></span></div><div class="row"><span class="k">Worked for<small>lower = faster</small></span><span class="v best"><b>2 min 06 s</b></span></div>
+  </article></div></section><section class="view" data-v="diff" hidden><h2>Where the two models differ, and where they don’t</h2><p class="lead">These are the only places the model changes anything. The better number in a row is bold.</p><div class="two wideLeft"><div><table class="grid diff"><thead><tr><th>What differs</th><th>Gemma 4 12B QAT</th><th>Qwen3.5 9B</th></tr></thead><tbody>
+  <tr><th>Made by</th><td>Google</td><td>Alibaba’s Qwen team</td></tr><tr><th>Model file<small>GB on disk</small></th><td>6.72 GB</td><td>6.87 GB</td></tr><tr><th>Speed helper<small>guesses the next words</small></th><td>a separate file (0.47 GB)</td><td>inside the model file</td></tr><tr><th>Memory each token takes<small>KB · lower = better</small></th><td class="best">8.7 KB</td><td>17.4 KB</td></tr><tr><th>Memory to run at 64k<small>GB · lower = better</small></th><td>9.1 GB</td><td class="best">8.4 GB</td></tr><tr><th>Reading speed<small>tokens a second · higher = faster</small></th><td>127</td><td class="best">190</td></tr><tr><th>Writing speed<small>tokens a second · higher = faster</small></th><td>14.2</td><td class="best">16.4</td></tr><tr><th>Its maker’s settings<small>temperature · top-p · top-k</small></th><td>1.0 · 0.95 · 64</td><td>0.7 · 0.8 · 20</td></tr><tr><th>The same, while thinking<small>temperature · top-p · top-k</small></th><td>1.0 · 0.95 · 64</td><td>0.6 · 0.95 · 20</td></tr><tr><th>Sorting check<small>of 82 requests · higher = better</small></th><td class="best">81 of 82</td><td>80 of 82</td></tr><tr><th>In /model</th><td>default</td><td>in use now</td></tr>
+  </tbody></table></div><div class="stack"><section class="card"><h3>The same for both</h3><dl class="same"><div><dt>The 5 steps</dt><dd>ask, sort, work, check, done</dd></div><div><dt>The 8 tools</dt><dd>Read, List, Search, Edit, Write, Bash, to-do list, a question to you</dd></div><div><dt>The 3 safety gates</dt><dd>blocked words, your OK, the fence around the project</dd></div><div><dt>The limits</dt><dd>40 steps, 8 tries, stops on a repeated step or 5 errors in a row</dd></div><div><dt>Thinking</dt><dd>Low or High; High thinks up to 4,096 tokens a reply (your setting: 8,192)</dd></div><div><dt>Longest conversation</dt><dd>256k tokens; yours is set to 64k</dd></div></dl></section><section class="card"><h3>Where a model plugs in</h3>
+  <div class="plug"><div><small>same</small><b>The harness</b><span>every screen, tool and check</span></div><i>→</i><div><small>same</small><b>One door</b><span>the only way to the model side</span></div><i>→</i><div><small>same</small><b>The engine</b><span>your build of llama.cpp</span></div><i>→</i><div class="m"><small>the brain</small><b>Gemma 4 12B QAT<br>or Qwen3.5 9B</b><span>one loaded at a time</span></div></div>
+  <p class="sub">A model is one settings card and two lines in the model list. A third model added there would show up on this tab by itself.</p></section></div></div></section><section class="view" data-v="results" hidden><h2>The same 24 tasks on both</h2><p class="lead">Each task is graded by a check the model never sees.</p><div class="two wideLeft res"><div><div class="two tasksTwo"><table class="grid tasks"><thead><tr><th>#</th><th>Task</th><th>Gemma<small>min:sec</small></th><th>Qwen3.5<small>min:sec</small></th></tr></thead><tbody><tr><td class="num">1</td><th title="Add a --json flag + a test">Add a --json flag + a test</th><td class="ok"><span class="mark">pass</span><span class="t">5:57</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:11</span></td></tr><tr><td class="num">2</td><th title="Fix a failing test">Fix a failing test</th><td class="ok"><span class="mark">pass</span><span class="t">0:49</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:23</span></td></tr><tr><td class="num">7</td><th title="Question: the tax code">Question: the tax code</th><td class="ok best"><span class="mark">pass</span><span class="t">0:05</span></td><td class="ok"><span class="mark">pass</span><span class="t">0:13</span></td></tr><tr><td class="num">8</td><th title="Rename a method">Rename a method</th><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td></tr><tr><td class="num">9</td><th title="Rename a constant">Rename a constant</th><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td><td class="ok"><span class="mark">pass</span><span class="t">0:00</span></td></tr><tr><td class="num">10</td><th title="Fix an off-by-one count">Fix an off-by-one count</th><td class="ok"><span class="mark">pass</span><span class="t">1:37</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:55</span></td></tr><tr><td class="num">11</td><th title="Fix prices sorted as text">Fix prices sorted as text</th><td class="ok"><span class="mark">pass</span><span class="t">0:40</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:21</span></td></tr><tr><td class="num">12</td><th title="Add a currency option">Add a currency option</th><td class="ok"><span class="mark">pass</span><span class="t">8:45</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:41</span></td></tr><tr><td class="num">13</td><th title="Add a Python function">Add a Python function</th><td class="ok"><span class="mark">pass</span><span class="t">6:27</span></td><td class="ok best"><span class="mark">pass</span><span class="t">3:19</span></td></tr><tr><td class="num">14</td><th title="Add perimeter(), no tests">Add perimeter(), no tests</th><td class="ok"><span class="mark">pass</span><span class="t">6:10</span></td><td class="ok best"><span class="mark">pass</span><span class="t">3:59</span></td></tr><tr><td class="num">15</td><th title="Fix Fahrenheit, no tests">Fix Fahrenheit, no tests</th><td class="ok"><span class="mark">pass</span><span class="t">4:03</span></td><td class="ok best"><span class="mark">pass</span><span class="t">2:06</span></td></tr><tr><td class="num">16</td><th title="Write a short story">Write a short story</th><td class="ok"><span class="mark">pass</span><span class="t">0:55</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:28</span></td></tr></tbody></table><table class="grid tasks"><thead><tr><th>#</th><th>Task</th><th>Gemma<small>min:sec</small></th><th>Qwen3.5<small>min:sec</small></th></tr></thead><tbody><tr><td class="num">17</td><th title="Write notes about an API">Write notes about an API</th><td class="ok"><span class="mark">pass</span><span class="t">0:38</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:24</span></td></tr><tr><td class="num">18</td><th title="A story, in a no-code folder">A story, in a no-code folder</th><td class="ok"><span class="mark">pass</span><span class="t">1:29</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:44</span></td></tr><tr><td class="num">19</td><th title="A symbol option, 3 files">A symbol option, 3 files</th><td class="ok"><span class="mark">pass</span><span class="t">7:13</span></td><td class="ok best"><span class="mark">pass</span><span class="t">2:36</span></td></tr><tr><td class="num">20</td><th title="A new argument, 2 files">A new argument, 2 files</th><td class="ok"><span class="mark">pass</span><span class="t">8:46</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:44</span></td></tr><tr><td class="num">21</td><th title="A big file, two places">A big file, two places</th><td class="no"><span class="mark">fail</span><span class="t">14:39</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:38</span></td></tr><tr><td class="num">22</td><th title="A bare “fix the bug”">A bare “fix the bug”</th><td class="ok"><span class="mark">pass</span><span class="t">5:44</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:25</span></td></tr><tr><td class="num">23</td><th title="The one word “api”">The one word “api”</th><td class="ok"><span class="mark">pass</span><span class="t">3:49</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:55</span></td></tr><tr><td class="num">24</td><th title="A bare “fix the test”">A bare “fix the test”</th><td class="ok"><span class="mark">pass</span><span class="t">1:36</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:58</span></td></tr><tr><td class="num">25</td><th title="Question: a big project">Question: a big project</th><td class="ok"><span class="mark">pass</span><span class="t">1:12</span></td><td class="ok best"><span class="mark">pass</span><span class="t">0:55</span></td></tr><tr><td class="num">26</td><th title="A change in a big project">A change in a big project</th><td class="ok"><span class="mark">pass</span><span class="t">11:17</span></td><td class="ok best"><span class="mark">pass</span><span class="t">1:59</span></td></tr><tr><td class="num">27</td><th title="Minus sign before the $">Minus sign before the $</th><td class="ok"><span class="mark">pass</span><span class="t">6:38</span></td><td class="ok best"><span class="mark">pass</span><span class="t">4:41</span></td></tr><tr><td class="num">28</td><th title="A Python change, 2 files">A Python change, 2 files</th><td class="no"><span class="mark">fail</span><span class="t">14:40</span></td><td class="ok best"><span class="mark">pass</span><span class="t">13:17</span></td></tr></tbody></table></div>
+  <p class="foot">Last night, 30 Sep: the same 24 practice tasks on both, thinking on (High), 32k, 15 minutes a task at most. The faster time in each row is bold. Tasks 8 and 9 are renames: the app does those itself, with no model.</p></div><div class="stack"><section class="card"><h3>The totals</h3><table class="grid cmp"><thead><tr><th></th><th>Gemma 4 12B QAT</th><th>Qwen3.5 9B</th></tr></thead><tbody><tr><th>Tasks passed<small>of 24 · higher = better</small></th><td><b>22</b> of 24</td><td class="best"><b>24</b> of 24</td></tr><tr><th>Time for the 24 tasks<small>lower = faster</small></th><td><b>113 min</b></td><td class="best"><b>59 min</b></td></tr><tr><th>A typical task<small>the middle one · lower = faster</small></th><td><b>3 min 56 s</b></td><td class="best"><b>1 min 33 s</b></td></tr></tbody></table></section><section class="card verdict"><h3>Which model, when</h3>
+  <dl>
+    <div><dt>Faster</dt><dd><b>Qwen, about 1.9×.</b> 59 min against 113 min for the same 24 tasks. It writes and thinks about half as much per task.</dd></div>
+    <div><dt>Passes more</dt><dd><b>Qwen, by a little.</b> 24 against 22. Gemma’s two misses were the 15-minute limit, not wrong code.</dd></div>
+    <div><dt>Watch</dt><dd><b>Qwen said “done” when it wasn’t.</b> Three times on the pages you tried by hand on 29 Sep. Nothing in the 24 tasks catches that.</dd></div>
+    <div><dt>Not tested</dt><dd>Thinking off on the full set. Page and design work: the component battle is built, not run.</dd></div>
+    <div><dt>So</dt><dd><b>Qwen for small fixes and features a test can check.</b> No verdict yet for pages and design.</dd></div>
+  </dl></section></div></div></section><section class="view" data-v="opus" hidden><h2>More like Opus 5.5: what has been copied since 28 Sep</h2><p class="lead">The same for both models, because all of it lives in the harness.</p><div class="two wideLeft"><div><table class="grid opus"><thead><tr><th>Opus 5.5</th><th>This harness today, with either model</th><th>Status</th></tr></thead><tbody><tr><th>1 · Gets a task</th><td>You type a request.</td><td><span class="st has">has it</span></td></tr><tr><th>2 · Thinking at the top setting</th><td>High turns thinking on, up to 4,096 tokens a reply (yours: 8,192).</td><td><span class="st done">built 28 Sep</span></td></tr><tr><th>2 · Room for up to 1 million tokens</th><td>64k is your setting. Both models can go to 256k.</td><td><span class="st done">built 28 Sep</span></td></tr><tr><th>2 · A sealed box, safety checks on</th><td>The fence, blocked words, your OK and your saved /permissions rules.</td><td><span class="st has">has it</span></td></tr><tr><th>3 · Think, use one tool, read, repeat</th><td>The same loop, up to 40 steps, plus a shortcut Opus doesn’t have.</td><td><span class="st has">has it</span></td></tr><tr><th>4 · Graded by hidden tests</th><td>The guard: the harness stops trusting a test that no draft can pass.</td><td><span class="st done">built 29 Sep</span></td></tr><tr><th>5 · Each test run 5 times</th><td>Once or twice so far: 24 tasks on both models, 28 on Gemma.</td><td><span class="st open">still open</span></td></tr><tr><th>Memory · old parts squeezed</th><td>When nearly full, the model writes its notes and carries on.</td><td><span class="st has">has it</span></td></tr><tr><th>When it stops</th><td>It answers, goes in circles, hits 40 steps, or you press Esc.</td><td><span class="st has">has it</span></td></tr><tr><th>Safety net · a backup model</th><td>None. Only one model fits in 16 GB at a time.</td><td><span class="st skip">skip</span></td></tr><tr><th>Watchers on every turn</th><td>None. They would need a second model reading every step.</td><td><span class="st skip">skip</span></td></tr><tr><th>Teams of agents</th><td>One model, one step at a time. Two answers at once gained nothing here.</td><td><span class="st skip">skip</span></td></tr></tbody></table></div><div class="stack"><section class="card"><h3>The four worth copying: where they stand</h3><ol class="four"><li><span class="n">1</span><div><b>Score it the way Opus is scored</b> <span class="st open">partly</span><p>24 and 28 tasks have been run, once or twice each. Five runs a task is still to do.</p></div></li><li><span class="n">2</span><div><b>A grader the model can’t bend</b> <span class="st done">built</span><p>The guard is in the harness, so it covers Gemma and Qwen alike. Round 3 with it: Gemma 27 of 28.</p></div></li><li><span class="n">3</span><div><b>Turn thinking up</b> <span class="st done">built</span><p>High is there for both. Last night’s run used it: Gemma 22 of 24, Qwen 24 of 24.</p></div></li><li><span class="n">4</span><div><b>More room to remember</b> <span class="st done">built</span><p>64k is in use. It costs Qwen twice the memory per token (17.4 KB against 8.7).</p></div></li></ol></section></div></div></section></div>
+</div>
+</main>
+<script>
+(function () {
+  const $ = (s, el) => (el || document).querySelector(s), $$ = (s, el) => [...(el || document).querySelectorAll(s)];
+  const designs = $$('.d');
+  // One view open per design; the two designs remember their own place.
+  const show = (d, v) => {
+    const tabs = $$('[role="tab"]', d); if (!tabs.some((t) => t.dataset.v === v)) v = tabs[0].dataset.v;
+    tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.v === v)));
+    $$('.view', d).forEach((s) => { s.hidden = s.dataset.v !== v; });
+    const stage = $('.stage', d); if (stage) stage.scrollTop = 0;
+  };
+  const current = () => designs.find((d) => !d.hidden);
+  const place = () => { const d = current(); const t = $('[role="tab"][aria-selected="true"]', d); try { history.replaceState(null, '', `#${d.id}/${t.dataset.v}`); } catch {} };
+  const pick = (id) => {
+    designs.forEach((d) => { d.hidden = d.id !== id; });
+    $$('#seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.d === id)));
+    $('main').scrollTop = 0;
+  };
+  designs.forEach((d) => $$('[role="tab"]', d).forEach((t) => t.addEventListener('click', () => { show(d, t.dataset.v); place(); })));
+  $$('#seg button').forEach((b) => b.addEventListener('click', () => { pick(b.dataset.d); place(); }));
+  const info = $('#infoBtn'), real = $('#real');
+  info.addEventListener('click', () => { real.hidden = !real.hidden; info.setAttribute('aria-expanded', String(!real.hidden)); });
+  document.addEventListener('click', (e) => { if (!real.hidden && !real.contains(e.target) && e.target !== info) { real.hidden = true; info.setAttribute('aria-expanded', 'false'); } });
+  // Keys: 1-9 open a view, ← → step through them, d swaps the design.
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const d = current(), tabs = $$('[role="tab"]', d), at = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
+    let to = -1;
+    if (/^[1-9]$/.test(e.key)) to = Number(e.key) - 1;
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to = at + 1;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to = at - 1;
+    else if (e.key === 'd') { pick(d.id === 'd1' ? 'd2' : 'd1'); place(); return; }
+    else if (e.key === 'Escape') { real.hidden = true; return; }
+    if (to >= 0 && to < tabs.length) { e.preventDefault(); show(d, tabs[to].dataset.v); place(); }
+  });
+  const m = /^#(d[12])(?:\/([\w-]+))?/.exec(location.hash);
+  if (m) { pick(m[1]); if (m[2]) show($(`#${m[1]}`), m[2]); }
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Battle Tab Designs v2</title>
+<style>
+/* The hub's own tokens (terminal/src/app/hub.html), plus the Battle colours. */
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc; --line2: #d4d3cb;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --accent-ink: #fff;
+  --a: #2a78d6; --a-soft: #e8f1fc; --b: #c2571a; --b-soft: #fcefe7;
+  --ok: #1d7a46; --ok-soft: #e3f3e9; --bad: #b3261e; --bad-soft: #fbe7e5; --warn: #8a5a00; --warn-soft: #fbf1dc;
+  --k-read: #b4b2a8; --k-edit: #8b63e0; --k-bash: #14928f; --k-ask: #d19b00; --k-tries: #5d5c57; --k-error: #d0392f; --k-answer: #d9d7ce;
+  --t-read: #1a1a18; --t-plan: #1a1a18; --t-edit: #fff; --t-bash: #fff; --t-ask: #1a1a18; --t-tries: #fff; --t-error: #fff;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --pv: #1f1f1d; --pv-ink: #f3f3ee; --pv-ink2: #b7b5aa; --pv-on: #fff; --pv-line: #3a3a36;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --line2: #45453f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5;
+    --a: #4d95ea; --a-soft: #172636; --b: #e8834b; --b-soft: #36241a; --ok: #5fd08f; --ok-soft: #173424; --bad: #ff8a80; --bad-soft: #3d1a17; --warn: #f0c060; --warn-soft: #3a2e12;
+    --k-read: #6d6b64; --k-edit: #a88af0; --k-bash: #3cc1c1; --k-ask: #f0c060; --k-tries: #b5b3a9; --k-error: #ff7a6e; --k-answer: #3b3a36; --pv: #2b2b28; --pv-line: #474742; --shadow: none; --t-read: #fff; --t-plan: #fff; --t-edit: #16141f; --t-bash: #0c1c1c; --t-ask: #1f1a08; --t-tries: #151514; --t-error: #200c0a; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --line2: #45453f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5;
+  --a: #4d95ea; --a-soft: #172636; --b: #e8834b; --b-soft: #36241a; --ok: #5fd08f; --ok-soft: #173424; --bad: #ff8a80; --bad-soft: #3d1a17; --warn: #f0c060; --warn-soft: #3a2e12;
+  --k-read: #6d6b64; --k-edit: #a88af0; --k-bash: #3cc1c1; --k-ask: #f0c060; --k-tries: #b5b3a9; --k-error: #ff7a6e; --k-answer: #3b3a36; --pv: #2b2b28; --pv-line: #474742; --shadow: none; --t-read: #fff; --t-plan: #fff; --t-edit: #16141f; --t-bash: #0c1c1c; --t-ask: #1f1a08; --t-tries: #151514; --t-error: #200c0a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+code { font: 12px var(--mono); }
+/* Scroll without a scroll bar; a soft fade says there is more. */
+.scroll { overflow: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.scroll::-webkit-scrollbar { display: none; }
+.scroll.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); }
+
+/* The preview's own bar (not part of the design). */
+#pv { flex: none; display: flex; align-items: center; gap: 14px; padding: 0 12px; height: 38px; background: var(--pv); color: var(--pv-ink); font-size: 12.5px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+#pv::-webkit-scrollbar { display: none; }
+#pv b { font-weight: 600; }
+#pv .grp { display: flex; align-items: center; gap: 2px; }
+#pv .grp > span { color: var(--pv-ink2); margin-right: 6px; }
+#pv button { background: none; border: 1px solid transparent; color: var(--pv-ink2); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+#pv button:hover { color: var(--pv-on); }
+#pv button[aria-pressed="true"] { color: var(--pv-on); border-color: var(--pv-line); background: rgba(255,255,255,.08); }
+#pv .sep { width: 1px; height: 18px; background: var(--pv-line); flex: none; }
+#pv .fill { flex: 1; }
+#realbox { position: fixed; top: 44px; right: 12px; width: min(540px, calc(100vw - 24px)); max-height: calc(100vh - 60px); background: var(--surface); color: var(--ink); border: 1px solid var(--line2); border-radius: 12px; padding: 14px 18px; box-shadow: 0 12px 40px rgba(0,0,0,.28); z-index: 30; display: none; font-size: 13px; }
+#realbox.on { display: block; }
+#realbox h3 { margin: 0 0 8px; font-size: 14px; }
+#realbox ul { margin: 0; padding-left: 18px; } #realbox li { margin: 5px 0; color: var(--ink2); } #realbox li b { color: var(--ink); }
+
+/* The hub's header, as it is, with the new Battle tab. */
+header { display: flex; align-items: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface); height: 44px; flex: none; overflow: hidden; }
+header h1 { font-size: 15px; margin: 0 14px 0 4px; font-weight: 600; white-space: nowrap; }
+header .tab { color: var(--ink2); border-radius: 8px; padding: 7px 12px; white-space: nowrap; }
+header .tab.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 8px 8px 0 0; }
+header .spacer { flex: 1; }
+header .now { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+header a { color: var(--accent); font-size: 12px; white-space: nowrap; padding: 6px 8px; }
+main#stage { flex: 1; min-height: 0; position: relative; background: var(--page); overflow-y: auto; scrollbar-width: none; }
+main#stage::-webkit-scrollbar { display: none; }
+.view { min-height: 600px; }
+
+/* ---------- Parts both designs share ---------- */
+.view { height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--panel); color: var(--ink2); white-space: nowrap; }
+.res { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12.5px; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.res.ok { color: var(--ok); background: var(--ok-soft); } .res.bad { color: var(--bad); background: var(--bad-soft); } .res.warn { color: var(--warn); background: var(--warn-soft); } .res.wait { color: var(--ink2); background: var(--panel); }
+.sw { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+.sw.A { background: var(--a); } .sw.B { background: var(--b); }
+.who { display: inline-flex; align-items: center; gap: 7px; font-weight: 650; white-space: nowrap; min-width: 0; }
+.who .real { font-weight: 500; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; }
+.btn { border: 1px solid var(--line2); background: var(--surface); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; white-space: nowrap; font-size: 13px; line-height: 1.3; }
+.btn:hover { background: var(--panel); }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.pri:hover { filter: brightness(1.07); }
+.btn.stop { color: var(--bad); }
+.btn:disabled { background: var(--panel); color: var(--ink3); border-color: var(--line2); cursor: default; filter: none; }
+.live { display: inline-flex; align-items: center; gap: 6px; }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--b); animation: pulse 1.2s infinite; flex: none; }
+@keyframes pulse { 50% { opacity: .3; } }
+.none { color: var(--ink3); font-size: 13px; border: 1px dashed var(--line2); border-radius: 8px; padding: 8px 10px; }
+.note { font-size: 12.5px; color: var(--ink2); background: var(--panel); border-radius: 8px; padding: 7px 10px; margin-bottom: 10px; line-height: 1.45; }
+
+/* The top band: score, every test as a cell, the actions. */
+.band { display: flex; align-items: center; gap: 22px; padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.tally { display: flex; align-items: center; gap: 10px; flex: none; }
+.tally .side { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.tally .n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tally .m { font-size: 11.5px; color: var(--ink2); }
+.tally .dash { color: var(--ink3); font-size: 18px; }
+.tally .sub { font-size: 11px; color: var(--ink3); max-width: 90px; line-height: 1.25; }
+.strips { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+.suite { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.suite .sl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; white-space: nowrap; }
+.cells { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; }
+.cellb { width: 22px; height: 34px; display: grid; grid-template-rows: 12px 12px 4px; gap: 2px; padding: 2px 3px; cursor: pointer; border-radius: 6px; border: 1.5px solid transparent; background: none; }
+.cellb:hover { border-color: var(--line2); background: var(--panel); }
+.cellb.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cellb .h { border-radius: 3px; }
+/* Not run yet: a hatch that shows on light and dark alike (an outline alone vanished on dark). */
+.h.plan, .h.todo { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink3) 45%, transparent) 0 1.5px, transparent 1.5px 4px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink3) 60%, transparent); }
+.h.ok { background: var(--ok); } .h.bad { background: var(--bad); } .h.warn { background: var(--warn); } .h.run { box-shadow: inset 0 0 0 1.5px var(--b); animation: pulse 1.2s infinite; }
+.cellb .v { justify-self: center; width: 4px; height: 4px; border-radius: 50%; }
+.v.A { background: var(--a); } .v.B { background: var(--b); } .v.T { background: var(--ink3); }
+.addcell { width: 22px; height: 34px; border-radius: 6px; border: 1.5px dashed color-mix(in srgb, var(--ink3) 70%, transparent); background: none; color: var(--ink2); cursor: pointer; font-size: 15px; line-height: 1; margin-left: 3px; }
+.addcell:hover { color: var(--ink); border-color: var(--ink3); }
+.keyq { width: 18px; height: 18px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--ink3) 70%, transparent); color: var(--ink2); font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; cursor: help; flex: none; }
+.bandacts { display: grid; grid-template-columns: auto auto; gap: 4px 8px; flex: none; justify-items: end; }
+.bandacts .status { grid-column: 1 / -1; grid-row: 2; font-size: 11.5px; color: var(--ink2); white-space: nowrap; }
+@media (max-width: 1700px) { .cellb, .addcell { width: 17px; } .cellb { padding: 2px 2px; } }
+@media (max-width: 1440px) { .cellb, .addcell { width: 14px; } .cells { gap: 2px; } .tally .sub { display: none; } .band { gap: 16px; } .strips { gap: 10px; } }
+
+/* The test's title row. */
+.titlerow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 12px 18px 10px; align-items: center; }
+.titlerow h2 { margin: 0; font-size: 18px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.titlerow h2 span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titlerow .acts { display: flex; gap: 6px; }
+.titlerow .line2 { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; min-width: 0; }
+.titlerow .prompt { flex: 1; min-width: 0; color: var(--ink2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titlerow .prompt.open { white-space: normal; }
+.titlerow .more { color: var(--accent); font-size: 12.5px; cursor: pointer; background: none; border: none; padding: 0; white-space: nowrap; }
+.rules { display: flex; gap: 6px; flex: none; max-width: 55%; overflow: hidden; }
+.rules .chip { overflow: hidden; text-overflow: ellipsis; max-width: 360px; display: inline-block; }
+.rules .chip::before { content: "✓ "; color: var(--ok); font-weight: 700; }
+
+/* The timeline: both runs on one clock, zoomed to the runs; each stretch = the time it took to reach that step. */
+.tl { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 8px; box-shadow: var(--shadow); }
+.tl .cap { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--ink3); flex-wrap: wrap; }
+.tl .cap b { color: var(--ink); font-weight: 650; }
+.tl .cap .delta { color: var(--ink2); font-weight: 600; }
+.tlsvg { display: block; width: 100%; overflow: visible; }
+.tlsvg text { font-size: 11px; fill: var(--ink3); font-family: inherit; }
+.tlsvg .seg { cursor: pointer; }
+.tlsvg .seg:hover { filter: brightness(1.12); stroke: var(--ink); stroke-width: 1.5; }
+.key { display: flex; gap: 12px; font-size: 11.5px; color: var(--ink3); flex-wrap: wrap; }
+.key span { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; } .key i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.k-read { background: var(--k-read); } .k-plan { background: var(--k-read); } .k-edit { background: var(--k-edit); } .k-bash { background: var(--k-bash); } .k-ask { background: var(--k-ask); } .k-tries { background: var(--k-tries); } .k-error { background: var(--k-error); } .k-answer { background: var(--k-answer); }
+#tip { position: fixed; z-index: 40; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; line-height: 1.4; padding: 6px 9px; border-radius: 7px; max-width: 360px; display: none; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+#tip b { font-weight: 650; } #tip .tm { opacity: .7; font-variant-numeric: tabular-nums; margin-right: 6px; } #tip .er { color: #ffb3ab; display: block; }
+:root[data-theme="dark"] #tip, :root:not([data-theme="light"]) #tip { }
+
+/* Tabs: What it did · Answer · Changes (or Page), each with Model A and Model B side by side. */
+.tabs { min-height: 240px; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.tabbar { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); }
+.tabbar button { border: none; background: none; padding: 7px 12px 8px; border-radius: 8px 8px 0 0; color: var(--ink2); cursor: pointer; font-size: 13px; display: inline-flex; gap: 7px; align-items: center; }
+.tabbar button:hover { color: var(--ink); background: var(--panel); }
+.tabbar button[aria-selected="true"] { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
+.tabbar .ct { font-size: 11px; font-weight: 500; color: var(--ink3); font-variant-numeric: tabular-nums; }
+.tabbar .fill { flex: 1; }
+.tabbar .hint { font-size: 11.5px; color: var(--ink3); padding-right: 6px; }
+.tcols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.tcol { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; min-width: 0; }
+.tcol + .tcol { border-left: 1px solid var(--line); }
+.tch { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 12px; color: var(--ink3); border-bottom: 1px solid var(--line); min-width: 0; }
+.tch .how { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbody { padding: 10px 14px 14px; min-height: 0; }
+.tbody.page { padding: 8px; }
+.steps { font: 12px/1.6 var(--mono); margin: 0; padding: 0; list-style: none; }
+.steps li { display: grid; grid-template-columns: 40px 10px minmax(0, 1fr); gap: 8px; align-items: baseline; border-radius: 6px; padding: 0 4px; }
+.steps li.hl { background: var(--warn-soft); }
+.steps .tm { color: var(--ink3); text-align: right; font-variant-numeric: tabular-nums; }
+.steps .dot { width: 8px; height: 8px; border-radius: 2px; align-self: center; }
+.steps .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps .lb i { font-style: normal; color: var(--ink3); }
+.steps .er { grid-column: 3; color: var(--bad); white-space: normal; font-size: 11.5px; }
+.steps li.new { animation: fadein .35s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.approx { font-size: 11.5px; color: var(--ink3); margin-top: 8px; }
+.answer { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.answer code { background: var(--panel); padding: 1px 4px; border-radius: 4px; }
+.diff { font: 11.5px/1.55 var(--mono); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+.diff .fh { padding: 4px 10px; background: var(--panel); color: var(--ink2); border-bottom: 1px solid var(--line); }
+.diff .ln { padding: 0 10px; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.diff .ln.add { background: var(--ok-soft); } .diff .ln.del { background: var(--bad-soft); } .diff .ln.ctx { color: var(--ink3); }
+.pageframe { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: block; }
+
+/* The vote. */
+.vbtn { border: 1.5px solid var(--line2); background: var(--surface); border-radius: 10px; padding: 6px 14px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; }
+.vbtn:hover:not(:disabled) { background: var(--panel); }
+.vbtn.A:hover:not(:disabled), .vbtn.A.on { border-color: var(--a); background: var(--a-soft); } .vbtn.B:hover:not(:disabled), .vbtn.B.on { border-color: var(--b); background: var(--b-soft); } .vbtn.T.on { border-color: var(--ink2); background: var(--panel); }
+.vbtn:disabled { color: var(--ink3); background: var(--panel); cursor: default; }
+.picked { font-size: 13px; color: var(--ink2); }
+.picked b { color: var(--ink); }
+
+/* ---------- Design 3 · Scoreboard ---------- */
+.d3.body { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 10px; padding: 0 18px 0; min-height: 0; }
+.duels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.duel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 9px; min-width: 0; box-shadow: var(--shadow); display: grid; gap: 5px; }
+.duel .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+.duel .k .w { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.duel .vals { display: flex; justify-content: space-between; align-items: baseline; gap: 4px 8px; font-variant-numeric: tabular-nums; flex-wrap: wrap; }
+.duel .vals b { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.duel .vals b small { font-size: 11.5px; font-weight: 500; color: var(--ink3); }
+.duel .vals .x { color: var(--ink3); font-size: 11px; }
+.duel .vals .won { color: var(--ok); }
+.tug { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; background: var(--panel); }
+.tug .ta { background: var(--a); } .tug .tb { background: var(--b); }
+.tug.flat { background: none; } .tug.flat span { background: var(--line2); }
+.duel .rv { display: flex; justify-content: space-between; gap: 6px; }
+.d3 .vote { display: flex; align-items: center; gap: 10px; padding: 9px 0 11px; }
+.d3 .vote .q { font-weight: 650; }
+.d3 .vote .fill { flex: 1; }
+
+/* ---------- Design 4 · Lanes ---------- */
+.d4.body { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; padding: 0 18px 12px; min-height: 0; }
+.lanes { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+.lgrid { display: grid; grid-template-columns: minmax(230px, 290px) 92px 64px 64px 92px minmax(0, 1fr) 132px; align-items: center; }
+.lgrid > div { padding: 8px 12px; min-width: 0; }
+.lhead > div { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; padding-top: 9px; padding-bottom: 4px; }
+.lhead > .axis { padding: 0 12px; }
+.lane { border-top: 1px solid var(--line); }
+.lane > div { padding-top: 10px; padding-bottom: 10px; }
+.lane .id { display: grid; gap: 4px; }
+.lane .num { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; display: flex; align-items: baseline; gap: 6px; }
+.lane .num small { font-size: 11px; font-weight: 500; color: var(--ink3); }
+.lane .num.won { color: var(--ok); }
+.lane .num.won::after { content: "▲"; font-size: 9px; margin-left: 1px; }
+.lane .band2 { padding-left: 12px; padding-right: 12px; }
+.lane .vcell { display: flex; justify-content: flex-end; }
+.lfoot { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding: 7px 12px; font-size: 12px; color: var(--ink3); flex-wrap: wrap; }
+.lfoot .fill { flex: 1; }
+.lfoot .delta { color: var(--ink2); font-weight: 600; }
+
+/* ---------- The new test: three steps on one screen ---------- */
+.nt { padding: 14px 18px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; min-height: 0; }
+.nt h2 { margin: 0; font-size: 18px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.nt h2 span { font-size: 13px; font-weight: 400; color: var(--ink3); }
+.steps3 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .9fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+.stp { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; min-width: 0; box-shadow: var(--shadow); }
+.stp .sh { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 14.5px; }
+.stp .sh .no { width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: var(--surface); display: grid; place-items: center; font-size: 12.5px; font-weight: 700; flex: none; }
+.stp .sh .opt { font-weight: 400; color: var(--ink3); font-size: 12.5px; }
+.stp .sb { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.stp textarea, .stp input[type=text] { font: inherit; font-size: 14px; color: var(--ink); background: var(--page); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; width: 100%; line-height: 1.5; }
+.stp textarea { flex: 1; min-height: 110px; resize: none; }
+.stp textarea::placeholder, .stp input::placeholder { color: var(--ink3); opacity: .75; }
+.stp textarea:focus, .stp input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 0; border-color: var(--accent); }
+.guess { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--ink3); }
+.pill { border: 1px solid var(--line2); background: var(--surface); color: var(--ink2); border-radius: 999px; padding: 3px 11px; cursor: pointer; font-size: 12.5px; }
+.pill[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.namerow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; font-size: 12.5px; color: var(--ink3); }
+.namerow input[type=text] { padding: 6px 10px; font-size: 13.5px; }
+.drop { flex: 1; min-height: 90px; border: 1.5px dashed var(--line2); border-radius: 12px; display: grid; place-items: center; text-align: center; color: var(--ink3); font-size: 13px; padding: 12px; }
+.drop b { color: var(--ink); font-weight: 600; }
+.drop.over { border-color: var(--accent); background: var(--a-soft); color: var(--ink); }
+.drop .files { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+.checks { display: grid; gap: 8px; align-content: start; }
+.check { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; background: var(--page); }
+.check:hover { border-color: var(--line2); }
+.check .bx { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--line2); display: grid; place-items: center; font-size: 12px; color: transparent; font-weight: 800; }
+.check.on { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); background: color-mix(in srgb, var(--ok-soft) 60%, var(--page)); }
+.check.on .bx { background: var(--ok); border-color: var(--ok); color: #fff; }
+.check .ct { font-size: 13.5px; } .check .cd { grid-column: 2; font-size: 12px; color: var(--ink3); }
+.check input[type=text] { grid-column: 2; padding: 5px 9px; font-size: 13px; background: var(--surface); }
+.vonly { font-size: 12.5px; color: var(--ink3); }
+.ntfoot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ntfoot .fill { flex: 1; }
+.ntfoot .help { color: var(--ink3); font-size: 12.5px; }
+.moreopt { font-size: 12.5px; color: var(--ink2); }
+.moreopt summary { cursor: pointer; color: var(--accent); list-style: none; }
+.moreopt summary::-webkit-details-marker { display: none; }
+.moreopt[open] summary { margin-bottom: 6px; }
+.moreopt textarea { min-height: 48px; flex: none; }
+.full { position: absolute; inset: 0; z-index: 12; background: var(--page); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.fullbar { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.fullbar .fill { flex: 1; }
+.fullbar .seg2 { display: inline-flex; border: 1px solid var(--line2); border-radius: 9px; overflow: hidden; }
+.fullbar .seg2 button { border: none; background: var(--surface); padding: 5px 12px; cursor: pointer; display: inline-flex; gap: 7px; align-items: center; font-size: 13px; color: var(--ink2); }
+.fullbar .seg2 button[aria-pressed="true"] { background: var(--panel); color: var(--ink); font-weight: 600; }
+.full .fbody { padding: 12px 18px 16px; min-height: 0; }
+.bigbtn { margin-left: auto; border: 1px solid var(--line2); background: var(--surface); color: var(--ink2); border-radius: 7px; padding: 2px 9px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.bigbtn:hover { color: var(--ink); background: var(--panel); }
+.panelmsg { padding: 28px 24px; max-width: 760px; display: grid; gap: 12px; }
+.panelmsg h2 { margin: 0; font-size: 20px; }
+
+/* Short windows (under 860 px tall): everything tightens so it still fits. */
+body.compact .band { padding: 5px 18px; }
+body.compact .cellb { height: 28px; grid-template-rows: 10px 10px 2px; }
+body.compact .addcell { height: 28px; }
+body.compact .tally .n { font-size: 22px; }
+body.compact .titlerow { padding: 7px 18px 6px; gap: 4px 16px; }
+body.compact .titlerow h2 { font-size: 16px; }
+body.compact .tl { padding: 6px 12px 5px; }
+body.compact .tl .cap .long { display: none; }
+body.compact .duel { padding: 6px 10px; gap: 3px; }
+body.compact .duel .tug, body.compact .duel .rv + .rv { display: none; }
+body.compact .duel .vals b { font-size: 15px; }
+body.compact .d3.body { gap: 7px; }
+body.compact .d3 .vote { padding: 5px 0 7px; }
+body.compact .lane > div { padding-top: 5px; padding-bottom: 5px; }
+body.compact .lfoot { padding: 4px 12px; }
+body.compact .lfoot .long { display: none; }
+body.compact .tch { padding: 5px 14px; }
+body.compact .nt { gap: 8px; padding: 8px 18px 10px; }
+
+/* Narrow windows: one column; the page scrolls there (a phone can't fit it all). */
+@media (max-width: 1100px) {
+  .duels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .lgrid { grid-template-columns: minmax(150px, 1fr) 80px 56px 52px 72px; }
+  .lgrid > .axis, .lgrid > .band2, .lgrid > .vh, .lane .vcell { grid-column: 1 / -1; }
+  .lane .vcell { justify-content: flex-start; }
+}
+@media (max-width: 800px) {
+  body { overflow: auto; height: auto; min-height: 100vh; }
+  main#stage { overflow: visible; }
+  .view { height: auto; }
+  .band { flex-wrap: wrap; gap: 12px; }
+  .strips { flex-wrap: wrap; flex-basis: 100%; }
+  .suite { flex-wrap: wrap; }
+  .bandacts { flex-wrap: wrap; }
+  .bandacts .status { white-space: normal; }
+  .bandacts { flex: 1 1 100%; min-width: 0; }
+  .duel .k { flex-wrap: wrap; }
+  .d3.body, .d4.body { grid-template-rows: none; }
+  .duels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tabs { height: 520px; }
+  .tcols { grid-template-columns: 1fr; }
+  .tcol + .tcol { border-left: none; border-top: 1px solid var(--line); }
+  .steps3 { grid-template-columns: 1fr; }
+  .titlerow .line2 { flex-wrap: wrap; } .rules { max-width: 100%; flex-wrap: wrap; }
+  .lgrid { grid-template-columns: 1fr 1fr; }
+  .lgrid > div:first-child, .lgrid > .axis, .lgrid > .band2, .lane .vcell, .lane .id { grid-column: 1 / -1; }
+  .lhead > div:not(.axis) { display: none; }
+  .d3 .vote { flex-wrap: wrap; }
+  header h1, header .now { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="pv" role="toolbar" aria-label="Preview controls (not part of the design)">
+  <b>Preview · Battle tab v2</b>
+  <span class="sep"></span>
+  <div class="grp" data-k="design"><span>Design</span><button data-v="3">3 · Scoreboard</button><button data-v="4">4 · Lanes</button></div>
+  <span class="sep"></span>
+  <div class="grp" data-k="state"><span>Show</span><button data-v="blind">Blind vote</button><button data-v="revealed">After your vote</button><button data-v="running">Running</button><button data-v="new">+ New test</button></div>
+  <span class="sep"></span>
+  <div class="grp" data-k="theme"><span>Theme</span><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+  <span class="fill"></span>
+  <button id="realbtn" aria-expanded="false">What's real here?</button>
+</div>
+<div id="realbox" role="dialog" aria-label="What is real on this page">
+  <h3>What's real on this page</h3>
+  <ul>
+    <li><b>Model A is Gemma 4 12B's real run</b>, and <b>Model B is the old Bonsai 27B's real run of the same test</b>. It stands in for Qwen, which hasn't run a task yet. In the real arena, which model is A or B is random for each test and stays hidden until you vote.</li>
+    <li><b>Negative amounts</b> and <b>Which function computes tax?</b> are practice tasks 27 and 7 from the practice-task runner (Low, 32k). The steps, times, changes and answers are theirs, word for word, and pass or fail comes from each task's own check.</li>
+    <li><b>The New 28</b> are the titles I plan to write. None are written yet, so they show as planned.</li>
+    <li><b>Running</b> replays Model B's real steps from Negative amounts at 2× speed.</li>
+    <li><b>+ New test</b> works on this page, but it saves nothing and runs no models.</li>
+    <li>Sample votes appear only under "After your vote" and are marked as samples.</li>
+  </ul>
+</div>
+<header>
+  <h1>Agentic Coder hub</h1>
+  <span class="tab">Weights</span><span class="tab">Harness</span><span class="tab">Structure</span><span class="tab">Flow</span><span class="tab">Tests</span><span class="tab on">Battle</span><span class="tab">Memory</span><span class="tab">All docs</span><span class="tab">Help</span>
+  <span class="spacer"></span>
+  <span class="now">Gemma vs Qwen, one model at a time</span>
+  <a>open in its own tab ↗</a>
+</header>
+<main id="stage"></main>
+<div id="tip"></div>
+<script>
+const D = {"made":"2026-09-29T15:23:53.493Z","tests":[{"id":"money","suite":"mine","title":"Negative amounts in formatMoney","kind":"code","prompt":"formatMoney in money.mjs must put the minus sign before the currency symbol for negative amounts: formatMoney(-1234.5) is '-$1,234.50' and formatMoney(-0.5) is '-$0.50'. Positive amounts and zero stay as they are today. Add a test for negative amounts.","rules":["The tests pass (node --test)","At least one new test","formatMoney(-1234.5) is -$1,234.50 (and 4 more cases)"],"files":["money.mjs","money.test.mjs","package.json"],"A":{"model":"gemma","pass":true,"secs":124,"steps":[{"t":0.002,"label":"Plan","arg":"","kind":"plan","err":""},{"t":0.002,"label":"Read","arg":"money.mjs","kind":"read","err":""},{"t":18.363,"label":"Writing tests","arg":"✗✗✗","kind":"tries","err":""},{"t":18.394,"label":"Read","arg":"money.test.mjs","kind":"read","err":""},{"t":18.394,"label":"Read","arg":"money.mjs","kind":"read","err":""},{"t":18.394,"label":"Search","arg":"formatMoney","kind":"read","err":""},{"t":45.289,"label":"Write","arg":"money.mjs","kind":"error","err":"money.mjs already exists (6 lines). Use Edit to change the part that needs changing; Write is only for new files."},{"t":53.581,"label":"Ask","arg":"Before I change anything: in money.mjs, change \"export function formatMoney(amount) {…\" to","kind":"ask","err":""},{"t":53.581,"label":"Update","arg":"money.mjs","kind":"edit","err":""},{"t":64.38,"label":"Update","arg":"money.test.mjs","kind":"edit","err":""},{"t":68.468,"label":"Bash","arg":"npm test","kind":"bash","err":""},{"t":76.192,"label":"Update","arg":"money.test.mjs","kind":"error","err":"old_text was not found in the file. The closest match is line 5: \"test('formatMoney handles negative amounts', () => {\"."},{"t":80.181,"label":"Read","arg":"money.test.mjs","kind":"read","err":""},{"t":87.919,"label":"Update","arg":"money.test.mjs","kind":"edit","err":""},{"t":92.776,"label":"Bash","arg":"npm test","kind":"bash","err":""}],"stepCount":14,"errors":2,"tps":14.3,"why":"","answer":"I have updated `money.mjs` to correctly handle negative amounts by placing the minus sign before the currency symbol and added a comprehensive test suite in `money.test.mjs`.\n\nSummary of changes:\n1.  **`money.mjs`**: Modified `formatMoney` to check if the amount is negative, take the absolute value for formatting, and then prepend the minus sign if necessary.\n2.  **`money.test.mjs`**: Added a new test case `formatMoney handles negative amounts` to verify that `-1234.5` becomes `-$1,234.50` and `-0.5` becomes `-$0.50`.\n\nVerified by running `npm test`, which passed both test suites.","diffs":[{"path":"money.mjs","created":false,"hunk":[[" ","// formatMoney(1234.5) → '$1,234.50'"],[" ","export function formatMoney(amount) {"],["-","  const fixed = amount.toFixed(2);"],["-","  const [whole, cents] = fixed.split('.');"],["-","  return `${whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}.${cents}`;"],["+","  const isNegative = amount \u003c 0;"],["+","  const absoluteAmount = Math.abs(amount);"],["+","  const fixed = absoluteAmount.toFixed(2);"],["+","  const [whole, cents] = fixed.split('.');"],["+","  const formattedWhole = whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',');"],["+","  const result = `${formattedWhole}.${cents}`;"],["+","  return isNegative ? `-${result}` : result;"],[" ","}"]]},{"path":"money.test.mjs","created":false,"hunk":[[" ","import { formatMoney } from './money.mjs';"],[" ",""],["-","test('formatMoney adds commas and two decimals', () => {"],["-","  assert.equal(formatMoney(1234.5), '$1,234.50');"],["-","  assert.equal(formatMoney(0), '$0.00');"],["+","test('formatMoney handles negative amounts', () => {"],["+","  assert.equal(formatMoney(-1234.5), '-$1,234.50');"],["+","  assert.equal(formatMoney(-0.5), '-$0.50');"],[" ","});"]]},{"path":"money.test.mjs","created":false,"hunk":[[" ","import assert from 'node:assert/strict';"],[" ","import { formatMoney } from './money.mjs';"],["+",""],["+","test('formatMoney adds commas and two decimals', () => {"],["+","  assert.equal(formatMoney(1234.5), '$1,234.50');"],["+","  assert.equal(formatMoney(0), '$0.00');"],["+","});"],[" ",""],[" ","test('formatMoney handles negative amounts', () => {"]]}],"how":"practice-task runner, Low, 32k"},"B":{"model":"big","pass":true,"secs":49,"steps":[{"t":0,"label":"Plan","arg":"","kind":"plan","err":""},{"t":0,"label":"Read","arg":"money.mjs","kind":"read","err":""},{"t":21.325,"label":"Writing tests","arg":"✓✓","kind":"tries","err":""},{"t":41.729,"label":"Drafting versions","arg":"✓✓","kind":"tries","err":""},{"t":42.286,"label":"Checked tests against drafts","arg":"✓✓","kind":"tries","err":""},{"t":42.286,"label":"Test","arg":"money.test.mjs","kind":"edit","err":""},{"t":42.419,"label":"Ask","arg":"Before I change anything: change money.mjs (+6 −5). Go ahead? Say yes, or tell me what to ","kind":"ask","err":""},{"t":42.419,"label":"Update","arg":"money.mjs","kind":"edit","err":""},{"t":42.551,"label":"Bash","arg":"npm test","kind":"bash","err":""}],"stepCount":6,"errors":0,"tps":null,"why":"","answer":"This change updates the `formatMoney` function to correctly handle negative amounts by prefixing the formatted currency string with a minus sign. Changed money.mjs and added a test to money.test.mjs; all 2 tests pass.","diffs":[{"path":"money.test.mjs","hunk":[[" ","  assert.equal(formatMoney(0), '$0.00');"],[" ","});"],["+",""],["+","test('formatMoney puts minus sign before currency symbol for negative amounts', () => {"],["+","  assert.equal(formatMoney(-1234.5), '-$1,234.50');"],["+","  assert.equal(formatMoney(-0.5), '-$0.50');"],["+","});"]]},{"path":"money.mjs","created":false,"hunk":[["-","// formatMoney(1234.5) → '$1,234.50'"],["-","export function formatMoney(amount) {"],["-","  const fixed = amount.toFixed(2);"],["-","  const [whole, cents] = fixed.split('.');"],["-","  return `${whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}.${cents}`;"],["+","export function formatMoney(amount) {"],["+","  const isNegative = amount \u003c 0;"],["+","  const fixed = Math.abs(amount).toFixed(2);"],["+","  const [whole, cents] = fixed.split('.');"],["+","  const formatted = `${whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')}.${cents}`;"],["+","  return isNegative ? `-${formatted}` : formatted;"],[" ","}"]]}],"how":"practice-task runner, Low, 32k"}},{"id":"tax","suite":"mine","title":"Which function computes tax?","kind":"question","prompt":"Which function computes tax in this project, and what is its default rate? Don't change any files.","rules":["The answer mentions addTax","The answer mentions 0.0825 or 8.25%","No file was changed"],"files":["billing.mjs","checkout.mjs","package.json"],"A":{"model":"gemma","pass":true,"secs":17,"steps":[{"t":0.002,"label":"Read","arg":"billing.mjs","kind":"read","err":""},{"t":0.002,"label":"Read","arg":"checkout.mjs","kind":"read","err":""}],"stepCount":2,"errors":0,"tps":15.9,"why":"","answer":"The function that computes tax is `addTax`, located in `billing.mjs`. Its default rate is `0.0825`.","diffs":[],"how":"practice-task runner, Low, 32k"},"B":{"model":"big","pass":true,"secs":10,"steps":[{"t":0.001,"label":"Read","arg":"billing.mjs","kind":"read","err":""},{"t":0.001,"label":"Read","arg":"checkout.mjs","kind":"read","err":""}],"stepCount":2,"errors":0,"tps":13.5,"why":"","answer":"The tax is computed by **`addTax(amount, rate)`** in `billing.mjs` (line 8). Its default rate is **`0.0825`** (8.25%). It's called from `total()` in `checkout.mjs` without a rate argument, so that default applies.","diffs":[],"how":"practice-task runner, Low, 32k"}}],"new28":[{"id":"n1","n":1,"suite":"new28","kind":"code","title":"Fix a date that shows one day early","planned":true},{"id":"n2","n":2,"suite":"new28","kind":"code","title":"Fix a CSV line split on a quoted comma","planned":true},{"id":"n3","n":3,"suite":"new28","kind":"code","title":"Fix a missing await in a save loop","planned":true},{"id":"n4","n":4,"suite":"new28","kind":"code","title":"Fix a discount applied twice","planned":true},{"id":"n5","n":5,"suite":"new28","kind":"code","title":"Python: fix a crash on an empty list","planned":true},{"id":"n6","n":6,"suite":"new28","kind":"code","title":"Fix an email check that lets bad ones in","planned":true},{"id":"n7","n":7,"suite":"new28","kind":"code","title":"Add a --csv flag to a small CLI","planned":true},{"id":"n8","n":8,"suite":"new28","kind":"code","title":"Add retry with backoff to a fetch helper","planned":true},{"id":"n9","n":9,"suite":"new28","kind":"code","title":"Add page and pageSize to a list function","planned":true},{"id":"n10","n":10,"suite":"new28","kind":"code","title":"Add a word count to text stats, with a test","planned":true},{"id":"n11","n":11,"suite":"new28","kind":"code","title":"Python: add a --dry-run option","planned":true},{"id":"n12","n":12,"suite":"new28","kind":"code","title":"Add clear errors to a form validator","planned":true},{"id":"n13","n":13,"suite":"new28","kind":"question","title":"Which function writes the log, and where?","planned":true},{"id":"n14","n":14,"suite":"new28","kind":"question","title":"What does this regex accept? (no changes)","planned":true},{"id":"n15","n":15,"suite":"new28","kind":"question","title":"Why does this one test fail? (no changes)","planned":true},{"id":"n16","n":16,"suite":"new28","kind":"question","title":"How slow is this function as the list grows?","planned":true},{"id":"n17","n":17,"suite":"new28","kind":"question","title":"Big project: where is the config read?","planned":true},{"id":"n18","n":18,"suite":"new28","kind":"page","title":"Make a countdown timer page","planned":true},{"id":"n19","n":19,"suite":"new28","kind":"page","title":"Make a tip calculator page","planned":true},{"id":"n20","n":20,"suite":"new28","kind":"page","title":"Make a to-do page that remembers","planned":true},{"id":"n21","n":21,"suite":"new28","kind":"page","title":"Make a colour palette page","planned":true},{"id":"n22","n":22,"suite":"new28","kind":"page","title":"Make a markdown preview page","planned":true},{"id":"n23","n":23,"suite":"new28","kind":"writing","title":"Write a README for a small project","planned":true},{"id":"n24","n":24,"suite":"new28","kind":"writing","title":"Write a changelog from a diff","planned":true},{"id":"n25","n":25,"suite":"new28","kind":"code","title":"Rename a function across 4 files","planned":true},{"id":"n26","n":26,"suite":"new28","kind":"code","title":"Split one big file into two modules","planned":true},{"id":"n27","n":27,"suite":"new28","kind":"code","title":"Turn callbacks into async/await, 2 files","planned":true},{"id":"n28","n":28,"suite":"new28","kind":"code","title":"Python: a dataclass used across 2 files","planned":true}]};
+(function () {
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const stage = $('#stage'), tip = $('#tip');
+  const NAMES = { gemma: 'Gemma 4 12B', big: 'Bonsai 27B', qwen: 'Qwen 3.5 9B' };
+  const LIMIT = 600;
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* no storage */ } } };
+  const S = { full: null, design: store.get('battle-pv2-design') || '3', state: 'blind', test: 'money', votes: {}, sample: {}, theme: store.get('battle-pv2-theme') || 'auto', added: [], tab: {}, openPrompt: false, hl: null };
+  const tests = () => [...D.tests, ...S.added];
+  const byId = (id) => tests().find((t) => t.id === id) || D.new28.find((t) => t.id === id);
+  const whole = (s) => Math.round(s);
+  const mmss = (s) => { const r = whole(s); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; };
+  const human = (s) => { const r = whole(s); return r < 60 ? `${r} s` : `${Math.floor(r / 60)} min ${String(r % 60).padStart(2, '0')} s`; };
+  const md = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  const kindName = { code: 'Code change', question: 'Question', page: 'Page', writing: 'Writing' };
+  const KINDS = [['read', 'read / look'], ['edit', 'change a file'], ['bash', 'run a command'], ['ask', 'asked you'], ['tries', 'tries (tests, drafts)'], ['error', 'a step that failed'], ['answer', 'writing its answer']];
+
+  function verdict(r) {
+    if (!r) return { cls: 'wait', text: 'Not run yet', mk: 'todo', sym: '' };
+    if (r.running) return { cls: 'wait', text: 'Running', mk: 'run', sym: '' };
+    if (r.stopped) return { cls: 'warn', text: 'Stopped by you', mk: 'warn', sym: '■' };
+    if (r.overLimit) return { cls: 'warn', text: 'Out of time', mk: 'warn', sym: '⏱' };
+    return r.pass ? { cls: 'ok', text: '✓ Pass', mk: 'ok', sym: '✓' } : { cls: 'bad', text: '✗ Fail', mk: 'bad', sym: '✗' };
+  }
+  const checkLine = (r) => r.running ? 'still working' : r.stopped || r.overLimit ? (r.pass ? 'what it left passes the check' : `what it left fails: ${esc(r.why)}`) : (r.pass ? 'every pass rule held' : `failed: ${esc(r.why)}`);
+  const clean = (r) => r && !r.running && !r.stopped && !r.overLimit;
+  const revealed = (t) => Boolean(S.votes[t.id]) || S.state === 'revealed';
+  const voteOf = (t) => S.votes[t.id] || (S.state === 'revealed' ? S.sample[t.id] : null);
+  const who = (side, t) => `<span class="who"><span class="sw ${side}"></span>Model ${side}${revealed(t) && t[side] ? `<span class="real">· ${esc(NAMES[t[side].model])}${t[side].model === 'big' ? ' (for Qwen)' : ''}</span>` : ''}</span>`;
+
+  // Running: Model B's real steps of the money test, replayed at 2x.
+  const RUN = { t0: performance.now(), speed: 2, test: 'money' };
+  const replayT = () => ((performance.now() - RUN.t0) / 1000) * RUN.speed;
+  function liveRun(t) {
+    const r = t.B, now = replayT();
+    if (now > r.secs + 6) { RUN.t0 = performance.now(); return liveRun(t); }
+    if (now >= r.secs) return { ...r, done: true };
+    return { ...r, running: true, clock: now, steps: r.steps.filter((s) => s.t <= now) };
+  }
+  const viewTest = (t) => (S.state === 'running' && t.id === RUN.test ? { ...t, B: liveRun(t) } : t);
+  const fin = (r) => (r.running ? r.clock : r.secs);
+  const stepsOf = (r) => (r.running ? r.steps.length : r.stepCount);
+  const errsOf = (r) => (r.running ? r.steps.filter((s) => s.kind === 'error').length : r.errors);
+
+  function score() {
+    const s = { gemma: 0, big: 0, tie: 0, passes: { gemma: 0, big: 0 }, ran: 0 };
+    for (const t of tests()) {
+      if (!t.A || !t.B) continue;
+      s.ran += 1;
+      for (const r of [t.A, t.B]) if (r.pass && clean(r)) s.passes[r.model] += 1;
+      const v = voteOf(t); if (!v) continue;
+      if (v === 'T') s.tie += 1; else s[t[v].model] += 1;
+    }
+    return s;
+  }
+
+  // ---------- The band ----------
+  function band() {
+    const sc = score(), running = S.state === 'running';
+    const sample = S.state === 'revealed' && Object.keys(S.sample).some((k) => !S.votes[k]);
+    const cell = (t) => {
+      const vt = viewTest(t); const va = verdict(vt.A), vb = verdict(vt.B), v = voteOf(t);
+      const cls = (x) => (t.planned ? 'plan' : x.mk);
+      const tipText = `${t.n ? `${t.n}. ` : ''}${t.title}${t.planned ? ' · planned' : ` · A: ${va.text} · B: ${vb.text}${v ? ` · your vote: ${v === 'T' ? 'tie' : `Model ${v}`}` : ''}`}`;
+      return `<button class="cellb${t.id === S.test ? ' sel' : ''}" data-act="pick" data-id="${t.id}" data-tip="${esc(tipText)}" aria-label="${esc(tipText)}"><span class="h ${cls(va)}"></span><span class="h ${cls(vb)}"></span><span class="v ${v || ''}"></span></button>`;
+    };
+    return `<div class="band">
+      <div class="tally"><div class="side"><span class="n">${sc.gemma}</span><span class="m">Gemma</span></div><span class="dash">–</span><div class="side"><span class="n">${sc.big}</span><span class="m">Qwen</span></div><span class="sub">your votes${sc.tie ? ` · ${sc.tie} tie` : ''}<br>passes ${sc.passes.gemma}–${sc.passes.big}${sample ? '<br><span class="chip" style="margin-top:2px">sample</span>' : ''}</span></div>
+      <div class="strips"><div class="suite"><span class="sl">New 28</span><div class="cells">${D.new28.map(cell).join('')}</div></div><div class="suite"><span class="sl">My tests</span><div class="cells">${tests().map(cell).join('')}<button class="addcell" data-act="new" data-tip="Add a test" aria-label="Add a test">+</button></div></div>
+        <span class="keyq" data-tip="Each test is one cell: top = Model A, bottom = Model B. Green pass · red fail · amber out of time or stopped · dashed = planned or not run. The dot under it is your vote." aria-label="What the cells mean">?</span></div>
+      <div class="bandacts">${running ? '<span class="status"><span class="live">Model B running · Negative amounts</span></span>' : '<span class="status">Idle · no model loaded</span>'}<button class="btn pri" data-act="new">+ New test</button><button class="btn" ${running ? 'disabled' : ''}>Run all 28</button></div></div>`;
+  }
+
+  function titleRow(t, running) {
+    return `<div class="titlerow"><h2><span class="t">${esc(t.title)}</span><span class="chip">${kindName[t.kind]}</span></h2><div class="acts">${running ? '<button class="btn stop">■ Stop</button>' : '<button class="btn">Edit</button><button class="btn">Run again</button>'}</div>
+      <div class="line2"><span class="prompt${S.openPrompt ? ' open' : ''}">${esc(t.prompt)}</span><button class="more" data-act="prompt">${S.openPrompt ? 'less' : 'full prompt'}</button><div class="rules">${t.rules.map((x) => `<span class="chip" data-tip="${esc(x)}">${esc(x)}</span>`).join('')}</div></div></div>`;
+  }
+
+  // ---------- The timeline (drawn at the box's real width) ----------
+  const NICE = [15, 20, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720];
+  function axisEnd(t) {
+    const mx = Math.max(fin(t.A), fin(t.B), 10);
+    const want = mx >= LIMIT * 0.75 ? Math.max(LIMIT, mx) * 1.02 : mx * 1.1;
+    return NICE.find((n) => n >= want) ?? Math.ceil(want / 60) * 60;
+  }
+  const tickStep = (end) => [5, 10, 15, 30, 60, 120].find((s) => end / s <= 10) ?? 120;
+  function segments(r) {
+    const out = []; let prev = 0;
+    r.steps.forEach((s, i) => { out.push({ x0: prev, x1: s.t, kind: s.kind, i, s }); prev = Math.max(prev, s.t); });
+    const end = fin(r);
+    if (end > prev) out.push({ x0: prev, x1: end, kind: r.running ? 'now' : 'answer', i: -1 });
+    return out;
+  }
+  function bandMarkup(r, side, end, W, y, h, L, R) {
+    const X = (s) => L + (Math.min(s, end) / end) * (W - L - R);
+    let g = `<rect x="${L}" y="${y}" width="${W - L - R}" height="${h}" rx="5" style="fill:var(--panel)"/>`;
+    for (const sg of segments(r)) {
+      const x0 = X(sg.x0), w = Math.max(2.5, X(sg.x1) - x0);
+      if (sg.kind === 'now') { g += `<rect x="${x0}" y="${y}" width="${w}" height="${h}" rx="3" style="fill:var(--${side === 'A' ? 'a' : 'b'});opacity:.25"><animate attributeName="opacity" values=".35;.12;.35" dur="1.4s" repeatCount="indefinite"/></rect>`; continue; }
+      const tipTxt = sg.i >= 0 ? `${mmss(sg.s.t)}|${sg.s.label} ${sg.s.arg}|${sg.s.err || ''}|${mmss(sg.x1 - sg.x0)} to reach it` : `${mmss(sg.x1)}|${r.stopped ? 'Still working when you stopped it' : r.overLimit ? 'Still working at the end' : 'Writing its answer'}||${mmss(sg.x1 - sg.x0)}`;
+      g += `<rect class="seg" x="${x0}" y="${y}" width="${w}" height="${h}" rx="3" style="fill:var(--k-${sg.kind})" data-step="${sg.i}" data-side="${side}" data-steptip="${esc(tipTxt)}"/>`;
+      if (w > 64 && sg.i >= 0) g += `<text x="${x0 + 6}" y="${y + h / 2 + 4}" style="fill:var(--t-${sg.kind});font-size:11px;font-weight:600;pointer-events:none">${esc((w > 150 ? `${sg.s.label} ${sg.s.arg}` : sg.s.label).slice(0, Math.floor(w / 7)))}</text>`;
+    }
+    const fx = X(fin(r)), v = verdict(r);
+    if (!r.running) g += `<circle cx="${fx}" cy="${y + h / 2}" r="10" style="fill:var(--${v.cls === 'ok' ? 'ok' : v.cls === 'bad' ? 'bad' : 'warn'});stroke:var(--surface);stroke-width:2"/><text x="${fx}" y="${y + h / 2 + 4}" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:800">${v.sym}</text>`;
+    const label = r.running ? `${mmss(r.clock)} …` : human(r.secs);
+    const right = fx + 16 + label.length * 7 > W;
+    g += `<text x="${right ? fx - 16 : fx + 16}" y="${y + h / 2 + 4}" text-anchor="${right ? 'end' : 'start'}" style="fill:var(--ink);font-weight:650;font-size:12px">${label}</text>`;
+    return g;
+  }
+  function axisMarkup(end, W, y0, y1, L, R, labels) {
+    const X = (s) => L + (Math.min(s, end) / end) * (W - L - R);
+    const st = tickStep(end); let g = '';
+    for (let s = 0; s <= end + 0.01; s += st) { const x = X(s); g += `<line x1="${x}" x2="${x}" y1="${y0}" y2="${y1}" style="stroke:var(--line)"/>${labels ? `<text x="${x}" y="${labels}" text-anchor="${s === 0 ? 'start' : 'middle'}">${mmss(s)}</text>` : ''}`; }
+    if (end >= LIMIT) { const x = X(LIMIT); g += `<line x1="${x}" x2="${x}" y1="${y0 - 6}" y2="${y1}" style="stroke:var(--warn);stroke-width:2" stroke-dasharray="4 3"/>${labels ? `<text x="${x - 4}" y="${y0 - 8}" text-anchor="end" style="fill:var(--warn);font-weight:650">10:00 stop</text>` : ''}`; }
+    return g;
+  }
+  function deltaLine(t) {
+    const a = t.A, b = t.B;
+    if (!clean(a) || !clean(b)) return a.running || b.running ? 'Model B is still working' : 'One run did not finish, so there is no "faster"';
+    const d = Math.abs(a.secs - b.secs);
+    return d < 1 ? 'Both took the same time' : `Model ${a.secs < b.secs ? 'A' : 'B'} finished ${human(d)} sooner`;
+  }
+  const limitNote = (t, end) => (end >= LIMIT ? 'the 10:00 stop is the dashed line' : `zoomed to the runs · the 10:00 stop is off to the right (A used ${Math.round((fin(t.A) / LIMIT) * 100)}%, B ${Math.round((fin(t.B) / LIMIT) * 100)}%)`);
+  const keyHtml = () => `<div class="key">${KINDS.map(([k, n]) => `<span><i class="k-${k}"></i>${n}</span>`).join('')}</div>`;
+  function timelineBox(t) {
+    return `<div class="tl"><div class="cap"><span><b>What each did, on one clock</b><span class="long"> · each coloured stretch is the time it took to reach that step · point at one for the step, click to open it</span></span><span class="delta">${deltaLine(t)}</span></div><svg class="tlsvg" id="tl3" height="112" role="img" aria-label="Both runs on one clock"></svg><div class="cap" style="margin-top:2px">${keyHtml()}<span>${limitNote(t, axisEnd(t))}${t.A.approxTimes ? ' · chat runs: times are close, not exact' : ''}</span></div></div>`;
+  }
+  function drawTimelines(t) {
+    const end = axisEnd(t);
+    const one = $('#tl3', stage);
+    if (one) {
+      const W = Math.max(300, Math.round(one.getBoundingClientRect().width)), L = 64, R = 20;
+      const c = document.body.classList.contains('compact'), H = c ? 82 : 112, bh = c ? 20 : 24, ya = c ? 10 : 20, yb = c ? 38 : 58;
+      one.setAttribute('viewBox', `0 0 ${W} ${H}`); one.setAttribute('height', H);
+      one.innerHTML = `${axisMarkup(end, W, ya - 6, yb + bh + 6, L, R, H - 4)}<text x="0" y="${ya + bh / 2 + 4}" style="fill:var(--a);font-weight:700;font-size:12px">Model A</text><text x="0" y="${yb + bh / 2 + 4}" style="fill:var(--b);font-weight:700;font-size:12px">Model B</text>${bandMarkup(t.A, 'A', end, W, ya, bh, L, R)}${bandMarkup(t.B, 'B', end, W, yb, bh, L, R)}`;
+    }
+    const ax = $('#lax', stage);
+    if (ax) {
+      const W = Math.max(200, Math.round(ax.getBoundingClientRect().width)), L = 2, R = 64;
+      ax.setAttribute('viewBox', `0 0 ${W} 20`);
+      ax.innerHTML = axisMarkup(end, W, 16, 20, L, R, 12).replace(/<text[^>]*>10:00 stop<\/text>/, '');
+      for (const side of ['A', 'B']) {
+        const sv = $(`#lane${side}`, stage); if (!sv) continue;
+        sv.setAttribute('viewBox', `0 0 ${W} 34`);
+        sv.innerHTML = axisMarkup(end, W, 0, 34, L, R, 0) + bandMarkup(t[side], side, end, W, 5, 24, L, R);
+      }
+    }
+  }
+
+  // ---------- Stat duels (design 3) and lanes (design 4) ----------
+  function stats(t) {
+    const A = t.A, B = t.B;
+    const both = clean(A) && clean(B);
+    const mk = (key, label, get, fmt, lower) => {
+      const a = get(A), b = get(B);
+      const won = both && a != null && b != null && a !== b ? ((lower ? a < b : a > b) ? 'A' : 'B') : null;
+      return { key, label, a, b, fmt, won };
+    };
+    return [
+      mk('secs', 'Time', fin, (s, r) => (r.running ? `<span data-clock>${mmss(s)}</span>` : human(s)), true),
+      mk('steps', 'Steps', stepsOf, (n) => `${n}`, true),
+      mk('errors', 'Errors', errsOf, (n) => `${n}`, true),
+      mk('tps', 'Writes', (r) => r.tps, (n) => `${n} <small>tok/s</small>`, false),
+    ];
+  }
+  function duels(t) {
+    const res = (r) => (r.running ? '<span class="res wait"><span class="live">Running</span></span>' : `<span class="res ${verdict(r).cls}">${verdict(r).text}</span>`);
+    const cards = [`<div class="duel"><div class="k">Result</div><div class="rv">${res(t.A)}${res(t.B)}</div><div class="rv" style="font-size:11.5px;color:var(--ink3)"><span>${checkLine(t.A)}</span><span style="text-align:right">${checkLine(t.B)}</span></div></div>`];
+    for (const s of stats(t)) {
+      const has = s.a != null || s.b != null;
+      const tot = (s.a || 0) + (s.b || 0);
+      const val = (x, side) => (x == null ? '<span class="x">not measured</span>' : `<b class="${s.won === side ? 'won' : ''}">${s.fmt(x, t[side])}</b>`);
+      const tug = s.a == null || s.b == null ? '<div class="tug flat"><span style="flex:1"></span></div>' : tot ? `<div class="tug"><span class="ta" style="flex:${s.a || 0.0001}"></span><span class="tb" style="flex:${s.b || 0.0001}"></span></div>` : '<div class="tug flat"><span style="flex:1"></span></div>';
+      const win = s.won ? `Model ${s.won} ${s.key === 'secs' ? 'faster' : s.key === 'tps' ? 'quicker writer' : 'fewer'}` : '';
+      cards.push(`<div class="duel"><div class="k">${s.label}<span class="w">${win}</span></div><div class="vals">${val(s.a, 'A')}<span class="x">vs</span>${val(s.b, 'B')}</div>${tug}</div>`);
+    }
+    return `<div class="duels">${cards.join('')}</div>`;
+  }
+  const short = (s, r) => { const w = whole(s); const txt = w < 60 ? `${w}<small>s</small>` : `${Math.floor(w / 60)}<small>m</small> ${String(w % 60).padStart(2, '0')}<small>s</small>`; return r.running ? `<span data-clock>${mmss(s)}</span>` : txt; };
+  function lanes(t) {
+    const st = stats(t), v = voteOf(t), running = S.state === 'running' && t.id === RUN.test;
+    const lane = (side) => {
+      const r = t[side];
+      const res = r.running ? '<span class="res wait"><span class="live">Running</span></span>' : `<span class="res ${verdict(r).cls}">${verdict(r).text}</span>`;
+      const num = (s) => { const x = side === 'A' ? s.a : s.b; return x == null ? '<span class="num"><small>not measured</small></span>' : `<span class="num${s.won === side ? ' won' : ''}"${s.won === side ? ' title="better"' : ''}>${s.key === 'secs' ? short(x, r) : s.fmt(x, r)}</span>`; };
+      const vb = running ? `<button class="vbtn ${side}" disabled>This one</button>` : `<button class="vbtn ${side}${v === side ? ' on' : ''}" data-act="vote" data-v="${side}"><span class="sw ${side}"></span>${v === side ? 'Your pick' : 'This one'}</button>`;
+      return `<div class="lgrid lane"><div class="id">${who(side, t)}<span style="display:flex;gap:8px;align-items:center;min-width:0">${res}<span style="font-size:11.5px;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" data-tip="${checkLine(r)}">${checkLine(r)}</span></span></div>${st.map(num).map((x) => `<div>${x}</div>`).join('')}<div class="band2"><svg class="tlsvg" id="lane${side}" height="34"></svg></div><div class="vcell">${vb}</div></div>`;
+    };
+    const tie = running ? '<button class="vbtn T" disabled>Tie</button>' : `<button class="vbtn T${v === 'T' ? ' on' : ''}" data-act="vote" data-v="T">Tie</button>`;
+    const picked = v ? `<span class="picked">You picked <b>${v === 'T' ? 'a tie' : `Model ${v}`}</b>${v !== 'T' ? ` · ${esc(NAMES[t[v].model])}${t[v].model === 'big' ? ' (standing in for Qwen)' : ''}` : ''}${!S.votes[t.id] ? ' <span class="chip">sample vote</span>' : ''}</span>` : `<span>${running ? 'Vote once both have finished.' : 'Which did better? Pick a lane, or'}</span>${tie}<span>· names stay hidden until you vote</span>`;
+    return `<div class="lanes"><div class="lgrid lhead"><div>Model · result</div><div>Time</div><div>Steps</div><div>Errors</div><div>Writes</div><div class="axis"><svg class="tlsvg" id="lax" height="20"></svg></div><div class="vh" style="text-align:right">Your vote</div></div>${lane('A')}${lane('B')}
+      <div class="lfoot"><span class="delta">${deltaLine(t)}</span><span>· <span style="color:var(--ok)">green ▲</span> = better<span class="long"> · each coloured stretch is the time it took to reach that step; point at one, click to open it</span></span><span class="fill"></span>${keyHtml()}</div>
+      <div class="lfoot" style="padding-top:6px;padding-bottom:8px">${picked}<span class="fill"></span><span>${limitNote(t, axisEnd(t))}${t.A.approxTimes ? ' · chat runs: times are close' : ''}</span></div></div>`;
+  }
+  function voteBar(t, running) {
+    const v = voteOf(t);
+    if (running) return `<div class="vote"><span class="q">Which did better?</span><span class="picked">You can vote once both have finished.</span><span class="fill"></span><button class="vbtn A" disabled><span class="sw A"></span>Model A</button><button class="vbtn T" disabled>Tie</button><button class="vbtn B" disabled><span class="sw B"></span>Model B</button></div>`;
+    const picked = v ? `<span class="picked">You picked <b>${v === 'T' ? 'a tie' : `Model ${v}`}</b>${v !== 'T' ? ` · ${esc(NAMES[t[v].model])}${t[v].model === 'big' ? ' (standing in for Qwen)' : ''}` : ''}${!S.votes[t.id] ? ' <span class="chip">sample vote</span>' : ''}</span>` : '<span class="picked">Names stay hidden until you vote.</span>';
+    return `<div class="vote"><span class="q">Which did better?</span>${picked}<span class="fill"></span>${['A', 'T', 'B'].map((k) => `<button class="vbtn ${k}${v === k ? ' on' : ''}" data-act="vote" data-v="${k}">${k === 'T' ? 'Tie' : `<span class="sw ${k}"></span>Model ${k}`}</button>`).join('')}</div>`;
+  }
+
+  // ---------- Tabs ----------
+  const SHIM = '<script>(function(){var m={};var s={getItem:function(k){return Object.prototype.hasOwnProperty.call(m,k)?m[k]:null},setItem:function(k,v){m[k]=String(v)},removeItem:function(k){delete m[k]},clear:function(){m={}},key:function(i){return Object.keys(m)[i]||null},get length(){return Object.keys(m).length}};try{Object.defineProperty(window,"localStorage",{value:s,configurable:true})}catch(e){}})();<\/script>';
+  const tabsFor = (t) => [['did', 'What it did'], ['answer', 'Answer'], t.kind === 'page' ? ['page', 'Page'] : ['changes', 'Changes']];
+  const defaultTab = (t) => (t.kind === 'page' ? 'page' : t.kind === 'question' ? 'answer' : 'changes');
+  const curTab = (t) => (S.state === 'running' ? 'did' : S.tab[t.id] || defaultTab(t));
+  function tabContent(tab, r, side) {
+    if (tab === 'did') {
+      if (!r.steps.length) return '<div class="none">No steps yet</div>';
+      return `<ul class="steps">${r.steps.map((s, i) => `<li data-row="${side}${i}" class="${S.hl && S.hl.side === side && S.hl.i === i ? 'hl' : ''}${r.running && i === r.steps.length - 1 ? ' new' : ''}"><span class="tm">${mmss(s.t)}</span><span class="dot k-${s.kind}"></span><span class="lb">${esc(s.label)} <i>${esc(s.arg)}</i></span>${s.err ? `<span class="er">${esc(s.err)}</span>` : ''}</li>`).join('')}</ul>${r.approxTimes ? '<div class="approx">A chat run keeps no clock per step: these times are the thinking before each step, added up.</div>' : ''}`;
+    }
+    if (r.running) return '<div class="none">Waiting for it to finish</div>';
+    if (tab === 'answer') return r.answer ? `<div class="answer">${md(r.answer)}</div>` : '<div class="none">It wrote no answer</div>';
+    if (tab === 'page') return r.page ? `<iframe class="pageframe" title="The page ${esc(NAMES[r.model])} made" data-page="${r.model}"></iframe>` : '<div class="none">It made no page</div>';
+    if (!r.diffs.length) return '<div class="none">No files changed</div>';
+    const byPath = {};
+    for (const d of r.diffs) (byPath[d.path] ||= []).push(d);
+    return Object.entries(byPath).map(([p, ds]) => { const lines = ds.flatMap((d) => d.hunk); return `<div class="diff"><div class="fh">${esc(p)}${ds.length > 1 ? ` · ${ds.length} edits` : ''}</div>${lines.map(([k, x]) => `<div class="ln ${k === '+' ? 'add' : k === '-' ? 'del' : 'ctx'}">${k === ' ' ? ' ' : k} ${esc(x)}</div>`).join('')}</div>`; }).join('');
+  }
+  function countFor(tab, r) {
+    if (tab === 'did') return `${stepsOf(r)}`;
+    if (tab === 'changes') { if (r.running) return '…'; const n = new Set(r.diffs.map((d) => d.path)).size; return n ? `${n} file${n > 1 ? 's' : ''}` : 'none'; }
+    if (tab === 'answer') return r.running ? '…' : r.answer ? `${r.answer.split(/\s+/).length} words` : 'none';
+    return '';
+  }
+  function tabs(t) {
+    const cur = curTab(t);
+    const bar = tabsFor(t).map(([k, n]) => { const ca = countFor(k, t.A), cb = countFor(k, t.B); return `<button role="tab" aria-selected="${cur === k}" data-act="tab" data-tab="${k}">${n}${ca || cb ? `<span class="ct">${ca} · ${cb}</span>` : ''}</button>`; }).join('');
+    const col = (side) => `<div class="tcol"><div class="tch">${who(side, t)}${revealed(t) ? `<span class="how">${esc(t[side].how)}</span>` : `<span class="how">${side === 'A' ? 'went first' : 'went second'}</span>`}${cur === 'page' && t[side].page ? `<button class="bigbtn" data-act="full" data-side="${side}">Open full size ↗</button>` : ''}</div><div class="tbody scroll${cur === 'page' ? ' page' : ''}" data-body="${side}">${t[side].note && cur !== 'page' ? `<div class="note">${esc(t[side].note)}</div>` : ''}${tabContent(cur, t[side], side)}</div></div>`;
+    return `<div class="tabs"><div class="tabbar" role="tablist">${bar}<span class="fill"></span><span class="hint">A on the left, B on the right</span></div><div class="tcols">${col('A')}${col('B')}</div></div>`;
+  }
+  function fillFrames(t) {
+    for (const f of stage.querySelectorAll('iframe[data-page]')) {
+      const r = [t.A, t.B].find((x) => x && x.model === f.dataset.page);
+      if (r && r.page) f.srcdoc = r.page.replace(/<head[^>]*>/i, (h) => `${h}${SHIM}`);
+    }
+  }
+
+  // ---------- Planned / not run / the new test ----------
+  const planned = (t) => `<div class="panelmsg"><span class="chip" style="justify-self:start">New 28 · test ${t.n} of 28 · planned · ${kindName[t.kind]}</span><h2>${esc(t.title)}</h2><div class="none" style="font-size:13.5px;line-height:1.55">Not written yet. In the build I write its prompt, starter files and pass checks, and check that it fails before and passes with a known-good answer. Your first Run all times it; you can edit it any time.</div></div>`;
+  const notRun = (t) => `<div class="panelmsg"><span class="chip" style="justify-self:start">My tests · ${kindName[t.kind]} · not run yet</span><h2>${esc(t.title)}</h2><div style="color:var(--ink2)">${esc(t.prompt)}</div><div class="rules" style="max-width:none;flex-wrap:wrap">${t.rules.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div><div class="none" style="font-size:13.5px">${t.runAsked ? 'In the real tab it runs now: one model, then the other, each up to 10 min; the results fill in here as they come.' : 'Saved. In the real tab, Run starts it (or Run all).'} This preview runs no models.</div><div style="display:flex;gap:6px"><button class="btn pri">Run</button><button class="btn">Edit</button></div></div>`;
+  const EXAMPLES = [
+    ['Fix a bug', 'The tests in this project fail. Find the bug and fix it (fix the code, not the tests).'],
+    ['Ask a question', 'Which function reads the settings file, and what happens when the file is missing? Don\'t change any files.'],
+    ['Make a page', 'Make one self-contained HTML page called timer.html with a 25-minute countdown, Start, Pause and Reset buttons, and my system\'s light or dark mode. Save it to my Desktop.'],
+    ['Add a feature', 'Add a --json flag to the CLI in cli.mjs that prints the result as JSON instead of text, and add a test for it.'],
+  ];
+  const F = { prompt: '', name: '', nameTouched: false, kind: null, files: [], checks: null, ask: '', suite: 'mine' };
+  const guessKind = (p) => (/\b(html|page|web ?page|site)\b/i.test(p) ? 'page' : /\?\s*$|^(what|which|why|how|where|who|when|explain|is|does|do|can)\b/i.test(p.trim()) ? 'question' : /\b(write|draft) (a|an|the)? ?(story|readme|notes?|changelog|poem|letter|summary)\b/i.test(p) ? 'writing' : 'code');
+  const kindNow = () => F.kind || guessKind(F.prompt);
+  const nameFrom = (p) => { const w = p.trim().replace(/\s+/g, ' ').split(' ').slice(0, 7).join(' ').replace(/[.,:;]$/, ''); return w ? w[0].toUpperCase() + w.slice(1) : ''; };
+  const CHECKS = {
+    code: [['tests', 'The tests pass', 'runs the project\'s tests (npm test, pytest…)', true, ''], ['others', 'Nothing else changed', 'only the files it was asked about', true, ''], ['mentions', 'A file says…', 'a word or line that must be in the changed file', false, 'e.g. export function slugify']],
+    question: [['answer', 'The answer mentions…', 'words the right answer must contain', true, 'e.g. 8790'], ['nochange', 'No file was changed', 'a question should not edit anything', true, '']],
+    page: [['exists', 'The page is saved', 'where the page should end up', true, 'Desktop/page.html'], ['works', 'It opens with no errors', 'opened in a real browser; its script must run', true, ''], ['offline', 'Nothing from the internet', 'works with the Wi-Fi off', true, ''], ['has', 'The page has…', 'a word or button that must be on it', false, 'e.g. Reset']],
+    writing: [['exists', 'The file is saved', 'where the text should end up', true, 'e.g. README.md'], ['has', 'The file mentions…', 'words it must contain', false, '']],
+  };
+  function checksNow() { const k = kindNow(); if (!F.checks || F.checks.kind !== k) F.checks = { kind: k, rows: CHECKS[k].map(([id, t, d, on, ph]) => ({ id, t, d, on, ph, val: '' })) }; return F.checks.rows; }
+  function newTest() {
+    const k = kindNow(), rows = checksNow(), any = rows.some((r) => r.on);
+    return `<div class="nt"><h2>New test <span>Three steps. It runs on both models, one after the other: 1 run each, Low, each stopped at 10 min.</span></h2>
+      <div class="steps3">
+        <div class="stp"><div class="sh"><span class="no">1</span>What should it do?</div><div class="sb">
+          <textarea id="f-prompt" placeholder="Type it the way you'd ask Agentic Coder, e.g.&#10;&#10;Make a tip calculator page with a bill box, a tip % slider and the total per person. Save it to my Desktop.">${esc(F.prompt)}</textarea>
+          <div class="guess"><span>Or start from:</span>${EXAMPLES.map(([n], i) => `<button class="pill" data-act="example" data-i="${i}">${n}</button>`).join('')}</div>
+          <div class="guess"><span>Kind${F.kind ? '' : ' (guessed)'}:</span>${Object.entries(kindName).map(([key, n]) => `<button class="pill" data-act="kind" data-v="${key}" aria-pressed="${k === key}">${n}</button>`).join('')}</div>
+          <div class="namerow"><span>Name</span><input id="f-name" type="text" value="${esc(F.nameTouched ? F.name : nameFrom(F.prompt))}" placeholder="taken from the prompt"></div>
+          <details class="moreopt"><summary>More: if it asks you something…</summary><textarea id="f-ask" placeholder="What to answer (empty: it's told to decide by itself)">${esc(F.ask)}</textarea></details>
+        </div></div>
+        <div class="stp"><div class="sh"><span class="no">2</span>Starter files <span class="opt">optional</span></div><div class="sb">
+          <div class="drop" id="drop"><div><b>Drop files or a folder</b> or <label class="btn" style="display:inline-block;margin:0 2px">Choose files<input type="file" multiple hidden data-pick="files"></label> <label class="btn" style="display:inline-block">Choose a folder<input type="file" webkitdirectory hidden data-pick="dir"></label><br>Each model works on its own copy. Your files are never changed.<br><span style="font-size:12px">${k === 'page' || k === 'question' ? 'None needed for this kind: it starts in an empty folder.' : 'For a code change, drop the project it should change.'}</span>${F.files.length ? `<div class="files">${F.files.map((n) => `<span class="chip">${esc(n)}</span>`).join('')}</div>` : ''}</div></div>
+        </div></div>
+        <div class="stp"><div class="sh"><span class="no">3</span>How do we know it worked?</div><div class="sb scroll">
+          <div class="checks">${rows.map((r, i) => `<div class="check${r.on ? ' on' : ''}" data-act="check" data-i="${i}"><span class="bx">✓</span><span class="ct">${esc(r.t)}</span><span class="cd">${esc(r.d)}</span>${r.ph && r.on ? `<input type="text" data-val="${i}" value="${esc(r.val)}" placeholder="${esc(r.ph)}">` : ''}</div>`).join('')}</div>
+          <div class="vonly">${any ? 'Every ticked check must hold. Your vote decides which did it better.' : 'No checks ticked: only your vote decides.'}</div>
+        </div></div>
+      </div>
+      <div class="ntfoot"><span class="help">Saved as a folder in <code>~/.agentic-coder/battle/tests/</code>; you can edit it by hand too.</span><span class="fill"></span><button class="btn" data-act="cancel">Cancel</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div></div>`;
+  }
+
+  // ---------- Views ----------
+  function body(t) {
+    const running = S.state === 'running' && t.id === RUN.test;
+    if (S.design === '3') return `<div class="d3 body">${timelineBox(t)}${duels(t)}${tabs(t)}${voteBar(t, running)}</div>`;
+    return `<div class="d4 body">${lanes(t)}${tabs(t)}</div>`;
+  }
+  function view() {
+    const t0 = byId(S.test);
+    if (S.state === 'new') return `<div class="view" style="grid-template-rows:auto minmax(0,1fr)">${band()}${newTest()}</div>`;
+    if (t0.planned) return `<div class="view" style="grid-template-rows:auto minmax(0,1fr)">${band()}${planned(t0)}</div>`;
+    if (!t0.A) return `<div class="view" style="grid-template-rows:auto minmax(0,1fr)">${band()}${notRun(t0)}</div>`;
+    const t = viewTest(t0);
+    const full = S.full && t.kind === 'page' ? `<div class="full"><div class="fullbar"><b>${esc(t.title)}</b><span style="color:var(--ink3)">· the page each model made, full size</span><span class="fill"></span><div class="seg2">${['A', 'B'].map((k) => `<button data-act="full" data-side="${k}" aria-pressed="${S.full === k}"><span class="sw ${k}"></span>Model ${k}${revealed(t) ? ` · ${esc(NAMES[t[k].model])}` : ''}</button>`).join('')}</div><button class="btn" data-act="closefull">Close ✕</button></div><div class="fbody"><iframe class="pageframe" title="Full size page" data-page="${t[S.full].model}"></iframe></div></div>` : '';
+    return `<div class="view">${band()}${titleRow(t, S.state === 'running')}${body(t)}</div>${full}`;
+  }
+  function fades() { for (const el of stage.querySelectorAll('.scroll')) el.classList.toggle('more', el.scrollTop + el.clientHeight < el.scrollHeight - 2); }
+  let lastDrawn = null;
+  function render() {
+    document.body.classList.toggle('compact', innerHeight < 860);
+    if (S.theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = S.theme;
+    for (const g of document.querySelectorAll('#pv .grp')) for (const b of g.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === S[g.dataset.k]));
+    if (S.state === 'running') S.test = RUN.test;
+    if (S.state === 'revealed') S.sample = { money: 'B', tax: 'T', notes: 'A' };
+    const keep = S.test === lastDrawn ? [...stage.querySelectorAll('.tbody')].map((b) => b.scrollTop) : [];
+    lastDrawn = S.test;
+    stage.innerHTML = view();
+    const t = byId(S.test);
+    if (t && !t.planned && t.A && S.state !== 'new') { fillFrames(t); drawTimelines(viewTest(t)); }
+    [...stage.querySelectorAll('.tbody')].forEach((b, i) => { b.scrollTop = keep[i] ?? 0; });
+    fades();
+  }
+
+  // Live: redraw when a step lands, else move the clocks and the growing band.
+  let lastLive = '';
+  setInterval(() => {
+    if (S.state !== 'running') return;
+    const t = byId(RUN.test), lr = liveRun(t);
+    const key = `${lr.steps.length}/${lr.done ? 'done' : 'run'}`;
+    if (key !== lastLive) {
+      lastLive = key;
+      render();
+      const b = stage.querySelector('.tbody[data-body="B"]'); if (b) { b.scrollTop = b.scrollHeight; fades(); }
+      return;
+    }
+    for (const el of stage.querySelectorAll('[data-clock]')) el.textContent = mmss(lr.clock ?? lr.secs);
+    drawTimelines(viewTest(t));
+  }, 250);
+  window.addEventListener('resize', () => { const was = document.body.classList.contains('compact'); if (was !== (innerHeight < 860)) { render(); return; } const t = byId(S.test); if (t && t.A && S.state !== 'new') drawTimelines(viewTest(t)); fades(); });
+  stage.addEventListener('scroll', (e) => { if (e.target.classList?.contains('scroll')) fades(); }, true);
+
+  // The tooltip: steps on the timeline, cells, rule chips.
+  document.addEventListener('mousemove', (e) => {
+    const seg = e.target.closest?.('[data-steptip]'); const el = seg || e.target.closest?.('[data-tip]');
+    if (!el) { tip.style.display = 'none'; return; }
+    if (seg) { const [tm, what, err, took] = seg.dataset.steptip.split('|'); tip.innerHTML = `<span class="tm">${esc(tm)}</span><b>${esc(what)}</b>${err ? `<span class="er">${esc(err)}</span>` : ''}<div style="opacity:.7">${esc(took)}</div>`; }
+    else tip.textContent = el.dataset.tip;
+    tip.style.display = 'block';
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = `${Math.min(innerWidth - w - 8, e.clientX + 14)}px`;
+    tip.style.top = `${e.clientY + 18 + h > innerHeight ? e.clientY - h - 12 : e.clientY + 18}px`;
+  });
+
+  document.querySelector('#pv').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'realbtn') { const on = $('#realbox').classList.toggle('on'); b.setAttribute('aria-expanded', String(on)); return; }
+    const g = b.closest('.grp'); if (!g) return;
+    S[g.dataset.k] = b.dataset.v;
+    if (g.dataset.k === 'state' && b.dataset.v === 'running') { RUN.t0 = performance.now(); lastLive = ''; }
+    if (g.dataset.k === 'state' && b.dataset.v === 'blind') S.votes = {};
+    if (g.dataset.k === 'design') store.set('battle-pv2-design', S.design);
+    if (g.dataset.k === 'theme') store.set('battle-pv2-theme', S.theme);
+    S.hl = null; S.full = null; render();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.full) { S.full = null; render(); } });
+  document.addEventListener('click', (e) => { if (!e.target.closest('#realbox') && !e.target.closest('#realbtn')) { $('#realbox').classList.remove('on'); $('#realbtn').setAttribute('aria-expanded', 'false'); } });
+  function keepForm() { const p = $('#f-prompt'), n = $('#f-name'), a = $('#f-ask'); if (p) F.prompt = p.value; if (n && n.value !== nameFrom(F.prompt)) { F.name = n.value; F.nameTouched = Boolean(n.value.trim()) && n.value !== nameFrom(F.prompt); } if (a) F.ask = a.value; }
+  stage.addEventListener('click', (e) => {
+    const seg = e.target.closest('.seg');
+    if (seg && seg.dataset.step >= 0) { S.tab[S.test] = 'did'; S.hl = { side: seg.dataset.side, i: Number(seg.dataset.step) }; render(); const row = stage.querySelector(`[data-row="${S.hl.side}${S.hl.i}"]`); if (row) { const box = row.closest('.tbody'); box.scrollTop = row.offsetTop - box.clientHeight / 3; fades(); } return; }
+    const el = e.target.closest('[data-act]'); if (!el) return;
+    const act = el.dataset.act;
+    if (act === 'pick') { S.full = null; S.test = el.dataset.id; S.hl = null; S.openPrompt = false; if (S.state === 'new' || S.state === 'running') S.state = 'blind'; render(); }
+    if (act === 'vote') { S.votes[S.test] = el.dataset.v; render(); }
+    if (act === 'full') { S.full = el.dataset.side; render(); return; }
+    if (act === 'closefull') { S.full = null; render(); return; }
+    if (act === 'tab') { S.tab[S.test] = el.dataset.tab; S.hl = null; render(); }
+    if (act === 'prompt') { S.openPrompt = !S.openPrompt; render(); }
+    if (act === 'new') { S.state = 'new'; render(); $('#f-prompt')?.focus(); }
+    if (act === 'cancel') { S.state = 'blind'; render(); }
+    if (act === 'kind') { keepForm(); F.kind = el.dataset.v; render(); }
+    if (act === 'example') { const [, p] = EXAMPLES[Number(el.dataset.i)]; F.prompt = p; F.kind = null; F.nameTouched = false; F.checks = null; render(); const ta = $('#f-prompt'); ta.focus(); ta.setSelectionRange(p.length, p.length); }
+    if (act === 'check' && !e.target.closest('input')) { keepForm(); const r = checksNow()[Number(el.dataset.i)]; r.on = !r.on; render(); }
+    if (act === 'save' || act === 'saverun') {
+      keepForm();
+      const k = kindNow(), rows = checksNow().filter((r) => r.on);
+      const id = `u${S.added.length + 1}`;
+      S.added.push({ id, suite: 'mine', title: (F.nameTouched ? F.name : nameFrom(F.prompt)) || 'Untitled test', kind: k, prompt: F.prompt.trim() || '(no prompt yet)', rules: rows.length ? rows.map((r) => `${r.t.replace('…', '')}${r.val ? ` ${r.val}` : ''}`) : ['Your vote only'], files: F.files.length ? [...F.files] : ['(none)'], A: null, B: null, runAsked: act === 'saverun' });
+      Object.assign(F, { prompt: '', name: '', nameTouched: false, kind: null, files: [], checks: null, ask: '' });
+      S.test = id; S.state = 'blind'; render();
+    }
+  });
+  stage.addEventListener('input', (e) => {
+    if (e.target.id === 'f-prompt') { F.prompt = e.target.value; const n = $('#f-name'); if (n && !F.nameTouched) n.value = nameFrom(F.prompt); if (!F.kind) { const g = guessKind(F.prompt); for (const p of stage.querySelectorAll('.pill')) p.setAttribute('aria-pressed', String(p.dataset.v === g)); if (F.checks && F.checks.kind !== g) { const pos = e.target.selectionStart; render(); const ta = $('#f-prompt'); ta.focus(); ta.setSelectionRange(pos, pos); } } }
+    if (e.target.id === 'f-name') { F.name = e.target.value; F.nameTouched = true; }
+    if (e.target.id === 'f-ask') F.ask = e.target.value;
+    if (e.target.dataset.val != null) checksNow()[Number(e.target.dataset.val)].val = e.target.value;
+  });
+  stage.addEventListener('change', (e) => { const i = e.target.closest('input[data-pick]'); if (!i) return; keepForm(); const names = [...i.files].map((f) => (i.dataset.pick === 'dir' ? f.webkitRelativePath || f.name : f.name)); F.files.push(...(i.dataset.pick === 'dir' && names.length > 8 ? [`${names[0].split('/')[0]}/ (${names.length} files)`] : names)); render(); });
+  stage.addEventListener('dragover', (e) => { const d = e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+  stage.addEventListener('dragleave', (e) => { const d = e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+  stage.addEventListener('drop', (e) => { const d = e.target.closest('#drop'); if (!d) return; e.preventDefault(); keepForm(); for (const f of e.dataTransfer.files) F.files.push(f.name); render(); });
+
+  render();
+})();
+</script>
+</body>
+</html>

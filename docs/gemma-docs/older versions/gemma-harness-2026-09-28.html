@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma harness</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--m:#eb6834;--u:#7a7568;
+  --t-soft:rgba(42,120,214,.08);--m-soft:rgba(235,104,52,.09);
+  --ok:#2f8a4e;--ok-soft:rgba(47,138,78,.12);--bad:#c4432b;--bad-soft:rgba(196,67,43,.11);--wait:#8a857a;--wait-soft:rgba(138,133,122,.13);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+    --t:#3987e5;--m:#e8743f;--u:#a4a19a;
+    --t-soft:rgba(57,135,229,.12);--m-soft:rgba(232,116,63,.12);
+    --ok:#56b675;--ok-soft:rgba(86,182,117,.15);--bad:#e46a52;--bad-soft:rgba(228,106,82,.15);--wait:#a4a19a;--wait-soft:rgba(164,161,154,.14);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#24262c;
+  --t:#3987e5;--m:#e8743f;--u:#a4a19a;
+  --t-soft:rgba(57,135,229,.12);--m-soft:rgba(232,116,63,.12);
+  --ok:#56b675;--ok-soft:rgba(86,182,117,.15);--bad:#e46a52;--bad-soft:rgba(228,106,82,.15);--wait:#a4a19a;--wait-soft:rgba(164,161,154,.14);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1180px;margin:0 auto;padding:28px 16px 34px}
+h1{font-size:30px;line-height:1.15;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-size:19px;letter-spacing:-.01em;margin:0 0 4px}
+h3{font-size:15px;margin:0}
+p{margin:0}
+.lede{color:var(--mute);max-width:880px;font-size:16px}
+.lede b{color:var(--ink);font-weight:600}
+section{margin-top:34px}
+.sub{color:var(--mute);font-size:14px;max-width:860px;margin-bottom:14px}
+
+/* who does what */
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:14px;font-size:13px;color:var(--mute)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--t);display:inline-block}
+.dot.m{background:var(--m)}
+.dot.u{background:var(--u)}
+
+/* number cards */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 15px;min-width:0}
+.stat .big{font-size:30px;font-weight:650;letter-spacing:-.02em;line-height:1.1}
+.stat .lab{font-size:14px;font-weight:600;margin-top:3px}
+.stat .was{font-size:13px;color:var(--mute);margin-top:4px}
+
+/* the five steps */
+.steps{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr 28px 1fr 28px 1fr}
+.step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px 15px;min-width:0}
+.step.open{background:var(--inner)}
+.head{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.n{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--bg);font-weight:600;font-size:12.5px;font-style:normal}
+.head b{font-size:16px;letter-spacing:-.005em}
+.step .txt{display:block;color:var(--mute);font-size:13.5px}
+.who{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:9px;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute)}
+.who span{display:inline-flex;align-items:center;gap:5px}
+.who .dot{width:7px;height:7px}
+.arrow{display:grid;place-items:center;color:var(--mute)}
+.arrow svg{width:20px;height:20px;display:block}
+.arrow path{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* inside step 3 */
+.inside{display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:16px}
+.panel{background:var(--inner);border:1px solid var(--line);border-radius:14px;padding:15px 16px 16px;min-width:0}
+.panel h3{margin-bottom:3px}
+.panel .ptxt{color:var(--mute);font-size:13.5px;margin-bottom:12px}
+.chain{list-style:none;margin:0;padding:0;counter-reset:c}
+.chain li{position:relative;display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:9px 12px 10px;border:1px solid var(--line);border-radius:11px;background:var(--card);font-size:13.5px;color:var(--mute)}
+.chain li + li{margin-top:8px}
+.chain li.brain{background:linear-gradient(var(--m-soft),var(--m-soft)),var(--card)}
+.chain li.code{background:linear-gradient(var(--t-soft),var(--t-soft)),var(--card)}
+.chain li b{color:var(--ink);font-weight:600}
+.chain .dot{margin-top:5px;justify-self:center}
+.aside{margin-top:12px;font-size:13px;color:var(--mute)}
+.aside b{color:var(--ink);font-weight:600}
+.loop{display:grid;grid-template-columns:1fr;gap:0}
+.node{border:1px solid var(--line);border-radius:11px;padding:9px 12px 10px;min-width:0;background:var(--card);display:grid;grid-template-columns:22px 1fr;gap:10px}
+.node.brain{background:linear-gradient(var(--m-soft),var(--m-soft)),var(--card)}
+.node.code{background:linear-gradient(var(--t-soft),var(--t-soft)),var(--card)}
+.node .dot{margin-top:5px;justify-self:center}
+.node b{display:block;font-size:14px}
+.node span.say{display:block;color:var(--mute);font-size:13px}
+.down{display:grid;place-items:center;height:22px;color:var(--mute)}
+.down svg{width:16px;height:16px;transform:rotate(90deg)}
+.down path{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.back{margin-top:10px;border:1px dashed var(--line);border-radius:11px;padding:8px 12px;font-size:13px;color:var(--mute);text-align:center}
+.back b{color:var(--ink);font-weight:600}
+
+/* where it plugs in */
+.plug{display:grid;grid-template-columns:1fr 28px 1fr 28px 1fr 28px 1fr;align-items:stretch}
+.box{border:1px solid var(--line);border-radius:14px;padding:13px 14px 14px;background:var(--card);min-width:0}
+.box.code{background:linear-gradient(var(--t-soft),var(--t-soft)),var(--card)}
+.box.brain{background:linear-gradient(var(--m-soft),var(--m-soft)),var(--card)}
+.box .tag{display:flex;align-items:center;gap:6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin-bottom:4px}
+.box b{display:block;font-size:15px}
+.box span.say{display:block;color:var(--mute);font-size:13px;margin-top:3px}
+.added{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 16px;font-size:14px;color:var(--mute)}
+.added b{color:var(--ink);font-weight:600}
+
+/* tables */
+.tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:14px}
+.tbl th,.tbl td{padding:9px 14px;text-align:left;vertical-align:top;border-top:1px solid var(--soft)}
+.tbl thead th{border-top:0;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600;background:var(--inner)}
+.tbl td:first-child{color:var(--ink);font-weight:600}
+.tbl td{color:var(--mute)}
+.tbl td.now{color:var(--ink)}
+.tbl .note{display:block;font-size:12.5px;color:var(--faint);font-weight:400}
+.cmp td:first-child{width:250px}
+.cmp td:nth-child(2),.cmp td:nth-child(3){width:calc((100% - 250px)/2)}
+.runs td:first-child{width:auto}
+.runs td.num,.runs th.num{text-align:right;white-space:nowrap}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{color:var(--ok);background:var(--ok-soft)}
+.tag.bad{color:var(--bad);background:var(--bad-soft)}
+.tag.wait{color:var(--wait);background:var(--wait-soft)}
+
+.verdict{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:16px;margin-bottom:14px}
+.verdict b{font-weight:650}
+.stories{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.story{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 16px 14px;min-width:0}
+.story h3{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.story ol{margin:0;padding-left:20px;color:var(--mute);font-size:13.5px}
+.story li + li{margin-top:5px}
+.story li b{color:var(--ink);font-weight:600}
+.story .lesson{margin-top:10px;padding-top:9px;border-top:1px solid var(--soft);font-size:13.5px}
+.story code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:1px 5px;border-radius:5px;color:var(--ink)}
+.left{margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 16px;font-size:14px;color:var(--mute)}
+.left b{color:var(--ink);font-weight:600}
+
+.foot{color:var(--faint);font-size:12.5px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
+.foot p + p{margin-top:6px}
+.foot code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);word-break:break-all}
+
+@media (max-width:1000px){
+  .steps{grid-template-columns:1fr}
+  .steps .arrow{height:24px}
+  .steps .arrow svg{transform:rotate(90deg)}
+  .plug{grid-template-columns:1fr}
+  .plug .arrow{height:24px}
+  .plug .arrow svg{transform:rotate(90deg)}
+  .inside{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  .stats{grid-template-columns:1fr}
+  .stories{grid-template-columns:1fr}
+  .cmp td:first-child{width:120px}
+  .tbl th,.tbl td{padding:8px 10px}
+  .runs .hide-sm{display:none}
+}
+@media (max-width:560px){
+  h1{font-size:26px}
+  .cmp thead tr{display:none}
+  .cmp tr{display:block;border-top:1px solid var(--soft)}
+  .cmp tbody tr:first-child{border-top:0}
+  .cmp td{display:block;border-top:0;padding:4px 12px}
+  .cmp td:first-child{width:auto;padding-top:10px}
+  .cmp td:nth-child(2),.cmp td:nth-child(3){width:auto}
+  .cmp td:nth-child(2)::before{content:"27B: ";color:var(--faint)}
+  .cmp td:nth-child(3)::before{content:"Gemma: ";color:var(--faint)}
+  .cmp td:last-child{padding-bottom:10px}
+}
+</style>
+</head>
+<body>
+<main>
+
+<h1>The harness, with Gemma as the brain</h1>
+<p class="lede"><b>Gemma 4 12B is the new brain. The harness around it is the same one the 27B used</b>: the same steps, tools, safety gates and checks. Plugging Gemma in took one small settings card and two lines in the model list. Nothing else changed.</p>
+<div class="legend">
+  <span><i class="dot m"></i>Gemma, the brain (writes the words and code)</span>
+  <span><i class="dot"></i>the harness (the code around it)</span>
+  <span><i class="dot u"></i>you</span>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="big">7 of 9</div>
+    <div class="lab">practice tasks passed</div>
+    <div class="was">First test, stopped after 9 of the 28 tasks. The 27B passed all 9.</div>
+  </div>
+  <div class="stat">
+    <div class="big">7.6 GB</div>
+    <div class="lab">of memory to run</div>
+    <div class="was">The 27B with its speed helper needs 11.9 GB, so Gemma frees about 4 GB.</div>
+  </div>
+  <div class="stat">
+    <div class="big">2× faster</div>
+    <div class="lab">at reading</div>
+    <div class="was">It reads about 127 tokens a second (the 27B: 61). Writing is the same, about 13 a second.</div>
+  </div>
+</div>
+
+<section>
+  <h2>One request, from start to done</h2>
+  <p class="sub">The coloured dots show who does each part. Gemma only writes. The harness decides what gets written to your files, and when.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="head"><i class="n">1</i><b>You ask</b></div>
+      <span class="txt">You type a request and press Enter.</span>
+      <div class="who"><span><i class="dot u"></i>you</span></div>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="step">
+      <div class="head"><i class="n">2</i><b>It sorts</b></div>
+      <span class="txt">Word rules pick the kind: rename, fix, change, question or other. A “thanks” gets a quick reply. Gemma is asked only when the rules can’t tell.</span>
+      <div class="who"><span><i class="dot"></i>harness</span><span><i class="dot m"></i>sometimes</span></div>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="step open">
+      <div class="head"><i class="n">3</i><b>It works</b></div>
+      <span class="txt">Fix and change take a shortcut built for them. Rename needs no brain at all. Everything else goes step by step. (See below.)</span>
+      <div class="who"><span><i class="dot m"></i>Gemma</span><span><i class="dot"></i>harness</span></div>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="step">
+      <div class="head"><i class="n">4</i><b>It checks</b></div>
+      <span class="txt">Before any change it asks for your OK. Afterwards it runs the project’s tests.</span>
+      <div class="who"><span><i class="dot u"></i>you</span><span><i class="dot"></i>harness</span></div>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="step">
+      <div class="head"><i class="n">5</i><b>Done</b></div>
+      <span class="txt">Gemma writes a sentence on what changed. The harness adds the files it touched and how many tests pass.</span>
+      <div class="who"><span><i class="dot m"></i>Gemma</span><span><i class="dot"></i>harness</span></div>
+    </div>
+  </div>
+
+  <div class="inside">
+    <div class="panel">
+      <h3>Inside step 3: the shortcut, for fix and change</h3>
+      <p class="ptxt">Gemma never edits your files. It writes tests and drafts, and the harness keeps only what passes.</p>
+      <ol class="chain">
+        <li class="brain"><i class="dot m"></i><span><b>Gemma writes a test</b> that should fail today and pass once the work is done. For a fix, the project’s own failing test does this job.</span></li>
+        <li class="brain"><i class="dot m"></i><span><b>Gemma drafts two versions</b> of the change.</span></li>
+        <li class="code"><i class="dot"></i><span><b>The harness picks the test the drafts agree with.</b> If no draft passes it, it can’t tell yet whether the test or the drafts are wrong.</span></li>
+        <li class="brain"><i class="dot m"></i><span><b>Gemma tries changes until one passes that test</b>: up to 8 tries, each checked by the harness.</span></li>
+        <li><i class="dot u"></i><span><b>You OK it.</b> “Before I change anything: change pages.mjs (+1 −1). Go ahead?”</span></li>
+        <li class="code"><i class="dot"></i><span><b>The harness writes the change</b> and runs the tests again.</span></li>
+      </ol>
+      <p class="aside"><b>If the shortcut can’t find a good test</b>, it says so and switches to step by step, on the right.</p>
+    </div>
+
+    <div class="panel">
+      <h3>Inside step 3: step by step, for everything else</h3>
+      <p class="ptxt">Gemma asks for one tool at a time. The harness decides whether it runs.</p>
+      <div class="loop">
+        <div class="node brain"><i class="dot m"></i><div><b>Gemma picks one tool</b><span class="say">Read, List, Search, Edit, Write, Bash, a to-do list, or a question to you.</span></div></div>
+        <div class="down" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+        <div class="node code"><i class="dot"></i><div><b>3 safety gates</b><span class="say">Blocked words (rm -rf, sudo, git push). Your OK. A fence that keeps commands inside the project.</span></div></div>
+        <div class="down" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+        <div class="node code"><i class="dot"></i><div><b>The harness runs it</b><span class="say">and hands the result back to Gemma.</span></div></div>
+      </div>
+      <p class="back">Round and round, <b>up to 40 steps</b>. It ends when Gemma answers instead of asking for a tool. It stops itself if it <b>repeats the same step</b> or hits <b>5 errors in a row</b>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Where Gemma plugs in</h2>
+  <p class="sub">The terminal doesn’t know which brain it’s talking to. It sends requests through one door, and whatever model sits behind that door answers.</p>
+  <div class="plug">
+    <div class="box code">
+      <div class="tag"><i class="dot"></i>unchanged</div>
+      <b>The harness</b>
+      <span class="say">Every screen, command, tool and check you use today.</span>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="box code">
+      <div class="tag"><i class="dot"></i>unchanged</div>
+      <b>One door</b>
+      <span class="say">The only way the terminal reaches the model side. It speaks the standard chat format.</span>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="box code">
+      <div class="tag"><i class="dot"></i>unchanged</div>
+      <b>The engine</b>
+      <span class="say">Your own build of llama.cpp, running on the Mac’s graphics chip. Only reachable from this Mac.</span>
+    </div>
+    <div class="arrow" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></svg></div>
+    <div class="box brain">
+      <div class="tag"><i class="dot m"></i>new</div>
+      <b>Gemma 4 12B</b>
+      <span class="say">One 6.7 GB file from Google, trained to run at 4-bit size.</span>
+    </div>
+  </div>
+  <div class="added"><b>What was added for Gemma:</b> a 36-line settings card (which file, how much memory each word of the conversation costs, Google’s recommended settings, thinking on or off) and 2 lines that put it in the model list. Apart from those two files, the harness code Gemma was tested on is the same as the saved main version.</div>
+</section>
+
+<section>
+  <h2>What changes when Gemma is the brain</h2>
+  <p class="sub">Measured on this Mac. The 27B numbers are from 24–25 Sep; Gemma’s are from this morning’s live check.</p>
+  <table class="tbl cmp">
+    <thead><tr><th></th><th>Bonsai 2 27B (before)</th><th>Gemma 4 12B</th></tr></thead>
+    <tbody>
+      <tr><td>File size</td><td>7.21 GB</td><td class="now">6.72 GB</td></tr>
+      <tr><td>Memory to run everything</td><td>11.9 GB<span class="note">including its speed helper</span></td><td class="now">7.6 GB<span class="note">7.69 GB measured running</span></td></tr>
+      <tr><td>Memory each token of the chat takes<span class="note">a token is roughly a short word</span></td><td>35 KB</td><td class="now">8.7 KB, about 4× less</td></tr>
+      <tr><td>Reading speed</td><td>61 tokens a second</td><td class="now">126–128 tokens a second</td></tr>
+      <tr><td>Writing speed</td><td>13.8 a second with its helper<span class="note">10.4 without</span></td><td class="now">13.2 a second<span class="note">no helper yet</span></td></tr>
+      <tr><td>Speed helper</td><td>Yes: a small 1.1 GB model that guesses the next words</td><td class="now">None yet</td></tr>
+      <tr><td>Thinking</td><td>Low, Medium, High</td><td class="now">Low only for now<span class="note">Gemma’s thinking is a plain on/off switch; no Medium or High</span></td></tr>
+      <tr><td>Tool calls</td><td>Standard</td><td class="now">Standard, and clean in the live check</td></tr>
+      <tr><td>Conversation size on this Mac</td><td>32k</td><td class="now">32k</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>The first test: 9 of the 28 practice tasks</h2>
+  <p class="sub">The same practice tasks the 27B passes, run through this harness at Low (no thinking), from 11:16 to 11:28 this morning. You stopped it after 9 tasks, so 19 haven’t been run.</p>
+  <p class="verdict"><b>Too early to call.</b> Gemma passed 7 of 9. The 27B passed all 9 of the same tasks. On the 7 Gemma passed, it was a little faster: 214 seconds in total against the 27B’s 245.</p>
+
+  <table class="tbl runs">
+    <thead><tr><th>The task</th><th class="hide-sm">Path</th><th>27B</th><th class="num">time</th><th>Gemma</th><th class="num">time</th></tr></thead>
+    <tbody>
+      <tr><td>Add a --json flag, with a test</td><td class="hide-sm">change</td><td><span class="tag ok">pass</span></td><td class="num">139 s</td><td><span class="tag bad">fail</span></td><td class="num">370 s</td></tr>
+      <tr><td>Fix an off-by-one page count</td><td class="hide-sm">fix</td><td><span class="tag ok">pass</span></td><td class="num">51 s</td><td><span class="tag ok">pass</span></td><td class="num">28 s</td></tr>
+      <tr><td>Fix prices sorted as text</td><td class="hide-sm">fix</td><td><span class="tag ok">pass</span></td><td class="num">20 s</td><td><span class="tag ok">pass</span></td><td class="num">11 s</td></tr>
+      <tr><td>Add a currency option</td><td class="hide-sm">change</td><td><span class="tag ok">pass</span></td><td class="num">42 s</td><td><span class="tag ok">pass</span></td><td class="num">35 s</td></tr>
+      <tr><td>Add a Python function</td><td class="hide-sm">change</td><td><span class="tag ok">pass</span></td><td class="num">31 s</td><td><span class="tag ok">pass</span></td><td class="num">28 s</td></tr>
+      <tr><td>Add perimeter() to a project with no tests</td><td class="hide-sm">change</td><td><span class="tag ok">pass</span></td><td class="num">62 s</td><td><span class="tag bad">fail</span></td><td class="num">79 s</td></tr>
+      <tr><td>Fix a wrong Fahrenheit formula, no tests</td><td class="hide-sm">fix</td><td><span class="tag ok">pass</span></td><td class="num">33 s</td><td><span class="tag ok">pass</span></td><td class="num">31 s</td></tr>
+      <tr><td>Write a short story to a file</td><td class="hide-sm">step by step</td><td><span class="tag ok">pass</span></td><td class="num">34 s</td><td><span class="tag ok">pass</span></td><td class="num">37 s</td></tr>
+      <tr><td>Write notes about an API</td><td class="hide-sm">step by step</td><td><span class="tag ok">pass</span></td><td class="num">34 s</td><td><span class="tag ok">pass</span></td><td class="num">44 s</td></tr>
+    </tbody>
+  </table>
+
+  <div class="stories">
+    <div class="story">
+      <h3><span class="tag bad">fail</span>Add a --json flag</h3>
+      <ol>
+        <li><b>Gemma wrote a wrong test.</b> It expected 2 rows back when the file holds 3.</li>
+        <li><b>The harness saw a warning sign.</b> None of the 4 drafts passed that test.</li>
+        <li><b>Gemma bent the code to fit its own test.</b> On the 8th try it hard-coded the 2 expected trades into the program, and that passed.</li>
+      </ol>
+      <p class="lesson">The real check wanted all 3 rows, so it failed. The 27B got this right.</p>
+    </div>
+    <div class="story">
+      <h3><span class="tag bad">fail</span>Add perimeter()</h3>
+      <ol>
+        <li><b>No usable test.</b> Gemma’s 3 tries at a test didn’t work, so the harness switched to step by step.</li>
+        <li><b>Gemma replaced <code>area()</code> with <code>perimeter()</code></b> when it should have added the new function next to it.</li>
+        <li><b>It tried to put <code>area()</code> back and missed twice.</b> Then it read the same file over and over, and the harness stopped it for going in circles.</li>
+      </ol>
+      <p class="lesson">perimeter() was right, but area() was left deleted. The 27B got this right.</p>
+    </div>
+  </div>
+
+  <p class="left"><b>Not run yet (19 tasks):</b> the three renames, the four questions about code, changes across several files, the big project, the vague “fix the bug”, the negative-money and Python multi-file tasks, the non-code folder task, and anything with thinking on. The real chart bug hasn’t been tried either.</p>
+</section>
+
+<div class="foot">
+  <p><b>Right now:</b> another session is renaming the app to Agentic Coder and making Gemma its model, as you asked at 11:30. This page shows the harness exactly as the test ran it.</p>
+  <p>Drawn from the code, not from memory. Test copy: <code>~/worktrees/gemma-bakeoff-frozen</code> (main 84df171 + Gemma’s card). Gemma’s runs: <code>~/Desktop/agentic-coder/models/gemma-4-12b/results/gemma-bakeoff-partial-2026-09-28/</code>. 27B runs: <code>~/Desktop/agentic-coder/models/bonsai-2-27b/results/step3-2026-09-27/tasks-after/pass1/</code> (28 of 28, 27 Sep). Memory figures from the app’s own sizing code at 32k.</p>
+</div>
+
+</main>
+</body>
+</html>

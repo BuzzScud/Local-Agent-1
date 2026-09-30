@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Final Grade</title>
+<style>
+:root { --bg: #fbfaf8; --card: #fff; --fg: #1d1d1b; --muted: #6b6a66; --line: #e6e3dd; --green: #1f7a4a; --amber: #9a6200; --red: #c8372d; --blue: #2f6bd8;
+  --t-green: #e1f2e7; --t-amber: #fbefd6; --t-red: #fbe3e0; --t-blue: #e3ecfb; --t-grey: #eceae5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f; --green: #62c48e; --amber: #e5b04c; --red: #f07a6e; --blue: #6e9df0;
+  --t-green: #1d3a2a; --t-amber: #3d3016; --t-red: #43221f; --t-blue: #1f2c45; --t-grey: #2e2d29; } }
+:root[data-theme="dark"] { --bg: #161614; --card: #1f1f1c; --fg: #ecebe6; --muted: #a09e97; --line: #34332f; --green: #62c48e; --amber: #e5b04c; --red: #f07a6e; --blue: #6e9df0;
+  --t-green: #1d3a2a; --t-amber: #3d3016; --t-red: #43221f; --t-blue: #1f2c45; --t-grey: #2e2d29; }
+* { box-sizing: border-box; } html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 44px 24px 80px; }
+h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 14px; } h2 { font-size: 23px; margin: 48px 0 8px; }
+p { margin: 0 0 12px; } .muted { color: var(--muted); } .kicker { color: var(--muted); font-size: 15px; margin-bottom: 8px; } .lede { font-size: 19px; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 12px; }
+.grade { display: grid; grid-template-columns: 150px 1fr; gap: 24px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px; margin-top: 22px; }
+.letter { font-size: 92px; font-weight: 700; line-height: 1; letter-spacing: -0.04em; text-align: center; }
+.letter small { display: block; font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--muted); margin-top: 8px; }
+.letter.green { color: var(--green); } .letter.blue { color: var(--blue); } .letter.amber { color: var(--amber); } .letter.red { color: var(--red); }
+.verdict { font-size: 20px; font-weight: 600; line-height: 1.35; margin-bottom: 8px; }
+dt { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 10px; } dd { margin: 2px 0 0; } dl { margin: 0; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; } .card .big { font-size: 30px; font-weight: 650; } .card .what { font-size: 15px; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; } th { text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); }
+td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; } tr:last-child td { border-bottom: 0; } td small { display: block; color: var(--muted); font-size: 14px; }
+.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tag, .g { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.g { font-size: 16px; font-weight: 700; border-radius: 8px; min-width: 40px; text-align: center; }
+.green { background: var(--t-green); color: var(--green); } .amber { background: var(--t-amber); color: var(--amber); } .red { background: var(--t-red); color: var(--red); } .blue { background: var(--t-blue); color: var(--blue); } .grey { background: var(--t-grey); color: var(--muted); }
+.letter.green, .letter.blue, .letter.amber, .letter.red { background: none; }
+ul { padding-left: 20px; } li { margin-bottom: 8px; }
+.paths { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); word-break: break-all; }
+.scroll { overflow-x: auto; }
+@media (max-width: 720px) { .cards { grid-template-columns: repeat(2, 1fr); } .grade { grid-template-columns: 1fr; } .letter { text-align: left; font-size: 72px; } }
+@media (max-width: 480px) { main { padding: 26px 16px 60px; } h1 { font-size: 27px; } td, th { padding: 8px 5px; } .hide-s { display: none; } }
+</style>
+</head>
+<body>
+<main>
+<p class="kicker">Gemma 4 12B in Agentic Coder · the 28 practice tasks at Low · version 2 · built Sep 28, 2026, 10:56 PM</p>
+<h1>Gemma’s grade, after all 28 practice tasks, on one app</h1>
+<p class="lede">Gemma passed <b>26 of 28</b> practice tasks, all run tonight on the same app. This morning’s 9, run again: 8 of 9 (this morning: 7 of 9). The 27B it replaced passed all 28. Graded by the rule set before the run, that makes Gemma a <b>B</b>.</p>
+
+<section class="grade">
+  <div class="letter blue">B<small>overall</small></div>
+  <div>
+    <div class="verdict">It codes about as well as the 27B did, and runs faster on less memory.</div>
+    <dl><dt>Coding</dt><dd>B: 26 of 28 passed, against the 27B’s 28.</dd><dt>What would lift it</dt><dd>B+ needs thinking (High) to change a result, not only take longer: the Low vs High test on the 28.</dd></dl>
+  </div>
+</section>
+
+<div class="cards">
+  <div class="card"><div class="big">26/28</div><div class="what">practice tasks passed</div></div>
+  <div class="card"><div class="big">8/9</div><div class="what">this morning’s 9, run again</div></div>
+  <div class="card"><div class="big">2</div><div class="what">failed</div></div>
+  <div class="card"><div class="big">−34%</div><div class="what">time vs the 27B, on the 26 both passed</div></div>
+</div>
+
+<h2>The grade, area by area</h2>
+<p class="muted">Only coding was tested tonight. The other areas keep their grades from the 28 Sep tests.</p>
+<div class="box scroll"><table><thead><tr><th>Area</th><th>Grade</th><th>Evidence</th></tr></thead><tbody>
+<tr><td><b>Coding tasks</b></td><td><span class="g blue">B</span></td><td>Passed 26 of 28 practice tasks at Low. The 27B passed 28 of 28.</td></tr>
+<tr><td><b>Checking its own work</b></td><td><span class="g amber">C−</span></td><td>From 28 Sep: once hard-coded a wrong test’s expected rows into the program. Not re-graded tonight.</td></tr>
+<tr><td><b>Using the tools</b></td><td><span class="g amber">C</span></td><td>From 28 Sep: the notes page was written but not saved (no file name). Not re-graded tonight.</td></tr>
+<tr><td><b>Thinking (High)</b></td><td><span class="g amber">C</span></td><td>From 28 Sep: the same result as Low, 6–8× slower. Not tested tonight.</td></tr>
+<tr><td><b>Speed</b></td><td><span class="g blue">B+</span></td><td>From 28 Sep: writes 13.0 tokens a second (up to 23.7 with helpers), reads 135.</td></tr>
+<tr><td><b>Long conversations</b></td><td><span class="g blue">B</span></td><td>From 28 Sep: 4 of 4 facts in 102,620 tokens; the read took 24 min.</td></tr>
+<tr><td><b>Memory</b></td><td><span class="g green">A−</span></td><td>From 28 Sep: 128k fits on 16 GB; loads cold in 7 s.</td></tr>
+<tr><td><b>Side questions (/btw)</b></td><td><span class="g blue">B</span></td><td>From 28 Sep: answers while the main job keeps going.</td></tr>
+</tbody></table></div>
+
+<h2>By kind of task</h2>
+<div class="box scroll"><table><thead><tr><th>Kind</th><th class="n">Gemma passed</th><th class="n">The 27B</th></tr></thead><tbody>
+<tr><td><b>Renames</b></td><td class="n">3 of 3</td><td class="n">3 of 3</td></tr>
+<tr><td><b>Questions about code</b></td><td class="n">4 of 4</td><td class="n">4 of 4</td></tr>
+<tr><td><b>Bug fixes</b></td><td class="n">7 of 7</td><td class="n">7 of 7</td></tr>
+<tr><td><b>Changes and new code</b></td><td class="n">10 of 11</td><td class="n">11 of 11</td></tr>
+<tr><td><b>Writing files</b></td><td class="n">2 of 3</td><td class="n">3 of 3</td></tr>
+</tbody></table></div>
+
+<h2>This morning’s 9, run again</h2><p class="muted">Same tasks, same setting (Low). This morning’s app had no context helpers; tonight’s has them.</p><div class="box scroll"><table><thead><tr><th class="n">#</th><th>Task</th><th class="n">This morning</th><th class="n">Tonight</th></tr></thead><tbody>
+<tr><td class="n">1</td><td>Add a --json flag, with a test</td><td class="n"><span class="tag red">Fail</span><small>370 s</small></td><td class="n"><span class="tag red">Fail</span><small>147 s</small></td></tr>
+<tr><td class="n">10</td><td>Fix an off-by-one page count</td><td class="n"><span class="tag green">Pass</span><small>28 s</small></td><td class="n"><span class="tag green">Pass</span><small>24 s</small></td></tr>
+<tr><td class="n">11</td><td>Fix prices sorted as text</td><td class="n"><span class="tag green">Pass</span><small>11 s</small></td><td class="n"><span class="tag green">Pass</span><small>10 s</small></td></tr>
+<tr><td class="n">12</td><td>Add a currency option</td><td class="n"><span class="tag green">Pass</span><small>35 s</small></td><td class="n"><span class="tag green">Pass</span><small>30 s</small></td></tr>
+<tr><td class="n">13</td><td>Add a Python function</td><td class="n"><span class="tag green">Pass</span><small>28 s</small></td><td class="n"><span class="tag green">Pass</span><small>23 s</small></td></tr>
+<tr><td class="n">14</td><td>Add perimeter() to a project with no tests<small>fixed since this morning</small></td><td class="n"><span class="tag red">Fail</span><small>79 s</small></td><td class="n"><span class="tag green">Pass</span><small>73 s</small></td></tr>
+<tr><td class="n">15</td><td>Fix a wrong Fahrenheit formula, no tests</td><td class="n"><span class="tag green">Pass</span><small>31 s</small></td><td class="n"><span class="tag green">Pass</span><small>35 s</small></td></tr>
+<tr><td class="n">16</td><td>Write a short story to a file</td><td class="n"><span class="tag green">Pass</span><small>37 s</small></td><td class="n"><span class="tag green">Pass</span><small>34 s</small></td></tr>
+<tr><td class="n">17</td><td>Write notes about an API</td><td class="n"><span class="tag green">Pass</span><small>44 s</small></td><td class="n"><span class="tag green">Pass</span><small>38 s</small></td></tr>
+</tbody></table></div>
+
+<h2>What went wrong</h2><div class="box scroll"><table><tbody>
+<tr><td class="n" style="width:36px"><b>1</b></td><td><b>Add a --json flag, with a test</b> <span class="muted">· tonight</span><small>--json output wrong</small><small>Gemma said: “It adds a condition to return a JSON string of the first two rows when the `--json` flag is provided. Changed export.mjs and added a test to export.test.mjs; all 3 tests pass.”</small></td></tr>
+<tr><td class="n" style="width:36px"><b>18</b></td><td><b>Write a story file in a folder with no code</b> <span class="muted">· tonight</span><small>TEST.txt has only 2 sentences</small><small>Gemma said: “I have created a file named `TEST.txt` in the current folder containing a short story about a bit of data.”</small></td></tr>
+</tbody></table></div>
+
+<h2>All 28 tasks</h2>
+<div class="box scroll"><table><thead><tr><th class="n">#</th><th>Task</th><th class="hide-s">Run</th><th class="n">Gemma</th><th class="n">27B</th></tr></thead><tbody>
+<tr><td class="n">1</td><td>Add a --json flag, with a test</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag red">Fail</span><small>147 s</small></td><td class="n">139 s</td></tr>
+<tr><td class="n">2</td><td>Fix the bug the tests show</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>15 s</small></td><td class="n">30 s</td></tr>
+<tr><td class="n">3</td><td>Add a titleCase() function and its test</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>49 s</small></td><td class="n">97 s</td></tr>
+<tr><td class="n">4</td><td>Rename a function everywhere</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>0 s</small></td><td class="n"><1 s<small>no model needed</small></td></tr>
+<tr><td class="n">5</td><td>Question: which port, and where is it set</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>5 s</small></td><td class="n">12 s</td></tr>
+<tr><td class="n">6</td><td>Question: the default page size</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>5 s</small></td><td class="n">14 s</td></tr>
+<tr><td class="n">7</td><td>Question: the tax function and its rate</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>17 s</small></td><td class="n">10 s</td></tr>
+<tr><td class="n">8</td><td>Rename a method everywhere</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>0 s</small></td><td class="n"><1 s<small>no model needed</small></td></tr>
+<tr><td class="n">9</td><td>Rename a constant everywhere</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>0 s</small></td><td class="n"><1 s<small>no model needed</small></td></tr>
+<tr><td class="n">10</td><td>Fix an off-by-one page count</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>24 s</small></td><td class="n">51 s</td></tr>
+<tr><td class="n">11</td><td>Fix prices sorted as text</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>10 s</small></td><td class="n">20 s</td></tr>
+<tr><td class="n">12</td><td>Add a currency option</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>30 s</small></td><td class="n">42 s</td></tr>
+<tr><td class="n">13</td><td>Add a Python function</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>23 s</small></td><td class="n">31 s</td></tr>
+<tr><td class="n">14</td><td>Add perimeter() to a project with no tests</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>73 s</small></td><td class="n">62 s</td></tr>
+<tr><td class="n">15</td><td>Fix a wrong Fahrenheit formula, no tests</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>35 s</small></td><td class="n">33 s</td></tr>
+<tr><td class="n">16</td><td>Write a short story to a file</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>34 s</small></td><td class="n">34 s</td></tr>
+<tr><td class="n">17</td><td>Write notes about an API</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>38 s</small></td><td class="n">34 s</td></tr>
+<tr><td class="n">18</td><td>Write a story file in a folder with no code</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag red">Fail</span><small>32 s</small></td><td class="n">38 s</td></tr>
+<tr><td class="n">19</td><td>Add a currency symbol option across 3 files</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>72 s</small></td><td class="n">117 s</td></tr>
+<tr><td class="n">20</td><td>Add a cap argument across 3 files</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>118 s</small></td><td class="n">186 s</td></tr>
+<tr><td class="n">21</td><td>Fix a bug in a big file (two places)</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>94 s</small></td><td class="n">273 s</td></tr>
+<tr><td class="n">22</td><td>“fix the bug” (nothing more said)</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>20 s</small></td><td class="n">37 s</td></tr>
+<tr><td class="n">23</td><td>“api” (one word)</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>33 s</small></td><td class="n">57 s</td></tr>
+<tr><td class="n">24</td><td>“fix the test”</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>86 s</small></td><td class="n">91 s</td></tr>
+<tr><td class="n">25</td><td>Big project: a question</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>37 s</small></td><td class="n">51 s</td></tr>
+<tr><td class="n">26</td><td>Big project: a change and its test</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>84 s</small></td><td class="n">165 s</td></tr>
+<tr><td class="n">27</td><td>Negative amounts in formatMoney</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>124 s</small></td><td class="n">49 s</td></tr>
+<tr><td class="n">28</td><td>Python: a change across 2 files</td><td class="hide-s muted">Tonight</td><td class="n"><span class="tag green">Pass</span><small>152 s</small></td><td class="n">295 s</td></tr>
+</tbody></table></div>
+
+<h2>What this shows, and what it doesn’t</h2>
+<div class="box"><ul>
+  <li><b>It shows</b> how often Gemma gets an everyday coding task right on the first try with thinking off, the way the app runs by default.</li>
+  <li>All 28 ran tonight on the same app (the frozen copy of main), one after another.</li>
+  <li>Each task ran once. The 27B’s 28 of 28 was also one run; its 5-run score was 138 of 140.</li>
+  <li><b>It doesn’t show</b> whether thinking (High) helps. That is its own test, not run tonight.</li>
+</ul></div>
+
+<h2>Next, your call</h2>
+<div class="box"><ul>
+  <li><b>Low vs High on the 28</b>: does thinking change any result? About 2–3 hours.</li>
+  
+  <li><b>A guard against bending tests</b>: when none of Gemma’s drafts pass its own test, doubt the test. A code change; outline and questions first.</li>
+  <li><b>Run the 2 failed tasks 3 times each, at Low and at High</b>: bad luck or a real weak spot, and does thinking help there? About 24 minutes.</li>
+</ul></div>
+
+<p class="paths" style="margin-top:28px">Tonight’s runs: ~/Desktop/agentic-coder/models/gemma-4-12b/results/remaining-28-2026-09-28/runs/ · morning: …/results/gemma-bakeoff-partial-2026-09-28/ · 27B: …/bonsai-2-27b/results/step3-2026-09-27/tasks-after/pass1/ · each run is also in the test record</p>
+</main>
+</body>
+</html>

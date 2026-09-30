@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Context Helpers</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--mute:#6b6a64;--line:#e4e1d8;--card:#fff;--green:#1f7a4d;--greenbg:#e3f3ea;--amber:#8a5a00;--amberbg:#fbf0d9;--grey:#5e5e5e;--greybg:#ececea;--blue:#1d4f91;--bluebg:#e5eef9}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecebe6;--mute:#a09f98;--line:#33322e;--card:#1f1e1b;--green:#7fd4a4;--greenbg:#1d3328;--amber:#f0c36b;--amberbg:#3a2f18;--grey:#c4c4c0;--greybg:#2c2c29;--blue:#9cc2f5;--bluebg:#1c2a3d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:780px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:32px;line-height:1.2;margin:0 0 12px}
+h2{font-size:23px;margin:44px 0 10px;padding-top:6px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:22px 0 6px}
+p{margin:8px 0}
+.lead{font-size:18px}
+.mute{color:var(--mute)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:22px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card b{display:block;font-size:24px}
+.card span{font-size:14px;color:var(--mute)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:15.5px}
+th,td{text-align:left;vertical-align:top;padding:8px 8px;border-bottom:1px solid var(--line)}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);font-weight:600}
+.tag{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.on{background:var(--greenbg);color:var(--green)}
+.off{background:var(--greybg);color:var(--grey)}
+.warn{background:var(--amberbg);color:var(--amber)}
+.new{background:var(--bluebg);color:var(--blue)}
+ol,ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+code{font:14px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--greybg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.files{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere;margin:10px 0 0}
+.paths{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
+@media (max-width:560px){h1{font-size:26px}table{font-size:14.5px}th,td{padding:7px 5px}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Context helpers for Gemma: the plan</h1>
+<p class="lead">The idea is to give Gemma the right things <b>before</b> it starts, so it needs fewer steps to go and find them. There are four helpers: files you name, test results and recent changes, code found by meaning, and a light syntax check. Together they may add at most about 6,000 tokens to a request. Each one gets its own switch, so the before/after bench can measure it. <b>Nothing is built yet.</b> Your app and the repo are unchanged.</p>
+
+<div class="cards">
+  <div class="card"><b>4</b><span>helpers, one switch each</span></div>
+  <div class="card"><b>6k</b><span>tokens at most per request</span></div>
+  <div class="card"><b>≈ 50 s</b><span>of reading if all 6k are used</span></div>
+  <div class="card"><b>~8 h</b><span>to build, plus ~2 h of Gemma runs</span></div>
+</div>
+
+<h2>Why this can pay</h2>
+<p>Gemma reads about ten times faster than it writes. Each step it takes means writing (and on High, thinking), and each thing pasted in only means reading.</p>
+<table>
+<tr><th style="width:46%">What</th><th>Measured (Gemma's server log)</th></tr>
+<tr><td>Reading pasted text</td><td><b>112–125</b> tokens a second, so 1,000 tokens ≈ <b>8–9 s</b></td></tr>
+<tr><td>Writing</td><td><b>11–12</b> tokens a second</td></tr>
+<tr><td>One step, short</td><td>189 tokens written = <b>16 s</b></td></tr>
+<tr><td>One step with High thinking</td><td>1,737 tokens = <b>2½ min</b>; 5,533 tokens = <b>8 min</b></td></tr>
+<tr><td>Your settings now</td><td>High effort, thinking up to 8,192, 256k memory. Room isn't the problem; reading time is.</td></tr>
+</table>
+<div class="box"><b>The trade:</b> a full 6k paste costs about 50 s of reading. On High it pays for itself if it saves <b>one</b> step. If it pastes the wrong thing, those seconds are wasted, so 6k is a <b>ceiling, not a target</b>: each helper only adds what clears its own bar.</div>
+
+<h2>What's there today</h2>
+<p>Agentic Coder has two ways of working. A <b>focused path</b> handles clear fix / change / rename requests: the program reads the files and runs the tests itself, and Gemma only writes the change. Everything else goes <b>step by step</b>: Gemma picks every Read, Search and test run itself.</p>
+<table>
+<tr><th style="width:26%">Helper</th><th>Step by step</th><th>Focused path</th></tr>
+<tr><td>Project map</td><td><span class="tag on">Yes</span> pasted as a pretend List</td><td><span class="tag on">Yes</span> in the file list</td></tr>
+<tr><td>Files you name</td><td><span class="tag warn">Questions only</span></td><td><span class="tag on">Yes</span> the program reads them</td></tr>
+<tr><td>Test results</td><td><span class="tag off">No</span> only the command to run</td><td><span class="tag on">Fix only</span> run first</td></tr>
+<tr><td>Recent changes (diff)</td><td><span class="tag off">No</span> one line: "3 changed files"</td><td><span class="tag off">No</span></td></tr>
+<tr><td>Code found by meaning</td><td><span class="tag off">No</span> (bge-m3 serves memory only)</td><td><span class="tag off">No</span> files ranked by word matches</td></tr>
+<tr><td>Language checks (LSP)</td><td><span class="tag off">No</span></td><td><span class="tag off">No</span> (only clangd is on the Mac)</td></tr>
+</table>
+
+<h2>Two things I found while reading</h2>
+<ol>
+<li><b>notes.html won't move.</b> It runs from your home folder and makes a new file. The home folder has no project map, no git and no tests, and the file doesn't exist yet. None of the four helpers fire, so it stays in the bench as the <b>"no slowdown"</b> check, as you picked.</li>
+<li><b>All four code tasks take the focused path.</b> On the earlier 27B runs, task 19 went Plan → Read ×3 → Test → Ask → Update ×3 → Bash. The program made those Reads, not the model. So helpers that only feed the step-by-step loop would barely touch these tasks. The plan handles this two ways:
+  <ul>
+  <li>the helpers also feed the focused path (which file it picks, and the check after each change);</li>
+  <li>the bench runs each code task <b>twice</b>, once as your app does it and once with the focused path off, so we see the step-by-step case where Gemma makes every Read itself.</li>
+  </ul>
+  "Steps" on a focused path include the program's own reads, so the bench also counts <b>Gemma's own calls, tokens written, and minutes</b>.</li>
+</ol>
+
+<h2>Part 0 · Switches and the "before" run <span class="tag new">~1 h + ~1 h Gemma</span></h2>
+<ol>
+<li>One switch for all the helpers: <code>AGENTIC_HELPERS=named,tests,rag,lsp</code>. <code>off</code> gives today's behaviour. The default is all on once the round passes.</li>
+<li>Add <code>--flows off</code> and <code>--helpers</code> options to the bench runner. The headless runner already has a flows switch; the bench just doesn't pass it.</li>
+<li>For each run, record Gemma's own calls, tokens written, minutes, pass/fail, and how many helper tokens came along.</li>
+<li>Add notes.html as bench task 29, with the exact prompt. It runs in a throwaway home folder, so your real Desktop is never touched. The check: the file exists, has the charset, and the page opens with no errors (the app's own page check).</li>
+<li>Run the "before" set with the helpers off: notes.html once, and tasks 2, 22, 19 and 26 once on each path. That's 9 runs at High.</li>
+</ol>
+<p class="files">models/evals/bench/run.mjs · terminal/src/headless.mjs · models/evals/bench/tasks/29-notes-page/ (new)</p>
+
+<h2>Part A · Files you name, for every request <span class="tag new">~1 h</span></h2>
+<ol>
+<li>Today, pre-reading the files a request names only happens for questions. It will happen for every step-by-step request.</li>
+<li>Its share of the budget drops from 45,000 characters to about 9,000 (~2.5k tokens). A long file comes the way Read already gives it: its outline plus the lines that match the request.</li>
+<li>Guard: a file the request asks you to <b>create</b> ("called notes.html") is never swapped for a look-alike file. In the home folder, only an exact match counts.</li>
+<li>The focused path is unchanged, since it already reads named files.</li>
+<li>Each file shows on the Context line (ctrl+o) with its size.</li>
+</ol>
+<p><b>Done when:</b> in the step-by-step run of task 19, Gemma's first call is no longer a Read of config.mjs, format.mjs or report.mjs.</p>
+<p class="files">terminal/src/agent/agent.mjs (prefetch, the loop start) · terminal/test/helpers-named.test.mjs (new)</p>
+
+<h2>Part B · Test results and recent changes <span class="tag new">~1½ h</span></h2>
+<ol>
+<li><b>Tests:</b> when the request is a fix, or mentions failing, broken, error or tests, the test command runs <b>once</b> before Gemma's first step (60 s cap). The failing test names and first error lines come along (≤1.5k tokens) as a pretend test run, so Gemma treats it as its own. If everything passes, it's one line: "Tests: 14 pass".</li>
+<li><b>Recent changes:</b> if the project has uncommitted changes, the changed lines come along, biggest files cut first, with a "… and N more files" line. This shares the 1.5k with the tests.</li>
+<li>It all goes into <b>the request</b>, not the start-up text, so Gemma's saved reading of the start-up text is kept.</li>
+<li>Focused path: the fix path already runs tests. The recent changes are added to what its "is this clear?" question sees, which helps task 22 ("fix the bug" while the tests pass).</li>
+<li>Guards: nothing in the home folder, nothing without a test command, and a hung test run is stopped at 60 s with a note saying so.</li>
+</ol>
+<p><b>Done when:</b> in the step-by-step runs of tasks 2 and 22, Gemma no longer starts by running the tests itself.</p>
+<p class="files">terminal/src/agent/helpers.mjs (new: the budget and the gatherers) · agent.mjs · flows/clarify.mjs · reuses flows/results.mjs (failureDigest, assertionDetail) · terminal/test/helpers-tests-diff.test.mjs (new)</p>
+
+<h2>Part C · Code found by meaning (RAG) <span class="tag new">~3 h</span></h2>
+<ol>
+<li>Each code file is split into its named parts (functions, classes). The existing outline code already does this split. bge-m3, the same model that serves your memory, turns each part into numbers.</li>
+<li>The results are saved per project next to the project map, and keyed the same way (file size and time), so only changed files are redone.</li>
+<li>For each request, the request is turned into numbers <b>once</b> and shared with memory recall. That's recall fix 3, which was never built.</li>
+<li>The 3–5 closest parts above the bar come along (≤1.5k tokens), each as a pretend Read with its line numbers. The bar starts at memory's 0.56 and gets tuned on the bench.</li>
+<li>Focused path: the file list it picks from gets ranked <b>by meaning and words</b>, not by words alone. This is Part 2 of the earlier "feel faster" plan ("read the right files first"), so it gets built once, here.</li>
+<li>Guards:
+  <ul>
+  <li>No index in the home folder.</li>
+  <li>Minified and huge files are skipped.</li>
+  <li>The first index of a project builds in the background, and a request never waits for it.</li>
+  <li>If bge-m3 is not up, ranking works by words as today.</li>
+  </ul></li>
+</ol>
+<p><b>Done when:</b> in the step-by-step run of task 26, the folder walker in fs.mjs arrives without a Search. On the focused path, it no longer reads scratch.mjs (an unneeded file the 27B read).</p>
+<p class="files">terminal/src/tools/codeindex.mjs (new) · tools/outline.mjs · agent/recall.mjs (embed once) · flows/localize.mjs (fileHints) · models/runtime/embed.mjs · terminal/test/codeindex.test.mjs (new)</p>
+
+<h2>Part D · Light language checks <span class="tag new">~1 h</span></h2>
+<ol>
+<li>After every Edit or Write, on both paths, the file gets a syntax check:
+  <ul>
+  <li>JS files: <code>node --check</code></li>
+  <li>JSX and TS: <code>bun build --no-bundle</code> (bun is already on the Mac)</li>
+  <li>Python: <code>py_compile</code></li>
+  <li>JSON: parsed</li>
+  </ul>
+  An error comes back <b>in the Edit's own reply</b> ("Saved. Line 42: Unexpected token"), so it doesn't cost a step.</li>
+<li>"Where is it, who uses it": for names in the request that the project map knows, one short line lists the file that defines each name and the files that import it (≤0.5k tokens).</li>
+<li><span class="tag off">Not built</span> A full language server (typescript-language-server, pyright). That only happens if the multi-file tasks still take many steps after this round.</li>
+</ol>
+<p><b>Done when:</b> a deliberately broken Edit gets its error in the same reply (unit test), and in the step-by-step run of task 19 Gemma doesn't Search for who uses formatMoney.</p>
+<p class="files">agent/tools.mjs (Edit and Write) · flows/apply.mjs · agent/helpers.mjs · terminal/test/helpers-check.test.mjs (new)</p>
+
+<h2>How the 6k is shared</h2>
+<table>
+<tr><th style="width:40%">Helper</th><th>Share</th><th>Only when</th></tr>
+<tr><td>A · Files you name</td><td>2.5k</td><td>the file exists and is named</td></tr>
+<tr><td>B · Tests + recent changes</td><td>1.5k</td><td>fix-type request / there are changes</td></tr>
+<tr><td>C · Code by meaning</td><td>1.5k</td><td>a part clears the bar</td></tr>
+<tr><td>D · Who uses what</td><td>0.5k</td><td>the request names known code</td></tr>
+</table>
+<p>A helper with nothing to add passes its share on. The project map (~1.1k) and memory (~0.4k) stay as they are, outside the 6k. Nothing already in the conversation is pasted twice: the existing "already read, see above" pointer covers it.</p>
+
+<h2>Part E · The "after" run and the verdict <span class="tag new">~1 h Gemma + ½ h</span></h2>
+<ol>
+<li>The same 9 runs as Part 0, with the helpers on.</li>
+<li><b>Win rule:</b> minutes and Gemma's own calls down across the tasks, no task going from pass to fail, and notes.html no more than ~10% slower.</li>
+<li>If the total wins but one helper looks like it hurt, only that helper gets a run of its own.</li>
+<li>A short results page in gemma-docs, verdict first.</li>
+</ol>
+
+<h2>Order and time</h2>
+<table>
+<tr><th style="width:52%">Step</th><th>Work</th><th>Gemma time</th></tr>
+<tr><td>0 · Switches, bench options, before run</td><td>1 h</td><td>~1 h</td></tr>
+<tr><td>A · Files you name</td><td>1 h</td><td>–</td></tr>
+<tr><td>B · Tests + recent changes</td><td>1½ h</td><td>–</td></tr>
+<tr><td>C · Code by meaning</td><td>3 h</td><td>–</td></tr>
+<tr><td>D · Light checks</td><td>1 h</td><td>–</td></tr>
+<tr><td>E · After run + results page</td><td>½ h</td><td>~1 h</td></tr>
+<tr><td><b>Total</b></td><td><b>~8 h</b></td><td><b>~2 h</b> (up to 2½)</td></tr>
+</table>
+<p class="mute">Built in a separate worktree off main. The main folder has 113 changed files from another session's rename work, and that gets left alone.</p>
+
+<h2>What could go wrong</h2>
+<ul>
+<li><b>The wrong thing gets pasted.</b> That costs about 8 s per 1,000 tokens for nothing, and on a short task the helpers could make it slower. The bars, the ceiling and the notes.html check are there to catch this.</li>
+<li><b>Tests run up front on a slow suite.</b> That adds time before Gemma starts. It's capped at 60 s and only happens on fix-type requests.</li>
+<li><b>The first index of a big project</b> takes a while. It runs in the background and never holds up a request.</li>
+<li><b>The bench shares Gemma with your app.</b> If you use <code>coding</code> during a run, both slow down (we saw 12 → 8 tokens a second once) and the minutes get skewed. It's best to run the bench when you're not using it.</li>
+<li><b>One run per task is noisy.</b> A single lucky or unlucky run can swing the minutes. If the result is close, the page will say so rather than claim a win.</li>
+</ul>
+
+<h2>Done when</h2>
+<ul>
+<li>The unit tests pass, including the four new test files.</li>
+<li>The before/after results page is in gemma-docs, verdict first.</li>
+<li>No task goes from pass to fail.</li>
+<li>Nothing is committed until you say so.</li>
+</ul>
+
+<h2>Your call</h2>
+<table>
+<tr><th style="width:42%">Option</th><th>What it costs</th></tr>
+<tr><td>Build it all as planned (0 → E), don't commit</td><td>~8 h work + ~2 h Gemma</td></tr>
+<tr><td>Build 0, A and B first, measure, then decide on C and D</td><td>~3½ h work + ~2 h Gemma. The cheapest two, with a first answer sooner.</td></tr>
+<tr><td>Change something in the plan</td><td>–</td></tr>
+</table>
+
+<h2>Files</h2>
+<p class="paths">~/Desktop/agentic-coder/terminal/src/agent/agent.mjs · agent/helpers.mjs (new) · agent/tools.mjs · agent/recall.mjs · tools/codeindex.mjs (new) · tools/outline.mjs · flows/localize.mjs · flows/clarify.mjs · flows/apply.mjs · flows/results.mjs · headless.mjs · models/runtime/embed.mjs · models/evals/bench/run.mjs · models/evals/bench/tasks/29-notes-page/ (new)<br>
+Speeds: ~/.agentic-coder/logs/server.log · Earlier task routes: models/bonsai-2-27b/results/step3-2026-09-27/tasks-after/pass1/<br>
+Related: gemma-docs/gemma-faster-plan-2026-09-28.html (its Part 2 is built here as Part C)</p>
+
+</main>
+</body>
+</html>

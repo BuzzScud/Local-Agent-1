@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory panel, new design</title>
+<style>
+:root { --bg:#f5f5f3; --fg:#1c1c1a; --mute:#6b6b66; --line:#dddcd6; --pill:#e9e9e4; --on:#1c1c1a; --onfg:#fff; --nowc:#6b6b66; --nowbg:#e9e9e4; --newc:#1f6b3a; --newbg:#d9efe0; }
+@media (prefers-color-scheme: dark) { :root { --bg:#131313; --fg:#ececea; --mute:#9a9a94; --line:#2c2c2a; --pill:#242423; --on:#ececea; --onfg:#131313; --nowc:#b4b4ae; --nowbg:#2a2a28; --newc:#86d6a0; --newbg:#17301f; } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.wrap { max-width: 1760px; margin: 0 auto; padding: 18px 24px 20px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+h1 { font-size: 21px; margin: 0; }
+.date { color: var(--mute); font-size: 13px; margin-top: 2px; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 16px 0 12px; }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pills button { border: 0; background: var(--pill); color: var(--fg); font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.pills button.on { background: var(--on); color: var(--onfg); }
+.seg { display: inline-flex; background: var(--pill); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: none; color: var(--mute); font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px; cursor: pointer; }
+.seg button.on { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line); }
+.lead { margin: 0 0 12px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+figure { margin: 0; min-width: 0; }
+figcaption { margin: 0 0 6px; }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; }
+.tag.now { color: var(--nowc); background: var(--nowbg); }
+.tag.new { color: var(--newc); background: var(--newbg); }
+.term { background: #171717; color: #fff; border-radius: 10px; padding: 14px 16px; font: var(--tf, 12px)/1.3 ui-monospace, Menlo, monospace; white-space: pre; overflow: hidden; }
+.term div { min-height: 1.3em; }
+.term .g { display: inline-block; width: 1ch; font-weight: inherit; }
+.changes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 18px; }
+.changes div { border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; color: var(--mute); }
+.changes b { display: block; color: var(--fg); font-size: 14px; margin-bottom: 2px; }
+@media (max-width: 900px) {
+  .pair { grid-template-columns: 1fr; }
+  .term { overflow-x: auto; --tf: 10px; }
+  .changes { grid-template-columns: 1fr 1fr; }
+}
+</style></head><body><div class="wrap">
+<header><div><h1>The /memory panel, new design</h1><div class="date">30 Sep 2026 · real app screens, cropped to the panel · now = main (c228258), new = memory-learn (not committed)</div></div></header>
+<div class="bar">
+  <div class="pills"><button data-id="memory" class="on">1 · /memory</button><button data-id="trust">4 · Trust</button></div>
+  <div class="seg" role="group" aria-label="Terminal width"><button data-w="107" class="on">107 columns · your Terminal</button><button data-w="80">80 columns · the smallest</button></div>
+</div>
+<main>
+  <section id="memory" class="tab">
+    <p class="lead">Your real memory (a copy of your 8 rules), as <b>/memory</b> shows it.</p>
+    
+    <div class="pair" data-w="107">
+      <figure><figcaption><span class="tag now">Now</span></figcaption><div class="term" data-cols="107"><div><span style="font-weight:700">Memory <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div><span style="color:#87d787">About you <b class="g">·</b> 8 facts   </span>/var/folders/x1/8twv_fs55zvcg40b605209740000gn/T/agentic-e2e-PiuMfj/memory-about-you</div><div><span style="color:#87d787">  always              </span>After you make a page or a file, say in your reply exactly where it is, with its full</div><div> path.</div><div><span style="color:#87d787">  always              </span>Before you delete or move many files, make a backup first.</div><div><span style="color:#87d787">  always              </span>When you explain, keep it simple: the result first, then a few short steps. Show code</div><div> only if th<b class="g">…</b></div><div><span style="color:#87d787">  always              </span>When you make a page or report: ONE self-contained .html file with &lt;meta</div><div>charset="utf-8"&gt;, real <b class="g">…</b></div><div><span style="color:#87d787">  always              </span>If a file the user named is missing, say so at once and ask where it went. Do not</div><div>work around it<b class="g">…</b></div><div><span style="color:#87d787">  always              </span>One step per command: do not chain stop, clean, restart and test in one line.</div><div><span style="color:#87d787">  always              </span>Other sessions may work in the same folder: never run git stash, or git checkout --</div><div>or git resto<b class="g">…</b></div><div><span style="color:#87d787">  always              </span>When you revise a page or report you already handed over, keep the original and write</div><div> a new one <b class="g">…</b></div><div><span style="color:#87d787">last change 2026-09-29 19:15</span>/memory undo takes the last save back <b class="g">·</b> /memory open shows it in the browser</div></div></figure>
+      <figure><figcaption><span class="tag new">New design</span></figcaption><div class="term" data-cols="107"><div><span style="color:#87d787"><b class="g">⏺</b></span> <span style="font-weight:700">Memory</span><span style="color:#8a8a8a"> <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div> </div><div>  <span style="font-weight:700">About you</span><span style="color:#8a8a8a">  8 facts</span>                                                                  <span style="color:#585858"><b class="g">…</b>/memory-about-you</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────────────────────────────</span></div><div>    <span style="color:#87d787">always</span>   After you make a page or a file, say in your reply exactly where it is, with its full path.</div><div>    <span style="color:#87d787">always</span>   Before you delete or move many files, make a backup first.</div><div>    <span style="color:#87d787">always</span>   When you explain, keep it simple: the result first, then a few short steps. Show code only<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   When you make a page or report: ONE self-contained .html file with &lt;meta charset="utf-8"&gt;,<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   If a file the user named is missing, say so at once and ask where it went. Do not work aro<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   One step per command: do not chain stop, clean, restart and test in one line.</div><div>    <span style="color:#87d787">always</span>   Other sessions may work in the same folder: never run git stash, or git checkout -- or git<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   When you revise a page or report you already handed over, keep the original and write a ne<b class="g">…</b></div><div> </div><div>  <span style="font-weight:700">Last 7 days</span>                                                                <span style="color:#585858">last change 29 Sep, 3:15 PM</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────────────────────────────</span></div><div>    no requests yet <b class="g">·</b> <span style="font-weight:700">3</span> facts saved <b class="g">·</b> <span style="font-weight:700">10</span> taken out <b class="g">·</b> trust moved once</div><div> </div><div>  <span style="color:#8a8a8a">/memory undo takes the last save back <b class="g">·</b> /memory open shows every fact in the browser</span></div></div></figure>
+    </div>
+    <div class="pair" data-w="80" hidden>
+      <figure><figcaption><span class="tag now">Now</span></figcaption><div class="term" data-cols="80"><div><span style="font-weight:700">Memory <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div><span style="color:#87d787">About you <b class="g">·</b> 8 facts   </span>/var/folders/x1/8twv_fs55zvcg40b605209740000gn/T/agentic-e</div><div>2e-VkPagP/memory-about-you</div><div><span style="color:#87d787">  always              </span>After you make a page or a file, say in your reply exactly</div><div> where it is, with its full path.</div><div><span style="color:#87d787">  always              </span>Before you delete or move many files, make a backup first.</div><div><span style="color:#87d787">  always              </span>When you explain, keep it simple: the result first, then a</div><div> few short steps. Show code only if th<b class="g">…</b></div><div><span style="color:#87d787">  always              </span>When you make a page or report: ONE self-contained .html</div><div>file with &lt;meta charset="utf-8"&gt;, real <b class="g">…</b></div><div><span style="color:#87d787">  always              </span>If a file the user named is missing, say so at once and</div><div>ask where it went. Do not work around it<b class="g">…</b></div><div><span style="color:#87d787">  always              </span>One step per command: do not chain stop, clean, restart</div><div>and test in one line.</div><div><span style="color:#87d787">  always              </span>Other sessions may work in the same folder: never run git</div><div>stash, or git checkout -- or git resto<b class="g">…</b></div><div><span style="color:#87d787">  always              </span>When you revise a page or report you already handed over,</div><div>keep the original and write a new one <b class="g">…</b></div><div><span style="color:#87d787">last change 2026-09-29 19:15</span>/memory undo takes the last save back <b class="g">·</b> /memory open</div><div> shows it in the browser</div></div></figure>
+      <figure><figcaption><span class="tag new">New design</span></figcaption><div class="term" data-cols="80"><div><span style="color:#87d787"><b class="g">⏺</b></span> <span style="font-weight:700">Memory</span><span style="color:#8a8a8a"> <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div> </div><div>  <span style="font-weight:700">About you</span><span style="color:#8a8a8a">  8 facts</span>                                          <span style="color:#585858"><b class="g">…</b>/memory-about-you</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────</span></div><div>    <span style="color:#87d787">always</span>   After you make a page or a file, say in your reply exactly where i<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   Before you delete or move many files, make a backup first.</div><div>    <span style="color:#87d787">always</span>   When you explain, keep it simple: the result first, then a few sho<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   When you make a page or report: ONE self-contained .html file with<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   If a file the user named is missing, say so at once and ask where <b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   One step per command: do not chain stop, clean, restart and test i<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   Other sessions may work in the same folder: never run git stash, o<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   When you revise a page or report you already handed over, keep the<b class="g">…</b></div><div> </div><div>  <span style="font-weight:700">Last 7 days</span>                                        <span style="color:#585858">last change 29 Sep, 3:15 PM</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────</span></div><div>    no requests yet <b class="g">·</b> <span style="font-weight:700">3</span> facts saved <b class="g">·</b> <span style="font-weight:700">10</span> taken out <b class="g">·</b> trust moved once</div><div> </div><div>  <span style="color:#8a8a8a">/memory undo takes the last save back <b class="g">·</b> /memory open shows every fact in the </span></div><div>  <span style="color:#8a8a8a">browser</span></div></div></figure>
+    </div>
+  </section>
+  <section id="trust" class="tab" hidden>
+    <p class="lead">After the <b>--json</b> task: two project facts, one used (trust +1) and one not (trust 0).</p>
+    
+    <div class="pair" data-w="107">
+      <figure><figcaption><span class="tag now">Now</span></figcaption><div class="term" data-cols="107"><div><span style="font-weight:700">Memory <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div><span style="color:#87d787">About you <b class="g">·</b> 2 facts   </span>/var/folders/x1/8twv_fs55zvcg40b605209740000gn/T/agentic-e2e-8NIu4s/memory-about-you</div><div><span style="color:#87d787">  always              </span>Before you change anything, say in one plain, simple sentence what you are going to</div><div>do.</div><div><span style="color:#87d787">  always              </span>When you are stuck, ask the user what to do instead of guessing or stopping.</div><div><span style="color:#87d787">This project <b class="g">·</b> 2 facts</span>/private/var/folders/x1/8twv_fs55zvcg40b605209740000gn/T/agentic-e2e-8NIu4s/demo-proj</div><div>ect/.agentic/memory</div><div><span style="color:#87d787">  project             </span>The flags are read in export.mjs, in main().  (trust 1, used 1)</div><div><span style="color:#87d787">  project             </span>The trades in trades.json are sorted by date, oldest first, for the json export.</div><div>(trust 1, used 1)</div><div><span style="color:#87d787">last change 2026-09-30 18:34</span>/memory undo takes the last save back <b class="g">·</b> /memory open shows it in the browser</div></div></figure>
+      <figure><figcaption><span class="tag new">New design</span></figcaption><div class="term" data-cols="107"><div><span style="color:#87d787"><b class="g">⏺</b></span> <span style="font-weight:700">Memory</span><span style="color:#8a8a8a"> <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div> </div><div>  <span style="font-weight:700">About you</span><span style="color:#8a8a8a">  2 facts</span>                                                                  <span style="color:#585858"><b class="g">…</b>/memory-about-you</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────────────────────────────</span></div><div>    <span style="color:#87d787">always</span>   Before you change anything, say in one plain, simple sentence what you are going to do.</div><div>    <span style="color:#87d787">always</span>   When you are stuck, ask the user what to do instead of guessing or stopping.</div><div> </div><div>  <span style="font-weight:700">This project</span><span style="color:#8a8a8a">  2 facts</span>                                                                <span style="color:#585858">./.agentic/memory</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────────────────────────────</span></div><div>    <span style="color:#8a8a8a">project</span>  The flags are read in export.mjs, in main().                              <span style="color:#87d787">trust +1 <b class="g">·</b> used 1</span></div><div>    <span style="color:#8a8a8a">project</span>  The trades in trades.json are sorted by date, oldest first, for the js<b class="g">…</b>   <span style="color:#8a8a8a">trust  0 <b class="g">·</b> used 1</span></div><div> </div><div>  <span style="font-weight:700">Last 7 days</span>                                                                <span style="color:#585858">last change 30 Sep, 2:36 PM</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────────────────────────────</span></div><div>    facts came with <span style="font-weight:700">1</span> of <span style="font-weight:700">1</span> request <b class="g">·</b> <span style="font-weight:700">2</span> facts saved <b class="g">·</b> <span style="font-weight:700">0</span> taken out <b class="g">·</b> trust moved once</div><div> </div><div>  <span style="color:#8a8a8a">/memory undo takes the last save back <b class="g">·</b> /memory open shows every fact in the browser</span></div></div></figure>
+    </div>
+    <div class="pair" data-w="80" hidden>
+      <figure><figcaption><span class="tag now">Now</span></figcaption><div class="term" data-cols="80"><div><span style="font-weight:700">Memory <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div><span style="color:#87d787">About you <b class="g">·</b> 2 facts   </span>/var/folders/x1/8twv_fs55zvcg40b605209740000gn/T/agentic-e</div><div>2e-Fp2K4d/memory-about-you</div><div><span style="color:#87d787">  always              </span>Before you change anything, say in one plain, simple</div><div>sentence what you are going to do.</div><div><span style="color:#87d787">  always              </span>When you are stuck, ask the user what to do instead of</div><div>guessing or stopping.</div><div><span style="color:#87d787">This project <b class="g">·</b> 2 facts</span>/private/var/folders/x1/8twv_fs55zvcg40b605209740000gn/T/a</div><div>gentic-e2e-Fp2K4d/demo-project/.agentic/memory</div><div><span style="color:#87d787">  project             </span>The flags are read in export.mjs, in main().  (trust 1,</div><div>used 1)</div><div><span style="color:#87d787">  project             </span>The trades in trades.json are sorted by date, oldest</div><div>first, for the json export.  (trust 1, used 1)</div><div><span style="color:#87d787">last change 2026-09-30 18:34</span>/memory undo takes the last save back <b class="g">·</b> /memory open</div><div> shows it in the browser</div></div></figure>
+      <figure><figcaption><span class="tag new">New design</span></figcaption><div class="term" data-cols="80"><div><span style="color:#87d787"><b class="g">⏺</b></span> <span style="font-weight:700">Memory</span><span style="color:#8a8a8a"> <b class="g">·</b> facts are found by their words (coding setup adds the small model)</span></div><div> </div><div>  <span style="font-weight:700">About you</span><span style="color:#8a8a8a">  2 facts</span>                                          <span style="color:#585858"><b class="g">…</b>/memory-about-you</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────</span></div><div>    <span style="color:#87d787">always</span>   Before you change anything, say in one plain, simple sentence what<b class="g">…</b></div><div>    <span style="color:#87d787">always</span>   When you are stuck, ask the user what to do instead of guessing or<b class="g">…</b></div><div> </div><div>  <span style="font-weight:700">This project</span><span style="color:#8a8a8a">  2 facts</span>                                        <span style="color:#585858">./.agentic/memory</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────</span></div><div>    <span style="color:#8a8a8a">project</span>  The flags are read in export.mjs, in main().      <span style="color:#87d787">trust +1 <b class="g">·</b> used 1</span></div><div>    <span style="color:#8a8a8a">project</span>  The trades in trades.json are sorted by date, <b class="g">…</b>   <span style="color:#8a8a8a">trust  0 <b class="g">·</b> used 1</span></div><div> </div><div>  <span style="font-weight:700">Last 7 days</span>                                        <span style="color:#585858">last change 30 Sep, 2:36 PM</span></div><div>  <span style="color:#585858">────────────────────────────────────────────────────────────────────────────</span></div><div>    facts came with <span style="font-weight:700">1</span> of <span style="font-weight:700">1</span> request <b class="g">·</b> <span style="font-weight:700">2</span> facts saved <b class="g">·</b> <span style="font-weight:700">0</span> taken out <b class="g">·</b> trust moved</div><div>    once</div><div> </div><div>  <span style="color:#8a8a8a">/memory undo takes the last save back <b class="g">·</b> /memory open shows every fact in the </span></div><div>  <span style="color:#8a8a8a">browser</span></div></div></figure>
+    </div>
+  </section></main>
+<div class="changes">
+  <div><b>One line per fact</b>Long facts end in “…” at the window’s edge instead of wrapping under the labels.</div>
+  <div><b>Sections with headings</b>About you, This project and Last 7 days each get a title, a count and a rule, like /rules.</div>
+  <div><b>Trust in its own column</b>Signed and lined up on the right: +1 in green, 0 grey, below 0 orange.</div>
+  <div><b>Short folders</b>./.agentic/memory for the project, ~/… for you; a long path keeps only its last folder.</div>
+</div>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var ids = ["memory","trust"];
+  var width = '107';
+  // Sized by measuring: the widest frame fills its half without a cut.
+  function fit() {
+    var terms = [].slice.call(document.querySelectorAll('section.tab:not([hidden]) .pair:not([hidden]) .term'));
+    if (!terms.length || innerWidth <= 900) { root.style.removeProperty('--tf'); return; }
+    var px = 14;
+    for (var i = 0; i < 4; i++) {
+      root.style.setProperty('--tf', px + 'px');
+      var ratio = Math.max.apply(null, terms.map(function (t) { return (t.scrollWidth - 32) / (t.clientWidth - 32); }));
+      if (ratio <= 1) break;
+      px = Math.max(7, px / ratio * 0.995);
+    }
+    // And the height: the frames and the notes under them stay inside the window.
+    var top = terms[0].getBoundingClientRect().top + scrollY;
+    var below = document.querySelector('.changes').offsetHeight + 40;
+    var room = innerHeight - top - below;
+    var h = Math.max.apply(null, terms.map(function (t) { return t.offsetHeight; }));
+    if (h > room) root.style.setProperty('--tf', Math.max(7, px * (room - 28) / (h - 28) * 0.99) + 'px');
+  }
+  function show(id) {
+    if (ids.indexOf(id) < 0) id = ids[0];
+    document.querySelectorAll('section.tab').forEach(function (s) { s.hidden = s.id !== id; });
+    document.querySelectorAll('.pills button').forEach(function (b) { b.classList.toggle('on', b.dataset.id === id); });
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+    fit();
+  }
+  function setWidth(w) {
+    width = w;
+    document.querySelectorAll('.pair').forEach(function (p) { p.hidden = p.dataset.w !== w; });
+    document.querySelectorAll('.seg button').forEach(function (b) { b.classList.toggle('on', b.dataset.w === w); });
+    fit();
+  }
+  document.querySelectorAll('.pills button').forEach(function (b) { b.onclick = function () { show(b.dataset.id); }; });
+  document.querySelectorAll('.seg button').forEach(function (b) { b.onclick = function () { setWidth(b.dataset.w); }; });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '1') show('memory'); else if (e.key === '4') show('trust');
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') show(ids[(ids.indexOf(location.hash.slice(1)) + 1) % ids.length]);
+  });
+  addEventListener('resize', fit);
+  show(location.hash.slice(1));
+})();
+</script>
+</body></html>

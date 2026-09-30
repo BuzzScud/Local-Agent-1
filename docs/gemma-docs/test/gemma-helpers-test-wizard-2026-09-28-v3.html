@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Helpers Test</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--t-soft:rgba(42,120,214,.09);
+  --ok:#2f8a4e;--ok-soft:rgba(47,138,78,.12);--bad:#c4432b;--bad-soft:rgba(196,67,43,.11);--warn:#a86b12;--warn-soft:rgba(200,140,30,.14);--wait:#8a857a;--wait-soft:rgba(138,133,122,.13);
+  --term:#18191d;--term-line:#2e3037;--term-ink:#e7e5df;--term-dim:#8e8b84;--term-ok:#7fd092;--term-bad:#f08a74;--term-warn:#e8b765;--term-prompt:#7fa9ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#26282e;
+    --t:#3987e5;--t-soft:rgba(57,135,229,.13);
+    --ok:#56b675;--ok-soft:rgba(86,182,117,.15);--bad:#e46a52;--bad-soft:rgba(228,106,82,.15);--warn:#e0a54a;--warn-soft:rgba(224,165,74,.15);--wait:#a4a19a;--wait-soft:rgba(164,161,154,.14);
+    --term:#0f1013;--term-line:#2a2c33;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#26282e;
+  --t:#3987e5;--t-soft:rgba(57,135,229,.13);
+  --ok:#56b675;--ok-soft:rgba(86,182,117,.15);--bad:#e46a52;--bad-soft:rgba(228,106,82,.15);--warn:#e0a54a;--warn-soft:rgba(224,165,74,.15);--wait:#a4a19a;--wait-soft:rgba(164,161,154,.14);
+  --term:#0f1013;--term-line:#2a2c33;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.page{height:100vh;height:100dvh;padding:14px 16px;display:flex;align-items:center}
+.app{flex:1;min-height:0;height:min(calc(100vh - 28px),max(850px,calc((100vh - 28px) * .75)));height:min(calc(100dvh - 28px),max(850px,calc((100dvh - 28px) * .75)));display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;width:100%;max-width:1040px;margin:0 auto;padding:0 26px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.06)}
+.winbar{display:flex;align-items:center;gap:7px;margin:0 -26px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--inner);border-radius:18px 18px 0 0}
+.winbar i{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.winbar h1{flex:1;margin:0 0 0 8px;font-size:14.5px;font-weight:650;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winbar h1 small{font-size:13px;font-weight:500;color:var(--mute)}
+.winbar em{font-style:normal;font-size:12px;color:var(--faint);white-space:nowrap}
+
+/* top: title + step chips */
+.top{padding:12px 0 11px;border-bottom:1px solid var(--line)}
+.title{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.title h1{font-size:19px;letter-spacing:-.01em;margin:0}
+.title span{font-size:13.5px;color:var(--mute)}
+.chips{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+.chip{appearance:none;border:1px solid var(--line);background:var(--inner);border-radius:10px;padding:6px 8px 7px;text-align:left;cursor:pointer;min-width:0;font:inherit;color:var(--mute)}
+.chip b{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mute)}
+.chip b i{flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--mute);font-style:normal;font-size:11px}
+.chip span{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.chip.on{border-color:var(--ink);background:var(--card)}
+.chip.on b,.chip.on span{color:var(--ink)}
+.chip.on b i{background:var(--ink);color:var(--bg)}
+.chip.did b i{background:var(--ok);color:#fff}
+
+/* middle: one step */
+.stage{overflow-y:auto;padding:16px 2px 8px;scrollbar-width:thin}
+.panel{display:none}
+.panel.on{display:block}
+.kicker{font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.kicker .eta{text-transform:none;letter-spacing:0;font-weight:500;margin-left:6px;background:var(--soft);border-radius:999px;padding:1px 9px}
+.panel h2{font-size:25px;line-height:1.15;letter-spacing:-.02em;margin:4px 0 5px}
+.why{color:var(--mute);font-size:15.5px;max-width:780px}
+.why b{color:var(--ink);font-weight:600}
+.lab{display:flex;align-items:center;gap:8px;margin:18px 0 7px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:650;color:var(--mute)}
+.lab .num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--t);color:#fff;font-size:11px;letter-spacing:0}
+.lab .hint{text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint)}
+.term{position:relative;background:var(--term);border:1px solid var(--term-line);border-radius:12px;color:var(--term-ink);font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;padding:13px 16px}
+.term .bar{display:flex;gap:6px;margin:-3px 0 9px}
+.term .bar i{width:10px;height:10px;border-radius:50%;background:#3a3c44}
+.type{padding-right:118px}
+.type .line{display:flex;gap:10px}
+.type .pr{color:var(--term-prompt);flex:none;user-select:none;-webkit-user-select:none}
+.type code{font:inherit;white-space:pre-wrap;word-break:break-all;color:#fff}
+.copy{position:absolute;top:12px;right:12px;appearance:none;border:0;background:var(--t);color:#fff;font:600 14px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:9px;padding:8px 16px;cursor:pointer;min-width:94px}
+.copy:hover{filter:brightness(1.08)}
+.copy.did{background:var(--ok)}
+.after{font-size:13.5px;color:var(--mute);margin-top:7px}
+.after b{color:var(--ink);font-weight:600}
+.show{white-space:pre-wrap;word-break:break-word;color:var(--term-ink);font-size:13px;line-height:1.55}
+.show .d{color:var(--term-dim)}
+.show .g{color:var(--term-ok);font-weight:600}
+.show .r{color:var(--term-bad);font-weight:600}
+.show .y{color:var(--term-warn)}
+.note{font-size:13px;color:var(--faint);margin-top:6px}
+.note b{color:var(--mute);font-weight:600}
+.box{background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:15px;color:var(--mute);margin-top:14px}
+.box b{color:var(--ink);font-weight:600}
+.box ol,.box ul{margin:6px 0 0;padding-left:20px}
+.box li + li{margin-top:5px}
+.box.warn{background:var(--warn-soft);border-color:transparent}
+kbd{font:600 12.5px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;background:var(--card);color:var(--ink)}
+.help{display:none;margin-top:14px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.help.open{display:block}
+.help h3{font-size:15px;margin:0 0 6px}
+.help dl{margin:0}
+.help dt{font-weight:600;font-size:14.5px;color:var(--ink);margin-top:9px}
+.help dt:first-child{margin-top:0}
+.help dd{margin:2px 0 0;font-size:14.5px;color:var(--mute)}
+.help code,.why code,.box code,.after code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:1px 5px;border-radius:5px;color:var(--ink)}
+.secs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;font-size:15px;color:var(--mute)}
+.secs input{width:90px;font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+
+/* results */
+.loader{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.drop{background:var(--inner);border:1px dashed var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.drop h3{font-size:15px;margin:0 0 3px}
+.drop p{font-size:13.5px;color:var(--mute);margin:0 0 9px}
+.drop textarea{width:100%;height:62px;resize:vertical;background:var(--term);color:var(--term-ink);border:1px solid var(--term-line);border-radius:8px;padding:7px 9px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+input[type=file]{font-size:13px;color:var(--mute);max-width:100%}
+.status{font-size:13px;color:var(--mute)}
+.sbtn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:8px;padding:6px 12px;cursor:pointer}
+.sbtn.quiet{color:var(--mute);font-weight:500}
+.verdict{margin-top:12px;background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:16px}
+.verdict b{font-weight:650}
+.verdict .more{display:block;margin-top:5px;font-size:14px;color:var(--mute)}
+.verdict .more b{color:var(--ink);font-weight:600}
+.twin{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;margin-top:10px}
+.twin[hidden],.loaded[hidden],.loader[hidden],.why[hidden]{display:none}
+.loaded{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;font-size:14px;color:var(--mute)}
+.loaded b{color:var(--ink);font-weight:600}
+.res{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+.res{table-layout:fixed}
+.res th:nth-child(2),.res th:nth-child(3){width:94px}
+.res td.t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res th,.res td{line-height:1.35;padding:3px 10px;text-align:left;border-top:1px solid var(--soft)}
+.res thead th{border-top:0;background:var(--inner);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.res td.t .n2{color:var(--faint);display:inline-block;width:24px;font-variant-numeric:tabular-nums}
+.res td.c{white-space:nowrap}
+.res td.c .s{color:var(--mute);font-size:12px;margin-left:6px}
+.res tfoot td{background:var(--inner);font-weight:600}
+.res tr.flip td.t{font-weight:650}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{color:var(--ok);background:var(--ok-soft)}
+.tag.bad{color:var(--bad);background:var(--bad-soft)}
+.tag.none{color:var(--wait);background:var(--wait-soft)}
+.big{font-size:17px;color:var(--ink)}
+.say{display:inline-block;margin-top:8px;font:600 17px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);border-radius:9px;padding:8px 14px;color:var(--ink)}
+
+/* bottom: fixed controls */
+.controls{display:grid;grid-template-columns:130px 1fr auto;align-items:center;gap:12px;padding:12px 0 14px;border-top:1px solid var(--line)}
+.btn{appearance:none;border:1px solid var(--line);background:var(--inner);color:var(--ink);font:600 15px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:11px;padding:11px 16px;cursor:pointer;white-space:nowrap}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--ink);color:var(--bg);border-color:var(--ink);width:300px}
+.btn.alt{justify-self:end;width:260px;color:var(--mute);font-weight:500}
+.btn.alt[hidden]{display:inline-block;visibility:hidden}
+.mid{display:flex;justify-content:flex-end;min-width:0}
+.pos{font-size:13px;color:var(--faint);text-align:center;display:none}
+
+@media (max-width:860px){
+  .chips{grid-template-columns:repeat(9,minmax(0,1fr));gap:4px}
+  .chip span{display:none}
+  .chip{padding:5px;display:grid;place-items:center}
+  .chip b{gap:0}
+  .chip b em{display:none}
+}
+@media (max-width:640px){
+  body{overflow:auto}
+  .page{padding:0}
+  .app{height:100vh;height:100dvh;border-radius:0;border-left:0;border-right:0;padding:0 16px}
+  .winbar{margin:0 -16px;border-radius:0}
+  .winbar h1 small,.winbar em{display:none}
+  .panel h2{font-size:23px}
+  .loader{grid-template-columns:1fr}
+  .twin{grid-template-columns:1fr}
+  .controls{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+  .controls .back{grid-row:2;grid-column:1}
+  .controls .mid{grid-row:1;grid-column:1 / -1;justify-content:stretch}
+  .btn.alt{width:100%}
+  .btn.go{grid-row:2;grid-column:2;width:auto}
+  .type{padding-right:16px;padding-top:52px}
+  .copy{left:12px;right:auto}
+}
+
+/* results table: four columns, grouped by path */
+.tablewrap{margin-top:10px}
+.tablewrap[hidden]{display:none}
+.res.wide{table-layout:fixed}
+.res.wide th:nth-child(1){width:30%}
+.res.wide th:nth-child(2){width:22%}
+.res.wide th:nth-child(3){width:27%}
+.res.wide td.c{white-space:normal}
+.res tr.grp td{background:var(--inner);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--mute);font-weight:600;padding-top:6px}
+.res .up{color:var(--ok);font-weight:600}
+.res .down{color:var(--bad);font-weight:600}
+.show .p{color:var(--term-ok)}
+/* the box: at least as tall as the tallest step (Try it, 868 px), at most the window */
+.app{height:min(calc(100vh - 28px),max(870px,calc((100vh - 28px) * .75)));height:min(calc(100dvh - 28px),max(870px,calc((100dvh - 28px) * .75)))}
+</style>
+
+</head>
+<body>
+<div class="page">
+<div class="app">
+
+<div class="winbar"><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><h1>Do the helpers make Gemma faster?<small> · the before/after test, step by step</small></h1><em>version 3</em></div>
+<header class="top">
+  <nav class="chips" id="chips"></nav>
+</header>
+
+<div class="stage" id="stage">
+
+  <!-- 0 · start -->
+  <section class="panel" data-name="Start" data-go="Terminal is open →">
+    <div class="kicker">Before you start</div>
+    <h2>Open Terminal next to this page</h2>
+    <p class="why">You’ll run the same 5 practice tasks with the new helpers <b>off</b> and then <b>on</b>, both the way the app normally works and step by step. This page then tells you whether Gemma got faster. Each step shows <b>exactly what to type</b> and <b>what Terminal should print</b>. About 2 hours, mostly waiting.</p>
+    <div class="box">
+      <b>Do these three things first</b>
+      <ol>
+        <li><b>Open Terminal:</b> press <kbd>⌘</kbd> <kbd>Space</kbd>, type <b>Terminal</b>, press <kbd>Return</kbd>. Put it beside this window.</li>
+        <li><b>Quit Agentic Coder:</b> type <code>/exit</code> in every Agentic Coder window. Wait for any Claude session that’s testing Gemma to finish: only one Gemma fits on this Mac.</li>
+        <li><b>Plug in the Mac</b> and close apps you don’t need. Gemma needs about 8 GB of memory.</li>
+      </ol>
+    </div>
+    <div class="box">
+      <b>How each step works:</b> press the blue <b>Copy</b> button, click in Terminal, press <kbd>⌘</kbd> <kbd>V</kbd>, then press <kbd>Return</kbd>. Compare what Terminal prints with the dark box underneath. If it matches, press the big button at the bottom right. If it doesn’t, press <b>Something’s different</b>.
+    </div>
+    <div class="box">
+      <b>Your <code>coding</code> app is not changed.</b> Everything here runs the code in <code>~/Desktop/agentic-coder</code> directly, without rebuilding the app you start with <code>coding</code>.
+    </div>
+    <div class="box">
+      <b>The four helpers go by codenames now:</b> <b>Scout</b> reads the files you name · <b>Medic</b> brings the failing tests and the changes · <b>Oracle</b> finds code by meaning · <b>Sentry</b> runs the light checks. Terminal prints the codenames, so the dark boxes below show them too.
+    </div>
+    <p class="note"><b>New in version 3:</b> the codenames, and every step runs from <code>~/Desktop/agentic-coder</code> instead of the old test copy in <code>~/worktrees/agentic-helpers</code>: the helpers have been in the main folder since 28 Sep, and only it has the codenames. The tasks, the results folder and the Results step are the same as in version 2. <b>In version 2:</b> the results moved to <b>gemma-docs → test → gemma-helpers-tests</b>.</p>
+  </section>
+
+  <!-- 1 · free the model -->
+  <section class="panel" data-name="Free the model" data-go="It says that →" data-alt="Something’s different">
+    <div class="kicker">Step 1 of 7 <span class="eta">a few seconds</span></div>
+    <h2>Free the model</h2>
+    <p class="why">Only one copy of Gemma fits on this Mac. The app keeps its copy loaded for 30 minutes after you close it. This unloads it.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>coding stop</code></div></div>
+    <div class="lab"><span class="num">2</span>Terminal should print one of these <span class="hint">· either is fine</span></div>
+    <div class="term show">Stopped the model on port 17600; its memory is free.
+<span class="d">— or —</span>
+No model is loaded.</div>
+    <div class="help">
+      <h3>If it printed something else</h3>
+      <dl>
+        <dt>“Still in use by an open Agentic Coder window”</dt><dd>An Agentic Coder window is still open. Type <code>/exit</code> in it, then run the command again.</dd>
+        <dt>“command not found: coding”</dt><dd>Type this instead: <code>~/.local/bin/coding stop</code></dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 2 · try it -->
+  <section class="panel" data-name="Try it" data-go="I saw the Helpers line →" data-alt="Something’s different">
+    <div class="kicker">Step 2 of 7 <span class="eta">5–10 minutes · you can skip it</span></div>
+    <h2>See the helpers in the app</h2>
+    <p class="why">The new version, in a copy of a practice project, working step by step.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal <span class="hint">· one line; Copy takes all of it</span></div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>d=~/Desktop/gemma-docs/test/gemma-helpers-tests/try-$(date +%H%M%S) &amp;&amp; mkdir -p $d &amp;&amp; cp -R ~/Desktop/agentic-coder/models/evals/bench/tasks/19-multifile-symbol/project/ $d &amp;&amp; cd $d &amp;&amp; AGENTIC_NO_UPDATE=1 ~/.bun/bin/bun ~/Desktop/agentic-coder/terminal/src/cli.jsx --no-flows</code></div></div>
+    <div class="lab"><span class="num">2</span>Say yes to the folder, then paste this into the app</div>
+    <div class="term type"><div class="line"><span class="pr">&gt;</span><code>Add a symbol option (default '$') to the defaults in config.mjs, and use it in formatMoney in format.mjs and in the report header in report.mjs, so that buildReport(rows, { symbol: '€' }) starts with 'Total in €' and formats every amount with €. Add a test for it.</code></div></div>
+    <div class="lab"><span class="num">3</span>Within a second the app should show <span class="hint">· from this build on your Mac</span></div>
+    <div class="term show">⏺ List(the project map)
+⏺ Read(config.mjs)
+⏺ Read(format.mjs)
+⏺ Read(report.mjs)
+⏺ Search(formatMoney|buildReport)
+<span class="g">⏺ Helpers · 4 brought along · +324 tokens</span>  <span class="d">(ctrl+o to expand)</span></div>
+    <p class="note">Those are the helpers’ steps, before Gemma’s first. Press <kbd>ctrl</kbd> <kbd>O</kbd>: each item on the Helpers line is marked with the codename of the helper that brought it (Medic, Oracle, Sentry), and the dim <b>Read first · Scout: …</b> line names the files Scout read. Then try <code>/helpers</code>: the four are listed as SCOUT, MEDIC, ORACLE and SENTRY. <kbd>esc</kbd> stops Gemma, <code>/exit</code> quits.</p>
+    <div class="help">
+      <h3>If it looks different</h3>
+      <dl>
+        <dt>No Helpers line, and Gemma starts with List or Read</dt><dd>The request went to Terminal instead of the app, or the app is the old one. Check the command above started it (the welcome box appears), then paste the request again.</dd>
+        <dt>“No such file or directory: …/.bun/bin/bun”</dt><dd>Replace <code>~/.bun/bin/bun</code> with just <code>bun</code> and run it again.</dd>
+        <dt>It asks whether to work in another project</dt><dd>Pick “No, stay”. It is working in the copy on your Desktop.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 3 · before, the app's way -->
+  <section class="panel" data-name="Before · app" data-go="It says …/5 passed →" data-alt="It stopped early or errored">
+    <div class="kicker">Step 3 of 7 <span class="eta">about 30–60 minutes</span></div>
+    <h2>Before: helpers off, the way the app works</h2>
+    <p class="why">The five tasks with the helpers <b>off</b>, as the app works today. The notes page runs in a throwaway home folder: your Desktop isn’t touched.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal <span class="hint">· one long line; Copy takes all of it</span></div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/Desktop/agentic-coder &amp;&amp; mkdir -p ~/Desktop/gemma-docs/test/gemma-helpers-tests &amp;&amp; caffeinate -i node models/evals/bench/run.mjs --model gemma --think on --effort high --helpers off --flows on --only 29,2,22,19,26 --timeout 1200 --out ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/before-app 2&gt;&amp;1 | tee ~/Desktop/gemma-docs/test/gemma-helpers-tests/before-app.log; cp ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/before-app/summary.json ~/Desktop/gemma-docs/test/gemma-helpers-tests/before-app.json</code></div></div>
+    <div class="lab"><span class="num">2</span>Terminal should print lines like these <span class="hint">· real output: task 2 alone, this build, 28 Sep; yours runs more tasks</span></div>
+    <div class="term show"><span class="d">server up on http://127.0.0.1:17602, ctx 32768, thinking budget 4096; helpers: off; focused paths: on</span>
+    · Plan()
+    <span class="r">✗</span> Bash(node --test)
+    · Read(stats.mjs)
+<span class="d">    …</span>
+    · Bash(node --test)
+<span class="g">PASS</span>  think=on   2-fix-bug         178s  6 steps (1 its own)  2 model calls  1 errors  
+<span class="d">thinking on : 1/1 passed, 178s total, 2 model calls, 1 own steps</span>
+<span class="d">saved …/helpers-2026-09-28/before-app/summary.json</span></div>
+    <p class="note">One <b>PASS</b> or <b>FAIL</b> line per task, then a total. A <b>✗</b> on the first test run is normal: those tests fail until the bug is fixed.</p>
+    <div class="help">
+      <h3>If it stopped early or printed an error</h3>
+      <dl>
+        <dt>It has been stuck on one task for over 20 minutes</dt><dd>Each task stops itself after 20 minutes and counts as FAIL, so wait. If nothing moves for 30 minutes, press <kbd>Control</kbd> <kbd>C</kbd> and tell Claude “step 3 got stuck”.</dd>
+        <dt>“cp: … summary.json: No such file or directory”</dt><dd>The run stopped before the end, so there is no summary. Run the step again.</dd>
+        <dt>Any other error</dt><dd>Tell Claude “step 3 failed”. Everything it printed is in <code>before-app.log</code> in the <b>gemma-helpers-tests</b> folder (gemma-docs → test).</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 4 · before, step by step -->
+  <section class="panel" data-name="Before · step by step" data-go="It says …/4 passed →" data-alt="It stopped early or errored">
+    <div class="kicker">Step 4 of 7 <span class="eta">about 20–45 minutes</span></div>
+    <h2>Before: helpers off, step by step</h2>
+    <p class="why">The four code tasks again, helpers still <b>off</b>, but with the focused paths off, so Gemma makes every Read and test run itself. This is where the helpers should save the most.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/Desktop/agentic-coder &amp;&amp; mkdir -p ~/Desktop/gemma-docs/test/gemma-helpers-tests &amp;&amp; caffeinate -i node models/evals/bench/run.mjs --model gemma --think on --effort high --helpers off --flows off --only 2,22,19,26 --timeout 1200 --out ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/before-step 2&gt;&amp;1 | tee ~/Desktop/gemma-docs/test/gemma-helpers-tests/before-step.log; cp ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/before-step/summary.json ~/Desktop/gemma-docs/test/gemma-helpers-tests/before-step.json</code></div></div>
+    <div class="lab"><span class="num">2</span>Terminal should print lines like these <span class="hint">· real output: task 2 alone, this build, 28 Sep; yours runs more tasks</span></div>
+    <div class="term show"><span class="d">server up on http://127.0.0.1:17601, ctx 32768, thinking budget 4096; helpers: off; focused paths: off</span>
+    · List(.)
+    <span class="r">✗</span> Bash(node --test)
+    · Read(stats.mjs)
+<span class="d">    …</span>
+    · Bash(node --test)
+<span class="g">PASS</span>  think=on   2-fix-bug         100s  7 steps (6 its own)  8 model calls  1 errors  
+<span class="d">thinking on : 1/1 passed, 100s total, 8 model calls, 6 own steps</span>
+<span class="d">saved …/helpers-2026-09-28/before-step/summary.json</span></div>
+    <div class="help">
+      <h3>If it stopped early or printed an error</h3>
+      <dl>
+        <dt>Stuck for over 30 minutes</dt><dd>Press <kbd>Control</kbd> <kbd>C</kbd> and tell Claude “step 4 got stuck”.</dd>
+        <dt>Any error</dt><dd>Tell Claude “step 4 failed”. The whole output is in <code>before-step.log</code>.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 5 · after, the app's way -->
+  <section class="panel" data-name="After · app" data-go="It says …/5 passed →" data-alt="It stopped early or errored">
+    <div class="kicker">Step 5 of 7 <span class="eta">about 30–60 minutes</span></div>
+    <h2>After: helpers on, the way the app works</h2>
+    <p class="why">Step 3 again with the helpers <b>on</b>. Lines starting with <b>+</b> are steps the helpers took for Gemma. Building the code search before each task isn’t timed: the app builds it in the background.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/Desktop/agentic-coder &amp;&amp; mkdir -p ~/Desktop/gemma-docs/test/gemma-helpers-tests &amp;&amp; caffeinate -i node models/evals/bench/run.mjs --model gemma --think on --effort high --helpers all --flows on --only 29,2,22,19,26 --timeout 1200 --out ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/after-app 2&gt;&amp;1 | tee ~/Desktop/gemma-docs/test/gemma-helpers-tests/after-app.log; cp ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/after-app/summary.json ~/Desktop/gemma-docs/test/gemma-helpers-tests/after-app.json</code></div></div>
+    <div class="lab"><span class="num">2</span>Terminal should print lines like these <span class="hint">· real output: task 2 alone, this build, 28 Sep; yours runs more tasks</span></div>
+    <div class="term show"><span class="d">server up on http://127.0.0.1:17601, ctx 32768, thinking budget 4096; helpers: Scout, Medic, Oracle, Sentry; focused paths: on</span>
+    · Plan()
+    <span class="r">✗</span> Bash(node --test)
+    · Read(stats.mjs)
+<span class="d">    …</span>
+    · Bash(node --test)
+<span class="g">PASS</span>  think=on   2-fix-bug         111s  6 steps (0 its own)  2 model calls  1 errors  
+<span class="d">thinking on : 1/1 passed, 111s total, 2 model calls, 0 own steps</span>
+<span class="d">saved …/helpers-2026-09-28/after-app/summary.json</span></div>
+    <div class="help">
+      <h3>If it stopped early or printed an error</h3>
+      <dl>
+        <dt>Stuck for over 30 minutes</dt><dd>Press <kbd>Control</kbd> <kbd>C</kbd> and tell Claude “step 5 got stuck”.</dd>
+        <dt>Any error</dt><dd>Tell Claude “step 5 failed”. The whole output is in <code>after-app.log</code>.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 6 · after, step by step -->
+  <section class="panel" data-name="After · step by step" data-go="It says …/4 passed →" data-alt="It stopped early or errored">
+    <div class="kicker">Step 6 of 7 <span class="eta">about 20–45 minutes</span></div>
+    <h2>After: helpers on, step by step</h2>
+    <p class="why">Step 4 again with the helpers <b>on</b>. This is the run to watch: fewer of Gemma’s own steps, and fewer minutes.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/Desktop/agentic-coder &amp;&amp; mkdir -p ~/Desktop/gemma-docs/test/gemma-helpers-tests &amp;&amp; caffeinate -i node models/evals/bench/run.mjs --model gemma --think on --effort high --helpers all --flows off --only 2,22,19,26 --timeout 1200 --out ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/after-step 2&gt;&amp;1 | tee ~/Desktop/gemma-docs/test/gemma-helpers-tests/after-step.log; cp ~/Desktop/agentic-coder/models/gemma-4-12b/results/helpers-2026-09-28/after-step/summary.json ~/Desktop/gemma-docs/test/gemma-helpers-tests/after-step.json</code></div></div>
+    <div class="lab"><span class="num">2</span>Terminal should print lines like these <span class="hint">· real output: task 2 alone, this build, 28 Sep; yours runs more tasks</span></div>
+    <div class="term show"><span class="d">server up on http://127.0.0.1:17601, ctx 32768, thinking budget 4096; helpers: Scout, Medic, Oracle, Sentry; focused paths: off</span>
+    ! Running node --test first, to see what fails (a minute at most).
+<span class="p">    + Bash(node --test)</span>
+<span class="p">    + helpers brought 1 (311 tokens: Medic 1)</span>
+<span class="d">    …</span>
+    · Bash(node --test)
+<span class="g">PASS</span>  think=on   2-fix-bug         111s  8 steps (6 its own)  8 model calls  0 errors  +311 helper tokens  
+<span class="d">thinking on : 1/1 passed, 111s total, 8 model calls, 6 own steps</span>
+<span class="d">saved …/helpers-2026-09-28/after-step/summary.json</span></div>
+    <div class="help">
+      <h3>If it stopped early or printed an error</h3>
+      <dl>
+        <dt>Stuck for over 30 minutes</dt><dd>Press <kbd>Control</kbd> <kbd>C</kbd> and tell Claude “step 6 got stuck”.</dd>
+        <dt>Any error</dt><dd>Tell Claude “step 6 failed”. The whole output is in <code>after-step.log</code>.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 7 · results -->
+  <section class="panel" data-name="Results" data-go="Next →">
+    <div class="kicker">Step 7 of 7 <span class="eta">1 minute</span></div>
+    <h2>Load your results</h2>
+    <p class="why" id="reswhy">Press <b>Choose Files</b>, open <b>gemma-docs → test → gemma-helpers-tests</b> on your Desktop, and pick the four files <b>before-app.json</b>, <b>before-step.json</b>, <b>after-app.json</b> and <b>after-step.json</b> together (<kbd>⌘</kbd> <kbd>A</kbd> picks all). Nothing leaves your Mac.</p>
+    <div class="loaded" id="loaded" hidden><span id="loadedtxt"></span><button class="sbtn quiet" id="reload" type="button">Load other files</button></div>
+    <div class="loader" id="loader">
+      <div class="drop">
+        <h3>Pick the four result files</h3>
+        <p>gemma-docs/test/gemma-helpers-tests/*.json (the .log files work too)</p>
+        <input type="file" id="files" multiple accept=".json,.log,.txt">
+        <div class="row"><span class="status" id="fstatus">No files loaded yet.</span></div>
+      </div>
+      <div class="drop">
+        <h3>Or paste what Terminal printed</h3>
+        <textarea id="paste" placeholder="server up on …; helpers: off; focused paths: on&#10;PASS  think=on   2-fix-bug  95s  7 steps (5 its own)  6 model calls  0 errors"></textarea>
+        <div class="row"><button class="sbtn" id="usepaste" type="button">Add these lines</button><button class="sbtn quiet" id="clear" type="button">Clear</button></div>
+      </div>
+    </div>
+    <div class="verdict" id="verdict">No results yet. Load the runs and the answer appears here.</div>
+    <div class="tablewrap" id="twin" hidden>
+      <table class="res wide"><thead><tr><th>Task</th><th>Before (helpers off)</th><th>After (helpers on)</th><th>Change</th></tr></thead><tbody id="rows"></tbody><tfoot id="foot"></tfoot></table>
+    </div>
+  </section>
+
+  <!-- 8 · done -->
+  <section class="panel" data-name="Done" data-go="Back to the start">
+    <div class="kicker">All done</div>
+    <h2>Tell Claude the tests are done</h2>
+    <p class="why">Type this to Claude. I’ll read the four runs, check the answer on the Results step, and write a results page in gemma-docs. Merging the helpers into your app is a separate step, only when you say so.</p>
+    <span class="say">the helper tests are done</span>
+    <div class="box">
+      <b>How to read the answer</b> (decided before the test, so it can’t be argued afterwards)
+      <ul>
+        <li><span class="tag ok">better</span> less time <b>and</b> no more of Gemma’s calls in all, no task that passed before fails now, and the notes page no more than 10% slower.</li>
+        <li><span class="tag none">mixed</span> some of that, not all. The table shows which task went the other way.</li>
+        <li><span class="tag bad">no</span> not faster and not fewer calls, or two or more tasks that passed now fail.</li>
+      </ul>
+    </div>
+    <div class="box">
+      <b>What this test can’t tell you:</b> with one run of each task, a difference under about 10% can be luck. And the code search helps most in a big project you use every day. The practice projects are small, so this test undersells it.
+    </div>
+  </section>
+
+</div>
+
+<footer class="controls">
+  <button class="btn back" id="back" type="button">← Back</button>
+  <div class="mid"><button class="btn alt" id="alt" type="button">Something’s different</button></div>
+  <button class="btn go" id="go" type="button">Next →</button>
+</footer>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var panels=[].slice.call(document.querySelectorAll('.panel'));
+  var chips=document.getElementById('chips'), stage=document.getElementById('stage');
+  var back=document.getElementById('back'), go=document.getElementById('go'), alt=document.getElementById('alt');
+  var K={step:'gemmahelpers-step',done:'gemmahelpers-done',res:'gemmahelpers-results'};
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var cur=Math.min(Math.max(Number(load(K.step))||0,0),panels.length-1), done=load(K.done)||{};
+
+  panels.forEach(function(p,i){
+    var c=document.createElement('button'); c.type='button'; c.className='chip';
+    c.innerHTML='<b><i>'+(i===0?'★':i===panels.length-1?'✓':i)+'</i><em></em></b><span>'+p.getAttribute('data-name')+'</span>';
+    c.addEventListener('click',function(){show(i)});
+    chips.appendChild(c);
+  });
+  var chipEls=[].slice.call(chips.children);
+
+  function show(i){
+    cur=Math.min(Math.max(i,0),panels.length-1);
+    panels.forEach(function(p,j){p.classList.toggle('on',j===cur); var h=p.querySelector('.help'); if(h)h.classList.remove('open')});
+    chipEls.forEach(function(c,j){c.classList.toggle('on',j===cur);c.classList.toggle('did',!!done[j]&&j!==cur)});
+    var p=panels[cur];
+    back.disabled=cur===0;
+    go.textContent=p.getAttribute('data-go')||'Next →';
+    var a=p.getAttribute('data-alt'); alt.hidden=!a; alt.textContent=a||'Something’s different';
+    stage.scrollTop=0; save(K.step,cur);
+  }
+  back.addEventListener('click',function(){show(cur-1)});
+  go.addEventListener('click',function(){ if(cur===panels.length-1){show(0);return} done[cur]=true; save(K.done,done); show(cur+1)});
+  alt.addEventListener('click',function(){var h=panels[cur].querySelector('.help'); if(!h)return; h.classList.add('open'); h.scrollIntoView({block:'nearest',behavior:'smooth'})});
+  document.addEventListener('keydown',function(e){ var tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea')return;
+    if(e.key==='ArrowRight'){go.click()} else if(e.key==='ArrowLeft'&&cur>0){show(cur-1)} });
+
+  // copy buttons: copy the command only (not the prompt sign)
+  [].forEach.call(document.querySelectorAll('.type'),function(t){
+    var code=t.querySelector('code'), text=code.textContent, b=document.createElement('button');
+    var inApp=t.querySelector('.pr').textContent==='>';
+    b.type='button'; b.className='copy'; b.textContent='Copy';
+    var after=document.createElement('p'); after.className='after';
+    after.innerHTML=inApp?'Press <b>Copy</b>, click in the <b>app</b> (the Agentic Coder prompt), press <kbd>⌘</kbd> <kbd>V</kbd>, then <kbd>Return</kbd>.':'Press <b>Copy</b>, click in Terminal, press <kbd>⌘</kbd> <kbd>V</kbd>, then <kbd>Return</kbd>.';
+    b.addEventListener('click',function(){
+      function ok(){b.textContent='Copied ✓';b.classList.add('did');after.innerHTML='Copied. Now click in <b>'+(inApp?'the app':'Terminal')+'</b>, press <kbd>⌘</kbd> <kbd>V</kbd>, then <kbd>Return</kbd>.';setTimeout(function(){b.textContent='Copy';b.classList.remove('did')},2200)}
+      function fallback(){var x=document.createElement('textarea');x.value=text;x.style.position='fixed';x.style.opacity='0';document.body.appendChild(x);x.select();try{document.execCommand('copy');ok()}catch(e){b.textContent='Select + ⌘C'}document.body.removeChild(x)}
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(ok,fallback)}else fallback();
+    });
+    t.appendChild(b); t.parentNode.insertBefore(after,t.nextSibling);
+  });
+
+  // ————— results —————
+  var TASKS={'29':'The notes page (notes.html)','2':'Fix failing tests','22':'“fix the bug” (vague)','19':'One option across 3 files','26':'Change in a big project'};
+  var ORDER=[['app','29'],['app','2'],['app','22'],['app','19'],['app','26'],['step','2'],['step','22'],['step','19'],['step','26']];
+  var data={before:{},after:{}}; // data[when][path+':'+task] = {pass,secs,calls,own,tokens}
+  function num(x){var n=Number(x);return isFinite(n)?n:null}
+  function add(when,path,task,r){data[when][path+':'+task]=r}
+  function parseJSON(text){var j;try{j=JSON.parse(text)}catch(e){return -1}
+    if(!j||!Array.isArray(j.results))return -1;
+    var when=(j.helpers||[]).length?'after':'before', path=j.flows===false?'step':'app', n=0;
+    j.results.forEach(function(r){var t=String(r.task||'').split('-')[0];if(!TASKS[t])return;
+      add(when,path,t,{pass:!!r.pass,secs:num(r.secs)||0,calls:num(r.modelCalls),own:num(r.ownSteps),tokens:num(r.helperTokens)||0});n++});
+    return n}
+  var HEAD=/helpers: ([^;]+); focused paths: (on|off)/;
+  var LINE=/^(PASS|FAIL)\s+think=(?:on|off)\s+(?:rep\d+\s+)?(\d+)-[\w-]+\s+(\d+)s\s+\d+ steps \((\d+|\?) its own\)\s+(\d+|\?) model calls\s+\d+ errors(?:\s+\+(\d+) helper tokens)?/;
+  function parseText(text){var when=null,path=null,n=0;text=text.replace(/\x1b\[[0-9;]*m/g,'');
+    text.split(/\r?\n/).forEach(function(l){var h=HEAD.exec(l);if(h){when=h[1].trim()==='off'?'before':'after';path=h[2]==='off'?'step':'app';return}
+      var m=LINE.exec(l.trim());if(m&&when&&TASKS[m[2]]){add(when,path,m[2],{pass:m[1]==='PASS',secs:Number(m[3]),calls:num(m[5]),own:num(m[4]),tokens:Number(m[6]||0)});n++}});
+    return n}
+  var fstatus=document.getElementById('fstatus'), showLoader=false;
+  document.getElementById('files').addEventListener('change',function(e){
+    var files=[].slice.call(e.target.files||[]); if(!files.length)return; var left=files.length,found=0,bad=[];
+    files.forEach(function(f){var rd=new FileReader();rd.onload=function(){var t=String(rd.result||''),n=/\.json$/i.test(f.name)?parseJSON(t):parseText(t);if(n<=0)bad.push(f.name);else found+=n;
+      if(--left===0){fstatus.textContent=found+' task results read'+(bad.length?' · nothing found in '+bad.join(', '):'')+'.';showLoader=false;save(K.res,data);render()}};rd.readAsText(f)});
+  });
+  document.getElementById('usepaste').addEventListener('click',function(){var n=parseText(document.getElementById('paste').value);fstatus.textContent=n?n+' task lines added.':'No PASS/FAIL lines found (paste from the “server up” line down).';if(n)showLoader=false;save(K.res,data);render()});
+  document.getElementById('clear').addEventListener('click',function(){data={before:{},after:{}};save(K.res,data);render();fstatus.textContent='Cleared.'});
+  document.getElementById('reload').addEventListener('click',function(){showLoader=true;render()});
+
+  function mins(s){return s<90?Math.round(s)+' s':(s/60).toFixed(s<600?1:0).replace(/\.0$/,'')+' min'}
+  function cell(r,after){if(!r)return '<span class="tag none">not run</span>';
+    return '<span class="tag '+(r.pass?'ok':'bad')+'">'+(r.pass?'pass':'fail')+'</span><span class="s">'+mins(r.secs)+(r.calls!=null?' · '+r.calls+' calls':'')+(after&&r.tokens?' · +'+(r.tokens>=1000?(r.tokens/1000).toFixed(1)+'k':r.tokens)+' tok':'')+'</span>'}
+  function change(a,b){if(!a||!b)return '';var ds=b.secs-a.secs,dc=(a.calls!=null&&b.calls!=null)?b.calls-a.calls:null;
+    var flip=a.pass!==b.pass?' <span class="tag '+(b.pass?'ok':'bad')+'">'+(b.pass?'now passes':'now fails')+'</span>':'';
+    var t=Math.abs(ds)<1?'<span>same time</span>':'<span class="'+(ds<0?'up':'down')+'">'+(ds<0?'−':'+')+mins(Math.abs(ds))+'</span>';
+    var c=dc==null?'':dc===0?' · <span>same calls</span>':' · <span class="'+(dc<0?'up':'down')+'">'+(dc<0?'−':'+')+Math.abs(dc)+' call'+(Math.abs(dc)===1?'':'s')+'</span>';
+    return t+c+flip}
+  function render(){
+    var rows='',group='',pairs=0,tb=0,ta=0,cb=0,ca=0,pb=0,pa=0,broke=[],fixed=[],tokens=0,notes=null,nb=0,na=0;
+    ORDER.forEach(function(o){var k=o[0]+':'+o[1],a=data.before[k],b=data.after[k];
+      if(a)nb++; if(b)na++;
+      if(o[0]!==group){group=o[0];rows+='<tr class="grp"><td colspan="4">'+(group==='app'?'The way the app works (focused paths on)':'Step by step (focused paths off)')+'</td></tr>'}
+      if(a&&b){pairs++;tb+=a.secs;ta+=b.secs;if(a.calls!=null&&b.calls!=null){cb+=a.calls;ca+=b.calls}if(a.pass)pb++;if(b.pass)pa++;tokens+=b.tokens||0;
+        if(a.pass&&!b.pass)broke.push(TASKS[o[1]]+(o[0]==='step'?' (step by step)':''));if(!a.pass&&b.pass)fixed.push(TASKS[o[1]]);
+        if(o[1]==='29')notes={a:a,b:b}}
+      rows+='<tr'+(a&&b&&a.pass!==b.pass?' class="flip"':'')+'><td class="t"><span class="n2">'+o[1]+'</span>'+TASKS[o[1]]+'</td><td class="c">'+cell(a)+'</td><td class="c">'+cell(b,true)+'</td><td class="c">'+change(a,b)+'</td></tr>'});
+    var has=nb||na;
+    document.getElementById('rows').innerHTML=rows;
+    document.getElementById('twin').hidden=!has; document.getElementById('loader').hidden=!!has&&!showLoader; document.getElementById('loaded').hidden=!has; document.getElementById('reswhy').hidden=!!has&&!showLoader;
+    document.getElementById('loadedtxt').innerHTML='Loaded: before <b>'+nb+'</b> of 9 · after <b>'+na+'</b> of 9.';
+    document.getElementById('foot').innerHTML=pairs?'<tr><td>All '+pairs+' pairs</td><td>'+pb+' pass · '+mins(tb)+' · '+cb+' calls</td><td>'+pa+' pass · '+mins(ta)+' · '+ca+' calls</td><td class="c">'+change({pass:true,secs:tb,calls:cb},{pass:true,secs:ta,calls:ca})+'</td></tr>':'';
+    var v=document.getElementById('verdict');
+    if(!has){v.innerHTML='No results yet. Load the runs and the answer appears here.';return}
+    if(!pairs){v.innerHTML='<b>Half-way there.</b> Loaded before: '+nb+' of 9, after: '+na+' of 9. Load the other runs to compare.';return}
+    var faster=ta<tb, fewer=ca<=cb, notesOk=!notes||(notes.b.secs<=notes.a.secs*1.1&&(!notes.a.pass||notes.b.pass));
+    var pct=tb?Math.round((1-ta/tb)*100):0, head;
+    var callsSaid=cb>ca?(cb-ca)+' fewer of Gemma’s calls':'the same number of Gemma’s calls';
+    if(!broke.length&&faster&&fewer&&notesOk)head='<b>'+(pairs<9?'So far, yes':'Yes, it got better')+'.</b> '+pct+'% less time and '+callsSaid+', and nothing that passed before fails now.';
+    else if(broke.length>=2||(!faster&&!fewer))head='<b>'+(pairs<9?'So far, no':'No')+'.</b> '+(broke.length>=2?broke.length+' tasks that passed before fail now.':'Not faster, and not fewer of Gemma’s calls.');
+    else{var why=[];if(!faster)why.push('it took longer ('+mins(ta)+' vs '+mins(tb)+')');if(!fewer)why.push('Gemma made more calls ('+ca+' vs '+cb+')');if(broke.length)why.push(broke[0]+' passed before and fails now');if(!notesOk)why.push('the notes page got more than 10% slower or stopped passing');
+      head='<b>'+(pairs<9?'So far, mixed':'Mixed')+'.</b> '+(faster?pct+'% less time':'')+(faster&&fewer?' and ':'')+(fewer?callsSaid:'')+(faster||fewer?', but ':'')+why.join('; ')+'.'}
+    var more='<span class="more">Before: <b>'+pb+' of '+pairs+'</b> passed in '+mins(tb)+'. After: <b>'+pa+' of '+pairs+'</b> in '+mins(ta)+'. The helpers brought '+(tokens>=1000?(tokens/1000).toFixed(1)+'k':tokens)+' tokens in all.'+(pairs<9?' Only '+pairs+' of 9 pairs are loaded so far.':'')+'</span>';
+    if(fixed.length)more+='<span class="more">Now passing: <b>'+fixed.join(', ')+'</b>.</span>';
+    more+='<span class="more">One run each: a difference under about 10% can be luck.</span>';
+    v.innerHTML=head+more;
+  }
+  var sv=load(K.res); if(sv&&sv.before&&sv.after)data=sv; render();
+
+  show(cur);
+})();
+</script>
+</body>
+</html>

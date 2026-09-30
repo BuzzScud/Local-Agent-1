@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Remaining Tasks</title>
+<style>
+:root {
+  --bg: #eeece7; --win: #fbfaf8; --bar: #f1efea; --card: #ffffff; --fg: #1d1d1b; --muted: #6b6a66; --line: #e2dfd8;
+  --accent: #d9661f; --accent-fg: #ffffff; --green: #1f7a4a; --red: #c8372d; --amber: #9a6200; --blue: #2f6bd8;
+  --t-green: #e1f2e7; --t-red: #fbe3e0; --t-amber: #fbefd6; --t-blue: #e3ecfb; --t-grey: #eceae5;
+  --term: #1b1b19; --term-fg: #e8e6df; --term-muted: #9a978e;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f0f0e; --win: #1a1a18; --bar: #232320; --card: #22221f; --fg: #ecebe6; --muted: #a09e97; --line: #34332f;
+  --accent: #f0955a; --accent-fg: #1a1a18; --green: #62c48e; --red: #f07a6e; --amber: #e5b04c; --blue: #6e9df0;
+  --t-green: #1d3a2a; --t-red: #43221f; --t-amber: #3d3016; --t-blue: #1f2c45; --t-grey: #2e2d29;
+  --term: #0c0c0b; --term-fg: #e8e6df; --term-muted: #8d8a82;
+} }
+:root[data-theme="dark"] {
+  --bg: #0f0f0e; --win: #1a1a18; --bar: #232320; --card: #22221f; --fg: #ecebe6; --muted: #a09e97; --line: #34332f;
+  --accent: #f0955a; --accent-fg: #1a1a18; --green: #62c48e; --red: #f07a6e; --amber: #e5b04c; --blue: #6e9df0;
+  --t-green: #1d3a2a; --t-red: #43221f; --t-amber: #3d3016; --t-blue: #1f2c45; --t-grey: #2e2d29;
+  --term: #0c0c0b; --term-fg: #e8e6df; --term-muted: #8d8a82;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 14px; }
+.win { width: min(1080px, 100%); height: min(calc(100vh - 28px), 980px); background: var(--win); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.12); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; }
+.title { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--bar); border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; }
+.dots { display: flex; gap: 7px; margin-right: 8px; } .dots i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+.title .conn { margin-left: auto; font-weight: 500; color: var(--muted); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+.chip { font: inherit; font-size: 14px; font-weight: 650; min-width: 38px; height: 34px; padding: 0 10px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; font-variant-numeric: tabular-nums; }
+.chip.word { font-weight: 600; }
+.chip.pass { background: var(--t-green); border-color: var(--green); color: var(--green); }
+.chip.fail { background: var(--t-red); border-color: var(--red); color: var(--red); }
+.chip.error { background: var(--t-amber); border-color: var(--amber); color: var(--amber); }
+.chip.running { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); animation: pulse 1.6s ease-in-out infinite; }
+.chip.queued { border-color: var(--blue); color: var(--blue); border-style: dashed; }
+.chip.here { outline: 2.5px solid var(--fg); outline-offset: 2px; }
+@keyframes pulse { 50% { opacity: .65; } }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: 14px; background: var(--card); }
+.status .say { flex: 1 1 380px; }
+.status .score { color: var(--muted); }
+.toggle { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--line); background: var(--win); color: var(--fg); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--muted); }
+.dot.on { background: var(--accent); animation: pulse 1.2s infinite; } .dot.ok { background: var(--green); } .dot.wait { background: var(--amber); }
+.step { overflow: auto; padding: 22px 26px 26px; }
+.kicker { color: var(--muted); font-size: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.015em; margin: 6px 0 14px; }
+h2 { font-size: 17px; margin: 22px 0 8px; }
+p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+.ask { background: var(--card); border: 1px solid var(--line); border-left: 0; border-radius: 10px; padding: 14px 16px; font-size: 17px; }
+.ask .lab { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.fact { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.fact .lab { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.fact .val { font-size: 20px; font-weight: 650; }
+.fact .val small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.term { background: var(--term); color: var(--term-fg); border-radius: 10px; padding: 12px 14px; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; min-height: 120px; }
+.term .m { color: var(--term-muted); }
+.result { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+.big { font-size: 34px; font-weight: 750; letter-spacing: -0.02em; }
+.big.pass { color: var(--green); } .big.fail { color: var(--red); } .big.error { color: var(--amber); }
+.tag { display: inline-block; font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.tag.green { background: var(--t-green); color: var(--green); } .tag.red { background: var(--t-red); color: var(--red); } .tag.amber { background: var(--t-amber); color: var(--amber); } .tag.blue { background: var(--t-blue); color: var(--blue); } .tag.grey { background: var(--t-grey); color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; }
+ul.rules { margin: 0; padding-left: 20px; } ul.rules li { margin-bottom: 6px; }
+.foot { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--bar); }
+.btn { font: inherit; font-weight: 650; font-size: 15px; border-radius: 10px; padding: 10px 16px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; white-space: nowrap; }
+.btn.go { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); min-width: 230px; font-size: 16px; }
+.btn.go:disabled { background: var(--t-grey); border-color: var(--line); color: var(--muted); cursor: default; }
+.btn.stop { color: var(--red); border-color: var(--red); }
+.btn.hide { visibility: hidden; }
+.foot .hint { color: var(--muted); font-size: 13px; }
+.offline { padding: 40px; text-align: center; }
+@media (max-width: 640px) {
+  body { padding: 0; } .win { height: 100vh; border-radius: 0; border: 0; }
+  .step { padding: 16px; } h1 { font-size: 22px; }
+  .foot { grid-template-columns: auto 1fr auto; } .foot .hint { display: none; } .btn.go { min-width: 0; }
+  .btn.stop { grid-column: 1 / -1; grid-row: 2; }
+}
+</style>
+</head>
+<body>
+<div class="win" id="win">
+  <div class="title"><span class="dots"><i></i><i></i><i></i></span>Gemma: the 28 practice tasks on tonight’s app<span class="conn" id="conn">connecting…</span></div>
+  <div class="chips" id="chips"></div>
+  <div class="status" id="status"></div>
+  <div class="step" id="step"><div class="offline" id="off"><h1>Opening the live page</h1><p class="muted">This page talks to a small runner on this Mac (127.0.0.1:48213). If this message stays, the runner is not running: ask Claude to start it.</p></div></div>
+  <div class="foot" id="foot">
+    <button class="btn" id="back">← Back</button>
+    <span class="hint" id="hint"></span>
+    <button class="btn stop hide" id="stop">Stop this test</button>
+    <button class="btn go" id="go" disabled>Waiting for the runner</button>
+  </div>
+</div>
+<script>
+const BASE = location.protocol === 'file:' ? 'http://127.0.0.1:48213' : location.origin;
+// Opened from the Desktop file: go to the live copy the runner serves.
+if (location.protocol === 'file:') location.replace(BASE + '/');
+
+// This morning's 9 (Low, same tasks, 84df171): 7 of 9. The 27B passed all 28.
+const MORNING = [[1, 'Add a --json flag, with a test', false, 370], [10, 'Fix an off-by-one page count', true, 28], [11, 'Fix prices sorted as text', true, 11], [12, 'Add a currency option', true, 35], [13, 'Add a Python function', true, 28], [14, 'Add perimeter(), no tests', false, 79], [15, 'Fix a Fahrenheit formula, no tests', true, 31], [16, 'Write a short story to a file', true, 37], [17, 'Write notes about an API', true, 44]];
+const MORNING_PASS = MORNING.filter((m) => m[2]).length;
+const MORNING_BY = Object.fromEntries(MORNING.map((m) => [m[0], m]));
+// The grade rule, set before the run (the same one the 28 Sep grade report promised).
+const RULE = [['27–28', 'B+', 'B (B+ also needs thinking to change a result)'], ['26', 'B', 'B'], ['24–25', 'B−', 'B−'], ['22–23', 'C+', 'C+'], ['19–21', 'C', 'C'], ['18 or fewer', 'C−', 'C']];
+
+let S = null, here = null;
+try { here = localStorage.getItem('gemma28.step'); } catch {}
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const dur = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const steps = () => ['start', ...S.tasks.map((t) => String(t.n)), 'report'];
+const task = (n) => S.tasks.find((t) => String(t.n) === String(n));
+const setHere = (h) => { here = h; try { localStorage.setItem('gemma28.step', h); } catch {} render(); };
+const status = (t) => (S.running?.n === t.n ? 'running' : S.queue.includes(t.n) && ['todo', 'error'].includes(t.status) ? 'queued' : t.status);
+
+async function post(path, body) {
+  const r = await fetch(BASE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body ?? {}) });
+  return r.json().catch(() => ({}));
+}
+async function load() {
+  try { const r = await fetch(BASE + '/api/state', { cache: 'no-store' }); S = await r.json(); $('conn').textContent = 'live'; }
+  catch { $('conn').textContent = 'runner not reachable'; return; }
+  if (!here || !steps().includes(here)) here = S.running ? String(S.running.n) : 'start';
+  render();
+}
+async function runTask(n) {
+  const t = task(n);
+  setHere(String(n));
+  if (t && ['todo', 'error'].includes(t.status) && S.running?.n !== t.n) { await post('/api/run', { n: t.n }); await load(); }
+}
+
+function rerun() {
+  const ts = S.tasks.filter((t) => MORNING_BY[t.n] && (t.status === 'pass' || t.status === 'fail'));
+  return { done: ts.length, pass: ts.filter((t) => t.status === 'pass').length };
+}
+function counts() {
+  const done = S.tasks.filter((t) => t.status === 'pass' || t.status === 'fail');
+  const pass = done.filter((t) => t.status === 'pass').length;
+  return { done: done.length, pass, fail: done.length - pass, left: S.tasks.length - done.length };
+}
+
+function renderChips() {
+  const c = [`<button class="chip word${here === 'start' ? ' here' : ''}" data-go="start">Start</button>`];
+  for (const t of S.tasks) c.push(`<button class="chip ${status(t)}${here === String(t.n) ? ' here' : ''}" data-run="${t.n}" title="Task ${t.n}: ${esc(t.name)}">${t.n}</button>`);
+  c.push(`<button class="chip word${here === 'report' ? ' here' : ''}${S.done ? ' pass' : ''}" data-go="report">Report</button>`);
+  $('chips').innerHTML = c.join('');
+}
+
+function renderStatus() {
+  const k = counts();
+  let say;
+  if (S.done) say = `<span class="dot ok"></span>All ${S.tasks.length} done. The grade report is ready.`;
+  else if (S.running) { const t = task(S.running.n); say = `<span class="dot on"></span><b>Task ${t.n} running</b> · ${dur(S.now - S.running.startedAt)} · ${esc(t.by ?? '')}`; }
+  else if (S.waiting) say = `<span class="dot wait"></span>${esc(S.waiting)}`;
+  else if (S.queue.length) say = `<span class="dot wait"></span>Starting task ${S.queue[0]}…`;
+  else if (S.next?.why === 'paused') say = `<span class="dot"></span>Automatic runs are paused. Click a number to run it.`;
+  else if (S.next?.at) say = `<span class="dot"></span>Next automatic run: <b>${clock(S.next.at)}</b> (${esc(S.next.why)}). Or click a number now.`;
+  else say = `<span class="dot"></span>Click a number to run that task.`;
+  const r = rerun(); const score = `Tonight’s app: <b>${k.pass} of ${k.done}</b> passed, ${k.left} to go${r.done ? ` · this morning’s 9 again: ${r.pass} of ${r.done}` : ''}`;
+  $('status').innerHTML = `<span class="say">${say}</span><span class="score">${score}</span>${S.done ? '' : `<button class="toggle" id="pause">${S.paused ? 'Automatic runs: off' : 'Automatic runs: on'}</button>`}`;
+  const p = $('pause'); if (p) p.onclick = async () => { await post('/api/pause', { paused: !S.paused }); load(); };
+}
+
+function startStep() {
+  const k = counts();
+  return `<div class="kicker">Start</div>
+  <h1>All 28 practice tasks, on tonight’s app</h1>
+  <p>Tonight Gemma ran the 19 it hadn’t done and passed 18. With this morning’s 9 (7 passed) that made <b>25 of 28</b>, a B−. The first report is <a href="${BASE}/report1" target="_blank">here</a>.</p>
+  <p><b>Now: this morning’s 9 again</b> (numbers 1 and 10–17), on tonight’s app, the same way (Low, once each). Then all 28 have run on the same code. Two of the three fails were this morning, on the older app: if one of them passes now, Gemma reaches 26 of 28, a B.</p>
+  <h2>How it runs</h2>
+  <ul class="rules">
+    <li><b>Click a number</b> at the top to run that task. If one is already running, yours goes next.</li>
+    <li><b>No click for 30 minutes</b> after a task ends: the next one starts by itself.</li>
+    <li><b>From 1:00 AM</b>: the rest run one after another, no waiting.</li>
+    <li><b>When all 9 are done</b>, the grade report is made again (version 2) and opened.</li>
+    <li>Keep Agentic Coder closed while a task runs. A test shares any Gemma it finds, and that would spoil it; the runner waits until Gemma is free.</li>
+    <li>This morning these 9 took 11–370 s each. All 9 back to back: about 15 minutes.</li>
+  </ul>
+  <h2>The grade rule, set before the run</h2>
+  <div class="box"><table><thead><tr><th>Passed, of 28</th><th>Coding grade</th><th>Overall grade</th></tr></thead><tbody>
+  ${RULE.map((r) => `<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td></tr>`).join('')}
+  </tbody></table></div>
+  <h2>This morning’s 9, on the older app</h2>
+  <div class="box"><table><tbody>${MORNING.map((m) => { const t = task(m[0]); const now = t && (t.status === 'pass' || t.status === 'fail') ? `<span class="tag ${t.status === 'pass' ? 'green' : 'red'}">now ${t.status === 'pass' ? 'Pass' : 'Fail'}</span>` : ''; return `<tr><td class="n" style="width:36px">${m[0]}</td><td>${m[1]}</td><td class="n">${m[3]} s</td><td class="n"><span class="tag ${m[2] ? 'green' : 'red'}">${m[2] ? 'Pass' : 'Fail'}</span> ${now}</td></tr>`; }).join('')}</tbody></table></div>
+  <p class="muted" style="margin-top:10px">So far on tonight’s app: ${k.done} of 28 done, ${k.pass} passed.</p>`;
+}
+
+function taskStep(t) {
+  const i = S.tasks.indexOf(t) + 1, st = status(t);
+  const big = t.big ? `${t.big.pass ? 'Passed' : 'Failed'} <small>${t.big.secs ? `in ${t.big.secs} s` : 'at once (a rename needs no model)'}</small>` : '—';
+  let body = '';
+  if (st === 'running') {
+    const lines = (S.running.tail ?? []).map((l) => (/^(PASS|FAIL)/.test(l) ? `<b>${esc(l)}</b>` : /^\s/.test(l) ? esc(l.trim()) : `<span class="m">${esc(l)}</span>`));
+    body = `<h2>What Gemma is doing <span class="muted" style="font-weight:500">· ${dur(S.now - S.running.startedAt)}</span></h2><div class="term">${lines.join('\n') || '<span class="m">Starting Gemma…</span>'}</div>`;
+  } else if (st === 'pass' || st === 'fail') {
+    const r = t.result ?? {};
+    body = `<div class="result"><span class="big ${st}">${st === 'pass' ? 'Passed' : 'Failed'}</span><span class="muted">${clock(t.endedAt)}</span></div>
+    <div class="facts">
+      <div class="fact"><div class="lab">Time</div><div class="val">${r.secs} <small>s</small></div></div>
+      <div class="fact"><div class="lab">Steps</div><div class="val">${r.steps ?? '—'} <small>${r.ownSteps != null ? `${r.ownSteps} its own` : ''}</small></div></div>
+      <div class="fact"><div class="lab">Model calls</div><div class="val">${r.modelCalls ?? '—'}</div></div>
+      <div class="fact"><div class="lab">Tool errors</div><div class="val">${r.toolErrors ?? 0}</div></div>
+    </div>
+    ${r.why ? `<h2>Why it failed</h2><div class="term">${esc(r.why)}${r.reason && r.reason !== 'done' ? `\n<span class="m">ended: ${esc(r.reason)}</span>` : ''}</div>` : ''}
+    ${r.answer ? `<h2>Gemma’s last words</h2><p>${esc(r.answer)}</p>` : ''}`;
+  } else if (st === 'error') {
+    body = `<div class="result"><span class="big error">Didn’t finish</span></div><p class="muted">The test itself broke, not Gemma’s answer. It gets one more try when the rest are done.</p><div class="term">${esc(t.error ?? '')}</div>`;
+  } else if (st === 'queued') {
+    body = `<p><span class="tag blue">Next in line</span> It starts as soon as task ${S.running?.n ?? ''} ends.</p>`;
+  } else {
+    body = `<p class="muted">${t.stopped ? 'You stopped this one. ' : ''}Not run yet. Click its number, or the button below, to run it now.</p>`;
+  }
+  const mo = MORNING_BY[t.n];
+  return `<div class="kicker">Task ${i} of ${S.tasks.length} · practice task ${t.n}${mo ? ' · this morning’s 9, run again' : ''}</div>
+  <h1>${esc(t.name)}</h1>
+  <div class="ask"><div class="lab">What Gemma is asked</div>${esc(t.prompt)}</div>
+  <div class="facts"><div class="fact"><div class="lab">The 27B, 27 Sep</div><div class="val">${big}</div></div>${mo ? `<div class="fact"><div class="lab">Gemma this morning (older app)</div><div class="val">${mo[2] ? 'Passed' : 'Failed'} <small>in ${mo[3]} s</small></div></div>` : ''}</div>
+  ${body}`;
+}
+
+function reportStep() {
+  const k = counts(), r = rerun();
+  const first = `<p class="muted">The first report (25 of 28, B−, with this morning’s 9 on the older app): <a href="${BASE}/report1" target="_blank">open it</a>.</p>`;
+  if (S.done) return `<div class="kicker">Report</div><h1>The grade report is ready</h1><p>All 28 ran on tonight’s app: Gemma passed <b>${k.pass} of 28</b>. This morning’s 9 again: ${r.pass} of 9 (this morning: 7 of 9).</p><p><a class="btn go" style="display:inline-block;text-decoration:none" href="${BASE}/report" target="_blank">Open the grade report</a></p><p class="muted">Saved in gemma-docs/test as gemma-final-grade-2026-09-29-v2.html.</p>${first}`;
+  return `<div class="kicker">Report</div><h1>Version 2 of the report comes when all 9 are done</h1><p>This morning’s 9 on tonight’s app: ${r.done} of 9 done, ${r.pass} passed. All 28 so far: ${k.pass} of ${k.done} passed.</p><p class="muted">It builds itself and opens when the last one ends.</p>${first}`;
+}
+
+function renderFoot() {
+  const list = steps(), i = list.indexOf(here);
+  $('back').disabled = i <= 0;
+  $('back').onclick = () => setHere(list[Math.max(0, i - 1)]);
+  const go = $('go'), stop = $('stop');
+  stop.classList.add('hide'); go.disabled = false; $('hint').textContent = '';
+  const firstTodo = S.tasks.find((t) => ['todo', 'error'].includes(t.status) && S.running?.n !== t.n && !S.queue.includes(t.n));
+  if (here === 'start' || here === 'report') {
+    if (S.done && here === 'start') { go.textContent = 'See the report →'; go.onclick = () => setHere('report'); }
+    else if (here === 'report') { go.textContent = S.done ? 'Open the grade report' : 'Back to the tasks'; go.onclick = () => (S.done ? window.open(BASE + '/report', '_blank') : setHere('start')); }
+    else if (S.running) { go.textContent = `Watch task ${S.running.n} →`; go.onclick = () => setHere(String(S.running.n)); }
+    else if (firstTodo) { go.textContent = `Run task ${firstTodo.n} now →`; go.onclick = () => runTask(firstTodo.n); }
+    else { go.textContent = 'All run'; go.disabled = true; }
+    return;
+  }
+  const t = task(here), st = status(t);
+  if (st === 'running') { go.textContent = 'Running'; go.disabled = true; stop.classList.remove('hide'); stop.onclick = async () => { if (confirm(`Stop task ${t.n}? It goes back to “not run”, and automatic runs pause.`)) { await post('/api/stop'); load(); } }; }
+  else if (st === 'queued') { go.textContent = `Next after task ${S.running?.n ?? ''}`; go.disabled = true; }
+  else if (st === 'todo' || st === 'error') { go.textContent = S.running ? `Run task ${t.n} next` : `Run task ${t.n} now`; go.onclick = () => runTask(t.n); }
+  else {
+    const nx = S.tasks.find((x, j) => j > S.tasks.indexOf(t) && ['todo', 'error', 'running'].includes(status(x)) || S.queue.includes(x.n));
+    go.textContent = nx ? `Next: task ${nx.n} →` : 'To the report →'; go.onclick = () => setHere(nx ? String(nx.n) : 'report');
+  }
+}
+
+function render() {
+  if (!S) return;
+  renderChips(); renderStatus();
+  $('step').innerHTML = here === 'start' ? startStep() : here === 'report' ? reportStep() : taskStep(task(here));
+  renderFoot();
+}
+
+$('chips').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.go) setHere(b.dataset.go); else if (b.dataset.run) runTask(b.dataset.run);
+});
+load(); setInterval(load, 2000);
+</script>
+</body>
+</html>

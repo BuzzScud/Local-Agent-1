@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Docs Folder</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f6f2;--card:#fff;--text:#1c1b18;--text-2:#6b675e;--line:#e3dfd5;--accent:#2a78d6;--accent-ink:#1f5fae;--accent-soft:#e6eefa;--ok:#1f7a4d;--ok-soft:#e1f2e9;--bad:#b3261e;--bad-soft:#fbe6e4;--warn:#8a5a00;--warn-soft:#fbf0d9;--mute:#efede6}
+@media (prefers-color-scheme:dark){:root{--bg:#15161a;--card:#1d1f24;--text:#ecebe6;--text-2:#a4a19a;--line:#34363e;--accent:#6aa5f0;--accent-ink:#9cc4f7;--accent-soft:#22324a;--ok:#6fcf9a;--ok-soft:#1f3a2c;--bad:#f2928b;--bad-soft:#47231f;--warn:#e9c172;--warn-soft:#3d3118;--mute:#26282e}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
+.app{height:100vh;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:14px;padding:18px 24px;max-width:1800px;margin:0 auto}
+h1{font-size:22px;margin:0;font-weight:650}
+.sub{color:var(--text-2);margin:4px 0 0;font-size:15px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{font:inherit;font-weight:600;padding:9px 18px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text-2);cursor:pointer}
+.tab[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.keys{margin-left:auto;color:var(--text-2);font-size:13.5px;align-self:center}
+kbd{font:12px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
+main{min-height:0;display:grid}
+.page{display:none;min-height:0}
+.page.on{display:grid;min-height:0;grid-template-rows:minmax(0,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-height:0;overflow:hidden}
+h2{margin:0 0 6px;font-size:17px}
+.hint{color:var(--text-2);font-size:14px;margin:0 0 10px}
+.verdict{font-size:22px;line-height:1.3;margin:0 0 14px;font-weight:650}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;min-height:0}
+.find{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
+.find b{font-size:16px}
+.find .big{font-size:28px;font-weight:650;line-height:1.1}
+.tag{font-size:12px;font-weight:700;letter-spacing:.04em;padding:3px 10px;border-radius:99px;align-self:flex-start;white-space:nowrap}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.acc{background:var(--accent-soft);color:var(--accent-ink)}.tag.mute{background:var(--mute);color:var(--text-2)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--text-2);font-weight:650;font-size:13px}
+td.n,th.n{text-align:right;white-space:nowrap;width:1%}
+td.arrow{color:var(--text-2);width:1%;padding:0 4px}
+tr.sep td{border-bottom:2px solid var(--line)}
+.dim{color:var(--text-2)}
+.list{margin:0;padding-left:20px;display:grid;gap:6px}
+.list.tight{gap:3px;font-size:15px}
+.picks{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0}
+.chip{border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-size:14px;background:var(--bg)}
+.chip b{color:var(--accent-ink)}
+.note{border:1px solid var(--warn);background:var(--warn-soft);border-radius:12px;padding:10px 14px;margin-top:14px;font-size:15px}
+.note b{color:var(--warn)}
+.move{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:8px;align-items:baseline;font-size:14.5px;padding:5px 0;border-bottom:1px solid var(--line)}
+.move .from{color:var(--text-2);text-decoration:line-through;text-decoration-color:var(--line)}
+.move .to{font-weight:600}
+.box{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg);margin:0 0 12px}
+.box h3{margin:0 0 6px;font-size:15px}
+@media (max-width:980px){html,body{height:auto}.app{height:auto;padding:14px 16px}.three,.two{grid-template-columns:minmax(0,1fr)}.keys{display:none}.card{overflow:visible}.move{grid-template-columns:minmax(0,1fr)}.move .arrow{display:none}table{font-size:13.5px}th,td{padding:6px;overflow-wrap:anywhere}.ph{display:none}.tag{white-space:normal}td code{word-break:break-all}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>One docs folder: before and after</h1>
+    <p class="sub">Counted from the real folders on this Mac at 5:41 PM ET, 30 Sep. Nothing has moved yet.</p>
+  </header>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t0" aria-selected="true">1 · The idea</button>
+    <button class="tab" role="tab" id="t1" aria-selected="false">2 · Folders, before → after</button>
+    <button class="tab" role="tab" id="t2" aria-selected="false">3 · The clean-up</button>
+    <button class="tab" role="tab" id="t3" aria-selected="false">4 · The privacy scan</button>
+    <button class="tab" role="tab" id="t4" aria-selected="false">5 · Code, links and risks</button>
+    <span class="keys"><kbd>1</kbd>–<kbd>5</kbd> or <kbd>←</kbd> <kbd>→</kbd></span>
+  </div>
+  <main>
+    <section class="page on" id="p0"><div class="card" id="c0"></div></section>
+    <section class="page" id="p1"><div class="card" id="c1"></div></section>
+    <section class="page" id="p2"><div class="card" id="c2"></div></section>
+    <section class="page" id="p3"><div class="card" id="c3"></div></section>
+    <section class="page" id="p4"><div class="card" id="c4"></div></section>
+  </main>
+</div>
+<noscript><p style="padding:16px">This page needs JavaScript. In short: cli docs and docs/ become one folder, docs/. Git keeps only the page groups (now including gemma-docs); everything in docs/private/ stays on this Mac. 126 files would be public afterwards; 5 Gemma files hold your home path or account name and need a decision first.</p></noscript>
+<script>
+const D={"when":"5:41 PM","rows":[{"g":"diagrams","cli":4,"docs":4,"after":4},{"g":"reports","cli":1,"docs":1,"after":1},{"g":"tests","cli":26,"docs":26,"after":21},{"g":"design rounds","cli":16,"docs":15,"after":18},{"g":"other","cli":3,"docs":3,"after":3},{"g":"older versions","cli":7,"docs":6,"after":12}],"loose":{"hard-28-test-list-2026-09-29.html":"gemma-docs/test/","memory-before-after-2026-09-30.html":"design rounds/","memory-panel-new-design-2026-09-30.html":"design rounds/","my-claude-md-and-agents-md-v2.html":"private/"},"gemma":{"all":66,"pages":50,"runs":16,"runDirs":["gemma-docs/test/gemma-faster-tests","gemma-docs/test/prompt-old-vs-new-tests"]},"priv":{"memory-about-you":{"files":22,"bytes":23125},"design examples":{"files":78,"bytes":314828},"morning briefs":{"files":1,"bytes":90798},"claude-code-runs":{"files":1,"bytes":18217}},"reruns":[{"base":"agentic-coder-done-check-qwen-2026-09-30","keep":"tests/agentic-coder-done-check-qwen-2026-09-30-1627.html","move":["tests/agentic-coder-done-check-qwen-2026-09-30-1541.html"]},{"base":"agentic-coder-prompt-old-vs-new-gemma-2026-09-30","keep":"tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html","move":["tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0602.html"]},{"base":"agentic-coder-prompt-old-vs-new-qwen-2026-09-30","keep":"tests/agentic-coder-prompt-old-vs-new-qwen-2026-09-30-0700.html","move":["tests/agentic-coder-prompt-old-vs-new-qwen-2026-09-30-0602.html"]},{"base":"agentic-coder-vision-check-qwen-2026-09-30","keep":"tests/agentic-coder-vision-check-qwen-2026-09-30-1712.html","move":["tests/agentic-coder-vision-check-qwen-2026-09-30-1655.html","tests/agentic-coder-vision-check-qwen-2026-09-30-1709.html"]}],"versions":[{"keep":"gemma-docs/test/gemma-helpers-test-wizard-2026-09-28-v3.html","move":["gemma-docs/test/gemma-helpers-test-wizard-2026-09-28-v2.html"]}],"identical":55,"fresh":["design rounds/agentic-coder-docs-merge-before-after-2026-09-30.html","older versions/agentic-coder-vision-check-gemma-2026-09-30-1714.html"],"scan":{"files":126,"byKind":{"already public":55,"new page":2,"loose page":3,"gemma-docs":66},"flagged":[{"f":"test/gemma-28-tests-guide-2026-09-28-v5.html","hits":[{"what":"home folder path","n":3}]},{"f":"test/gemma-notes-run-timeline-2026-09-28.html","hits":[{"what":"account name","n":1}]},{"f":"test/older versions/gemma-28-tests-guide-2026-09-28-v4.html","hits":[{"what":"home folder path","n":3}]},{"f":"test/prompt-old-vs-new-tests/gemma-think.log","hits":[{"what":"home folder path","n":50}]},{"f":"test/prompt-old-vs-new-tests/qwen-think.log","hits":[{"what":"home folder path","n":50}]}]}};
+const $=id=>document.getElementById(id);
+const n=x=>x.toLocaleString('en-US');
+const kb=b=>b<1e6?Math.round(b/1024)+' KB':(b/1048576).toFixed(1)+' MB';
+const base=f=>f.split('/').pop();
+const pub='<span class="tag ok">PUBLIC</span>', mac='<span class="tag mute">MAC ONLY</span>', gone='<span class="tag warn">TRASH · IN BACKUP</span>';
+
+$('c0').innerHTML=`<p class="verdict">One folder: <code>docs/</code>. Your pages are written straight into it. Everything private sits in <code>docs/private/</code>, which git never sees.</p>
+<div class="three">
+ <div class="find"><span class="tag mute">TODAY</span><b>Two folders, the same pages twice</b>
+  <span>Every page is written to <code>cli docs</code> (Mac only). Before a commit, <code>bun run docs</code> copies six of its groups into <code>docs/</code>, the public copy.</span>
+  <span class="big">${n(D.identical)}</span><span class="dim">pages are in both folders right now, byte for byte.</span></div>
+ <div class="find"><span class="tag acc">AFTER</span><b>One folder, no copy step</b>
+  <span>Pages go straight into their group in <code>docs/</code>. Gemma pages become a seventh public group. Your memory, design cards, morning briefs, Gemma run files and the Claude run move into <code>docs/private/</code>.</span>
+  <span class="big">1</span><span class="dim">folder to open. <code>cli docs</code> is gone (clean break).</span></div>
+ <div class="find"><span class="tag ok">THE SAFETY RULE</span><b>Git keeps only named groups</b>
+  <span>The ignore file becomes an allow-list: the seven groups, <code>README.md</code> and <code>tools/</code>. Anything else in <code>docs/</code>, including <code>private/</code> or a brand-new folder, stays on this Mac.</span>
+  <span><code>bun run check</code> fails if a private file is ever tracked, or if a public page holds your home path or account name.</span></div>
+</div>
+<div class="picks"><span class="chip">Approach <b>Full merge</b></span><span class="chip">Private things <b>docs/private/</b></span><span class="chip">Clean-up <b>loose pages · replaced runs · empty folders · Gemma public</b></span><span class="chip">Old name <b>clean break</b></span></div>
+<div class="note"><b>Correction.</b> I said earlier that the safety check skips pages in <code>docs/</code>. It doesn't: it scans them for keys, tokens and passwords. The gap is smaller: a home path in a page only shows as a note, worded “fine while the repo is private”. The repo has been public since 28 Sep. The new rule makes it a failure.</div>`;
+
+{ const r=D.rows.map(x=>`<tr><td><code>${x.g}/</code></td><td class="n">${x.cli}</td><td class="n">${x.docs}</td><td class="arrow">→</td><td><code>docs/${x.g}/</code></td><td class="n">${x.after}</td><td>${pub}</td></tr>`).join('');
+  const pv=Object.entries(D.priv).map(([k,v])=>`<tr><td><code>${k}/</code></td><td class="n">${v.files}</td><td class="n dim">–</td><td class="arrow">→</td><td><code>docs/private/${k}/</code></td><td class="n">${v.files}</td><td>${mac}</td></tr>`).join('');
+  $('c1').innerHTML=`<h2>Every folder today and where it goes</h2><p class="hint">Counts are files (no .DS_Store). Rows line up: today on the left, after on the right.</p>
+<table><thead><tr><th>Today in <code>cli docs</code></th><th class="n ph">cli docs</th><th class="n ph">docs/</th><th class="ph"></th><th>After</th><th class="n">files</th><th></th></tr></thead><tbody>
+${r}
+<tr class="sep"><td colspan="7" style="padding:2px"></td></tr>
+<tr><td><code>gemma-docs/</code> pages</td><td class="n ph">${D.gemma.pages}</td><td class="n ph dim">–</td><td class="arrow ph">→</td><td><code>docs/gemma-docs/</code> (+1 loose page)</td><td class="n">${D.gemma.pages+1}</td><td>${pub} <span class="tag warn">NEW</span></td></tr>
+<tr><td><code>gemma-docs/</code> run files (logs, scripts, markers)</td><td class="n ph">${D.gemma.runs}</td><td class="n ph dim">–</td><td class="arrow ph">→</td><td><code>docs/private/gemma-runs/</code></td><td class="n">${D.gemma.runs}</td><td>${mac}</td></tr>
+${pv}
+<tr><td>the rules-files page (loose)</td><td class="n ph">1</td><td class="n ph dim">–</td><td class="arrow ph">→</td><td><code>docs/private/</code></td><td class="n">1</td><td>${mac}</td></tr>
+<tr><td>the <code>cli docs</code> folder itself</td><td class="n ph dim">–</td><td class="n ph dim">–</td><td class="arrow ph">→</td><td>gone, with its ${D.identical} duplicate copies</td><td class="n dim">–</td><td>${gone}</td></tr>
+</tbody></table>`; }
+
+{ const rr=D.reruns.flatMap(r=>r.move.map(m=>`<div class="move"><span class="from">${base(m)}</span><span class="arrow dim">→</span><span class="to">older versions/ <span class="dim">(kept: …-${r.keep.slice(-9,-5)})</span></span></div>`)).join('');
+  const vv=D.versions.flatMap(v=>v.move.map(m=>`<div class="move"><span class="from">${base(m)}</span><span class="arrow dim">→</span><span class="to">gemma-docs/test/older versions/ <span class="dim">(kept: v3)</span></span></div>`)).join('');
+  const lo=Object.entries(D.loose).map(([f,to])=>`<div class="move"><span class="from">${f}</span><span class="arrow dim">→</span><span class="to">docs/${to}</span></div>`).join('');
+  $('c2').innerHTML=`<div class="two">
+<div><div class="box"><h3>Replaced runs → older versions <span class="dim">(same test, same day: only the newest stays)</span></h3>${rr}${vv}</div>
+<div class="box"><h3>The 4 loose pages get filed</h3>${lo}<p class="hint" style="margin:8px 0 0">The rules-files page shows your ~/MEMORY.md, so it stays private. The other three passed the scan.</p></div></div>
+<div><div class="box"><h3>To the Trash (all of it is in the backup first)</h3><ul class="list tight">
+<li><b>${D.identical}</b> copies in <code>cli docs</code> that are identical to the ones already in <code>docs/</code></li>
+<li><b>3</b> empty folders in the Gemma tests (thinking-cap, design-examples, helpers)</li>
+<li><b>5</b> <code>.DS_Store</code> files (Finder makes them again; git already ignores them)</li></ul></div>
+<div class="box"><h3>Left alone on purpose</h3><ul class="list tight">
+<li>2 design cards that are copies of real pages: the cards need their own copy</li>
+<li>5 empty run-marker files: they move with the Gemma run files, unchanged</li>
+<li>The test record page: it's rebuilt on every test run</li></ul></div>
+<div class="box"><h3>New pages since the last copy</h3><ul class="list tight" style="margin:0 0 6px">${D.fresh.map(f=>'<li><code>'+base(f)+'</code> → <code>docs/'+f.split('/')[0]+'/</code>'+(f.includes('docs-merge')?' <span class="dim">(this page)</span>':'')+'</li>').join('')}</ul><p style="margin:0">The other busy session committed its 7 new test pages at about 17:30, so they're already in both folders.</p></div></div></div>`; }
+
+{ const k=D.scan.byKind, fl=D.scan.flagged;
+  const what={'home folder path':'your home folder path','account name':'your account name'};
+  const why={'test/gemma-28-tests-guide-2026-09-28-v5.html':'sample output: “saved ~/Desktop/gemma-docs/…”, written out in full','test/older versions/gemma-28-tests-guide-2026-09-28-v4.html':'the same sample output, older version','test/gemma-notes-run-timeline-2026-09-28.html':'a conversation file name, which has your account name in it','test/prompt-old-vs-new-tests/gemma-think.log':'a raw run log: every “saved …” line','test/prompt-old-vs-new-tests/qwen-think.log':'a raw run log: every “saved …” line'};
+  const rows=fl.map(s=>`<tr><td><code>${base(s.f)}</code></td><td>${s.hits.map(h=>`${what[h.what]??h.what} ×${h.n??1}`).join(', ')}</td><td class="dim ph">${why[s.f]??''}</td><td>${s.f.endsWith('.log')?'<span class="tag mute">GOES PRIVATE (RUN FILE)</span>':'<span class="tag warn">YOUR CALL</span>'}</td></tr>`).join('');
+  $('c3').innerHTML=`<p class="verdict">${n(D.scan.files)} files would be public after the merge. ${D.scan.files-fl.length} are clean. ${fl.length} Gemma files show your home path or account name.</p>
+<div class="two" style="grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr)">
+<div><table><thead><tr><th>Files</th><th class="n">scanned</th><th class="n">flagged</th></tr></thead><tbody>
+<tr><td>Already public in <code>docs/</code></td><td class="n">${k['already public']}</td><td class="n">0</td></tr>
+<tr><td>New page</td><td class="n">${k['new page']}</td><td class="n">0</td></tr>
+<tr><td>Loose pages going public</td><td class="n">${k['loose page']}</td><td class="n">0</td></tr>
+<tr><td>Gemma files (all of them)</td><td class="n">${k['gemma-docs']}</td><td class="n"><b>${fl.length}</b></td></tr></tbody></table>
+<p class="hint" style="margin-top:12px">Checked for: keys, tokens, passwords, private keys (the check's own patterns), email addresses, your home folder path, your account name and surname. <b>No keys, tokens, passwords or emails turned up anywhere.</b></p></div>
+<div><table><thead><tr><th>Flagged file</th><th>What</th><th class="ph">Where it comes from</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+<p class="hint" style="margin-top:12px">The two logs are run files, so they go to <code>docs/private/gemma-runs/</code> anyway. The 3 pages need your call: write the path as <code>~</code> and blank out the account part of the file name, or keep those 3 pages private.</p></div></div>`; }
+
+$('c4').innerHTML=`<div class="two">
+<div><h2>What changes</h2><ol class="list tight">
+<li><b>One shared helper</b> that about 25 page builders use now points at <code>docs/</code>, so they all move at once.</li>
+<li><b>The app's folder finder</b> (the /docs hub, the design cards, the Weights page) looks in <code>docs/</code>, and in <code>docs/private/</code> for private things. Inside a worktree it takes private things from the main folder.</li>
+<li><b>Six places</b> with the path written out: the Gemma test page, the design bench (2), the test-record copy and the check.</li>
+<li><b><code>bun run docs</code></b> stops copying. It only rebuilds the index page and checks that nothing private is tracked.</li>
+<li><b><code>bun run check</code></b> gets two new failures: a tracked private file, or your home path or account name in a public page.</li>
+<li><b>The ignore file</b> becomes the allow-list (seven groups, README, tools).</li>
+<li><b>Your memory link</b> points at <code>docs/private/memory-about-you</code>. It's moved while holding the memory's lock.</li>
+<li><b>Your /morning skill</b> writes to <code>docs/private/morning briefs</code>.</li>
+<li><b>Words:</b> AGENTS.md, both READMEs and the help text. <b>Tests:</b> the 5 test files that name the folder.</li>
+<li><b>The installed app</b> is rebuilt after the push: the old build looks for <code>cli docs</code>.</li></ol></div>
+<div><h2>Risks and timing</h2><ul class="list tight">
+<li><b>Two other sessions are open.</b> One has been busy for 3 hours and wrote pages into <code>cli docs</code> this afternoon. With a clean break, its next page would be refused (“not there, nothing written”). I message both first and move only when they're idle.</li>
+<li><b>9 worktree branches</b> still have the old code: arena, memory-learn, model-decides, phase1-vision, phase2-web, prompt-test, think-when-it-pays, ui-component-battle, weights-both-2. A page built there is refused until the branch takes the new main. Merging them later may touch the same few files (small conflicts).</li>
+<li><b>Open <code>coding</code> windows</b> keep the old build until they restart. Until then their /docs page says the folder isn't found.</li>
+<li><b>Backup first:</b> a git bundle, a zip and a full copy of <code>cli docs</code> in <code>~/Desktop/SEP/agentic-coder backups/2026-09-30-before-docs-merge/</code>, checked, with restore steps.</li>
+<li><b>Checks after:</b> the full test suite, <code>bun run check</code>, the /docs hub, one real page build, one morning brief, and a memory read through the link.</li>
+<li><b>Time:</b> about 1 to 1.5 hours, including about 15 minutes of full tests.</li></ul></div></div>`;
+
+const tabs=[...document.querySelectorAll('.tab')];
+function show(i){tabs.forEach((t,j)=>{t.setAttribute('aria-selected',j===i);$('p'+j).classList.toggle('on',j===i)});history.replaceState(null,'','#'+['idea','folders','cleanup','scan','code'][i]);}
+tabs.forEach((t,i)=>t.onclick=()=>show(i));
+addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey)return;const cur=tabs.findIndex(t=>t.getAttribute('aria-selected')==='true');if(e.key>='1'&&e.key<='5')show(+e.key-1);else if(e.key==='ArrowRight')show((cur+1)%5);else if(e.key==='ArrowLeft')show((cur+4)%5);});
+{const h=['idea','folders','cleanup','scan','code'].indexOf(location.hash.slice(1));if(h>0)show(h);}
+</script>
+</body>
+</html>

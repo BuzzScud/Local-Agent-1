@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma: Low vs High</title>
+<style>
+:root { --bg:#fbfbfa; --card:#ffffff; --ink:#1d1d1f; --dim:#6b6b70; --line:#e4e4e2; --box:#b9b9bd; --soft:#f3f3f1;
+  --think:#b86e00; --thinkfill:#f4b949; --thinkbg:#fdf1d8; --write:#3a6ad6; --read:#cfcfd4; --sum:#8e8e96; --ok:#1f7a3d; --okbg:#e6f4ea; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#161617; --card:#1f1f21; --ink:#ececee; --dim:#9a9aa0; --line:#333336; --box:#5a5a60; --soft:#26262a;
+  --think:#f0b44c; --thinkfill:#d9982a; --thinkbg:#3a2f16; --write:#6f9cff; --read:#4a4a50; --sum:#7c7c84; --ok:#6fd08c; --okbg:#1c3324; } }
+:root[data-theme="dark"] { --bg:#161617; --card:#1f1f21; --ink:#ececee; --dim:#9a9aa0; --line:#333336; --box:#5a5a60; --soft:#26262a;
+  --think:#f0b44c; --thinkfill:#d9982a; --thinkbg:#3a2f16; --write:#6f9cff; --read:#4a4a50; --sum:#7c7c84; --ok:#6fd08c; --okbg:#1c3324; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+main { max-width:820px; margin:0 auto; padding:40px 16px 64px; }
+h1 { font-size:30px; line-height:1.2; margin:0 0 6px; letter-spacing:-0.01em; }
+.kicker { color:var(--dim); font-size:14px; margin:0 0 18px; }
+h2 { font-size:19px; margin:44px 0 12px; }
+p { margin:0 0 14px; }
+.lead { font-size:18px; }
+.dim { color:var(--dim); }
+.cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin:24px 0 8px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.card .k { font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color:var(--dim); white-space:nowrap; }
+.card .v { font-size:22px; font-weight:650; margin-top:4px; }
+.card .s { font-size:13.5px; color:var(--dim); }
+figure { margin:0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 18px 14px; }
+figure svg { display:block; width:100%; height:auto; color:var(--ink); }
+figcaption { font-size:14.5px; color:var(--dim); margin-top:12px; }
+/* diagram parts (the SVGs use these classes; no styles inside the SVGs) */
+.bx { fill:var(--card); stroke:var(--box); stroke-width:1.5; }
+.bx-think { fill:var(--thinkbg); stroke:var(--think); stroke-width:2; }
+.bx-ok { fill:var(--okbg); stroke:var(--ok); stroke-width:1.5; }
+.ln { stroke:currentColor; stroke-width:1.5; fill:none; }
+.cap { stroke:var(--think); stroke-width:4; }
+.t { fill:currentColor; font-size:14px; font-weight:600; }
+.ts { fill:var(--dim); font-size:12px; }
+.tl { fill:var(--dim); font-size:12px; font-weight:600; letter-spacing:0.06em; }
+.tthink { fill:var(--think); }
+.tok { fill:var(--ok); }
+.pill { fill:var(--soft); stroke:var(--line); }
+.s-read { fill:var(--read); } .s-think { fill:var(--thinkfill); } .s-write { fill:var(--write); } .s-sum { fill:var(--sum); }
+.tin { fill:#2a1a00; font-size:13px; font-weight:600; }
+.ax { stroke:var(--box); stroke-width:1; }
+.two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.two .card h3 { margin:0 0 8px; font-size:15px; }
+.two ul { margin:0; padding-left:20px; font-size:15.5px; }
+.two li { margin:3px 0; }
+.tag { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; vertical-align:2px; margin-left:4px; }
+.tag.think { background:var(--thinkbg); color:var(--think); }
+.tag.no { background:var(--soft); color:var(--dim); }
+ol.means { padding-left:22px; margin:0; }
+ol.means li { margin:0 0 10px; }
+.now { background:var(--thinkbg); border:1px solid var(--think); border-radius:12px; padding:12px 16px; margin-top:18px; font-size:15.5px; }
+.paths { margin-top:44px; font:12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color:var(--dim); overflow-wrap:anywhere; }
+kbd { font:13.5px ui-monospace, SFMono-Regular, Menlo, monospace; background:var(--soft); border:1px solid var(--line); border-radius:5px; padding:0 5px; }
+.v2 { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin:18px 0 0; font-size:15.5px; }
+.v2 b.lab { font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color:var(--dim); margin-right:6px; }
+.strip { display:flex; height:34px; border-radius:8px; overflow:hidden; border:1px solid var(--think); margin:4px 0 6px; }
+.strip span { background:var(--thinkfill); color:#2a1a00; font-size:13px; font-weight:650; display:flex; align-items:center; justify-content:center; border-right:2px solid var(--card); min-width:0; }
+.strip span:last-child { border-right:0; }
+.strip span.hi { background:var(--think); color:#fff; }
+.striplab { display:flex; justify-content:space-between; font-size:13px; color:var(--dim); margin-bottom:18px; }
+ol.steps { list-style:none; padding:0; margin:0; counter-reset:st; }
+ol.steps li { counter-increment:st; position:relative; padding:0 0 14px 40px; }
+ol.steps li::before { content:counter(st); position:absolute; left:0; top:1px; width:26px; height:26px; border-radius:50%; background:var(--thinkbg); color:var(--think); border:1.5px solid var(--think); font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+ol.steps li.hi::before { background:var(--think); color:var(--card); }
+ol.steps .h { font-weight:650; }
+ol.steps .pct { color:var(--dim); font-size:13.5px; font-weight:400; margin-left:6px; }
+.q { display:block; margin-top:5px; background:var(--soft); border:1px solid var(--line); border-radius:8px; padding:7px 10px; font:13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+details { margin-top:6px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 16px; }
+details summary { cursor:pointer; font-size:15px; font-weight:600; }
+details pre { margin:10px 0 4px; font:12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--ink); }
+.big { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-top:12px; }
+.big .row { display:flex; gap:10px; align-items:center; margin:6px 0; font-size:15px; }
+.big .row .lab { width:132px; flex:none; color:var(--dim); font-size:13.5px; }
+.big .track { flex:1; min-width:0; }
+.big .bar.s-write { background:var(--write); } .big .bar.s-think { background:var(--thinkfill); }
+.big .bar { display:block; height:22px; border-radius:5px; }
+.big .num { font-size:13.5px; color:var(--dim); white-space:nowrap; flex:none; width:118px; }
+@media (max-width:640px) {
+  h1 { font-size:25px; }
+  .cards, .two { grid-template-columns:1fr; }
+  figure { padding:12px 10px 10px; overflow-x:auto; }
+  figure svg { min-width:640px; }
+  .big .row .lab { width:84px; }
+  .big .num { width:106px; font-size:12.5px; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Low vs High effort, for Gemma</h1>
+<p class="kicker">Agentic Coder · Gemma 4 12B · 28 Sep 2026 · numbers from practice test 2, one run each · version 2</p>
+
+<p class="lead">High adds <b>one step</b>: before Gemma writes code, it thinks in private, up to 2,048 tokens. On test 2 it wrote the <b>same fix</b> either way, and High took <b>about 8 times longer</b>: 23 s on Low, 3 min 14 s on High.</p>
+
+<div class="v2"><b class="lab">New in version 2</b>Two new sections: <a href="#doing">what Gemma is doing while it thinks</a>, with a real thought recorded on 28 Sep, and <a href="#buys">what thinking buys you</a>. Version 1 is kept in <i>older versions</i>.</div>
+
+<div class="cards">
+  <div class="card"><div class="k">Time</div><div class="v">23 s · 3 m 14 s</div><div class="s">Low · High</div></div>
+  <div class="card"><div class="k">Tokens written</div><div class="v">185 · 2,247</div><div class="s">High's extra 2,048 were thinking</div></div>
+  <div class="card"><div class="k">Result</div><div class="v">Both passed</div><div class="s">the same 3-line fix</div></div>
+</div>
+
+<h2>What changes between the two</h2>
+<figure>
+<svg viewBox="0 0 780 290" role="img" aria-label="On Low, Agentic Coder asks Gemma with thinking off and Gemma writes the answer straight away. On High, the same request has thinking on, so Gemma first thinks in private until it finishes or hits the 2,048-token cap, then writes the answer. Both end with the same fix.">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <!-- LOW lane -->
+  <text class="tl" x="0" y="22">LOW · THE DEFAULT</text>
+  <rect class="bx" x="0" y="36" width="130" height="56" rx="10"/>
+  <text class="t" x="65" y="60" text-anchor="middle">Agentic Coder</text>
+  <text class="ts" x="65" y="78" text-anchor="middle">asks Gemma</text>
+
+  <line class="ln" x1="130" y1="64" x2="508" y2="64" marker-end="url(#ah)"/>
+  <rect class="pill" x="140" y="44" width="92" height="22" rx="11"/>
+  <text class="ts" x="186" y="59" text-anchor="middle">thinking: off</text>
+  <text class="ts" x="345" y="84" text-anchor="middle">no thinking step: straight to the answer</text>
+
+  <rect class="bx" x="510" y="36" width="140" height="56" rx="10"/>
+  <text class="t" x="580" y="60" text-anchor="middle">writes the answer</text>
+  <text class="ts" x="580" y="78" text-anchor="middle">the code fix</text>
+
+  <line class="ln" x1="650" y1="64" x2="678" y2="64" marker-end="url(#ah)"/>
+  <rect class="bx-ok" x="680" y="36" width="100" height="56" rx="10"/>
+  <text class="t tok" x="730" y="69" text-anchor="middle">✓ fix</text>
+
+  <!-- HIGH lane -->
+  <text class="tl" x="0" y="156">HIGH</text>
+  <rect class="bx" x="0" y="170" width="130" height="56" rx="10"/>
+  <text class="t" x="65" y="194" text-anchor="middle">Agentic Coder</text>
+  <text class="ts" x="65" y="212" text-anchor="middle">asks Gemma</text>
+
+  <line class="ln" x1="130" y1="198" x2="218" y2="198" marker-end="url(#ah)"/>
+  <rect class="pill" x="137" y="178" width="78" height="22" rx="11"/>
+  <text class="ts" x="176" y="193" text-anchor="middle">thinking: on</text>
+
+  <rect class="bx-think" x="220" y="170" width="250" height="56" rx="10"/>
+  <text class="t tthink" x="345" y="194" text-anchor="middle">thinks in private</text>
+  <text class="ts" x="345" y="212" text-anchor="middle">up to about 3 minutes</text>
+
+  <line class="cap" x1="490" y1="160" x2="490" y2="236"/>
+  <text class="ts tthink" x="490" y="252" text-anchor="middle">cap: 2,048</text>
+  <line class="ln" x1="470" y1="198" x2="508" y2="198" marker-end="url(#ah)"/>
+
+  <rect class="bx" x="510" y="170" width="140" height="56" rx="10"/>
+  <text class="t" x="580" y="194" text-anchor="middle">writes the answer</text>
+  <text class="ts" x="580" y="212" text-anchor="middle">the code fix</text>
+
+  <line class="ln" x1="650" y1="198" x2="678" y2="198" marker-end="url(#ah)"/>
+  <rect class="bx-ok" x="680" y="170" width="100" height="56" rx="10"/>
+  <text class="t tok" x="730" y="203" text-anchor="middle">✓ same fix</text>
+
+  <text class="ts" x="220" y="280">At 2,048 tokens the server cuts in: “I have thought enough. Now I act on it.”</text>
+</svg>
+<figcaption>The only difference is the switch Agentic Coder sends with the request. Gemma has no dial in between, so there is no Medium: thinking is either off or on, and a cap stops it at 2,048 tokens.</figcaption>
+</figure>
+
+<h2>Where the time went on test 2</h2>
+<figure>
+<svg viewBox="0 0 780 210" role="img" aria-label="Time bars to scale. Low: 6 seconds reading, 14 seconds writing the fix, 3 seconds for a one-line summary, 23 seconds in all. High: the same reading, then about 169 seconds of thinking (2,048 tokens), 15 seconds writing the fix and 3 seconds for the summary, 3 minutes 14 seconds in all.">
+  <text class="t" x="0" y="50">Low</text>
+  <rect class="s-read"  x="60"    y="30" width="18"    height="30"/>
+  <rect class="s-write" x="78"    y="30" width="40.8"  height="30"/>
+  <rect class="s-sum"   x="118.8" y="30" width="8.4"   height="30"/>
+  <text class="t" x="138" y="50">23 s</text>
+
+  <text class="t" x="0" y="120">High</text>
+  <rect class="s-read"  x="60"    y="100" width="18.6"  height="30"/>
+  <rect class="s-think" x="78.6"  y="100" width="508.2" height="30"/>
+  <rect class="s-write" x="586.8" y="100" width="44.1"  height="30"/>
+  <rect class="s-sum"   x="630.9" y="100" width="8.7"   height="30"/>
+  <text class="tin" x="332.7" y="120" text-anchor="middle">thinking · 2,048 tokens · about 2 min 49 s</text>
+  <text class="t" x="650" y="120">3 min 14 s</text>
+
+  <line class="ax" x1="60" y1="148" x2="660" y2="148"/>
+  <line class="ax" x1="60"  y1="148" x2="60"  y2="154"/><text class="ts" x="60"  y="168" text-anchor="middle">0</text>
+  <line class="ax" x1="150" y1="148" x2="150" y2="154"/><text class="ts" x="150" y="168" text-anchor="middle">30 s</text>
+  <line class="ax" x1="240" y1="148" x2="240" y2="154"/><text class="ts" x="240" y="168" text-anchor="middle">1 min</text>
+  <line class="ax" x1="330" y1="148" x2="330" y2="154"/><text class="ts" x="330" y="168" text-anchor="middle">1:30</text>
+  <line class="ax" x1="420" y1="148" x2="420" y2="154"/><text class="ts" x="420" y="168" text-anchor="middle">2 min</text>
+  <line class="ax" x1="510" y1="148" x2="510" y2="154"/><text class="ts" x="510" y="168" text-anchor="middle">2:30</text>
+  <line class="ax" x1="600" y1="148" x2="600" y2="154"/><text class="ts" x="600" y="168" text-anchor="middle">3 min</text>
+
+  <rect class="s-read"  x="60"  y="186" width="12" height="12" rx="2"/><text class="ts" x="78"  y="196">read the request</text>
+  <rect class="s-think" x="210" y="186" width="12" height="12" rx="2"/><text class="ts" x="228" y="196">think (High only)</text>
+  <rect class="s-write" x="360" y="186" width="12" height="12" rx="2"/><text class="ts" x="378" y="196">write the fix</text>
+  <rect class="s-sum"   x="490" y="186" width="12" height="12" rx="2"/><text class="ts" x="508" y="196">one-line summary</text>
+</svg>
+<figcaption>Drawn to scale from the model server's log. Reading, writing the fix and the summary took the same time on both; the whole difference is the thinking. It used all 2,048 tokens, so the cap is what stopped it. The think and write split inside High's one call is by token count.</figcaption>
+</figure>
+
+
+<h2 id="doing">What Gemma is doing while it thinks</h2>
+<p>Thinking is Gemma <b>writing notes to itself</b> before its real answer. The notes are ordinary text, the same kind of tokens as the answer. The app keeps them apart and does not use them as the reply. Nothing else happens during this time: Gemma doesn't run code or open files. It works the problem out in words, one token at a time.</p>
+<p>Below is a real thought, recorded on 28 Sep. We sent test 2's “try a fix” step to your running Gemma again with thinking on, and saved what it wrote. It thought for <b>765 tokens (2 min 12 s)</b> and stopped by itself, well under the 2,048 cap. The first time it saw this task, in test 2, it used the full 2,048. Thinking length changes from run to run.</p>
+
+<div class="strip" aria-hidden="true">
+  <span style="flex:9.8">1</span><span style="flex:7.2">2</span><span style="flex:8.2">3</span><span style="flex:33.7">4</span><span style="flex:16.5">5</span><span style="flex:3.9">6</span><span class="hi" style="flex:14.1">7</span><span style="flex:6.6">8</span>
+</div>
+<div class="striplab"><span>start of the thought</span><span>share of the thought, by length</span><span>answer starts →</span></div>
+
+<ol class="steps">
+  <li><span class="h">Reads the failure back to itself<span class="pct">10%</span></span>
+    <span class="q">The test `median of an even count` fails: `median([4, 1, 3, 2])` is expected to be `2.5` but currently returns `3`.</span></li>
+  <li><span class="h">Runs the code by hand<span class="pct">7%</span></span>
+    <span class="q">Sorted: `[1, 2, 3, 4]` · Length: 4 · `mid`: `Math.floor(4 / 2) = 2` · `sorted[2]` is `3`.</span></li>
+  <li><span class="h">Remembers the rule<span class="pct">8%</span></span>
+    <span class="q">For an even number of elements, the median is the average of the two middle elements.</span></li>
+  <li><span class="h">Compares the code with the rule<span class="pct">34%</span></span>
+    <span class="q">If `length` is 4, `mid` is 2. We need the average of `sorted[1]` and `sorted[2]`.</span></li>
+  <li><span class="h">Drafts the fix<span class="pct">17%</span></span>
+    <span class="q">if (n % 2 === 0) {
+  return (sorted[mid - 1] + sorted[mid]) / 2;
+}</span></li>
+  <li><span class="h">Checks the rest of the file<span class="pct">4%</span></span>
+    <span class="q">`mean`: Correct. · `range`: Correct. · `median`: Updated.</span></li>
+  <li class="hi"><span class="h">Tests its draft in its head, against both tests<span class="pct">14%</span></span>
+    <span class="q">`median([3, 1, 2])` … returns `sorted[1]` which is `2`. Correct.
+`median([4, 1, 3, 2])` … `(2 + 3) / 2 = 2.5`. Correct.</span></li>
+  <li><span class="h">Rereads what it was asked to hand back<span class="pct">7%</span></span>
+    <span class="q">"Reply with only the requested code in one fenced code block, nothing else."</span></li>
+</ol>
+<p>Only then did it write the answer (168 tokens, 21 s), which was the same fix Low writes without thinking.</p>
+
+<details>
+  <summary>The whole thought, word for word</summary>
+  <pre id="fullthought"></pre>
+</details>
+
+<h2 id="buys">What thinking buys you</h2>
+<div class="two">
+  <div class="card">
+    <h3>What it gives</h3>
+    <ul>
+      <li><b>A check before the answer.</b> In step 7 above, Gemma tested its fix against both tests before writing it. On Low, its first guess is the answer.</li>
+      <li><b>Room to work in steps.</b> It traces values, writes down the rule, then drafts. Low has to get all of that right in one pass.</li>
+      <li><b>A catch for its own mistakes.</b> If the traced numbers don't match the test, it can change course before writing any code.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>What it costs</h3>
+    <ul>
+      <li><b>Time.</b> 2 to 3 minutes per code-writing step, against about 14 s on Low.</li>
+      <li><b>Room in the chat.</b> In chat turns the app keeps the thought, so it fills Gemma's 16k working memory sooner.</li>
+      <li><b>No guarantee.</b> A careful thought can still be wrong. The real test run is what counts.</li>
+    </ul>
+  </div>
+</div>
+
+<p style="margin-top:18px">The catch for Agentic Coder is that it <b>already checks every try</b>. It runs your real tests after each attempt and tries again, up to 8 times. So thinking isn't the only way to catch a mistake. It's competing against simply trying again:</p>
+<div class="big" role="img" aria-label="Time for one try: Low about 20 seconds, High about 3 minutes 10 seconds. Nearly all 8 of Low's tries fit in the time of one High try.">
+  <div class="row"><span class="lab">One try on Low</span><span class="track"><span class="bar s-write" style="width:10.5%"></span></span><span class="num">about 20 s</span></div>
+  <div class="row"><span class="lab">One try on High</span><span class="track"><span class="bar s-think" style="width:100%"></span></span><span class="num">about 3 min 10 s</span></div>
+  <div class="row"><span class="lab">8 tries on Low</span><span class="track"><span class="bar s-write" style="width:84.2%"></span></span><span class="num">about 2 min 40 s</span></div>
+</div>
+<p class="dim" style="font-size:14.5px;margin-top:8px">Time for one try comes from test 2's server log: read + write, the test run itself takes under a second. Bars are to scale with each other.</p>
+
+<ol class="means" style="margin-top:14px">
+  <li><b>Where thinking should pay off (expected, not measured):</b> bugs where the error message doesn't show the cause, fixes that touch several places, and cases where quick guesses keep failing the same way. Trying again alone won't find those.</li>
+  <li><b>Where it doesn't:</b> small, clear bugs like test 2. Low gets there first, and the tests catch a bad guess anyway.</li>
+  <li><b>The real answer is the 28-task test</b> (thinking off vs on, same tasks), which hasn't been run yet. Its rule was set in advance: if High passes 2 or more extra tasks, use High for real work. Otherwise, keep Low.</li>
+</ol>
+
+<h2>Which steps think on High</h2>
+<div class="two">
+  <div class="card">
+    <h3>Thinks first <span class="tag think">High only</span></h3>
+    <ul>
+      <li>writing code: every try at a fix or change</li>
+      <li>writing tests</li>
+      <li>chat answers that read files and use tools</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Never thinks <span class="tag no">Low and High</span></h3>
+    <ul>
+      <li>sorting your request</li>
+      <li>asking you a question</li>
+      <li>the one-line summary of a change</li>
+      <li>saving to memory, shrinking a long chat</li>
+    </ul>
+  </div>
+</div>
+
+<h2>What this means</h2>
+<ol class="means">
+  <li><b>Each time Gemma writes code on High, add up to about 3 minutes.</b> A job that needs three tries can run about 9 minutes longer than on Low.</li>
+  <li><b>On test 2, the extra thinking bought nothing</b>: same fix, same passing tests.</li>
+  <li><b>Not known yet:</b> whether High ever fixes something Low can't. One small task can't show that. The 28-task test (thinking off vs on) is written up but has not been run.</li>
+</ol>
+<div class="now">Your app is set to <b>High</b> right now. To switch, type <kbd>/effort</kbd> in Agentic Coder and pick Low. It is kept for next time.</div>
+
+<div class="paths">
+Numbers: models/gemma-4-12b/results/test2-low-high-2026-09-28/ (tokens.json, summary.json, server-log-extract.txt)<br>
+Mechanism read from: models/gemma-4-12b/model.mjs · models/registry.mjs (thinkingKwargs) · models/runtime/server.mjs (--reasoning-budget 2048) · terminal/src/flows/llm.mjs, tries.mjs · terminal/src/agent/agent.mjs<br>
+Setting: ~/.agentic-coder/settings.json (effort "high")<br>
+Recorded thought (v2): models/gemma-4-12b/results/test2-low-high-2026-09-28/thought-replay.json, made by thought-replay.mjs (test 2's whole-file fix prompt, sent through terminal/src/agent/client.mjs to the app's running Gemma, thinking on, cap 2,048)
+</div>
+</main>
+<script>document.getElementById("fullthought").textContent = "*   The user wants to fix a bug in the `median` function in `stats.mjs`.\n    *   The test `median of an even count` fails: `median([4, 1, 3, 2])` is expected to be `2.5` but currently returns `3`.\n    *   Input: `[4, 1, 3, 2]`\n    *   Sorted: `[1, 2, 3, 4]`\n    *   Length: 4\n    *   `mid`: `Math.floor(4 / 2) = 2`\n    *   `sorted[2]` is `3`.\n\n    *   For an even number of elements, the median is the average of the two middle elements.\n    *   For an odd number of elements, the median is the middle element.\n\n    *   Current implementation:\n        ```js\n        export function median(values) {\n          const sorted = [...values].sort((a, b) => a - b);\n          const mid = Math.floor(sorted.length / 2);\n          return sorted[mid];\n        }\n        ```\n    *   If `length` is 4, `mid` is 2. We need the average of `sorted[1]` and `sorted[2]`.\n    *   If `length` is 3, `mid` is 1. We need `sorted[1]`.\n\n    *   Let `n = sorted.length`.\n    *   If `n % 2 === 0`:\n        *   Middle indices are `(n / 2) - 1` and `n / 2`.\n        *   Example: `n=4`. Indices are `1` and `2`.\n    *   If `n % 2 !== 0`:\n        *   Middle index is `Math.floor(n / 2)`.\n        *   Example: `n=3`. Index is `1`.\n\n    Revised code logic:\n    ```js\n    export function median(values) {\n      const sorted = [...values].sort((a, b) => a - b);\n      const n = sorted.length;\n      const mid = Math.floor(n / 2);\n      if (n % 2 === 0) {\n        return (sorted[mid - 1] + sorted[mid]) / 2;\n      } else {\n        return sorted[mid];\n      }\n    }\n    ```\n\n    *   `mean`: Correct.\n    *   `range`: Correct.\n    *   `median`: Updated.\n\n    *   `median([3, 1, 2])` -> sorted `[1, 2, 3]`, `n=3`, `mid=1`. `n%2 != 0` -> returns `sorted[1]` which is `2`. Correct.\n    *   `median([4, 1, 3, 2])` -> sorted `[1, 2, 3, 4]`, `n=4`, `mid=2`. `n%2 == 0` -> returns `(sorted[1] + sorted[2]) / 2` which is `(2 + 3) / 2 = 2.5`. Correct.\n\n    *   \"Reply with only the requested code in one fenced code block, nothing else.\"\n    *   \"Reply with the complete corrected stats.mjs.\"";</script>
+</body>
+</html>

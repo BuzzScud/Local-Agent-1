@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Faster Plan</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--mute:#6b6a64;--line:#e4e1d8;--card:#fff;--green:#1f7a4d;--greenbg:#e3f3ea;--amber:#8a5a00;--amberbg:#fbf0d9;--grey:#5e5e5e;--greybg:#ececea;--blue:#1d4f91;--bluebg:#e5eef9}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecebe6;--mute:#a09f98;--line:#33322e;--card:#1f1e1b;--green:#7fd4a4;--greenbg:#1d3328;--amber:#f0c36b;--amberbg:#3a2f18;--grey:#c4c4c0;--greybg:#2c2c29;--blue:#9cc2f5;--bluebg:#1c2a3d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:780px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:32px;line-height:1.2;margin:0 0 12px}
+h2{font-size:23px;margin:44px 0 10px;padding-top:6px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:22px 0 6px}
+p{margin:8px 0}
+.lead{font-size:18px}
+.mute{color:var(--mute)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:22px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card b{display:block;font-size:24px}
+.card span{font-size:14px;color:var(--mute)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:15.5px}
+th,td{text-align:left;vertical-align:top;padding:8px 8px;border-bottom:1px solid var(--line)}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);font-weight:600}
+.tag{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.on{background:var(--greenbg);color:var(--green)}
+.off{background:var(--greybg);color:var(--grey)}
+.warn{background:var(--amberbg);color:var(--amber)}
+.new{background:var(--bluebg);color:var(--blue)}
+ol,ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+code{font:14px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--greybg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.paths{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
+@media (max-width:560px){h1{font-size:26px}table{font-size:14.5px}th,td{padding:7px 5px}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Making Gemma feel faster: the plan</h1>
+<p class="lead">Gemma writes about 12–13 tokens a second, and that stays the same. The plan cuts <b>what it does</b>: no thinking on easy requests, the right files read up front, and asking you sooner when it is stuck. Each task will show its steps and minutes, and one before/after run will prove it. <b>Nothing is built yet.</b> Your app and the repo are unchanged.</p>
+
+<div class="cards">
+  <div class="card"><b>Auto</b><span>thinking, by task</span></div>
+  <div class="card"><b>Rank</b><span>files first (bge-m3)</span></div>
+  <div class="card"><b>Sooner</b><span>stop, then ask you</span></div>
+  <div class="card"><b>Bench</b><span>before/after + footer</span></div>
+</div>
+
+<h2>Where the time goes today</h2>
+<table>
+<tr><th style="width:44%">What</th><th>Measured</th></tr>
+<tr><td>Same bug fix (test 2), thinking off vs on</td><td><b>23 s</b> vs <b>3 min 14 s</b>. Both passed with the same 3-line fix.</td></tr>
+<tr><td>Setup before Gemma says a word</td><td>6,671 tokens, 41% of a 16k memory</td></tr>
+<tr><td>Share of time spent reading, in the bake-off</td><td>about 84%</td></tr>
+<tr><td>The notes.html run (High)</td><td>54 s of thinking before step 1. Stopped by you at 14 min 28 s.</td></tr>
+<tr><td>A full re-read of the conversation</td><td>about 60 s for ~7,700 tokens</td></tr>
+</table>
+
+<h2>Two things I found while reading the code</h2>
+<div class="box">
+<p><b>1 · The thinking switch sits at the very top of Gemma's prompt.</b> Its template puts a <code>&lt;|think|&gt;</code> mark in the first line when thinking is on. If thinking is flipped between two steps, everything after that mark changes, so the saved reading is lost and Gemma re-reads the whole conversation (about a minute). "Auto" can't just flip the switch on each step. Part 0 below tests a way around this.</p>
+<p><b>2 · "Think less once a file has changed" does nothing on Gemma today.</b> The code drops High to Medium after a change. But Gemma has no Medium: its template ignores the effort word, and only on/off counts. So after a change, every step (run tests, report) still thinks up to 4,096 tokens.</p>
+<p class="mute">Also already in place, so they are not in this plan: re-reading an unchanged file is pointed back to the earlier read, and long files already show only the lines that match the request.</p>
+</div>
+
+<h2>Part 0 · A quick probe first (about 30 min, real Gemma)</h2>
+<p>Three questions, each answered by measuring before any building:</p>
+<ol>
+<li><b>Can a step skip thinking without a re-read?</b> Keep the think mark in the prompt, and start the reply with an empty thought (<code>&lt;|channel&gt;thought\n&lt;channel|&gt;</code>, which is what the template writes when thinking is off). If llama-server keeps the saved reading and Gemma just answers, Auto can work <b>step by step</b>.</li>
+<li><b>What does a flip really cost?</b> Time one real on→off switch in the middle of a conversation.</li>
+<li><b>How fast does bge-m3 rank files?</b> Time it on this repo (about 200 code files) and on a small bench project.</li>
+</ol>
+<p class="mute">If question 1 fails, Auto falls back to <b>once per request</b>: the choice is made when you send the message, and the only re-read happens when it differs from the last one.</p>
+
+<h2>Part 1 · Thinking: Auto by task</h2>
+<table>
+<tr><th style="width:40%">Request</th><th style="width:22%">Thinks?</th><th>Why</th></tr>
+<tr><td>Hello, thanks, small talk</td><td><span class="tag off">off</span></td><td>Already sorted before Gemma sees it.</td></tr>
+<tr><td>A question about code ("what does X do?")</td><td><span class="tag off">off</span></td><td>The files are read up front. Answering is reading, not working things out.</td></tr>
+<tr><td>A page, a note, a story, a command</td><td><span class="tag off">off</span></td><td>No bug to reason out. The notes page burned 54 s thinking about where to save it.</td></tr>
+<tr><td>A fix, or a change to code</td><td><span class="tag on">on</span></td><td>This is where thinking helps.</td></tr>
+<tr><td>…after the file has changed (tests, report)</td><td><span class="tag off">off</span></td><td>Fixes finding 2. Step by step only if Part 0 passes.</td></tr>
+<tr><td>A fix that failed its check and goes back</td><td><span class="tag on">on</span></td><td>It needs to work out why.</td></tr>
+<tr><td>Any request that says "think", "carefully" or "hard"</td><td><span class="tag on">on</span></td><td>You can always ask for it.</td></tr>
+</table>
+<ul>
+<li><b>Your effort setting stays the ceiling.</b> At Low it never thinks. At High, Auto decides as above. The "Sorted as" line adds <i>· thinking</i> or <i>· no thinking</i>, so you can see the choice.</li>
+<li>The focused fix/change paths (the "tries") keep thinking when you are on High.</li>
+<li>Files: <code>agent.mjs</code> (<code>generate</code>, the loop), <code>client.mjs</code> (the empty-thought start), <code>flows/sort.mjs</code> (the "think" words). Tests for each row of the table.</li>
+</ul>
+
+<h2>Part 2 · Read the right files first</h2>
+<ul>
+<li><b>New <code>rank.mjs</code>:</b> bge-m3 (already running beside Gemma for memory) turns each code file's name, top-level names and first lines into numbers. They are kept on disk and redone only for files that changed. Each request is matched against them.</li>
+<li><b>Step-by-step requests</b> (pages, commands, anything not a fix/change path): the top 2–3 files are read in one go before Gemma's first step, as questions already are. A file named in the request always comes first.</li>
+<li><b>The fix/change paths:</b> today, when the request names no file and no test points at one, Gemma picks from the whole file list (a model call). bge-m3 goes first and Gemma picks only when the top matches are close together.</li>
+<li><b>A cap, because memory is small:</b> at most ~3,000 tokens read up front (about 20 s of reading) at 16k, more at 32k and above. No ranking in the home folder, or in a project with fewer than 4 code files.</li>
+<li>Files: new <code>terminal/src/agent/rank.mjs</code>, <code>agent.mjs</code> (<code>prefetch</code>), <code>flows/localize.mjs</code>. Tests: the right file ranks first on 5 bench tasks, cache reuse, the cap, skipped in home.</li>
+</ul>
+
+<h2>Part 3 · Stop sooner, then ask you</h2>
+<table>
+<tr><th style="width:40%">When</th><th style="width:30%">Today</th><th>New</th></tr>
+<tr><td>The exact same call again</td><td>stops after 3</td><td><span class="tag new">asks after 2</span></td></tr>
+<tr><td>Tool errors in a row</td><td>stops after 5</td><td><span class="tag new">asks after 3</span></td></tr>
+<tr><td>Looking with no change and no new file</td><td>asks after 8 looks or 5 min</td><td><span class="tag new">asks after 6 steps</span></td></tr>
+<tr><td>40 steps</td><td>stops</td><td>stops (unchanged, /increase moves it)</td></tr>
+</table>
+<ul>
+<li><b>The question</b> reuses today's check-in box: "I've tried X twice / hit 3 errors: &lt;the last error&gt;. Give me a hint, keep going, or stop here." A hint goes straight to Gemma. <i>Keep going</i> resets the count. <i>Stop here</i> ends the task.</li>
+<li>The practice bench has nobody to answer, so it counts the ask and carries on the old way. That keeps the numbers comparable.</li>
+<li>Files: <code>agent.mjs</code> (the loop, <code>checkIn</code>, <code>CHECK_INS</code>). Tests for each row.</li>
+</ul>
+
+<h2>Part 4 · Measure steps and minutes</h2>
+<ul>
+<li><b>Footer when a task ends:</b> <code>Done in 3 min 12 s · 9 steps · 4 reads · 1,820 thinking tokens</code>. The counts ride on the <code>turn-end</code> event, and the session file keeps them too.</li>
+<li><b>The bench</b> (<code>run.mjs</code>) adds reads and thinking tokens to each row. It also fixes the known gap where focused-path runs save 0 tokens (it will read the server's own counts).</li>
+<li><b>Before/after, on the real Gemma at High, 16k, one run each:</b></li>
+</ul>
+<table>
+<tr><th style="width:40%">Task</th><th>Why it's in</th></tr>
+<tr><td>The notes.html prompt</td><td>Your real page request: thinking and reading waste</td></tr>
+<tr><td>2 · fix-bug</td><td>Measured today: 23 s off vs 3 min 14 s on</td></tr>
+<tr><td>10 · fix off-by-one</td><td>A fix path, where thinking should stay on</td></tr>
+<tr><td>12 · feature currency</td><td>A change path</td></tr>
+<tr><td>17 · writing notes api</td><td>Writing: thinking goes off</td></tr>
+<tr><td>25 · big-project question</td><td>Ranking and up-front reading</td></tr>
+</table>
+<div class="box">
+<p><b>Win rule:</b> total minutes and median steps go down, and <b>no task that passed before fails after</b>. Every row is shown, including any that got slower.</p>
+<p class="mute">About 60–90 min of model time (6 tasks × 2). Tell me if you want 3 runs each, which is steadier but about 3× longer. The page goes to <code>~/Desktop/gemma-docs</code>, and the raw runs go to <code>models/gemma-4-12b/results/</code>.</p>
+</div>
+
+<h2>Order and time</h2>
+<table>
+<tr><th style="width:8%">#</th><th>Step</th><th style="width:26%">About</th></tr>
+<tr><td>0</td><td>Probe (empty thought, flip cost, ranking speed)</td><td>30 min</td></tr>
+<tr><td>1</td><td>The "before" bench on main as it is now</td><td>40 min, runs while I build</td></tr>
+<tr><td>2</td><td>Part 4 counts (footer + bench), so every later step is measured</td><td>45 min</td></tr>
+<tr><td>3</td><td>Part 1 thinking Auto</td><td>1 h 30 min</td></tr>
+<tr><td>4</td><td>Part 3 stop sooner, then ask</td><td>45 min</td></tr>
+<tr><td>5</td><td>Part 2 ranking</td><td>2 h</td></tr>
+<tr><td>6</td><td>Unit suite, then the "after" bench, then the page</td><td>1 h</td></tr>
+</table>
+<p class="mute">About 7 hours in all. It is built in its own worktree (another session pushed to main today), and nothing is committed until you say so.</p>
+
+<h2>What could go wrong</h2>
+<ul>
+<li><b>A "question" that is really hard gets no thinking.</b> Answers might get shallower. The fix: say "think" in the request, or the rule gets moved.</li>
+<li><b>Ranking picks the wrong files.</b> That wastes up to ~20 s of reading. The cap keeps it small, and the bench shows it.</li>
+<li><b>More questions to you mid-task</b> (asks after 2 repeats or 3 errors, not stops). That is the trade you picked.</li>
+<li><b>Part 0 fails.</b> Auto becomes once per request. That is still the big win for pages and questions, but a fix keeps thinking through its tests and report steps.</li>
+<li><b>One run each is noisy.</b> Gemma's replies vary, so a single slow task isn't proof.</li>
+</ul>
+
+<h2>Done when</h2>
+<ul>
+<li>Every row of the Part 1 and Part 3 tables has a test. The full unit suite passes.</li>
+<li>The footer shows steps, reads, thinking tokens and minutes in the real app, checked in a pty.</li>
+<li>The before/after page is in gemma-docs, and it says whether the win rule held.</li>
+</ul>
+
+<h2>Your call</h2>
+<table>
+<tr><td style="width:40%"><b>Build all of it</b></td><td>About 7 h, no commit, then the report.</td></tr>
+<tr><td><b>Probe first, then decide</b></td><td>30 min. You see Part 0's answers before any build.</td></tr>
+<tr><td><b>Only Parts 1 + 4</b></td><td>About 3 h. Thinking Auto and the counts. The biggest win for the least work.</td></tr>
+<tr><td><b>Change something</b></td><td>Tell me which row.</td></tr>
+</table>
+
+<p class="paths">Repo ~/Desktop/agentic-coder (main 66ac7e8) · agent loop terminal/src/agent/agent.mjs · client terminal/src/agent/client.mjs · routing terminal/src/flows/sort.mjs · file finding terminal/src/flows/localize.mjs · bench models/evals/bench/run.mjs · Gemma template: the gguf's tokenizer.chat_template · earlier numbers: models/gemma-4-12b/results/test2-low-high-2026-09-28, gemma-notes-run-timeline-2026-09-28.html</p>
+
+</main>
+</body>
+</html>

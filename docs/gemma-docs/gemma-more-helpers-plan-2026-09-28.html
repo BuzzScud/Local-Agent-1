@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>More Gemma Helpers</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1d1b;--mute:#6b6a64;--line:#e4e1d8;--card:#fff;--green:#1f7a4d;--greenbg:#e3f3ea;--amber:#8a5a00;--amberbg:#fbf0d9;--grey:#5e5e5e;--greybg:#ececea;--blue:#1d4f91;--bluebg:#e5eef9}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecebe6;--mute:#a09f98;--line:#33322e;--card:#1f1e1b;--green:#7fd4a4;--greenbg:#1d3328;--amber:#f0c36b;--amberbg:#3a2f18;--grey:#c4c4c0;--greybg:#2c2c29;--blue:#9cc2f5;--bluebg:#1c2a3d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+main{max-width:780px;margin:0 auto;padding:40px 16px 80px}
+h1{font-size:32px;line-height:1.2;margin:0 0 12px}
+h2{font-size:23px;margin:44px 0 10px;padding-top:6px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:0 0 4px}
+p{margin:8px 0}
+.lead{font-size:18px}
+.mute{color:var(--mute)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:22px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card b{display:block;font-size:24px}
+.card span{font-size:14px;color:var(--mute)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:15.5px}
+th,td{text-align:left;vertical-align:top;padding:8px 8px;border-bottom:1px solid var(--line)}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);font-weight:600}
+.tag{display:inline-block;font-size:12.5px;font-weight:600;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.on{background:var(--greenbg);color:var(--green)}
+.off{background:var(--greybg);color:var(--grey)}
+.warn{background:var(--amberbg);color:var(--amber)}
+.new{background:var(--bluebg);color:var(--blue)}
+ol,ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+.helper{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+.helper .top{display:flex;gap:10px;align-items:baseline}
+.helper .n{flex:none;width:28px;height:28px;border-radius:99px;background:var(--bluebg);color:var(--blue);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;transform:translateY(-2px)}
+.helper .gap{color:var(--mute);margin:2px 0 8px}
+.helper .for{margin:8px 0 10px;display:flex;flex-wrap:wrap;gap:6px}
+.helper dl{display:grid;grid-template-columns:128px 1fr;gap:4px 12px;margin:0;font-size:15.5px}
+.helper dt{color:var(--mute);font-size:13px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;padding-top:2px;white-space:nowrap}
+.helper dd{margin:0}
+.phase td:first-child{width:92px;white-space:nowrap}
+.paths{font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
+@media (max-width:560px){h1{font-size:26px}table{font-size:14.5px}th,td{padding:7px 5px}.helper dl{grid-template-columns:1fr;gap:0}.helper dt{padding-top:8px}}
+</style>
+</head>
+<body>
+<main>
+<h1>More helpers for Gemma: the plan</h1>
+<p class="lead">You asked for helpers that make Gemma <b>right more often</b>, across all four kinds of work: fixing bugs, building new pages or apps, changing features across files, and explaining code. They could be <b>programs and checks</b>, plus <b>small add-on models of 1 GB at most</b>. So there are no extra Gemma calls and nothing goes online. Below are 8 helpers, best first. Each one fills a gap that is still open today. <b>Nothing is built yet.</b> Your app and the repo are unchanged.</p>
+<div class="cards">
+  <div class="card"><b>8</b><span>helpers, best first</span></div>
+  <div class="card"><b>0</b><span>extra Gemma calls when a check passes</span></div>
+  <div class="card"><b>0.64 GB</b><span>the only add-on model (#8)</span></div>
+  <div class="card"><b>~15 h</b><span>to build all 8, in three parts</span></div>
+</div>
+
+<h2>What Gemma already checks</h2>
+<p>More than you might think. Everything on this list is already in the app, so none of it appears again below.</p>
+<table>
+<tr><th style="width:44%">Check</th><th>Today</th></tr>
+<tr><td>Fix and change requests: a test that fails first, then tries until it passes</td><td><span class="tag on">Yes</span> clear requests only</td></tr>
+<tr><td>Layout bugs on a page (something covered or behind)</td><td><span class="tag warn">Partly</span> only when the project has its own browser tester</td></tr>
+<tr><td>Code that doesn't parse</td><td><span class="tag on">Yes</span> a breaking edit is refused, a new file gets a warning</td></tr>
+<tr><td>The project's tests at the end of a turn</td><td><span class="tag on">Yes</span> when the project has tests, with 2 rounds to fix them</td></tr>
+<tr><td>"Did it do every part of the request?"</td><td><span class="tag on">Yes</span> one short Gemma check at the end</td></tr>
+<tr><td>Renames across the project</td><td><span class="tag on">Yes</span> built in, no model</td></tr>
+<tr><td>A new page or script actually runs</td><td><span class="tag off">No</span> only its syntax is checked</td></tr>
+<tr><td>Names exist (imports, functions, variables)</td><td><span class="tag off">No</span> shows only when it runs</td></tr>
+<tr><td>A rewrite kept everything that was there</td><td><span class="tag off">No</span></td></tr>
+<tr><td>An explanation names real files and functions</td><td><span class="tag off">No</span></td></tr>
+</table>
+
+<h2>The helpers, best first</h2>
+<p>A check that passes costs Gemma nothing. A check that fails goes back to Gemma as one message, the same way failing tests do today, so it only costs a step when something is actually wrong.</p>
+
+<div class="helper">
+  <div class="top"><span class="n">1</span><h3>Try it: run new pages and scripts</h3></div>
+  <p class="gap">The gap: a page Gemma writes is never opened, and a new script is never run. The notes.html run is the example.</p>
+  <p>After Gemma makes or changes a page, the program opens it in a hidden browser. It collects console errors and files that fail to load, and clicks each button once. A new script runs once in the throwaway copy. Whatever breaks goes back to Gemma.</p>
+  <div class="for"><span class="tag new">Build new</span><span class="tag new">Fix bugs</span></div>
+  <dl><dt>Costs</dt><dd>2–10 seconds per check. No model. The browsers are already on this Mac.</dd>
+      <dt>Have part?</dt><dd>The layout-bug check opens pages, but only on the fix path, and only in projects that have their own browser tester.</dd>
+      <dt>Build</dt><dd>~3 h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">2</span><h3>Names check</h3></div>
+  <p class="gap">The gap: a wrong import, a misspelled function or a missing export parses fine, then breaks when it runs.</p>
+  <p>After each edit, a checker looks for three mistakes that are always real: a name that isn't defined anywhere, an import of a file that doesn't exist, and an import of something the other file doesn't export. For JavaScript and TypeScript it uses TypeScript's own checker, filtered to those three. For Python it uses pyflakes.</p>
+  <div class="for"><span class="tag new">Fix bugs</span><span class="tag new">Change across files</span><span class="tag new">Build new</span></div>
+  <dl><dt>Costs</dt><dd>About 1 second per edit. Two small packages to add (neither is on this Mac yet).</dd>
+      <dt>Have part?</dt><dd>The syntax check, which this extends.</dd>
+      <dt>Build</dt><dd>~2½ h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">3</span><h3>Nothing lost</h3></div>
+  <p class="gap">The gap: when Gemma rewrites a whole file, a function it never meant to touch can quietly disappear.</p>
+  <p>Before and after each rewrite, the program lists the file's functions and exports and compares the two lists. Anything that vanished without being asked for goes back to Gemma, and the change you approve shows a warning.</p>
+  <div class="for"><span class="tag new">Fix bugs</span><span class="tag new">Change across files</span></div>
+  <dl><dt>Costs</dt><dd>Instant. No model.</dd>
+      <dt>Have part?</dt><dd>The outline tool already lists a file's parts.</dd>
+      <dt>Build</dt><dd>~1 h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">4</span><h3>Answer check for explanations</h3></div>
+  <p class="gap">The gap: when Gemma explains code, the files, functions and line numbers it names are never checked.</p>
+  <p>Every file and function name in the answer is looked up in the project, along with any line number it gives. Anything that doesn't exist is marked in the answer, for example "⚠ no function called loadRows in this project". The answer is marked, not rewritten, so no Gemma call is added.</p>
+  <div class="for"><span class="tag new">Explain</span></div>
+  <dl><dt>Costs</dt><dd>Instant. No model.</dd>
+      <dt>Have part?</dt><dd>The project map and the outline tool.</dd>
+      <dt>Build</dt><dd>~1½ h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">5</span><h3>Real library signatures</h3></div>
+  <p class="gap">The gap: when Gemma uses an installed package, it writes the function names and options from memory. A small model often gets them slightly wrong.</p>
+  <p>When the code imports an installed package, the real signatures of the functions it uses come along. For JavaScript they're read from the package's own type files; for Python, from the installed module.</p>
+  <div class="for"><span class="tag new">Build new</span><span class="tag new">Change across files</span><span class="tag new">Fix bugs</span></div>
+  <dl><dt>Costs</dt><dd>300–800 tokens of reading, about 3–6 seconds. No model.</dd>
+      <dt>Have part?</dt><dd>No.</dd>
+      <dt>Build</dt><dd>~2½ h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">6</span><h3>Error pointer</h3></div>
+  <p class="gap">The gap: when a command fails with a stack trace, Gemma spends a whole step just opening the line the trace points at.</p>
+  <p>The lines each frame of the error points at are added to the error message, 5 lines on each side, before Gemma sees it.</p>
+  <div class="for"><span class="tag new">Fix bugs</span></div>
+  <dl><dt>Costs</dt><dd>A little reading. No model.</dd>
+      <dt>Have part?</dt><dd>The fix path already reads the frames of failing tests. The step-by-step way doesn't.</dd>
+      <dt>Build</dt><dd>~1 h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">7</span><h3>Starter files for new pages</h3></div>
+  <p class="gap">The gap: Gemma writes a whole new page in one long go. Writing is the slow part, and one bad write loses all of it.</p>
+  <p>For a "make a page" request, the program first writes a skeleton it knows is right: the file name you asked for, text encoding, phone sizing, light and dark mode, and an empty script. Gemma then fills it in with small edits.</p>
+  <div class="for"><span class="tag new">Build new</span></div>
+  <dl><dt>Costs</dt><dd>None. It's also faster, because there's less to write.</dd>
+      <dt>Have part?</dt><dd>No.</dd>
+      <dt>Build</dt><dd>~1 h</dd></dl>
+</div>
+
+<div class="helper">
+  <div class="top"><span class="n">8</span><h3>Sharper finder (small add-on model)</h3></div>
+  <p class="gap">The gap: finding the right code relies on one general-purpose matcher, bge-m3. It compares a summary of the request with a summary of the code, never the two side by side.</p>
+  <p>A reranker (bge-reranker-v2-m3) reads the request and each of the top 20 matches together, then puts them back in order. Picking the right file is the first thing every other helper depends on.</p>
+  <div class="for"><span class="tag new">Fix bugs</span><span class="tag new">Change across files</span><span class="tag new">Explain</span><span class="tag new">Build new</span></div>
+  <dl><dt>Costs</dt><dd>0.64 GB, Apache 2.0 licence. Gemma, its guesser and bge-m3 already fill most of the 11.45 GB the graphics chip may use on this Mac, so it would run on the main processor instead: a few seconds per request, to be measured.</dd>
+      <dt>Have part?</dt><dd>The code search it would sharpen.</dd>
+      <dt>Wait for</dt><dd>The helpers test, one of the tests you're running one by one. If code search doesn't help now, making it sharper won't either.</dd>
+      <dt>Build</dt><dd>~3 h</dd></dl>
+</div>
+
+<h2>Left out, and why</h2>
+<table>
+<tr><th style="width:38%">Idea</th><th>Why not now</th></tr>
+<tr><td>Gemma reviews or plans its own work</td><td>Extra Gemma calls: 1–5 minutes each at High. You didn't pick that cost.</td></tr>
+<tr><td>Ask Claude online when stuck</td><td>Code would leave your Mac. You didn't pick that either.</td></tr>
+<tr><td>A full language server (type-aware "find every use")</td><td>Uses about 0.5 GB of memory while it runs. The names check (#2) catches most of the same mistakes for far less.</td></tr>
+<tr><td>A code-trained matcher instead of bge-m3 (0.32 GB)</td><td>It would need converting to the engine's format first. Try #8 first, since it keeps what already works.</td></tr>
+</table>
+
+<h2>How we'd know it worked</h2>
+<p>The 28 practice tasks are mostly too easy for Gemma to show a difference (it passed 7 of 9 in the bake-off), and Gemma has never been tried on a hard task. So the first step is a <b>hard set</b> of 12 tasks, 3 for each kind of work:</p>
+<ul>
+<li><b>Build new:</b> the notes.html request plus 2 more pages or scripts, each with an automatic check.</li>
+<li><b>Fix bugs:</b> 3 real bugs from your apps, including the chart bug the old model couldn't fix (0 of 14) until the check-first path got it to 3 of 3.</li>
+<li><b>Change across files:</b> 3 changes that touch 2–4 files.</li>
+<li><b>Explain:</b> 3 questions with known answers, graded by the files and functions a right answer must name.</li>
+</ul>
+<div class="box"><b>Win rule, set before anything runs:</b> more of the 12 tasks passed with the new helpers on than with them off, no task that passed before fails after, and each task takes at most 15% longer. Every helper gets its own switch in <code>/helpers</code>, so any one that doesn't earn its place can be turned off.</div>
+
+<h2>Build order</h2>
+<table class="phase">
+<tr><th>Part</th><th>What</th><th>Time</th></tr>
+<tr><td><b>0</b></td><td>The hard set of 12, and one run with every new helper off (the baseline)</td><td>~2 h to write, then ~1½–2 h of Gemma</td></tr>
+<tr><td><b>1</b></td><td>The four checks: try it, names, nothing lost, answer check (#1–4)</td><td>~8 h, then the hard set again</td></tr>
+<tr><td><b>2</b></td><td>Library signatures, error pointer, starter files (#5–7)</td><td>~4½ h, then the hard set again</td></tr>
+<tr><td><b>3</b></td><td>The sharper finder (#8), only if the helpers test shows code search helps</td><td>~3 h</td></tr>
+</table>
+
+<h2>Your call</h2>
+<table>
+<tr><th style="width:38%">Option</th><th>What it costs</th></tr>
+<tr><td>Part 0 first: the hard set and a baseline</td><td>~2 h of building, then a Gemma run whenever Gemma is free between your one-by-one tests. Gemma's hard-task score would be known before anything is built.</td></tr>
+<tr><td>Parts 0 and 1 together</td><td>~10 h. The four checks are built while the baseline waits for Gemma.</td></tr>
+<tr><td>Wait for the helpers test first</td><td>Nothing gets built until it's done. Its result changes only where #8 ranks.</td></tr>
+</table>
+
+<h2>Where things are</h2>
+<p class="paths">This page: ~/Desktop/gemma-docs/gemma-more-helpers-plan-2026-09-28.html<br>
+Earlier plan (the 4 helpers you have now): ~/Desktop/gemma-docs/gemma-context-helpers-plan-2026-09-28.html<br>
+Commands for the one-by-one tests: ~/Desktop/agentic-coder/models/gemma-4-12b/results/test-queue-2026-09-28/run-queue.sh<br>
+Checked in code at main 7ebc0b9, 28 Sep 2026.</p>
+</main>
+</body>
+</html>

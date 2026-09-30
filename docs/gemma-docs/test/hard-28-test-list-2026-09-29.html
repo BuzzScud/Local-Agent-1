@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hard 28 test list</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1c1b18;--mute:#5f5b52;--faint:#8c877c;--line:#e3dfd5;--soft:#efece4;--accent:#2f6fdb;--pub:#1d7a46;--priv:#8a4b00;--swap:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#8a877f;--line:#2e3037;--soft:#24262c;--accent:#7aa7ff;--pub:#5fd08f;--priv:#f0b35a;--swap:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#8a877f;--line:#2e3037;--soft:#24262c;--accent:#7aa7ff;--pub:#5fd08f;--priv:#f0b35a;--swap:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 14px;display:flex;flex-direction:column;min-height:100vh}
+@media (min-width:900px) and (min-height:600px){html,body{height:100%;overflow:hidden}main{height:100vh;min-height:0}}
+h1{font-size:24px;margin:0;letter-spacing:-.01em}.lede{color:var(--mute);margin:2px 0 12px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;flex:none}
+.tabs button{font:inherit;font-size:13.5px;padding:5px 13px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}.tabs span{color:var(--faint);margin-left:5px;font-weight:400}
+.stage{flex:1;min-height:0;margin-top:14px;display:flex;flex-direction:column}
+.pane{flex:1;min-height:0;display:flex;flex-direction:column}.pane[hidden]{display:none}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.card .k{color:var(--mute);font-size:13px}.card .v{font-size:24px;font-weight:700;margin:2px 0}.card p{margin:4px 0 0;font-size:13.5px;color:var(--mute)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px;min-width:0}
+.box h2{font-size:16px;margin:0 0 6px}.box ul,.box ol{margin:0;padding-left:20px}.box li{margin:4px 0}
+.bars{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:13.5px}
+.bars i{display:block;height:8px;border-radius:4px;background:var(--accent)}.bars b{font-weight:600;font-variant-numeric:tabular-nums}
+.split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px}
+.list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:auto;min-height:0}
+table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+thead th{position:sticky;top:0;background:var(--soft);color:var(--mute);font-size:12.5px;font-weight:600}
+tbody tr{cursor:pointer}tbody tr:hover,tbody tr[aria-selected="true"]{background:var(--soft)}tbody tr[aria-selected="true"] td.t{font-weight:600}
+tbody tr.swapped td.t{text-decoration:line-through;color:var(--mute)}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;border:1px solid var(--line);border-radius:6px;padding:0 5px;margin-right:3px;color:var(--mute)}
+.stars{color:var(--accent);letter-spacing:1px;text-overflow:clip}
+.detail{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;overflow:auto;min-height:0}
+.detail .k{color:var(--mute);font-size:12.5px}.detail h3{font-size:17px;margin:2px 0 8px;line-height:1.3}
+.detail .ask{background:var(--soft);border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:14px}
+.detail dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;margin:0 0 12px;font-size:13.5px}.detail dt{color:var(--mute)}.detail dd{margin:0}
+.detail code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
+.swapbtn{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer}
+.swapbtn[aria-pressed="true"]{border-color:var(--swap);color:var(--swap);font-weight:600}
+.bar{flex:none;display:flex;gap:10px;align-items:center;margin-top:10px;font-size:13px;color:var(--mute)}
+.bar button{font:inherit;font-size:13px;padding:5px 12px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-weight:600}
+.pub{color:var(--pub)}.priv{color:var(--priv)}
+@media (max-width:899px),(max-height:599px){.split,.two{grid-template-columns:1fr}.list{max-height:60vh}}
+</style>
+</head>
+<body><main>
+<h1>Hard 28 · the test list</h1>
+<p class="lede">28 hard tests built from real bugs fixed in your code, each with the test that proved the fix as its hidden check. Swap any out before I build them. <b class="priv">Private page:</b> it names your MAIN2026 bugs, so it stays on this Mac.</p>
+<div class="tabs" role="tablist" id="tabs"></div>
+<div class="stage">
+  <section class="pane" id="p-over"></section>
+  <section class="pane" id="p-list" hidden>
+    <div class="split"><div class="list"><table><colgroup><col style="width:52px"><col><col style="width:210px"><col style="width:84px"><col style="width:104px"></colgroup>
+      <thead><tr><th>#</th><th>Test</th><th>Hard because</th><th>Size</th><th>Level</th></tr></thead><tbody id="rows"></tbody></table></div>
+      <aside class="detail" id="detail" aria-live="polite"></aside></div>
+    <div class="bar"><span id="swapcount"></span><button type="button" id="copy">Copy my swaps</button><span id="copied"></span><span style="margin-left:auto">↑ ↓ pick · S swaps the picked test · ← → tabs</span></div>
+  </section>
+  <section class="pane" id="p-grade" hidden></section>
+</div>
+</main>
+<script>
+const T = [
+  // ---- Public: from Agentic Coder's own history (the repo is public, so these can live in it) ----
+  { id: 'H01', side: 'pub', src: 'd9550d3', title: 'Two windows lose a memory fact', lang: 'JS', size: '≈8k lines', level: 4, tags: ['Big', 'Hidden', 'Debug'],
+    ask: 'I had two Agentic Coder windows open and both saved a memory fact at the same moment. One of the two facts is gone. Make saving safe when two windows save at once.',
+    hard: 'A race between two processes: nothing fails in a single run, and the obvious fix (read, add, write) still loses facts.', check: 'The fix\'s own test: many facts saved at once from two processes, every one kept.' },
+  { id: 'H02', side: 'pub', src: '8900411', title: '"~/Desktop" makes a folder called ~', lang: 'JS', size: '≈6k lines', level: 3, tags: ['Big', 'Hidden', 'Multi-step'],
+    ask: 'I asked it to save ~/Desktop/notes.html and it created a folder named "~" inside my project instead of saving to my Desktop. A path starting with ~ should mean my home folder, everywhere a path is taken.',
+    hard: 'Paths are taken in several tools (write, read, list, run); fixing one leaves the others wrong.', check: 'Hidden cases for each tool, "~" alone, "~user" left alone, and a path that only looks like one.' },
+  { id: 'H03', side: 'pub', src: '096b401', title: 'A saved rule lets a command overwrite .env', lang: 'JS', size: '≈7k lines', level: 4, tags: ['Big', 'Hidden', 'Multi-step', 'Debug'],
+    ask: 'With an "always allow" rule saved for a command, the agent ran a command that overwrote my protected .env file without asking. Any command that changes a protected file must ask, whatever rule is saved.',
+    hard: 'Security: a rule that matches must still lose to protection, and chained or redirected commands (a && b, > .env) must be seen.', check: 'Hidden commands that write a protected file in 8 different ways; a harmless command with the rule still runs without asking.' },
+  { id: 'H04', side: 'pub', src: '2eaaa81', title: 'My notes reach the model cut mid-sentence', lang: 'JS', size: '≈5k lines', level: 3, tags: ['Hidden', 'Debug'],
+    ask: 'My AGENTS.md notes reach the model cut off in the middle of a sentence, and log lines from events show up in them. Send the notes whole; if a file must be cut, end it at a heading.',
+    hard: 'Two separate faults behind one complaint; the cut must land on a heading, not a character count.', check: 'Long notes files of several shapes: the cut ends at a heading, events never appear, short files arrive whole.' },
+  { id: 'H05', side: 'pub', src: '278b182', title: 'The next model server\'s files vanish', lang: 'JS + shell', size: '≈4k lines', level: 5, tags: ['Big', 'Hidden', 'Debug'],
+    ask: 'After I stop a model server by hand and start a new window, the new window\'s server isn\'t listed, and it gets stopped 30 minutes later while I\'m using it. Find out why and fix it.',
+    hard: 'The cause is a shell script inside a JavaScript string, in a race across two processes, seconds apart. Nothing in the symptom points there.', check: 'The fix\'s test: the old watcher runs beside a newer server on the same port and must leave its files; its own files still go.' },
+  { id: 'H06', side: 'pub', src: 'e7533a9', title: 'A false "the Mac may slow down" warning', lang: 'JS', size: '≈6k lines', level: 4, tags: ['Hidden', 'Multi-step', 'Debug'],
+    ask: 'When a window waits for another copy of the model to finish and then loads, it warns "the Mac may slow down" even though memory is fine. Fix the warning without hiding real shortages.',
+    hard: 'The numbers are right at the moment they are read; it is about WHEN they are read. The fix must not simply silence the warning.', check: 'Hidden cases: servers that quit during the wait count as free; a real shortage still warns; nothing quit means nothing changes.' },
+  { id: 'H07', side: 'pub', src: '751abf5', title: 'The test record shows my account name', lang: 'JS', size: '≈3k lines', level: 2, tags: ['Hidden', 'Multi-step'],
+    ask: 'The test record, which goes to a public repo, shows full paths with my account name. Paths must never show my home folder\'s full path.',
+    hard: 'The path is written in more than one place, and old lines already in the file must be shown without it too.', check: 'Paths inside the repo, elsewhere in the home folder, outside it, and already-written lines.' },
+  { id: 'H08', side: 'pub', src: 'f68763d', title: '"can you …?" is treated as a question', lang: 'JS', size: '≈5k lines', level: 3, tags: ['Hidden', 'Debug'],
+    ask: 'When I type "can you use clouds and sun for the icons?" my request is treated as a question and its edits are refused. "Can you …?" asking for a change is a request; "can you explain …?" is still a question.',
+    hard: 'Language rules: the hidden check has dozens of phrasings both ways, so a fix for the one example fails.', check: '40 hidden requests and questions, sorted by hand.' },
+  { id: 'H09', side: 'pub', src: 'ae0374b', title: 'A big file is retried whole, forever', lang: 'JS', size: '≈9k lines', level: 5, tags: ['Big', 'Hidden', 'Multi-step'],
+    ask: 'When the model writes a file too big for one reply, the reply is cut off, and it retries the whole file again and again. Build big files in parts instead.',
+    hard: 'A new behaviour across the agent loop, the tools and the prompt; the parts must join into exactly the file.', check: 'A stand-in model that can only write 2,000 characters a reply must still produce a 9,000-character file, byte for byte.' },
+  { id: 'H10', side: 'pub', src: '8d28819', title: 'The code search reads the wrong files', lang: 'JS', size: '≈10k lines', level: 5, tags: ['Big', 'Hidden', 'Multi-step'],
+    ask: 'On big projects the code search indexes junk (build output, ignored folders) and leaves out the app\'s own code. Make it index the code I actually work on.',
+    hard: 'Needs git\'s ignore rules, a sense of what "the app\'s code" is, and a cap that picks the right files, not the first ones.', check: 'Hidden project trees: ignored and generated folders left out, the source folders kept, the cap filled from the right files.' },
+  { id: 'H11', side: 'pub', src: '5db156d', title: 'A page written without a file name is lost', lang: 'JS', size: '≈8k lines', level: 3, tags: ['Multi-step', 'Hidden'],
+    ask: 'When the model writes a page but forgets the file name, the page is lost. Keep it: save it under a sensible name and say where. Also, /clear should go back to the folder I started in.',
+    hard: 'Two changes in different parts; the saved name must not overwrite an existing file.', check: 'A nameless page is kept under a new name that never clobbers a file; /clear returns to the start folder.' },
+  { id: 'H12', side: 'pub', src: '3d53594', title: 'The token counter misses tokens', lang: 'JS', size: '≈7k lines', level: 3, tags: ['Hidden', 'Debug'],
+    ask: 'The Musing line\'s token count stays low while tries are writing tests and drafts. Count every token written, like Claude Code does.',
+    hard: 'The tokens arrive through several different events; only some are counted today.', check: 'A stand-in run with tries, drafts and a reply: the count equals every token written.' },
+  { id: 'H13', side: 'pub', src: '9d9821f', title: 'A queued message is lost', lang: 'JS', size: '≈9k lines', level: 4, tags: ['Big', 'Hidden', 'Debug'],
+    ask: 'If I save Context or Thinking cap in /effort while the model is still starting, a message I queued is lost. Nothing I send should be lost.',
+    hard: 'A timing bug in the app\'s state: it only happens in one order of events.', check: 'A queued message during a start and a settings save: it is sent once, after the start.' },
+  { id: 'H14', side: 'pub', src: '090078a', title: 'Code bent to fit a wrong test', lang: 'JS', size: '≈9k lines', level: 5, tags: ['Big', 'Hidden', 'Multi-step', 'Debug'],
+    ask: 'Gemma sometimes changes working code to make a wrong test pass, and a change can quietly delete a function. Stop both.',
+    hard: 'Judging a change, not making one: it has to notice a deleted function and a test that disagrees with the task.', check: 'Hidden changes: one that drops a function, one that bends code to a wrong test, and good changes that must still go through.' },
+  // ---- Private: from MAIN2026 (stays on this Mac, never in the public repo) ----
+  { id: 'P01', side: 'priv', src: 'b29bc32c', title: 'Forecast grades check the wrong hour', lang: 'JS', size: '≈6k lines', level: 5, tags: ['Big', 'Hidden', 'Multi-step', 'Debug'],
+    ask: 'Orbit\'s forecast grades are wrong: a forecast for 10:00 is graded against the 06:00 bar. Find out why and fix it.',
+    hard: 'The chart\'s New York times are read as UTC in one place of three; winter and summer time move it by an hour.', check: 'The fix\'s tests: grading in summer and winter time, around the clock change, and at midnight.' },
+  { id: 'P02', side: 'priv', src: '27b8f4b4', title: 'September starts on Sep 2', lang: 'JS', size: '≈6k lines', level: 3, tags: ['Hidden', 'Debug'],
+    ask: 'In Cycle Lab, daily charts start September on Sep 2 instead of Sep 1. Each month should start on its first trading day.',
+    hard: 'The fix for September must hold for months that start on a weekend or a holiday.', check: 'Every month of two years, including holiday starts.' },
+  { id: 'P03', side: 'priv', src: '7aa2021b', title: 'The year fib misses the day session', lang: 'JS', size: '≈17k lines', level: 3, tags: ['Big', 'Hidden', 'Debug'],
+    ask: 'The Ladder\'s year fib only uses the evening that opened the year, not the whole first session.',
+    hard: 'A trading session runs across two calendar days; the year\'s first one starts the evening before.', check: 'Years that open on different weekdays, and a year whose first day is a holiday.' },
+  { id: 'P04', side: 'priv', src: 'd1954700', title: 'Grain nights count as gaps', lang: 'Python', size: '≈18k lines', level: 4, tags: ['Big', 'Hidden', 'Debug'],
+    ask: 'The Data Center shows gaps every night for grains and livestock, when those markets are simply closed. Give them their own trading hours.',
+    hard: 'Python in a big service; each market family has different hours, and the index markets must not change.', check: 'Grains, livestock and index futures across a week: only real gaps count.' },
+  { id: 'P05', side: 'priv', src: 'a1d03686', title: 'The bank re-asks for empty gaps', lang: 'Python', size: '≈18k lines', level: 4, tags: ['Big', 'Hidden', 'Multi-step'],
+    ask: 'The nightly bank keeps asking ProjectX for the same gaps every night, even though ProjectX already said they\'re empty. Stop re-asking.',
+    hard: 'It has to remember an answer across nights, but still re-ask when new data could exist.', check: 'The fix\'s tests: a gap said empty is not asked again; a newer gap still is.' },
+  { id: 'P06', side: 'priv', src: '98aac2bc', title: 'A covered tick hole says "no 1-second bars"', lang: 'Python', size: '≈18k lines', level: 3, tags: ['Hidden', 'Debug'],
+    ask: 'A tick hole that 1-second bars fully cover still reads "no 1-second bars" on the Data Center.',
+    hard: 'An edge in time ranges: covered, partly covered and uncovered must each read right.', check: 'Holes fully, partly and not covered, touching ends included.' },
+  { id: 'P07', side: 'priv', src: '3f0a374d', title: 'Scheduled runs use an expired contract', lang: 'JS', size: '≈12k lines', level: 5, tags: ['Big', 'Hidden', 'Multi-step'],
+    ask: 'Scheduled futures runs keep forecasting an expired contract after the roll. Swap to the live contract, and show it in the schedule.',
+    hard: 'New logic across the worker and the schedule, with roll dates that differ by market.', check: 'The fix\'s tests: before, on and after roll days for several markets; the schedule shows the swap.' },
+  { id: 'P08', side: 'priv', src: '8ce58935', title: '"Stale" after one missed bar', lang: 'Python + JS', size: '≈18k lines', level: 4, tags: ['Big', 'Hidden', 'Multi-step'],
+    ask: 'The Data Center calls a market "stale" after one missed bar. Stale should mean a whole session day was missed.',
+    hard: 'Changes in the Python service and the page, and "a session day" is not a calendar day.', check: 'Missed bars, a missed session, weekends and holidays.' },
+  { id: 'P09', side: 'priv', src: '559341c9', title: 'Adding contracts floods the bank', lang: 'Python', size: '≈18k lines', level: 5, tags: ['Big', 'Hidden', 'Multi-step', 'Debug'],
+    ask: 'When I add many contracts at once, the bank floods ProjectX and gets 429s. Fetch new tapes three at a time, and keep the nightly run in its own lane.',
+    hard: 'Concurrency across several files: a limit of three, a separate lane, and nothing lost or run twice.', check: 'The fix\'s tests: never more than three at once, the nightly lane never blocked, every tape fetched once.' },
+  { id: 'P10', side: 'priv', src: '227ffa80', title: 'The scanner cache ignores the filters', lang: 'JS', size: '≈8k lines', level: 3, tags: ['Hidden', 'Debug'],
+    ask: 'The scanner\'s one-minute cache returns results for the wrong filters when I change the JUL13 filters.',
+    hard: 'The cache key is built far from the filters; every filter must count, and nothing else.', check: 'Each filter changed alone gets its own result; the same filters still hit the cache.' },
+  { id: 'P11', side: 'priv', src: 'cd714be0', title: 'Activity miscounts, and odd sign-in names', lang: 'JS', size: '≈8k lines', level: 4, tags: ['Hidden', 'Multi-step'],
+    ask: 'Activity counts the loading screen as a visit and miscounts admins, and a sign-in name that isn\'t text breaks the login.',
+    hard: 'Three faults in three files; one is security (input that is not a string).', check: 'The fix\'s tests: the loading screen left out, admins counted once, non-text names refused with a clear error.' },
+  { id: 'P12', side: 'priv', src: 'cfc034c7', title: 'Recorder and Ladder sign each other out', lang: 'JS', size: '≈5k lines', level: 4, tags: ['Hidden', 'Debug'],
+    ask: 'The recorder and the Ladder keep signing each other out of ProjectX.',
+    hard: 'Two programs share one sign-in; the symptom looks like a network fault.', check: 'The fix\'s test: both keep working with one shared sign-in.' },
+  { id: 'P13', side: 'priv', src: 'de9d43b1', title: 'A switched-off collector reads as a warning', lang: 'JS', size: '≈4k lines', level: 2, tags: ['Hidden'],
+    ask: 'Data health shows a warning for a collector I switched off, just because it has no table yet. Off should read as off.',
+    hard: 'The one warm-up test: off, empty and broken must each read differently.', check: 'Off with and without a table, on and empty, on and failing.' },
+  { id: 'P14', side: 'priv', src: '2e0d47a3', title: 'The retrain panel crashes on a slow machine', lang: 'JS', size: '≈4k lines', level: 4, tags: ['Hidden', 'Debug'],
+    ask: 'The retrain progress panel crashes on a slow machine.',
+    hard: 'Only the order of events differs on a slow machine; the crash does not happen on a fast one.', check: 'The fix\'s test: steps arriving late, early and twice.' },
+];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let swaps = new Set(); try { swaps = new Set(JSON.parse(localStorage.getItem('hard28-swaps') || '[]')); } catch {}
+const saveSwaps = () => { try { localStorage.setItem('hard28-swaps', JSON.stringify([...swaps])); } catch {} };
+const TABS = [['over', 'Overview'], ['pub', 'Public'], ['priv', 'Private'], ['grade', 'How it is graded and built']];
+let tab = 'over', sel = 0;
+const stars = (n) => '★'.repeat(n) + '<span style="opacity:.25">' + '★'.repeat(5 - n) + '</span>';
+function tabs() { $('tabs').innerHTML = TABS.map(([k, w]) => `<button type="button" role="tab" data-t="${k}" aria-selected="${k === tab}">${w}${k === 'pub' || k === 'priv' ? `<span>${T.filter((t) => t.side === k && !swaps.has(t.id)).length}</span>` : ''}</button>`).join(''); }
+$('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) { tab = b.dataset.t; sel = 0; draw(); } };
+function over() {
+  const count = (tag) => T.filter((t) => t.tags.includes(tag)).length;
+  const lv = [1, 2, 3, 4, 5].map((n) => T.filter((t) => t.level === n).length);
+  $('p-over').innerHTML = `<div class="cards">
+    <div class="card"><div class="k">Tests</div><div class="v">28</div><p><b class="pub">14 public</b> from Agentic Coder's own history · <b class="priv">14 private</b> from MAIN2026</p></div>
+    <div class="card"><div class="k">Where each comes from</div><div class="v">a real fixed bug</div><p>The project as it was just before the fix; the test that proved the fix is the hidden check.</p></div>
+    <div class="card"><div class="k">Project sizes</div><div class="v">3k–18k lines</div><p>vs 5–100 lines in Practice, New and Work 28. JavaScript, Python, a shell script.</p></div>
+    <div class="card"><div class="k">Time</div><div class="v">20 min a test</div><p>A whole run: about 2–5 hours per model (9 at worst).</p></div>
+  </div>
+  <div class="two">
+    <div class="box"><h2>What makes them hard</h2><div class="bars">${[['Big project', count('Big')], ['Hidden check (all 28)', 28], ['Multi-step', count('Multi-step')], ['Debug from a symptom', count('Debug')], ['Truth check (all 28)', 28]].map(([n, c]) => `<span>${n}</span><i style="width:${Math.round(c / 28 * 100)}%"></i><b>${c}</b>`).join('')}</div>
+      <p style="color:var(--mute);font-size:13.5px;margin:10px 0 0">Levels are my guess before any run: ${lv.map((c, i) => `${c} at ${'★'.repeat(i + 1)}`).join(' · ')}. Aimed so a strong model passes about half, and scores spread out.</p></div>
+    <div class="box"><h2>What you can do on this page</h2><ul>
+      <li>Open <b>Public</b> or <b>Private</b>, pick a test to read what it asks, why it is hard and how it is checked.</li>
+      <li><b>Swap</b> any test you don't want (the button, or S). <b>Copy my swaps</b> and paste them to me; I'll replace them from the same histories.</li>
+      <li>Nothing here runs a model or changes your code.</li></ul></div>
+  </div>`;
+}
+function list() {
+  const L = T.filter((t) => t.side === tab);
+  sel = Math.max(0, Math.min(sel, L.length - 1));
+  $('rows').innerHTML = L.map((t, i) => `<tr data-i="${i}" aria-selected="${i === sel}" class="${swaps.has(t.id) ? 'swapped' : ''}"><td>${t.id}</td><td class="t" title="${esc(t.title)}">${esc(t.title)}</td><td>${t.tags.map((g) => `<span class="tag">${g}</span>`).join('')}</td><td>${t.size}</td><td class="stars">${stars(t.level)}</td></tr>`).join('');
+  const t = L[sel];
+  $('detail').innerHTML = `<div class="k">${t.id} · ${t.side === 'pub' ? '<b class="pub">public</b> · Agentic Coder' : '<b class="priv">private</b> · MAIN2026, stays on this Mac'} · fixed in <code>${t.src}</code></div>
+    <h3>${esc(t.title)}</h3><div class="k">What the model is asked</div><p class="ask">${esc(t.ask)}</p>
+    <dl><dt>Hard because</dt><dd>${esc(t.hard)}</dd><dt>Hidden check</dt><dd>${esc(t.check)}</dd><dt>Also</dt><dd>the truth check: did its last message say done or fixed while the check failed?</dd><dt>Project</dt><dd>${t.size}, ${t.lang}, as it was just before <code>${t.src}</code></dd><dt>Level</dt><dd class="stars">${stars(t.level)}</dd></dl>
+    <button type="button" class="swapbtn" id="swap" aria-pressed="${swaps.has(t.id)}">${swaps.has(t.id) ? 'Swapped: keep it after all' : 'Swap this test out'}</button>`;
+  $('swapcount').textContent = swaps.size ? `${swaps.size} swapped: ${[...swaps].sort().join(', ')}` : 'None swapped';
+}
+$('rows').onclick = (e) => { const r = e.target.closest('tr'); if (r) { sel = +r.dataset.i; list(); } };
+const toggle = () => { const t = T.filter((x) => x.side === tab)[sel]; if (!t) return; if (swaps.has(t.id)) swaps.delete(t.id); else swaps.add(t.id); saveSwaps(); tabs(); list(); };
+$('detail').onclick = (e) => { if (e.target.closest('#swap')) toggle(); };
+$('copy').onclick = async () => { const text = swaps.size ? `Hard 28: swap ${[...swaps].sort().map((id) => `${id} (${T.find((t) => t.id === id).title})`).join(', ')}` : 'Hard 28: keep all 28'; try { await navigator.clipboard.writeText(text); $('copied').textContent = 'Copied: paste it to me'; } catch { $('copied').textContent = text; } };
+function grade() {
+  $('p-grade').innerHTML = `<div class="two" style="margin-top:0">
+  <div class="box"><h2>How a test is graded</h2><ol>
+    <li><b>The hidden check</b> runs after the model says it is done (or at 20 minutes): the test that proved the real fix, plus the project's own tests, which must still pass. Pass or fail.</li>
+    <li><b>The truth check:</b> if the check failed, did the model's last message say it was done, fixed or working? That counts as a <b>false done</b>. Each model gets a false-done count beside its score.</li>
+    <li>Every test is verified before it counts: it <b>fails as given</b> and <b>passes with the real fix</b> applied, the same guard the other sets have.</li>
+    <li>Scores land in the test record like the other sets: the Tests tab grid gets a Hard 28 column, and the Battle arena gets the set.</li></ol></div>
+  <div class="box"><h2>How I'd build it (after your OK on this list)</h2><ol>
+    <li>For each test: the project slice from the commit before the fix (only the folders it needs), the ask, and the hidden check from the fix's own test.</li>
+    <li>Checks run with the repo's own tools: bun for Agentic Coder, vitest / node / pytest for MAIN2026 (its node_modules and Python environment on this Mac).</li>
+    <li><b>Public 14</b> go in the repo beside New 28 and Work 28. <b>Private 14</b> stay in <code>~/.agentic-coder/battle/</code> only; the repo check makes sure no MAIN2026 file is ever committed.</li>
+    <li>The runner gets a 20-minute limit for this set, and the false-done count.</li>
+    <li>Verify all 28 (fail as given, pass with the fix), run the unit tests, commit and push the public part. No model is run: you run Hard 28 yourself, like Practice 28.</li></ol>
+    <p style="color:var(--mute);font-size:13.5px;margin:10px 0 0">Time to build: about 5–7 hours. <b>Real:</b> the commits, their fixes and the tests that proved them, and the folder sizes (counted from the repos). <b>Planned, not built yet:</b> each test's slice size (≈), the extra hidden cases listed beside each fix's own test, the wording of each ask, and the levels (my guess before any run).</p></div></div>`;
+}
+function draw() {
+  tabs();
+  $('p-over').hidden = tab !== 'over'; $('p-list').hidden = tab !== 'pub' && tab !== 'priv'; $('p-grade').hidden = tab !== 'grade';
+  if (tab === 'over') over(); else if (tab === 'grade') grade(); else list();
+}
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const order = TABS.map(([k]) => k), at = order.indexOf(tab);
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { tab = order[(at + (e.key === 'ArrowRight' ? 1 : order.length - 1)) % order.length]; sel = 0; draw(); return; }
+  if ($('p-list').hidden) return;
+  const n = T.filter((t) => t.side === tab).length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, Math.min(n - 1, sel + (e.key === 'ArrowDown' ? 1 : -1))); list(); }
+  else if (e.key === 's' || e.key === 'S') toggle();
+});
+draw();
+</script>
+</body>
+</html>

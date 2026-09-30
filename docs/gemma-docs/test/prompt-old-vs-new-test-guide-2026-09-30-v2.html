@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt old vs new: the test, step by step</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f7f6f2;--card:#ffffff;--inner:#fbfaf7;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;
+  --t:#2a78d6;--t-soft:rgba(42,120,214,.09);
+  --ok:#2f8a4e;--ok-soft:rgba(47,138,78,.12);--bad:#c4432b;--bad-soft:rgba(196,67,43,.11);--warn:#a86b12;--warn-soft:rgba(200,140,30,.14);--wait:#8a857a;--wait-soft:rgba(138,133,122,.13);
+  --term:#18191d;--term-line:#2e3037;--term-ink:#e7e5df;--term-dim:#8e8b84;--term-ok:#7fd092;--term-bad:#f08a74;--term-warn:#e8b765;--term-prompt:#7fa9ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#26282e;
+    --t:#3987e5;--t-soft:rgba(57,135,229,.13);
+    --ok:#56b675;--ok-soft:rgba(86,182,117,.15);--bad:#e46a52;--bad-soft:rgba(228,106,82,.15);--warn:#e0a54a;--warn-soft:rgba(224,165,74,.15);--wait:#a4a19a;--wait-soft:rgba(164,161,154,.14);
+    --term:#0f1013;--term-line:#2a2c33;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15161a;--card:#1d1f24;--inner:#23252b;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#34363e;--soft:#26282e;
+  --t:#3987e5;--t-soft:rgba(57,135,229,.13);
+  --ok:#56b675;--ok-soft:rgba(86,182,117,.15);--bad:#e46a52;--bad-soft:rgba(228,106,82,.15);--warn:#e0a54a;--warn-soft:rgba(224,165,74,.15);--wait:#a4a19a;--wait-soft:rgba(164,161,154,.14);
+  --term:#0f1013;--term-line:#2a2c33;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.page{height:100vh;height:100dvh;padding:14px 16px;display:flex;align-items:center}
+.app{flex:1;min-height:0;height:min(calc(100vh - 28px),max(850px,calc((100vh - 28px) * .75)));height:min(calc(100dvh - 28px),max(850px,calc((100dvh - 28px) * .75)));display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;width:100%;max-width:1040px;margin:0 auto;padding:0 26px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 32px rgba(0,0,0,.06)}
+.winbar{display:flex;align-items:center;gap:7px;margin:0 -26px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--inner);border-radius:18px 18px 0 0}
+.winbar i{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.winbar h1{flex:1;margin:0 0 0 8px;font-size:14.5px;font-weight:650;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winbar h1 small{font-size:13px;font-weight:500;color:var(--mute)}
+.winbar em{font-style:normal;font-size:12px;color:var(--faint);white-space:nowrap}
+
+/* top: title + step chips */
+.top{padding:12px 0 11px;border-bottom:1px solid var(--line)}
+.title{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.title h1{font-size:19px;letter-spacing:-.01em;margin:0}
+.title span{font-size:13.5px;color:var(--mute)}
+.chips{display:grid;grid-template-columns:repeat(9,1fr);gap:6px}
+.chip{appearance:none;border:1px solid var(--line);background:var(--inner);border-radius:10px;padding:6px 8px 7px;text-align:left;cursor:pointer;min-width:0;font:inherit;color:var(--mute)}
+.chip b{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mute)}
+.chip b i{flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--mute);font-style:normal;font-size:11px}
+.chip span{display:block;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.chip.on{border-color:var(--ink);background:var(--card)}
+.chip.on b,.chip.on span{color:var(--ink)}
+.chip.on b i{background:var(--ink);color:var(--bg)}
+.chip.did b i{background:var(--ok);color:#fff}
+
+/* middle: one step */
+.stage{overflow-y:auto;padding:16px 2px 8px;scrollbar-width:thin}
+.panel{display:none}
+.panel.on{display:block}
+.kicker{font-size:12.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.kicker .eta{text-transform:none;letter-spacing:0;font-weight:500;margin-left:6px;background:var(--soft);border-radius:999px;padding:1px 9px}
+.panel h2{font-size:25px;line-height:1.15;letter-spacing:-.02em;margin:4px 0 5px}
+.why{color:var(--mute);font-size:15.5px;max-width:780px}
+.why b{color:var(--ink);font-weight:600}
+.lab{display:flex;align-items:center;gap:8px;margin:18px 0 7px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:650;color:var(--mute)}
+.lab .num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--t);color:#fff;font-size:11px;letter-spacing:0}
+.lab .hint{text-transform:none;letter-spacing:0;font-weight:500;color:var(--faint)}
+.term{position:relative;background:var(--term);border:1px solid var(--term-line);border-radius:12px;color:var(--term-ink);font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;padding:13px 16px}
+.term .bar{display:flex;gap:6px;margin:-3px 0 9px}
+.term .bar i{width:10px;height:10px;border-radius:50%;background:#3a3c44}
+.type{padding-right:118px}
+.type .line{display:flex;gap:10px}
+.type .pr{color:var(--term-prompt);flex:none;user-select:none;-webkit-user-select:none}
+.type code{font:inherit;white-space:pre-wrap;word-break:break-all;color:#fff}
+.copy{position:absolute;top:12px;right:12px;appearance:none;border:0;background:var(--t);color:#fff;font:600 14px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:9px;padding:8px 16px;cursor:pointer;min-width:94px}
+.copy:hover{filter:brightness(1.08)}
+.copy.did{background:var(--ok)}
+.after{font-size:13.5px;color:var(--mute);margin-top:7px}
+.after b{color:var(--ink);font-weight:600}
+.show{white-space:pre-wrap;word-break:break-word;color:var(--term-ink);font-size:13px;line-height:1.55}
+.show .d{color:var(--term-dim)}
+.show .g{color:var(--term-ok);font-weight:600}
+.show .r{color:var(--term-bad);font-weight:600}
+.show .y{color:var(--term-warn)}
+.note{font-size:13px;color:var(--faint);margin-top:6px}
+.note b{color:var(--mute);font-weight:600}
+.box{background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:15px;color:var(--mute);margin-top:14px}
+.box b{color:var(--ink);font-weight:600}
+.box ol,.box ul{margin:6px 0 0;padding-left:20px}
+.box li + li{margin-top:5px}
+.box.warn{background:var(--warn-soft);border-color:transparent}
+kbd{font:600 12.5px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;background:var(--card);color:var(--ink)}
+.help{display:none;margin-top:14px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.help.open{display:block}
+.help h3{font-size:15px;margin:0 0 6px}
+.help dl{margin:0}
+.help dt{font-weight:600;font-size:14.5px;color:var(--ink);margin-top:9px}
+.help dt:first-child{margin-top:0}
+.help dd{margin:2px 0 0;font-size:14.5px;color:var(--mute)}
+.help code,.why code,.box code,.after code{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:1px 5px;border-radius:5px;color:var(--ink)}
+.secs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;font-size:15px;color:var(--mute)}
+.secs input{width:90px;font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+
+/* results */
+.loader{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.drop{background:var(--inner);border:1px dashed var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.drop h3{font-size:15px;margin:0 0 3px}
+.drop p{font-size:13.5px;color:var(--mute);margin:0 0 9px}
+.drop textarea{width:100%;height:62px;resize:vertical;background:var(--term);color:var(--term-ink);border:1px solid var(--term-line);border-radius:8px;padding:7px 9px;font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+input[type=file]{font-size:13px;color:var(--mute);max-width:100%}
+.status{font-size:13px;color:var(--mute)}
+.sbtn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:8px;padding:6px 12px;cursor:pointer}
+.sbtn.quiet{color:var(--mute);font-weight:500}
+.verdict{margin-top:12px;background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:12px 16px;font-size:16px}
+.verdict b{font-weight:650}
+.verdict .more{display:block;margin-top:5px;font-size:14px;color:var(--mute)}
+.verdict .more b{color:var(--ink);font-weight:600}
+.twin{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;margin-top:10px}
+.twin[hidden],.loaded[hidden],.loader[hidden],.why[hidden]{display:none}
+.loaded{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;font-size:14px;color:var(--mute)}
+.loaded b{color:var(--ink);font-weight:600}
+.res{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:13px}
+.res{table-layout:fixed}
+.res th:nth-child(2),.res th:nth-child(3){width:94px}
+.res td.t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res th,.res td{line-height:1.35;padding:3px 10px;text-align:left;border-top:1px solid var(--soft)}
+.res thead th{border-top:0;background:var(--inner);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);font-weight:600}
+.res td.t .n2{color:var(--faint);display:inline-block;width:24px;font-variant-numeric:tabular-nums}
+.res td.c{white-space:nowrap}
+.res td.c .s{color:var(--mute);font-size:12px;margin-left:6px}
+.res tfoot td{background:var(--inner);font-weight:600}
+.res tr.flip td.t{font-weight:650}
+.tag{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{color:var(--ok);background:var(--ok-soft)}
+.tag.bad{color:var(--bad);background:var(--bad-soft)}
+.tag.none{color:var(--wait);background:var(--wait-soft)}
+.big{font-size:17px;color:var(--ink)}
+.say{display:inline-block;margin-top:8px;font:600 17px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);border-radius:9px;padding:8px 14px;color:var(--ink)}
+
+/* bottom: fixed controls */
+.controls{display:grid;grid-template-columns:130px 1fr auto;align-items:center;gap:12px;padding:12px 0 14px;border-top:1px solid var(--line)}
+.btn{appearance:none;border:1px solid var(--line);background:var(--inner);color:var(--ink);font:600 15px -apple-system,BlinkMacSystemFont,sans-serif;border-radius:11px;padding:11px 16px;cursor:pointer;white-space:nowrap}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--ink);color:var(--bg);border-color:var(--ink);width:300px}
+.btn.alt{justify-self:end;width:260px;color:var(--mute);font-weight:500}
+.btn.alt[hidden]{display:inline-block;visibility:hidden}
+.mid{display:flex;justify-content:flex-end;min-width:0}
+.pos{font-size:13px;color:var(--faint);text-align:center;display:none}
+
+@media (max-width:860px){
+  .chips{grid-template-columns:repeat(9,minmax(0,1fr));gap:4px}
+  .chip span{display:none}
+  .chip{padding:5px;display:grid;place-items:center}
+  .chip b{gap:0}
+  .chip b em{display:none}
+}
+@media (max-width:640px){
+  body{overflow:auto}
+  .page{padding:0}
+  .app{height:100vh;height:100dvh;border-radius:0;border-left:0;border-right:0;padding:0 16px}
+  .winbar{margin:0 -16px;border-radius:0}
+  .winbar h1 small,.winbar em{display:none}
+  .panel h2{font-size:23px}
+  .loader{grid-template-columns:1fr}
+  .twin{grid-template-columns:1fr}
+  .controls{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+  .controls .back{grid-row:2;grid-column:1}
+  .controls .mid{grid-row:1;grid-column:1 / -1;justify-content:stretch}
+  .btn.alt{width:100%}
+  .btn.go{grid-row:2;grid-column:2;width:auto}
+  .type{padding-right:16px;padding-top:52px}
+  .copy{left:12px;right:auto}
+}
+</style>
+<style>
+.arms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.arm{background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14.5px;color:var(--mute)}
+.arm b{display:block;color:var(--ink);font-size:15px}
+.y{color:var(--term-warn)}
+.winbar em,.note,.lab .hint{color:var(--mute)}
+.panel.helpopen .term.show,.panel.helpopen .lab.expect{display:none}
+.help dl{columns:2;column-gap:28px}.help dt{break-after:avoid}.help dd{break-inside:avoid;margin-bottom:8px}
+@media (max-width:760px){.help dl{columns:1}}
+/* long file names in the boxes wrap, so a phone never scrolls sideways */
+.stage{min-width:0}.show,.help dd{overflow-wrap:anywhere}
+</style>
+
+</head>
+<body>
+<div class="page">
+<div class="app">
+
+<div class="winbar"><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i><h1>Does the new prompt help?<small> · Practice 28, old prompt against new, step by step</small></h1><em>version 2 · thinking off and on</em></div>
+<header class="top">
+  <nav class="chips" id="chips" style="grid-template-columns:repeat(9,minmax(0,1fr))"></nav>
+</header>
+
+<div class="stage" id="stage">
+
+  <section class="panel" data-name="Start" data-go="Terminal is open →">
+    <div class="kicker">Before you start</div>
+    <h2>The 28 practice tasks, old prompt and new, thinking off and on</h2>
+    <p class="why">Each model does the Practice 28 twice: <b>once with the prompt from before 30 Sep</b>, and <b>once with the new one</b> (the Work habits block Opus and Fable work by). Only the prompt differs. Each model runs it with <b>thinking off</b> (about 1–1½ hours) and then with <b>thinking on</b> (about 5–8 hours, so overnight). Every run gets a results page and a line in the hub’s Tests tab.</p>
+    <div class="box">
+      <b>Do these three things first</b>
+      <ol>
+        <li><b>Open Terminal</b> and put it beside this window.</li>
+        <li><b>Quit Agentic Coder:</b> type <code>/exit</code> in every Agentic Coder window. Only one model fits at a time.</li>
+        <li><b>Plug in the Mac.</b> The test keeps it awake by itself.</li>
+      </ol>
+    </div>
+    <div class="box"><b>Nobody has run this test yet.</b> The dark “Terminal should print” boxes show the exact lines the test prints; the <span style="color:var(--warn)">yellow</span> parts (<b>N</b>) are where your numbers go. <b>The rule, set before any run:</b> the new prompt holds when it passes at least as many tasks as the old one and takes at most 10% longer.<br><b>The same for both models:</b> 32k context, 15 min a task, 40 steps, 8 tries, all four helpers, a 4,096-token thinking cap, no memory. Each keeps its own sampling, the way the app runs it.</div>
+  </section>
+
+  <section class="panel" data-name="Free the model" data-go="It says that →" data-alt="Something’s different">
+    <div class="kicker">Step 1 of 7 <span class="eta">a few seconds</span></div>
+    <h2>Free the model</h2>
+    <p class="why">The app keeps its model loaded for 30 minutes after you close it. This unloads it so the test can load its own.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>coding stop</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Terminal should print one of these <span class="hint">· either is fine</span></div>
+    <div class="term show">Stopped the model on port 17600; its memory is free.
+<span class="d">— or —</span>
+No model is loaded.</div>
+    <div class="help"><h3>If it printed something else</h3><dl>
+      <dt>“Still in use by an open Agentic Coder window”</dt><dd>An Agentic Coder window is still open. Type <code>/exit</code> in it, then run the command again.</dd>
+      <dt>“command not found: coding”</dt><dd>Type this instead: <code>~/.local/bin/coding stop</code></dd>
+    </dl></div>
+  </section>
+
+  <section class="panel" data-name="Test copy" data-go="It ended with copy ready →" data-alt="Something’s different">
+    <div class="kicker">Step 2 of 7 <span class="eta">about 10 seconds</span></div>
+    <h2>Make a test copy of the new code</h2>
+    <p class="why">A copy nobody else edits, so a Claude session changing the app can’t change the code between the old run and the new one. <b>Your main folder is untouched</b>, and the results still go there.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal <span class="hint">· one long line; Copy takes all of it</span></div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/Desktop/agentic-coder &amp;&amp; git fetch -q origin &amp;&amp; git worktree add --detach ~/worktrees/prompt-test origin/main &amp;&amp; ln -s ~/Desktop/agentic-coder/node_modules ~/worktrees/prompt-test/node_modules &amp;&amp; mkdir -p ~/Desktop/agentic-coder/cli\ docs/gemma-docs/test/prompt-old-vs-new-tests &amp;&amp; echo "copy ready"</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Terminal should print</div>
+    <div class="term show"><span class="d">Preparing worktree (detached HEAD <span class="y">1a2b3c4</span>)</span>
+<span class="d">HEAD is now at <span class="y">1a2b3c4</span> …</span>
+<span class="g">copy ready</span></div>
+    <div class="help"><h3>If it printed something else</h3><dl>
+      <dt>“already exists” about <code>~/worktrees/prompt-test</code></dt><dd>A copy from an earlier try is there. Run <code>git -C ~/Desktop/agentic-coder worktree remove --force ~/worktrees/prompt-test</code>, then press Copy above again. That removes only the test copy.</dd>
+      <dt>“File exists” about <code>node_modules</code></dt><dd>That’s fine. The link was already made. Type <code>echo "copy ready"</code> and go on.</dd>
+    </dl></div>
+  </section>
+
+  <section class="panel" data-name="Qwen · off" data-go="It printed its verdict →" data-alt="It refused, errored or got stuck">
+    <div class="kicker">Step 3 of 7 <span class="eta">about 1–1½ hours</span></div>
+    <h2>Qwen, thinking off: 28 tasks old, then 28 new</h2>
+    <p class="why">Thinking off, the way ▶ Run a test runs the Practice 28. Each task stops by itself after 15 minutes.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/worktrees/prompt-test &amp;&amp; AGENTIC_REPO=~/Desktop/agentic-coder node models/evals/tools/prompt-ab.mjs --model qwen 2&gt;&amp;1 | tee ~/Desktop/agentic-coder/cli\ docs/gemma-docs/test/prompt-old-vs-new-tests/qwen.log</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Terminal should print these lines <span class="hint">· yellow = your numbers</span></div>
+    <div class="term show">old prompt: the Practice 28 on Qwen3.5 9B
+server up on http://127.0.0.1:<span class="y">N</span>, ctx 32768, thinking budget 4096; helpers: Scout, Medic, Oracle, Sentry; focused paths: on; prompt: old
+<span class="g">PASS</span> old  think=off  1-json-flag      <span class="y">N</span>s  <span class="y">N</span> steps …
+<span class="d">…  27 more lines like it, then the same 28 with “new” …</span>
+results page: tests/agentic-coder-prompt-old-vs-new-qwen-<span class="y">date</span>.html
+recorded in the test record: Prompt old vs new — <span class="y">N</span> of 28, <span class="y">N</span> s
+Prompt old vs new on Qwen3.5 9B: old <span class="y">N</span> of 28, new <span class="y">N</span> of 28 · <span class="g">HOLDS</span> <span class="d">or</span> <span class="r">DOES NOT HOLD</span></div>
+    <div class="help"><h3>Stop here and tell Claude</h3><dl>
+      <dt>An error about memory, or the model not loading</dt><dd>A model is still in memory. Run step 1 again, wait a minute, then press Copy above again.</dd>
+      <dt>A line starts with <span class="r">FAIL</span></dt><dd>That’s a result, not a failure of the test: a task’s own check did not pass. Let it finish.</dd>
+      <dt>Stuck on one task for over 15 minutes</dt><dd>Press <kbd>Control</kbd> <kbd>C</kbd> once. It saves what ran, skips the rest, and still makes a page, marked as a part run. Everything it printed is in <code>qwen.log</code> in gemma-docs → test → prompt-old-vs-new-tests.</dd>
+      <dt>You want thinking on</dt><dd>That comes in steps 5 and 6, with the same command plus <code>--think on</code>. Run this one first.</dd>
+    </dl></div>
+  </section>
+
+  <section class="panel" data-name="Gemma · off" data-go="It printed its verdict →" data-alt="It refused, errored or got stuck">
+    <div class="kicker">Step 4 of 7 <span class="eta">about 1–1½ hours</span></div>
+    <h2>Gemma, thinking off: the same, old then new</h2>
+    <p class="why">The same 56 runs on the other model, same settings. You can do this step another day; each run gets its own page.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/worktrees/prompt-test &amp;&amp; AGENTIC_REPO=~/Desktop/agentic-coder node models/evals/tools/prompt-ab.mjs --model gemma 2&gt;&amp;1 | tee ~/Desktop/agentic-coder/cli\ docs/gemma-docs/test/prompt-old-vs-new-tests/gemma.log</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Terminal should print the same lines, for Gemma</div>
+    <div class="term show">old prompt: the Practice 28 on Gemma 4 12B QAT
+<span class="d">…</span>
+Prompt old vs new on Gemma 4 12B QAT: old <span class="y">N</span> of 28, new <span class="y">N</span> of 28 · <span class="g">HOLDS</span> <span class="d">or</span> <span class="r">DOES NOT HOLD</span></div>
+    <div class="help"><h3>Stop here and tell Claude</h3><dl>
+      <dt>Anything from step 3’s list</dt><dd>Same answers. The log is <code>gemma.log</code> in the same folder.</dd>
+    </dl></div>
+  </section>
+
+  <section class="panel" data-name="Qwen · on" data-go="It printed its verdict →" data-alt="It refused, errored or got stuck">
+    <div class="kicker">Step 5 of 7 <span class="eta">about 5–8 hours · overnight</span></div>
+    <h2>Qwen, thinking on: old, then new</h2>
+    <p class="why">The same 56 runs with thinking at High: the model thinks before each step, up to 4,096 tokens. <b>About 5× slower</b> than off (Gemma measured 5.3×; Qwen hasn’t been timed with thinking yet). At most 14 hours if every task uses its 15 minutes.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/worktrees/prompt-test &amp;&amp; AGENTIC_REPO=~/Desktop/agentic-coder node models/evals/tools/prompt-ab.mjs --model qwen --think on 2&gt;&amp;1 | tee ~/Desktop/agentic-coder/cli\ docs/gemma-docs/test/prompt-old-vs-new-tests/qwen-think.log</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Terminal should print these lines <span class="hint">· yellow = your numbers</span></div>
+    <div class="term show">old prompt: the Practice 28 on Qwen3.5 9B, thinking at High
+server up on http://127.0.0.1:<span class="y">N</span>, ctx 32768, thinking budget 4096; helpers: Scout, Medic, Oracle, Sentry; focused paths: on; prompt: old
+<span class="g">PASS</span> old  think=on   1-json-flag      <span class="y">N</span>s  <span class="y">N</span> steps …
+<span class="d">…  27 more lines like it, then the same 28 with “new” …</span>
+Prompt old vs new on Qwen3.5 9B: old <span class="y">N</span> of 28, new <span class="y">N</span> of 28 · <span class="g">HOLDS</span> <span class="d">or</span> <span class="r">DOES NOT HOLD</span></div>
+    <div class="help"><h3>Stop here and tell Claude</h3><dl>
+      <dt>A <span class="r">FAIL</span> at about 900 s</dt><dd>That task ran out of its 15 minutes while thinking. It counts as a fail for both prompts alike, so the comparison stays fair. Let it finish.</dd>
+      <dt>You need the Mac before it ends</dt><dd>Press <kbd>Control</kbd> <kbd>C</kbd> once. It saves what ran and makes a page marked as a part run. Run this step again another night for the full count.</dd>
+      <dt>Anything from step 3’s list</dt><dd>Same answers. The log is <code>qwen-think.log</code> in the same folder.</dd>
+    </dl></div>
+  </section>
+
+  <section class="panel" data-name="Gemma · on" data-go="It printed its verdict →" data-alt="It refused, errored or got stuck">
+    <div class="kicker">Step 6 of 7 <span class="eta">about 5–8 hours · overnight</span></div>
+    <h2>Gemma, thinking on: the same, old then new</h2>
+    <p class="why">The same 56 runs with thinking at High, same settings as Qwen. Gemma took <b>5.3× as long</b> at High on its last test (tasks 1 and 28). You can do this on another night.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>cd ~/worktrees/prompt-test &amp;&amp; AGENTIC_REPO=~/Desktop/agentic-coder node models/evals/tools/prompt-ab.mjs --model gemma --think on 2&gt;&amp;1 | tee ~/Desktop/agentic-coder/cli\ docs/gemma-docs/test/prompt-old-vs-new-tests/gemma-think.log</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Terminal should print the same lines, for Gemma</div>
+    <div class="term show">old prompt: the Practice 28 on Gemma 4 12B QAT, thinking at High
+<span class="d">…</span>
+Prompt old vs new on Gemma 4 12B QAT: old <span class="y">N</span> of 28, new <span class="y">N</span> of 28 · <span class="g">HOLDS</span> <span class="d">or</span> <span class="r">DOES NOT HOLD</span></div>
+    <div class="help"><h3>Stop here and tell Claude</h3><dl>
+      <dt>Anything from step 5’s list</dt><dd>Same answers. The log is <code>gemma-think.log</code> in the same folder.</dd>
+    </dl></div>
+  </section>
+
+  <section class="panel" data-name="Results" data-go="I see the verdict →">
+    <div class="kicker">Step 7 of 7 <span class="eta">a few seconds</span></div>
+    <h2>Open the results</h2>
+    <p class="why">This opens the four newest results pages: each model with thinking off and on. They are also on each run’s line in the hub’s Tests tab.</p>
+    <div class="lab"><span class="num">1</span>Type this into Terminal</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>ls -t ~/Desktop/agentic-coder/cli\ docs/tests/agentic-coder-prompt-old-vs-new-*.html | head -4 | while read f; do open "$f"; done</code></div></div>
+    <div class="lab expect"><span class="num">2</span>Your browser should show</div>
+    <div class="term show">Prompt old vs new · Qwen3.5 9B
+1 · Result   2 · Task by task   3 · What changed   4 · How it was measured</div>
+    <div class="arms">
+      <div class="arm"><b>“Holds” means</b>at least as many tasks passed with the new prompt, in at most 10% more time. Tab 1 marks the better cell in every row.</div>
+      <div class="arm"><b>Tasks that moved</b>Tab 2 names each task the new prompt fixed or broke, so one lucky task can’t hide.</div>
+    </div>
+  </section>
+
+  <section class="panel" data-name="Done" data-go="Start over">
+    <div class="kicker">Done</div>
+    <h2>Tell Claude what you saw</h2>
+    <p class="why">Say the four verdicts. If the new prompt holds, nothing more is needed: it is already on in the app. If it does not, name the model; the old prompt comes back for everyone with <code>AGENTIC_PROMPT=old</code> while the habits are fixed.</p>
+    <div class="lab"><span class="num">1</span>Optional: remove the test copy</div>
+    <div class="term type"><div class="line"><span class="pr">%</span><code>git -C ~/Desktop/agentic-coder worktree remove --force ~/worktrees/prompt-test &amp;&amp; echo "removed"</code></div></div>
+    <p class="note"><b>Safe because</b> it removes only the test copy. The results are in your main folder (models → results, and cli docs → tests).</p>
+  </section>
+
+</div>
+
+<footer class="controls">
+  <button class="btn back" id="back" type="button">← Back</button>
+  <div class="mid"><button class="btn alt" id="alt" type="button">Something’s different</button></div>
+  <button class="btn go" id="go" type="button">Next →</button>
+</footer>
+
+</div>
+</div>
+<script>
+(function(){
+  var panels=[].slice.call(document.querySelectorAll('.panel'));
+  var chips=document.getElementById('chips'), stage=document.getElementById('stage');
+  var back=document.getElementById('back'), go=document.getElementById('go'), alt=document.getElementById('alt');
+  var K={step:'promptw2-step',done:'promptw2-done'};
+  function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+  function save(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  var cur=Math.min(Math.max(Number(load(K.step))||0,0),panels.length-1), done=load(K.done)||{};
+  panels.forEach(function(p,i){
+    var c=document.createElement('button'); c.type='button'; c.className='chip';
+    c.innerHTML='<b><i>'+(i===0?'★':i===panels.length-1?'✓':i)+'</i><em></em></b><span>'+p.getAttribute('data-name')+'</span>';
+    c.addEventListener('click',function(){show(i)});
+    chips.appendChild(c);
+  });
+  var chipEls=[].slice.call(chips.children);
+  function show(i){
+    cur=Math.min(Math.max(i,0),panels.length-1);
+    panels.forEach(function(p,j){p.classList.toggle('on',j===cur); p.classList.remove('helpopen'); var h=p.querySelector('.help'); if(h)h.classList.remove('open');});
+    chipEls.forEach(function(c,j){c.classList.toggle('on',j===cur);c.classList.toggle('did',!!done[j]&&j!==cur)});
+    var p=panels[cur];
+    back.disabled=cur===0;
+    go.textContent=p.getAttribute('data-go')||'Next →';
+    var a=p.getAttribute('data-alt'); alt.style.visibility=a?'visible':'hidden'; alt.textContent=a||'Something’s different';
+    stage.scrollTop=0; save(K.step,cur);
+  }
+  back.addEventListener('click',function(){show(cur-1)});
+  go.addEventListener('click',function(){ if(cur===panels.length-1){done={};save(K.done,done);show(0);return} done[cur]=true; save(K.done,done); show(cur+1)});
+  alt.addEventListener('click',function(){var p=panels[cur], h=p.querySelector('.help'); if(!h)return; var open=!p.classList.contains('helpopen'); p.classList.toggle('helpopen',open); h.classList.toggle('open',open); alt.textContent=open?'Show what it should print':p.getAttribute('data-alt'); stage.scrollTop=0;});
+  document.addEventListener('keydown',function(e){ var tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea')return;
+    if(e.key==='ArrowRight'){go.click()} else if(e.key==='ArrowLeft'&&cur>0){show(cur-1)} });
+  [].forEach.call(document.querySelectorAll('.type'),function(t){
+    var code=t.querySelector('code'), text=code.textContent, b=document.createElement('button');
+    b.type='button'; b.className='copy'; b.textContent='Copy';
+    var after=document.createElement('p'); after.className='after'; after.innerHTML='Press <b>Copy</b>, click in Terminal, press <kbd>⌘</kbd> <kbd>V</kbd>, then <kbd>Return</kbd>.';
+    b.addEventListener('click',function(){
+      function ok(){b.textContent='Copied ✓';b.classList.add('did');after.innerHTML='Copied. Now click in <b>Terminal</b>, press <kbd>⌘</kbd> <kbd>V</kbd>, then <kbd>Return</kbd>.';setTimeout(function(){b.textContent='Copy';b.classList.remove('did')},2200)}
+      function fallback(){var x=document.createElement('textarea');x.value=text;x.style.position='fixed';x.style.opacity='0';document.body.appendChild(x);x.select();try{document.execCommand('copy');ok()}catch(e){b.textContent='Select + ⌘C'}document.body.removeChild(x)}
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(ok,fallback)}else fallback();
+    });
+    t.appendChild(b); t.parentNode.insertBefore(after,t.nextSibling);
+  });
+  show(cur);
+})();
+</script>
+</body>
+</html>

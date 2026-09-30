@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemma Faster Steps</title>
+<style>
+:root{--bg:#eeece6;--win:#fbfaf7;--fg:#1d1d1b;--mute:#6b6a64;--line:#dedad0;--term:#1b1b1a;--termfg:#e9e7df;--termmute:#8d8b84;--accent:#c96442;--accentfg:#fff;--good:#1f7a4d;--goodbg:#e3f3ea;--chip:#e6e3db}
+@media (prefers-color-scheme:dark){:root{--bg:#121211;--win:#1c1b19;--fg:#ecebe6;--mute:#a09f98;--line:#33322e;--term:#0e0e0d;--termfg:#e9e7df;--termmute:#8d8b84;--accent:#d97757;--accentfg:#fff;--good:#7fd4a4;--goodbg:#1d3328;--chip:#2a2926}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:14px}
+.win{width:min(920px,100%);height:min(calc(100vh - 28px),max(720px,calc(75vh - 28px)));background:var(--win);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.12);display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;overflow:hidden}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.dot{width:12px;height:12px;border-radius:50%;background:#ec6a5e}.dot:nth-child(2){background:#f4bf4f}.dot:nth-child(3){background:#61c554}
+.bar b{flex:1;text-align:center;font-size:14px;color:var(--mute);font-weight:600;margin-right:52px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line)}
+.chip{font-size:13px;padding:4px 10px;border-radius:99px;background:var(--chip);color:var(--mute);border:0;cursor:pointer;font-family:inherit}
+.chip.on{background:var(--accent);color:var(--accentfg)}.chip.done{color:var(--good)}
+.body{overflow:auto;padding:22px 26px}
+.kick{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.pill{text-transform:none;letter-spacing:0;background:var(--chip);padding:2px 9px;border-radius:99px;font-weight:500}
+h1{font-size:27px;line-height:1.2;margin:8px 0 6px}
+.why{color:var(--mute);margin:0 0 16px}
+.box{margin:14px 0}.box h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 6px}
+.term{background:var(--term);color:var(--termfg);border-radius:10px;padding:14px 16px;font:14.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;position:relative;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+.term .p{color:var(--termmute);user-select:none}
+.term.out{color:#cfcdc4}
+.copy{position:absolute;top:10px;right:10px;background:var(--accent);color:var(--accentfg);border:0;border-radius:8px;padding:7px 14px;font:600 14px -apple-system,system-ui,sans-serif;cursor:pointer}
+.under{font-size:14px;color:var(--mute);margin-top:6px}
+.safe{font-size:14px;color:var(--good);background:var(--goodbg);padding:6px 10px;border-radius:8px;margin-top:8px}
+.help{display:none;margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:15px}
+.help.show{display:block}.help p{margin:6px 0}
+ul.plain{margin:6px 0;padding-left:20px}ul.plain li{margin:4px 0}
+.foot{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.btn{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:9px;padding:10px 16px;font:600 15px -apple-system,system-ui,sans-serif;cursor:pointer}
+.btn.go{margin-left:auto;background:var(--accent);color:var(--accentfg);border-color:var(--accent);min-width:230px}
+.btn.alt{visibility:visible}
+@media (max-width:560px){body{padding:0}.win{height:100vh;border-radius:0}.body{padding:18px 16px}.btn.go{min-width:0}.bar b{margin-right:0}}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><b>Gemma faster: run it yourself · v2</b></div>
+  <div class="chips" id="chips"></div>
+  <div class="body" id="body"></div>
+  <div class="foot">
+    <button class="btn" id="back">← Back</button>
+    <button class="btn alt" id="alt">Something’s different</button>
+    <button class="btn go" id="go">Start →</button>
+  </div>
+</div>
+<script>
+const T = '~/Desktop/gemma-docs/test/gemma-faster-tests';
+const R = '~/Desktop/gemma-docs/test/gemma-faster-results-2026-09-28.html';
+const STEPS = [
+  { chip: 'Start', title: 'What you are about to run', time: 'about 1 h 15 min in all', go: 'Start →',
+    html: `<p class="under">New in v2: results go to <b>gemma-docs/test/gemma-faster-tests</b> and the results page to <b>gemma-docs/test</b>, beside the other tests. v1 is in <b>test/older versions</b>.</p>
+    <p class="why">It is on main now (c311a28, pushed 28 Sep): your <code>coding</code> rebuilds with it at its next start. The “before” run uses a frozen copy of the old code in <b>~/worktrees/agentic-before</b>.</p>
+    <ul class="plain">
+      <li><b>Speed helpers:</b> Google’s MTP guesses one word ahead and n-grams copy what is already on screen. Gemma checks every guess, so the answers are still Gemma’s.</li>
+      <li><b>Read the right files first:</b> the small memory model picks the files a request is about, read before step 1.</li>
+      <li><b>Stuck sooner:</b> the same step twice, or three errors in a row, asks you for a hint.</li>
+      <li><b>Counts:</b> the done line shows steps, reads and thinking tokens.</li>
+      <li>Thinking stays on for every step, as you chose.</li>
+    </ul>
+    <p class="why"><b>Win rule, set before the run:</b> total minutes and median steps go down, and no task that passed before fails after.</p>` },
+  { chip: '1', title: 'Stop the app', time: '10 s', go: 'It stopped →',
+    why: 'Only one Gemma fits in memory. Type this in a <b>Terminal tab</b>, not inside the app.',
+    cmd: 'coding stop', out: '(a line saying the model server stopped, or that none was running)',
+    help: '<p><b>“command not found”:</b> open a new Terminal window and try again.</p><p><b>You typed it into Agentic Coder:</b> it answers as if it were a request. Press Esc, then use a Terminal tab.</p>' },
+  { chip: '2', title: 'Unit tests on the new copy', time: 'about 5 min', go: 'It ended with 0 fail →',
+    why: 'Checks the new code with stand-in servers. It loads no model.',
+    cmd: 'cd ~/Desktop/agentic-coder && bun run test', out: '…\n  N pass\n  0 fail\n(the exact count depends on the run; this is the shape)',
+    help: '<p><b>Some tests fail:</b> I did not run them, as you asked. Copy the names of the failing tests to me, and I will fix them. Old tests that count the exact steps of a task can change now that files are read first.</p>' },
+  { chip: '3', title: 'A folder for the results', time: '1 s', go: 'Done →',
+    why: 'Both runs write here.', cmd: `mkdir -p ${T}`, out: '(nothing: that means it worked)', safe: 'Safe: it only creates the folder if it is missing.' },
+  { chip: '4', title: 'The “before” run', time: 'about 25–40 min', go: 'It printed “saved …summary.json” →',
+    why: 'Five practice tasks on the code as it was (9350bba), at High, with no helpers. Keep the Mac awake and don’t use Gemma meanwhile.',
+    cmd: `cd ~/worktrees/agentic-before && caffeinate -i node models/evals/bench/run.mjs --model gemma --think on --effort high --only 2,10,12,17,25 --out ${T}/before 2>&1 | tee ${T}/before.log`,
+    out: 'PASS  think=on  2-fix-bug          194s  12 steps  0 errors\n…\nthinking on : 5/5 passed, …s total\nsaved …/before/summary.json\n(real line from test 2 earlier today; your times will differ)',
+    help: '<p><b>It stops with “no model”:</b> the app was still running. Do step 1 again, then this step.</p><p><b>A FAIL line:</b> that is fine. It is the result, not an error.</p>' },
+  { chip: '5', title: 'The “after” run', time: 'about 20–35 min', go: 'It printed “saved …summary.json” →',
+    why: 'The same five tasks on the new code. Each line now also shows reads and thinking.',
+    cmd: `cd ~/Desktop/agentic-coder && caffeinate -i node models/evals/bench/run.mjs --model gemma --think on --effort high --only 2,10,12,17,25 --out ${T}/after 2>&1 | tee ${T}/after.log`,
+    out: 'PASS  think=on  2-fix-bug          …s  … steps  … reads  ~… thinking  0 errors\n…\nsaved …/after/summary.json\n(the shape; the numbers come from your run)',
+    help: '<p><b>It is much slower than “before”:</b> check that nothing else is using Gemma, then tell me. The helper file is <code>~/.agentic-coder/models/mtp-gemma-4-12b-it.gguf</code>. <code>AGENTIC_HELPER=off</code> in front of the command turns it off.</p>' },
+  { chip: 'Results', title: 'The before/after page', time: '5 s', go: 'The page opened →',
+    why: 'Builds one page from both runs, checked against the win rule, and opens it.',
+    cmd: `cd ~/Desktop/agentic-coder && node models/evals/reports/report-faster.mjs ${T}/before ${T}/after ${R} && open ${R}`,
+    out: 'WIN: Faster: … → … in all … (or NO WIN: …)\nsaved /Users/…/Desktop/gemma-docs/test/gemma-faster-results-2026-09-28.html' },
+  { chip: '6', title: 'Try it in the real app', time: 'as long as you like', go: 'Finish →',
+    why: 'Start the app as usual: it rebuilds itself with the new code the first time (a few seconds).',
+    cmd: 'cd ~ && coding',
+    out: '· Read first, by meaning: src/… (when a request is about files in a project)\n⠿ Worked for 3m 12s · 9 steps · 4 reads · ~1,820 thinking tokens · done 6:40 PM\n(the shape of the new lines)',
+    help: '<p><b>No “Read first” line:</b> that is normal in your home folder or in a folder with fewer than 4 code files.</p><p><b>It asks “I ran the same step twice…”:</b> that is the new stuck question. Type a hint, pick Keep going, or Stop here.</p>' },
+  { chip: 'Done', title: 'Done', time: '', go: 'Back to start',
+    html: `<p class="why">Tell me “the tests are done” and I will read <code>${T}</code>. It is already on main; if anything failed, I fix it on top.</p>` },
+];
+let i = 0;
+try { i = Math.min(STEPS.length - 1, Number(localStorage.getItem('gemma-faster-step')) || 0); } catch {}
+const $ = (id) => document.getElementById(id);
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function render() {
+  const s = STEPS[i];
+  $('chips').innerHTML = STEPS.map((x, k) => `<button class="chip${k === i ? ' on' : k < i ? ' done' : ''}" data-k="${k}">${k < i && k > 0 && k < STEPS.length - 1 ? '✓ ' : ''}${x.chip}</button>`).join('');
+  const n = STEPS.filter((x) => x.cmd).length;
+  const stepNo = STEPS.slice(0, i + 1).filter((x) => x.cmd).length;
+  let h = `<div class="kick">${s.cmd ? `Step ${stepNo} of ${n}` : s.chip}${s.time ? `<span class="pill">${s.time}</span>` : ''}</div><h1>${s.title}</h1>`;
+  if (s.why) h += `<p class="why">${s.why}</p>`;
+  if (s.html) h += s.html;
+  if (s.cmd) {
+    h += `<div class="box"><h3>Type this into Terminal</h3><div class="term"><span class="p">% </span>${esc(s.cmd)}<button class="copy" id="copy">Copy</button></div><div class="under">then ⌘V, Return</div>${s.safe ? `<div class="safe">${s.safe}</div>` : ''}</div>`;
+    h += `<div class="box"><h3>Terminal should print</h3><div class="term out">${esc(s.out)}</div></div>`;
+  }
+  h += `<div class="help" id="help">${s.help ?? '<p>Tell me what you see, and I will help.</p>'}</div>`;
+  $('body').innerHTML = h;
+  $('back').style.visibility = i ? 'visible' : 'hidden';
+  $('alt').style.visibility = s.cmd ? 'visible' : 'hidden';
+  $('go').textContent = s.go;
+  const c = $('copy');
+  if (c) c.onclick = async () => { try { await navigator.clipboard.writeText(s.cmd); c.textContent = 'Copied ✓'; } catch { const r = document.createRange(); r.selectNodeContents(c.parentNode); getSelection().removeAllRanges(); getSelection().addRange(r); c.textContent = 'Select + ⌘C'; } setTimeout(() => { c.textContent = 'Copy'; }, 1600); };
+  document.querySelectorAll('.chip').forEach((b) => { b.onclick = () => { i = Number(b.dataset.k); save(); render(); }; });
+}
+const save = () => { try { localStorage.setItem('gemma-faster-step', String(i)); } catch {} };
+$('go').onclick = () => { i = i === STEPS.length - 1 ? 0 : i + 1; save(); render(); };
+$('back').onclick = () => { if (i) { i--; save(); render(); } };
+$('alt').onclick = () => $('help').classList.toggle('show');
+render();
+</script>
+</body>
+</html>
