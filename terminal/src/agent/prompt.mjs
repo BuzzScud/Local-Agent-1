@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { instructionBlock } from './instructions.mjs';
 import { RULES } from './rules.mjs';
 import { memoryNotes } from './facts.mjs';
+import { rulesRoomFor } from './room.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Agentic Coder answers from what it knows there, and goes into a
@@ -21,10 +22,11 @@ const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general
 // labelled nor ranked, and 6,000 characters of room for them. The local date
 // is in both: the old UTC one was a bug.
 export const promptVersion = () => (process.env.AGENTIC_PROMPT === 'old' ? 'old' : 'new');
-// Room for the notes files. 9,000 fits this repo's AGENTS.md and the home
-// one whole (6,765 + 1,443 characters on 30 Sep 2026); 6,000 left the home
-// one out and cut the repo's mid-section.
-export const notesRoom = () => (promptVersion() === 'old' ? 6000 : 9000);
+// Room for the notes files: a share of the Context, never under 12,000 (room.mjs;
+// /effort's Rules room moves it). The old 9,000 cut the home rules when this repo's
+// AGENTS.md grew (7,892 + 1,438 characters on 30 Sep 2026); 6,000 left the home
+// one out and cut the repo's mid-section. ctx: the model's context, 32k when unknown.
+export const notesRoom = (ctx) => (promptVersion() === 'old' ? 6000 : rulesRoomFor(ctx ?? 32768));
 
 // What a notes file is, as the model is told (Claude Code names each file's
 // kind the same way): the folder's own rules, a folder above it, or the

@@ -21,7 +21,7 @@ test('/effort is the one command for the panel (/increase is gone), and every li
   expect(COMMANDS.find((c) => c.name === 'effort').picker).toBe(true);
   const d = defaultLimits(model);
   // the search's rows first (BGE-M3, by meaning, no reranker: as before), then the limits
-  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, tries: 8, steps: 40, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85 });
+  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, tries: 8, steps: 40, rulesRoom: 0, upFront: 0, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85 });
   expect(LIMITS.slice(0, 3).map((l) => [l.id, l.group])).toEqual([['embedder', 'Search'], ['retriever', 'Search'], ['reranker', 'Search']]);
   for (const l of LIMITS) expect(l.steps(model)).toContain(d[l.id]);
   // the context goes as far as the model can (Gemma: 256k), 0 = auto

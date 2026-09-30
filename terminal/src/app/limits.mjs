@@ -7,6 +7,7 @@
 // default reaches you.
 import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
 import { SEARCH } from '../agent/search.mjs';
+import { rulesRoomFor, upFrontFor, CHARS_PER_TOKEN } from '../agent/room.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
 const mins = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`);
@@ -98,6 +99,31 @@ export const LIMITS = [
     def: () => 40,
     show: (v) => String(v),
     note: (v) => `stops a request after ${v} tool steps`,
+  },
+  {
+    // 0 = auto: a share of the Context, never under 12,000 (room.mjs). Saved with the rest of the rules' reading:
+    // a change reads your rules again once, before the next message.
+    id: 'rulesRoom', label: 'Rules room',
+    steps: () => [0, 6000, 9000, 12000, 18000, 36000, 72000],
+    def: () => 0,
+    show: (v) => (v ? `${v.toLocaleString()} chars` : 'auto'),
+    note: (v, e) => {
+      const room = v || rulesRoomFor(e.values.context || e.ctxNow || 32768);
+      return `${v ? '' : `follows Context: ${room.toLocaleString()} chars · `}AGENTS.md / CLAUDE.md: ~${mins(room / CHARS_PER_TOKEN / READ_TPS)} to read at start, once`;
+    },
+  },
+  {
+    // 0 = auto: a share of the Context, 45,000 at 32k (room.mjs). What a question that names files reads whole before the first step.
+    id: 'upFront', label: 'Up-front reading',
+    steps: () => [0, 11000, 22000, 45000, 90000, 180000, 360000],
+    def: () => 0,
+    show: (v) => (v ? `${v.toLocaleString()} chars` : 'auto'),
+    note: (v, e) => {
+      const ctx = e.values.context || e.ctxNow || 32768;
+      const room = v || upFrontFor(ctx);
+      const big = room / CHARS_PER_TOKEN > ctx * 0.5;
+      return `${big ? '⚠ over half the window: raise Context first · ' : ''}${v ? '' : `follows Context: ${room.toLocaleString()} chars · `}files a question names, up to ~${mins(room / CHARS_PER_TOKEN / READ_TPS)} of reading`;
+    },
   },
   {
     id: 'outputLines', label: 'Command output',
@@ -294,4 +320,7 @@ export function applyLimits(agent, values) {
   agent.fullAt = values.summarizeAt;
   agent.bash = { maxLines: values.outputLines, timeoutMs: values.timeoutSecs * 1000 };
   agent.testTimeoutMs = values.timeoutSecs * 1000; // the flows' test runs
+  agent.rulesRoom = values.rulesRoom;
+  agent.upFront = values.upFront;
+  agent.syncRules?.(); // a new Rules room reads the rules again once
 }

@@ -153,7 +153,7 @@ export function practiceChoice(n, home) {
 // (else it is off). `total` is how many tests the run has, where the list can change (My tests).
 // The rows the Tests page's control panel may change for a run (/effort's rows; their ranges are
 // checked again where they are used, terminal/src/app/limits.mjs testLimits). Named choices are ids.
-const PANEL_ROWS = { embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number' };
+const PANEL_ROWS = { embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', rulesRoom: 'number', upFront: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number' };
 export function cleanSettings(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const out = {};

@@ -216,7 +216,7 @@ separate planner or proof of correctness. Compare real task success and elapsed 
 
 **Project context** (tab 03) shows one card per notes file for a folder you pick: what kind it is
 (this project's rules, a folder above, your rules for every folder, the memory),
-whether it arrives whole, cut or left out (the notes get 9,000 characters), and which wins: your
+whether it arrives whole, cut or left out (the notes get 12,000 characters at 32k Context and more on a bigger one; /effort's Rules room moves it), and which wins: your
 words in the chat, then the notes, then General and Planning, then the built-in defaults.
 **Prompt preview** (tab 04) splits the prompt into its parts with each part's size, the share of
 the model's memory it takes, whether it is kept on disk or read again, and what the side calls

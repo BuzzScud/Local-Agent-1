@@ -162,7 +162,7 @@ test('the parts of the prompt cover it exactly, in order, each with where it com
  expect(inPrompt.find((p) => p.id === 'note-1').from).toBe(`rules for every folder under ${home}`); // a folder above, not the real home folder
  expect(d.cost.parts.at(-1)).toMatchObject({ id: 'tools', group: 'tools', start: null });
  expect(d.notes.map((n) => [n.kind, n.status])).toEqual([['project', 'whole'], ['parent', 'whole']]);
- expect(d.rank).toContain('they win'); expect(d.notesRoom).toBe(9000); expect(d.version).toBe('new');
+ expect(d.rank).toContain('they win'); expect(d.notesRoom).toBe(12000); expect(d.version).toBe('new');
  // an old prompt (AGENTIC_PROMPT=old) has no Work habits part and says so
  const parts = promptParts(d.preview.replace(/\nWork habits\n[\s\S]*?\n\n(?=Fixing a bug)/, '\n'), d.notes);
  expect(parts.some((p) => p.id === 'habits')).toBe(false);

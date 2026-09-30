@@ -10,7 +10,7 @@ import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
 import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
-import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
+import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
@@ -25,6 +25,7 @@ import { checkInText } from '../flows/fix.mjs';
 import { Scratch } from '../flows/scratch.mjs';
 import { lostNames } from '../flows/blocks.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
+import { upFrontFor } from './room.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
@@ -65,7 +66,7 @@ const NOTES_ROOM = 700; // tokens for its notes when memory fills (about 200 wor
 const KEEP_THOUGHTS = 3;
 // A question that names files gets them read in one go (see prefetch).
 const PREFETCH_MAX_LINES = 1000;
-const PREFETCH_MAX_CHARS = 45000; // ~12,500 tokens, ~3½ minutes of reading
+// Characters a question's named files may fill: /effort's Up-front reading, a share of the context (room.mjs: 45,000 at 32k).
 const MAP_MIN_FILES = 4; // fewer code files than this: no project map, the model just reads them
 // Any other request in a project: the files it is most likely about
 // (rank.mjs), read before the first step. The budget follows the memory:
@@ -296,11 +297,22 @@ export class Agent extends EventEmitter {
   }
 
   setSystem(system) { this.messages[0] = { role: 'system', content: system }; }
+  // /effort's Rules room and Up-front reading: 0 = auto, a share of the context (room.mjs).
+  rulesRoom = 0;
+  upFront = 0;
+  get notesRoomNow() { return this.rulesRoom || notesRoom(this.ctx); }
+  get upFrontNow() { return this.upFront || upFrontFor(this.ctx); }
+  // The rules or the context changed what the room comes to: the rules are read again once, before the next message.
+  syncRules() {
+    if (this.notesRoomUsed === undefined || this.notesRoomUsed === this.notesRoomNow) return;
+    this.refreshNotes();
+  }
   // The rules changed (/rules): the next message reads them. The instructions
   // are read again once, as after a move to another folder.
   refreshNotes() {
     const before = tokensOf(this.messages[0].content);
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd).text, git: gitSummary(this.cwd), instructions: this.workingInstructions }));
+    this.notesRoomUsed = this.notesRoomNow;
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed).text, git: gitSummary(this.cwd), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // Work in another folder from now on: its tests, its AGENTS.md, and the fence
@@ -310,7 +322,8 @@ export class Agent extends EventEmitter {
     this.cwd = dir;
     this.rewind?.moved(dir);
     this.testCmd = this.verify ? testCommand(dir) : null;
-    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir).text, git: gitSummary(dir), instructions: this.workingInstructions }));
+    this.notesRoomUsed = this.notesRoomNow;
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed).text, git: gitSummary(dir), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.readFiles = new Set();
     this.mapGiven = false;
@@ -1172,7 +1185,7 @@ export class Agent extends EventEmitter {
   }
 
   async prefetch(text) {
-    let budget = PREFETCH_MAX_CHARS;
+    let budget = this.upFrontNow;
     const given = (rel, args, body, view) => {
       budget -= body.length;
       this.giveRead(rel, args, body, view);

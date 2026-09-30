@@ -114,7 +114,7 @@ test('AGENTIC_PROMPT=old gives the prompt from before the Work habits: no habits
     expect(p).not.toContain(NOTES_RANK);
     delete process.env.AGENTIC_PROMPT;
     expect(promptVersion()).toBe('new');
-    expect(notesRoom()).toBe(9000);
+    expect(notesRoom()).toBe(12000);
     expect(projectNotes(proj, notesRoom(), { memory: false, home }).text).toBe("From ~/proj/AGENTS.md (this project's rules):\n# Here\n\nUse tabs.");
   } finally {
     if (was === undefined) delete process.env.AGENTIC_PROMPT; else process.env.AGENTIC_PROMPT = was;

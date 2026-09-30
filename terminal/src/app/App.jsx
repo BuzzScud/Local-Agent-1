@@ -280,7 +280,8 @@ export function App({ opts, win, onRestart }) {
     // the first request that needs it.
     const remembers = memoryOn(settings);
     if (remembers) { try { openMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
-    const notes = projectNotes(cwd, notesRoom(), { memory: remembers });
+    const notesChars = limitsRef.current.rulesRoom || notesRoom(ctx);
+    const notes = projectNotes(cwd, notesChars, { memory: remembers });
     // The context helpers (agent/helpers.mjs): all on unless /helpers (in
     // settings.json) or AGENTIC_HELPERS says otherwise. The small model that
     // compares meanings serves both the memory and the code search.
@@ -318,6 +319,7 @@ export function App({ opts, win, onRestart }) {
         await warmUp({ sessionMark: SESSION_MARK, url: a.url, model: a.model, system: a.messages[0].content, tools: toolSchemas(), thinking: a.thinking, effort: a.effort, slot: a.slots.main, helper: serverRef.current.draft, signal });
       },
     });
+    agentRef.current.notesRoomUsed = notesChars; // what the system prompt above was built with
     applyLimits(agentRef.current, limitsRef.current);
     // /effort's Search rows: the retriever, and the reranker when it is on (started at its first use).
     applySearch(agentRef.current, limitsRef.current);
@@ -445,6 +447,7 @@ export function App({ opts, win, onRestart }) {
       agent.url = srv.url;
       agent.model = modelWithLimits(next, limitsRef.current);
       agent.ctx = st.ctx ?? c.ctx; setCtx(agent.ctx);
+      agent.syncRules(); // rules that follow the Context are read again before the warm-up below
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       setStartPhase('reading');
       await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase });
@@ -990,6 +993,7 @@ export function App({ opts, win, onRestart }) {
       }
       agent.ctx = size;
       setCtx(size);
+      agent.syncRules(); // rules that follow the Context, settled before the model reads them
       const srv = new ModelServer(modelWithLimits(model, limitsRef.current));
       serverRef.current = srv;
       srv.on('crash', ({ code, signal }) => {
@@ -1005,6 +1009,7 @@ export function App({ opts, win, onRestart }) {
         if (st.shared) {
           agent.ctx = st.ctx;
           setCtx(st.ctx);
+          agent.syncRules();
           if (!st.idle) push({ type: 'note', text: `Sharing the model with another Agentic Coder window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
         }
       } catch (e) {

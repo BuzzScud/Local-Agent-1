@@ -782,6 +782,7 @@ function SettingsPicker({ app }) {
 // Retriever, Reranker) and every limit that can move, each under its heading,
 // each value between ◀ ▶ with what it costs. ↻ marks the two that restart
 // the model; • a value not saved yet. Thinking cap is dimmed while Effort is Low.
+// Ten limits and no blank line above Reset all keep the panel within 22 lines: it fits a 24-row window (app-effort.test.mjs).
 function LimitsPicker({ app }) {
   const pk = app.picker;
   const levels = pk.model.thinkingLevels ?? [];
@@ -837,7 +838,6 @@ function LimitsPicker({ app }) {
           </React.Fragment>
         );
       })}
-      <Text> </Text>
       <Text wrap="truncate-end">
         <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {'Reset all'.padEnd(lw)}</Text>
         <Text color={C.dim}>enter here: every row back to its default</Text>
