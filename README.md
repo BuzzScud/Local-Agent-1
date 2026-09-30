@@ -290,6 +290,13 @@ once you know enough, pick one way, report failures plainly, Read and Search ove
 names each notes file's kind and says which notes win. `AGENTIC_PROMPT=old` gives the prompt from
 before, and the Arena's **Prompt old vs new** check (`/test prompt`) runs the Practice 28 with both.
 
+This repo's own `AGENTS.md` is kept short for the same reason (30 Sep 2026): the rules stay there,
+and the background went word for word into `AGENTS-DETAILS.md`, which Claude Code reads through
+`CLAUDE.md` and Agentic Coder never does. `terminal/test/agents-md.test.mjs` keeps it under 4,000
+characters. The Arena's **Rules file old vs new** check (`/test rules file`) asks the model 10
+questions about working here with the old file and with the new one, times the start, and runs one
+small task with each.
+
 Also since 30 Sep 2026, **High thinks where it pays**, the local way of Fable's adaptive thinking.
 The first round of tests and drafts (the work before the tries) is written without thinking; a
 try after a miss thinks, with the miss in front of it; the tries that fix or change the code think
