@@ -6,11 +6,17 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
+import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The model on this Mac in these tests is the default one (its file, name and size).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
+const DGB = `${(D.bytes / 1e9).toFixed(1)} GB`;
 
 test('/settings → Weights starts the viewer inside the window: the note names the page, and it serves the model while the app runs', async () => {
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'models'), { recursive: true });
-  writeFileSync(join(base, 'home', 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in'); // 8 bytes
+  writeFileSync(join(base, 'home', 'models', D.file), 'stand-in'); // 8 bytes
   const fake = await startFakeServer([]);
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -21,9 +27,9 @@ test('/settings → Weights starts the viewer inside the window: the note names 
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toMatch(/❯ Weights\s+Gemma 4 12B QAT · 0\.00 GB\s+each model's weights/); // the row names the model whose file is here
-  expect(r.text).toContain('Weights of Gemma 4 12B QAT opened in the browser at http://127.0.0.1:'); // the models whose files are on this Mac
-  expect(served.facts).toEqual({ name: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', size: 8 });
+  expect(r.snapshots.menu).toMatch(new RegExp(`❯ Weights\\s+${DN} · 0\\.00 GB\\s+each model's weights`)); // the row names the model whose file is here
+  expect(r.text).toContain(`Weights of ${D.name} opened in the browser at http://127.0.0.1:`); // the models whose files are on this Mac
+  expect(served.facts).toEqual({ name: D.file, size: 8 });
   expect(served.page).toContain('<title>Agentic Coder Weights</title>');
   expect(served.hub).toContain('<title>Agentic Coder Hub</title>');
   expect(served.bytes).toBe('stand');
@@ -112,7 +118,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'remote', 'meters', 'mouse']);
   expect(served.data.keys.flatMap((g) => g.rows.map(([k]) => k))).toContain('shift + ← →');
   expect(served.data.modes.map((m) => m.id)).toEqual(['ask', 'edits', 'plan']);
-  expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'high']); // Gemma: no Medium
+  expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'high']); // the default model: no Medium
   expect(served.page).toContain('<title>Agentic Coder Help</title>');
   expect(served.hub).toContain('data-tab="help"');
 }, T);

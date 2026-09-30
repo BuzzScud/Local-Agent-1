@@ -1,12 +1,12 @@
 // Settings, saved sessions and prompt history, all under ~/.agentic-coder.
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { HOME } from '../../../models/index.mjs';
+import { HOME, DEFAULT_MODEL } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
 import { startModeFor } from './perm-store.mjs';
 
 const SETTINGS = join(HOME, 'settings.json');
-const DEFAULTS = { thinking: null, model: 'gemma' };
+const DEFAULTS = { thinking: null, model: DEFAULT_MODEL };
 
 // A trusted folder may set these in <folder>/.agentic/settings.json (the old
 // .bonsai/settings.json is still read); they

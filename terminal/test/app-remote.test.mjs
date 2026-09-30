@@ -11,6 +11,12 @@ import { createServer } from 'node:http';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
+import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The model on this Mac in these tests is the default one (its file, name and size).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
+const DGB = `${(D.bytes / 1e9).toFixed(1)} GB`;
 
 const KEY = 'test-remote-test-0123456789';
 const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
@@ -94,7 +100,7 @@ test('a remote that does not answer at the start: nothing loads here; it says wh
   const asked = r.snapshots.asked;
   expect(asked).toContain('Nothing is listening at that address and port. Nothing loads on this Mac unless you pick it.');
   expect(asked).toContain('Try again');
-  expect(asked).toMatch(/Use Gemma 4 12B QAT on this Mac for now/);
+  expect(asked).toMatch(new RegExp(`Use ${DN} on this Mac for now`)); // the model on this Mac: the default
   expect(asked).toContain('Open /remote');
   expect(r.snapshots.form).toMatch(/Use\s+◀ Remote\s+▶/);
   expect(r.snapshots.form).toMatch(new RegExp(`Port\\s+${port}`));

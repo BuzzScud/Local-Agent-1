@@ -9,7 +9,11 @@ import { spawn } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
-import { ENGINE } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The stand-in plays the default model (its file name and its name on screen).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
 
 // A live process stands in for the arena's runner (the hold names the runner's pid).
 const standIn = spawn('sleep', ['300'], { stdio: 'ignore' });
@@ -22,7 +26,7 @@ function withStandInModel() {
   mkdirSync(join(home, 'models'), { recursive: true });
   mkdirSync(join(home, 'battle'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   return { cwd, env, home };
 }
 
@@ -71,6 +75,6 @@ test('an open window lets its model go when a battle starts, and loads it again 
     { wait: 'Hello from the stand-in model.', ms: 30_000 }, ...quit,
   ] });
   expect(r.snapshots.released.replace(/\s+/g, ' ')).toContain('is unloaded for now: a battle is running (Fix a bug · run 1 of 2');
-  expect(r.text.replace(/\s+/g, ' ')).toContain('The battle is over: Gemma 4 12B QAT is loaded again.');
+  expect(r.text.replace(/\s+/g, ' ')).toContain(`The battle is over: ${D.name} is loaded again.`);
   expect(r.text).toContain('Hello from the stand-in model.');
 }, 130_000);

@@ -7,7 +7,11 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
-import { ENGINE } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The stand-in plays the default model (its file name and its name on screen).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
 
 test('the welcome on the top line, the prompt box on the last lines, space in between', async () => {
   const { cwd, env } = setup();
@@ -31,20 +35,20 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: ' · reading · ', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
+    { wait: ' · reading', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
     { wait: 'sends as soon as the model is ready' }, { snapshot: 'queued' },
     { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
-  expect(first.snapshots.queued).toMatch(/Gemma 4 12B QAT · reading · \d+s/); // the start page's model line, live while it loads
+  expect(first.snapshots.queued).toMatch(new RegExp(`${DN} · reading( instructions)? · \\d+s`)); // the start page's model line, live while it loads (the long words when the name leaves room)
   expect(first.snapshots.queued).toContain('⏵ Queued: hello');
   // Live while it loaded, then printed once, ready: one start page in the whole scrollback.
   expect(first.text.match(/Recent activity/g)).toHaveLength(1);
-  expect(first.text).toMatch(/Gemma 4 12B QAT · effort \w+ · \d+k/);
+  expect(first.text).toMatch(new RegExp(`${DN} · effort \\w+ · \\d+k`));
   expect(readdirSync(join(home, 'slots')).filter((f) => f.startsWith('warm-'))).toHaveLength(1);
   const second = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: ' · restoring · ', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
+    { wait: ' · restoring', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
   expect(second.text).toContain('Hello from the stand-in model.');

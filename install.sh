@@ -96,7 +96,7 @@ esac
 # ---- 5. the model server and the models -------------------------------------------------------
 bold "5/5  The model"
 echo "  Next: build the model server (llama.cpp, about 3 minutes) and download the models,"
-echo "  about 8.5 GB: Gemma 4 12B (6.7 GB), its speed-up helper, and two small models for"
+echo "  about 8.2 GB: Qwen3.5 9B (6.9 GB, its speed-up helper built in) and two small models for"
 echo "  the memory and the code search. Everything runs on this Mac afterwards."
 free_gb=$(( $(df -k "$HOME" | awk 'NR==2 {print $4}') / 1048576 ))
 [ "$free_gb" -ge 12 ] || warn "only ${free_gb} GB free on this disk: about 12 GB is needed"

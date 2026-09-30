@@ -8,8 +8,8 @@ the agent with each one.
 | `index.mjs` | The one file the terminal imports: the registry, the runtime and setup. This part in turn imports the terminal only through `../terminal/index.mjs`. |
 | `registry.mjs` | The list of models (one folder each), where their files live on this Mac (`~/.agentic-coder`), and how to ask a model to think. |
 | `runtime/` | `server.mjs` starts, shares and stops llama-server, and finds another copy of the model already loaded (a practice-test run, a speed test); `memory.mjs` picks a context that fits the Mac, and checks one you picked in `/effort`; `warmup.mjs` saves and restores the read-in instructions; `setup.mjs` builds the engine and downloads a model; `engine/` builds llama-server (the official release, or Prism's with our patch for the Bonsai 27B). |
-| `gemma-4-12b/` | The model in use: `model.mjs` (its settings), `results/` (raw runs, on this Mac only). |
-| `qwen3.5-9b/` | The second model in `/model`: `model.mjs` (its settings; its MTP helper is inside the model file, `draft.inFile`), `results/` (raw runs, on this Mac only). |
+| `qwen3.5-9b/` | The default model: `model.mjs` (its settings; its MTP helper is inside the model file, `draft.inFile`), `results/` (raw runs, on this Mac only). |
+| `gemma-4-12b/` | The second model in `/model`: `model.mjs` (its settings), `results/` (raw runs, on this Mac only). |
 | `bge-m3/` | The small model that compares meanings, for the memory: it finds the saved facts that fit a request. `runtime/embed.mjs` runs it in the engine's embedding mode, beside the model in use. |
 | `qwen3-reranker-0.6b/` | The reranker behind /effort's Reranker row (off by default): it reads a request together with each of the search's best pieces and orders them. `runtime/rerank.mjs` runs it in the engine's reranking mode (`--rerank`). `README.md` has the 29 Sep bake-off that picked it. |
 | `bonsai-2-27b/` | The previous model, kept as a recipe: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
@@ -20,8 +20,8 @@ the agent with each one.
 
 | Model | Folder | Status |
 |---|---|---|
-| Gemma 4 12B it QAT (Google, 4-bit QAT, 6.7 GB) | [`gemma-4-12b/`](gemma-4-12b/model.mjs) | **In use, the default** since 28 Sep 2026. Live-checked on the M4: clean tool calls, reads 126–128 tok/s, writes 13.2. Not yet graded on the 28 tasks. |
-| Qwen3.5 9B (Alibaba Qwen, Unsloth UD-Q5_K_XL MTP build, 6.9 GB) | [`qwen3.5-9b/`](qwen3.5-9b/model.mjs) | **Second model** since 29 Sep 2026 (pick it in `/model`). Quick check 4/4 (tool calls, High); reads ~190 tok/s; with its own MTP layer writes 18.1 tok/s over 4 kinds of writing (1.12× without it). Only one model fits in 16 GB at a time. Not yet graded on the 28 tasks. |
+| Gemma 4 12B it QAT (Google, 4-bit QAT, 6.7 GB) | [`gemma-4-12b/`](gemma-4-12b/model.mjs) | **Second model** since 30 Sep 2026 (pick it in `/model`); the default from 28 to 30 Sep. Live-checked on the M4: clean tool calls, reads 126–128 tok/s, writes 13.2. Not yet graded on the 28 tasks. |
+| Qwen3.5 9B (Alibaba Qwen, Unsloth UD-Q5_K_XL MTP build, 6.9 GB) | [`qwen3.5-9b/`](qwen3.5-9b/model.mjs) | **In use, the default** since 30 Sep 2026 (added 29 Sep): with thinking on, 24 of 24 practice tasks in 1 h 53 m against Gemma's 22 in 3 h 49 m. Quick check 4/4 (tool calls, High); reads ~190 tok/s; with its own MTP layer writes 18.1 tok/s over 4 kinds of writing (1.12× without it). Only one model fits in 16 GB at a time. Not yet graded on the 28 tasks. |
 | Bonsai 2 27B (Prism ML, ternary PQ2_0, 7.2 GB) | [`bonsai-2-27b/`](bonsai-2-27b/README.md) | **Retired 28 Sep 2026**, file removed to free the disk; the folder is the recipe to bring it back (import it in `registry.mjs`, `coding setup`). Grade B+ as a coding agent on the M4. |
 
 Earlier, Ternary Bonsai 8B was used in round 1 and removed on 24 Sep 2026; its

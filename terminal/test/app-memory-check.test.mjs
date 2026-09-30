@@ -8,9 +8,13 @@ import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from '
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
 import { setup, quit } from './app-setup.mjs';
-import { ENGINE } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
-const MODEL_FILE = 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf';
+// The stand-in plays the default model (its file name and its name on screen).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
+
+const MODEL_FILE = D.file;
 const COLS = 200; // the waiting line is long; kept on one line to match it
 
 // A test home with the stand-in engine and model file (as in app-start.test.mjs).
@@ -43,8 +47,8 @@ test('another copy already loaded: the start says who has it and waits, then sta
       { wait: 'esc starts anyway', ms: 30_000 }, { sleep: 200 }, { snapshot: 'waiting' },
       { wait: ' · effort ', ms: 45_000 }, ...quit,
     ] });
-    expect(r.snapshots.waiting).toMatch(/Gemma 4 12B QAT · waiting( for memory)? · \d+s/); // the start page's model line
-    expect(r.snapshots.waiting).toMatch(/another program \(port 17999, [\d.]+ GB\) has Gemma 4 12B QAT loaded, and two copies do not fit\. It starts by itself when that is done · esc starts anyway/);
+    expect(r.snapshots.waiting).toMatch(new RegExp(`${DN} · waiting( for memory)? · \\d+s`)); // the start page's model line
+    expect(r.snapshots.waiting).toMatch(new RegExp(`another program \\(port 17999, [\\d.]+ GB\\) has ${DN} loaded, and two copies do not fit\\. It starts by itself when that is done · esc starts anyway`));
     expect(r.text).not.toContain('Starting anyway');
   } finally { stop(other); }
 }, 120_000);
@@ -57,7 +61,7 @@ test('esc starts anyway beside the other copy, and says so', async () => {
       { wait: 'esc starts anyway', ms: 30_000 }, { key: 'esc' },
       { wait: 'Starting anyway', ms: 10_000 }, { wait: ' · effort ', ms: 45_000 }, ...quit,
     ] });
-    expect(r.text).toMatch(/Starting anyway: another program \(port 17999, [\d.]+ GB\) still has Gemma 4 12B QAT loaded, so both may be slow\./);
+    expect(r.text).toMatch(new RegExp(`Starting anyway: another program \\(port 17999, [\\d.]+ GB\\) still has ${DN} loaded, so both may be slow\\.`));
   } finally { stop(other); }
 }, 120_000);
 
@@ -97,12 +101,12 @@ test('an /effort restart counts the memory the old server gives back: 64k → 32
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
     // past Embedder, Retriever and Reranker to Context, then 64k → 32k
     { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 80 },
-    { key: 'enter' }, { wait: 'Restarting Gemma' },
+    { key: 'enter' }, { wait: `Restarting ${D.name}` },
     { wait: 'restarted: context 32k', ms: 45_000 }, { sleep: 300 },
     { type: '/stats' }, { key: 'enter' }, { wait: 'Context 32k', ms: 15_000 }, { sleep: 200 }, { snapshot: 'stats' },
     ...quit,
   ] });
-  const after = r.text.slice(r.text.indexOf('Restarting Gemma'));
+  const after = r.text.slice(r.text.indexOf(`Restarting ${D.name}`));
   expect(after).toContain('restarted: context 32k');
   expect(after).not.toContain('may slow down');
   expect(r.snapshots.stats).toMatch(/Context 32k: needs [\d.]+ GB, [\d.]+ GB free\./);

@@ -139,20 +139,21 @@ test('a narrow window cuts a long tip, never the memory beside it', async () => 
 }, T);
 
 test('a panel opened while the model loads prints the page out of its way: whole, once, above the Starting line', async () => {
-  const { ENGINE } = await import('../../models/index.mjs'); // inside the test: an early import would fix HOME for later files
+  const { ENGINE, MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs'); // inside the test: an early import would fix HOME for later files
+  const D = MODELS[DEFAULT_MODEL]; // the stand-in plays the default model
   const { cwd, env, base } = setup();
   const home = join(base, 'home');
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_LOAD_MS: '9000' }, rows: 30, args: ['--no-flows'], timeoutMs: 90_000, steps: [
     { wait: ' · loading', ms: 30_000 }, { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 300 }, { snapshot: 'panel' },
-    { key: 'esc' }, { wait: 'Starting Gemma' }, { sleep: 300 }, { snapshot: 'closed' },
+    { key: 'esc' }, { wait: `Starting ${D.name}` }, { sleep: 300 }, { snapshot: 'closed' },
     ...quit,
   ] });
   expect(r.snapshots.panel).toContain('Effort and limits');
-  expect(r.snapshots.closed).toContain('Starting Gemma 4 12B QAT…'); // the old line carries the loading now
+  expect(r.snapshots.closed).toContain(`Starting ${D.name}…`); // the old line carries the loading now
   expect(r.text.match(/Recent activity/g)).toHaveLength(1); // the page was printed once, whole
 }, 120_000);
 

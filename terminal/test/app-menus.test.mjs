@@ -6,6 +6,12 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
+import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The model on this Mac in these tests is the default one (its file, name and size).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
+const DGB = `${(D.bytes / 1e9).toFixed(1)} GB`;
 
 test('slash menu, /help, ? shortcuts, ! shell, history, shift+tab and @files', async () => {
   const { cwd, env } = setup();
@@ -47,7 +53,7 @@ test('/effort alone opens the Effort and limits panel: ←→ moves Effort, ente
   ] });
   await fake.close();
   expect(r.snapshots.menu).toMatch(/❯ Effort\s+◀ Low\s+▶\s+default · answers straight away \(fastest\)/);
-  expect(r.snapshots.menu).not.toContain('Medium'); // Gemma has no effort dial
+  expect(r.snapshots.menu).not.toContain('Medium'); // the model has no effort dial (Gemma and Qwen: Low and High)
   expect(r.snapshots.menu).toContain('↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model');
   expect(r.snapshots.moved).toMatch(/❯ Effort\s+◀ High\s+▶ •\s+thinks first/); // moved, not saved yet: the •
   expect(r.snapshots.again).toMatch(/❯ Effort\s+◀ High\s+▶\s+thinks first/); // opens on the level in use
@@ -94,7 +100,7 @@ test('/model: the model list and the effort in one picker; the choice is used an
     { wait: '? for shortcuts' }, { type: '/model' }, { key: 'enter' },
     { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'picker' },
     { key: 'right' }, { wait: 'High: thinks first' }, { sleep: 200 }, { key: 'enter' },
-    { wait: 'Gemma 4 12B QAT · effort high.' }, { sleep: 300 }, { snapshot: 'after' },
+    { wait: `${D.name} · effort high.` }, { sleep: 300 }, { snapshot: 'after' },
     { type: 'hi' }, { key: 'enter' }, { wait: 'Hi.' },
     // the old names still work: /think, and "off" for low
     // a level this model does not have is refused, and nothing changes
@@ -104,15 +110,15 @@ test('/model: the model list and the effort in one picker; the choice is used an
   ] });
   await fake.close();
   const picker = r.snapshots.picker;
-  expect(picker).toMatch(/❯ Gemma 4 12B QAT\s+6\.7 GB · on this Mac\s+✔ in use/);
+  expect(picker).toMatch(new RegExp(`❯ ${DN}\\s+${DGB} · on this Mac\\s+✔ in use`));
   expect(picker).toMatch(/Effort\s+◀\s+Low\s+·\s+High\s+▶/);
   expect(picker).not.toMatch(/Thinking\s+◀/);
   expect(picker).toContain('Low: answers straight away (fastest)');
   expect(picker).toContain('↑↓ model · ←→ effort · enter to save · esc to cancel');
-  expect(r.snapshots.after).toMatch(/Gemma 4 12B QAT · effort high\./); // the note; no status bar by default
+  expect(r.snapshots.after).toMatch(new RegExp(`${DN} · effort high\\.`)); // the note; no status bar by default
   const sent = fake.requests.find((q) => q.stream && q.tools);
   expect(sent.chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
-  expect(r.text).toContain('Gemma 4 12B QAT has no medium effort: it has Low and High. Effort stays high.');
+  expect(r.text).toContain(`${D.name} has no medium effort: it has Low and High. Effort stays high.`);
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
   expect(saved.thinking).toBe(false); // /effort off (the old name for low) came last
   expect(saved.effort).toBe('high'); // …and /effort on would bring back High
@@ -181,6 +187,6 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   ] });
   await fake.close();
   expect(r.snapshots.off).not.toMatch(/ctx .* of 32k/); // no status bar (the start page's model line says its effort)
-  expect(r.snapshots.on).toMatch(/Gemma 4 12B QAT\s+idle\s+ctx .* of 32k\s+effort/);
+  expect(r.snapshots.on).toMatch(new RegExp(`${DN}\\s+idle\\s+ctx .* of 32k\\s+effort`));
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);

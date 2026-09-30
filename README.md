@@ -26,7 +26,7 @@ It does five steps and prints a ✓ after each:
 4. **Builds the app** and adds the `coding` command (in `~/.local/bin`, added to your PATH).
 5. **Gets the model.** It asks first, then builds the model server (llama.cpp, about 3
    minutes; it offers to install `cmake` with Homebrew if it's missing) and downloads about
-   8.5 GB: Gemma 4 12B plus three small helper models. If you say no, run `coding setup`
+   8.2 GB: Qwen3.5 9B plus two small helper models. If you say no, run `coding setup`
    later.
 
 When it says **Done**, open a new Terminal window and start it in any project:
@@ -117,7 +117,7 @@ conversation again and is billed to the key.
 On the other machine, if it is a Mac or a Linux box with this repo installed:
 
 ```
-coding serve              # Gemma for other machines, behind a new API key; prints what to type into /remote
+coding serve              # the model for other machines, behind a new API key; prints what to type into /remote
 coding serve --local      # this machine only: reach it with Connect = SSH tunnel
 coding serve --https cert.pem key.pem   # https with your certificate (tailscale cert makes one)
 ```
@@ -134,8 +134,12 @@ this Mac.
 | **1 · The terminal** | [`terminal/`](terminal/README.md) | The agent you talk to: the screen, keys, permissions, the tool loop, the focused paths (fix, change, several files, rename), the questions it asks you. It works with any model the models part offers. |
 | **2 · The models** | [`models/`](models/README.md) | The models we use and test, one folder each, plus what runs them (llama-server, memory, warm-up, setup) and the test bench that measures the agent with a model (practice tasks, real requests, speed and soak runs, reports). |
 
-The model today is **Gemma 4 12B QAT** (Google, quantization-aware 4-bit, 6.7 GB):
-[`models/gemma-4-12b/`](models/gemma-4-12b/model.mjs) holds its settings. The previous
+The model today is **Qwen3.5 9B** (Alibaba, 6.9 GB, its speed-up layer inside the file):
+[`models/qwen3.5-9b/`](models/qwen3.5-9b/model.mjs) holds its settings. It became the default on
+30 Sep 2026: with thinking on it passed 24 of 24 practice tasks in about half the time Gemma
+took for 22. **Gemma 4 12B QAT** (Google, 6.7 GB) is still one pick away in `/model`
+([`models/gemma-4-12b/`](models/gemma-4-12b/model.mjs); `coding setup` downloads only the
+default, so run it with Gemma picked to get Gemma's file). The previous
 brain, **Bonsai 2 27B**, is kept as a recipe in [`models/bonsai-2-27b/`](models/bonsai-2-27b/README.md)
 (settings, checksum, what was measured); its file was removed to free the disk.
 
@@ -155,7 +159,8 @@ agentic-coder/
 │  ├─ index.mjs         the one entry the terminal imports
 │  ├─ registry.mjs      the list of models and where their files live
 │  ├─ runtime/          llama-server, memory, warm-up, coding setup; engine/ = how llama.cpp is built (Prism's, or the official)
-│  ├─ gemma-4-12b/      the model in use: settings (results/ stays local)
+│  ├─ qwen3.5-9b/       the default model: settings (results/ stays local)
+│  ├─ gemma-4-12b/      the other model in /model: settings (results/ stays local)
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
 │  ├─ qwen3-reranker-0.6b/ the reranker /effort's Reranker row turns on (off by default)
 │  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)

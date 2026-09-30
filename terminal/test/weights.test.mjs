@@ -221,10 +221,10 @@ test('every model: /models.json lists each with its tags, /model/<id> gives that
     const s = startWeightsServer({ path: modelPath(MODELS.gemma), docsDir: null, port: 0, cwd: ${JSON.stringify(home)}, onEdits: (e) => told.push([e.kind, e.saved?.base ?? e.base]) });
     const get = async (p, init) => { const r = await fetch(s.url + p, init); return { status: r.status, body: r.headers.get('content-type')?.includes('json') ? await r.json() : await r.text() }; };
     out.none = (await get('models.json')).body;
-    writeFileSync(modelPath(MODELS.qwen), tinyBlockModel()); // only the second model's file arrives
-    saveSettings({ model: 'qwen-edited' }); // what /model saves when its edited copy is picked
+    writeFileSync(modelPath(MODELS.gemma), tinyModel()); // only the second model's file arrives
+    saveSettings({ model: 'gemma-edited' }); // what /model saves when its edited copy is picked
     out.one = (await get('models.json')).body;
-    writeFileSync(modelPath(MODELS.gemma), tinyModel());
+    writeFileSync(modelPath(MODELS.qwen), tinyBlockModel());
     out.both = (await get('models.json')).body;
     out.bytes = [await get('model/qwen', { headers: { Range: 'bytes=0-3' } }), await get('model/gemma', { headers: { Range: 'bytes=0-3' } }), await get('model/qwen'), await get('model/nope', { headers: { Range: 'bytes=0-3' } })].map((r) => [r.status, r.status === 206 ? r.body : '']);
     const post = (p, body) => get(p, { method: 'POST', body: JSON.stringify(body) });
@@ -246,11 +246,11 @@ test('every model: /models.json lists each with its tags, /model/<id> gives that
   const out = JSON.parse(r.stdout.trim().split('\n').pop() || (() => { throw new Error(r.stderr); })());
   const G = 'gemma-4-12B-it-qat-UD-Q4_K_XL', Q = 'Qwen3.5-9B-MTP-UD-Q5_K_XL';
   // no file yet: both are listed, both "not on this Mac", and the default is the one in use
-  expect(out.none.inUse).toBe('gemma');
-  expect(out.none.models.map((m) => [m.id, m.name, m.missing, m.size, m.tags])).toEqual([['gemma', 'Gemma 4 12B QAT', true, 0, ['default', 'in use now', 'not on this Mac']], ['qwen', 'Qwen3.5 9B', true, 0, ['not on this Mac']]]);
+  expect(out.none.inUse).toBe('qwen');
+  expect(out.none.models.map((m) => [m.id, m.name, m.missing, m.size, m.tags])).toEqual([['gemma', 'Gemma 4 12B QAT', true, 0, ['not on this Mac']], ['qwen', 'Qwen3.5 9B', true, 0, ['default', 'in use now', 'not on this Mac']]]);
   // the model /model saved last is the one in use, its edited copy counted as the model itself
-  expect(out.one.inUse).toBe('qwen');
-  expect(out.one.models.map((m) => [m.id, m.missing, m.tags])).toEqual([['gemma', true, ['default', 'not on this Mac']], ['qwen', false, ['in use now']]]);
+  expect(out.one.inUse).toBe('gemma');
+  expect(out.one.models.map((m) => [m.id, m.missing, m.tags])).toEqual([['gemma', false, ['in use now']], ['qwen', true, ['default', 'not on this Mac']]]);
   expect(out.both.models.map((m) => [m.id, m.missing, m.size > 0, m.by.length > 0, m.file])).toEqual([['gemma', false, true, true, `${G}.gguf`], ['qwen', false, true, true, `${Q}.gguf`]]);
   expect(out.bytes).toEqual([[206, 'GGUF'], [206, 'GGUF'], [416, ''], [404, '']]);
   // each model's copy is its own file with its own manifest, built from that model's original
@@ -262,7 +262,7 @@ test('every model: /models.json lists each with its tags, /model/<id> gives that
   expect(out.files).toEqual([`${Q}-edited.gguf`, `${Q}.gguf`, 'edited-gemma.json', 'edited-qwen.json', `${G}-edited.gguf`, `${G}.gguf`].sort());
   expect(out.listed).toEqual([['gemma-edited', 'Gemma 4 12B QAT · edited', 'gemma', 2], ['qwen-edited', 'Qwen3.5 9B · edited', 'qwen', 1]]);
   expect(out.byId).toEqual([`${Q}-edited.gguf`, `${G}-edited.gguf`, null]);
-  expect(out.json.saved.base).toBe('gemma'); expect(Object.keys(out.json.all)).toEqual(['gemma', 'qwen']);
+  expect(out.json.saved.base).toBe('qwen'); expect(Object.keys(out.json.all)).toEqual(['gemma', 'qwen']); // saved: the default model's copy
   expect(out.tagged).toEqual([['gemma', 2], ['qwen', 1]]);
   // removing one model's copy leaves the other's
   expect(out.revert).toBe(200);

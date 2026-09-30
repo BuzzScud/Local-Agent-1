@@ -8,7 +8,11 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
-import { ENGINE } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The stand-in plays the default model (its file name and its name on screen).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
 
 const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
 // The three Search rows (Embedder, Retriever, Reranker) sit between Effort and the limits.
@@ -145,14 +149,14 @@ test('/effort on a server Agentic Coder started: a new context and thinking cap 
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   const argsFile = join(base, 'server-args.jsonl');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile }, args: ['--no-flows'], timeoutMs: 120_000, steps: [
     { wait: '? for shortcuts', ms: 45_000 }, { wait: ' · effort ', ms: 60_000 }, // ready: a restart is refused while the model still starts
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
     // Effort stays; Context auto → 16k → 32k → 64k; Thinking cap 4,096 → 8,192
     ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 },
-    { key: 'enter' }, { wait: 'Restarting Gemma' },
+    { key: 'enter' }, { wait: `Restarting ${D.name}` },
     { wait: 'restarted: context 64k · thinking cap 8,192 tokens', ms: 45_000 },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 },
     ...quit,
@@ -163,7 +167,7 @@ test('/effort on a server Agentic Coder started: a new context and thinking cap 
   expect(val(starts[0], '--reasoning-budget')).toBe('4096');
   expect(val(starts[1], '-c')).toBe('65536');
   expect(val(starts[1], '--reasoning-budget')).toBe('8192');
-  expect(r.text).toContain('Saved: Context auto → 64k · Thinking cap 4,096 tokens → 8,192 tokens. Restarting Gemma 4 12B QAT for it');
+  expect(r.text).toContain(`Saved: Context auto → 64k · Thinking cap 4,096 tokens → 8,192 tokens. Restarting ${D.name} for it`);
   expect(settingsOf(base).limits).toEqual({ context: 65536, thinking: 8192 });
 }, 150_000);
 
@@ -173,7 +177,7 @@ test('/effort while a reply is running: a change that needs a restart is refused
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   const argsFile = join(base, 'server-args.jsonl');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile, FAKE_LLAMA_REPLY_MS: '9000' }, args: ['--no-flows'], timeoutMs: 150_000, steps: [
     { wait: '? for shortcuts', ms: 45_000 }, { wait: ' · effort ', ms: 60_000 }, // ready: a prompt now goes out, not into the queue
@@ -187,7 +191,7 @@ test('/effort while a reply is running: a change that needs a restart is refused
     // idle now: the same change saves, and the server restarts once
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
     { key: 'right' }, { sleep: 80 }, ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 },
-    { key: 'enter' }, { wait: 'Restarting Gemma' },
+    { key: 'enter' }, { wait: `Restarting ${D.name}` },
     { wait: 'restarted: context 16k', ms: 45_000 },
     ...quit,
   ] });
@@ -213,7 +217,7 @@ test('/effort while the model is still starting: a Context change is refused and
   mkdirSync(join(home, 'engine', ENGINE.tag), { recursive: true });
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   const argsFile = join(base, 'server-args.jsonl');
   // the stand-in takes 9 s to load, so the start-up window is long enough to act inside it
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile, FAKE_LLAMA_LOAD_MS: '9000' }, args: ['--no-flows'], timeoutMs: 120_000, steps: [

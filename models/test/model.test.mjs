@@ -9,9 +9,9 @@ import bonsai27b from '../bonsai-2-27b/model.mjs';
 const m = bonsai27b; // the 27B's recipe: its settings are still exact
 const g = MODELS.gemma;
 
-test('Gemma 4 12B QAT is the default, Qwen3.5 9B the second model; the 27B stays as a recipe', () => {
+test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second model; the 27B stays as a recipe', () => {
   expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen']);
-  expect(DEFAULT_MODEL).toBe('gemma');
+  expect(DEFAULT_MODEL).toBe('qwen');
   expect(g.file).toBe('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf');
   expect(g.bytes).toBe(6_716_356_800);
   expect(g.sha256).toBe('90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370');

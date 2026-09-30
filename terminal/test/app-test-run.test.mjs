@@ -9,7 +9,12 @@ import { spawn } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
-import { ENGINE } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The model on this Mac in these tests is the default one (its file, name and size).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
+const DGB = `${(D.bytes / 1e9).toFixed(1)} GB`;
 
 // A live process stands in for the test run (its hold names the run's own pid).
 const standIn = spawn('sleep', ['300'], { stdio: 'ignore' });
@@ -22,7 +27,7 @@ function withStandInModel() {
   mkdirSync(join(home, 'models'), { recursive: true });
   mkdirSync(join(home, 'battle'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(home, 'models', D.file), 'stand-in');
   return { cwd, env, home };
 }
 
@@ -43,9 +48,9 @@ test('/test opens the Arena with this model as who runs it; a name or a task num
   await fake.close();
   const text = r.text.replace(/\s+/g, ' ');
   expect(r.snapshots.menu).toMatch(/\/test\s+Pick a test in the Arena for this model/);
-  expect(text).toMatch(/\?tab=arena&run=1&model=gemma · pick a test on Gemma 4 12B QAT, then press Run · while it runs, Gemma 4 12B QAT here is unloaded/);
-  expect(text).toMatch(/&model=gemma&test=practice28 · Practice 28 is picked on Gemma 4 12B QAT/);
-  expect(text).toMatch(/&model=gemma&test=task&n=12 · One practice task 12 is picked on Gemma 4 12B QAT/);
+  expect(text).toMatch(new RegExp(`\\?tab=arena&run=1&model=${D.id} · pick a test on ${DN}, then press Run · while it runs, ${DN} here is unloaded`));
+  expect(text).toMatch(new RegExp(`&model=${D.id}&test=practice28 · Practice 28 is picked on ${DN}`));
+  expect(text).toMatch(new RegExp(`&model=${D.id}&test=task&n=12 · One practice task 12 is picked on ${DN}`));
   expect(text).toMatch(/&model=none&test=unit · Unit tests is picked, then press Run/);
   expect(text).toContain('No test called "nonsense". Try one of: practice 28, one practice task, real requests, long task, work 28, new 28, my tests, my tests · easy, my tests · medium, my tests · hard, one of my tests, sorting check, two at once, remote check, prompt old vs new, thinking old vs new, ui component battle, edited copy vs original, unit tests, repo check, weights reader check');
   expect(hub).toContain('runAsk'); // the hub hands the model and the test on to the Arena
@@ -74,5 +79,5 @@ test('an open window lets its model go when a test run starts, and loads it agai
   ] });
   expect(r.snapshots.released.replace(/\s+/g, ' ')).toContain('is unloaded for now: a test is running (Practice 28 on Gemma 4 12B QAT');
   expect(r.text.replace(/\s+/g, ' ')).toContain('when the test run is over');
-  expect(r.text.replace(/\s+/g, ' ')).toContain('The test run is over: Gemma 4 12B QAT is loaded again.');
+  expect(r.text.replace(/\s+/g, ' ')).toContain(`The test run is over: ${D.name} is loaded again.`);
 }, 130_000);

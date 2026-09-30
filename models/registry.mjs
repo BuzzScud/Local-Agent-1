@@ -43,7 +43,10 @@ import qwen35_9b from './qwen3.5-9b/model.mjs';
 const ALL = [gemma4_12b, qwen35_9b];
 export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
-export const DEFAULT_MODEL = 'gemma';
+// Qwen3.5 9B since 30 Sep 2026: with thinking on it passed 24 of 24 practice
+// tasks in 1 h 53 m where Gemma passed 22 in 3 h 49 m, and it reads 190 tokens/s
+// to Gemma's 127 (the prompt test and the speed probe). Gemma stays in /model.
+export const DEFAULT_MODEL = 'qwen';
 // The default model's engine and its server: what `coding setup`, the version
 // check and the dev tools use.
 export const ENGINE = engineOf(MODELS[DEFAULT_MODEL]);

@@ -8,7 +8,12 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
-import { ENGINE } from '../../models/index.mjs';
+import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
+
+// The model on this Mac in these tests is the default one (its file, name and size).
+const D = MODELS[DEFAULT_MODEL];
+const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
+const DGB = `${(D.bytes / 1e9).toFixed(1)} GB`;
 
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const T = 90_000;
@@ -20,7 +25,7 @@ function homes() {
   const serveHome = join(base, 'serve-home'), clientHome = join(base, 'client-home'), proj = join(base, 'project');
   for (const d of [join(serveHome, 'engine', ENGINE.tag), join(serveHome, 'models'), clientHome, proj]) mkdirSync(d, { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(serveHome, 'engine', ENGINE.tag, 'llama-server'));
-  writeFileSync(join(serveHome, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
+  writeFileSync(join(serveHome, 'models', D.file), 'stand-in');
   writeFileSync(join(proj, 'README.md'), 'hi\n');
   writeFileSync(join(clientHome, 'trust.json'), JSON.stringify({ [proj]: new Date().toISOString() }));
   return { base, serveHome, clientHome, proj };
@@ -63,7 +68,7 @@ test('coding serve: a new key readable by you only, the form’s values printed,
   writeFileSync(join(clientHome, 'settings.json'), JSON.stringify({ remote: { use: true, address: '127.0.0.1', port, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: key.slice(-4) } }));
   const r = await run(['-p', 'hello', '--no-flows'], { cwd: proj, env: { AGENTIC_HOME: clientHome, AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: key } });
   expect(r.out.trim()).toBe('Hello from the stand-in model.');
-  expect(r.err).toContain(`· On the remote model: Gemma 4 12B QAT · 127.0.0.1:${port}`);
+  expect(r.err).toContain(`· On the remote model: ${D.name} · 127.0.0.1:${port}`); // coding serve serves the default model
   // started again, it keeps its key; a port in use is refused
   const busy = await run(['serve', '--local', '--port', String(port)], { cwd: proj, env: { AGENTIC_HOME: serveHome } });
   expect(busy.code).toBe(1);
