@@ -22,7 +22,7 @@ export const FETCH_FIRST_MS = 30_000;
 export function isAppCode(path) {
   // package.json, and the files under evals/ that are part of the app: the test record, the list
   // of tests the Arena and /test know (a new test is there only once the app is rebuilt), and
-  // the arena's own files the hub's Test builder tab runs (models/evals/battle/*.mjs, not its sets)
+  // the arena's own files the hub's Test builder runs (models/evals/battle/*.mjs, not its sets)
   if (path === 'package.json' || path === 'models/evals/record.mjs' || path === 'models/evals/run-tests.mjs' || /^models\/evals\/battle\/[^/]+\.mjs$/.test(path)) return true;
   if (!/^(terminal\/src|terminal\/rules|models)\//.test(path)) return false;
   if (/(^|\/)(node_modules|results|evals|test)\//.test(path)) return false;

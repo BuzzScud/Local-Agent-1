@@ -46,7 +46,7 @@
   (`/tests` in Agentic Coder, `coding hub tests`). The Arena (`/arena`, `/test`; it is the Tests tab and
   the Battle tab as one, since 30 Sep 2026) runs a test on one model or battles two with it, and the
   checks in `models/evals/run-tests.mjs`, one at a time, with the settings of its panel kept in the
-  record; the owner's own tests are made in the hub's Test builder tab, `models/evals/battle/builder.mjs`,
+  record; the owner's own tests are made in the hub's Test builder (a window over the Arena), `models/evals/battle/builder.mjs`,
   and stay on the Mac in `~/.agentic-coder/battle/tests/`, never in git. The record is one file on the Mac,
   `~/.agentic-coder/tests/record.jsonl`, one line per run. `bun run test`, `bun run eval`
   and `bun run eval:words` add their own line when they finish, so run the tests through

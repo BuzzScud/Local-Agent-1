@@ -1,6 +1,6 @@
-// The hub's Test builder tab (src/app/builder.html, the routes in src/app/builder-hub.mjs): the tab
-// is in the hub and stands alone, its routes make, change and try tests of your own in the arena's
-// folder, and only this hub's own page may call them. What the routes do, in full:
+// The hub's Test builder (src/app/builder.html, the routes in src/app/builder-hub.mjs): a window over
+// the Arena since 30 Sep 2026 (a tab before), and a page that stands alone; its routes make, change and
+// try tests of your own in the arena's folder, and only this hub's own page may call them. What the routes do, in full:
 // models/test/builder.test.mjs.
 import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtempSync, readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -24,10 +24,15 @@ beforeAll(() => { hub = startWeightsServer({ path: null, docsDir: null, port: 0,
 afterAll(() => { try { hub?.stop(); } catch {} });
 const post = (path, body, headers = {}) => fetch(`${H}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
-test('the hub has a Test builder tab, after the Arena, that serves one page with nothing loaded from outside', async () => {
+test('the Test builder is a window over the hub, not a tab, and serves one page with nothing loaded from outside', async () => {
   const page0 = await (await fetch(`${H}/`)).text();
-  expect(page0).toContain('<button data-tab="arena">Arena</button>\n  <button data-tab="builder">Test builder</button>\n  <button data-tab="memory">Memory</button>');
-  expect(page0).toContain("t === 'builder'"); // opened straight from ?tab=builder, like the other built-in tabs
+  expect(page0).toContain('<button data-tab="arena">Arena</button>\n  <button data-tab="memory">Memory</button>');
+  expect(page0).not.toContain('data-tab="builder"');
+  expect(page0).toContain('<div id="bm" role="dialog" aria-modal="true" aria-label="Test builder">');
+  expect(page0).toContain('<iframe id="bframe" title="Test builder"></iframe>');
+  // ?tab=builder (coding hub builder) is the Arena with the window open over it.
+  expect(page0).toContain("builder: 'arena'");
+  expect(page0).toContain('if (builderAsk) openBuilder(builderAsk);');
   const r = await fetch(`${H}/builder`);
   expect([r.status, r.headers.get('content-type')]).toEqual([200, 'text/html; charset=utf-8']);
   const page = await r.text();
@@ -42,23 +47,38 @@ test('the hub has a Test builder tab, after the Arena, that serves one page with
   expect((await (await fetch(`${H}/help`)).text())).toContain("['Test builder',");
 });
 
-test('+ New in the Arena opens the Test builder, and ▶ Run in the builder opens the Arena with that test picked', async () => {
+test('the Arena opens the Test builder window (its button, + New, Edit on a test of yours), and ▶ Run in it closes it with that test picked', async () => {
   const hubPage = await (await fetch(`${H}/`)).text();
-  expect(hubPage).toContain("if (e.data?.agentic === 'new-test') { newAsk = true; open('builder'); }");
-  expect(hubPage).toContain("if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string')");
-  expect(hubPage).toContain("show(n ? '/builder?new=1' : '/builder'");
-  expect(hubPage).toContain('frame.contentWindow?.builderDirty?.()'); // it asks before leaving a test with changes not saved
+  expect(hubPage).toContain("if (e.data?.agentic === 'new-test') openBuilder({ fresh: true });");
+  expect(hubPage).toContain("if (e.data?.agentic === 'open-builder') openBuilder({ test:");
+  expect(hubPage).toContain('bframe.src = `/builder?${a}`;'); // the builder page on this hub, in window mode (?modal=1)
+  expect(hubPage).toContain("if (ask && w?.builderDirty?.() && !confirm("); // it asks before closing on a test with changes not saved
+  expect(hubPage).toContain("if (e.key === 'Escape' && bm.classList.contains('on'))");
+  expect(hubPage).not.toMatch(/\.back'?\)?\.on(?:click|mousedown)/); // a click beside the window closes nothing
   // The Arena's page is at its runner's address, not the hub's: its message is taken because it is the page in the frame.
   expect(hubPage).toContain('if (e.origin !== location.origin && e.source !== frame.contentWindow) return;');
-  expect(hubPage).toContain("open('arena'); }"); // ▶ Run: the Arena, with the test picked (nothing starts by itself)
+  // ▶ Run: the window closes, and the Arena already open gets the test picked (nothing starts by itself); one not open yet is opened with it.
+  expect(hubPage).toContain("if (e.source === bframe.contentWindow) closeBuilder({ ask: false });");
+  expect(hubPage).toContain("if (arenaSay({ agentic: 'arena-pick', test,");
+  expect(hubPage).toContain("open('arena');\n    }");
+  // A save in the window: the Arena reads its tests again.
+  expect(hubPage).toContain("e.data?.agentic === 'tests-changed') arenaSay({ agentic: 'arena-refresh' });");
   const arena = readFileSync(join(REPO, 'models', 'evals', 'battle', 'arena.html'), 'utf8');
-  expect(arena).toContain("parent.postMessage({ agentic: 'new-test' }, HUB)");
+  expect(arena).toContain("if (act === 'new') { S.menu = false; draw(); if (toHub({ agentic: 'new-test' })) return; openForm(); }");
+  expect(arena).toContain('<div class="lfoot"><button class="btn" data-act="builder"');
+  expect(arena).toContain("if (act === 'edit' && selTest()?.suite === 'mine' && toHub({ agentic: 'open-builder', test: selTest().id }))");
+  expect(arena).toContain("if (e.data?.agentic === 'arena-refresh') { poll(true); return; }");
+  expect(arena).toContain('parent.postMessage(msg, HUB)');
   expect(arena).toContain("if (id === 'mytest')"); // Save and run: that test of yours, by its number
   expect(arena).toContain("'mine-hard': 'mine-hard'"); // ▶ Run on a level: that level's tests, as a set
   const builder = await (await fetch(`${H}/builder`)).text();
   expect(builder).toContain("const ask = { agentic: 'run-test', test,");
   expect(builder).toContain('runIn(`mine-${el.dataset.v}`)');
   expect(builder).toContain("runIn('mytest', r.n)");
+  // In the window: esc asks the hub to close it, and a save tells it the tests changed.
+  expect(builder).toContain("new URL(location.href).searchParams.get('modal') === '1' && window.parent !== window");
+  expect(builder).toContain("tellHub({ agentic: 'builder-close' })");
+  expect(builder).toContain("if (d.data) { D = d.data; tellHub({ agentic: 'tests-changed' }); }");
 });
 
 test('the routes through the hub: empty at first, a pasted list becomes tests, a level, a save, the checks for some words', async () => {
@@ -103,7 +123,7 @@ test('the routes through the hub: empty at first, a pasted list becomes tests, a
 test('only this hub\'s own page may call them: no other site, nothing that is not JSON', async () => {
   for (const headers of [{ origin: 'http://evil.example' }, { 'sec-fetch-site': 'cross-site' }, { 'sec-fetch-site': 'same-site' }, { origin: H.replace('127.0.0.1', 'localhost') }]) {
     const r = await post('/builder/paste', { text: 'Prompt 9 — Planted\nBuild an HTML page.' }, headers);
-    expect([r.status, (await r.json()).error]).toEqual([403, 'Open the Test builder tab from this local hub.']);
+    expect([r.status, (await r.json()).error]).toEqual([403, 'Open the Test builder from this local hub.']);
   }
   expect((await fetch(`${H}/builder.json`, { headers: { origin: 'http://evil.example' } })).status).toBe(403);
   expect((await fetch(`${H}/builder/export`, { headers: { 'sec-fetch-site': 'cross-site' } })).status).toBe(403);

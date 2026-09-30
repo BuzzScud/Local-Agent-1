@@ -1,6 +1,6 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure (its two pages: Structure and Flow) · Arena · Test builder · Memory · Instructions · All docs · Help
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure (its two pages: Structure and Flow) · Arena · Memory · Instructions · All docs · Help
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned structure page (and a harness page kept there, under All docs)
@@ -13,7 +13,7 @@
 //                     Record button can show the page below. /battle is the same (its name before 30 Sep 2026)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
 //                     (the Arena shows it over its own page)
-//   /builder, /builder.json, /builder/…   the Test builder tab: making tests of your own, in full, by level
+//   /builder, /builder.json, /builder/…   the Test builder (a window over the Arena since 30 Sep 2026): making tests of your own, in full, by level
 //     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
 //     no model (builder-hub.mjs). The tests are the Arena's "My tests", on this Mac only
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)

@@ -1,4 +1,4 @@
-// The Test builder (the hub's Test builder tab): making tests of your own, in full, on top of the
+// The Test builder (the hub's Test builder, a window over the Arena): making tests of your own, in full, on top of the
 // arena's store. A test made here is a Battle test of the set "My tests" (store.mjs), with a level
 // (Easy, Medium, Hard), so the Arena runs it, in a battle or on one model.
 //   builderData()      everything the tab shows: your tests, the trash, the levels, the kinds, the checks

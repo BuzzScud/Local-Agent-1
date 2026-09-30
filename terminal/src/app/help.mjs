@@ -77,7 +77,7 @@ export function cliRows(lingerMins = 30) {
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
       ['coding stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
-      ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (make your own tests), memory, instructions, help'],
+      ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (the Arena with the Test builder open over it), memory, instructions, help'],
       ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
       ['coding morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],
     ],

@@ -87,7 +87,7 @@ test('the hub has one Arena tab where Tests and Battle were, and an address that
   expect(html).toContain('<button data-tab="arena">Arena</button>');
   expect(html).not.toContain('data-tab="tests"');
   expect(html).not.toContain('data-tab="battle"');
-  expect(html).toContain("const ALIAS = { tests: 'arena', battle: 'arena' };");
+  expect(html).toContain("const ALIAS = { tests: 'arena', battle: 'arena', builder: 'arena' };");
   expect(html).toContain("return show(`/arena${a ? `?${a}` : ''}`");
 });
 

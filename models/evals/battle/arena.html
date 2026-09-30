@@ -382,7 +382,10 @@ body.compact .tch { padding: 5px 14px; }
 .lh .btn { padding: 4px 9px; font-size: 12.5px; }
 .lh .cmenu { top: calc(100% + 2px); right: 4px; }
 /* The list: sets (open one for its tests), then the checks. */
-.tl-box { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.tl-box { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+/* Under the list, in the hub: the Test builder (a window over the whole hub). */
+.lfoot { padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface); }
+.lfoot .btn { width: 100%; padding: 7px 12px; font-weight: 600; }
 .lhead, .lrow { display: grid; grid-template-columns: 22px minmax(0, 1fr) 40px 40px; align-items: center; gap: 0 8px; padding: 0 10px 0 12px; }
 .lhead { height: 30px; font-size: 12px; color: var(--ink3); font-weight: 600; background: var(--panel); border-bottom: 1px solid var(--line); }
 .lhead span:nth-child(n+3), .lrow .c { text-align: center; }
@@ -495,7 +498,7 @@ body.compact .tch { padding: 5px 14px; }
   const OWN = ['new28', 'work28', 'practice'];
   const SUITE_NAME = { new28: 'New 28', work28: 'Work 28', practice: 'Practice 28', mine: 'My tests' };
   const suiteOf = (t) => (OWN.includes(t?.suite) ? t.suite : 'mine');
-  // A test of yours has a level (set in the Test builder tab): its points and its time on one model.
+  // A test of yours has a level (set in the Test builder): its points and its time on one model.
   const LEVEL_NAME = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
   const numOf = (t) => (t?.n ? `${t.n}${t.variant ?? ''}` : '');
   const KINDS = [['read', 'read / look'], ['edit', 'change a file'], ['bash', 'run a command'], ['ask', 'asked you'], ['tries', 'tries (tests, drafts)'], ['error', 'a step that failed'], ['answer', 'writing its answer']];
@@ -505,6 +508,9 @@ body.compact .tch { padding: 5px 14px; }
   const ask = new URLSearchParams(location.search);
   const HUB = (() => { const h = ask.get('hub'); const ok = (x) => /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(x ?? ''); try { if (ok(h)) sessionStorage.setItem('arena-hub', h); return ok(h) ? h : (ok(sessionStorage.getItem('arena-hub')) ? sessionStorage.getItem('arena-hub') : null); } catch { return ok(h) ? h : null; } })();
   if (location.search) history.replaceState(null, '', location.pathname);
+  // Inside the hub: the Test builder opens as a window over the whole hub (the hub holds it, and its tests).
+  const inHub = () => Boolean(HUB) && window.parent !== window;
+  const toHub = (msg) => { if (!inHub()) return false; try { parent.postMessage(msg, HUB); return true; } catch { return false; } };
   // What you picked and set, kept for next time: the ticks, what is shown, who runs it, the panel.
   // The sets are not kept: every one starts shut each time the page opens.
   const KEEP = 'agentic-arena-v1';
@@ -660,7 +666,8 @@ body.compact .tch { padding: 5px 14px; }
       const mk = (r) => (!r ? '<span class="mk nil">–</span>' : r.grade === 'measure' ? `<span class="mk nil" data-tip="${r.passed} of ${r.total}: a measurement">•</span>` : `<span class="mk ${r.result === 'pass' ? 'ok' : 'bad'}" data-tip="${r.total != null ? `${r.passed} of ${r.total}` : r.result} · ${when(r.at)}">${r.result === 'pass' ? '✓' : '✗'}</span>`);
       rows += `<div class="lrow${sel().kind === 'check' && sel().id === c.id ? ' sel' : ''}" data-check="${c.id}">${tick(`check:${c.id}`, false, c.name)}<span class="nm" data-tip="${esc(c.what)}"><span class="tt">${esc(c.name)}</span>${c.model ? '' : '<small>no model</small>'}${stateTag('check', c.id, false)}</span>${c.model ? `<span class="c">${mk(c.last[m1.id])}</span><span class="c">${mk(c.last[m2.id])}</span>` : `<span class="c">${mk(c.last.none)}</span><span class="c"></span>`}</div>`;
     }
-    return `<div class="lhead"><span></span><span>Test</span><span>${esc(nameOf(m1.id))}</span><span>${esc(nameOf(m2.id))}</span></div><div class="scroll" data-scroll="list">${rows}</div>`;
+    const foot = inHub() ? '<div class="lfoot"><button class="btn" data-act="builder" data-tip="Make your own tests, easy, medium or hard: they go in My tests">Test builder</button></div>' : '';
+    return `<div class="lhead"><span></span><span>Test</span><span>${esc(nameOf(m1.id))}</span><span>${esc(nameOf(m2.id))}</span></div><div class="scroll" data-scroll="list">${rows}</div>${foot}`;
   }
   function headHtml() {
     const busy = Boolean(S.st.running), any = tests().some((t) => t.latest), q = S.st.line.length;
@@ -727,7 +734,7 @@ body.compact .tch { padding: 5px 14px; }
   // ---------- The title row of a test ----------
   const CHECKS = { tests: { label: 'The tests pass' }, 'only-named': { label: 'Nothing else changed' }, 'file-has': { label: 'A file says' }, 'answer-has': { label: 'The answer mentions' }, 'no-change': { label: 'No file was changed' }, saved: { label: 'The file is saved' }, 'scripts-valid': { label: 'Its scripts are valid' }, offline: { label: 'Nothing from the internet' }, 'page-has': { label: 'The page has' } };
   const rulesOf = (t) => [...(t.hasScript && !t.noScript ? t.rules ?? [] : []), ...(t.checks ?? []).map((c) => c.label ?? `${CHECKS[c.type]?.label ?? c.type}${c.value ? `: ${c.value}` : ''}`)];
-  // The checks the Test builder tab adds (a test made there keeps them when it is edited here).
+  // The checks the Test builder adds (a test made there keeps them when it is edited here).
   const MORE_CHECKS = { 'page-made': 'A page was made', count: 'The page has at least', drawn: 'It draws the bar or line', layout: 'The layout is clean' };
   const runWord = () => (whoNow() === 'both' ? 'Battle' : `Run on ${nameOf(whoNow())}`);
   function titleRow(t, extra = '') {
@@ -1100,7 +1107,7 @@ body.compact .tch { padding: 5px 14px; }
     for (const c of t.checks ?? []) {
       const r = F.rows.find((x) => x.type === c.type && !taken.has(x));
       if (r) { r.on = true; r.val = c.value ?? r.val; taken.add(r); continue; }
-      const row = { type: c.type, t: c.label ?? CHECKS[c.type]?.label ?? MORE_CHECKS[c.type] ?? c.type, d: 'kept from this test (made in the Test builder tab)', on: true, ph: c.value ? ' ' : '', val: c.value ?? '' };
+      const row = { type: c.type, t: c.label ?? CHECKS[c.type]?.label ?? MORE_CHECKS[c.type] ?? c.type, d: 'kept from this test (made in the Test builder)', on: true, ph: c.value ? ' ' : '', val: c.value ?? '' };
       F.rows.push(row); taken.add(row);
     }
     F.base = snapshotF();
@@ -1355,8 +1362,11 @@ body.compact .tch { padding: 5px 14px; }
       if (act === 'unbeside') { S.cmp[sel().id] = null; drawMain(true); }
       if (act === 'latest') { S.view[sel().id] = null; S.cmp[sel().id] = null; S.runsOpen = false; await poll(true); }
       // A window opens over the page: the menu closes first.
-      // + New: in the hub, the Test builder tab on a new test (tests are made in full there); on its own, the window here.
-      if (act === 'new') { S.menu = false; draw(); if (HUB && window.parent !== window) { try { parent.postMessage({ agentic: 'new-test' }, HUB); return; } catch { /* not the hub's frame */ } } openForm(); }
+      // + New: in the hub, the Test builder window on a new test (tests are made in full there); on its own, the window here.
+      if (act === 'new') { S.menu = false; draw(); if (toHub({ agentic: 'new-test' })) return; openForm(); }
+      if (act === 'builder') { S.menu = false; draw(); toHub({ agentic: 'open-builder', ...(selTest()?.suite === 'mine' ? { test: selTest().id } : {}) }); }
+      // Edit on one of your tests: the Test builder window at that test. The sets that came with the arena keep the window here.
+      if (act === 'edit' && selTest()?.suite === 'mine' && toHub({ agentic: 'open-builder', test: selTest().id })) { S.menu = false; draw(); return; }
       if (act === 'edit' || act === 'edittests') { S.menu = false; draw(); openModal(sel().kind === 'test' ? sel().id : null); }
       // The form (in the New test and Edit tests windows)
       if (act === 'kind') { keepForm(); F.kind = el.dataset.v; drawForm(); }
@@ -1421,7 +1431,13 @@ body.compact .tch { padding: 5px 14px; }
     $('#panel .pr[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   });
   // The record page's ▶ (the hub's own page, in the window over this one): that test, picked here.
-  addEventListener('message', (e) => { if (!HUB || e.origin !== HUB || e.data?.agentic !== 'arena-pick') return; asked = { test: e.data.test, model: e.data.model ?? null, n: e.data.n ?? null, think: null, fresh: false }; S.rec = false; drawOver(); poll(true); });
+  // The Test builder window (the hub's) saved or closed: read the tests again, so My tests shows what it holds now.
+  addEventListener('message', (e) => {
+    if (!HUB || e.origin !== HUB) return;
+    if (e.data?.agentic === 'arena-refresh') { poll(true); return; }
+    if (e.data?.agentic !== 'arena-pick') return;
+    asked = { test: e.data.test, model: e.data.model ?? null, n: e.data.n ?? null, think: null, fresh: false }; S.rec = false; drawOver(); poll(true);
+  });
   const setCompact = () => { const c = innerHeight < 780; if (c !== document.body.classList.contains('compact')) { document.body.classList.toggle('compact', c); if (S.st) drawMain(true); } };
   window.addEventListener('resize', () => { setCompact(); drawTimeline(); fades(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(true); });

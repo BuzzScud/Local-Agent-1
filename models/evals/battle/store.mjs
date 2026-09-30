@@ -17,7 +17,7 @@
 //   practice    the Practice 28 (p01…): the practice tasks that grade a model (models/evals/bench/tasks/),
 //               with a title, kind and rules from practice28.json. Those task folders are never changed:
 //               an edit of a Practice 28 test is saved as a copy with the next letter (p18 → p18b).
-// A test of your own (suite 'mine', made in the hub's Test builder tab or the arena's New test window)
+// A test of your own (suite 'mine', made in the hub's Test builder or the arena's New test window)
 // may also have, in its meta.json:
 //   level    easy | medium | hard (LEVELS): its points, and its time limit in a one-model run
 //   minutes  its own time limit, in place of its level's

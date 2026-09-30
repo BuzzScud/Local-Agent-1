@@ -58,7 +58,7 @@ const SETS = {
   work28: ['Work 28', (t) => t.suite === 'work28'],
   practice: ['Practice 28', (t) => t.suite === 'practice' && !t.copyOf],
   mine: ['My tests', (t) => !OWN.includes(t.suite)],
-  // Your own tests of one level (the Test builder tab sets a test's level).
+  // Your own tests of one level (the Test builder sets a test's level).
   ...Object.fromEntries(Object.entries(LEVELS).map(([lv, L]) => [`mine-${lv}`, [`My tests · ${L.name}`, (t) => !OWN.includes(t.suite) && t.level === lv]])),
 };
 // The checks: what ▶ Run tests could run, less the ones that are sets here.

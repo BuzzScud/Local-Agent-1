@@ -52,6 +52,21 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
 .row .k { color: var(--ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 #list .note { color: var(--ink2); max-width: 560px; }
 #list .note code { font-family: var(--mono); font-size: 12px; }
+/* The Test builder: a window over the whole hub, opened from the Arena (its Test builder button, + New, Edit on a test of yours). */
+#bm { position: fixed; inset: 0; z-index: 50; display: none; }
+#bm.on { display: block; }
+#bm .back { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
+#bm .win { position: absolute; inset: 2.5vh 2vw; background: var(--page); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, .35); display: flex; flex-direction: column; overflow: hidden; }
+#bm .win iframe { flex: 1; min-height: 0; height: auto; }
+#bm .bh { flex: none; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); min-width: 0; }
+#bm .bh b { font-size: 15px; font-weight: 600; white-space: nowrap; }
+#bm .bh span { color: var(--ink3); font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bm .bh a { color: var(--accent); font-size: 12px; text-decoration: none; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
+#bm .bh a:hover { background: var(--panel); }
+#bm .bh button { font: inherit; font-size: 15px; line-height: 1; color: var(--ink2); background: none; border: 0; border-radius: 8px; padding: 7px 10px; cursor: pointer; }
+#bm .bh button:hover { color: var(--ink); background: var(--panel); }
+#bm .bh a:focus-visible, #bm .bh button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 720px) { #bm .win { inset: 6px; } #bm .bh span, #bm .bh a { display: none; } #bm .bh b { flex: 1; } }
 @media (max-width: 720px) { header { overflow-x: auto; scrollbar-width: none; } header::-webkit-scrollbar { display: none; } header button { padding: 7px 9px; } header h1 { display: none; } header .now { display: none; } .row { grid-template-columns: 1fr auto; } .row .k { display: none; } }
 </style>
 </head>
@@ -62,7 +77,6 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="harness">Harness</button>
   <button data-tab="structure" aria-haspopup="menu" aria-expanded="false" title="Structure and Flow: click again for the menu">Structure<i class="caret" aria-hidden="true"></i></button>
   <button data-tab="arena">Arena</button>
-  <button data-tab="builder">Test builder</button>
   <button data-tab="memory">Memory</button>
   <button data-tab="instructions">Instructions</button>
   <button data-tab="docs">All docs</button>
@@ -76,17 +90,28 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <iframe id="frame" title="page"></iframe>
   <div id="list"></div>
 </main>
+<div id="bm" role="dialog" aria-modal="true" aria-label="Test builder"><div class="back"></div><div class="win">
+  <div class="bh"><b>Test builder</b><span>make your own tests: easy, medium, hard · they go in My tests</span><a href="/builder" target="_blank" rel="noopener">open in its own tab ↗</a><button type="button" id="bm-x" aria-label="Close the Test builder" title="Close (esc)">✕</button></div>
+  <iframe id="bframe" title="Test builder"></iframe>
+</div></div>
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
-  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own'), menu = $('#menu'), stab = document.querySelector('header > button[data-tab="structure"]');
+  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own'), menu = $('#menu'), stab = document.querySelector('header > button[data-tab="structure"]'), bm = $('#bm'), bframe = $('#bframe');
   let docs = null; // { dir, missing, pinned: { harness, structure }, pages: [{ file, title, kind, size, saved }] }
   // The Arena is the Tests tab and the Battle tab as one (30 Sep 2026): an address that names either opens it.
-  const ALIAS = { tests: 'arena', battle: 'arena' };
-  // ?tab=builder&new=1, or + New in the Arena (a message from its frame): the Test builder tab on a
-  // new, empty test. Taken once, like runAsk below
-  // (read before it: ?tab=arena&new=1 is the Arena's own New test window).
-  let newAsk = (() => { const q = new URL(location.href); if (q.searchParams.get('tab') !== 'builder' || !q.searchParams.has('new')) return false; q.searchParams.delete('new'); history.replaceState(null, '', q); return true; })();
+  // The Test builder was a tab until 30 Sep 2026 and is a window over the Arena now: ?tab=builder opens that.
+  const ALIAS = { tests: 'arena', battle: 'arena', builder: 'arena' };
+  // ?tab=builder (coding hub builder; &new=1 on a new test), ?new=1 on the Arena (+ New), or ?builder=… (the
+  // window was open when the page reloaded): the Arena with the Test builder over it. Taken once, and read
+  // before runAsk below, which would take new=1 for the Arena's own New test window.
+  let builderAsk = (() => {
+    const q = new URL(location.href), tab = q.searchParams.get('tab'), b = q.searchParams.get('builder'), fresh = q.searchParams.has('new');
+    if (tab !== 'builder' && !b && !(fresh && (ALIAS[tab] ?? tab) === 'arena')) return null;
+    const r = fresh || b === 'new' ? { fresh: true } : { test: b && b !== '1' ? b : null };
+    q.searchParams.delete('new'); q.searchParams.delete('builder'); if (tab === 'builder') q.searchParams.set('tab', 'arena'); history.replaceState(null, '', q);
+    return r;
+  })();
   // /test in Agentic Coder opens ?tab=arena&run=1&model=…&test=…&n=…(&think=on): the Arena with those picked;
   // /tests adds record=1 (the test record, over it); ?new=1 opens its New test window. Taken once, then
   // dropped from the address (the Arena button opens it as you left it).
@@ -98,10 +123,53 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   window.addEventListener('message', (e) => {
     // This hub's own pages (the Test builder), or the page in the frame (the Arena is at its runner's address).
     if (e.origin !== location.origin && e.source !== frame.contentWindow) return;
-    if (e.data?.agentic === 'new-test') { newAsk = true; open('builder'); }
-    // ▶ Run in the Test builder: the Arena with that test (or that level's tests) picked. Nothing starts by itself.
-    if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string') { runAsk = new URLSearchParams({ test: e.data.test.slice(0, 80), ...(e.data.n != null ? { n: String(e.data.n).slice(0, 80) } : {}), at: String(Date.now()) }); open('arena'); }
+    // + New in the Arena, its Test builder button, or Edit on a test of yours: the Test builder window.
+    if (e.data?.agentic === 'new-test') openBuilder({ fresh: true });
+    if (e.data?.agentic === 'open-builder') openBuilder({ test: typeof e.data.test === 'string' ? e.data.test : null });
+    // From the builder in the window: a test saved (the Arena reads its tests again), or esc.
+    if (e.source === bframe.contentWindow && e.data?.agentic === 'tests-changed') arenaSay({ agentic: 'arena-refresh' });
+    if (e.source === bframe.contentWindow && e.data?.agentic === 'builder-close') closeBuilder();
+    // ▶ Run in the Test builder: the window closes and the Arena has that test (or that level's tests) picked.
+    // Nothing starts by itself. The Arena already open is told; one not open yet is opened with it.
+    if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string') {
+      const test = e.data.test.slice(0, 80), n = e.data.n != null ? String(e.data.n).slice(0, 80) : null;
+      if (e.source === bframe.contentWindow) closeBuilder({ ask: false });
+      if (arenaSay({ agentic: 'arena-pick', test, ...(n != null ? { n } : {}) })) return;
+      runAsk = new URLSearchParams({ test, ...(n != null ? { n } : {}), at: String(Date.now()) }); open('arena');
+    }
   });
+  // The Arena in the frame, once its page has loaded (it is at its runner's own address, so a message goes to any origin: it
+  // carries only a test's name). A message it cannot take yet is not sent.
+  let frameReady = false;
+  frame.addEventListener('load', () => { frameReady = true; });
+  function arenaSay(msg) {
+    if (!frameReady || !(frame.getAttribute('src') ?? '').startsWith('/arena')) return false;
+    try { frame.contentWindow.postMessage(msg, '*'); return true; } catch { return false; }
+  }
+  // The Test builder window: the builder page (on this hub, with its tests) over the whole hub. It opens on a new
+  // test, one test of yours, or where it was; ✕, esc or the builder's own esc close it, asking first if a test has
+  // changes not saved. A click beside it does nothing, so no work is lost by a slip.
+  function openBuilder({ test = null, fresh = false } = {}) {
+    if (bm.classList.contains('on') && !closeBuilder()) return;
+    if (!(frame.getAttribute('src') ?? '').startsWith('/arena')) open('arena');
+    const a = new URLSearchParams({ modal: '1' }); if (fresh) a.set('new', '1'); else if (test) a.set('test', test.slice(0, 120));
+    bframe.src = `/builder?${a}`; bm.classList.add('on');
+    const q = new URL(location.href); q.searchParams.set('builder', fresh ? 'new' : test || '1'); history.replaceState(null, '', q);
+    bframe.focus();
+  }
+  function closeBuilder({ ask = true } = {}) {
+    if (!bm.classList.contains('on')) return true;
+    const w = bframe.contentWindow;
+    if (ask && w?.builderDirty?.() && !confirm('Close the Test builder without saving? What you changed in the test is lost.')) return false;
+    if (w) w.builderLeaving = true;
+    bm.classList.remove('on'); bframe.src = 'about:blank';
+    const q = new URL(location.href); q.searchParams.delete('builder'); history.replaceState(null, '', q);
+    arenaSay({ agentic: 'arena-refresh' });
+    frame.focus();
+    return true;
+  }
+  $('#bm-x').onclick = () => closeBuilder();
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bm.classList.contains('on')) { e.preventDefault(); closeBuilder(); } });
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
 
   function setTab(tab) { for (const b of document.querySelectorAll('header > button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
@@ -114,7 +182,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   }
   function show(url, label) {
     list.classList.remove('on'); frame.classList.remove('off');
-    if (frame.getAttribute('src') !== url) frame.src = url;
+    if (frame.getAttribute('src') !== url) { frameReady = false; frame.src = url; }
     now.textContent = label || ''; own.href = url; own.style.display = '';
     const q = new URL(location.href); if (url.startsWith('/docs/')) q.searchParams.set('page', url.slice(6)); else q.searchParams.delete('page'); history.replaceState(null, '', q);
   }
@@ -142,11 +210,6 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
       frame.contentWindow.instructionsLeaving = true;
       frame.src = 'about:blank';
     }
-    if ((frame.getAttribute('src') ?? '').startsWith('/builder') && tab !== 'builder' && frame.contentWindow?.builderDirty?.()) {
-      if (!confirm('Leave the Test builder without saving? What you changed in the test is lost.')) return;
-      frame.contentWindow.builderLeaving = true;
-      frame.src = 'about:blank';
-    }
     setTab(tab);
     setView(tab === 'structure' && !page ? (view === 'flow' ? 'flow' : 'structure') : null);
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
@@ -156,7 +219,6 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'structure' && view === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
     // The Arena runs on its own address (its runner's): /arena starts it when it is not up and sends the frame there.
     if (tab === 'arena') { const a = runAsk ? runAsk.toString() : ''; runAsk = null; return show(`/arena${a ? `?${a}` : ''}`, 'run a test on one model, or battle two'); }
-    if (tab === 'builder' && !page) { const n = newAsk; newAsk = false; return show(n ? '/builder?new=1' : '/builder', 'make your own tests: easy, medium, hard'); }
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
@@ -186,8 +248,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   const q = new URL(location.href); const tab = ALIAS[q.searchParams.get('tab')] ?? (q.searchParams.get('tab') || 'weights'); const page = q.searchParams.get('page');
   const view = q.searchParams.get('view');
   // Flow, in the Structure tab, opens before the DOCS folder is read, like the tabs built into the app.
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'builder' || t === 'memory' || t === 'instructions';
-  if (builtIn(tab) && !page) open(tab, null, view); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'memory' || t === 'instructions';
+  if (builtIn(tab) && !page) { open(tab, null, view); if (builderAsk) openBuilder(builderAsk); builderAsk = null; } else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();
 </script>

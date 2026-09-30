@@ -53,7 +53,7 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(() => runCommand('task', { model: 'gemma', n: 29, models })).toThrow('no practice test "29" (1 to 28, or a copy of yours like 18b)');
   expect(() => runCommand('task', { model: 'gemma', n: '18b', models })).toThrow('no practice test "18b"');
   // My tests: none yet, so nothing to run.
-  expect(() => runCommand('mine', { model: 'gemma', models })).toThrow('you have no tests of your own yet: the Test builder tab makes one');
+  expect(() => runCommand('mine', { model: 'gemma', models })).toThrow('you have no tests of your own yet: the Test builder (in the Arena) makes one');
   // A level of them (the Test builder sets a test's level), and one of them by its number: the same.
   expect(() => runCommand('mine-hard', { model: 'gemma', models })).toThrow('you have no Hard tests yet');
   expect(() => runCommand('mytest', { model: 'gemma', n: 1, models })).toThrow('you have no tests of your own yet');

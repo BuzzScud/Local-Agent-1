@@ -1,4 +1,4 @@
-// The Test builder's reading of a prompt (the hub's Test builder tab):
+// The Test builder's reading of a prompt (the hub's Test builder):
 //   parsePrompts(text)     a pasted list → [{ n, title, prompt }]. A line like "Prompt 1 — Data metric
 //                          card" starts a test and the lines under it are its words; with no such
 //                          lines, every block between blank lines is one test, named by its first words

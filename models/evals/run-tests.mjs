@@ -63,10 +63,10 @@ export const RUN_TESTS = [
   { id: 'new28', name: 'New 28', set: 'new28', what: 'the Battle’s New 28 set, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'new28', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^The New 28', part: false } },
-  { id: 'mine', name: 'My tests', set: 'mine', what: 'every test of your own (made in the Test builder tab), one after another: each stops at its level’s time (Easy 5, Medium 10, Hard 20 minutes; 10 with no level) and is worth its level’s points (1, 2, 3)', model: true, think: true, total: null, own: true, count: '^(PASS|FAIL|NONE)\\s',
+  { id: 'mine', name: 'My tests', set: 'mine', what: 'every test of your own (made in the Test builder), one after another: each stops at its level’s time (Easy 5, Medium 10, Hard 20 minutes; 10 with no level) and is worth its level’s points (1, 2, 3)', model: true, think: true, total: null, own: true, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'mine', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^My tests(,| \\()', part: false } },
-  ...Object.entries(LEVELS).map(([level, L]) => ({ id: `mine-${level}`, name: `My tests · ${L.name}`, set: 'mine', level, what: `your ${L.name} tests (the Test builder tab sets a test’s level): ${L.points} point${L.points === 1 ? '' : 's'} each, each stopped at ${L.minutes} minutes unless it has its own limit`, model: true, think: true, total: null, own: level, count: '^(PASS|FAIL|NONE)\\s',
+  ...Object.entries(LEVELS).map(([level, L]) => ({ id: `mine-${level}`, name: `My tests · ${L.name}`, set: 'mine', level, what: `your ${L.name} tests (the Test builder sets a test’s level): ${L.points} point${L.points === 1 ? '' : 's'} each, each stopped at ${L.minutes} minutes unless it has its own limit`, model: true, think: true, total: null, own: level, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'mine', '--level', level, ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: `^My tests · ${L.name}`, part: false } })),
   { id: 'mytest', name: 'One of my tests', what: 'one test of your own, by its number (the Test builder’s Save and run picks it for you): it stops at its level’s time', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: null, own: true, prefix: 'My test ' },
@@ -155,7 +155,7 @@ export function runCommand(id, { model = null, n = null, think = false, models =
   let key = null;
   if (t.pick?.own) {
     const c = ownChoice(n);
-    if (!c) throw new Error(ownCount() ? `${t.name}: no test of yours numbered "${n}"` : 'you have no tests of your own yet: the Test builder tab makes one');
+    if (!c) throw new Error(ownCount() ? `${t.name}: no test of yours numbered "${n}"` : 'you have no tests of your own yet: the Test builder (in the Arena) makes one');
     key = c.key; pickArg = c.only;
   } else if (t.pick) {
     const c = practiceChoice(n == null || n === '' ? t.pick.default : n);
@@ -163,7 +163,7 @@ export function runCommand(id, { model = null, n = null, think = false, models =
     key = c.key; pickArg = c.only;
   }
   const total = totalOf(t);
-  if (t.own && !total) throw new Error(t.own === true ? 'you have no tests of your own yet: the Test builder tab makes one' : `you have no ${LEVELS[t.own].name} tests yet: the Test builder tab sets a test’s level`);
+  if (t.own && !total) throw new Error(t.own === true ? 'you have no tests of your own yet: the Test builder (in the Arena) makes one' : `you have no ${LEVELS[t.own].name} tests yet: the Test builder (in the Arena) sets a test’s level`);
   const on = Boolean(t.think && think);
   // The control panel's changed rows reach the run as AGENTIC_TEST_SETTINGS (a test with no model takes none).
   const set = t.model ? cleanSettings(settings) : null;

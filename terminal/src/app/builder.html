@@ -14,6 +14,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 /* One container that fits the window: your tests by level on the left, the picked one on the right. A small window (a phone) scrolls instead. */
 @media (min-width:900px) and (min-height:560px){html,body{height:100%;overflow:hidden}body{height:100vh;min-height:0}}
 main{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 16px 12px;max-width:1500px;width:100%;margin:0 auto}
+/* In the hub's Test builder window (the Arena opens it): the window's own width. */
+:root[data-modal] main{max-width:none}
 .box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
 .q{color:var(--mute);font-size:12.5px;font-weight:400}
 .fill{flex:1}
@@ -132,6 +134,10 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
   const L = (k) => D.levels[k];
   const keyOf = (c) => `${c.type}:${c.value ?? ''}`;
   const testOf = (id) => D?.tests.find((t) => t.id === id) ?? null;
+  // In the hub's Test builder window (?modal=1, over the Arena): esc closes it, and a save tells the Arena to read its tests again.
+  const MODAL = new URL(location.href).searchParams.get('modal') === '1' && window.parent !== window;
+  if (MODAL) document.documentElement.dataset.modal = '1';
+  const tellHub = (msg) => { if (MODAL) try { parent.postMessage(msg, location.origin); } catch { /* not the hub's window */ } };
 
   // ---------- the editor's working copy ----------
   // on: the checks ticked; extra: checks the prompt does not suggest (kept from the test, or added by
@@ -161,7 +167,7 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
     const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error ?? `the hub said ${r.status}`);
-    if (d.data) D = d.data;
+    if (d.data) { D = d.data; tellHub({ agentic: 'tests-changed' }); }
     return d;
   }
   async function act(name, fn) {
@@ -178,6 +184,7 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
     clearTimeout(toastT); if (text) toastT = setTimeout(() => toast(''), bad ? 12000 : 8000);
   }
   // ▶ Run hands over to the Arena tab, with the test (or that level's tests) picked: nothing starts by itself there.
+  // In the hub's window, the window closes and the Arena under it has them picked.
   function runIn(test, n) {
     const ask = { agentic: 'run-test', test, ...(n != null ? { n: String(n) } : {}) };
     if (window.parent !== window) { try { parent.postMessage(ask, location.origin); return; } catch { /* not the hub's frame */ } }
@@ -382,7 +389,8 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.ck, .row')) { e.preventDefault(); e.target.click(); return; }
     if (e.key === 'Enter' && e.target.id === 'ck-value') { e.preventDefault(); $('[data-act="addck"]')?.click(); return; }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && S.mode === 'edit' && F) { e.preventDefault(); $('[data-act="save"]')?.click(); return; }
-    if (e.key === 'Escape' && S.mode !== 'edit') { e.preventDefault(); $('[data-act="cancel"]')?.click(); }
+    if (e.key === 'Escape' && S.mode !== 'edit') { e.preventDefault(); $('[data-act="cancel"]')?.click(); return; }
+    if (e.key === 'Escape' && MODAL) { e.preventDefault(); tellHub({ agentic: 'builder-close' }); }
   });
   $('#pagefile').addEventListener('change', async (e) => { const file = e.target.files[0]; e.target.value = ''; if (file && F) tryNow({ name: file.name, html: await file.text(), at: new Date(file.lastModified).toISOString() }); });
   $('#starter').addEventListener('change', async (e) => {

@@ -1,4 +1,4 @@
-// The hub's Test builder tab: making tests of your own, in full (models/evals/battle/builder.mjs).
+// The hub's Test builder (a window over the Arena tab, a tab of its own until 30 Sep 2026): making tests of your own, in full (models/evals/battle/builder.mjs).
 // A test made here is one of the Battle arena's "My tests", with a level (Easy, Medium, Hard), kept
 // on this Mac only in ~/.agentic-coder/battle/tests/. The files are read and written here directly,
 // so the tab works whether or not the arena's runner is up.
@@ -22,7 +22,7 @@ const json = (body, status = 200, extra = {}) => Response.json(body, { status, h
 // home: the arena's folder (a test passes its own); check: the layout check (a test passes a stand-in).
 export async function builderRoute(req, url, { home, check = layoutCheck } = {}) {
   const o = req.headers.get('origin');
-  if (url.hostname !== '127.0.0.1' || (o && o !== url.origin) || ['cross-site', 'same-site'].includes(req.headers.get('sec-fetch-site'))) return json({ error: 'Open the Test builder tab from this local hub.' }, 403);
+  if (url.hostname !== '127.0.0.1' || (o && o !== url.origin) || ['cross-site', 'same-site'].includes(req.headers.get('sec-fetch-site'))) return json({ error: 'Open the Test builder from this local hub.' }, 403);
   const data = () => builderData(home);
   if (req.method === 'GET') {
     if (url.pathname === '/builder.json') return json(data());
