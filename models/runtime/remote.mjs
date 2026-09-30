@@ -211,8 +211,10 @@ export async function openTunnel({ dest, remotePort = SERVE_PORT, ssh = 'ssh', t
     await new Promise((r) => setTimeout(r, 150));
   }
   if (exited === null && !(await portOpen(localPort))) { child.kill(); throw new Error(`ssh to ${dest} did not connect in ${Math.round(timeoutMs / 1000)} s`); }
-  const stop = () => { try { child.kill('SIGTERM'); } catch {} };
-  process.once('exit', stop);
+  // The tunnel ends with this app; a stopped one takes its exit hook with it (a reconnect makes a new one).
+  const onExit = () => { try { child.kill('SIGTERM'); } catch {} };
+  process.once('exit', onExit);
+  const stop = () => { process.off('exit', onExit); onExit(); };
   return { url: `http://127.0.0.1:${localPort}`, port: localPort, child, stop, alive: () => exited === null };
 }
 
@@ -283,12 +285,15 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
     if (reply) {
       const t1 = Date.now();
       const t = AbortSignal.timeout(Math.max(timeoutMs, 60_000));
-      const res = await fetch(`${norm(url)}/v1/chat/completions`, {
+      const ask = (limit) => fetch(`${norm(url)}/v1/chat/completions`, {
         method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t,
         headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ model: out.model ?? 'coding', messages: [{ role: 'user', content: 'Reply with the single word: ready' }], max_tokens: 8, stream: false, ...(kind === 'llama' ? { chat_template_kwargs: { enable_thinking: false } } : {}) }),
+        body: JSON.stringify({ model: out.model ?? 'coding', messages: [{ role: 'user', content: 'Reply with the single word: ready' }], ...limit, stream: false, ...(kind === 'llama' ? { chat_template_kwargs: { enable_thinking: false } } : {}) }),
       });
-      const j = await res.json().catch(() => null);
+      let res = await ask({ max_tokens: 8 });
+      let j = await res.json().catch(() => null);
+      // A server that wants max_completion_tokens (OpenAI's reasoning models) is asked that way, with room to think.
+      if (res.status === 400 && /max_completion_tokens/.test(j?.error?.message ?? '')) { res = await ask({ max_completion_tokens: 512 }); j = await res.json().catch(() => null); }
       if (!res.ok) return fail(`it would not answer: ${res.status} ${(j?.error?.message ?? '').slice(0, 140)}`.trim());
       const said = String(j?.choices?.[0]?.message?.content ?? '').trim().replace(/\s+/g, ' ').slice(0, 24);
       steps.push({ ok: true, text: `answered "${said || '…'}" in ${((Date.now() - t1) / 1000).toFixed(1)} s` });

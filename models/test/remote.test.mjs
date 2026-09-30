@@ -79,6 +79,7 @@ test('what stops a remote before anything is sent: no address, a bad one, a bad 
   expect(validSshDest('me@studio')).toBe(true);
   expect(validSshDest('orbit')).toBe(true);
   expect(validSshDest('a b')).toBe(false);
+  expect(validSshDest('-oBatchMode')).toBe(false); // an ssh option, not an address: only the leading-dash rule stops this one
   expect(remoteProblem(R({ address: 'me@studio', connect: 'ssh' }))).toBe(null);
 });
 
@@ -242,4 +243,23 @@ test('a server on another address answering 401 to everything but /health (llama
   const url = `http://127.0.0.1:${s.address().port}`;
   expect((await probe({ url, kind: 'llama' })).error).toMatch(/answered 404: is it a llama\.cpp server\?/);
   s.close();
+});
+
+test('the Test row on a server that wants max_completion_tokens (OpenAI’s reasoning models): asked again that way, and it answers', async () => {
+  const asked = [];
+  const s = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/v1/models') { res.end(JSON.stringify({ data: [{ id: 'reasoner' }] })); return; }
+    const body = JSON.parse(b);
+    asked.push(Object.keys(body).filter((k) => /tokens/.test(k)));
+    if ('max_tokens' in body) { res.writeHead(400); res.end(JSON.stringify({ error: { message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead." } })); return; }
+    res.end(JSON.stringify({ choices: [{ message: { content: 'ready' } }] }));
+  });
+  await new Promise((r) => s.listen(0, '127.0.0.1', r));
+  const r = await probe({ url: `http://127.0.0.1:${s.address().port}`, kind: 'openai', reply: true });
+  s.close();
+  expect(r.ok).toBe(true);
+  expect(asked).toEqual([['max_tokens'], ['max_completion_tokens']]);
+  expect(r.steps.at(-1).text).toMatch(/^answered "ready"/);
 });
