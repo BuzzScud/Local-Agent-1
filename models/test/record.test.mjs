@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, pathOf, taskSteps, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 import { RUN_TESTS } from '../evals/run-tests.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'agentic-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
@@ -252,4 +252,54 @@ test('side by side: no run in common, raw results that are gone, or a different 
   recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T10:00:00.000Z', model: 'gemma', effort: 'high', ctx: 32768, passed: 1, total: 1, raw: 'models/gemma/results/run-b' }, quiet(other.file));
   recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T11:00:00.000Z', model: 'qwen', effort: 'high', ctx: 65536, passed: 1, total: 1, raw: 'models/qwen/results/run-b' }, quiet(other.file));
   expect(sideBySide(['gemma', 'qwen'], { file: other.file, top: dir }).run).toBe(null);
+});
+
+// The hub's Flow tab draws the paths and one real task from here.
+test('side by side: each task says which path it took and whether it went on step by step; one task every model passed the short way is the example, step by step from its own log', () => {
+  expect([{ route: 'rename' }, { route: 'fix' }, { route: 'change', tries: ['Writing tests: ✓✓', 'Drafting versions: ✓✓'] }, { route: 'change', tries: ['Writing tests: ✓✓', 'Drafting changes: ✓✗'] }, { route: 'question' }, { route: 'other' }, { route: 'step by step' }, {}, null].map(pathOf))
+    .toEqual(['rename', 'fix', 'change', 'multi', 'loop', 'loop', 'loop', null, null]);
+  const { dir, file } = scratch();
+  const line = (model, raw) => recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: `2026-09-30T1${model === 'gemma' ? 0 : 1}:00:00.000Z`, model, effort: 'high', ctx: 32768, passed: 4, total: 4, raw }, quiet(file));
+  const rows = (fixSecs, more = {}) => [
+    row('1-json-flag', true, 300, { route: 'change', tries: ['Writing tests: ✓✓', 'Drafting versions: ✓✓'], ownSteps: 0 }),
+    row('2-fix-bug', true, fixSecs, { route: 'fix', tries: ['Trying fixes: ✓'], ownSteps: 0 }),
+    row('21-bigfile', true, 340, { route: 'fix', tries: ['Trying fixes: ✗✗✗', 'Trying wider fixes: ✗✗✗'], ownSteps: 7, ...more }),
+    row('18-story', true, 44, { route: 'step by step', ownSteps: 2 }),
+  ];
+  // The log of a task, as the runner writes it: beside the summary, or one folder down in t<number>/ (the prompt test).
+  const log = (secs) => ({ task: '2-fix-bug', thinking: true, reason: 'done', log: [
+    { type: 'sorted', kind: 'fix', text: 'Sorted as: fix · shortcut', at: 1000 },
+    { type: 'tool', id: 'flow_2', name: 'Bash', label: 'Bash', arg: 'node --test', view: { kind: 'bash', code: 1 }, at: 1200 },
+    { type: 'tries-done', label: 'Trying fixes', marks: ['✓'], secs: secs + 0.4, at: 2000 },
+    { type: 'tool', id: 'plan_1', name: 'Ask', label: 'Ask', arg: 'Before I change anything: change stats.mjs (+3 −0). Go ahead?', view: { kind: 'answer', question: 'Before I change anything: change stats.mjs (+3 −0). Go ahead?', text: 'yes' }, at: 2100 },
+    { type: 'tool', id: 'flow_4', name: 'Update', label: 'Update', arg: 'stats.mjs', view: { kind: 'diff', path: 'stats.mjs', created: false, additions: 3, removals: 0 }, at: 2200 },
+    { type: 'tool', id: 'flow_5', name: 'Bash', label: 'Bash', arg: 'node --test', view: { kind: 'bash', code: 0 }, at: 2300 },
+    { type: 'assistant', text: 'Fixed stats.mjs; all 4 tests pass.', final: true, at: 2400 },
+    { type: 'settled', request: 'The tests fail. Fix the bug.', kind: 'fix', reason: 'done', check: null, at: 2500 },
+  ] });
+  taskRun(dir, 'models/gemma/results/run-c', rows(49), 'new');
+  taskRun(dir, 'models/qwen/results/run-c', rows(23, { pass: false, reason: 'interrupted' }));
+  mkdirSync(join(dir, 'models/gemma/results/run-c/new/t2'), { recursive: true });
+  writeFileSync(join(dir, 'models/gemma/results/run-c/new/t2/2-fix-bug-think-on.json'), JSON.stringify(log(46)));
+  writeFileSync(join(dir, 'models/qwen/results/run-c/2-fix-bug-think-on.json'), JSON.stringify(log(21)));
+  line('gemma', 'models/gemma/results/run-c'); line('qwen', 'models/qwen/results/run-c');
+  const { run } = sideBySide(['gemma', 'qwen'], { file, top: dir, home: join(dir, 'no-arena') });
+  expect(Object.fromEntries(Object.entries(run.models.gemma.tasks).map(([t, x]) => [t, [x.path, x.thenLoop]]))).toEqual({ '1-json-flag': ['change', false], '2-fix-bug': ['fix', false], '18-story': ['loop', false], '21-bigfile': ['fix', true] });
+  // The example is the fix both passed in one round of tries, not the first task by number (a change) nor the one that went on step by step.
+  expect(run.example).toMatchObject({ task: '2-fix-bug', request: 'The tests fail. Fix the bug.', memory: false });
+  expect(run.example.models.gemma).toEqual({ request: 'The tests fail. Fix the bug.', sorted: 'fix · shortcut', tries: [{ label: 'Trying fixes', marks: '✓', secs: 46 }], asked: [{ question: 'Before I change anything: change stats.mjs (+3 −0). Go ahead?', answer: 'yes' }],
+    changed: [{ path: 'stats.mjs', add: 3, del: 0, created: false, test: false }], check: { cmd: 'node --test', ok: true } });
+  expect(run.example.models.qwen.tries[0].secs).toBe(21);
+  // A log that is gone, cut off or empty gives no example, never a throw; the paths stay.
+  expect(taskSteps(join(dir, 'models/qwen/results/run-c'), '9-not-there')).toBe(null);
+  writeFileSync(join(dir, 'models/qwen/results/run-c/2-fix-bug-think-on.json'), '{"log": [');
+  const cut = sideBySide(['gemma', 'qwen'], { file, top: dir, home: join(dir, 'no-arena') }).run;
+  expect(cut.example).toBe(null);
+  expect(cut.models.qwen.tasks['21-bigfile']).toMatchObject({ pass: false, path: 'fix', thenLoop: true });
+  // A run from before the route was kept: no path, no example.
+  taskRun(dir, 'models/gemma/results/run-c', [row('2-fix-bug', true, 49)], 'new');
+  taskRun(dir, 'models/qwen/results/run-c', [row('2-fix-bug', true, 23)]);
+  const old = sideBySide(['gemma', 'qwen'], { file, top: dir, home: join(dir, 'no-arena') }).run;
+  expect(old.models.gemma.tasks['2-fix-bug']).toMatchObject({ path: null, thenLoop: false });
+  expect(old.example).toBe(null);
 });

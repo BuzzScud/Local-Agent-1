@@ -8,6 +8,8 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [diagrams/agentic-coder-flow-diagram-2026-09-30.html](diagrams/agentic-coder-flow-diagram-2026-09-30.html) | page | Agentic Coder flow diagram | 85 KB | 2026-09-30 |
+| [design rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html](design%20rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html) | page | Flow tab for both models: 2 designs | 250 KB | 2026-09-30 |
 | [design rounds/agentic-coder-test-builder-2-designs-2026-09-30.html](design%20rounds/agentic-coder-test-builder-2-designs-2026-09-30.html) | page | Test builder designs | 82 KB | 2026-09-30 |
 | [design rounds/agentic-coder-arena-4-designs-2026-09-30.html](design%20rounds/agentic-coder-arena-4-designs-2026-09-30.html) | page | Arena · 4 designs | 221 KB | 2026-09-30 |
 | [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-09-30 |
@@ -29,7 +31,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 | [diagrams/embedder-retriever-reranker-explained-v2.html](diagrams/embedder-retriever-reranker-explained-v2.html) | page | Embedder, retriever, reranker | 27 KB | 2026-09-29 |
 | [older versions/embedder-retriever-reranker-explained.html](older%20versions/embedder-retriever-reranker-explained.html) | page | Embedder, retriever, reranker | 22 KB | 2026-09-29 |
 | [diagrams/agentic-coder-structure-2026-09-29.html](diagrams/agentic-coder-structure-2026-09-29.html) | page | Agentic Coder folder structure | 199 KB | 2026-09-29 |
-| [diagrams/agentic-coder-flow-diagram-2026-09-29.html](diagrams/agentic-coder-flow-diagram-2026-09-29.html) | page | Agentic Coder flow diagram | 58 KB | 2026-09-29 |
+| [older versions/agentic-coder-flow-diagram-2026-09-29.html](older%20versions/agentic-coder-flow-diagram-2026-09-29.html) | page | Agentic Coder flow diagram | 58 KB | 2026-09-29 |
 | [reports/agentic-coder-mac-memory-built-2026-09-28.html](reports/agentic-coder-mac-memory-built-2026-09-28.html) | page | Mac memory · built | 14 KB | 2026-09-29 |
 | [design rounds/rules-command-2-designs-2026-09-28.html](design%20rounds/rules-command-2-designs-2026-09-28.html) | page | Rules Command Designs | 13 KB | 2026-09-29 |
 | [design rounds/context-line-3-designs-2026-09-28.html](design%20rounds/context-line-3-designs-2026-09-28.html) | page | Context Line Designs | 10 KB | 2026-09-29 |

@@ -17,6 +17,7 @@ import { MODELS, DEFAULT_MODEL, MODELS_DIR, needBytes, kvBytesPerToken, hasDraft
 import { TOOL_DEFS } from '../agent/tools.mjs';
 import { loadSettings } from './store.mjs';
 import { readLimits } from './limits.mjs';
+import { STAGES, STEPS as FLOW_STEPS, stagesInWords } from './steps.mjs';
 
 // What the tab shows, as data. `models` and `record` can be given (a test's own).
 export function harnessData(cwd, { models = Object.values(MODELS), settings = loadSettings(cwd), record } = {}) {
@@ -76,13 +77,9 @@ const dot = (w) => `<i class="dot ${WHO[w]}"></i>`;
 const who = (ws, note = {}) => `<span class="who">${ws.map((w) => `<span>${dot(w)}${w === 'm' ? sw('model', '{short}') : WHO[w]}${note[w] ? ` <em>${note[w]}</em>` : ''}</span>`).join('')}</span>`;
 const LEGEND = `<p class="legend"><span>${dot('m')}${the_model}, the brain (writes the words and code)</span><span>${dot('h')}the harness (the code around it)</span><span>${dot('u')}you</span></p>`;
 
-const STEPS = [
-  { name: 'You ask', who: ['u'], text: 'You type a request and press Enter.' },
-  { name: 'It sorts', who: ['h', 'm'], note: { m: 'sometimes' }, text: `Word rules pick the kind: rename, fix, change, question or task. ${THE_MODEL} is asked only when no rule fits.` },
-  { name: 'It works', who: ['m', 'h'], text: 'Fix and change take a shortcut built for them. Rename needs no model at all. Everything else goes step by step.' },
-  { name: 'It checks', who: ['u', 'h', 'm'], text: 'Before any change it asks for your OK. Afterwards it runs the project’s tests and checks that every part of your request was done.' },
-  { name: 'Done', who: ['m', 'h'], text: `${THE_MODEL} writes a sentence on what changed. The harness adds the files it touched and how many tests pass.` },
-];
+// The five steps of this tab are the hub's one list of steps (steps.mjs), told as its stages: the
+// Flow tab draws the same list as seven boxes, so the two tabs cannot disagree.
+const STEPS = STAGES.map((g) => ({ ...g, text: g.text.replace('{The model}', THE_MODEL) }));
 // The tools as the page names them; one added to the app shows under its own name.
 const TOOL_WORDS = { TodoWrite: 'a to-do list', Ask: 'a question to you' };
 
@@ -133,7 +130,7 @@ export function harnessPage(d) {
 
   // ── 1 · the flow
   const steps = `<div class="steps">${STEPS.map((s, i) => `<section class="card step"><h3><span class="n">${i + 1}</span>${s.name}</h3><p>${s.text}</p>${who(s.who, s.note)}</section>${i < STEPS.length - 1 ? '<i class="arr">→</i>' : ''}`).join('')}</div>`;
-  const sameLine = `<p class="sameline"><b>The same whichever model is loaded:</b> the ${STEPS.length} steps · the ${tools.length} tools · the 3 safety gates · ${S.steps} steps and ${S.tries} tries at most · your OK before any change. Only one model is loaded at a time on this Mac; <code>/model</code> swaps them.</p>`;
+  const sameLine = `<p class="sameline"><b>The same whichever model is loaded:</b> the ${STEPS.length} steps · the ${tools.length} tools · the 3 safety gates · ${S.steps} steps and ${S.tries} tries at most · your OK before any change. Only one model is loaded at a time on this Mac; <code>/model</code> swaps them. The Flow tab draws these ${STEPS.length} as ${FLOW_STEPS.length} steps: ${stagesInWords()}.</p>`;
   const flow = `<h2>One request, from start to done</h2><p class="lead">The coloured dots show who does each part. ${THE_MODEL} only writes. The harness decides what gets written to your files, and when.</p>${LEGEND}${steps}${sameLine}${pair([R.passed, R.time, R.read, R.write, R.mem], M.length > 1 ? sw(`The model in steps 2 to ${STEPS.length} is one of these ${M.length === 2 ? 'two' : M.length}`, `{name} in steps 2 to ${STEPS.length}`) : `The model in steps 2 to ${STEPS.length}`)}`;
 
   // ── 2 · step 3
