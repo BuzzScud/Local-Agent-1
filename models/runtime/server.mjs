@@ -290,6 +290,14 @@ export function otherCopies(model, { psText = null, live = null } = {}) {
     .map((r) => ({ pid: r.pid, port: Number(/--port\s+(\d+)/.exec(r.cmd)?.[1]) || null, who: whoStarted(r, byPid), bytes: r.bytes }));
 }
 
+// Every model server running now, whatever its model: { pid, bytes } (its resident size).
+export function serverProcesses({ psText = null } = {}) {
+  const ps = psText ?? spawnSyncText('/bin/ps', ['-Ao', 'pid=,rss=,command=']);
+  return ps.split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l))
+    .filter((m) => m && /(^|\/)llama-server(\s|$)/.test(m[3]))
+    .map((m) => ({ pid: Number(m[1]), bytes: Number(m[2]) * 1024 }));
+}
+
 // Who a server belongs to, from the programs above it.
 function whoStarted(r, byPid) {
   for (let p = byPid.get(r.ppid), i = 0; p && i < 8; p = byPid.get(p.ppid), i++) {

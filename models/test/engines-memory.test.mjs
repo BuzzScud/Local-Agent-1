@@ -3,8 +3,8 @@
 import { test, expect } from 'bun:test';
 import { join } from 'node:path';
 import { ENGINES, DEFAULT_ENGINE, ENGINE, SERVER_BIN, engineOf, serverBinOf, MODELS, DEFAULT_MODEL, HOME, modelPath, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER } from '../registry.mjs';
-import { contextCheck, needBytes, freeWithHandBack, loadedBytesOf, searchBytes, appName, topMemoryUsers } from '../runtime/memory.mjs';
-import { otherCopies } from '../runtime/server.mjs';
+import { contextCheck, needBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, appName, topMemoryUsers } from '../runtime/memory.mjs';
+import { otherCopies, serverProcesses } from '../runtime/server.mjs';
 import bonsai from '../bonsai-2-27b/model.mjs';
 
 const gemma = MODELS[DEFAULT_MODEL];
@@ -123,4 +123,33 @@ test('another copy of the model: found by its whole path, apart from the servers
     { pid: 351, port: 17603, who: 'a coding -p run', bytes: b },
     { pid: 360, port: 17604, who: 'another program', bytes: b },
   ]);
+});
+
+// 29 Sep, 22:02: a window waited for another Qwen3.5 9B copy; that copy and two search servers
+// (8.6 GB) were stopped, the window loaded at once, read 4.8 GB free and warned, pressure green.
+test('a start that waited for other copies counts what the servers that quit held as free', () => {
+  const ps = [
+    '  100  2000 /bin/zsh',
+    '60605 7541648 /x/engine/t/llama-server -m /x/models/Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf --port 17600 -c 32768',
+    '68794  317216 /x/engine/t/llama-server -m /x/models/bge-m3-Q8_0.gguf --port 17601 --embedding',
+    '69389  845584 /x/engine/t/llama-server -m /x/models/qwen3-reranker-0.6b-q8_0.gguf --port 17602 --rerank',
+    '  700      40 grep llama-server',
+    '  800     900 /x/llama-server-helper --watch',
+  ].join('\n');
+  // the last look while they still ran (every 3 s while it waits): 2.4 GB free
+  const before = { free: 2.4e9, servers: serverProcesses({ psText: ps }) };
+  // every model server, whatever its model; not a grep that names one, nor another program
+  expect(before.servers.map((s) => s.pid)).toEqual([60605, 68794, 69389]);
+  expect(before.servers[0].bytes).toBe(7541648 * 1024);
+  const held = (7541648 + 317216 + 845584) * 1024;
+  // all three quit: what was free while they ran, plus what they held (8.9 GB): 64k with search fits
+  const free = freeAfterQuit(before, []);
+  expect(free).toBe(2.4e9 + held);
+  const qwen = MODELS.qwen ?? gemma;
+  expect(contextCheck(qwen, 65536, { draft: true, available: free, users: [], search: 2.3e9 }).fits).toBe(true);
+  // only the copy quit: only its memory comes back; none quit, or nothing looked at: 0 (the check reads the Mac as it is)
+  expect(freeAfterQuit(before, before.servers.filter((s) => s.pid !== 60605))).toBe(2.4e9 + 7541648 * 1024);
+  expect(freeAfterQuit(before, before.servers)).toBe(0);
+  expect(freeAfterQuit({ free: 1e9, servers: [] }, [])).toBe(0);
+  expect(freeAfterQuit(null, [])).toBe(0);
 });

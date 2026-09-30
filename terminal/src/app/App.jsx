@@ -14,7 +14,7 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, contextCheck, freeWithHandBack, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -158,9 +158,14 @@ export function App({ opts, win, onRestart }) {
     });
     setBattle(null); setStartPhase('loading');
   };
+  // Waits while another copy of the model is loaded outside the app windows. Returns what is free
+  // once the servers that quit meanwhile give their memory back (freeAfterQuit, from the last look
+  // while they ran), 0 when it did not wait or none quit.
   const waitForOthers = async (m, stillOn = () => true) => {
     let others = otherCopies(m);
-    if (!others.length) return;
+    if (!others.length) return 0;
+    const look = () => ({ free: availableBytes(), servers: serverProcesses() });
+    let last = look();
     const who = (list) => list.map((o) => `${o.who} (port ${o.port ?? '?'}, ${(o.bytes / 1e9).toFixed(1)} GB)`).join(' and ');
     setWaiting(who(others));
     setStartPhase('waiting');
@@ -169,13 +174,13 @@ export function App({ opts, win, onRestart }) {
       const tick = setInterval(() => {
         if (!stillOn()) return done();
         others = otherCopies(m);
-        if (others.length) setWaiting(who(others));
-        else done();
+        if (others.length) { setWaiting(who(others)); last = look(); } else done();
       }, 3000);
       waitRef.current = { go: () => { push({ type: 'note', text: `Starting anyway: ${who(others)} still has ${m.name} loaded, so both may be slow.`, tone: 'warn' }); done(); } };
     });
     setWaiting(null);
     setStartPhase('loading');
+    return freeAfterQuit(last, serverProcesses());
   };
   const [stats, setStats] = useState({});
   const [ctx, setCtx] = useState(opts.ctx ?? 32768);
@@ -370,9 +375,9 @@ export function App({ opts, win, onRestart }) {
       // Wait for the old one to really exit: two 27Bs never fit side by side.
       if (oldPid && !(await exited(oldPid))) throw new Error('the old model server did not stop');
       await waitForBattle();
-      await waitForOthers(next);
+      const back = await waitForOthers(next);
       const fixed = limitsRef.current.context;
-      const available = Math.max(mem.free, availableBytes());
+      const available = Math.max(mem.free, back, availableBytes());
       const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined, available });
       // A context you picked is checked on a restart too: used as asked, said when it does not fit.
       if (fixed) {
@@ -769,11 +774,12 @@ export function App({ opts, win, onRestart }) {
       }
       if (!size && running) size = running.ctx;
       // Another copy loaded outside the app windows: wait for it (esc starts anyway).
-      if (!running) await waitForOthers(model, () => alive);
+      // What the copies it waited for give back counts as free, as a restart's does.
+      if (!running) freeBefore = Math.max(freeBefore, await waitForOthers(model, () => alive));
       if (!alive) return;
       let helper;
       if (!size) {
-        const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined });
+        const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined, available: Math.max(freeBefore, availableBytes()) });
         size = c.ctx;
         helper = c.helper; // false: High keeps its memory, the speed helper stays off
         memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen

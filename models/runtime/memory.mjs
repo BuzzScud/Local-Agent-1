@@ -69,6 +69,18 @@ export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGE
 // every /effort restart warned although nothing was short.
 export const freeWithHandBack = (m, ctx, { draft = false, available = availableBytes() } = {}) => available + needBytes(m, ctx, { draft });
 
+// Free memory after model servers quit that were running a moment ago (the copy a start waited
+// for, and anything that quit with it): what was free while they ran plus what they held. The
+// same lag as above: on 29 Sep a window waited for another Qwen3.5 9B copy and its two search
+// servers (8.6 GB), loaded the moment they were stopped, saw 4.8 GB free and warned that the Mac
+// may slow down, with pressure green. before: { free, servers: [{ pid, bytes }] }, a look while
+// they still ran; now: the servers running now. 0 when none of them quit.
+export function freeAfterQuit(before, now) {
+  const running = new Set(now.map((s) => s.pid));
+  const back = (before?.servers ?? []).filter((s) => !running.has(s.pid)).reduce((sum, s) => sum + s.bytes, 0);
+  return back ? before.free + back : 0;
+}
+
 // What a search model (the embedder, the reranker) holds while loaded: its
 // measured loadedBytes (model.mjs), else its file and the working space.
 export const loadedBytesOf = (m) => m.loadedBytes ?? m.bytes + OVERHEAD;

@@ -8,8 +8,8 @@
 //   - the reranker: the small model that orders what the search found (/effort);
 //   - the Battle arena: starting its runner, and whether a battle holds the memory.
 export { HOME, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, thinkingLevel, thinkingKwargs, modelPath, draftPath, modelFolder } from './registry.mjs';
-export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, stopServer, otherCopies, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
-export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, loadedBytesOf, searchBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
+export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
+export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { setup, RUNTIME } from './runtime/setup.mjs';
 export { Embedder, embedderReady } from './runtime/embed.mjs';
