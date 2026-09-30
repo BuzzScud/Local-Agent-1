@@ -38,8 +38,10 @@ numbers live in the 27B's comparison pages.
    others: `by` (who made it), `measured` (its reading and writing speed on this Mac, tokens a
    second) and, when there is one, `watch` (what to look out for, seen in use by hand).
 2. Import it in `registry.mjs` and add it to the list.
-3. `coding setup` fetches it; `/model` in the terminal lists it, and the Harness tab shows it
-   by itself (`coding hub harness`).
+3. `coding setup` fetches it; `/model` in the terminal lists it, and the hub's Harness and Flow
+   tabs show it by themselves (`coding hub harness`, `coding hub flow`): its own box in the
+   flow's drawings, and its own row wherever the model is used, once it has run the same test
+   as the others.
 4. Test it the way the 27B was: `node models/evals/bench/run.mjs --model <id>` and
    `node models/evals/bench/words/real.mjs --model <id>`; results land in `models/<name>/results/`.
 

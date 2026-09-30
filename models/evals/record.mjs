@@ -20,7 +20,7 @@
 //            ({ reranker: 'qwen3-reranker-0.6b', context: 65536 }); only then. Runs compare only
 //            with runs at the same settings.
 // A later line with the same id replaces the earlier one.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -167,17 +167,55 @@ export function recordData(file = recordFile()) {
   return { rows: readRecord(file), kinds: KINDS, models: installedModels(), ...overviewTests(), file: file.startsWith(homedir()) ? file.replace(homedir(), '~') : basename(file), made: new Date().toISOString() };
 }
 
-// What the record holds about the listed models side by side (the hub's Harness tab):
+// What the record holds about the listed models side by side (the hub's Harness and Flow tabs):
 //   run   the newest practice-task run every one of them did under the same name, effort, context
 //         and panel settings, task by task from each run's raw results. Only the tasks they all
-//         ran count. null while they have no such run.
+//         ran count. null while they have no such run. Each task also says which path it took
+//         through the app and whether it went on step by step (the Flow tab draws the paths), and
+//         `example` is one task's real steps on every model (the Flow tab's "One request").
 //   sort  each model's newest whole Sorting check ({ right, total }), or null.
 // The prompt test keeps two sides in its raw results: the new prompt's is read (the app as it is).
 // `top` is the repo the raw results sit in: the launcher names it (the built app has no folder of its own).
 const rawDir = (raw, top) => { const p = String(raw ?? ''); return p.startsWith('~/') ? join(homedir(), p.slice(2)) : p.startsWith('/') ? p : p && !p.startsWith('a temporary folder') ? join(top, p) : null; };
-function taskRows(dir) {
-  for (const f of [join(dir, 'summary.json'), join(dir, 'new', 'summary.json')]) {
-    try { const d = JSON.parse(readFileSync(f, 'utf8')); if (Array.isArray(d.results) && d.results.length) return d.results; } catch { /* not there, or not a task run */ }
+// A task run's rows, the folder they were read from, and whether the memory was on for it.
+function taskRun(dir) {
+  for (const at of [dir, join(dir, 'new')]) {
+    try { const d = JSON.parse(readFileSync(join(at, 'summary.json'), 'utf8')); if (Array.isArray(d.results) && d.results.length) return { rows: d.results, at, memory: Boolean(d.memory) }; } catch { /* not there, or not a task run */ }
+  }
+  return null;
+}
+// The path a task took through the app: the run's own route, with the step-by-step loop's three
+// names as one ('loop'), and a change that spans files told apart by its tries ('multi': its
+// drafts are called "changes"). null for a run from before the route was kept.
+const LOOP_ROUTES = new Set(['question', 'other', 'step by step']);
+export const pathOf = (row) => (!row?.route ? null : LOOP_ROUTES.has(row.route) ? 'loop' : row.route === 'change' && (row.tries ?? []).some((t) => /^Drafting changes\b/.test(String(t))) ? 'multi' : String(row.route));
+// One task's steps as the run's own log has them: how it was sorted, each round of tries with its
+// marks and seconds, what it asked before changing anything, the files it changed and the check it
+// ran afterwards. The log is beside the summary, or one folder down in t<number>/ (the prompt
+// test). null when it is gone.
+const CHANGES = new Set(['Update', 'Edit', 'Write', 'Test']);
+export function taskSteps(dir, task) {
+  for (const at of [dir, join(dir, `t${parseInt(task, 10)}`)]) {
+    let names; try { names = readdirSync(at); } catch { continue; }
+    const f = names.filter((x) => x.startsWith(`${task}-think-`) && x.endsWith('.json')).sort()[0];
+    if (!f) continue;
+    try {
+      const log = JSON.parse(readFileSync(join(at, f), 'utf8')).log;
+      if (!Array.isArray(log) || !log.length) return null;
+      const tools = log.filter((e) => e.type === 'tool'), settled = log.find((e) => e.type === 'settled');
+      const changed = new Map();
+      for (const e of tools) if (CHANGES.has(e.name) || CHANGES.has(e.label)) changed.set(String(e.arg), { path: String(e.arg), add: e.view?.additions ?? null, del: e.view?.removals ?? null, created: Boolean(e.view?.created), test: e.name === 'Test' });
+      const first = tools.findIndex((e) => CHANGES.has(e.name) || CHANGES.has(e.label));
+      const ran = first < 0 ? null : tools.slice(first).findLast((e) => e.name === 'Bash');
+      return {
+        request: String(settled?.request ?? ''),
+        sorted: String(log.find((e) => e.type === 'sorted')?.text ?? '').replace(/^Sorted as:\s*/, ''),
+        tries: log.filter((e) => e.type === 'tries-done').map((e) => ({ label: String(e.label ?? ''), marks: (e.marks ?? []).join(''), secs: Math.round(e.secs ?? 0) })),
+        asked: tools.filter((e) => e.label === 'Ask').map((e) => ({ question: String(e.view?.question ?? e.arg ?? ''), answer: String(e.view?.text ?? '') })),
+        changed: [...changed.values()],
+        check: ran ? { cmd: String(ran.arg), ok: ran.view?.code === 0 } : settled?.check ? { cmd: String(settled.check.cmd), ok: Boolean(settled.check.ok) } : null,
+      };
+    } catch { return null; }
   }
   return null;
 }
@@ -195,24 +233,34 @@ export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top
     tried.add(same(r));
     const lines = ids.map((id) => rows.find((x) => x.kind === 'tasks' && x.model === id && whole(x) && same(x) === same(r)));
     if (lines.some((l) => !l)) continue;
-    const raws = lines.map((l) => { const d = rawDir(l.raw, top); return d ? taskRows(d) : null; });
-    if (raws.some((x) => !x)) continue;
+    const runs = lines.map((l) => { const d = rawDir(l.raw, top); return d ? taskRun(d) : null; });
+    if (runs.some((x) => !x)) continue;
+    const raws = runs.map((x) => x.rows);
     const num = (t) => parseInt(t, 10) || 0;
     const shared = [...new Set(raws[0].map((x) => x.task))].filter((t) => raws.every((rs) => rs.some((x) => x.task === t))).sort((a, b) => num(a) - num(b) || a.localeCompare(b));
     if (!shared.length) continue;
     const models = Object.fromEntries(ids.map((id, i) => {
       // A task run several times passes when every run did; its time is the mean.
-      const tasks = Object.fromEntries(shared.map((t) => { const reps = raws[i].filter((x) => x.task === t); const bad = reps.find((x) => !x.pass); return [t, { pass: !bad, secs: Math.round(mean(reps.map((x) => x.secs ?? 0))), why: bad ? (bad.reason === 'interrupted' ? 'time' : String(bad.why || bad.reason || '')) : '', think: Math.round(mean(reps.map((x) => x.thinkTokens ?? 0))), calls: Math.round(mean(reps.map((x) => x.modelCalls ?? 0))) }]; }));
+      const tasks = Object.fromEntries(shared.map((t) => { const reps = raws[i].filter((x) => x.task === t); const bad = reps.find((x) => !x.pass); const path = pathOf(reps[0]); return [t, { pass: !bad, secs: Math.round(mean(reps.map((x) => x.secs ?? 0))), why: bad ? (bad.reason === 'interrupted' ? 'time' : String(bad.why || bad.reason || '')) : '', think: Math.round(mean(reps.map((x) => x.thinkTokens ?? 0))), calls: Math.round(mean(reps.map((x) => x.modelCalls ?? 0))),
+        // The path it took, and whether the model went on step by step after a focused path (its own tool steps).
+        path, thenLoop: Boolean(path) && path !== 'loop' && reps.some((x) => (x.ownSteps ?? 0) > 0) }]; }));
       const all = Object.values(tasks);
       const tps = raws[i].filter((x) => shared.includes(x.task) && x.tps).map((x) => x.tps);
       return [id, { at: lines[i].at, page: lines[i].page ?? '', passed: all.filter((t) => t.pass).length, secs: all.reduce((n, t) => n + t.secs, 0), median: middle(all.map((t) => t.secs)), thinkTokens: all.reduce((n, t) => n + t.think, 0), modelCalls: all.reduce((n, t) => n + t.calls, 0), write: tps.length ? +middle(tps).toFixed(1) : null, tasks }];
     }));
     const timed = Object.values(models).flatMap((m) => Object.values(m.tasks)).filter((t) => t.why === 'time').map((t) => t.secs);
+    // The example: a task every model passed by the shortest road (a fix, one round of tries, no
+    // step of its own), the lowest number first; else any task all passed on a focused path.
+    const rowOf = (i, t) => raws[i].find((x) => x.task === t);
+    const clean = (t, strict) => ids.every((id, i) => { const m = models[id].tasks[t], tries = rowOf(i, t).tries ?? []; return m.pass && ['fix', 'change', 'multi'].includes(m.path) && !m.thenLoop && tries.length > 0 && (!strict || (m.path === 'fix' && tries.length === 1)); });
+    const picked = shared.find((t) => clean(t, true)) ?? shared.find((t) => clean(t, false));
+    const steps = picked ? ids.map((id, i) => taskSteps(runs[i].at, picked)) : [];
+    const example = picked && steps.every(Boolean) ? { task: picked, request: steps[0].request, memory: runs.every((x) => x.memory), models: Object.fromEntries(ids.map((id, i) => [id, steps[i]])) } : null;
     return {
       // reps: how many times each task was run, on the model that ran it least.
       run: { name: String(r.name).replace(/, tasks [\w, ]+$/, ''), at: lines.map((l) => l.at).sort().at(-1), effort: r.effort ?? null, ctx: r.ctx ?? null, thinking: Boolean(raws[0][0].thinking), limitMins: timed.length ? Math.round(Math.max(...timed) / 60) : null,
         reps: Math.min(...raws.flatMap((rs) => shared.map((t) => rs.filter((x) => x.task === t).length))),
-        tasks: shared.map((t) => ({ id: t, n: num(t), title: titles.get(String(num(t))) ?? t.replace(/^\d+-/, '').replace(/-/g, ' ') })), models },
+        tasks: shared.map((t) => ({ id: t, n: num(t), title: titles.get(String(num(t))) ?? t.replace(/^\d+-/, '').replace(/-/g, ' ') })), models, example },
       sort,
     };
   }

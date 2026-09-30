@@ -7,7 +7,7 @@
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /harness, /harness.json the Harness tab: one harness, every model in /model beside the others, read live (harness-hub.mjs)
-//   /flow             the Flow tab: how Agentic Coder works as a flow diagram (flow.html, drawn by scripts/flow-page.mjs)
+//   /flow, /flow.json the Flow tab: how Agentic Coder works as a flow diagram, every model in /model drawn into it, read live (flow-hub.mjs)
 //   /arena            the Arena tab: run a test on one model, or battle two. It is the arena runner's own page
 //                     (models/evals/battle/): started when it is not up, and told this hub's address so its
 //                     Record button can show the page below. /battle is the same (its name before 30 Sep 2026)
@@ -26,13 +26,13 @@ import hubHtml from './hub.html' with { type: 'text' };
 import helpHtml from './help.html' with { type: 'text' };
 import testsHtml from './tests.html' with { type: 'text' };
 import memoryHtml from './memory.html' with { type: 'text' };
-import flowHtml from './flow.html' with { type: 'text' };
 import instructionsHtml from './instructions.html' with { type: 'text' };
 import builderHtml from './builder.html' with { type: 'text' };
 import { builderRoute } from './builder-hub.mjs';
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
+import { flowRoute } from './flow-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
@@ -122,7 +122,7 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/') return page(hubHtml);
       if (url.pathname === '/weights') return page(html);
       if (url.pathname === '/help') return page(helpHtml);
-      if (url.pathname === '/flow') return page(flowHtml);
+      if (url.pathname === '/flow' || url.pathname === '/flow.json') return flowRoute(url, cwd);
       if (url.pathname === '/harness' || url.pathname === '/harness.json') return harnessRoute(url, cwd);
       if (url.pathname === '/tests') return page(testsHtml);
       if (url.pathname === '/builder') return page(builderHtml);
