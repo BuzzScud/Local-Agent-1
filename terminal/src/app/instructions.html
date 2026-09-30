@@ -4,9 +4,21 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Instructions · Agentic Coder</title>
 <style>
-:root{color-scheme:light dark;--bg:#f6f7f9;--surface:#fff;--soft:#f0f3f6;--ink:#17232f;--muted:#627080;--line:#dce3e9;--blue:#2566ba;--tint:#eaf2fd;--green:#217157;--red:#ad3737;--shadow:0 10px 30px #17232f07}
-@media(prefers-color-scheme:dark){:root{--bg:#111619;--surface:#192126;--soft:#202b32;--ink:#e8eff4;--muted:#a0b0bc;--line:#32414b;--blue:#8dbbff;--tint:#223b55;--green:#8ad5b6;--red:#ffaaaa;--shadow:none}}
+:root{color-scheme:light dark;--bg:#f6f7f9;--surface:#fff;--soft:#f0f3f6;--ink:#17232f;--muted:#627080;--line:#dce3e9;--blue:#2566ba;--tint:#eaf2fd;--green:#217157;--red:#ad3737;--amber:#8a5a00;--shadow:0 10px 30px #17232f07;--g-built:#2a78d6;--g-yours:#eb6834;--g-session:#1baf7a;--g-notes:#eda100;--g-memory:#e87ba4;--g-tools:#008300}
+@media(prefers-color-scheme:dark){:root{--bg:#111619;--surface:#192126;--soft:#202b32;--ink:#e8eff4;--muted:#a0b0bc;--line:#32414b;--blue:#8dbbff;--tint:#223b55;--green:#8ad5b6;--red:#ffaaaa;--amber:#f0c36b;--shadow:none;--g-built:#3987e5;--g-yours:#d95926;--g-session:#199e70;--g-notes:#c98500;--g-memory:#d55181;--g-tools:#008300}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,textarea,select{font:inherit}button{cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:9px 14px;transition:background .16s,transform .16s}button:hover:not(:disabled){background:var(--soft);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:default}button:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--blue);outline-offset:3px}.page{max-width:1440px;margin:auto;height:100dvh;min-height:590px;padding:28px 34px 20px;display:flex;flex-direction:column;gap:20px}.top{display:flex;justify-content:space-between;align-items:center;gap:20px}.eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue);font-weight:750}h1{font-size:29px;letter-spacing:-.8px;margin:3px 0 4px;font-weight:650}.subtitle{margin:0;color:var(--muted);max-width:730px}.badge{white-space:nowrap;border:1px solid var(--line);border-radius:30px;padding:7px 12px;font-size:12px;color:var(--green);background:var(--surface)}.badge:before{content:'●';margin-right:7px;font-size:8px}.workspace{flex:1;min-height:0;display:grid;grid-template-columns:226px 1fr;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);background:var(--surface)}aside{padding:20px 14px;background:var(--bg);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px}aside .eyebrow{padding:0 10px 10px;color:var(--muted)}.nav{text-align:left;border:1px solid transparent;background:none;padding:11px 12px;display:block;width:100%;font-weight:600}.nav small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:2px}.nav[aria-selected=true]{background:var(--tint);border-color:var(--tint);color:var(--blue)}.aside-note{margin-top:auto;padding:18px 10px 2px;color:var(--muted);font-size:12px}.aside-note strong{color:var(--ink);display:block;margin-bottom:6px}.editor{min-width:0;min-height:0;display:flex;flex-direction:column}.section-head{padding:24px 28px 17px;border-bottom:1px solid var(--line)}.section-head h2{font-size:20px;margin:0 0 4px;letter-spacing:-.3px}.section-head p{color:var(--muted);margin:0;font-size:13px}.body{flex:1;min-height:0;padding:20px 28px;display:flex;flex-direction:column;gap:10px}textarea{resize:none;flex:1;min-height:150px;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);padding:17px 18px;line-height:1.75;font-size:13px}textarea:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--tint)}.meta{display:flex;gap:12px;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted)}.text-button{background:none;border:0;padding:2px;color:var(--blue);font-size:12px}.readview{margin:0;white-space:pre-wrap;overflow:auto;flex:1;min-height:0;overflow-wrap:anywhere;background:var(--soft);border-radius:10px;padding:18px;font:12px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace}.preview-note{margin:0;font-size:12px;color:var(--muted);line-height:1.55}.preview-note b{color:var(--ink);font-weight:600}.recall-box{display:flex;gap:8px}.recall-box input{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);padding:9px 12px;font-size:13px}.recall-box input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--tint)}.sources{font-size:12px;color:var(--muted);overflow-wrap:anywhere;max-height:70px;overflow:auto}.footer{border-top:1px solid var(--line);padding:15px 28px;display:flex;gap:8px;align-items:center}.status{flex:1;min-width:0;font-size:12px;color:var(--muted);padding-right:12px;overflow-wrap:anywhere}.status.error{color:var(--red)}.primary{color:white;background:#2566ba;border-color:#2566ba}.primary:hover:not(:disabled){background:#18559e}.hint{display:flex;gap:22px;color:var(--muted);font-size:12px}.hint b{color:var(--ink);font-weight:600}.hint span{flex:1}select{border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--surface);padding:5px 8px} [hidden]{display:none!important}
+.scope{display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--muted)}.scope label{display:flex;gap:6px;align-items:center}.scope select{max-width:340px}.scope-info{margin-left:auto}
+.cost{display:flex;flex-direction:column;gap:7px}.cost-head{font-size:12px;color:var(--muted)}.cost-head b{color:var(--ink);font-weight:600}
+.bar{display:flex;gap:2px;height:16px;background:var(--soft);border-radius:4px;overflow:hidden}.seg{height:100%;min-width:3px}.seg:first-child{border-radius:4px 0 0 4px}.seg:focus-visible{outline:3px solid var(--blue);outline-offset:1px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11px;color:var(--muted)}.legend b{color:var(--ink);font-weight:600}.sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}.sw.free{background:var(--soft);outline:1px solid var(--line)}
+.g-built{background:var(--g-built)}.g-yours{background:var(--g-yours)}.g-session{background:var(--g-session)}.g-notes{background:var(--g-notes)}.g-memory{background:var(--g-memory)}.g-tools{background:var(--g-tools)}
+.tip{position:fixed;z-index:5;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;line-height:1.45;padding:7px 10px;border-radius:8px;max-width:320px;box-shadow:0 6px 20px #0003}
+.plabel{display:block;margin:16px 0 4px;font:600 10px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}.plabel:first-child{margin-top:0}
+.costview{flex:1;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:10px}.costview table{width:100%;border-collapse:collapse;font-size:12px}.costview th,.costview td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.costview th{position:sticky;top:0;background:var(--soft);font-weight:600;color:var(--muted);font-size:11px}.costview td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.costview tr.sum td{background:var(--soft);font-weight:600}.costview .from{color:var(--muted)}
+.rank{margin:0;font-size:12px;color:var(--muted);background:var(--soft);border-radius:10px;padding:9px 12px;line-height:1.6}.rank b{color:var(--ink);font-weight:600}
+.srclist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px}.src{border:1px solid var(--line);border-radius:10px;background:var(--surface)}.src summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:3px 14px;align-items:center;padding:11px 14px}.src summary::-webkit-details-marker{display:none}.src summary:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:10px}.src-name{font-weight:600;font-size:13px;overflow-wrap:anywhere}.src-name small{font-weight:400;color:var(--muted);font-size:12px;margin-left:8px}.src-size{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;min-width:90px}.src-path{grid-column:1/-1;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);overflow-wrap:anywhere}.src-path:before{content:'▸ ';color:var(--muted)}.src[open] .src-path:before{content:'▾ '}.src pre{margin:0 14px 14px;max-height:280px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border-radius:8px;padding:12px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
+.chip{font-size:11px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);white-space:nowrap;text-align:center;min-width:72px}.chip.whole{color:var(--green)}.chip.part{color:var(--amber)}.chip.left{color:var(--red)}
+.design-meta{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}.design-meta label{display:flex;gap:6px;align-items:center;color:var(--ink);font-weight:600}.design-meta span{flex:1;min-width:200px}
 @media(max-width:850px){.page{padding:20px 16px;gap:14px}.workspace{grid-template-columns:185px 1fr}.section-head,.body{padding:18px}.footer{padding:14px 18px;flex-wrap:wrap}.status{flex-basis:100%}.badge{display:none}.hint{gap:12px;font-size:11px}}
 @media(max-width:580px){.page{height:auto;min-height:100dvh}.workspace{display:flex;flex-direction:column}aside{display:grid;grid-template-columns:1fr 1fr;border-right:0;border-bottom:1px solid var(--line);padding:10px}.aside-note,aside>.eyebrow{display:none}.nav{font-size:12px;padding:8px}.nav small{font-size:10px}textarea{min-height:380px}.readview{max-height:440px}.hint{flex-direction:column;gap:7px}}
 
@@ -23,8 +35,8 @@
 <aside><div class="eyebrow">Working policy</div><div role="tablist" aria-label="Instruction sections">
 <button class="nav" role="tab" id="tab-general" aria-selected="true" aria-controls="panel" data-section="general">01 &nbsp; General<small>Evidence, scope, and completion</small></button>
 <button class="nav" role="tab" id="tab-planning" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="planning">02 &nbsp; Planning<small>Inspect → plan → verify → revise</small></button>
-<button class="nav" role="tab" id="tab-context" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="context">03 &nbsp; Project context<small>Loaded notes · read only</small></button>
-<button class="nav" role="tab" id="tab-preview" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="preview">04 &nbsp; Prompt preview<small>See where your draft goes</small></button>
+<button class="nav" role="tab" id="tab-context" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="context">03 &nbsp; Project context<small>Notes files · which wins</small></button>
+<button class="nav" role="tab" id="tab-preview" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="preview">04 &nbsp; Prompt preview<small>Every part and its cost</small></button>
 <button class="nav" role="tab" id="tab-howto" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="howto">05 &nbsp; How to<small>How it works · interactive guide</small></button>
 </div><div class="aside-note"><strong>One agent, a clearer plan.</strong>Planning uses the active model and existing task list. No separate planner model is added.<br><br>Project rules remain in their source files. Tool permissions are enforced by the app.</div></aside>
 <section class="editor" id="panel" role="tabpanel" aria-labelledby="tab-general">
@@ -32,10 +44,13 @@
 <div class="body">
 <textarea id="text" aria-label="General instructions" spellcheck="false" disabled></textarea>
 <div class="meta" id="edit-meta"><button class="text-button" id="defaults" disabled>Use recommended defaults</button><span id="count"></span></div>
-<div class="meta" id="preview-meta" hidden><label>View <select id="preview-kind"><option value="main">Main agent prompt</option><option value="focused">Focused coding calls</option><option value="tools">Tools sent with it</option><option value="added">Added to each request</option><option value="models">Gemma and Qwen settings</option></select></label><span id="preview-edits">Preview includes unsaved edits</span></div>
+<div class="scope" id="scope" hidden><label id="view-label">View <select id="preview-kind"><option value="main">Main agent prompt</option><option value="cost">What each part costs</option><option value="focused">Focused coding calls</option><option value="tools">Tools sent with it</option><option value="added">Added to each request</option><option value="models">Gemma and Qwen settings</option></select></label><label>Folder <select id="folder" aria-label="Show the prompt for this folder"></select></label><span class="scope-info" id="scope-info"></span></div>
 <p class="preview-note" id="preview-note" hidden></p>
+<p class="rank" id="rank" hidden><b>Which wins:</b> ① your words in the chat › ② these notes › ③ General and Planning (tabs 01–02) › ④ the built-in defaults. The app's own blocks (folders outside the project, rm -rf, git push…) hold whatever the notes say.</p>
+<section class="cost" id="cost" aria-label="What the prompt costs" hidden><div class="cost-head" id="cost-head"></div><div class="bar" id="bar" role="list" aria-label="The model's memory, by part"></div><div class="legend" id="legend"></div></section>
+<div class="design-meta" id="design-meta" hidden><label>Design style <select id="design-style"></select></label><span id="design-info"></span></div>
 <form class="recall-box" id="recall-box" hidden><input id="recall-input" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="Try a request, for example: fix the login bug on the settings page" aria-label="Try a request to see which saved facts would be attached"><button type="submit" id="recall-run">Find facts</button></form>
-<div class="sources" id="sources" hidden></div><pre class="readview" id="readview" tabindex="0" hidden></pre>
+<div class="srclist" id="srclist" hidden></div><div class="costview" id="costview" tabindex="0" hidden></div><pre class="readview" id="readview" tabindex="0" hidden></pre><div class="tip" id="tip" role="tooltip" hidden></div>
 <section class="howto" id="howto" aria-label="How it works" hidden>
 <div class="howto-flow" aria-label="Task, context, coding model, tools, and checks"><button class="howto-node" data-step="0" aria-pressed="false"><span class="step-number">01</span><strong>Your task</strong><small>Goal + instructions</small></button>
 <button class="howto-node" data-step="1" aria-pressed="false"><span class="step-number">02</span><strong>Find context</strong><small>Search + rank</small></button>
@@ -61,9 +76,18 @@ const editable = () => section === 'general' || section === 'planning';
 const dirty = () => !!state && Object.keys(state.sections).some(k => draft[k] !== state.sections[k]);
 window.instructionsDirty = dirty;
 const titles = {general:'General instructions',planning:'Planning instructions',context:'Project context',preview:'Effective prompt preview',howto:'How to'};
-const descriptions = {general:'Ground changes in evidence, preserve scope, and report what was actually verified.',planning:'Use a short plan for complex work. Define success, update the plan, and check the result.',context:'These sources are loaded for this hub’s project folder. Edit the original files to change them.',preview:'The real prompt with your draft inserted, and the other things the model receives: its tools, what is added to each request, and each model’s settings.',howto:'How it works · Hover or select a step to see what powers it and how to improve it.'};
+const descriptions = {general:'Ground changes in evidence, preserve scope, and report what was actually verified.',planning:'Use a short plan for complex work. Define success, update the plan, and check the result.',context:'The notes files and the memory the model reads in the chosen folder: what kind each is, how much of it arrives, and which wins. Edit the original files to change them.',preview:'The real prompt with your draft inserted, what each part costs, and the other things the model receives: its tools, what is added to each request, and each model’s settings.',howto:'How it works · Hover or select a step to see what powers it and how to improve it.'};
+// The parts of the prompt, grouped by where they come from (colours checked for colour-blind readers, light and dark).
+const GROUPS = {built:'Built in', yours:'Your General + Planning', session:'This session', notes:'Notes files', memory:'Memory', tools:'Tools'};
+const KEPT = {disk:'On disk', folder:'This folder today', unknown:'With every request'};
+const counted = () => state.cost.tokenizer ? `Counted by ${state.cost.tokenizer}’s own tokenizer.` : state.cost.busy ? `≈ estimated: ${state.cost.busy} was busy and did not answer in time (Reload to try again).` : '≈ estimated at 3.6 characters a token; start a model for exact counts.';
+const approx = () => state.cost.tokenizer ? '' : '≈';
+const num = n => Math.round(n).toLocaleString('en-US');
+const secs = t => { const v = t / state.cost.speed; return v < 1 ? 'under 1 s' : (v < 10 ? v.toFixed(1) : Math.round(v)) + ' s'; };
+let folder = null;
 async function api(path, data) {
- const r = await fetch(path, data ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)} : {cache:'no-store'});
+ if (!data && folder) path += '?folder=' + encodeURIComponent(folder);
+ const r = await fetch(path, data ? {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...data, folder})} : {cache:'no-store'});
  const value = await r.json(); if (!r.ok) throw new Error(value.error || 'The request failed.'); return value;
 }
 function preview() {
@@ -89,8 +113,21 @@ function recallText() {
   ...r.attached.map(line),
   ...(r.near.length ? ['  Next closest, not attached:', ...r.near.map(line)] : []),
   ...(r.goesAlong ? ['  The model would read this at the end of your message:', '    ' + r.goesAlong.replace(/\n/g, '\n    ')] : []),
+  ...designLines(r.design),
   rule
  ].join('\n');
+}
+function designLines(d) {
+ if (!d) return [];
+ if (!d.page) return ['  Design cards: none. This is not a request to make or restyle a page.'];
+ if (!d.on) return ['  Design cards: off (/design on turns them back on).'];
+ if (!d.cards.length) return ['  Design cards: none found (the design examples folder is missing or empty).'];
+ return [
+  `  Design cards (style: ${state.design.styles.find(x => x.id === d.style)?.words ?? d.style}${d.turn ? `; ${d.turn}’s turn next` : ''}), ≈${num(d.tokens)} tokens:`,
+  ...d.cards.map(f => `    ${f === d.example ? 'Example' : f === d.look ? 'Look   ' : 'Rules  '}  DESIGN/${f}`),
+  ...(d.look ? ['    The example comes in that look: its own colours, type and spacing are swapped for the look’s.'] : []),
+  ...(d.more.length ? [`    Named for the model to open if it wants: ${d.more.map(f => 'DESIGN/' + f).join(', ')}`] : [])
+ ];
 }
 function addedText(s) {
  const r = s.recall;
@@ -132,6 +169,7 @@ function viewText(kind) {
 }
 function viewNote(kind) {
  const s = state.sees;
+ if (kind === 'cost') return `On disk: saved once and restored in under a second at every start. This folder today: saved with this folder, day and Git state, read again after a commit, a new day or a notes edit. Side calls (fix, change, file choice) read their parts again unless the server still holds them. Time to read: at about ${state.cost.speed} tokens a second, measured on this Mac (120–200).`;
  if (kind === 'main') return (s.folder.isHome
   ? `Preview for ${s.folder.path}, your home folder, not a project: it includes the home-folder note and has no test command. A project folder shows its own notes, Git line and test command instead.`
   : `Preview for ${s.folder.path}: the notes, Git line and test command are this folder’s. Another project folder would change them.`)
@@ -152,21 +190,141 @@ function controls() {
  $('status').textContent = error || (busy ? 'Saving…' : changed ? 'Unsaved changes · Save applies both sections to the next task.' : state ? (state.updatedAt ? 'Saved ' + new Date(state.updatedAt).toLocaleString() : 'Recommended defaults · no custom version saved') : 'Loading…');
  if (state && editable()) $('count').textContent = draft[section].length.toLocaleString() + ' / ' + state.limits[section].toLocaleString() + ' characters';
 }
+function show(id, on) { $(id).hidden = !on; }
 function render() {
  document.querySelectorAll('[data-section]').forEach(b => { const on = b.dataset.section === section; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; });
  $('panel').setAttribute('aria-labelledby', 'tab-' + section);
  $('section-title').textContent = titles[section]; $('description').textContent = descriptions[section];
- $('text').hidden = !editable(); $('edit-meta').hidden = !editable(); $('readview').hidden = section !== 'context' && section !== 'preview';
- $('howto').hidden = section !== 'howto';
- $('preview-meta').hidden = section !== 'preview'; $('preview-note').hidden = section !== 'preview'; $('recall-box').hidden = section !== 'preview' || $('preview-kind').value !== 'added'; $('sources').hidden = section !== 'context';
+ const kind = $('preview-kind').value, prev = section === 'preview', ctx = section === 'context';
+ show('text', editable()); show('edit-meta', editable()); show('howto', section === 'howto');
+ show('scope', prev || ctx); show('view-label', prev); show('preview-note', prev); show('rank', ctx); show('srclist', ctx);
+ show('cost', prev && (kind === 'main' || kind === 'cost')); show('costview', prev && kind === 'cost');
+ show('readview', prev && kind !== 'cost'); show('recall-box', prev && kind === 'added'); show('design-meta', prev && kind === 'added');
+ $('tip').hidden = true;
  if (state) {
   if (editable()) { $('text').value = draft[section]; $('text').maxLength = state.limits[section]; $('text').setAttribute('aria-label', titles[section]); }
-  if (section === 'preview') { const kind = $('preview-kind').value; $('readview').textContent = viewText(kind); $('preview-note').textContent = viewNote(kind); $('preview-edits').hidden = kind !== 'main' && kind !== 'focused'; }
-  if (section === 'context') { $('sources').textContent = 'Project: ' + state.cwd + '\nSources found: ' + (state.sources.join(' · ') || 'none'); $('readview').textContent = state.context || 'No project notes were found. General and Planning instructions still apply.'; }
+  if (prev || ctx) renderScope();
+  if (prev) {
+   $('preview-note').textContent = viewNote(kind);
+   if (kind === 'main' || kind === 'cost') renderCost();
+   if (kind === 'main') renderMain(); else if (kind === 'cost') renderCostTable(); else $('readview').textContent = viewText(kind);
+   if (kind === 'added') renderDesign();
+  }
+  if (ctx) renderSources();
  }
  controls();
 }
-function accept(value) { state = value; draft = {...state.sections}; error = ''; render(); }
+// The folder the preview is for, and what fills its notes room.
+function renderScope() {
+ const sel = $('folder');
+ if (sel.options.length !== state.folders.length || [...sel.options].some((o, i) => o.value !== state.folders[i].path)) {
+  sel.replaceChildren(...state.folders.map(f => { const o = document.createElement('option'); o.value = f.path; o.textContent = f.name + (f.path === state.hubFolder ? '  (this hub)' : ''); return o; }));
+ }
+ sel.value = state.cwd;
+ const used = state.notes.filter(n => n.kind !== 'memory').reduce((a, n) => a + n.text.length, 0);
+ const left = state.notes.filter(n => n.status !== 'whole').length;
+ $('scope-info').textContent = section === 'context'
+  ? `Notes room ${num(used)} of ${num(state.notesRoom)} characters${left ? ` · ${left} file${left === 1 ? '' : 's'} cut or left out` : ' · every file whole'}${state.version === 'old' ? ' · AGENTIC_PROMPT=old' : ''}`
+  : `${state.version === 'old' ? 'Old prompt (AGENTIC_PROMPT=old) · ' : ''}${['main', 'cost', 'focused'].includes($('preview-kind').value) ? 'Preview includes unsaved edits' : ''}`;
+}
+// The parts with the draft in place: the saved offsets, moved by how much General and Planning changed.
+function partsNow() {
+ const text = preview(), dG = draft.general.length - state.sections.general.length, dP = draft.planning.length - state.sections.planning.length;
+ const inPrompt = state.cost.parts.filter(p => p.start !== null);
+ const moved = inPrompt.map(p => ({...p, start: p.start + (p.id === 'opening' || p.id === 'general' ? 0 : p.id === 'planning' ? dG : dG + dP)}));
+ const scale = {general: draft.general.length / Math.max(1, state.sections.general.length), planning: draft.planning.length / Math.max(1, state.sections.planning.length)};
+ return [...moved.map((p, i) => ({...p, text: text.slice(p.start, moved[i + 1]?.start ?? text.length), tokens: scale[p.id] ? Math.round(p.tokens * scale[p.id]) : p.tokens})),
+  ...state.cost.parts.filter(p => p.start === null)];
+}
+function renderCost() {
+ const parts = partsNow(), ctx = state.cost.context, total = parts.reduce((a, p) => a + p.tokens, 0);
+ const by = Object.keys(GROUPS).map(g => ({g, tokens: parts.filter(p => p.group === g).reduce((a, p) => a + p.tokens, 0)})).filter(x => x.tokens);
+ $('cost-head').replaceChildren(Object.assign(document.createElement('b'), {textContent: `${approx()}${num(total)} of ${num(ctx || total)} tokens`}),
+  document.createTextNode(` (${ctx ? (100 * total / ctx).toFixed(1) + '%' : '—'} of ${state.cost.model}’s memory, your /effort Context) go in before your first words. ${counted()}`));
+ const bar = $('bar'); bar.replaceChildren();
+ for (const x of by) {
+  const seg = document.createElement('span'); seg.tabIndex = 0; seg.className = 'seg g-' + x.g; seg.setAttribute('role', 'listitem');
+  seg.style.flex = `0 0 ${Math.max(0.4, 100 * x.tokens / (ctx || total))}%`;
+  const inIt = parts.filter(p => p.group === x.g);
+  const tip = `${GROUPS[x.g]}: ${num(x.tokens)} tokens (${ctx ? (100 * x.tokens / ctx).toFixed(1) : '—'}%)\n${inIt.map(p => `${p.name} ${num(p.tokens)}`).join(' · ')}`;
+  seg.setAttribute('aria-label', tip.replace('\n', '. '));
+  seg.onmouseenter = e => showTip(tip, e); seg.onmousemove = e => showTip(tip, e); seg.onmouseleave = () => { $('tip').hidden = true; };
+  seg.onfocus = () => { const r = seg.getBoundingClientRect(); showTip(tip, {clientX: r.left + r.width / 2, clientY: r.bottom}); }; seg.onblur = () => { $('tip').hidden = true; };
+  bar.append(seg);
+ }
+ const legend = by.map(x => { const s = document.createElement('span'); s.innerHTML = `<i class="sw g-${x.g}"></i>`; s.append(`${GROUPS[x.g]} `, Object.assign(document.createElement('b'), {textContent: num(x.tokens)})); return s; });
+ if (ctx) { const f = document.createElement('span'); f.innerHTML = '<i class="sw free"></i>'; f.append('Free for the conversation ', Object.assign(document.createElement('b'), {textContent: num(ctx - total)})); legend.push(f); }
+ $('legend').replaceChildren(...legend);
+}
+function showTip(text, e) {
+ const t = $('tip'); t.textContent = ''; text.split('\n').forEach((l, i) => { if (i) t.append(document.createElement('br')); t.append(l); }); t.hidden = false;
+ const w = t.offsetWidth, h = t.offsetHeight;
+ t.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, e.clientX - w / 2)) + 'px';
+ t.style.top = (e.clientY + 14 + h > window.innerHeight ? e.clientY - h - 12 : e.clientY + 14) + 'px';
+}
+// The main prompt, each part under a label: where it comes from, its size and how it is kept.
+function renderMain() {
+ const view = $('readview'); view.replaceChildren();
+ for (const p of partsNow().filter(p => p.start !== null)) {
+  const label = document.createElement('span'); label.className = 'plabel';
+  label.innerHTML = `<i class="sw g-${p.group}"></i>`;
+  label.append(`${p.name} · ${p.from} · ${approx()}${num(p.tokens)} tokens · ${p.kept === 'disk' ? 'kept on disk' : 'kept for this folder today'}${p.side ? ' · also in side calls' : ''}`);
+  view.append(label, document.createTextNode(p.text.replace(/\n+$/, '\n')));
+ }
+}
+// The cost of each part, as a table, and three totals.
+function renderCostTable() {
+ const parts = partsNow(), ctx = state.cost.context;
+ const t = document.createElement('table');
+ const row = (cells, cls) => { const tr = document.createElement('tr'); if (cls) tr.className = cls; cells.forEach(([v, c, html]) => { const td = document.createElement(cls === 'head' ? 'th' : 'td'); if (c) td.className = c; if (html) td.innerHTML = html; td.append(v); tr.append(td); }); return tr; };
+ const pct = n => ctx ? (100 * n / ctx).toFixed(1) + '%' : '—';
+ t.append(row([['Part'], ['Comes from'], [`Tokens${approx() ? ' ≈' : ''}`, 'n'], ['Memory', 'n'], ['Kept'], ['Side calls'], ['Time to read', 'n']], 'head'));
+ for (const p of parts) t.append(row([[p.name, '', `<i class="sw g-${p.group}"></i>`], [p.from + (p.status === 'part' ? ' · cut to fit' : ''), 'from'], [num(p.tokens), 'n'], [pct(p.tokens), 'n'], [KEPT[p.kept]], [p.side ? 'Yes' : '—'], [secs(p.tokens), 'n']]));
+ const sum = (f) => parts.filter(f).reduce((a, p) => a + p.tokens, 0);
+ const disk = sum(p => p.kept === 'disk'), again = sum(p => p.kept !== 'disk'), side = sum(p => p.side);
+ t.append(row([['On disk'], ['restored at every start; changes when you save tabs 01–02'], [num(disk), 'n'], [pct(disk), 'n'], ['On disk'], [''], ['under 1 s', 'n']], 'sum'));
+ t.append(row([['Read again'], ['after a commit, a new day or a notes edit here'], [num(again), 'n'], [pct(again), 'n'], ['This folder today'], [''], [secs(again), 'n']], 'sum'));
+ t.append(row([['Each side call'], ['General, Planning, the notes and the memory'], [num(side), 'n'], [pct(side), 'n'], [''], ['Yes'], [secs(side), 'n']], 'sum'));
+ $('costview').replaceChildren(t);
+}
+// Project context: one card per notes file, then the memory, as the model gets them.
+function renderSources() {
+ const list = $('srclist');
+ if (!state.notes.length) { list.replaceChildren(Object.assign(document.createElement('p'), {className: 'preview-note', textContent: 'No notes files or memory were found for this folder. General and Planning still apply.'})); return; }
+ const kinds = {project: 'This project’s rules', parent: 'Rules for a folder above', home: 'Your rules for every folder under ~', private: 'Private notes, kept out of git', memory: 'What Agentic Coder saved about you and this project'};
+ const status = {whole: ['whole', 'Whole'], part: ['part', 'Part of it'], left: ['left', 'Left out']};
+ list.replaceChildren(...state.notes.map(n => {
+  const d = document.createElement('details'); d.className = 'src';
+  const sm = document.createElement('summary');
+  const name = document.createElement('span'); name.className = 'src-name'; name.textContent = n.kind === 'memory' ? 'Memory' : n.name.split('/').pop();
+  name.append(Object.assign(document.createElement('small'), {textContent: kinds[n.kind] ?? n.label}));
+  const [cls, words] = status[n.status] ?? ['', n.status];
+  const chip = Object.assign(document.createElement('span'), {className: 'chip ' + cls, textContent: words});
+  const size = Object.assign(document.createElement('span'), {className: 'src-size', textContent: n.status === 'left' ? `${num(n.chars / 3.6)} tokens not sent` : `≈${num((n.text || '').length / 3.6)} tokens`});
+  const path = Object.assign(document.createElement('span'), {className: 'src-path', textContent: n.kind === 'memory' ? n.path.replace(/\/Users\/[^/]+/g, '~') : n.name});
+  sm.append(name, chip, size, path);
+  const body = document.createElement('pre');
+  body.textContent = n.status === 'left' ? 'Not sent: no room was left for this file. It arrives when the notes room is bigger or the files before it are shorter.' : (n.status === 'part' ? `Sent: the sections that fit. Left out: ${n.left.join(', ') || 'the rest'}.\n\n` : '') + n.text;
+  d.append(sm, body);
+  return d;
+ }));
+}
+// The design style row (Added to each request): saved at once, like /design style.
+function renderDesign() {
+ const d = state.design, sel = $('design-style');
+ if (sel.options.length !== d.styles.length) sel.replaceChildren(...d.styles.map(x => { const o = document.createElement('option'); o.value = x.id; o.textContent = x.id[0].toUpperCase() + x.id.slice(1) + ' · ' + x.words; return o; }));
+ sel.value = d.style; sel.disabled = busy || d.fromEnv;
+ const sets = d.sets.filter(x => x.kinds || x.looks.length).map(x => `${x.name} ${x.kinds}${x.looks.length ? ' + ' + x.looks.length + ' looks' : ''}`).join(' · ');
+ $('design-info').textContent = !d.dir ? 'No design examples folder yet.' : `${d.on ? '' : 'Off (/design on) · '}${sets}. Words like “minimal”, “compact”, “playful” or “dark” in a request bring that look.${d.fromEnv ? ' AGENTIC_DESIGN_STYLE decides the style.' : ''}`;
+}
+function accept(value) { state = value; folder = state.cwd; draft = {...state.sections}; error = ''; render(); }
+// Another folder: the same instructions, so an unsaved draft stays.
+async function switchFolder(path) {
+ folder = path; busy = true; controls();
+ try { const keep = draft, was = state.revision; state = await api('/instructions.json'); folder = state.cwd; draft = state.revision === was ? keep : {...state.sections}; error = ''; }
+ catch (e) { error = e.message; }
+ finally { busy = false; render(); }
+}
 async function reload() {
  if (dirty() && !confirm('Discard your unsaved edits and load the saved version?')) return;
  busy = true; controls();
@@ -223,6 +381,14 @@ selectStep(0, false);
 $('text').oninput = () => { draft[section] = $('text').value; controls(); };
 $('defaults').onclick = () => { if (!state || !editable()) return; draft[section] = state.defaults[section]; error = ''; render(); };
 $('preview-kind').onchange = render;
+$('folder').onchange = () => switchFolder($('folder').value);
+$('costview').onmouseleave = () => { $('tip').hidden = true; };
+$('design-style').onchange = async () => {
+ const style = $('design-style').value; busy = true; controls();
+ try { const r = await api('/instructions/design-style', {style}); state.design = r.design; error = ''; }
+ catch (e) { error = e.message; }
+ finally { busy = false; render(); if (!error) $('status').textContent = `Design style saved: ${state.design.styles.find(x => x.id === style).words}. It applies to the next page request.`; }
+};
 $('recall-box').onsubmit = async e => {
  e.preventDefault();
  const request = $('recall-input').value.trim();

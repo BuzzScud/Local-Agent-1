@@ -101,6 +101,21 @@ Planning uses the selected coding model and existing task-list tool. These defau
 brief covering goal, evidence, scope, steps, checks, and unknowns; they are guidance, not a
 separate planner or proof of correctness. Compare real task success and elapsed time when tuning them.
 
+**Project context** (tab 03) shows one card per notes file for a folder you pick: what kind it is
+(this project's rules, a folder above, your rules for every folder, private notes, the memory),
+whether it arrives whole, cut or left out (the notes get 9,000 characters), and which wins: your
+words in the chat, then the notes, then General and Planning, then the built-in defaults.
+**Prompt preview** (tab 04) splits the prompt into its parts with each part's size, the share of
+the model's memory it takes, whether it is kept on disk or read again, and what the side calls
+get; with a model running, the counts come from its own tokenizer. Its "Added to each request"
+view also picks the design style (Auto, Opus, Fable or Mix) and shows the design cards a request
+would bring.
+
+Since 30 Sep 2026 the built-in prompt has a **Work habits** block (how Opus and Fable work: act
+once you know enough, pick one way, report failures plainly, Read and Search over cat and grep…),
+names each notes file's kind and says which notes win. `AGENTIC_PROMPT=old` gives the prompt from
+before, and ▶ Run a test → **Prompt old vs new** (`/test prompt`) runs the Practice 28 with both.
+
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).

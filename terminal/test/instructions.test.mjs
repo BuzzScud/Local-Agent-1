@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DEFAULT_INSTRUCTIONS, instructionFile, readInstructions, saveInstructions, validateInstructions, focusedInstructions } from '../src/agent/instructions.mjs';
@@ -9,7 +9,7 @@ import { TOP, recall } from '../src/agent/recall.mjs';
 import { memoryDirs, applyChanges, readFacts } from '../src/agent/facts.mjs';
 import { FakeEmbedder } from './fake-embedder.mjs';
 import { runHeadless } from '../src/headless.mjs';
-import { instructionsData, recallHooks } from '../src/app/instructions-hub.mjs';
+import { instructionsData, recallHooks, tokenHooks, settingsHooks, knownFolders, promptParts, designTry } from '../src/app/instructions-hub.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { complete } from '../src/flows/llm.mjs';
 import { pickFile } from '../src/flows/localize.mjs';
@@ -103,7 +103,7 @@ test('the preview shows the rest of what the model receives: folder, the tools, 
   expect(sees.focusedLeftOut).toContain('Tool use');
   for (const h of sees.focusedLeftOut) { expect(preview).toContain(`\n${h}\n`); expect(focusedPreview).not.toContain(`\n${h}\n`); }
   const page = await (await fetch(s.url+'instructions')).text();
-  for (const view of ['main','focused','tools','added','models']) expect(page).toContain(`<option value="${view}">`);
+  for (const view of ['main','cost','focused','tools','added','models']) expect(page).toContain(`<option value="${view}">`);
  } finally { s.stop(); }
 });
 
@@ -147,4 +147,98 @@ test('Try a request shows which saved facts would be attached, with closeness, a
  const w = await (await post({request:'where are the tests run, node test'})).json();
  expect(w.how).toBe('words'); expect(w.note).toContain('Embedder is Off in /effort');
  } finally { recallHooks.embedder = original; recallHooks.search = originalSearch; s.stop(); }
+});
+
+test('the parts of the prompt cover it exactly, in order, each with where it comes from, how it is kept and whether side calls get it', () => {
+ mkdirSync(join(home, 'proj'));
+ writeFileSync(join(home, 'proj', 'AGENTS.md'), '# Here\n\nUse tabs.');
+ writeFileSync(join(home, 'AGENTS.md'), 'Home rule.');
+ const d = instructionsData(join(home, 'proj'), home, {});
+ const inPrompt = d.cost.parts.filter((p) => p.start !== null);
+ expect(inPrompt.map((p) => p.text).join('')).toBe(d.preview);
+ expect(inPrompt.map((p) => p.id)).toEqual(['opening', 'general', 'planning', 'tooluse', 'habits', 'bugs', 'rules', 'session', 'notes-head', 'note-0', 'note-1']);
+ expect(inPrompt.filter((p) => p.kept === 'disk').map((p) => p.id)).toEqual(['opening', 'general', 'planning', 'tooluse', 'habits', 'bugs', 'rules']);
+ expect(d.cost.parts.filter((p) => p.side).map((p) => p.id)).toEqual(['general', 'planning', 'notes-head', 'note-0', 'note-1']);
+ expect(inPrompt.find((p) => p.id === 'note-1').from).toBe(`rules for every folder under ${home}`); // a folder above, not the real home folder
+ expect(d.cost.parts.at(-1)).toMatchObject({ id: 'tools', group: 'tools', start: null });
+ expect(d.notes.map((n) => [n.kind, n.status])).toEqual([['project', 'whole'], ['parent', 'whole']]);
+ expect(d.rank).toContain('they win'); expect(d.notesRoom).toBe(9000); expect(d.version).toBe('new');
+ // an old prompt (AGENTIC_PROMPT=old) has no Work habits part and says so
+ const parts = promptParts(d.preview.replace(/\nWork habits\n[\s\S]*?\n\n(?=Fixing a bug)/, '\n'), d.notes);
+ expect(parts.some((p) => p.id === 'habits')).toBe(false);
+});
+
+test('the preview can be shown for another folder Agentic Coder was used in, never for one it was not', async () => {
+ const other = join(home, 'other'); mkdirSync(other);
+ writeFileSync(join(other, 'AGENTS.md'), 'Other rule.');
+ writeFileSync(join(home, 'history.jsonl'), `${JSON.stringify({ cwd: other, text: 'hi' })}\n${JSON.stringify({ cwd: '/nowhere/gone', text: 'x' })}\n`);
+ expect(knownFolders(home, { home, state: home }).map((f) => f.path)).toEqual([home, other]);
+ const s = startWeightsServer({path:null,docsDir:null,port:0,cwd:home,instructionsHome:home});
+ try {
+  const there = await (await fetch(s.url + 'instructions.json?folder=' + encodeURIComponent(other))).json();
+  expect(there.cwd).toBe(other); expect(there.hubFolder).toBe(home); expect(there.preview).toContain('Other rule.');
+  const not = await (await fetch(s.url + 'instructions.json?folder=' + encodeURIComponent('/etc'))).json();
+  expect(not.cwd).toBe(home); // a folder not on the list: the hub's own
+ } finally { s.stop(); }
+});
+
+test('with a model server up, the parts are counted by its own tokenizer and its template says where the tools sit; without one, estimates', async () => {
+ const original = tokenHooks.measure;
+ tokenHooks.measure = async (texts) => ({ counts: texts.map((t) => t.length), by: 'Fake-9B', toolsKept: 'disk' });
+ const s = startWeightsServer({path:null,docsDir:null,port:0,cwd:home,instructionsHome:home});
+ try {
+  const d = await (await fetch(s.url + 'instructions.json')).json();
+  expect(d.cost.tokenizer).toBe('Fake-9B');
+  expect(d.cost.parts.find((p) => p.id === 'tools').kept).toBe('disk');
+  for (const p of d.cost.parts) { expect(p.tokens).toBe(p.chars); expect('text' in p).toBe(false); }
+  tokenHooks.measure = async () => null;
+  const e = await (await fetch(s.url + 'instructions.json')).json();
+  expect(e.cost.tokenizer).toBeNull(); expect(e.cost.parts.find((p) => p.id === 'tools').kept).toBe('unknown');
+  expect(e.cost.parts[0].tokens).toBe(Math.ceil(e.cost.parts[0].chars / 3.6));
+ } finally { tokenHooks.measure = original; s.stop(); }
+});
+
+test('the design style is saved from the page like /design style and told to the running app; a bad one is refused', async () => {
+ const saved = [], told = [];
+ const load = settingsHooks.load, save = settingsHooks.save;
+ let settings = { design: { sets: ['opus', 'fable'] } };
+ settingsHooks.load = () => settings; settingsHooks.save = (patch) => { saved.push(patch); settings = { ...settings, ...patch }; };
+ const s = startWeightsServer({path:null,docsDir:null,port:0,cwd:home,instructionsHome:home,onDesign:(next) => told.push(next)});
+ const post = (data) => fetch(s.url + 'instructions/design-style', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});
+ try {
+  const r = await (await post({ style: 'mix' })).json();
+  expect(r.design.style).toBe('mix');
+  expect(saved).toEqual([{ design: { sets: ['opus', 'fable'], style: 'mix' } }]); // the other design settings are kept
+  expect(told).toEqual([{ sets: ['opus', 'fable'], style: 'mix' }]);
+  expect((await post({ style: 'purple' })).status).toBe(400);
+  expect(saved).toHaveLength(1);
+ } finally { settingsHooks.load = load; settingsHooks.save = save; s.stop(); }
+});
+
+test('Try a request names the design cards a page request would bring, in its look; mix only peeks at whose turn it is', () => {
+ const dir = join(home, 'design'), was = { d: process.env.AGENTIC_DESIGN_DIR, a: process.env.AGENTIC_DESIGN };
+ for (const set of ['your rules', 'opus', 'fable']) mkdirSync(join(dir, set), { recursive: true });
+ writeFileSync(join(dir, 'your rules', 'rules.md'), '# Rules\n- For: every page\n- Words: page\n- Always: yes\n\n## Fit\n- No sideways scroll.\n');
+ for (const set of ['opus', 'fable']) {
+  writeFileSync(join(dir, set, 'landing.md'), `# Landing ${set}\n- For: a landing page\n- Words: landing, landing page, hero\n\n## Look\n- Colours: \`--bg:#fff\`\n\n## Do\n- One action.\n`);
+  writeFileSync(join(dir, set, 'look-bold.md'), `# Bold look\n- For: any kind of page\n- Words: bold, playful\n- Look: yes\n\n## Look\n- Colours: \`--bg:#ff0\`\n`);
+ }
+ const load = settingsHooks.load;
+ let style = 'mix';
+ settingsHooks.load = () => ({ design: { style } });
+ process.env.AGENTIC_DESIGN_DIR = dir; delete process.env.AGENTIC_DESIGN;
+ try {
+  const t = designTry(home, 'make a playful landing page for my app');
+  expect(t).toMatchObject({ page: true, on: true, style: 'mix', turn: 'opus', example: 'opus/landing.md', look: 'opus/look-bold.md' });
+  expect(t.cards).toEqual(['your rules/rules.md', 'opus/landing.md', 'opus/look-bold.md']);
+  expect(designTry(home, 'make a playful landing page for my app').turn).toBe('opus'); // peeking did not take the turn
+  expect(existsSync(join(home, 'design-turn.json'))).toBe(false);
+  style = 'fable';
+  expect(designTry(home, 'make a landing page').example).toBe('fable/landing.md');
+  expect(designTry(home, 'why is the landing page slow?')).toMatchObject({ page: false, cards: [] });
+ } finally {
+  settingsHooks.load = load; rmSync(dir, { recursive: true, force: true });
+  if (was.d === undefined) delete process.env.AGENTIC_DESIGN_DIR; else process.env.AGENTIC_DESIGN_DIR = was.d;
+  if (was.a === undefined) delete process.env.AGENTIC_DESIGN; else process.env.AGENTIC_DESIGN = was.a;
+ }
 });

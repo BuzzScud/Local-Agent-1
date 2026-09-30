@@ -101,8 +101,10 @@ async function runRoute(req, url) {
 //   GET  /edits.json    what is saved: the manifest, or { saved: null }
 //   POST /edits/save    { edits } → a fresh clone of the original + all edits
 //   POST /edits/revert  deletes the copy and its manifest
+// onDesign: called when the Instructions page saves a design style (the app's
+// window uses it from its next page request).
 // cwd: the folder whose memory the Memory tab shows.
-export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits, cwd = process.cwd(), instructionsHome }) {
+export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_PORT, onEdits, onDesign, cwd = process.cwd(), instructionsHome }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
   const size = missing ? 0 : statSync(path).size;
@@ -149,7 +151,7 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       }
       if (url.pathname === '/memory') return page(memoryHtml);
       if (url.pathname === '/instructions') return page(instructionsHtml);
-      if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome);
+      if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome, { onDesign });
       if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname.startsWith('/tests/')) return runRoute(req, url);
