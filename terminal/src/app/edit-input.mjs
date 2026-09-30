@@ -86,6 +86,27 @@ export function moveBy(s, dRow, dCol, opts) {
   const to = Math.min(rows.length - 1, Math.max(0, row + dRow));
   return { value: s.value, cursor: indexAt(s.value, rows[to], Math.max(0, x + dCol)) };
 }
+// The position under the mouse: a cell of a drawn row. Above the first row
+// it is the start of the text, below the last row its end.
+export function posAt(s, row, x, opts) {
+  const rows = promptRows(s.value, opts);
+  if (row < 0) return rows[0].start;
+  if (row >= rows.length) return s.value.length;
+  return indexAt(s.value, rows[row], Math.max(0, x));
+}
+// The word at a position (a double click): [start, end), or the run of
+// spaces when it is on one.
+export function wordAt(value, i) {
+  const at = Math.min(i, value.length - 1);
+  if (at < 0) return [0, 0];
+  const same = /\s/.test(value[at]) ? (ch) => /\s/.test(ch) && ch !== '\n' : (ch) => !/\s/.test(ch);
+  if (value[at] === '\n') return [at, at];
+  let a = at, b = at + 1;
+  while (a > 0 && same(value[a - 1])) a--;
+  while (b < value.length && same(value[b])) b++;
+  return [a, b];
+}
+
 // One row up or down at the same cell (or the one kept from the row before,
 // goalX); past the first or last row, the very start or end of the text (so
 // shift+↑ from the end selects everything), and the kept cell is let go.

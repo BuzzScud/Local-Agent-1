@@ -687,13 +687,17 @@ function SettingsPicker({ app }) {
   const pk = app.picker;
   const lw = Math.max(...pk.rows.map((r) => r.label.length)) + 2;
   const vw = Math.max(...pk.rows.map((r) => r.value.length)) + 3;
-  // 25 lines with the gaps; a short window (24 rows at the least) drops them.
+  // 27 lines with the gaps; a short window (24 rows at the least) drops them,
+  // and the line under the title too when the status bar or the memory note
+  // takes a line under the menu: the whole menu always shows, top edge to last row.
   const tight = app.rows < 30;
+  const under = app.meters || memoryWarning(app.stats.ctxUsed ?? 0, app.ctx) ? 1 : 0;
+  const noBlurb = tight && pk.rows.length + pk.groups.length + 5 + under + 1 > app.rows;
   let at = 0;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Text bold>{pk.title ?? 'Settings'}</Text>
-      <Text color={C.dim}>{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text>
+      {noBlurb ? null : <Text color={C.dim}>{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text>}
       {pk.groups.map((g) => (
         <Box key={g.group} flexDirection="column" marginTop={tight ? 0 : 1}>
           <Text bold>{g.group}</Text>

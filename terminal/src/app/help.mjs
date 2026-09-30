@@ -35,6 +35,7 @@ export const KEYS = [
     ['ctrl+k', 'delete everything after the cursor on this line'],
     ['shift + ← →', 'select, a character at a time (with option: a word at a time)'],
     ['shift + ↑ ↓', 'select a line up or down; past the first or last line it reaches the start or end, so from the end shift+↑ selects everything'],
+    ['click · drag · double click', 'with /mouse on and text in the box: put the cursor there · highlight · take the word (hold fn for Terminal’s own highlight)'],
     ['(selecting)', 'selected text is copied to the clipboard at once: “copied N chars to clipboard”'],
     ['delete · typing · paste', 'with text selected: remove it · replace it · replace it'],
     ['← → · esc', 'with text selected: jump to its start or end · keep the text, drop the selection'],
@@ -104,7 +105,7 @@ export function cliHelpText({ version, modelName, lingerMins }) {
 // Where Agentic Coder keeps things. [where, what]
 export const PLACES = [
   ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
-  ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the model'],
+  ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the mouse, the model'],
   ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],

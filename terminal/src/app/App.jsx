@@ -2,10 +2,10 @@
 // its events into the screen; handles the prompt box, permission prompts,
 // slash commands, layouts, sessions and keys.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useApp, useInput, usePaste, useWindowSize } from 'ink';
+import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, statfsSync, writeSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdBudget } from './screen.jsx';
 import { startTip } from './start.jsx';
@@ -20,7 +20,8 @@ import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
-import { editInput, insertText, cursorLine, mentionAt, selectedText, withUndo, undoEdit, redoEdit, moveBy, promptTextWidth } from './edit-input.mjs';
+import { editInput, insertText, cursorLine, cursorCell, mentionAt, selectedText, withUndo, undoEdit, redoEdit, moveBy, posAt, wordAt, promptTextWidth } from './edit-input.mjs';
+import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR, DOUBLE_CLICK_MS, WHEEL_PAUSE_MS, parseMouse, parseCursorReply, isMouseText } from './mouse.mjs';
 import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands, COMMANDS, SETTINGS } from './commands.mjs';
 import { startWeightsServer, listDocs, findDocsDir } from './weights.mjs';
@@ -205,6 +206,8 @@ export function App({ opts, win, onRestart }) {
   const [leaving, setLeaving] = useState(false);
   const [ramGb, setRamGb] = useState(null);
   const [meters, setMeters] = useState(Boolean(settings.meters)); // the status bar under the prompt (off, like Claude Code)
+  const [mouse, setMouse] = useState(Boolean(settings.mouse)); // /mouse: drag to highlight in the prompt box (off: the mouse stays Terminal's)
+  const [wheelPause, setWheelPause] = useState(false); // a scroll just came in: the mouse is Terminal's for a moment
   // /btw: a side question and its answer, in a panel in the prompt box's place
   // (Claude Code's /btw); gone when closed. The main job's own question wins
   // the place while one is open: answerWait is "type your answer" to it.
@@ -322,7 +325,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, btw, answerWait };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -341,7 +344,7 @@ export function App({ opts, win, onRestart }) {
 
   const setMode = useCallback((m) => { agent.mode = m; setModeState(m); }, [agent]);
 
-  // The menus that /mode and /meters open when typed alone: a title, a line
+  // The menus that /mode, /meters and /mouse open when typed alone: a title, a line
   // on what it sets, the options with what each does, the one in use.
   // applyChoice is also what the typed forms use, so both say the same.
   // (/effort opens the Effort and limits panel instead: openEffortLimits.)
@@ -353,6 +356,7 @@ export function App({ opts, win, onRestart }) {
       return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else ask first' }] };
     }
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
+    if (id === 'mouse') return { title: 'Mouse in the prompt box', blurb: 'Drag over the text you are typing to highlight it: copied at once, delete removes it, typing replaces it. While the box has text the mouse is Agentic Coder’s; hold fn for Terminal’s own highlight. Kept for next time.', what: 'the mouse', current: S.current.mouse ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'click, drag to highlight, double click for a word' }, { id: 'off', label: 'Off', note: 'the mouse stays Terminal’s; option+click still works' }] };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
   };
   // The hub in the browser (/weights, /docs, /help): one small server per
@@ -446,6 +450,7 @@ export function App({ opts, win, onRestart }) {
     const file = modelPath(model);
     const value = {
       meters: S.current.meters ? 'on' : 'off',
+      mouse: S.current.mouse ? 'on' : 'off',
       helpers: `${agent.helpers.size} of 4 on`,
       permissions: settingsValue(agent.cwd),
       rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
@@ -564,6 +569,11 @@ export function App({ opts, win, onRestart }) {
       setMeters(on);
       saveSettings({ meters: on });
       push({ type: 'note', text: on ? 'Status bar on: model, speed, memory and effort under the prompt.' : 'Status bar off. /stats has the numbers; a memory note appears only when it runs low.', tone: 'dim' });
+    } else if (id === 'mouse') {
+      const on = value === 'on';
+      setMouse(on);
+      saveSettings({ mouse: on });
+      push({ type: 'note', text: on ? 'Mouse on: with text in the prompt box, a click puts the cursor there and a drag highlights (copied at once; delete removes it). Hold fn to highlight the way Terminal does.' : 'Mouse off: the mouse is Terminal’s again. option+click and shift+arrows still work.', tone: 'dim' });
     } else if (id === 'startmode') {
       const r = changePermissions(agent.cwd, `mode ${value}`, { mode: agent.mode, session: agent.allowedPrefixes });
       if (r.mode) setMode(r.mode);
@@ -1357,6 +1367,11 @@ export function App({ opts, win, onRestart }) {
         applyChoice('meters', /^(on|show|yes)$/i.test(arg) ? 'on' : 'off');
         break;
       }
+      case 'mouse': {
+        if (!arg.trim()) { openChoice('mouse'); break; }
+        applyChoice('mouse', /^(on|yes)$/i.test(arg.trim()) ? 'on' : 'off');
+        break;
+      }
       case 'update':
         // /update memory [what]: save to memory now, like saying "update memory".
         if (/^memory\b/i.test(arg.trim())) { const what = arg.trim().replace(/^memory\b[\s:]*/i, ''); sendPrompt(what ? `update memory: ${what}` : 'update memory'); break; }
@@ -1437,6 +1452,94 @@ export function App({ opts, win, onRestart }) {
 
   // The prompt box's rows as it draws them (its width; the ! of shell mode is not drawn).
   const rowsOf = (s) => ({ width: promptTextWidth(width), skip: s.value.startsWith('!') ? 1 : 0 });
+  // The mouse in the prompt box (/mouse on). Terminal hands it over only
+  // while the box is on screen with text in it: then a press puts the cursor
+  // there, a drag highlights (the selection shift + arrows make: copied at
+  // once, delete removes it) and a double click takes the word. A scroll
+  // gives the mouse back for a moment, so the rest of it moves the
+  // conversation as it always did.
+  const { internal_eventEmitter: rawKeys } = useStdin();
+  const tty = win?.out ?? process.stdout;
+  const mouseArmed = mouse && Boolean(input.value) && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
+  const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, wheel: null });
+  useEffect(() => {
+    if (!mouseArmed) return undefined;
+    const m = mouseRef.current;
+    m.armed = true;
+    tty.write(MOUSE_ON);
+    return () => { clearTimeout(m.asked); Object.assign(m, { armed: false, asked: null, waiting: [], origin: null, down: false }); tty.write(MOUSE_OFF); };
+  }, [mouseArmed, tty]);
+  // However the app ends, Terminal gets its mouse back.
+  useEffect(() => {
+    const off = () => { if (mouseRef.current.armed) { try { writeSync(1, MOUSE_OFF); } catch {} } };
+    process.on('exit', off);
+    return () => { process.off('exit', off); clearTimeout(mouseRef.current.wheel); };
+  }, []);
+  // One press, drag or release, with the box's place on screen known (origin:
+  // the screen row and cell of the first row's first letter).
+  const onMouse = (ev) => {
+    const m = mouseRef.current;
+    const s = S.current.input;
+    const o = rowsOf(s);
+    const row = ev.row - m.origin.row, x = ev.col - m.origin.col;
+    if (ev.kind === 'release') { m.down = false; return; }
+    if (ev.kind === 'drag') {
+      if (!m.down) return;
+      const to = posAt(s, row, x, o);
+      setInput((p) => withUndo(p, { value: p.value, cursor: to, anchor: p.anchor ?? p.cursor }));
+      return;
+    }
+    // a press counts only on one of the box's own rows
+    if (row < 0 || row >= cursorCell(s, o).rows.length) { m.down = false; return; }
+    const to = posAt(s, row, x, o);
+    const again = Boolean(m.last) && m.last.to === to && Date.now() - m.last.t < DOUBLE_CLICK_MS;
+    m.last = again ? null : { to, t: Date.now() };
+    m.down = !again;
+    setPopup(null);
+    if (again) { const [a, b] = wordAt(s.value, to); setInput((p) => withUndo(p, { value: p.value, cursor: b, anchor: a })); return; }
+    setInput((p) => withUndo(p, { value: p.value, cursor: to, anchor: ev.shift ? (p.anchor ?? p.cursor) : to }));
+  };
+  // What Terminal sends for the mouse arrives with the keys. A press first
+  // asks where the cursor is (it sits where you type, so the answer places
+  // the box: the conversation above it may have grown since the last press).
+  const onRawRef = useRef(null);
+  onRawRef.current = (seq) => {
+    const m = mouseRef.current;
+    if (!m.armed || typeof seq !== 'string') return;
+    const at = parseCursorReply(seq);
+    if (at) {
+      if (!m.asked) return;
+      clearTimeout(m.asked);
+      m.asked = null;
+      const c = cursorCell(S.current.input, rowsOf(S.current.input));
+      m.origin = { row: at.row - c.row, col: at.col - c.x };
+      m.waiting.splice(0).forEach(onMouse);
+      return;
+    }
+    const ev = parseMouse(seq);
+    if (!ev || ev.kind === 'other') return;
+    if (ev.kind === 'wheel') {
+      setWheelPause(true);
+      clearTimeout(m.wheel);
+      m.wheel = setTimeout(() => setWheelPause(false), WHEEL_PAUSE_MS);
+      return;
+    }
+    if (ev.kind === 'press') {
+      clearTimeout(m.asked);
+      m.origin = null;
+      m.waiting = [ev];
+      m.asked = setTimeout(() => { m.asked = null; m.waiting = []; }, 500);
+      tty.write(ASK_CURSOR);
+      return;
+    }
+    if (m.origin) onMouse(ev);
+    else if (m.asked) m.waiting.push(ev);
+  };
+  useEffect(() => {
+    const h = (seq) => onRawRef.current(seq);
+    rawKeys.on('input', h);
+    return () => { rawKeys.removeListener('input', h); };
+  }, [rawKeys]);
   // ⌥-click in Terminal moves the cursor by sending arrow keys, all at once:
   // plain arrows for the prompt wait for the rest of their read. One alone is
   // a key as usual; several are one move by rows and cells, kept in the box
@@ -1452,6 +1555,7 @@ export function App({ opts, win, onRestart }) {
     setInput((s) => withUndo(s, moveBy(s, n('downArrow') - n('upArrow'), n('rightArrow') - n('leftArrow'), rowsOf(s))));
   };
   useInput((ch, key) => {
+    if (isMouseText(ch)) return; // the mouse's reports are handled above, never typed
     const cur = S.current;
     const arrow = (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow) && !key.shift && !key.meta && !key.ctrl;
     if (arrow && !cur.tooSmall && !cur.perm && !cur.picker && !(cur.btw && !cur.answerWait) && !waitRef.current) {
@@ -1573,7 +1677,7 @@ export function App({ opts, win, onRestart }) {
       else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Effort and limits kept as they were.', tone: 'dim' }); }
       return;
     }
-    // A choice menu (/mode, /meters): ↑↓ or a number, enter picks, esc goes back unchanged
+    // A choice menu (/mode, /meters, /mouse): ↑↓ or a number, enter picks, esc goes back unchanged
     if (cur.picker?.kind === 'choice') {
       const pk = cur.picker;
       const n = pk.options.length;

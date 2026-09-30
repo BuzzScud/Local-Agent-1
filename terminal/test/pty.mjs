@@ -52,7 +52,8 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
       if (s.wait) await waitFor(s.wait, s.ms);
       if (s.snapshot) { snapshots[s.snapshot] = await screenText(read(), cols, rows); terms[s.snapshot] = await emulate(read(), cols, rows); }
       if (s.sleep) await new Promise((r) => setTimeout(r, s.sleep));
-      if (s.fn) await s.fn({ text: await screenText(read(), cols, rows) }); // a check while the app runs, given the screen so far
+      // a check while the app runs, given the screen so far; write sends keys (or what a terminal would answer) worked out from that screen
+      if (s.fn) await s.fn({ text: await screenText(read(), cols, rows), raw: read, screen: () => emulate(read(), cols, rows), write: stdin.write });
       if (s.autoYes) {
         // Answer "Yes" to every question until the turn ends (the prompt box comes back).
         const t0 = Date.now();

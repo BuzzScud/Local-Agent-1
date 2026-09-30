@@ -42,6 +42,7 @@ uncommitted).
 | `/` | commands · `@` attach a file · `!` run a shell command yourself · `?` shortcuts |
 | ctrl+c twice | quit (the conversation is saved) |
 | esc twice | on an empty prompt: `/rewind` |
+| click · drag | with `/mouse on` and text in the prompt box: put the cursor there · highlight it (copied at once; delete removes it). Hold fn for Terminal's own highlight |
 
 Commands: `/help /clear /compact /btw /effort /mode /math /rewind /resume /model /test /morning /settings /exit` — and typing `exit` quits too.
 

@@ -20,6 +20,7 @@ export const COMMANDS = [
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
+  { name: 'mouse', desc: 'Drag to highlight the text you are typing in the prompt box: copied at once, delete removes it', arg: '[on|off]', picker: true },
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
   { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
   { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Agentic Coder page' },
@@ -39,6 +40,7 @@ export const SETTINGS = [
   { group: 'Setup', rows: [
     { name: 'permissions', label: 'Permissions', note: 'what runs without asking, what never runs' },
     { name: 'meters', label: 'Status bar', note: 'model, speed and memory under the prompt' },
+    { name: 'mouse', label: 'Mouse', note: 'drag to highlight text in the prompt box' },
     { name: 'helpers', label: 'Helpers', note: 'what comes along with each request' },
     { name: 'rules', label: 'Rules', note: 'what the model reads at every start' },
     { name: 'instructions', label: 'Instructions', note: 'general and planning, edited in the browser' },
