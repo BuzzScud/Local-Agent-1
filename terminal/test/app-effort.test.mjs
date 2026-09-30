@@ -148,7 +148,7 @@ test('/effort on a server Agentic Coder started: a new context and thinking cap 
   writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
   const argsFile = join(base, 'server-args.jsonl');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile }, args: ['--no-flows'], timeoutMs: 120_000, steps: [
-    { wait: '? for shortcuts', ms: 45_000 }, { waitGone: 'Starting Gemma', ms: 60_000 }, // ready: a restart is refused while the model still starts
+    { wait: '? for shortcuts', ms: 45_000 }, { wait: ' · effort ', ms: 60_000 }, // ready: a restart is refused while the model still starts
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
     // Effort stays; Context auto → 16k → 32k → 64k; Thinking cap 4,096 → 8,192
     ...PAST_SEARCH, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 },
@@ -176,7 +176,7 @@ test('/effort while a reply is running: a change that needs a restart is refused
   writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
   const argsFile = join(base, 'server-args.jsonl');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile, FAKE_LLAMA_REPLY_MS: '9000' }, args: ['--no-flows'], timeoutMs: 150_000, steps: [
-    { wait: '? for shortcuts', ms: 45_000 }, { waitGone: 'Starting Gemma', ms: 60_000 }, // ready: a prompt now goes out, not into the queue
+    { wait: '? for shortcuts', ms: 45_000 }, { wait: ' · effort ', ms: 60_000 }, // ready: a prompt now goes out, not into the queue
     // the reply is held open for 9 s; /effort runs at once, even now
     { type: 'hello' }, { key: 'enter' }, { sleep: 1500 },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },

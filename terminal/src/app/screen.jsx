@@ -15,6 +15,7 @@ import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
+import { StartPage, READING_TIP } from './start.jsx';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -22,45 +23,8 @@ const diffW = (width) => Math.max(40, Math.min(110, width - 12));
 // Long folder paths keep their end, which is the part that says where you are.
 const fitPath = (p, max) => (p.length <= max ? p : `…${p.slice(p.length - max + 1)}`);
 
-// A numbered tip whose second line lines up under the first.
-const Tip = ({ n, children }) => (
-  <Box paddingLeft={2}>
-    <Box width={3} flexShrink={0}><Text color={C.dim}>{n}.</Text></Box>
-    <Text color={C.dim}>{children}</Text>
-  </Box>
-);
-
-const TIPS = [
-  'Run /init to write an AGENTS.md with notes about this project',
-  'Ask for a change: Agentic Coder reads, edits and tests, and asks before it touches anything',
-  'Everything runs on this Mac; nothing is sent anywhere',
-];
-
 // The footer's live memory dot: Activity Monitor's green / yellow / red.
 const PRESSURE_COLOR = { fine: C.ok, tight: C.warn, critical: C.bad };
-
-// Like Claude Code: a welcome box as wide as its words, then the tips.
-export function Welcome({ model, cwd, width, loaded }) {
-  const lines = [`  /help for help · /stats for your current setup`, `  ${model}, on this Mac`, `  cwd: ${cwd}`, ...(loaded ? [`  loaded: ${loaded}`] : [])];
-  const boxW = Math.min(width, 76, Math.max(34, ...lines.map((l) => l.length + 4), 'Welcome to Agentic Coder!'.length + 6));
-  return (
-    <Box flexDirection="column">
-      <Box borderStyle="round" borderColor={C.accent} paddingX={1} width={boxW} flexDirection="column">
-        <Text><Text color={C.accent}>{MARK}</Text> Welcome to <Text bold>Agentic Coder</Text>!</Text>
-        <Text> </Text>
-        <Text color={C.dim}>  /help for help · /stats for your current setup</Text>
-        <Text> </Text>
-        <Text color={C.dim}>  {model}, on this Mac</Text>
-        <Text color={C.dim}>  cwd: {fitPath(cwd, boxW - 11)}</Text>
-        {loaded ? <Text color={C.dim} wrap="truncate-end">  loaded: {loaded}</Text> : null}
-      </Box>
-      <Box flexDirection="column" marginTop={1}>
-        <Text color={C.dim}> Tips for getting started:</Text>
-        {TIPS.map((t, i) => <Tip key={i} n={i + 1}>{t}</Tip>)}
-      </Box>
-    </Box>
-  );
-}
 
 function ToolView({ it, width }) {
   const v = it.view ?? {};
@@ -184,9 +148,9 @@ export function doneCounts(it) {
   return `${n(it.steps, 'step', 'steps')}${n(it.reads, 'read', 'reads')}${it.thinkTokens ? ` · ~${it.thinkTokens.toLocaleString('en-US')} thinking tokens` : ''}`;
 }
 
-export function Item({ it, width, model, cwd, loaded }) {
+export function Item({ it, width, model, cwd, loaded, start }) {
   switch (it.type) {
-    case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} />;
+    case 'welcome': return <StartPage start={start} width={width} />;
     // Your message on its grey strip; an answer you typed to its question mid-turn is a step of the turn.
     case 'user': return it.rail
       ? <Node g="›" c={C.accent}><Text><Text color={C.dim}>You: </Text>{it.text}</Text></Node>
@@ -547,7 +511,10 @@ function Footer({ app }) {
   const { mode, notice, width } = app;
   // An open menu takes the footer's place, as in Claude Code.
   if (app.menu?.items?.length) return null;
-  const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : '? for shortcuts');
+  // Until your first message a tip sits here (start.jsx); while a first start reads its
+  // instructions it says how long that takes.
+  const tip = app.tip ? (app.starting && app.startPhase === 'reading' ? READING_TIP : app.tip) : null;
+  const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : tip ? `※ Tip: ${tip}` : '? for shortcuts');
   // The update and weights badges share the lower right with the mode label,
   // which drops its "(shift+tab to cycle)" hint first when room runs short.
   const badges = [app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
@@ -560,8 +527,9 @@ function Footer({ app }) {
   return (
     <Box flexDirection="column">
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
-        <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text>
-        <Text wrap="truncate-start">{macEl}{macEl && (badge || ml) ? <Text color={C.dim}> · </Text> : null}{badge}{badge && ml ? <Text color={C.dim}> · </Text> : null}{ml}</Text>
+        {/* A long left side (a tip) is cut to what is left; the right side stays whole, two spaces clear of it. */}
+        <Box flexShrink={1} marginRight={2}><Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text></Box>
+        <Box flexShrink={0}><Text wrap="truncate-start">{macEl}{macEl && (badge || ml) ? <Text color={C.dim}> · </Text> : null}{badge}{badge && ml ? <Text color={C.dim}> · </Text> : null}{ml}</Text></Box>
       </Box>
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
@@ -996,11 +964,11 @@ const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}`;
 // blank line under it; the turn's end line, and everything outside a turn, has one. Your message's
 // strip has its own padding.
 export const gapUnder = (it) => (it.rail ? (it.type === 'done' ? 1 : 0) : it.type === 'user' ? 0 : 1);
-export function ItemFrame({ it, width, model, cwd, loaded }) {
+export function ItemFrame({ it, width, model, cwd, loaded, start }) {
   return (
     <Box flexDirection="column" marginBottom={gapUnder(it)} width={width}>
       {it.rail && it.type !== 'machine' ? <Pipe /> : null}
-      <Item it={it} width={width} model={model} cwd={cwd} loaded={loaded} />
+      <Item it={it} width={width} model={model} cwd={cwd} loaded={loaded} start={start} />
     </Box>
   );
 }
@@ -1010,19 +978,25 @@ export function primeRows(items, ctx) {
     const k = rowsKey(it, ctx);
     if (itemHeights.has(k)) continue;
     if (itemHeights.size > 5000) itemHeights.clear();
-    const out = renderToString(<ItemFrame it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} loaded={ctx.loaded} />, { columns: ctx.width });
+    const out = renderToString(<ItemFrame it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} loaded={ctx.loaded} start={ctx.start} />, { columns: ctx.width });
     itemHeights.set(k, out.split('\n').length); // the margin under it (gapUnder) is its last line
     added = true;
   }
   return added;
 }
 const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
+// The start page stays live while the model loads at launch (a dot goes round its mark, the model
+// line says what it waits for) and prints once it is ready, with whatever came meanwhile printed
+// under it in order. What came meanwhile shows under the live page; when it passes this many rows
+// the page is let go (printed as it will be once ready) and the Starting line takes over.
+export const heldRows = (items, ctx) => items.slice(1).reduce((n, it) => n + (itemHeights.get(rowsKey(it, ctx)) ?? Infinity), 0);
+export const holdBudget = (rows) => Math.max(0, rows - 20);
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.
 export function usedRows(app) {
   let n = 0;
-  for (const it of app.items) {
+  for (const it of app.hold ? [] : app.items) {
     const h = heightOf(it, app);
     if (h === undefined) return app.rows;
     n += h;
@@ -1038,7 +1012,7 @@ export function Screen({ app }) {
   const drawn = useRef({ redraw: null, height: 0, count: 0 });
   useLayoutEffect(() => {
     if (!liveRef.current) return;
-    drawn.current = { redraw: app.redraw, height: measureElement(liveRef.current).height, count: app.items.length };
+    drawn.current = { redraw: app.redraw, height: measureElement(liveRef.current).height, count: app.hold ? 0 : app.items.length };
   });
   // An empty <Static> of its own resets what Ink keeps to print again on a
   // full clear, so the old (wider) conversation is not printed into the small window.
@@ -1048,6 +1022,7 @@ export function Screen({ app }) {
   // last lines, with blank space in between until the conversation fills it.
   // The last line stays free for the cursor, so nothing scrolls.
   const items = app.items;
+  const printed = app.hold ? [] : items;
   let fill = Math.max(0, app.rows - 1 - usedRows(app));
   // Once the window has scrolled (a long reply), keep the live part as tall as
   // it was, less the lines printed above it now: shrinking it would leave
@@ -1060,16 +1035,23 @@ export function Screen({ app }) {
   }
   return (
     <Box flexDirection="column" width={width}>
-      <Static key={app.redraw} items={items}>
+      <Static key={app.redraw} items={printed}>
         {(it) => (
           // Static lines are laid out on their own, so they need the width
           // too; without it long lines are wrapped by the terminal mid-word.
-          <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} />
+          <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />
         )}
       </Static>
       <Box ref={liveRef} flexDirection="column" minHeight={fill} maxHeight={Math.max(fill, app.rows - 1)} overflow="hidden" justifyContent="flex-end">
       <Box flexDirection="column" flexShrink={0}>
-      {app.battle ? (
+      {app.hold ? (
+        <Box flexDirection="column">
+          <Box marginBottom={1}><StartPage start={app.start} width={width} loading={{ phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000) }} /></Box>
+          {items.slice(1).map((it) => <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />)}
+          {app.battle ? <Box marginBottom={1}><Text color={C.warn}>⏸ Waiting for {/^a test/.test(app.battle) ? 'a test run' : 'a battle'}: {app.battle}. Only one model fits, so {modelName} loads by itself when it is over; a message you send now waits for it.</Text></Box> : null}
+          {app.waiting ? <Box marginBottom={1}><Text color={C.warn}>{app.waiting} has {modelName} loaded, and two copies do not fit. It starts by itself when that is done · <Text bold>esc</Text> starts anyway</Text></Box> : null}
+        </Box>
+      ) : app.battle ? (
         <Box marginBottom={1}><Text color={C.warn}>⏸ Waiting for {/^a test/.test(app.battle) ? 'a test run' : 'a battle'}: {app.battle}. Only one model fits, so {modelName} loads by itself when it is over; a message you send now waits for it.</Text></Box>
       ) : app.starting ? (
         <Box marginBottom={1} flexDirection="column"><Text><StartIcon app={app} /><Text color={C.accent}> Starting {modelName}…</Text><Text color={C.dim}> {START_PHASE[app.startPhase] ?? ''}({fmtSecs(Math.max(0, (app.now - app.startedAt) / 1000))})</Text></Text>

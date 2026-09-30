@@ -66,7 +66,7 @@ test('the start waits while a test run holds the memory, and says it is a test r
 test('an open window lets its model go when a test run starts, and loads it again by itself when the run is over', async () => {
   const { cwd, env, home } = withStandInModel();
   const r = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 120_000, steps: [
-    { wait: 'reading its instructions', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 }, { sleep: 1500 },
+    { wait: ' · effort ', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 }, { sleep: 1500 },
     { fn: async () => { writeFileSync(join(home, 'battle', 'running.json'), hold()); } },
     { wait: 'is unloaded for now', ms: 15_000 }, { snapshot: 'released' },
     { fn: async () => { rmSync(join(home, 'battle', 'running.json'), { force: true }); } },

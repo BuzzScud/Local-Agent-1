@@ -7,7 +7,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions, primeRows, btwLayout } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdBudget } from './screen.jsx';
+import { startTip } from './start.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
@@ -194,6 +195,11 @@ export function App({ opts, win, onRestart }) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [popup, setPopup] = useState(null); // a box in the middle of the window (/help); any key closes it
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
+  // The start page (start.jsx): the tip under the prompt box until your first message, the
+  // conversations it lists, and whether it is still held live while the model loads at launch.
+  const [tip, setTip] = useState(() => startTip(opts.start));
+  const recentRef = useRef(opts.start?.recent ?? []);
+  const holdRef = useRef(!opts.url);
   // Quitting or restarting: the terminal's cursor leaves the prompt box for the
   // line under it, so what is printed after the app goes there, not into the box.
   const [leaving, setLeaving] = useState(false);
@@ -1028,12 +1034,14 @@ export function App({ opts, win, onRestart }) {
           sessionRef.current = { id: newSessionId(), title: null, items: [] };
           // Like Claude Code's /clear: nothing of the old conversation is left on
           // the screen, in the scrollback, behind ctrl+o or in the status line;
-          // only the welcome box, drawn again. The old one stays in /resume.
+          // only the start page, drawn again. The old one stays in /resume.
           pendingContext.current = [];
           folds.current = { list: [], back: 0 };
           setStats({});
           closeBtw();
-          itemsRef.current = [{ key: 'welcome', type: 'welcome' }];
+          // The start page again, listing the conversation just cleared (a new key: its rows are measured afresh).
+          try { recentRef.current = listSessions(opts.cwd); } catch {}
+          itemsRef.current = [{ key: `welcome${++seq}`, type: 'welcome' }];
           setItems(itemsRef.current);
           win?.clear();
           rewindRef.current?.setSession(sessionRef.current.id);
@@ -1388,6 +1396,7 @@ export function App({ opts, win, onRestart }) {
     if (isQuit(value)) { quit(); return; }
     addHistory(cwd, value);
     historyRef.current.push(value);
+    setTip(null);
     if (agent.busy || S.current.starting) { queuedRef.current = value; setQueued(value); return; }
     sendPrompt(value);
   }, [agent, cwd, push, quit, runShell, runSlash, sendPrompt]);
@@ -1739,14 +1748,18 @@ export function App({ opts, win, onRestart }) {
     return () => { on = false; };
   }, [items, width]);
   // What primeRows needs to measure items as they are printed.
-  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '' };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt };
+  measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start };
   itemsRef.current = items;
+  // Held until the model is ready; let go for good once it is, when too much came meanwhile, or
+  // when a panel, pop-up or question opens under it (the page and a tall panel would not fit together).
+  if (holdRef.current && !(starting && items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRows(items, measure.current) <= holdBudget(rows ?? 40))) holdRef.current = false;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
   const app = {
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
-    items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '',
+    items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle,

@@ -1,13 +1,13 @@
 // /clear, end-to-end in a pseudo-terminal: like Claude Code's, it erases the
 // old conversation everywhere — the window, the terminal's scrollback, what
-// the model is sent next — and draws the welcome box again. Before, the old
+// the model is sent next — and draws the start page again. Before, the old
 // messages stayed on the screen above a "new conversation" line.
 import { test, expect } from 'bun:test';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
 
-test('/clear wipes the screen and the scrollback, shows the welcome box again, and the next message starts with nothing of the old one', async () => {
+test('/clear wipes the screen and the scrollback, shows the start page again, and the next message starts with nothing of the old one', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'The answer is PINEAPPLE-42.' }, { text: 'Hello, SECOND-REPLY here.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -19,10 +19,12 @@ test('/clear wipes the screen and the scrollback, shows the welcome box again, a
   ] });
   await fake.close();
   expect(r.snapshots.before).toContain('what is two plus two');
-  // The whole buffer, scrollback included: nothing of the old conversation.
+  // The whole buffer, scrollback included: nothing of the old conversation, only its title in the
+  // start page's Recent activity (where /resume brings it back).
   const cleared = r.snapshots.cleared;
-  for (const gone of ['what is two plus two', 'PINEAPPLE-42', 'new conversation']) expect(cleared).not.toContain(gone);
-  expect(cleared.match(/Welcome to Agentic Coder/g)).toHaveLength(1);
+  for (const gone of ['PINEAPPLE-42', 'new conversation']) expect(cleared).not.toContain(gone);
+  expect(cleared.split('\n').filter((l) => l.includes('what is two plus two'))).toEqual([expect.stringMatching(/│  \d+m ago {4}what is two plus two/)]);
+  expect(cleared.match(/Recent activity/g)).toHaveLength(1);
   expect(cleared).toContain('? for shortcuts');
   const term = r.terms.cleared;
   expect(term.buffer.active.length).toBe(term.rows); // no scrollback left

@@ -44,7 +44,7 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
     ...quitTyped,
   ] });
   await fake.close();
-  // Only the menu's own box (the welcome box above it is drawn with │ too).
+  // Only the menu's own box (the start page above it is drawn with │ too).
   const all = r.snapshots.menu.split('\n');
   const top = all.findIndex((l) => /^│ Settings\s/.test(l));
   const m = all.slice(top, top + all.slice(top).findIndex((l) => l.startsWith('╰')) + 1).join('\n');

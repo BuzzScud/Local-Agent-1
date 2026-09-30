@@ -16,8 +16,8 @@ test('the welcome on the top line, the prompt box on the last lines, space in be
   await fake.close();
   const lines = r.snapshots.start.split('\n');
   while (lines.length < 43) lines.push('');
-  const welcome = lines.findIndex((l) => l.includes('Welcome to Agentic Coder'));
-  const tipsEnd = lines.findIndex((l) => l.includes('nothing is sent anywhere'));
+  const welcome = lines.findIndex((l) => l.includes('Agentic Coder v'));
+  const tipsEnd = lines.findLastIndex((l) => l.indexOf('│') > 20 && l.indexOf('│') < 60); // the start page's last row: its columns' divider
   const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
   expect(welcome).toBeLessThanOrEqual(2);          // at the top (this harness may show one line above)
   expect(footer).toBeGreaterThanOrEqual(43 - 3);   // the prompt box and footer at the bottom
@@ -33,15 +33,18 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
   writeFileSync(join(home, 'models', 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf'), 'stand-in');
   const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: 'reading its instructions', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
+    { wait: ' · reading · ', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
     { wait: 'sends as soon as the model is ready' }, { snapshot: 'queued' },
     { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
-  expect(first.snapshots.queued).toMatch(/Starting Gemma 4 12B QAT… reading its instructions, about 30 s the first time/);
+  expect(first.snapshots.queued).toMatch(/Gemma 4 12B QAT · reading · \d+s/); // the start page's model line, live while it loads
   expect(first.snapshots.queued).toContain('⏵ Queued: hello');
+  // Live while it loaded, then printed once, ready: one start page in the whole scrollback.
+  expect(first.text.match(/Recent activity/g)).toHaveLength(1);
+  expect(first.text).toMatch(/Gemma 4 12B QAT · effort \w+ · \d+k/);
   expect(readdirSync(join(home, 'slots')).filter((f) => f.startsWith('warm-'))).toHaveLength(1);
   const second = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: 'restoring its instructions from last time', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
+    { wait: ' · restoring · ', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
   expect(second.text).toContain('Hello from the stand-in model.');
@@ -57,7 +60,7 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Quick safety check' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'onNo' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
-    { wait: 'Welcome to Agentic Coder' }, ...quit,
+    { wait: 'Recent activity' }, ...quit,
   ] });
   await fake.close();
   expect(r.text).toContain('Is this a folder you created or one you trust?');
@@ -65,7 +68,8 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
   expect(r.snapshots.menu).toContain('  2. No, exit');
   expect(r.snapshots.onNo).toContain('❯ 2. No, exit');
   expect(r.snapshots.onNo).toContain('  1. Yes, I trust this folder');
-  expect(r.text).toContain('loaded:'); // the welcome says what was read
+  expect(r.text).toContain('This folder'); // the start page says what was read
+  expect(r.snapshots.menu).toContain('not trusted yet'); // in the start page's columns, nothing read before a yes
   // The key is the real path (tmpdir is a link on macOS).
   const keys = Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')));
   expect(keys.some((k) => k.endsWith('/demo-project'))).toBe(true);
@@ -87,10 +91,10 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
   const b = mk();
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const yes = await runInPty({ cwd: b.cwd, env: b.env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Welcome to Agentic Coder' }, ...quit,
+    { wait: 'Quick safety check' }, { sleep: 200 }, { type: '1' }, { wait: 'Recent activity' }, ...quit,
   ] });
   await fake.close();
-  expect(yes.text).toContain('Welcome to Agentic Coder');
+  expect(yes.text).toContain('Recent activity');
   expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
 }, T * 2);
 

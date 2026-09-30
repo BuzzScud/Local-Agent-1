@@ -96,8 +96,8 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(r.snapshots.box).not.toContain('/compact'); // no command list in the terminal any more
   expect(r.snapshots.box).not.toContain(':8757/'); // a test's hub never takes the real hub's address
   // in the middle: centred across, and between the conversation and the prompt box
-  const top = box.findIndex((l) => l.indexOf('╭') > 4); // the welcome and prompt boxes start at the left edge
-  expect(top).toBeGreaterThan(box.findIndex((l) => l.includes('Tips for getting started')));
+  const top = box.findIndex((l) => l.indexOf('╭') > 4); // the prompt box starts at the left edge
+  expect(top).toBeGreaterThan(box.findIndex((l) => l.includes('This folder')));
   expect(top).toBeLessThan(title);
   expect(top).toBeLessThan(box.findLastIndex((l) => l.startsWith('╭'))); // above the prompt box
   const left = box[top].indexOf('╭'), right = 155 - 1 - box[top].lastIndexOf('╮'); // the pty is 155 wide; the snapshot drops trailing spaces
@@ -126,7 +126,7 @@ test('edited weights: the badge points at /model, the picker lists the copy, and
   writeFileSync(join(models, 'edited.json'), JSON.stringify({ base: 'gemma', file: 'gemma-4-12B-it-qat-UD-Q4_K_XL-edited.gguf', saved: '2026-09-26T14:32:00.000Z', edits: [{ op: 'scale', tensor: 'blk.12.ffn_up.weight', row: 3072, k: 0.5 }] }));
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Agentic Coder' }, { sleep: 400 }, { snapshot: 'badge' },
+    { wait: 'Recent activity' }, { sleep: 400 }, { snapshot: 'badge' },
     { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
     // the edited copy is listed last, after every model, and ↓ stops at the
     // end of the list, so 4 presses reach it however many models there are.

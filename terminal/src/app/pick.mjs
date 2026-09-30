@@ -8,12 +8,15 @@ import { emitKeypressEvents } from 'node:readline';
 const MARK = '\x1b[38;5;147m'; // the app's C.ask (#afafff)
 const OFF = '\x1b[0m';
 
-export function pickOnTerminal(options, { input = process.stdin, output = process.stderr, index = 0, hint = 'Enter to confirm · Esc to exit' } = {}) {
+// page(i), when given, draws the whole block with row i marked (the safety check's two columns,
+// start.jsx) in place of the plain list; it is redrawn whole when the mark moves.
+export function pickOnTerminal(options, { input = process.stdin, output = process.stderr, index = 0, hint = 'Enter to confirm · Esc to exit', page = null } = {}) {
   const n = options.length;
-  const rows = n + (hint ? 2 : 0);
-  const draw = (i) => output.write(options.map((o, k) => `${k === i ? `${MARK}❯` : ' '} ${k + 1}. ${o}${k === i ? OFF : ''}\n`).join('') + (hint ? `\n\x1b[2m${hint}\x1b[0m\n` : ''));
-  // Rows are redrawn in place: move up and print them again.
-  const redraw = (i) => { output.write(`\x1b[${rows}A`); draw(i); };
+  const text = (i) => (page ? page(i) : options.map((o, k) => `${k === i ? `${MARK}❯` : ' '} ${k + 1}. ${o}${k === i ? OFF : ''}\n`).join('') + (hint ? `\n\x1b[2m${hint}\x1b[0m\n` : ''));
+  let rows = 0;
+  const draw = (i) => { const t = text(i); rows = (t.match(/\n/g) ?? []).length; output.write(t); };
+  // Rows are redrawn in place: move up, clear below, and print them again.
+  const redraw = (i) => { output.write(`\x1b[${rows}A\x1b[J`); draw(i); };
   draw(index);
   return new Promise((resolve) => {
     let i = index;

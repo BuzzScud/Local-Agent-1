@@ -56,7 +56,7 @@ test('below 80×24 a note replaces the screen and keys wait; it all comes back',
     expect(fake.requests.length).toBe(0);
     await settle(t, 100, 30);
     await clean(t, 'back to 100×30');
-    expect(await t.screen()).toContain('Welcome to Agentic Coder');
+    expect(await t.screen()).toContain('Recent activity');
     expect(await t.screen()).not.toContain('hello');
   } finally { await t.close(); await fake.close(); }
 }, T);

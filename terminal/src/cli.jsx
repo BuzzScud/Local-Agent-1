@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // coding — a Claude Code-style coding agent that runs a local Agentic Coder model.
 import React from 'react';
-import { render } from 'ink';
+import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
@@ -10,6 +10,7 @@ import { readLimits, modelWithLimits } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
+import { TrustPage, TRUST_OPTIONS } from './app/start.jsx';
 
 // coding -p: a question from Agentic Coder is printed and answered on the same
 // terminal. Its choices are a menu like the app's (arrows, enter, or the
@@ -28,7 +29,7 @@ async function askOnTerminal(question, req) {
   rl.close();
   return line.trim() || null;
 }
-import { loadSettings } from './app/store.mjs';
+import { loadSettings, listSessions } from './app/store.mjs';
 import { helpersFrom } from './app/helpers.mjs';
 import { memoryOn } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
@@ -49,23 +50,14 @@ async function ensureTrusted(cwd) {
     process.stderr.write(`coding: ${cwd} is not a trusted folder yet. Start coding there once and say yes to the safety check.\n`);
     return false;
   }
-  const b = (s) => `\x1b[1m${s}\x1b[0m`;
-  process.stderr.write([
-    '',
-    `\x1b[33m${b('Quick safety check')}\x1b[0m`,
-    '',
-    'Agentic Coder is about to work in:',
-    `  ${b(cwd)}`,
-    '',
-    'Is this a folder you created or one you trust? Agentic Coder reads its notes',
-    '(AGENTS.md) into the model, and can read, edit and run things here once',
-    'you allow them. A yes covers this folder and everything inside it, and',
-    'is remembered.',
-    '',
-    '',
-  ].join('\n'));
+  // The question in the start page's two columns (start.jsx): nothing here is read before a yes.
+  const width = Math.max(MIN_COLS, process.stdout.columns || 100);
+  const home = process.env.HOME ?? '';
+  const shown = home && cwd.startsWith(home) ? `~${cwd.slice(home.length)}` : cwd;
+  const model = (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name;
+  const page = (i) => `\n${renderToString(<TrustPage width={width} cwd={shown} model={model} selected={i} />, { columns: width })}\n\n`;
   // A menu like the ones inside the app: arrows move ❯, enter picks, 1 or 2 pick at once.
-  const pick = await pickOnTerminal(['Yes, I trust this folder', 'No, exit']);
+  const pick = await pickOnTerminal(TRUST_OPTIONS, { page });
   if (pick === 0) { saveTrust(cwd); return true; }
   process.stderr.write('\x1b[2mNothing was read here. Start coding in a folder you trust.\x1b[0m\n');
   return false;
@@ -263,14 +255,20 @@ if (opts.print) {
   if (!process.stdin.isTTY) { process.stderr.write('coding needs a terminal. For scripts use: coding -p "…"\n'); process.exit(2); }
   // Step 1, before anything in the folder is read: the safety check.
   if (!(await ensureTrusted(opts.cwd))) process.exit(0);
-  // What the start loaded, for the welcome box: the notes read into the
-  // model, settings a folder file set, and the git state.
+  // What the start loaded, for the start page: the notes read into the model, settings a folder
+  // file set, the git state, and the conversations had here (start.jsx).
   try {
     const { projectNotes, gitSummary, notesRoom } = await import('./agent/prompt.mjs');
     const st = loadSettings(opts.cwd);
     if (memoryOn(st)) { try { openMemory(opts.cwd); } catch {} }
     const names = [...new Set(projectNotes(opts.cwd, notesRoom(), { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
     const git = gitSummary(opts.cwd);
+    // also: what this folder changes at the start (its own settings file, a start-up mode saved with /permissions).
+    const also = [
+      ...(st.fromFolder?.length ? [`folder settings (${st.fromFolder.filter((k) => k !== 'thinking').join(', ')})`] : []),
+      ...(st.modeFrom && st.mode !== 'ask' ? [`starts in ${modeWord(st.mode)} (/permissions)`] : []),
+    ];
+    opts.start = { notes: names, git, also, recent: listSessions(opts.cwd) };
     opts.loaded = [
       names.join(' + ') || 'no AGENTS.md',
       ...(st.fromFolder?.length ? [`folder settings (${st.fromFolder.filter((k) => k !== 'thinking').join(', ')})`] : []),
@@ -290,7 +288,8 @@ if (opts.print) {
   try {
     const { homedir } = await import('node:os');
     const cwdShort = opts.cwd.startsWith(homedir()) ? `~${opts.cwd.slice(homedir().length)}` : opts.cwd;
-    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName: (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name, cwdShort, loaded: opts.loaded ?? '' });
+    const modelName = (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name;
+    primeRows([{ key: 'welcome', type: 'welcome' }], { width: Math.max(MIN_COLS, process.stdout.columns || 100), modelName, cwdShort, loaded: opts.loaded ?? '', start: { ...opts.start, model: modelName, cwd: cwdShort } });
   } catch {}
   const win = new TerminalWindow(process.stdout);
   // /update asks for a restart: set here, run once this window has closed.

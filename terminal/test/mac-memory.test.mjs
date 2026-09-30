@@ -1,10 +1,10 @@
 // The Mac's memory, live in the footer only: the words, this Mac's own
-// numbers, and the real app (no panel beside the welcome box since 28 Sep).
+// numbers, and the real app (no panel beside the start page since 28 Sep).
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 import { footerLabel, pressureWord } from '../src/app/mac-memory.mjs';
-import { Welcome } from '../src/app/screen.jsx';
+import { StartPage } from '../src/app/start.jsx';
 import { macMemory } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { openTerm } from './term.mjs';
@@ -23,14 +23,12 @@ test('the footer says it the way Activity Monitor does, and the pressure has a w
   expect([1, 2, 4].map((level) => pressureWord({ level }))).toEqual(['fine', 'tight', 'critical']);
 });
 
-test('the welcome box stands alone, as wide as its words', () => {
-  const out = strip(renderToString(React.createElement(Welcome, { model: 'Gemma 4 12B QAT', cwd: '~', width: 155, loaded: 'AGENTS.md + memory · no git' }), { columns: 155 }));
-  expect(out).toContain('Welcome to Agentic Coder!');
+test('the start page says nothing about the memory: that is the footer', () => {
+  const out = strip(renderToString(React.createElement(StartPage, { start: { model: 'Gemma 4 12B QAT', effort: 'low', ctx: 32768, cwd: '~', git: 'not a git repository', notes: ['AGENTS.md', 'memory'], recent: [] }, width: 155 }), { columns: 155 }));
+  expect(out).toContain('Agentic Coder v');
   expect(out).not.toContain('Mac memory');
   expect(out).not.toContain('does not fit');
-  const box = out.split('\n').filter((l) => /^[╭│╰]/.test(l));
-  expect(box.length).toBeGreaterThan(4);
-  for (const line of box) expect(line.trimEnd().length).toBeLessThanOrEqual(76);
+  for (const line of out.split('\n')) expect(line.trimEnd().length).toBeLessThanOrEqual(155);
 });
 
 test('measured on this Mac: the numbers add up', () => {
@@ -41,14 +39,14 @@ test('measured on this Mac: the numbers add up', () => {
   expect([1, 2, 4]).toContain(m.level);
 });
 
-test('the real app: no memory panel beside the welcome box; the memory is live in the footer, and a narrow window does not cut the footer short', async () => {
+test('the real app: no memory panel beside the start page; the memory is live in the footer, and a narrow window does not cut the footer short', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const t = openTerm({ cwd, cols: 155, rows: 43, env, args: ['--url', fake.url] });
   try {
     await t.waitFor('? for shortcuts'); await t.idle();
     const lines = (await t.lines()).map((l) => l.text);
-    expect(lines.find((l) => l.includes('Welcome to Agentic Coder'))).not.toContain('Mac memory');
+    expect(lines.find((l) => l.includes('Agentic Coder v'))).not.toContain('Mac memory');
     expect(lines.some((l) => l.includes('squeezed') || l.includes('swap'))).toBe(false);
     const footer = lines.find((l) => l.includes('? for shortcuts'));
     expect(footer).toMatch(/● Mac \d+\.\d\/\d+ GB/);

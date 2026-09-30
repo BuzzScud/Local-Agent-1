@@ -19,7 +19,7 @@ test('facts come back with the request that fits them; /memory shows both memori
   applyChanges(m.project, { add: [{ kind: 'project', text: 'The flags are read in export.mjs, in main().' }, { kind: 'worked', text: 'Worked: the rows print as JSON once main() checks argv for --json.' }] }, { batch: 'earlier' });
   const fake = await startFakeServer([{ text: 'In main(), from argv.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Agentic Coder' }, { snapshot: 'welcome' },
+    { wait: 'Recent activity' }, { snapshot: 'welcome' },
     { type: 'where are the flags read in export.mjs?' }, { key: 'enter' }, { wait: 'In main(), from argv.' }, { sleep: 200 }, { snapshot: 'asked' },
     { key: 'ctrlO' }, { wait: 'ctrl+o again opens the one before' }, { key: 'ctrlO' }, { wait: 'The flags are read in export.mjs' }, { sleep: 200 }, { snapshot: 'listed' },
     { type: '/memory' }, { key: 'enter' }, { wait: 'This project · 2 facts' }, { sleep: 200 }, { snapshot: 'panel' },

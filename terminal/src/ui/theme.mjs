@@ -30,7 +30,7 @@ export const SPINNERS = {
   bloom: { name: 'Bloom', frames: ['·', '✿', '❀', '❁', '❀', '✿'], colors: [65, 71, 114, 120, 114, 71], fps: 5 },
   orbit: { name: 'Orbit', frames: ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'], fps: 3, perToken: true, waitColor: 65 },
 };
-// Orbit at rest, every dot lit: the mark in the welcome box and on the line a
+// Orbit at rest, every dot lit: the mark on the line a
 // finished turn leaves ("⠿ Baked for 41s · done 12:58 PM").
 export const MARK = '⠿';
 export const spinStyle = (v) => (Object.hasOwn(SPINNERS, v ?? '') ? v : 'orbit');

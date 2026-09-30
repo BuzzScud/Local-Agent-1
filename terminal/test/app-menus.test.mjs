@@ -65,7 +65,7 @@ test('/mode and /meters alone open the same kind of menu: the one in use marked,
   const { cwd, env, base } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/mode' }, { key: 'enter' }, // the welcome box is drawn before the app takes keys
+    { wait: '? for shortcuts' }, { type: '/mode' }, { key: 'enter' }, // the start page is drawn before the app takes keys
     { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
     { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is auto-edit' }, { wait: 'accept edits on' },
     { type: '/mo' }, { key: 'enter' }, { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as auto-edit' },
@@ -174,13 +174,13 @@ test('/meters shows the status bar; off by default, like Claude Code', async () 
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Welcome to Agentic Coder' }, { sleep: 300 }, { snapshot: 'off' },
+    { wait: 'Recent activity' }, { sleep: 300 }, { snapshot: 'off' },
     { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' }, { sleep: 300 }, { snapshot: 'on' },
     { type: '/meters off' }, { key: 'enter' }, { wait: 'Status bar off' }, { sleep: 300 }, { snapshot: 'offAgain' },
     { type: 'exit' }, { key: 'enter' }, { sleep: 300 },
   ] });
   await fake.close();
-  expect(r.snapshots.off).not.toMatch(/effort (low|medium|high)/);
+  expect(r.snapshots.off).not.toMatch(/ctx .* of 32k/); // no status bar (the start page's model line says its effort)
   expect(r.snapshots.on).toMatch(/Gemma 4 12B QAT\s+idle\s+ctx .* of 32k\s+effort/);
   expect(r.snapshots.offAgain).not.toMatch(/ctx .* of 32k/);
 }, T);

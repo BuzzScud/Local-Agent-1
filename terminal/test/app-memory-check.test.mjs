@@ -41,9 +41,9 @@ test('another copy already loaded: the start says who has it and waits, then sta
   try {
     const r = await runInPty({ cwd, env, cols: COLS, args: ['--no-flows'], timeoutMs: 90_000, steps: [
       { wait: 'esc starts anyway', ms: 30_000 }, { sleep: 200 }, { snapshot: 'waiting' },
-      { wait: 'reading its instructions', ms: 45_000 }, ...quit,
+      { wait: ' · effort ', ms: 45_000 }, ...quit,
     ] });
-    expect(r.snapshots.waiting).toContain('Starting Gemma 4 12B QAT… waiting for memory');
+    expect(r.snapshots.waiting).toMatch(/Gemma 4 12B QAT · waiting( for memory)? · \d+s/); // the start page's model line
     expect(r.snapshots.waiting).toMatch(/another program \(port 17999, [\d.]+ GB\) has Gemma 4 12B QAT loaded, and two copies do not fit\. It starts by itself when that is done · esc starts anyway/);
     expect(r.text).not.toContain('Starting anyway');
   } finally { stop(other); }
@@ -55,7 +55,7 @@ test('esc starts anyway beside the other copy, and says so', async () => {
   try {
     const r = await runInPty({ cwd, env, cols: COLS, args: ['--no-flows'], timeoutMs: 90_000, steps: [
       { wait: 'esc starts anyway', ms: 30_000 }, { key: 'esc' },
-      { wait: 'Starting anyway', ms: 10_000 }, { wait: 'reading its instructions', ms: 45_000 }, ...quit,
+      { wait: 'Starting anyway', ms: 10_000 }, { wait: ' · effort ', ms: 45_000 }, ...quit,
     ] });
     expect(r.text).toMatch(/Starting anyway: another program \(port 17999, [\d.]+ GB\) still has Gemma 4 12B QAT loaded, so both may be slow\./);
   } finally { stop(other); }
@@ -74,7 +74,7 @@ test('a copy kept loaded at another size restarts at the size you picked, and /s
   const argsFile = join(base, 'fake-args.jsonl');
   try {
     const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_ARGS: argsFile }, cols: COLS, args: ['--no-flows'], timeoutMs: 90_000, steps: [
-      { wait: 'reading its instructions', ms: 45_000 }, { sleep: 300 }, { type: '/stats' }, { key: 'enter' },
+      { wait: ' · effort ', ms: 45_000 }, { sleep: 300 }, { type: '/stats' }, { key: 'enter' },
       { wait: 'Context 64k', ms: 15_000 }, { sleep: 200 }, { snapshot: 'stats' }, ...quit,
     ] });
     expect(await oldExit).toBe('SIGTERM');
@@ -93,7 +93,7 @@ test('an /effort restart counts the memory the old server gives back: 64k → 32
   const { cwd, env, home } = withStandIns();
   writeFileSync(join(home, 'settings.json'), JSON.stringify({ limits: { context: 65536 } }));
   const r = await runInPty({ cwd, env, cols: COLS, args: ['--no-flows'], timeoutMs: 120_000, steps: [
-    { wait: '? for shortcuts', ms: 45_000 }, { waitGone: 'Starting Gemma', ms: 60_000 },
+    { wait: '? for shortcuts', ms: 45_000 }, { wait: ' · effort ', ms: 60_000 },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
     // past Embedder, Retriever and Reranker to Context, then 64k → 32k
     { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 80 },

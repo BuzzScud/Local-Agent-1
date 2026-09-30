@@ -59,7 +59,7 @@ test('the start waits while a battle holds the memory; a message typed then goes
 test('an open window lets its model go when a battle starts, and loads it again by itself when the battle is over', async () => {
   const { cwd, env, home } = withStandInModel();
   const r = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 120_000, steps: [
-    { wait: 'reading its instructions', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 }, { sleep: 1500 },
+    { wait: ' · effort ', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 }, { sleep: 1500 },
     { fn: async () => { writeFileSync(join(home, 'battle', 'running.json'), hold(home)); } },
     { wait: 'is unloaded for now', ms: 15_000 }, { snapshot: 'released' },
     { type: 'hi again' }, { key: 'enter' }, { wait: 'sends as soon as the model is ready' },
