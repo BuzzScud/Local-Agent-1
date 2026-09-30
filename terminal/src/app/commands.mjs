@@ -24,9 +24,9 @@ export const COMMANDS = [
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
   { name: 'weights', desc: "See the model's weights in the browser (the hub)" },
   { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Agentic Coder page' },
-  { name: 'tests', desc: 'Open the hub on the test record: every test run and its result' },
-  { name: 'test', desc: 'Run a test on this model from the hub: pick it, press Run, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
-  { name: 'battle', desc: 'Open the hub on the Battle tab: Gemma vs Qwen on the New 28, Work 28, Practice 28 or tests you make, one model at a time, a blind vote' },
+  { name: 'arena', desc: 'Open the hub on the Arena: run a test on one model, or battle Gemma and Qwen with it (the New 28, Work 28, Practice 28, tests you make, the checks), one model at a time' },
+  { name: 'test', desc: 'Pick a test in the Arena for this model: press Run there, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
+  { name: 'tests', desc: 'Open the Arena on the test record: every test run and its result' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
   { name: 'update', desc: 'Restart on new Agentic Coder code, keeping this conversation · /update memory saves to memory now', arg: '[memory]' },
   { name: 'settings', desc: 'Everything else in one menu: status bar, helpers, rules, instructions, memory, the hub pages and the tools' },
@@ -49,8 +49,8 @@ export const SETTINGS = [
   { group: 'Pages · the hub in the browser', rows: [
     { name: 'weights', label: 'Weights', note: "the model's weights, layer by layer" },
     { name: 'docs', label: 'Docs', note: 'the diagrams and every Agentic Coder page' },
-    { name: 'tests', label: 'Tests', note: 'every test run and its result' },
-    { name: 'battle', label: 'Battle', note: 'Gemma vs Qwen on the test sets or yours, a blind vote' },
+    { name: 'arena', label: 'Arena', note: 'run a test on one model, or battle two' },
+    { name: 'tests', label: 'Test record', note: 'every test run and its result, in the Arena' },
   ] },
   { group: 'Tools', rows: [
     { name: 'stats', label: 'Stats', note: 'speed, memory and context used' },

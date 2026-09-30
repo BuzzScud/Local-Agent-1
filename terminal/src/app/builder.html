@@ -177,11 +177,11 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
     for (const el of document.querySelectorAll('.msg')) { el.textContent = text ?? ''; el.title = text ?? ''; el.classList.toggle('bad', bad); }
     clearTimeout(toastT); if (text) toastT = setTimeout(() => toast(''), bad ? 12000 : 8000);
   }
-  // ▶ Run hands over to the Tests tab's Run tests, with the test picked: nothing starts by itself there.
+  // ▶ Run hands over to the Arena tab, with the test (or that level's tests) picked: nothing starts by itself there.
   function runIn(test, n) {
     const ask = { agentic: 'run-test', test, ...(n != null ? { n: String(n) } : {}) };
     if (window.parent !== window) { try { parent.postMessage(ask, location.origin); return; } catch { /* not the hub's frame */ } }
-    location.href = `/?tab=tests&run=1&list=1&test=${encodeURIComponent(test)}${n != null ? `&n=${encodeURIComponent(n)}` : ''}`;
+    location.href = `/?tab=arena&run=1&test=${encodeURIComponent(test)}${n != null ? `&n=${encodeURIComponent(n)}` : ''}`;
   }
 
   function pick(id, { keep = false } = {}) {
@@ -220,7 +220,7 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
   function setsHtml(f) {
     const lv = f.level ? L(f.level) : null, lim = limitOf(f);
     const design = f.kind === 'page' ? `<div class="set"><span class="l" title="On: the design cards and the layout fix go along, as in the app. Off: neither, as the three sets of 28 run.">Design folder</span>${seg('design', [['on', 'On'], ['off', 'Off']], f.design ? 'on' : 'off')}<span class="n">${f.design ? 'as in the app: cards + layout fix' : 'as the three sets of 28 run'}</span></div>` : '';
-    return `<div class="set"><span class="l" title="How long one run of it may take in ▶ Run tests. A battle stops every test at ${D.battleMinutes} minutes.">Time limit</span><span class="v"><button type="button" data-act="limit" data-d="-5" ${lim <= 5 ? 'disabled' : ''} aria-label="Less time">◀</button>${lim} min<button type="button" data-act="limit" data-d="5" ${lim >= D.maxMinutes ? 'disabled' : ''} aria-label="More time">▶</button></span><span class="n" title="In ▶ Run tests. A battle stops every test at ${D.battleMinutes} minutes.">${f.minutes == null ? (lv ? `from ${lv.name}` : 'set by the level') : 'yours'} · ${D.battleMinutes} in a battle</span></div>
+    return `<div class="set"><span class="l" title="How long one run of it may take on one model (in the Arena tab). A battle stops every test at ${D.battleMinutes} minutes.">Time limit</span><span class="v"><button type="button" data-act="limit" data-d="-5" ${lim <= 5 ? 'disabled' : ''} aria-label="Less time">◀</button>${lim} min<button type="button" data-act="limit" data-d="5" ${lim >= D.maxMinutes ? 'disabled' : ''} aria-label="More time">▶</button></span><span class="n" title="In ▶ Run tests. A battle stops every test at ${D.battleMinutes} minutes.">${f.minutes == null ? (lv ? `from ${lv.name}` : 'set by the level') : 'yours'} · ${D.battleMinutes} in a battle</span></div>
       ${design}<div class="set"><span class="l">Points</span><span class="v">${lv ? lv.points : '—'}</span><span class="n">${lv ? `from ${lv.name}: what a pass is worth` : 'set by the level'}</span></div>`;
   }
   function actsHtml(f) {
@@ -411,7 +411,7 @@ textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;borde
   // The hub asks before it leaves this tab with changes not saved.
   window.builderDirty = () => Boolean(S.mode === 'edit' && F?.dirty && (F.prompt.trim() || F.title.trim()));
   window.addEventListener('beforeunload', (e) => { if (window.builderDirty() && !window.builderLeaving) e.preventDefault(); });
-  // A test changed elsewhere (the Battle tab, a run that kept a page): read again when this tab is looked at.
+  // A test changed elsewhere (the Arena tab, a run that kept a page): read again when this tab is looked at.
   document.addEventListener('visibilitychange', async () => { if (document.hidden || !D || S.busy || window.builderDirty()) return; try { D = await call('/builder.json'); if (S.mode === 'edit' && S.sel !== 'new') pick(S.sel); draw(); } catch { /* the hub went away */ } });
 
   (async () => {

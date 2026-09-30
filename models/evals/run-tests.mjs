@@ -1,4 +1,4 @@
-// The tests the hub's Tests tab can run (its ▶ Run a test tab, `/test` in Agentic Coder), one model
+// The tests the Arena and `/test` know by name (the hub's Arena tab, models/evals/battle/), one model
 // at a time: what each is, the command it runs (from the repo's top), how the page counts its
 // progress from the lines it prints, and how its line in the test record is found. The Battle
 // arena's runner starts them (models/evals/battle/runner.mjs): it holds the memory the way a battle
@@ -14,6 +14,10 @@
 //           One of my tests (pick.own): which test of your own, by its number
 //   own     My tests: its total is how many tests of your own there are (made in the hub's Test
 //           builder tab); 'easy' | 'medium' | 'hard': only the tests of that level
+//   set     it is one of the Arena's sets (the Practice 28, the Work 28, the New 28, your own tests,
+//           all or one level of them): the Arena runs those test by test, on one model or as battles;
+//           this entry is how Terminal runs the whole set on one model, and how its line in the
+//           record is found
 //   lines   UI component battle: its total is three lines a request in its list (a list you add to)
 //   stop    the signal the Stop button sends first: each runner then saves what it has
 //   record  its line in the test record: kind, a name pattern, and whether it is a full run (its
@@ -41,10 +45,10 @@ const totalOf = (t) => (t.own ? ownCount(undefined, t.own === true ? null : t.ow
 const thinkRun = (think) => (think ? ['--think', 'on', '--effort', 'high'] : ['--think', 'off']);
 
 export const RUN_TESTS = [
-  { id: 'practice28', name: 'Practice 28', what: 'the 28 practice tasks, each with its own check', model: true, think: true, total: 28, count: '^(PASS|FAIL)\\s',
+  { id: 'practice28', name: 'Practice 28', set: 'practice', what: 'the 28 practice tasks, each with its own check', model: true, think: true, total: 28, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/run.mjs', args: (m, n, think) => ['--model', m, ...thinkRun(think), '--set', '28'],
     stop: 'SIGTERM', record: { kind: 'tasks', name: '^The 28 practice tasks', part: false } },
-  { id: 'task', name: 'One practice task', what: 'one of the Practice 28 as the Battle tab keeps it (an edit or a copy of yours made there counts), 10 minutes at most: pick it by name', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: '10', prefix: 'Practice test ' },
+  { id: 'task', name: 'One practice task', what: 'one of the Practice 28 as the Arena keeps it (an edit or a copy of yours made there counts), 10 minutes at most: pick it by name', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: '10', prefix: 'Practice test ' },
     script: 'models/evals/battle/run-set.mjs', args: (m, only, think) => ['--model', m, '--set', 'practice', '--only', only, ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^Practice test ', part: true } },
   { id: 'requests', name: 'Real requests', what: '28 everyday requests in throwaway folders: where each goes, and that blocked commands stay blocked', model: true, think: true, total: 28, count: '^(OK|FAIL)\\s+#\\d+',
@@ -53,16 +57,16 @@ export const RUN_TESTS = [
   { id: 'long', name: 'Long task', what: 'one long, read-heavy question: where the time goes and what it reads twice (stops by itself at 20 min)', model: true, think: true, total: null, minutes: 20,
     script: 'models/evals/tools/long-task.mjs', args: (m, n, think) => ['--model', m, '--effort', think ? 'high' : 'low', '--minutes', '20', '--record'],
     stop: 'SIGINT', record: { kind: 'other', name: '^Long task', part: false } },
-  { id: 'work28', name: 'Work 28', what: 'the Battle set about your own work, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
+  { id: 'work28', name: 'Work 28', set: 'work28', what: 'the Battle set about your own work, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'work28', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^The Work 28', part: false } },
-  { id: 'new28', name: 'New 28', what: 'the Battle’s New 28 set, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
+  { id: 'new28', name: 'New 28', set: 'new28', what: 'the Battle’s New 28 set, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'new28', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^The New 28', part: false } },
-  { id: 'mine', name: 'My tests', what: 'every test of your own (made in the Test builder tab), one after another: each stops at its level’s time (Easy 5, Medium 10, Hard 20 minutes; 10 with no level) and is worth its level’s points (1, 2, 3)', model: true, think: true, total: null, own: true, count: '^(PASS|FAIL|NONE)\\s',
+  { id: 'mine', name: 'My tests', set: 'mine', what: 'every test of your own (made in the Test builder tab), one after another: each stops at its level’s time (Easy 5, Medium 10, Hard 20 minutes; 10 with no level) and is worth its level’s points (1, 2, 3)', model: true, think: true, total: null, own: true, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'mine', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^My tests(,| \\()', part: false } },
-  ...Object.entries(LEVELS).map(([level, L]) => ({ id: `mine-${level}`, name: `My tests · ${L.name}`, what: `your ${L.name} tests (the Test builder tab sets a test’s level): ${L.points} point${L.points === 1 ? '' : 's'} each, each stopped at ${L.minutes} minutes unless it has its own limit`, model: true, think: true, total: null, own: level, count: '^(PASS|FAIL|NONE)\\s',
+  ...Object.entries(LEVELS).map(([level, L]) => ({ id: `mine-${level}`, name: `My tests · ${L.name}`, set: 'mine', level, what: `your ${L.name} tests (the Test builder tab sets a test’s level): ${L.points} point${L.points === 1 ? '' : 's'} each, each stopped at ${L.minutes} minutes unless it has its own limit`, model: true, think: true, total: null, own: level, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'mine', '--level', level, ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: `^My tests · ${L.name}`, part: false } })),
   { id: 'mytest', name: 'One of my tests', what: 'one test of your own, by its number (the Test builder’s Save and run picks it for you): it stops at its level’s time', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: null, own: true, prefix: 'My test ' },
@@ -96,7 +100,7 @@ export function findRunTest(words) {
   return RUN_TESTS.find((t) => hit(t).includes(w)) ?? RUN_TESTS.find((t) => hit(t).some((x) => x.startsWith(w))) ?? null;
 }
 
-// The Practice 28 as the Battle tab keeps them (~/.agentic-coder/battle/tests/): each by its number,
+// The Practice 28 as the Arena keeps them (~/.agentic-coder/battle/tests/): each by its number,
 // with your copies after it (18, 18b, 18c). Before the arena ever started: the originals in the repo.
 //   key: '18b' (what you pick), only: 'p18b' (run-set.mjs's --only), title, copy: a copy of yours
 export function practiceChoices(home) {
@@ -105,7 +109,7 @@ export function practiceChoices(home) {
   return ts.sort((a, b) => a.n - b.n || String(a.variant ?? '').localeCompare(String(b.variant ?? '')))
     .map((t) => ({ key: `${t.n}${t.variant ?? ''}`, only: /^(p\d+[b-z]?)-/.exec(t.id)?.[1] ?? t.id, title: t.title, copy: Boolean(t.copyOf) }));
 }
-// How many tests of your own there are (the Test builder's, the Battle tab's My tests); level: only that level's.
+// How many tests of your own there are (the Test builder's, the Arena's My tests); level: only that level's.
 export const ownCount = (home, level = null) => listMetas(home).filter((t) => t.suite === 'mine' && (!level || t.level === level)).length;
 // Your own tests as "One of my tests" picks them: by number, oldest first.
 //   key: '3' (what you pick), only: its folder (run-set.mjs's --only), title (with its level)

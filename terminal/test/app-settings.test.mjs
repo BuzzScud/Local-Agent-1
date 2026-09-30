@@ -15,7 +15,7 @@ const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 6
 test('the / menu holds 15 commands and /settings the other 15; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
   expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'test', 'morning', 'settings', 'exit']);
-  expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'helpers', 'rules', 'instructions', 'memory', 'weights', 'docs', 'tests', 'battle', 'stats', 'doctor', 'init', 'update']);
+  expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'helpers', 'rules', 'instructions', 'memory', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {
     expect(COMMANDS.some((c) => c.name === n)).toBe(true); // typed in full it still runs
@@ -53,8 +53,8 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   expect(m).toMatch(/Status bar\s+off\s+model, speed and memory under the prompt/);
   expect(m).toMatch(/Mouse\s+off\s+drag to highlight text in the prompt box/);
   expect(m).toMatch(/Helpers\s+\d of 4 on\s/);
-  expect(m).toMatch(/Tests\s+no runs yet\s/); // a fresh home has no test record
-  expect(m).toMatch(/Battle\s+\d+ tests? · \d+ battles?\s/);
+  expect(m).toMatch(/Test record\s+no runs yet\s/); // a fresh home has no test record
+  expect(m).toMatch(/Arena\s+\d+ tests? · \d+ runs?\s/);
   expect(m).toMatch(/Update\s+\d+\.\d+\.\d+ · nothing new\s/);
   // every row has something in its value column: no blank cell
   const rows = m.split('\n').filter((l) => /^│ [❯ ] \S/.test(l));
@@ -109,16 +109,17 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   const { env } = setup();
   const help = spawnSync('bun', [CLI, '--help'], { encoding: 'utf8', env: { ...process.env, ...env } }).stdout;
   expect(help).toContain('coding hub [tab]');
-  for (const w of ['weights', 'docs', 'tests', 'instructions', 'battle', 'memory']) expect(help).not.toMatch(new RegExp(`^  coding ${w}\\s`, 'm'));
-  expect(await hubLine(['hub', 'tests'], env)).toBe('tests');
+  for (const w of ['weights', 'docs', 'arena', 'tests', 'instructions', 'battle', 'memory']) expect(help).not.toMatch(new RegExp(`^  coding ${w}\\s`, 'm'));
+  expect(await hubLine(['hub', 'arena'], env)).toBe('arena');
+  expect(await hubLine(['hub', 'tests'], env)).toBe('arena'); // the Tests tab is the Arena now (with the record up)
   expect(await hubLine(['hub', 'builder'], env)).toBe('builder');
   expect(await hubLine(['hub', 'docs'], env)).toBe('harness');
-  expect(await hubLine(['hub', 'Battle'], env)).toBe('battle');
-  expect(await hubLine(['tests'], env)).toBe('tests'); // the old word
+  expect(await hubLine(['hub', 'Battle'], env)).toBe('arena'); // and so is the Battle tab
+  expect(await hubLine(['tests'], env)).toBe('arena'); // the old word
   expect(await hubLine(['memory'], env)).toBe('memory');
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, tests, builder, battle, memory, instructions, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, memory, instructions, help.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');

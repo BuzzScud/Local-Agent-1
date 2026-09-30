@@ -19,7 +19,7 @@ test('the pages, the model facts and exact byte ranges come back; bad ranges are
   const s = startWeightsServer({ path, docsDir: null });
   try {
     expect(s.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
-    const hub = await (await fetch(s.url)).text(); for (const t of ['<title>Agentic Coder Hub</title>', 'data-tab="harness"', 'data-tab="structure"', 'data-tab="tests"', 'data-tab="docs"', "fetch('/docs.json')"]) expect(hub).toContain(t);
+    const hub = await (await fetch(s.url)).text(); for (const t of ['<title>Agentic Coder Hub</title>', 'data-tab="harness"', 'data-tab="structure"', 'data-tab="arena"', 'data-tab="docs"', "fetch('/docs.json')"]) expect(hub).toContain(t);
     const page = await fetch(s.url + 'weights'); expect(page.headers.get('content-type')).toContain('text/html'); const html = await page.text();
     for (const t of ['<title>Agentic Coder Weights</title>', '<meta charset="utf-8">', "fetch('/model.json')", 'id="core"']) expect(html).toContain(t);
     expect(await (await fetch(s.url + 'model.json')).json()).toEqual({ name: 'stand-in.gguf', size: 1000 });
@@ -142,7 +142,7 @@ test('edits: save builds the copy + manifest and tells the app; a bad edit chang
   expect(out.told).toEqual(['save', 'revert']);
 });
 
-test('the Tests tab: the page is built in, and /tests.json is the test record read live, newest first', async () => {
+test('the test record: the page is built in (the Arena shows it), and /tests.json is the record read live, newest first', async () => {
   const { dir, path } = standIn();
   const was = (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD);
   process.env.AGENTIC_TEST_RECORD = join(dir, 'tests', 'record.jsonl');
@@ -161,18 +161,19 @@ test('the Tests tab: the page is built in, and /tests.json is the test record re
   } finally { s.stop(); if (was == null) delete process.env.AGENTIC_TEST_RECORD; else process.env.AGENTIC_TEST_RECORD = was; }
 });
 
-test('the Battle tab: /battle starts the arena when it is not up and sends the tab to its page; ?new=1 opens its New test window; the hub lists the tab', () => {
+test('the Arena tab: /arena starts the runner when it is not up and sends the tab to its page with the hub\'s address; ?new=1 opens its New test window; the hub lists the tab', () => {
   const home = mkdtempSync(join(tmpdir(), 'agentic-battle-hub-'));
   const port = 21000 + Math.floor(Math.random() * 20000);
   const script = `
     const { startWeightsServer } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'app', 'weights.mjs'))});
     const s = startWeightsServer({ path: null, docsDir: null, port: 0 });
     const out = {};
-    const r = await fetch(s.url + 'battle', { redirect: 'manual' });
+    const r = await fetch(s.url + 'arena', { redirect: 'manual' });
+    out.hubAt = s.url.slice(0, -1);
     out.status = r.status; out.location = r.headers.get('location');
     out.page = await (await fetch(out.location)).text();
-    out.again = (await fetch(s.url + 'battle', { redirect: 'manual' })).status; // already up: no second runner
-    out.fresh = (await fetch(s.url + 'battle?new=1', { redirect: 'manual' })).headers.get('location'); // + New test on the Tests tab
+    out.again = (await fetch(s.url + 'battle', { redirect: 'manual' })).status; // already up: no second runner (and its old name still works)
+    out.fresh = (await fetch(s.url + 'arena?new=1', { redirect: 'manual' })).headers.get('location'); // the New test window
     out.hub = await (await fetch(s.url)).text();
     s.stop();
     console.log(JSON.stringify(out));
@@ -183,13 +184,12 @@ test('the Battle tab: /battle starts the arena when it is not up and sends the t
   try { process.kill(pid, 'SIGTERM'); } catch {}
   const out = JSON.parse(r.stdout.trim().split('\n').pop() || (() => { throw new Error(r.stderr); })());
   expect(out.status).toBe(302);
-  expect(out.location).toBe(`http://127.0.0.1:${port}/`);
-  expect(out.page).toContain('<title>Battle</title>');
+  expect(out.location).toBe(`http://127.0.0.1:${port}/?hub=${encodeURIComponent(out.hubAt)}`);
+  expect(out.page).toContain('<title>Arena</title>');
   expect(out.again).toBe(302);
-  expect(out.hub).toContain('<button data-tab="battle">Battle</button>');
-  expect(out.fresh).toBe(`http://127.0.0.1:${port}/?new=1`);
-  expect(out.hub).toContain("return show(n ? '/battle?new=1' : '/battle'");
-  expect(out.hub).toContain("e.data?.agentic === 'new-test'"); // the Tests tab's + New test
+  expect(out.hub).toContain('<button data-tab="arena">Arena</button>');
+  expect(out.fresh).toBe(`http://127.0.0.1:${port}/?hub=${encodeURIComponent(out.hubAt)}&new=1`);
+  expect(out.hub).toContain("return show(`/arena${a ? `?${a}` : ''}`");
 });
 
 test('the DOCS folder is "cli docs" at the top of the repo, and a Mac that still has the older name keeps working', () => {

@@ -121,9 +121,10 @@ if (process.argv[2] === 'memory-review') {
   } catch (e) { process.stderr.write(`coding memory-review: ${e.message}\n`); process.exit(1); }
 }
 // coding hub [tab]: the hub in the browser, on one of its tabs (weights when
-// none is named). The old one-word forms (coding docs, coding tests…) still work.
-const HUB_TABS = { weights: 'weights', docs: 'harness', harness: 'harness', structure: 'structure', flow: 'flow', tests: 'tests', builder: 'builder', battle: 'battle', memory: 'memory', instructions: 'instructions', help: 'help' };
-const OLD_HUB = ['weights', 'docs', 'tests', 'battle', 'memory', 'instructions'];
+// none is named). The old one-word forms (coding docs, coding tests…) still work. The Arena is
+// the Tests tab and the Battle tab as one (30 Sep 2026): either name opens it, tests with the record up.
+const HUB_TABS = { weights: 'weights', docs: 'harness', harness: 'harness', structure: 'structure', flow: 'flow', arena: 'arena', tests: 'arena&record=1', builder: 'builder', battle: 'arena', memory: 'memory', instructions: 'instructions', help: 'help' };
+const OLD_HUB = ['weights', 'docs', 'arena', 'tests', 'battle', 'memory', 'instructions'];
 if (process.argv[2] === 'hub' || OLD_HUB.includes(process.argv[2])) {
   const name = process.argv[2] === 'hub' ? (process.argv[3] ?? 'weights').toLowerCase() : process.argv[2];
   if (!HUB_TABS[name]) { process.stderr.write(`coding hub: no tab called ${name}. Tabs: ${Object.keys(HUB_TABS).join(', ')}.\n`); process.exit(1); }

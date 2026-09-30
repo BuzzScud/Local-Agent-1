@@ -50,9 +50,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="harness">Harness</button>
   <button data-tab="structure">Structure</button>
   <button data-tab="flow">Flow</button>
-  <button data-tab="tests">Tests</button>
+  <button data-tab="arena">Arena</button>
   <button data-tab="builder">Test builder</button>
-  <button data-tab="battle">Battle</button>
   <button data-tab="memory">Memory</button>
   <button data-tab="instructions">Instructions</button>
   <button data-tab="docs">All docs</button>
@@ -70,22 +69,26 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   const $ = (s) => document.querySelector(s);
   const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own');
   let docs = null; // { dir, missing, pinned: { harness, structure }, pages: [{ file, title, kind, size, saved }] }
-  // /test in Agentic Coder opens ?tab=tests&run=1&model=…&test=…&n=…(&think=on): the Tests tab on ▶ Run a test with
-  // those picked. Taken once, then dropped from the address (the Tests button opens the record as usual).
+  // The Arena is the Tests tab and the Battle tab as one (30 Sep 2026): an address that names either opens it.
+  const ALIAS = { tests: 'arena', battle: 'arena' };
+  // ?tab=builder&new=1, or + New in the Arena (a message from its frame): the Test builder tab on a
+  // new, empty test. Taken once, like runAsk below
+  // (read before it: ?tab=arena&new=1 is the Arena's own New test window).
+  let newAsk = (() => { const q = new URL(location.href); if (q.searchParams.get('tab') !== 'builder' || !q.searchParams.has('new')) return false; q.searchParams.delete('new'); history.replaceState(null, '', q); return true; })();
+  // /test in Agentic Coder opens ?tab=arena&run=1&model=…&test=…&n=…(&think=on): the Arena with those picked;
+  // /tests adds record=1 (the test record, over it); ?new=1 opens its New test window. Taken once, then
+  // dropped from the address (the Arena button opens it as you left it).
   let runAsk = (() => {
-    const q = new URL(location.href); if (!q.searchParams.has('run')) return null;
-    const a = new URLSearchParams(); for (const k of ['model', 'test', 'n', 'think', 'list']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
+    const q = new URL(location.href); if (!['run', 'new', 'record'].some((k) => q.searchParams.has(k))) return null;
+    const a = new URLSearchParams(); for (const k of ['model', 'test', 'n', 'think', 'new', 'record']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
     q.searchParams.delete('run'); history.replaceState(null, '', q); return a;
   })();
-  // ?tab=builder&new=1, or + New test on the Tests tab (a message from its frame): the Test builder
-  // tab on a new, empty test (?tab=battle&new=1: the Battle tab's own New test window). Taken once, like runAsk.
-  let newAsk = (() => { const q = new URL(location.href); if (!q.searchParams.has('new')) return false; q.searchParams.delete('new'); history.replaceState(null, '', q); return true; })();
   window.addEventListener('message', (e) => {
-    if (e.origin !== location.origin) return;
+    // This hub's own pages (the Test builder), or the page in the frame (the Arena is at its runner's address).
+    if (e.origin !== location.origin && e.source !== frame.contentWindow) return;
     if (e.data?.agentic === 'new-test') { newAsk = true; open('builder'); }
-    // ▶ Run in the Test builder: the Tests tab's Run tests with that test picked, on its run list
-    // (each test there has its own ▶: nothing starts by itself).
-    if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string') { runAsk = new URLSearchParams({ test: e.data.test, list: '1', ...(e.data.n != null ? { n: String(e.data.n) } : {}), at: String(Date.now()) }); open('tests'); }
+    // ▶ Run in the Test builder: the Arena with that test (or that level's tests) picked. Nothing starts by itself.
+    if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string') { runAsk = new URLSearchParams({ test: e.data.test.slice(0, 80), ...(e.data.n != null ? { n: String(e.data.n).slice(0, 80) } : {}), at: String(Date.now()) }); open('arena'); }
   });
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
 
@@ -109,6 +112,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
       + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${docs.dir}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
   }
   function open(tab, page) {
+    tab = ALIAS[tab] ?? tab;
     if (frame.getAttribute('src') === '/instructions' && tab !== 'instructions' && frame.contentWindow?.instructionsDirty?.()) {
       if (!confirm('Discard unsaved instruction edits and leave this tab?')) return;
       frame.contentWindow.instructionsLeaving = true;
@@ -125,10 +129,9 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'instructions') return show('/instructions', 'general behavior and planning');
     if (tab === 'harness' && !page) return show('/harness', 'one harness, every model beside the others');
     if (tab === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
-    if (tab === 'tests' && !page && runAsk) { const a = runAsk.toString(); runAsk = null; return show(`/tests${a ? `?${a}` : ''}#run`, 'run a test on one model'); }
-    if (tab === 'tests' && !page) return show('/tests', 'every test run and its result');
+    // The Arena runs on its own address (its runner's): /arena starts it when it is not up and sends the frame there.
+    if (tab === 'arena') { const a = runAsk ? runAsk.toString() : ''; runAsk = null; return show(`/arena${a ? `?${a}` : ''}`, 'run a test on one model, or battle two'); }
     if (tab === 'builder' && !page) { const n = newAsk; newAsk = false; return show(n ? '/builder?new=1' : '/builder', 'make your own tests: easy, medium, hard'); }
-    if (tab === 'battle') { const n = newAsk; newAsk = false; return show(n ? '/battle?new=1' : '/battle', 'Gemma vs Qwen, one model at a time'); }
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
@@ -139,8 +142,8 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   for (const b of document.querySelectorAll('header button')) b.onclick = () => open(b.dataset.tab);
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
-  const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || t === 'tests' || t === 'builder' || t === 'battle' || t === 'memory' || t === 'instructions';
+  const q = new URL(location.href); const tab = ALIAS[q.searchParams.get('tab')] ?? (q.searchParams.get('tab') || 'weights'); const page = q.searchParams.get('page');
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || t === 'arena' || t === 'builder' || t === 'memory' || t === 'instructions';
   if (builtIn(tab) && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();

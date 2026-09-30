@@ -1,6 +1,6 @@
 // The Test builder (the hub's Test builder tab): making tests of your own, in full, on top of the
 // arena's store. A test made here is a Battle test of the set "My tests" (store.mjs), with a level
-// (Easy, Medium, Hard), so the Battle tab and ▶ Run tests both run it.
+// (Easy, Medium, Hard), so the Arena runs it, in a battle or on one model.
 //   builderData()      everything the tab shows: your tests, the trash, the levels, the kinds, the checks
 //   saveOwn(body)      the editor's Save: a new test or an edit of one (it needs a level and a check)
 //   pasteTests(text)   a pasted list → one test each, not sorted yet, with Easy's starting checks

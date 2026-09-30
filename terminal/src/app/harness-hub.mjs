@@ -196,7 +196,7 @@ export function harnessPage(d) {
   let results;
   if (!run) {
     results = `<h2>The same tasks on every model</h2><p class="lead">Each task is graded by a check the model never sees.</p>
-    <section class="card empty"><h3>No test yet that ${M.length === 2 ? 'both models' : 'every model'} ran</h3><p class="sub">Run the same test on each model from the Tests tab (▶ Run tests), with the same settings. The newest one they have in common shows here, task by task.</p></section>`;
+    <section class="card empty"><h3>No test yet that ${M.length === 2 ? 'both models' : 'every model'} ran</h3><p class="sub">Run the same test on each model from the Arena, with the same settings. The newest one they have in common shows here, task by task.</p></section>`;
   } else {
     const cell = (m, t) => { const r = m.run.tasks[t.id]; const fastest = r.pass && M.every((o) => o === m || !o.run.tasks[t.id].pass || r.secs < o.run.tasks[t.id].secs); return `<td ${of(m)} class="${r.pass ? 'ok' : 'no'}${fastest ? ' best' : ''}"><span class="mark">${r.pass ? 'pass' : 'fail'}</span><span class="t">${mss(r.secs)}</span></td>`; };
     const block = (ts) => `<table class="grid tasks"><colgroup><col class="cn"><col>${M.map((m) => `<col class="cm" ${of(m)}>`).join('')}</colgroup><thead><tr><th>#</th><th>Task</th>${M.map((m) => `<th ${of(m)}>${short(m)}<small>min:sec</small></th>`).join('')}</tr></thead><tbody>${ts.map((t) => `<tr><td class="num">${t.n || ''}</td><th>${esc(t.title)}</th>${M.map((m) => cell(m, t)).join('')}</tr>`).join('')}</tbody></table>`;
@@ -208,7 +208,7 @@ export function harnessPage(d) {
     const byPass = [...ran].sort((a, b) => b.run.passed - a.run.passed), top = byPass[0], low = byPass.at(-1);
     const missedOf = (m) => { const f = run.tasks.filter((t) => !m.run.tasks[t.id].pass); if (!f.length) return ''; const timed = f.filter((t) => m.run.tasks[t.id].why === 'time'); return `${list(f.map((t) => `task ${t.n || esc(t.id)}`))}${timed.length === f.length ? `: ${run.limitMins ? `the ${run.limitMins}-minute limit` : 'out of time'}, not wrong code` : ''}`; };
     const missed = (m) => (missedOf(m) ? `${short(m)} missed ${missedOf(m)}.` : '');
-    const notShown = `This is one run: ${setup}. Other settings are not compared here, and these are practice tasks a check can grade: page and design work is judged in the Battle tab.`;
+    const notShown = `This is one run: ${setup}. Other settings are not compared here, and these are practice tasks a check can grade: page and design work is judged in the Arena tab.`;
     const tie = top.run.passed === low.run.passed;
     const clear = fast !== slow && fast === top && !tie;
     const rowsV = [

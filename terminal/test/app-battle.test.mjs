@@ -1,5 +1,5 @@
 // End-to-end, the real app in a pseudo-terminal (see app.test.mjs).
-// Here: /battle, and a window beside a battle (the Battle tab, Gemma vs Qwen): only one model
+// Here: /arena (and /battle, its name before), and a window beside a battle in the Arena: only one model
 // fits, so a window waits while a battle holds the memory, lets its own model go when one
 // starts, and loads it again by itself when the battle is over; a message waits meanwhile.
 import { test, expect, afterAll } from 'bun:test';
@@ -26,21 +26,24 @@ function withStandInModel() {
   return { cwd, env, home };
 }
 
-test('/settings → Battle opens the hub on the Battle tab and says a battle unloads this window\'s model until it is over', async () => {
+test('/settings → Arena opens the hub on the Arena tab and says a run there unloads this window\'s model until it is over; /battle still opens it', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   let hub = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
-    ...Array.from({ length: 10 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
-    { wait: 'Battle opened in the browser at http://127.0.0.1:' },
-    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=battle`)).text(); } },
+    ...Array.from({ length: 9 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
+    { wait: 'The Arena opened in the browser at http://127.0.0.1:' },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=arena`)).text(); } },
+    { type: '/battle' }, { key: 'enter' }, { sleep: 600 }, { snapshot: 'old' },
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toMatch(/❯ Battle\s+\d+ tests? · \d+ battles?\s+Gemma vs Qwen/);
-  expect(r.text).toContain('?tab=battle · Gemma vs Qwen, one model at a time, each run stopped at 10 min');
-  expect(hub).toContain('<button data-tab="battle">Battle</button>');
+  expect(r.snapshots.menu).toMatch(/❯ Arena\s+\d+ tests? · \d+ runs?\s+run a test on one model, or battle two/);
+  expect(r.text.replace(/\s+/g, ' ')).toContain('?tab=arena · run a test on one model, or battle Gemma and Qwen with it, one model at a time, each run stopped at 10 min');
+  expect(hub).toContain('<button data-tab="arena">Arena</button>');
+  expect((r.text.match(/The Arena opened in the browser at/g) ?? []).length).toBe(2); // /battle opened it too
+  expect(r.text).not.toContain('Unknown command /battle');
 }, T);
 
 test('the start waits while a battle holds the memory; a message typed then goes once the battle is over', async () => {

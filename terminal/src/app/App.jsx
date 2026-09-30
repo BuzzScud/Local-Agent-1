@@ -146,7 +146,7 @@ export function App({ opts, win, onRestart }) {
   // (the user's pick, 28 Sep). `waiting` is the line on the start screen.
   const [waiting, setWaiting] = useState(null);
   const waitRef = useRef(null);
-  // A battle (the hub's Battle tab, Gemma vs Qwen) holds the memory: only one model fits, so the
+  // A run in the Arena (the hub's Arena tab: a battle, or a test on one model) holds the memory: only one model fits, so the
   // start waits until it is over and says so. `battle` is the line on the screen.
   const [battle, setBattle] = useState(null);
   const waitForBattle = async (stillOn = () => true) => {
@@ -459,7 +459,7 @@ export function App({ opts, win, onRestart }) {
       weights: existsSync(file) ? `${model.name} · ${(statSync(file).size / 1e9).toFixed(2)} GB` : 'file not here yet',
       docs: docs.missing ? 'DOCS folder not found' : n(docs.pages.length, 'page'),
       tests: last ? `${n(runs.length, 'run')} · last ${last.total != null ? `${last.passed}/${last.total}` : last.result}` : 'no runs yet',
-      battle: battleHold() ? 'a battle is running' : `${n(bc.tests, 'test')} · ${n(bc.battles, 'battle')}`,
+      arena: battleHold() ? 'something is running there' : `${n(bc.tests, 'test')} · ${n(bc.battles, 'run')}`,
       stats: `${tokK(agent.ctxUsed ?? 0)} of ${tokK(agent.ctx)} context`,
       doctor: `${(availableBytes() / 1e9).toFixed(1)} GB free now`,
       init: existsSync(join(cwd, 'AGENTS.md')) ? 'AGENTS.md is here' : 'no AGENTS.md yet',
@@ -758,7 +758,7 @@ export function App({ opts, win, onRestart }) {
     return () => offs.forEach((f) => f());
   }, [agent, push, saveNow, sendPrompt]);
 
-  // A battle wants the memory (the Battle tab runs Gemma vs Qwen, one model at a time): once no
+  // The Arena wants the memory (it runs Gemma and Qwen one model at a time): once no
   // reply is running, this window lets its model go, and loads it again by itself when the
   // battle is over. A message sent meanwhile waits in line and goes once the model is back.
   const battleRef = useRef({ released: false });
@@ -1314,32 +1314,33 @@ export function App({ opts, win, onRestart }) {
       case 'doctor':
         doctor();
         break;
-      case 'battle': {
-        // The hub on its Battle tab: Gemma vs Qwen on tests you make. The arena runs on its own
-        // (the hub starts it), so a battle keeps going when this window closes.
-        const hub = openHub('battle'); if (!hub) break;
-        push({ type: 'note', text: `Battle opened in the browser at ${hub.url} · Gemma vs Qwen, one model at a time, each run stopped at 10 min · while a battle runs, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
+      case 'arena':
+      case 'battle': { // /battle: its name before 30 Sep 2026, still typed
+        // The hub on its Arena tab: a test on one model, or a battle of two. The Arena runs on its own
+        // (the hub starts it), so what runs there keeps going when this window closes.
+        const hub = openHub('arena'); if (!hub) break;
+        push({ type: 'note', text: `The Arena opened in the browser at ${hub.url} · run a test on one model, or battle Gemma and Qwen with it, one model at a time, each run stopped at 10 min · while something runs there, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
         break;
       }
       case 'test': {
-        // The hub's Tests tab on ▶ Run a test, with this window's model picked: pick a test (or name
-        // one: /test practice 28, /test work28, /test 12 for practice task 12, /test 18b for your copy of it) and press Run. The run is
-        // the Battle arena runner's: this window lets go of its model while it runs, and it keeps
+        // The Arena with this window's model as who runs it: pick a test (or name one: /test practice 28,
+        // /test work28, /test 12 for practice test 12, /test 18b for your copy of it, /test sorting) and press
+        // Run there. The run is the Arena runner's: this window lets go of its model while it runs, and it keeps
         // going when this window closes.
         const num = /^(?:task\s*)?(\d{1,2}[b-z]?)$/i.exec(arg);
         const t = arg ? (findRunTest(arg) ?? (num ? RUN_TESTS.find((x) => x.id === 'task') : null)) : null;
         if (arg && !t) { push({ type: 'note', text: `No test called "${arg}". Try one of: ${RUN_TESTS.map((x) => x.name.toLowerCase()).join(', ')}, or a practice task's number (/test 12). /test alone opens the list.`, tone: 'warn' }); break; }
         const mine = model.edited ? model.edited.base : model.id;
-        const hub = openHub('tests', { run: '1', model: t && !t.model ? 'none' : MODELS[mine] ? mine : '', test: t?.id, n: num && t?.id === 'task' ? num[1] : '' });
+        const hub = openHub('arena', { run: '1', model: t && !t.model ? 'none' : MODELS[mine] ? mine : '', test: t?.id, n: num && t?.id === 'task' ? num[1] : '' });
         if (!hub) break;
-        push({ type: 'note', text: `Run a test opened in the browser at ${hub.url} · ${t ? `${t.name}${num && t.id === 'task' ? ` ${num[1]}` : ''} is picked` : 'pick a test'}${t && !t.model ? '' : ` on ${model.name}`}, then press Run · while it runs, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
+        push({ type: 'note', text: `The Arena opened in the browser at ${hub.url} · ${t ? `${t.name}${num && t.id === 'task' ? ` ${num[1]}` : ''} is picked` : 'pick a test'}${t && !t.model ? '' : ` on ${model.name}`}, then press Run · while it runs, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
         break;
       }
       case 'tests': {
-        // The hub on its Tests tab: the record every test run adds a line to.
-        const hub = openHub('tests'); if (!hub) break;
+        // The Arena with the test record over it: every test run and its result.
+        const hub = openHub('arena', { record: '1' }); if (!hub) break;
         const runs = readRecord();
-        push({ type: 'note', text: runs.length ? `Tests opened in the browser at ${hub.url} · ${runs.length} run${runs.length === 1 ? '' : 's'} recorded, the latest: ${runs[0].name} (${runs[0].total != null ? `${runs[0].passed} of ${runs[0].total}` : runs[0].result}) · it stays up while this window is open` : `Tests opened in the browser at ${hub.url} · no test has been recorded yet`, tone: 'dim' });
+        push({ type: 'note', text: runs.length ? `The test record opened in the browser at ${hub.url} · ${runs.length} run${runs.length === 1 ? '' : 's'} recorded, the latest: ${runs[0].name} (${runs[0].total != null ? `${runs[0].passed} of ${runs[0].total}` : runs[0].result}) · it stays up while this window is open` : `The test record opened in the browser at ${hub.url} · no test has been recorded yet`, tone: 'dim' });
         break;
       }
       case 'instructions': {

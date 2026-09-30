@@ -24,9 +24,9 @@ beforeAll(() => { hub = startWeightsServer({ path: null, docsDir: null, port: 0,
 afterAll(() => { try { hub?.stop(); } catch {} });
 const post = (path, body, headers = {}) => fetch(`${H}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
-test('the hub has a Test builder tab, between Tests and Battle, that serves one page with nothing loaded from outside', async () => {
+test('the hub has a Test builder tab, after the Arena, that serves one page with nothing loaded from outside', async () => {
   const page0 = await (await fetch(`${H}/`)).text();
-  expect(page0).toContain('<button data-tab="tests">Tests</button>\n  <button data-tab="builder">Test builder</button>\n  <button data-tab="battle">Battle</button>');
+  expect(page0).toContain('<button data-tab="arena">Arena</button>\n  <button data-tab="builder">Test builder</button>\n  <button data-tab="memory">Memory</button>');
   expect(page0).toContain("t === 'builder'"); // opened straight from ?tab=builder, like the other built-in tabs
   const r = await fetch(`${H}/builder`);
   expect([r.status, r.headers.get('content-type')]).toEqual([200, 'text/html; charset=utf-8']);
@@ -42,16 +42,19 @@ test('the hub has a Test builder tab, between Tests and Battle, that serves one 
   expect((await (await fetch(`${H}/help`)).text())).toContain("['Test builder',");
 });
 
-test('+ New test on the Tests tab opens the Test builder, and ▶ Run in the builder opens the run list with only that test', async () => {
+test('+ New in the Arena opens the Test builder, and ▶ Run in the builder opens the Arena with that test picked', async () => {
   const hubPage = await (await fetch(`${H}/`)).text();
   expect(hubPage).toContain("if (e.data?.agentic === 'new-test') { newAsk = true; open('builder'); }");
   expect(hubPage).toContain("if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string')");
   expect(hubPage).toContain("show(n ? '/builder?new=1' : '/builder'");
   expect(hubPage).toContain('frame.contentWindow?.builderDirty?.()'); // it asks before leaving a test with changes not saved
-  const tests = await (await fetch(`${H}/tests`)).text();
-  expect(tests).toContain("location.href = '/?tab=builder&new=1';");
-  expect(tests).not.toContain('tab=battle&new=1');
-  expect(tests).toContain("if (q.get('list') && q.get('test')) { ui.mode = 'list'; ui.picked = [q.get('test')];"); // "run all" there can start nothing else
+  // The Arena's page is at its runner's address, not the hub's: its message is taken because it is the page in the frame.
+  expect(hubPage).toContain('if (e.origin !== location.origin && e.source !== frame.contentWindow) return;');
+  expect(hubPage).toContain("open('arena'); }"); // ▶ Run: the Arena, with the test picked (nothing starts by itself)
+  const arena = readFileSync(join(REPO, 'models', 'evals', 'battle', 'arena.html'), 'utf8');
+  expect(arena).toContain("parent.postMessage({ agentic: 'new-test' }, HUB)");
+  expect(arena).toContain("if (id === 'mytest')"); // Save and run: that test of yours, by its number
+  expect(arena).toContain("'mine-hard': 'mine-hard'"); // ▶ Run on a level: that level's tests, as a set
   const builder = await (await fetch(`${H}/builder`)).text();
   expect(builder).toContain("const ask = { agentic: 'run-test', test,");
   expect(builder).toContain('runIn(`mine-${el.dataset.v}`)');

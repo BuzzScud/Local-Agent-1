@@ -1,7 +1,7 @@
-// ▶ Run a test (the hub's Tests tab, /test): which practice tasks a run plays (--set 28), the list of
-// tests it can run and the command each starts, the Battle sets on one model (run-set.mjs), and the
-// arena runner's test runs end to end in practice mode (no model): the key, the hold on the memory,
-// and Stop. The hub's routes in front of it: terminal/test/hub-run.test.mjs.
+// The tests the Arena and /test know by name (models/evals/run-tests.mjs): which practice tasks a run
+// plays (--set 28), the list and the command each starts from Terminal, a set on one model
+// (run-set.mjs), and the runs from Terminal stopped part way. The Arena's runner, which runs them from
+// the page: models/test/arena.test.mjs; the hub's tab in front of it: terminal/test/hub-arena.test.mjs.
 import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,6 +19,7 @@ const { RUN_TESTS, runCommand, runCatalog, findRunTest, countLines, runTestById,
 const { holdText, seedSuites, saveTest } = await import('../evals/battle/store.mjs');
 const { readRecord } = await import('../evals/record.mjs');
 const REPO = join(import.meta.dir, '..', '..');
+const until = async (fn, ms = 30_000) => { const t0 = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 120)); } };
 const NODE = process.execPath.endsWith('bun') ? 'node' : process.execPath;
 
 test('--set 28 plays the 28 that grade a model; 29, the notes page, only when named; --only picks by number', () => {
@@ -273,118 +274,4 @@ test('real.mjs on the stand-in, stopped during its first request: it says so, sa
   expect(seen).toContain('stopping: the request under way ends now');
   expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ stopped: true, total: 0 });
   expect(existsSync(join(home, 'record.jsonl'))).toBe(false);
-}, 90_000);
-
-// ---------- The arena's runner: test runs, in practice mode ----------
-let runner = null;
-const O = `http://127.0.0.1:${PORT}`;
-const get = async (p) => (await fetch(`${O}${p}`)).json();
-const key = () => readFileSync(join(HOME, 'battle', 'runner.token'), 'utf8').trim();
-const post = async (p, body, headers = {}) => { const r = await fetch(`${O}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body ?? {}) }); return { status: r.status, body: await r.json() }; };
-const until = async (fn, ms = 30_000) => { const t0 = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('timed out'); await new Promise((r) => setTimeout(r, 120)); } };
-const idle = () => until(async () => { const j = (await get('/api/testrun')).job; return !j || !['waiting', 'running'].includes(j.status); });
-beforeAll(async () => {
-  runner = spawn(NODE, [join(REPO, 'models', 'evals', 'battle', 'runner.mjs')], { env: { ...process.env, AGENTIC_BATTLE_FAKE: '1', AGENTIC_BATTLE_FAKE_MS: '60' }, stdio: 'ignore' });
-  await until(async () => { try { return (await get('/api/ping')).ok; } catch { return false; } });
-});
-afterAll(() => { try { runner?.kill('SIGTERM'); } catch {} });
-
-test('a test run needs the key the runner wrote (only this Mac\'s user can read it); a page on another address cannot start one', async () => {
-  expect(statSync(join(HOME, 'battle', 'runner.token')).mode & 0o777).toBe(0o600);
-  expect((await post('/api/testrun', { test: 'unit' })).status).toBe(403);
-  expect((await post('/api/testrun', { test: 'unit' }, { 'x-agentic-key': 'nope', origin: O })).status).toBe(403);
-  expect((await post('/api/teststop', {}, { origin: O })).status).toBe(403);
-  expect((await post('/api/testrun', { test: 'nope' }, { 'x-agentic-key': key() })).body.error).toBe('no test "nope"');
-  expect((await post('/api/testrun', { test: 'practice28', model: 'bonsai' }, { 'x-agentic-key': key() })).status).toBe(400);
-});
-
-test('Practice 28 on Gemma: it holds the memory as a test run (named, on its own process), prints live, counts, and ends done', async () => {
-  const r = await post('/api/testrun', { test: 'practice28', model: 'gemma' }, { 'x-agentic-key': key() });
-  expect(r.status).toBe(200);
-  const running = await until(async () => { const s = await get('/api/testrun'); return s.job?.status === 'running' && s.job.count.done > 0 ? s : null; });
-  expect(running.job).toMatchObject({ test: 'practice28', model: 'gemma', modelName: 'Gemma 4 12B QAT', name: 'Practice 28' });
-  const hold = JSON.parse(readFileSync(join(HOME, 'battle', 'running.json'), 'utf8'));
-  expect(hold).toMatchObject({ kind: 'test', state: 'running', title: 'Practice 28 on Gemma 4 12B QAT', pid: running.job.pid });
-  expect(running.loaded).toEqual([{ model: 'Gemma 4 12B QAT', who: 'this test run' }]);
-  // One at a time: a second run waits in the line (the Run tab's ▶ while one runs), and a battle waits.
-  const q = await post('/api/testrun', { test: 'unit', key: 'unit-while-busy' }, { 'x-agentic-key': key() });
-  expect([q.status, q.body.queued]).toEqual([200, 1]);
-  expect((await get('/api/testrun')).line.map((x) => x.key)).toEqual(['unit-while-busy']);
-  expect((await post('/api/testunqueue', { key: 'unit-while-busy' }, { 'x-agentic-key': key() })).body.removed).toBe(1); // taken back out: this test waits for one run only
-  expect((await post('/api/start', {}, { origin: O })).body.error).toBe('a test is running in the Tests tab: stop it there first');
-  await idle();
-  const done = (await get('/api/testrun')).job;
-  expect(done.status).toBe('done');
-  expect(done.count).toEqual({ done: 28, passed: done.count.passed, total: 28 });
-  expect(done.lines.at(-1)).toBe('not recorded in the test record: a practice run (no model ran)');
-  expect(existsSync(join(HOME, 'battle', 'running.json'))).toBe(false);
-  expect(JSON.parse(readFileSync(join(HOME, 'battle', 'state.json'), 'utf8')).job.status).toBe('done');
-}, 60_000);
-
-test('thinking on: the run is asked for it, its title (and so the app\'s waiting line) says so, and a test with no model ignores it', async () => {
-  expect((await post('/api/testrun', { test: 'work28', model: 'qwen', think: true }, { 'x-agentic-key': key() })).status).toBe(200);
-  const s = await until(async () => { const x = await get('/api/testrun'); return x.job?.test === 'work28' && x.job.status === 'running' && x.job.lines.length ? x : null; });
-  expect(s.job).toMatchObject({ model: 'qwen', think: true });
-  expect(s.job.id).toMatch(/-work28-qwen-think$/);
-  expect(s.job.lines[0]).toContain('thinking on (High)');
-  expect(JSON.parse(readFileSync(join(HOME, 'battle', 'running.json'), 'utf8')).title).toBe('Work 28 on Qwen3.5 9B · thinking on');
-  await post('/api/teststop', {}, { 'x-agentic-key': key() });
-  await idle();
-  await post('/api/testrun', { test: 'check', think: true }, { 'x-agentic-key': key() });
-  await idle();
-  expect((await get('/api/testrun')).job).toMatchObject({ test: 'check', think: false, status: 'done' });
-}, 60_000);
-
-test('Stop: the run is told to stop, saves what it has, and ends as stopped; a run with no model holds no memory', async () => {
-  await post('/api/testrun', { test: 'work28', model: 'qwen' }, { 'x-agentic-key': key() });
-  await until(async () => (await get('/api/testrun')).job?.count?.done >= 2);
-  expect((await post('/api/teststop', {}, { 'x-agentic-key': key() })).status).toBe(200);
-  expect((await get('/api/testrun')).job.stopping).toBe(true);
-  await idle();
-  const j = (await get('/api/testrun')).job;
-  expect(j.status).toBe('stopped');
-  expect(j.lines.join('\n')).toContain('stopping:');
-  expect(j.count.done).toBeLessThan(28);
-  expect((await post('/api/teststop', {}, { 'x-agentic-key': key() })).status).toBe(409);
-  await post('/api/testrun', { test: 'unit' }, { 'x-agentic-key': key() });
-  await until(async () => (await get('/api/testrun')).job?.status === 'running');
-  expect(existsSync(join(HOME, 'battle', 'running.json'))).toBe(false);
-  await idle();
-  expect((await get('/api/testrun')).job).toMatchObject({ test: 'unit', model: null, status: 'done' });
-}, 60_000);
-
-// The Run tab's line: each ▶ is one run. A press while one runs waits in the line and starts when the
-// run before it ends; ■ Stop ends a run and the next starts; ✕ takes a waiting one out; the line is
-// kept in state.json; the control panel's settings reach the run (the stand-in prints them) and its
-// result carries the press's key.
-test('the line of runs: waits its turn, Stop moves on, ✕ takes one out, kept in state.json, the panel\'s settings reach the run', async () => {
-  const k = { 'x-agentic-key': key() };
-  expect((await post('/api/testrun', { test: 'practice28', model: 'gemma', key: 'p28', settings: { context: 65536, reranker: 'qwen3-reranker-0.6b', evil: 'x' } }, k)).body.ok).toBe(true);
-  const s1 = await until(async () => { const x = await get('/api/testrun'); return x.job?.key === 'p28' && x.job.status === 'running' && x.job.lines.length ? x : null; });
-  expect(s1.job.settings).toEqual({ context: 65536, reranker: 'qwen3-reranker-0.6b' }); // only known rows
-  expect(s1.job.lines[0].startsWith('settings: ')).toBe(true);
-  expect(JSON.parse(s1.job.lines[0].slice('settings: '.length))).toEqual({ context: 65536, reranker: 'qwen3-reranker-0.6b' }); // what the run was handed
-  expect(s1.job.id).toMatch(/-practice28-gemma-set$/);
-  expect((await post('/api/testrun', { test: 'unit', key: 'u' }, k)).body.queued).toBe(1);
-  expect((await post('/api/testrun', { test: 'check', key: 'c' }, k)).body.queued).toBe(2);
-  expect((await post('/api/testrun', { test: 'unit', key: 'u' }, k)).body).toMatchObject({ queued: 1, already: true }); // a second press of the same row
-  expect((await post('/api/testrun', { test: 'practice28', model: 'gemma', key: 'p28' }, k)).body.already).toBe(true); // the one running
-  expect(JSON.parse(readFileSync(join(HOME, 'battle', 'state.json'), 'utf8')).testLine.map((x) => x.key)).toEqual(['u', 'c']);
-  expect((await post('/api/testunqueue', { key: 'c' }, k)).body.removed).toBe(1);
-  expect((await get('/api/testrun')).line.map((x) => x.key)).toEqual(['u']);
-  // ■ Stop on the running one: it ends as stopped and the next in the line starts by itself
-  await post('/api/teststop', {}, k);
-  const s2 = await until(async () => { const x = await get('/api/testrun'); return x.job?.key === 'u' ? x : null; });
-  expect(s2.line).toEqual([]);
-  expect(s2.done[0]).toMatchObject({ key: 'p28', test: 'practice28', model: 'gemma', status: 'stopped', settings: { context: 65536, reranker: 'qwen3-reranker-0.6b' } });
-  expect(s2.job.settings).toBeNull(); // a test with no model takes no settings
-  await until(async () => (await get('/api/testrun')).done[0]?.key === 'u');
-  expect((await get('/api/testrun')).done.slice(0, 2).map((d) => [d.key, d.status])).toEqual([['u', 'done'], ['p28', 'stopped']]);
-  // Stop all: the line is emptied and the run under way ends
-  await post('/api/testrun', { test: 'work28', model: 'qwen', key: 'w' }, k);
-  await post('/api/testrun', { test: 'unit', key: 'u2' }, k);
-  expect((await post('/api/teststopall', {}, k)).body.ok).toBe(true);
-  await until(async () => { const x = await get('/api/testrun'); return x.done[0]?.key === 'w' && !['waiting', 'running'].includes(x.job?.status) ? x : null; });
-  const end = await get('/api/testrun');
-  expect([end.line, end.job.key, end.done[0].status]).toEqual([[], 'w', 'stopped']);
 }, 90_000);

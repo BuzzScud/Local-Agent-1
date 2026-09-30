@@ -45,7 +45,7 @@ agentic-coder/
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
 │  ├─ qwen3-reranker-0.6b/ the reranker /effort's Reranker row turns on (off by default)
 │  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)
-│  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Battle tab's arena), reports, tools, dev
+│  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Arena: its runner, page and tests), reports, tools, dev
 │  └─ test/             unit tests of the models part
 └─ docs/                every diagram, preview and report page, the one home (mirrors the page groups of cli docs/, which is on the Mac only); tools/ = the mirror's two scripts
 ```
@@ -72,16 +72,17 @@ bun run test:record        # add test runs that are on this Mac but not yet in t
 bun run check              # is anything here that should not be? secrets, packages, where the code connects, the installed app, the tests
 ```
 
-Every test run adds a line to the test record (`~/.agentic-coder/tests/record.jsonl`); the hub shows it on its
-Tests tab: `/settings` → Tests (or `/tests`) in Agentic Coder, or `coding hub tests`. Its first tab, **▶ Run a test**
-(`/test` in Agentic Coder), runs one test on one model from the page: pick the model and the test, set Thinking
-off or on (the T key flips it), press Run, and watch it live; it keeps going if you close Agentic Coder, and Stop
-is there while it runs.
+Every test run adds a line to the test record (`~/.agentic-coder/tests/record.jsonl`); `/tests` in Agentic
+Coder (or `coding hub tests`) shows it. Tests are run from the hub's **Arena** tab (`/arena`, or `/test` with a
+test named; it is the Tests tab and the Battle tab as one): tick tests, sets or checks on the left, say who runs
+them on the right (Gemma, Qwen, or both: a battle, with a blind vote) and set the run in the panel, then press the
+button and watch the result in the middle. Everything runs one at a time in one line, keeps going if you close
+Agentic Coder, and Stop is there while it runs.
 
-The hub's **Test builder** tab (`coding hub builder`, or + New test on the Tests tab) is where tests of your own are
+The hub's **Test builder** tab (`coding hub builder`, or + New in the Arena) is where tests of your own are
 made: paste a list of prompts or write one, give each a level (Easy, Medium, Hard: its points and its time limit),
 confirm the checks suggested from the prompt's words, try them on a page with no model, then run them by level from
-the Tests tab. They are kept on the Mac only, in `~/.agentic-coder/battle/tests/`.
+the Arena. They are kept on the Mac only, in `~/.agentic-coder/battle/tests/`.
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 
@@ -119,7 +120,7 @@ would bring.
 Since 30 Sep 2026 the built-in prompt has a **Work habits** block (how Opus and Fable work: act
 once you know enough, pick one way, report failures plainly, Read and Search over cat and grep…),
 names each notes file's kind and says which notes win. `AGENTIC_PROMPT=old` gives the prompt from
-before, and ▶ Run a test → **Prompt old vs new** (`/test prompt`) runs the Practice 28 with both.
+before, and the Arena's **Prompt old vs new** check (`/test prompt`) runs the Practice 28 with both.
 
 ## License
 

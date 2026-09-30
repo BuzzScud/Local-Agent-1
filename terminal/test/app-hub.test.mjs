@@ -52,7 +52,7 @@ test('/docs opens the hub on the harness page and says how many pages the DOCS f
   expect(served.hub).toContain('<title>Agentic Coder Hub</title>');
 }, T);
 
-test('/tests opens the hub on the test record and says how many runs it holds and the latest', async () => {
+test('/tests opens the Arena on the test record and says how many runs it holds and the latest', async () => {
   const { cwd, env, base } = setup();
   mkdirSync(join(base, 'home', 'tests'), { recursive: true });
   writeFileSync(join(base, 'home', 'tests', 'record.jsonl'), [
@@ -63,12 +63,12 @@ test('/tests opens the hub on the test record and says how many runs it holds an
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/tests' }, { key: 'enter' },
-    { wait: 'Tests opened in the browser at http://127.0.0.1:' },
+    { wait: 'The test record opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { data: await (await fetch(url + 'tests.json')).json(), page: await (await fetch(url + 'tests')).text() }; } },
     ...quit,
   ] });
   await fake.close();
-  expect(r.text).toContain('?tab=tests · 2 runs recorded, the latest: The chart bug (0 of 1)');
+  expect(r.text.replace(/\s+/g, ' ')).toContain('?tab=arena&record=1 · 2 runs recorded, the latest: The chart bug (0 of 1)');
   expect(served.data.rows.map((x) => x.id)).toEqual(['b', 'a']);
   expect(served.page).toContain('<title>Agentic Coder test record</title>');
 }, T);

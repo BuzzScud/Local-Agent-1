@@ -26,14 +26,14 @@ function withStandInModel() {
   return { cwd, env, home };
 }
 
-test('/test opens the Tests tab on ▶ Run a test with this model picked; a name or a task number picks the test; an unknown name says what there is', async () => {
+test('/test opens the Arena with this model as who runs it; a name or a task number picks the test; an unknown name says what there is', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   let hub = null; let page = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/te' }, { wait: 'Run a test on this model from the hub' }, { sleep: 150 }, { snapshot: 'menu' }, { type: 'st' }, { sleep: 100 }, { key: 'enter' },
-    { wait: 'Run a test opened in the browser at http://127.0.0.1:' },
-    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=tests&run=1`)).text(); page = await (await fetch(`${url}tests`)).text(); } },
+    { wait: '? for shortcuts' }, { type: '/te' }, { wait: 'Pick a test in the Arena for this model' }, { sleep: 150 }, { snapshot: 'menu' }, { type: 'st' }, { sleep: 100 }, { key: 'enter' },
+    { wait: 'The Arena opened in the browser at http://127.0.0.1:' },
+    { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=arena&run=1`)).text(); page = await (await fetch(`${url}tests`)).text(); } },
     { type: '/test practice 28' }, { key: 'enter' }, { wait: 'Practice 28 is picked' },
     { type: '/test 12' }, { key: 'enter' }, { wait: 'One practice task 12 is picked' },
     { type: '/test unit tests' }, { key: 'enter' }, { wait: 'Unit tests is picked' },
@@ -42,14 +42,14 @@ test('/test opens the Tests tab on ▶ Run a test with this model picked; a name
   ] });
   await fake.close();
   const text = r.text.replace(/\s+/g, ' ');
-  expect(r.snapshots.menu).toMatch(/\/test\s+Run a test on this model from the hub/);
-  expect(text).toMatch(/\?tab=tests&run=1&model=gemma · pick a test on Gemma 4 12B QAT, then press Run · while it runs, Gemma 4 12B QAT here is unloaded/);
+  expect(r.snapshots.menu).toMatch(/\/test\s+Pick a test in the Arena for this model/);
+  expect(text).toMatch(/\?tab=arena&run=1&model=gemma · pick a test on Gemma 4 12B QAT, then press Run · while it runs, Gemma 4 12B QAT here is unloaded/);
   expect(text).toMatch(/&model=gemma&test=practice28 · Practice 28 is picked on Gemma 4 12B QAT/);
   expect(text).toMatch(/&model=gemma&test=task&n=12 · One practice task 12 is picked on Gemma 4 12B QAT/);
   expect(text).toMatch(/&model=none&test=unit · Unit tests is picked, then press Run/);
   expect(text).toContain('No test called "nonsense". Try one of: practice 28, one practice task, real requests, long task, work 28, new 28, my tests, my tests · easy, my tests · medium, my tests · hard, one of my tests, sorting check, prompt old vs new, ui component battle, unit tests, repo check');
-  expect(hub).toContain('runAsk'); // the hub hands run=1, the model and the test on to the Tests tab
-  expect(page).toContain('id="runpane"');
+  expect(hub).toContain('runAsk'); // the hub hands the model and the test on to the Arena
+  expect(page).not.toContain('id="runpane"'); // the record page has no Run tab: the Arena runs the tests
 }, T);
 
 test('the start waits while a test run holds the memory, and says it is a test run', async () => {

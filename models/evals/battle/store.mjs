@@ -1,14 +1,15 @@
-// The Battle arena's files, on this Mac only (never in git): ~/.agentic-coder/battle/
+// The Arena's files, on this Mac only (never in git): ~/.agentic-coder/battle/
 // (AGENTIC_HOME moves it with the rest).
 //   tests/<id>/        one test: meta.json, task.txt, project/ (its starter files), check.sh (optional)
-//   battles/<id>/      one battle of one test: battle.json, A/ and B/ (each model's run: result.json,
-//                      events.jsonl, files/ with the pages it made)
+//   battles/<id>/      one run of one test: battle.json (mode: a battle of both models, or one model
+//                      alone), A/ and B/ (each model's run: result.json, events.jsonl, files/ with
+//                      the pages it made; one model alone has A/ only)
 //   trash/             a deleted test, kept (nothing is removed for good)
 //   pages/<id>/        the last page each model made for a test (the Test builder tries a test's checks on it)
-//   state.json         the line of tests waiting to run, and whether it is paused
+//   state.json         the line of what waits to run, whether it is paused, and what ended lately
 //   running.json       the hold: a battle or a test run wants or uses the memory (the app waits while it is there)
-//   runs/<id>/         one test run from the hub's Tests tab (▶ Run a test): job.json, run.log (what it printed)
-//   runner.pid, runner.log, runner.token (the key the hub sends to start or stop a test run)
+//   runs/<id>/         one run of a check (the unit tests, the sorting check…): job.json, run.log (what it printed)
+//   runner.pid, runner.log
 // Three sets of 28 come with the repo, each copied into tests/ the first time the arena starts,
 // so your edits are yours; a deleted one is not copied again:
 //   new28/      the New 28 (n01…), written for the arena
@@ -21,7 +22,7 @@
 //   level    easy | medium | hard (LEVELS): its points, and its time limit in a one-model run
 //   minutes  its own time limit, in place of its level's
 //   design   true: it runs with the design folder and the layout fix on, as the app does
-//   n        its number among your tests (▶ Run tests picks one by it; never used twice)
+//   n        its number among your tests (/test mytest picks one by it; never used twice)
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, cpSync, rmSync, statSync } from 'node:fs';
 import { join, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +35,7 @@ export const LIMIT_SECS = 600; // each model's run stops at 10 minutes
 // The levels of a test of your own: what a pass is worth, and how long a one-model run of it may take.
 export const LEVELS = { easy: { name: 'Easy', points: 1, minutes: 5 }, medium: { name: 'Medium', points: 2, minutes: 10 }, hard: { name: 'Hard', points: 3, minutes: 20 } };
 export const MAX_MINUTES = 60;
-// A test's time limit in a one-model run (▶ Run tests), in seconds: its own, else its level's, else
+// A test's time limit in a one-model run (the Arena with one model picked, run-set.mjs), in seconds: its own, else its level's, else
 // the arena's 10 minutes. A battle stops every test at 10 minutes, whatever its level.
 export function limitSecsOf(meta) {
   const m = Number(meta?.minutes);

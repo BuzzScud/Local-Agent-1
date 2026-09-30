@@ -1,6 +1,6 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Tests · Test builder · Battle · Memory · Instructions · All docs · Help
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Arena · Test builder · Memory · Instructions · All docs · Help
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned structure page (and a harness page kept there, under All docs)
@@ -8,14 +8,14 @@
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /harness, /harness.json the Harness tab: one harness, every model in /model beside the others, read live (harness-hub.mjs)
 //   /flow             the Flow tab: how Agentic Coder works as a flow diagram (flow.html, drawn by scripts/flow-page.mjs)
+//   /arena            the Arena tab: run a test on one model, or battle two. It is the arena runner's own page
+//                     (models/evals/battle/): started when it is not up, and told this hub's address so its
+//                     Record button can show the page below. /battle is the same (its name before 30 Sep 2026)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
-//   /tests/run.json, POST /tests/run, /tests/stop, /tests/unqueue, /tests/stopall   the Tests tab's Run tab:
-//     each ▶ is one run (it waits in the runner's line while another runs), with the control panel's settings,
-//     run by the Battle arena's runner (it keeps going when this window closes)
+//                     (the Arena shows it over its own page)
 //   /builder, /builder.json, /builder/…   the Test builder tab: making tests of your own, in full, by level
 //     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
-//     no model (builder-hub.mjs). The tests are the arena's "My tests", on this Mac only
-//   /battle           the Battle tab: the arena's own page (Gemma vs Qwen), started when it is not up (models/evals/battle/)
+//     no model (builder-hub.mjs). The tests are the Arena's "My tests", on this Mac only
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `cli docs/` at the top of the repo on this Mac (older
 // Macs: `agentic-coder DOCS/`): see docs-dir.mjs.
@@ -34,8 +34,7 @@ import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
-import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle, testRun, runCatalog, availableBytes, serverProcesses, freeAfterQuit } from '../../../models/index.mjs';
-import { panelData } from './limits.mjs';
+import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 import { findDocsDir } from './docs-dir.mjs';
 
@@ -78,52 +77,6 @@ export function listDocs(dir) {
 // the real hub had opened, and Weights said the model was missing (27 Sep).
 const envPort = Number((process.env.AGENTIC_HUB_PORT ?? process.env.BONSAI_HUB_PORT) || NaN);
 export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 8757;
-
-// The Tests tab's ▶ Run a test. The runs themselves are the Battle arena runner's (it holds the
-// memory, and a run keeps going when this window closes); this passes the page's asks along with
-// the runner's key. Only this hub's own page may start or stop one (no other site, no rebinding).
-const noStore = { 'cache-control': 'no-store' };
-// The Run tab's control panel: /effort's rows for each model on this Mac, with what a run will have
-// free (free now, plus what the model servers loaded now give back: the runner frees them first).
-// Kept 10 s: the page asks every second while a test runs.
-let panelCache = null;
-function runPanel() {
-  if (panelCache && Date.now() - panelCache.at < 10_000) return panelCache.data;
-  const servers = serverProcesses();
-  const freeBytes = servers.length ? freeAfterQuit({ free: availableBytes(), servers }, []) : availableBytes();
-  const models = Object.values(MODELS).filter((m) => existsSync(join(MODELS_DIR, m.file)));
-  panelCache = { at: Date.now(), data: { free: freeBytes, models: panelData(models.length ? models : [MODELS[DEFAULT_MODEL]], { freeBytes }) } };
-  return panelCache.data;
-}
-async function runRoute(req, url) {
-  const o = req.headers.get('origin');
-  if (url.hostname !== '127.0.0.1' || (o && o !== url.origin) || ['cross-site', 'same-site'].includes(req.headers.get('sec-fetch-site'))) return Response.json({ error: 'Open the Tests tab from this local hub.' }, { status: 403, headers: noStore });
-  try {
-    if (url.pathname === '/tests/run.json' && req.method === 'GET') {
-      const r = await testRun();
-      return Response.json({ up: r.up, ...(r.body ?? { job: null, line: [], done: [], loaded: [], battle: false }), catalog: runCatalog(Object.keys(MODELS)), panel: runPanel() }, { status: r.status >= 400 ? r.status : 200, headers: noStore });
-    }
-    if (['/tests/unqueue', '/tests/stopall'].includes(url.pathname) && req.method === 'POST') {
-      if (!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type') ?? '')) return Response.json({ error: 'Send JSON.' }, { status: 415, headers: noStore });
-      let body = {};
-      try { body = await req.json(); } catch {}
-      const r = await testRun({ method: 'POST', path: url.pathname === '/tests/unqueue' ? '/api/testunqueue' : '/api/teststopall', body: { key: String(body.key ?? '') } });
-      if (!r.up) return Response.json({ error: 'the test runner is not running' }, { status: 409, headers: noStore });
-      return Response.json(r.body ?? {}, { status: r.status, headers: noStore });
-    }
-    if ((url.pathname === '/tests/run' || url.pathname === '/tests/stop') && req.method === 'POST') {
-      if (!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type') ?? '')) return Response.json({ error: 'Send JSON.' }, { status: 415, headers: noStore });
-      let body = {};
-      try { body = await req.json(); } catch {}
-      const r = url.pathname === '/tests/run'
-        ? await testRun({ method: 'POST', path: '/api/testrun', body: { test: body.test, model: body.model, n: body.n, think: body.think === true, settings: body.settings ?? null, key: body.key ?? null }, start: true })
-        : await testRun({ method: 'POST', path: '/api/teststop' });
-      if (!r.up) return Response.json({ error: 'no test is running' }, { status: 409, headers: noStore });
-      return Response.json(r.body ?? {}, { status: r.status, headers: noStore });
-    }
-  } catch (e) { return Response.json({ error: `The test runner did not answer: ${e.message}` }, { status: 502, headers: noStore }); }
-  return Response.json({ error: 'not found' }, { status: 404, headers: noStore });
-}
 
 // onEdits: called after a save or revert of the edited copy (the app shows a
 // note and lights the weights badge). Editing endpoints:
@@ -174,19 +127,24 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/tests') return page(testsHtml);
       if (url.pathname === '/builder') return page(builderHtml);
       if (url.pathname === '/builder.json' || url.pathname.startsWith('/builder/')) return builderRoute(req, url);
-      // The arena runs on its own (it keeps going when this window closes): started here when it is
-      // not up, then shown at its own address.
-      if (url.pathname === '/battle') {
-        // ?new=1 (+ New test on the Tests tab): the arena opens its New test window.
-        try { const b = await startBattle(); return Response.redirect(url.searchParams.get('new') === '1' ? `${b.url.replace(/\/?$/, '/')}?new=1` : b.url, 302); }
-        catch (e) { return page(`<!doctype html><meta charset="utf-8"><body style="font:14px -apple-system,sans-serif;padding:24px"><h3>The Battle arena did not start</h3><p>${String(e.message).replace(/[<>&]/g, '')}</p><p>Open the Battle tab again to try once more.</p>`); }
+      // The Arena runs on its own (it keeps going when this window closes): started here when it is
+      // not up, then shown at its own address, with this hub's address (its Record button shows /tests
+      // from here) and what /test asked for: a test, who runs it, thinking, the New test window, the record.
+      if (url.pathname === '/arena' || url.pathname === '/battle') {
+        try {
+          const b = await startBattle();
+          const to = new URL(b.url);
+          to.searchParams.set('hub', url.origin);
+          for (const k of ['test', 'model', 'n', 'think', 'new', 'record']) { const v = url.searchParams.get(k); if (v) to.searchParams.set(k, v.slice(0, 80)); }
+          return Response.redirect(to.href, 302);
+        }
+        catch (e) { return page(`<!doctype html><meta charset="utf-8"><body style="font:14px -apple-system,sans-serif;padding:24px"><h3>The Arena did not start</h3><p>${String(e.message).replace(/[<>&]/g, '')}</p><p>Open the Arena tab again to try once more.</p>`); }
       }
       if (url.pathname === '/memory') return page(memoryHtml);
       if (url.pathname === '/instructions') return page(instructionsHtml);
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome, { onDesign });
       if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
-      if (url.pathname.startsWith('/tests/')) return runRoute(req, url);
       if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });
       if (url.pathname === '/model') {

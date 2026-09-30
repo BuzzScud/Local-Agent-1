@@ -34,7 +34,8 @@ export { CodeIndex, partsOf, partKey, CUT as CODE_CUT, MARGIN as CODE_MARGIN } f
 // How the pieces that come along are chosen, for the code search check (models/evals/bench/code/).
 export { choose } from './src/agent/search.mjs';
 export { loadSettings } from './src/app/store.mjs';
-export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX } from './src/app/limits.mjs';
+// panelData: the Arena's control panel (/effort's rows, their steps and notes), which its runner hands to the page.
+export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX, panelData } from './src/app/limits.mjs';
 // pickCards, designNotes and scoreCard: which cards go along with a request, for the UI component battle's card pick (models/evals/bench/design/components.mjs).
 export { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard } from './src/agent/design.mjs';
 export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/layoutcheck.mjs';

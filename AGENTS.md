@@ -42,16 +42,19 @@
   must end with the app quitting: with text left in the prompt, quit with `quitTyped`.
   Raw results of model tests stay on the Mac in `models/<model>/results/` (not in git);
   a test's working copy of another project goes outside the repo, not into `results/`.
-- **Every test run goes in the test record**, which the hub shows on its Tests tab
-  (`/settings` → Tests in Agentic Coder, `coding hub tests`; its ▶ Run tests tab, `/test`, runs the tests in
-  `models/evals/run-tests.mjs`, each with its own ▶, with the settings of its control panel kept in the record; the owner's own tests are made in the hub's Test builder tab, `models/evals/battle/builder.mjs`, and stay on the Mac in `~/.agentic-coder/battle/tests/`, never in git). The record is one file on the Mac,
+- **Every test run goes in the test record**, which the hub shows from its Arena tab
+  (`/tests` in Agentic Coder, `coding hub tests`). The Arena (`/arena`, `/test`; it is the Tests tab and
+  the Battle tab as one, since 30 Sep 2026) runs a test on one model or battles two with it, and the
+  checks in `models/evals/run-tests.mjs`, one at a time, with the settings of its panel kept in the
+  record; the owner's own tests are made in the hub's Test builder tab, `models/evals/battle/builder.mjs`,
+  and stay on the Mac in `~/.agentic-coder/battle/tests/`, never in git. The record is one file on the Mac,
   `~/.agentic-coder/tests/record.jsonl`, one line per run. `bun run test`, `bun run eval`
   and `bun run eval:words` add their own line when they finish, so run the tests through
   those (a bare `bun test` is not recorded). Any other measured run (a real-bug try, a
   probe, a one-off check) adds its line with `recordTest()` from `models/evals/record.mjs`:
   what was tested, the code it ran on, the result, the seconds, where the raw results are,
   and its results page in the DOCS folder if one was made. `bun run test:record` adds runs
-  that are on the Mac but not yet in the record. A saved copy of the Tests tab is written to
+  that are on the Mac but not yet in the record. A saved copy of the record page is written to
   `cli docs/tests/agentic-coder-test-record.html`, so it is mirrored with the other pages.
 - **The memory** (`terminal/src/agent/facts.mjs`, `recall.mjs`, `lessons.mjs`) keeps what Agentic Coder
   learns as small files, on the Mac only: `~/.agentic/memory` about the user (on this Mac a link to
