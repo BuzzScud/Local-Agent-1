@@ -209,7 +209,7 @@ test('side by side: the newest task run both models did under the same name and 
   const { dir, file } = scratch();
   const line = (model, at, raw, more = {}) => recordTest({ kind: 'tasks', name: 'Prompt old vs new, tasks 1,2,21', at, model, effort: 'high', ctx: 32768, passed: 2, total: 3, part: true, raw, ...more }, quiet(file));
   // The prompt test keeps its task rows one folder down, under new/; a plain run keeps them at the top.
-  taskRun(dir, 'models/gemma-4-12b/results/run-a', [row('1-json-flag', true, 300, { tps: 14 }), row('2-fix-bug', true, 50, { tps: 16 }), row('21-bigfile-two-places', false, 880, { reason: 'interrupted', why: 'tests still fail', tps: 0 })], 'new');
+  taskRun(dir, 'models/gemma-4-12b/results/run-a', [row('21-bigfile-two-places', false, 880, { reason: 'interrupted', why: 'tests still fail', tps: 0 }), row('5-only-gemma', true, 7), row('2-fix-bug', true, 50, { tps: 16 }), row('1-json-flag', true, 300, { tps: 14 })], 'new');
   taskRun(dir, 'models/qwen3.5-9b/results/run-a', [row('2-fix-bug', true, 20, { tps: 18 }), row('1-json-flag', true, 200, { tps: 20 }), row('21-bigfile-two-places', true, 340, { tps: 19 }), row('9-only-qwen', true, 5)]);
   line('gemma', '2026-09-30T11:00:20.000Z', 'models/gemma-4-12b/results/run-a');
   line('qwen', '2026-09-30T11:00:10.000Z', 'models/qwen3.5-9b/results/run-a');
@@ -217,9 +217,12 @@ test('side by side: the newest task run both models did under the same name and 
   recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T12:00:00.000Z', model: 'qwen', effort: 'high', ctx: 32768, passed: 1, total: 1, raw: 'models/qwen3.5-9b/results/run-a' }, quiet(file));
   line('qwen', '2026-09-30T13:00:00.000Z', 'models/qwen3.5-9b/results/run-a', { result: 'stopped' });
   recordTest({ kind: 'other', name: 'Sorting check', at: '2026-09-29T22:49:18.000Z', model: 'gemma', passed: 81, total: 82, result: 'pass' }, quiet(file));
+  // A newer Sorting check of only part of the set, and one that was stopped, are not the model's score.
+  recordTest({ kind: 'other', name: 'Sorting check', at: '2026-09-30T09:00:00.000Z', model: 'gemma', passed: 3, total: 5, part: true, result: 'pass' }, quiet(file));
+  recordTest({ kind: 'other', name: 'Sorting check', at: '2026-09-30T09:30:00.000Z', model: 'qwen', passed: 10, total: 82, result: 'stopped' }, quiet(file));
   const { run, sort } = sideBySide(['gemma', 'qwen'], { file, top: dir, home: join(dir, 'no-arena') });
-  expect(run).toMatchObject({ name: 'Prompt old vs new', at: '2026-09-30T11:00:20.000Z', effort: 'high', ctx: 32768, thinking: true, limitMins: 15 });
-  expect(run.tasks.map((t) => t.id)).toEqual(['1-json-flag', '2-fix-bug', '21-bigfile-two-places']); // by number; the task only Qwen ran is left out
+  expect(run).toMatchObject({ name: 'Prompt old vs new', at: '2026-09-30T11:00:20.000Z', effort: 'high', ctx: 32768, thinking: true, limitMins: 15, reps: 1 });
+  expect(run.tasks.map((t) => t.id)).toEqual(['1-json-flag', '2-fix-bug', '21-bigfile-two-places']); // by number, whatever order they ran in; a task only one of them ran is left out
   expect(run.tasks[0]).toMatchObject({ n: 1, title: expect.stringContaining('--json') });
   expect(run.models.gemma).toMatchObject({ passed: 2, secs: 1230, median: 300, thinkTokens: 300, modelCalls: 6, write: 15 });
   expect(run.models.gemma.tasks['21-bigfile-two-places']).toMatchObject({ pass: false, secs: 880, why: 'time' });
@@ -236,6 +239,12 @@ test('side by side: no run in common, raw results that are gone, or a different 
   taskRun(dir, 'models/gemma/results/run-b', [row('3-add-function', true, 10)]);
   taskRun(dir, 'models/qwen/results/run-b', [row('3-add-function', true, 12)]);
   expect(sideBySide(['gemma', 'qwen'], { file, top: dir }).run.tasks).toHaveLength(1);
+  // A task run three times on one model and once on the other: reps is the fewest, and it passes only when every run did.
+  taskRun(dir, 'models/gemma/results/run-b', [row('3-add-function', true, 10), row('3-add-function', false, 20, { why: 'wrong answer' }), row('3-add-function', true, 30)]);
+  const thrice = sideBySide(['gemma', 'qwen'], { file, top: dir }).run;
+  expect(thrice.reps).toBe(1);
+  expect(thrice.models.gemma.tasks['3-add-function']).toMatchObject({ pass: false, secs: 20, why: 'wrong answer' });
+  expect(thrice.limitMins).toBe(null);
   // One model alone: its own newest run.
   expect(sideBySide(['qwen'], { file, top: dir }).run.models.qwen.passed).toBe(1);
   // The same test at another context is another test: it does not pair with the first.

@@ -57,7 +57,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pair { display: grid; grid-template-columns: repeat(var(--models, 2), minmax(0, 1fr)); column-gap: 12px; row-gap: 0; }
 .mc { display: grid; grid-template-rows: subgrid; grid-row: span calc(var(--rows) + 1); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px 4px; min-width: 0; }
 .mc header { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; padding-bottom: 4px; }
-.mc header b { font-size: 15px; font-weight: 650; white-space: nowrap; }
+.mc header b { font-size: 15px; font-weight: 650; min-width: 0; overflow-wrap: anywhere; line-height: 1.25; }
+.mc .tags { flex: none; }
 .mc .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; border-top: 1px solid var(--line); min-height: 42px; padding: 3px 0; }
 .mc .k { color: var(--ink2); font-size: 13px; line-height: 1.25; }
 .mc .k small, .grid th small { display: block; color: var(--ink3); font-size: 11px; font-weight: 400; }
@@ -102,10 +103,14 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .grid td.best, .grid td.best b { color: var(--ink); font-weight: 650; }
 .grid td b { font-weight: 500; }
 .diff { table-layout: fixed; } .diff th:first-child { width: 36%; }
-.cmp { margin-top: 6px; table-layout: fixed; } .cmp thead th { padding-top: 4px; } .cmp th:first-child { width: 44%; } .cmp td { white-space: nowrap; }
+.cmp { margin-top: 6px; table-layout: fixed; } .cmp thead th { padding-top: 4px; overflow-wrap: anywhere; } .cmp th:first-child { width: 44%; } .cmp td { white-space: nowrap; }
+.many .cmp th:first-child { width: 36%; }
+.many .tasks th, .many .tasks td { padding-top: 3px; padding-bottom: 3px; }
+/* the task tables: every model's column the same width, the task's words take the rest */
+.tasks { table-layout: fixed; } .tasks col.cn { width: 36px; } .tasks col.cm { width: 92px; }
 .tasks th, .tasks td { padding: 4px 8px; }
-.tasks td { white-space: nowrap; }
-.tasks td.num { color: var(--ink3); text-align: right; width: 28px; }
+.tasks td { white-space: nowrap; } .tasks thead th { overflow-wrap: anywhere; }
+.tasks td.num { color: var(--ink3); text-align: right; }
 .tasks .mark { display: inline-block; width: 34px; font-size: 11.5px; }
 .tasks td.ok .mark { color: var(--ok); } .tasks td.no .mark { color: var(--bad); font-weight: 600; }
 .tasksTwo { gap: 22px; align-items: start; }
@@ -135,11 +140,14 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* a narrow window: the task tables keep the full width, the totals and the verdict sit under them */
 .view { container: view / inline-size; }
+/* the same with three models or more: each task row needs the width for their times */
+.two.wideLeft.res.many { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.two.wideLeft.res.many > .stack { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 @container view (max-width: 1150px) {
   .two.wideLeft.res { grid-template-columns: minmax(0, 1fr); }
   .two.wideLeft.res > .stack { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 }
-@container view (max-width: 900px) { .two.wideLeft, .two.wideLeft.res > .stack { grid-template-columns: minmax(0, 1fr); } }
+@container view (max-width: 900px) { .two.wideLeft, .two.wideLeft.res > .stack, .two.wideLeft.res.many > .stack { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 1100px) {
   .steps { grid-template-columns: minmax(0, 1fr); gap: 8px; } .steps .arr { display: none; }
   .two { grid-template-columns: minmax(0, 1fr); }
@@ -148,6 +156,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .pair, .plug, .tasksTwo { grid-template-columns: minmax(0, 1fr); } .plug > i { display: none; }
   .pair { row-gap: 10px; } .mc { grid-template-rows: none; grid-row: auto; }
   main { padding-left: 16px; padding-right: 16px; }
+  .tasks th, .tasks td { padding: 4px 4px; } .tasks .mark { width: auto; margin-right: 4px; } .tasks col.cn { width: 26px; } .tasks col.cm { width: 68px; }
+  .chip { white-space: normal; }
 }
 </style>
 </head>
@@ -172,7 +182,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const to = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : e.key === 'ArrowRight' ? at + 1 : e.key === 'ArrowLeft' ? at - 1 : -1;
     if (to >= 0 && to < tabs.length) { e.preventDefault(); show(tabs[to].dataset.v, true); }
   });
+  // The address names a tab: at the start, and when it is changed by hand afterwards.
   if (location.hash.length > 1) show(location.hash.slice(1));
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 })();
 </script>
 </body>

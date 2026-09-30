@@ -207,7 +207,9 @@ export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top
     }));
     const timed = Object.values(models).flatMap((m) => Object.values(m.tasks)).filter((t) => t.why === 'time').map((t) => t.secs);
     return {
+      // reps: how many times each task was run, on the model that ran it least.
       run: { name: String(r.name).replace(/, tasks [\w, ]+$/, ''), at: lines.map((l) => l.at).sort().at(-1), effort: r.effort ?? null, ctx: r.ctx ?? null, thinking: Boolean(raws[0][0].thinking), limitMins: timed.length ? Math.round(Math.max(...timed) / 60) : null,
+        reps: Math.min(...raws.flatMap((rs) => shared.map((t) => rs.filter((x) => x.task === t).length))),
         tasks: shared.map((t) => ({ id: t, n: num(t), title: titles.get(String(num(t))) ?? t.replace(/^\d+-/, '').replace(/-/g, ' ') })), models },
       sort,
     };
