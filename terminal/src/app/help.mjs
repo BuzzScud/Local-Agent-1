@@ -114,11 +114,11 @@ export const PLACES = [
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
   ['~/.agentic-coder/logs', 'the model server and update logs'],
-  ['AGENTS.md', "a project's notes for Agentic Coder, read at the start (/init writes one)"],
-  ['.agentic/settings.json', 'this folder only: mode, effort, and "memory": false to turn the memory off here (.bonsai/ still read)'],
+  ['AGENTS.md or CLAUDE.md', "your rules for Agentic Coder, read at the start from the working folder and every folder above it, up to your home folder (/init writes one). Nothing else is read as rules"],
+  ['.agentic/settings.json', 'this folder only: mode, effort, and "memory": false to turn the memory off here'],
   ['.agentic/memory', 'what Agentic Coder remembers about this project: one small file per fact in facts/, kept out of git; edit or delete them freely'],
   ['~/.agentic/memory', 'what Agentic Coder remembers about you: how you like to work; it follows you into every project'],
-  ['.agentic/notes.md', 'the older notes file (.bonsai/notes.md too): its lines are carried over into the memory the first time'],
+  ['.agentic/notes.md', 'the older notes file (.bonsai/notes.md too): its lines are carried over into the memory the first time; it is not read as rules any more'],
   ['cli docs/design examples', 'the design cards that come with a request to make or restyle a page, one folder per set (your picks, your rules, opus, fable, public systems), plus look cards (calm, dense, bold, dark) that restyle any kind; read-only to the model as DESIGN/'],
 ];
 

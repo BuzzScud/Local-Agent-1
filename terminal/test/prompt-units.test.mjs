@@ -18,16 +18,20 @@ test('the instructions start the same in every project and on every day (so the 
   expect(b.slice(b.indexOf(SESSION_MARK))).toContain('Use tabs.');
 });
 
-test('a private .bonsai/notes.md is read alongside AGENTS.md', () => {
+test('only AGENTS.md or CLAUDE.md is read as rules: a private notes.md beside them is left alone', () => {
   const dir = mkdtempSync(join(tmpdir(), 'agentic-notes-'));
   writeFileSync(join(dir, 'AGENTS.md'), 'Run the tests with npm test.');
-  mkdirSync(join(dir, '.bonsai'), { recursive: true });
-  writeFileSync(join(dir, '.bonsai', 'notes.md'), 'The deploy password lives in 1Password.');
-  const n = projectNotes(dir);
-  expect(n.files.some((p) => p.endsWith('AGENTS.md'))).toBe(true);
-  expect(n.files.some((p) => p.endsWith('.bonsai/notes.md'))).toBe(true);
-  expect(n.text).toContain('npm test');
-  expect(n.text).toContain('1Password');
+  for (const d of ['.bonsai', '.agentic']) {
+    mkdirSync(join(dir, d), { recursive: true });
+    writeFileSync(join(dir, d, 'notes.md'), 'The deploy password lives in 1Password.');
+  }
+  for (const memory of [true, false]) {
+    const n = projectNotes(dir, undefined, { memory, home: dir });
+    expect(n.files.some((p) => p.endsWith('AGENTS.md'))).toBe(true);
+    expect(n.files.some((p) => p.endsWith('notes.md'))).toBe(false);
+    expect(n.text).toContain('npm test');
+    expect(n.text).not.toContain('1Password');
+  }
 });
 
 test('tries rewrite one function past 80 lines; the model reads whole files up to 300', () => {
@@ -117,16 +121,16 @@ test('AGENTIC_PROMPT=old gives the prompt from before the Work habits: no habits
   }
 });
 
-test('each notes file is named by its kind: this folder, a folder above, the home folder, private notes', () => {
+test('each notes file is named by its kind: this folder, a folder above, the home folder', () => {
   const home = mkdtempSync(join(tmpdir(), 'agentic-kinds-'));
   const proj = join(home, 'work', 'proj');
   mkdirSync(join(proj, '.agentic'), { recursive: true });
   writeFileSync(join(proj, 'AGENTS.md'), 'Project rule.');
-  writeFileSync(join(proj, '.agentic', 'notes.md'), 'Private note.');
+  writeFileSync(join(proj, '.agentic', 'notes.md'), 'Private note.'); // in the folder, but not read
   writeFileSync(join(home, 'work', 'AGENTS.md'), 'Work rule.');
   writeFileSync(join(home, 'AGENTS.md'), 'Home rule.');
   const n = projectNotes(proj, 9000, { memory: false, home });
-  expect(n.sources.map((s) => s.kind)).toEqual(['project', 'private', 'parent', 'home']);
+  expect(n.sources.map((s) => s.kind)).toEqual(['project', 'parent', 'home']);
   expect(n.text).toContain('From ~/work/AGENTS.md (rules for every folder under ~/work):\nWork rule.');
-  expect(n.text).toContain('From ~/work/proj/.agentic/notes.md (private notes for this folder, kept out of git):\nPrivate note.');
+  expect(n.text).not.toContain('Private note.');
 });

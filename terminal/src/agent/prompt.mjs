@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { instructionBlock } from './instructions.mjs';
 import { RULES } from './rules.mjs';
-import { memoryNotes, readState } from './facts.mjs';
+import { memoryNotes } from './facts.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Agentic Coder answers from what it knows there, and goes into a
@@ -27,21 +27,21 @@ export const promptVersion = () => (process.env.AGENTIC_PROMPT === 'old' ? 'old'
 export const notesRoom = () => (promptVersion() === 'old' ? 6000 : 9000);
 
 // What a notes file is, as the model is told (Claude Code names each file's
-// kind the same way): the folder's own rules, a folder above it, the user's
-// own rules in the home folder, or private notes kept out of git.
+// kind the same way): the folder's own rules, a folder above it, or the
+// user's own rules in the home folder.
 function kindOf(path, cwd, home) {
-  if (/\/\.(?:agentic|bonsai)\/notes\.md$/.test(path)) return { kind: 'private', label: 'private notes for this folder, kept out of git' };
   const dir = dirname(path);
   if (dir === home) return { kind: 'home', label: "the user's own rules, for every folder under the home folder" };
   if (dir === cwd) return { kind: 'project', label: "this project's rules" };
   return { kind: 'parent', label: `rules for every folder under ${dir.replace(home, '~')}` };
 }
 
-// AGENTS.md (or CLAUDE.md), and private .bonsai/notes.md files (kept out of
-// git), from the project folder up to the home folder; then what the memory
-// holds (facts.mjs): the rules that always apply and one line per fact.
-// A notes file whose lines were carried over into the memory is not read
-// twice. memory: false leaves the memory out (practice runs, tests).
+// AGENTS.md (or CLAUDE.md) and nothing else, from the working folder up to
+// the home folder, the way Claude Code reads CLAUDE.md (30 Sep 2026: the
+// private .agentic/notes.md is no longer read; its lines are carried over
+// into the memory the first time, facts.mjs openMemory); then what the
+// memory holds (facts.mjs): the rules that always apply and one line per
+// fact. memory: false leaves the memory out (practice runs, tests).
 // sources: each file as the model gets it (whole, part or left out, and its
 // kind), then the memory; the hub's Project context tab shows them.
 export function projectNotes(cwd, maxChars = notesRoom(), { memory = true, home: homeDir } = {}) {
@@ -58,12 +58,6 @@ export function projectNotes(cwd, maxChars = notesRoom(), { memory = true, home:
         if (text && !/^@AGENTS\.md\s*$/.test(text) && !found.some((f) => f.text === text)) found.push({ path: p, text });
         break;
       }
-    }
-    const newer = join(dir, '.agentic', 'notes.md');
-    const own = existsSync(newer) ? newer : join(dir, '.bonsai', 'notes.md');
-    if (existsSync(own) && !(memory && readState(join(dir, '.agentic', 'memory')).notes)) {
-      const text = readFileSync(own, 'utf8').trim();
-      if (text && !found.some((f) => f.text === text)) found.push({ path: own, text });
     }
     if (dir === home || dir === dirname(dir)) break;
     dir = dirname(dir);

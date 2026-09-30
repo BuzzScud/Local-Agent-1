@@ -2,10 +2,10 @@
 // (or "remember that …") saves into the memory's facts (facts.mjs, lessons.mjs).
 // Before the facts there was one notes file per folder, .bonsai/notes.md or
 // .agentic/notes.md, written by "update memory"; its lines were carried into
-// the facts at the first start (openMemory), and a file that is still there
-// is read at every start as before (projectNotes in prompt.mjs). Nothing
-// writes it any more (30 Sep 2026): with the memory off, nothing is saved.
-// memoryFile still names it: the memory's folders sit beside it.
+// the facts at the first start (openMemory). A file that is still there is no
+// longer read as rules (30 Sep 2026: only AGENTS.md and CLAUDE.md are, in
+// projectNotes in prompt.mjs), and nothing writes it any more: with the memory
+// off, nothing is saved. memoryFile still names it: the memory's folders sit beside it.
 const keepOld = (old, fresh) => (existsSync(old) ? old : fresh);
 import { existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';

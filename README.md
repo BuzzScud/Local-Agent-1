@@ -215,7 +215,7 @@ brief covering goal, evidence, scope, steps, checks, and unknowns; they are guid
 separate planner or proof of correctness. Compare real task success and elapsed time when tuning them.
 
 **Project context** (tab 03) shows one card per notes file for a folder you pick: what kind it is
-(this project's rules, a folder above, your rules for every folder, private notes, the memory),
+(this project's rules, a folder above, your rules for every folder, the memory),
 whether it arrives whole, cut or left out (the notes get 9,000 characters), and which wins: your
 words in the chat, then the notes, then General and Planning, then the built-in defaults.
 **Prompt preview** (tab 04) splits the prompt into its parts with each part's size, the share of

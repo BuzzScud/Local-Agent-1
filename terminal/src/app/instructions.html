@@ -291,7 +291,7 @@ function renderCostTable() {
 function renderSources() {
  const list = $('srclist');
  if (!state.notes.length) { list.replaceChildren(Object.assign(document.createElement('p'), {className: 'preview-note', textContent: 'No notes files or memory were found for this folder. General and Planning still apply.'})); return; }
- const kinds = {project: 'This project’s rules', parent: 'Rules for a folder above', home: 'Your rules for every folder under ~', private: 'Private notes, kept out of git', memory: 'What Agentic Coder saved about you and this project'};
+ const kinds = {project: 'This project’s rules', parent: 'Rules for a folder above', home: 'Your rules for every folder under ~', memory: 'What Agentic Coder saved about you and this project'};
  const status = {whole: ['whole', 'Whole'], part: ['part', 'Part of it'], left: ['left', 'Left out']};
  list.replaceChildren(...state.notes.map(n => {
   const d = document.createElement('details'); d.className = 'src';

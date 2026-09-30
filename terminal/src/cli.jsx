@@ -308,7 +308,7 @@ if (opts.print) {
     const { projectNotes, gitSummary, notesRoom } = await import('./agent/prompt.mjs');
     const st = loadSettings(opts.cwd);
     if (memoryOn(st)) { try { openMemory(opts.cwd); } catch {} }
-    const names = [...new Set(projectNotes(opts.cwd, notesRoom(), { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
+    const names = [...new Set(projectNotes(opts.cwd, notesRoom(), { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
     const git = gitSummary(opts.cwd);
     // also: what this folder changes at the start (its own settings file, a start-up mode saved with /permissions).
     const also = [

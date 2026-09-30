@@ -76,7 +76,7 @@
   saved facts closest to what happened (`SAVE_SEEN`); when a window closes, the conversation is read again and,
   asking first, what it would save waits in a `.pending` file in `memory-jobs/` for the next start there; a fact
   skipped once is kept in `state.json` (`declined`) and not offered again; `/memory` ends with a 7-day health line.
-  With `"memory": false` nothing is saved: the old `notes.md` writer is gone (a notes file is still read).
+  With `"memory": false` nothing is saved: the old `notes.md` writer is gone, and a leftover notes file is no longer read as rules (since 30 Sep 2026 only AGENTS.md and CLAUDE.md are, from the working folder up to your home folder).
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
   scan staged files before a push. `bun run check` does that scan and more (the history,
   the packages, where the code connects, the installed app, the unit tests); `--fast`
