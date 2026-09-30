@@ -121,7 +121,7 @@ export const PLACES = [
   ['.agentic/memory', 'what Agentic Coder remembers about this project: one small file per fact in facts/, kept out of git; edit or delete them freely'],
   ['~/.agentic/memory', 'what Agentic Coder remembers about you: how you like to work; it follows you into every project'],
   ['.agentic/notes.md', 'the older notes file (.bonsai/notes.md too): its lines are carried over into the memory the first time; it is not read as rules any more'],
-  ['cli docs/design examples', 'the design cards that come with a request to make or restyle a page, one folder per set (your picks, your rules, opus, fable, public systems), plus look cards (calm, dense, bold, dark) that restyle any kind; read-only to the model as DESIGN/'],
+  ['docs/private/design examples', 'the design cards that come with a request to make or restyle a page, one folder per set (your picks, your rules, opus, fable, public systems), plus look cards (calm, dense, bold, dark) that restyle any kind; read-only to the model as DESIGN/'],
 ];
 
 // How Agentic Coder keeps you safe, in plain words.

@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 
 const HOME = mkdtempSync(join(tmpdir(), 'agentic-components-'));
 const DESIGN = join(HOME, 'design examples');
-const DOCS = join(HOME, 'cli docs');
+const DOCS = join(HOME, 'docs');
 const RECORD = join(HOME, 'record.jsonl');
 const REPO = join(import.meta.dir, '..', '..');
 const NODE = process.execPath.endsWith('bun') ? 'node' : process.execPath;

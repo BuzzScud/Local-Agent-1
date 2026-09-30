@@ -1,6 +1,6 @@
 // Who decides (/effort's row, "way" in settings.json, AGENTIC_WAY): the app or the model.
 // The user's ask of 30 Sep 2026 was to bring the six steps of a request as close to Claude Code
-// as they can go (cli docs/diagrams/agentic-coder-question-walkthrough-2026-09-30.html, tab 2).
+// as they can go (docs/diagrams/agentic-coder-question-walkthrough-2026-09-30.html, tab 2).
 //   app    (the default, as before) the app sorts the request with word rules, runs a focused
 //          path (rename, fix, change), reads for the model before its first step, locks a
 //          question's files, sends its checks back, and asks to save to memory after the turn.

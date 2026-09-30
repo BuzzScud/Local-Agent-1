@@ -10,7 +10,7 @@
 // small row ("twin") wherever the model is used. A click on a model's name at the
 // top draws the flow with that model alone. The steps are the hub's one list
 // (steps.mjs), the same the Harness tab tells as its five.
-//   scripts/flow-page.mjs saves a dated copy of the page into cli docs/diagrams/.
+//   scripts/flow-page.mjs saves a dated copy of the page into docs/diagrams/.
 import shell from './flow.html' with { type: 'text' };
 import { MODELS, sideBySide } from '../../../models/index.mjs';
 import { harnessData } from './harness-hub.mjs';
@@ -345,7 +345,7 @@ export function flowPage(d, { dated = '' } = {}) {
     f.box(460, 60, 190, 90, { k: 't2', t: 'Own llama-server', s: ['starts with the model', 'under test'] });
     f.box(700, 60, 200, 90, { k: 't1', t: 'The agent, no screen', s: ['runs the task headless;', 'everything auto-approved;', 'questions get scripted answers'], dot: true });
     f.box(945, 60, 145, 90, { t: 'The check', s: ['each task has one;', 'passes or fails'] });
-    f.box(1140, 60, 120, 90, { k: 'you', t: 'Report page', s: ['written to', 'the repo\'s', 'cli docs/'] });
+    f.box(1140, 60, 120, 90, { k: 'you', t: 'Report page', s: ['written to', 'the repo\'s', 'docs/'] });
     [[190, 240], [410, 460], [650, 700], [900, 945], [1090, 1140]].forEach(([a, b]) => f.arrow([[a, 105], [b, 105]]));
     if (run) {
       f.text(20, 176, many ? `NEWEST RUN ${two.toUpperCase()} DID` : 'THE NEWEST RUN', { k: 'gl' });
@@ -378,7 +378,7 @@ ${M.map((m) => `│  ├─ ${esc(`${d.folders[m.id]}/`.padEnd(19))}<em>${esc(m.
 │  ├─ bonsai-2-27b/      retired, kept as a recipe
 │  ├─ bge-m3/            finds memory facts by meaning
 │  └─ evals/             the test bench
-├─ <b>cli docs/</b>            every diagram, report and test page (mirrored to docs/)
+├─ <b>docs/</b>                every diagram, report and test page · private/ stays on this Mac
 └─ Agentic Coder.app     double-click: pick a folder, opens Terminal running coding</pre></div>
  <div class="card"><h3>On this Mac, outside the repo</h3>
 <pre><b>~/.local/bin/coding</b>          the launcher you type

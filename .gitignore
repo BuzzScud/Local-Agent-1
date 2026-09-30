@@ -10,8 +10,22 @@ Bonsai Code.app/
 *.key
 .split-map.json
 
-# The pages' working folder, on this Mac only: `bun run docs` mirrors its page groups into docs/.
-# It also holds the owner's private things (memory-about-you, gemma-docs, morning briefs).
+# docs/ is the pages' one folder (since 30 Sep 2026). The repo is public, so git keeps
+# only its page groups (PAGE_GROUPS in docs/tools/to-docs.mjs), the index and the tools:
+# anything else in it stays on this Mac, docs/private/ above all (memory-about-you,
+# design examples, morning briefs, Gemma run files) and any new folder or loose page.
+# `bun run docs` and `bun run check` fail if a file outside these is ever tracked.
+docs/*
+!docs/README.md
+!docs/tools/
+!docs/diagrams/
+!docs/reports/
+!docs/tests/
+!docs/design rounds/
+!docs/other/
+!docs/older versions/
+!docs/gemma-docs/
+# The pages' old folder names (before 30 Sep 2026): still ignored if one is left over
 cli docs/
 agentic-coder DOCS/
 bonsai-code DOCS/
@@ -26,7 +40,7 @@ terminal/scripts/ui-walk-*.json
 terminal/ui-walk/
 
 # Part 2 · models: raw test runs stay on this Mac (one results/ per model);
-# the report pages live in docs/ (mirror of `agentic-coder DOCS/`).
+# the report pages live in docs/.
 models/*/results/
 models/evals/dev/experiments/slots/
 models/evals/dev/experiments/*.log

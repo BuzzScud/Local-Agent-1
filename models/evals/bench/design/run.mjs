@@ -11,7 +11,7 @@
 // Every page it made is then measured the same way, whatever the arm: the
 // layout check's problems (sideways scroll, overlapping or faint text, script
 // errors, missing head lines), and two screenshots (1440×900 and a 390-wide
-// phone) for looking at by eye. The page of results goes in cli docs/gemma-docs/test/.
+// phone) for looking at by eye. The page of results goes in docs/gemma-docs/test/.
 //   node models/evals/bench/design/run.mjs --model gemma [--arms today,full | all] [--pages all | 1,3] [--minutes 8] [--record]
 //   node models/evals/bench/design/run.mjs --page-only      rebuilds the page from what is saved
 // One big model at a time: it refuses to start while another is loaded.
@@ -34,7 +34,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..', '..'); // the repo this code runs from
 // Where the results go: the main folder when the test runs from a copy of it
 // (AGENTIC_REPO=~/Desktop/agentic-coder), so the raw runs land in its models/
-// and the page in its cli docs, as every other test's do.
+// and the page in its docs/, as every other test's do.
 const home = process.env.AGENTIC_REPO ?? root;
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
@@ -99,7 +99,7 @@ async function main() {
   if (!chrome) { console.error('refused: no headless Chrome on this Mac to measure the pages (Chrome, or Playwright\'s own).'); return 5; }
   const dir = designDir();
   const sets = readCards(dir).sets;
-  if (!dir || !sets.length) { console.error('refused: the "design examples" folder is missing or empty (cli docs/design examples).'); return 6; }
+  if (!dir || !sets.length) { console.error('refused: the "design examples" folder is missing or empty (docs/private/design examples).'); return 6; }
   // The arms decide; nothing in the environment may.
   for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS']) delete process.env[k];
 

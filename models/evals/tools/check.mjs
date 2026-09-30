@@ -14,7 +14,7 @@ import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, tmpdir } from 'node:os';
 import { recordTest, codeLabel } from '../record.mjs';
-import { DOCS_NAMES, published } from '../../../docs/tools/to-docs.mjs';
+import { published, ownerMarks } from '../../../docs/tools/to-docs.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -364,17 +364,19 @@ async function installedApp() {
   return notes.length ? look(notes[0], notes.slice(1)) : fine('byte for byte what this code builds; only you can change it');
 }
 
-function pagesMirrored() {
-  const src = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (DOCS_NAMES.map((n) => join(root, n)).find((p) => existsSync(p)) ?? join(root, DOCS_NAMES[0])), dst = join(root, 'docs');
-  if (!existsSync(src)) return skipped('the DOCS folder is not here');
-  const skip = (rel) => /(^|\/)(\.DS_Store|\.localized|Icon\r)$|(^|\/)\._/.test(rel);
-  const own = (f) => f === 'README.md' || f.startsWith('tools/'); // the index and the mirror's own scripts
-  // Only the page groups are mirrored; the owner's own folders beside them stay on the Mac.
-  const pages = filesUnder(src, skip).filter(published), copies = filesUnder(dst, skip).filter((f) => !own(f));
-  const open = [...pages.filter((f) => !copies.includes(f)).map((f) => `${f}  not in docs/ yet`),
-    ...pages.filter((f) => copies.includes(f) && !readFileSync(join(src, f)).equals(readFileSync(join(dst, f)))).map((f) => `${f}  changed since it was copied`),
-    ...copies.filter((f) => !pages.includes(f)).map((f) => `${f}  in docs/ but gone from the DOCS folder`)];
-  return open.length ? look(`${open.length} page${open.length > 1 ? 's differ' : ' differs'} between the DOCS folder and docs/ (bun run docs copies them)`, few(open, 6)) : fine(`${pages.length} pages, all copied into docs/`);
+// docs/ holds the pages, which are published, and docs/private/, which is the owner's and
+// never in git. Wrong when git tracks a file of docs/ outside the page groups (the index
+// and the tools aside), or when a page that is or will be committed holds the home
+// folder's path or name (ownerMarks): the repo is public.
+async function docsStayPrivate({ files }) {
+  const own = (f) => f === 'README.md' || f.startsWith('tools/');
+  const tracked = (await git('ls-files', '-z', '--', 'docs')).out.split('\0').filter(Boolean).map((f) => f.slice('docs/'.length));
+  const strays = tracked.filter((f) => !published(f) && !own(f));
+  const pages = [...new Set(files.filter((f) => f.startsWith('docs/')).map((f) => f.slice('docs/'.length)).filter(published))].filter((f) => existsSync(join(root, 'docs', f)));
+  const marked = pages.map((f) => [f, ownerMarks(readFileSync(join(root, 'docs', f), 'latin1'))]).filter(([, m]) => m.length);
+  const bad = [...strays.map((f) => `docs/${f}  tracked, but it belongs on this Mac only (git rm --cached -- <file> keeps the file)`), ...marked.map(([f, m]) => `docs/${f}  ${m.join(', ')}`)];
+  return bad.length ? wrong(`${bad.length} file${bad.length > 1 ? 's' : ''} in docs/ would show this Mac's private things on GitHub`, few(bad, 8))
+    : fine(`${pages.length} pages; nothing of docs/private/ tracked, no home folder path or name in a page`);
 }
 
 async function onlyOnThisMac() {
@@ -411,7 +413,7 @@ export async function check({ fast = false, tests = true, offline = false, say =
   const list = [
     safe('Same as GitHub', sameAsGitHub), safe('Private on GitHub', privateOnGitHub), safe('No secrets in the files', secretsInFiles), safe('Only files that belong', filesThatBelong),
     safe('No secrets in the history', history), safe('Packages', packages), safe('Where the code connects', connections), safe('No leftover code', leftovers),
-    safe('The model files', modelFiles), safe('The installed app', installedApp), safe('Pages copied to docs/', pagesMirrored), safe('Only on this Mac', onlyOnThisMac),
+    safe('The model files', modelFiles), safe('The installed app', installedApp), safe('Private pages stay private', docsStayPrivate), safe('Only on this Mac', onlyOnThisMac),
   ];
   const results = [];
   const show = (name, r) => {

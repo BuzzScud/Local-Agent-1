@@ -19,8 +19,8 @@
 //     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
 //     no model (builder-hub.mjs). The tests are the Arena's "My tests", on this Mac only
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
-// The DOCS folder is `cli docs/` at the top of the repo on this Mac (older
-// Macs: `agentic-coder DOCS/`): see docs-dir.mjs.
+// The DOCS folder is the repo's docs/ (the main folder's, from a worktree),
+// with the owner's own things in docs/private/: see docs-dir.mjs.
 import { statSync, existsSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import html from './weights.html' with { type: 'text' };
@@ -41,8 +41,9 @@ import { loadSettings } from './store.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 import { findDocsDir } from './docs-dir.mjs';
 
-// The memory's own files sit in the folder too (the hub's Memory tab shows them): never listed or served as pages.
-const NOT_PAGES = 'memory-about-you';
+// Folders that are not pages: the memory's own files (the hub's Memory tab shows them;
+// now in private/, once at the top) and the index's tools. Never listed or served.
+const NOT_PAGES = new Set(['memory-about-you', 'tools']);
 export { findDocsDir };
 
 const KINDS = { '.html': ['page', 'text/html; charset=utf-8'], '.pdf': ['PDF', 'application/pdf'], '.png': ['image', 'image/png'], '.jpg': ['image', 'image/jpeg'], '.jpeg': ['image', 'image/jpeg'], '.md': ['notes', 'text/markdown; charset=utf-8'] };
@@ -57,15 +58,16 @@ function titleOf(path) {
 // top level is "unsorted" and shown first so it gets filed.
 export const GROUPS = ['unsorted', 'diagrams', 'reports', 'tests', 'design rounds', 'other', 'older versions'];
 
-// Every page in the folder and its subfolders (one level), newest first, each
+// Every page in the folder and its subfolders (one level; README.md at the top is
+// the index GitHub shows, not a page), newest first, each
 // with its group; the pinned pages are the newest files whose names say
 // harness and structure outside "older versions", so a new version pins itself.
 export function listDocs(dir) {
   if (!dir) return { dir: null, missing: true, pinned: {}, groups: GROUPS, pages: [] };
   const pages = [];
-  const add = (group, sub) => { for (const f of readdirSync(join(dir, sub))) { if (f.startsWith('.') || !KINDS[ext(f)]) continue; const st = statSync(join(dir, sub, f)); if (!st.isFile()) continue; pages.push({ file: sub ? `${sub}/${f}` : f, name: f, group, kind: KINDS[ext(f)][0], size: st.size, mtime: st.mtimeMs, saved: new Date(st.mtimeMs).toISOString().slice(0, 10), title: ext(f) === '.html' ? titleOf(join(dir, sub, f)) : '' }); } };
+  const add = (group, sub) => { for (const f of readdirSync(join(dir, sub))) { if (f.startsWith('.') || !KINDS[ext(f)] || (!sub && f === 'README.md')) continue; const st = statSync(join(dir, sub, f)); if (!st.isFile()) continue; pages.push({ file: sub ? `${sub}/${f}` : f, name: f, group, kind: KINDS[ext(f)][0], size: st.size, mtime: st.mtimeMs, saved: new Date(st.mtimeMs).toISOString().slice(0, 10), title: ext(f) === '.html' ? titleOf(join(dir, sub, f)) : '' }); } };
   add('unsorted', '');
-  for (const g of readdirSync(dir)) if (!g.startsWith('.') && g !== NOT_PAGES && statSync(join(dir, g)).isDirectory()) add(g, g);
+  for (const g of readdirSync(dir)) if (!g.startsWith('.') && !NOT_PAGES.has(g) && statSync(join(dir, g)).isDirectory()) add(g, g);
   pages.sort((a, b) => b.mtime - a.mtime);
   const pin = (word) => pages.find((p) => p.kind === 'page' && p.group !== 'older versions' && p.name.toLowerCase().includes(word)) ?? null;
   const groups = [...GROUPS.filter((g) => pages.some((p) => p.group === g)), ...[...new Set(pages.map((p) => p.group))].filter((g) => !GROUPS.includes(g))];
@@ -192,10 +194,12 @@ export function startWeightsServer({ path, models = Object.values(MODELS), docsD
       if (url.pathname.startsWith('/docs/')) {
         if (!docsDir) return new Response('the DOCS folder was not found', { status: 404 });
         const file = decodeURIComponent(url.pathname.slice(6));
-        const full = resolve(docsDir, file);
+        let full = resolve(docsDir, file);
         // Only a file in the folder or one of its groups, never a path out of it.
         const parts = file.split('/');
-        const clean = parts.length <= 2 && parts[0] !== NOT_PAGES && parts.every((p) => p && p === basename(p) && p !== '..' && !p.startsWith('.'));
+        const clean = parts.length <= 2 && !NOT_PAGES.has(parts[0]) && parts.every((p) => p && p === basename(p) && p !== '..' && !p.startsWith('.'));
+        // A page a newer run replaced moves to "older versions": its old link (a test-record line) still opens it.
+        if (clean && parts.length === 2 && !existsSync(full) && existsSync(resolve(docsDir, 'older versions', parts[1]))) full = resolve(docsDir, 'older versions', parts[1]);
         if (!clean || !KINDS[ext(file)] || !full.startsWith(resolve(docsDir) + '/') || !existsSync(full) || !statSync(full).isFile()) return new Response('not found', { status: 404 });
         return new Response(Bun.file(full), { headers: { 'content-type': KINDS[ext(file)][1], 'cache-control': 'no-store' } });
       }

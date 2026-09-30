@@ -1,12 +1,12 @@
 // The results page of the design before/after test (run.mjs): one
-// self-contained HTML file in cli docs/gemma-docs/test/, built from every
+// self-contained HTML file in docs/gemma-docs/test/, built from every
 // model's saved runs for that day, with the screenshots inside it. Four tabs
 // that each fit the window: the verdict and the table, the pages side by side,
 // every problem the check found, and how it was run.
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
-export const PAGE_OUT = (root, date) => join(root, 'cli docs', 'gemma-docs', 'test', `design-examples-results-${date}.html`);
+export const PAGE_OUT = (root, date) => join(root, 'docs', 'gemma-docs', 'test', `design-examples-results-${date}.html`);
 
 // models/<model>/results/design-bench-<date>/ for every model that has one.
 export function resultsDirs(root, date) {

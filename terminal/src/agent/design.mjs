@@ -4,7 +4,7 @@
 // builds in a look the user already liked instead of inventing one. The
 // model's weights never change; it is handed the closest card each time,
 // the way a designer is handed a mood board.
-//   where         `design examples/` in the DOCS folder (AGENTIC_DESIGN_DIR names
+//   where         `docs/private/design examples/` (AGENTIC_DESIGN_DIR names
 //                 another), one subfolder per set: your picks, your rules, opus,
 //                 fable, public systems (any other subfolder is a set too)
 //   a card        one .md file: "# Name", then "- For:", "- Words:", and
@@ -35,7 +35,7 @@
 //                 flows/layoutcheck.mjs) win over it
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, sep, relative, isAbsolute } from 'node:path';
-import { findDocsDir } from '../app/docs-dir.mjs';
+import { findPrivateDir } from '../app/docs-dir.mjs';
 import { instructionHome } from './instructions.mjs';
 
 export const FOLDER = 'design examples';
@@ -53,8 +53,8 @@ export const LOOK_CHARS = 700;
 export function designDir() {
   const named = process.env.AGENTIC_DESIGN_DIR;
   if (named) return existsSync(named) ? resolve(named) : null;
-  const docs = findDocsDir();
-  const d = docs ? join(docs, FOLDER) : null;
+  const own = findPrivateDir();
+  const d = own ? join(own, FOLDER) : null;
   return d && existsSync(d) ? d : null;
 }
 

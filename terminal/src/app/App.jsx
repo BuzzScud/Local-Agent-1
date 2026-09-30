@@ -1562,7 +1562,7 @@ export function App({ opts, win, onRestart }) {
         if (!a) {
           const now = designSettings(saved);
           const sum = designSummary(now);
-          if (!sum.dir) { push({ type: 'note', text: 'No design examples folder (make "design examples" in the cli docs folder, one subfolder per set of .md cards).', tone: 'warn' }); break; }
+          if (!sum.dir) { push({ type: 'note', text: 'No design examples folder (make "design examples" in docs/private/, one subfolder per set of .md cards).', tone: 'warn' }); break; }
           push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
           break;
         }
@@ -1709,7 +1709,7 @@ export function App({ opts, win, onRestart }) {
         const w = hub.server; const url = hub.url;
         if (cmd === 'docs') {
           const d = listDocs(w.docsDir);
-          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (cli docs at the top of the repo; set AGENTIC_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
+          push({ type: 'note', text: d.missing ? `Docs opened at ${url}, but the DOCS folder was not found (docs/ in the repo; set AGENTIC_DOCS to point elsewhere)` : `Docs opened in the browser at ${url} · ${d.pages.length} pages from ${d.dir.replace(process.env.HOME, '~')}${d.pinned.harness ? ` · harness: ${d.pinned.harness.title}` : ''}${d.pinned.structure ? ` · structure: ${d.pinned.structure.title}` : ''} · it stays up while this window is open`, tone: d.missing ? 'warn' : 'dim' });
         } else push({ type: 'note', text: `Weights of ${here.map((m) => m.name).join(' and ')} opened in the browser at ${url} · it stays up while this window is open`, tone: 'dim' });
         break;
       }

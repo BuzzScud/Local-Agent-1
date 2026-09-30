@@ -190,7 +190,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none';
     const q = new URL(location.href); q.searchParams.delete('page'); history.replaceState(null, '', q);
     if (!docs) { list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
-    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Agentic Coder looks for <code>${docs.dir || 'agentic-coder DOCS'}</code> at the top of the repo. Set <code>AGENTIC_DOCS</code> to point somewhere else.</p>`; return; }
+    if (docs.missing) { list.innerHTML = `<p class="note">The DOCS folder was not found. Agentic Coder looks for <code>${docs.dir || 'docs'}</code> in the repo. Set <code>AGENTIC_DOCS</code> to point somewhere else.</p>`; return; }
     const row = (p, kind) => `<div class="row" data-file="${p.file}"><span><span class="t">${p.title || p.name}</span>${p.title ? `<span class="f">${p.name}</span>` : ''}</span><span class="k">${kind || p.kind}</span><span class="m">${p.saved} · ${kb(p.size)}</span></div>`;
     const pinned = [docs.pinned.harness, docs.pinned.structure].filter(Boolean);
     const BLURB = { unsorted: 'at the top level, not filed yet', diagrams: 'how Agentic Coder is built and how a request moves through it', reports: 'what got built, day by day', tests: 'measured runs, checks and the chart-bug rounds', 'design rounds': 'looks that were tried and picked', other: 'kept here, not about Agentic Coder itself', 'older versions': 'replaced by a newer page, kept as the record' };
@@ -224,7 +224,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
     // No folder map in the DOCS folder: the Structure tab says so and keeps its switch, so Flow is still one click away.
-    if (!p && tab === 'structure') { frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none'; list.innerHTML = docs.missing ? `<p class="note">The DOCS folder was not found, so the folder map cannot be shown. Agentic Coder looks for <code>${docs.dir || 'cli docs'}</code> at the top of the repo. Flow, beside it, needs no folder.</p>` : '<p class="note">No structure page in the DOCS folder. Flow, beside it, needs no page.</p>'; return; }
+    if (!p && tab === 'structure') { frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none'; list.innerHTML = docs.missing ? `<p class="note">The DOCS folder was not found, so the folder map cannot be shown. Agentic Coder looks for <code>${docs.dir || 'docs'}</code> in the repo. Flow, beside it, needs no folder.</p>` : '<p class="note">No structure page in the DOCS folder. Flow, beside it, needs no page.</p>'; return; }
     if (!p) { setTab('docs'); showList(); if (!docs.missing) list.insertAdjacentHTML('afterbegin', `<p class="note">No ${page ? `page called <code>${page}</code>` : `${tab} page`} in the DOCS folder.</p>`); return; }
     show('/docs/' + p.file.split('/').map(encodeURIComponent).join('/'), p.title || p.name);
   }

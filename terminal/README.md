@@ -195,7 +195,7 @@ Practice runs (`bun run eval`) never read your rules. Code: `src/agent/permissio
   - Anything a focused path cannot finish goes step by step. `--no-flows` always does.
 - **Design examples and the layout check** (`src/agent/design.mjs`, `src/flows/layoutcheck.mjs`).
   A request to make or restyle a page, screen or widget brings the closest design card from
-  `cli docs/design examples/` (one folder per set: your picks, your rules, opus, fable, public
+  `docs/private/design examples/` (one folder per set: your picks, your rules, opus, fable, public
   systems): the rules card, which always comes, plus the one best example, about 1,500 tokens.
   The model can open any file there read-only as `DESIGN/…`. When it says it is done, each page
   it made or changed is opened in headless Chrome (the Mac's own, or Playwright's) at 1440×900,
@@ -228,8 +228,8 @@ bun terminal/src/cli.jsx               # run from source
 bun run test:terminal                   # its tests, including the app driven by keys in a real terminal
 node terminal/scripts/ui-walk.mjs       # every screen at one window size, with resizes, checked
 node terminal/scripts/capture-ui.mjs    # the real app with the real model, screens saved as HTML
-bun terminal/scripts/flow-page.mjs       # save a dated copy of the hub's Flow tab into cli docs/diagrams/ (the tab itself is drawn live: src/app/flow-hub.mjs, with the steps in src/app/steps.mjs)
+bun terminal/scripts/flow-page.mjs       # save a dated copy of the hub's Flow tab into docs/diagrams/ (the tab itself is drawn live: src/app/flow-hub.mjs, with the steps in src/app/steps.mjs)
 ```
 
-`scripts/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`); `scripts/shims` is the react-devtools stand-in the single-file build needs. Report pages are written to `cli docs/` at the top of the repo and its page groups are mirrored into the repo's `docs/`.
+`scripts/demo` + `demo-project/` hold the design-stage previews (`bun run demo 1|2|3`); `scripts/shims` is the react-devtools stand-in the single-file build needs. Report pages are written straight into the repo's `docs/`, in their group.
 `app/make-app.sh` builds `Agentic Coder.app` beside the repo's README.

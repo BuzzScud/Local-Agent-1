@@ -1,5 +1,5 @@
 // Saves a dated copy of the hub's Flow tab: one self-contained HTML file.
-//   bun terminal/scripts/flow-page.mjs                   writes cli docs/diagrams/agentic-coder-flow-diagram-<today>.html
+//   bun terminal/scripts/flow-page.mjs                   writes docs/diagrams/agentic-coder-flow-diagram-<today>.html
 //   bun terminal/scripts/flow-page.mjs <file.html>       writes that file instead
 // The tab itself is drawn by the app each time it opens (src/app/flow-hub.mjs),
 // from the model list, the settings in use and the newest test the models share.

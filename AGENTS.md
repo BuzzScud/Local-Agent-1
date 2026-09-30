@@ -5,38 +5,42 @@
   `models/index.mjs`, and the models part imports only `terminal/index.mjs`: a name the
   other part needs is added to that file, not imported around it
   (`terminal/test/two-parts.test.mjs` fails otherwise). See README.md for the map.
-- **Every page goes in `cli docs/`** (at the top of this repo, on the Mac only, not in git; it was `agentic-coder DOCS/`
-  until 29 Sep 2026). Diagrams, previews, reports,
-  test and result pages, PDFs: anything made about Agentic Coder is saved there, as one
-  self-contained HTML file where it is a page. The report builders write their pages
-  there directly (`docsPath` in `docs/tools/to-docs.mjs`); a page made by hand is saved there too.
-  Pages are not kept anywhere else in the repo, and capture outputs stay out of git.
-  The folder has six groups, each a subfolder: `diagrams/` (how Agentic Coder is built),
-  `reports/` (what got built, by day), `tests/` (measured runs and checks), `design rounds/`,
-  `other/`, and `older versions/` (a page replaced by a newer one moves there; nothing is
-  deleted). A builder names its group in the path it gives `docsPath` (`tests/agentic-coder-….html`).
-  `/docs` in Agentic Coder (the hub) lists the folder live by these groups; a file left at the top
-  level shows as unsorted until it is filed. The folder also holds the owner's own things beside
-  the six groups: `memory-about-you/` (Agentic Coder's memory about them; `~/.agentic/memory` is a
-  link to it), `gemma-docs/`, `morning briefs/` and loose pages at its top. Those are private and
-  are never mirrored into `docs/`.
-- **Gemma pages go in `cli docs/gemma-docs/`, not in the six groups** (the user's rule, 28 Sep
-  2026; the folder moved there from `~/Desktop/gemma-docs/` on 29 Sep). Any report, diagram, flow, test page or other file about Gemma (the model, its
-  tests, its thinking, its harness) is saved there; a replaced version moves to its
-  `older versions/`. Raw model results still stay in `models/gemma-4-12b/results/`.
-  **Tests go in its `test/` folder** (the user's rule, 28 Sep evening): a test wizard or
-  runbook, a run's timeline, a test's results page. The logs and summaries a test wizard
-  has you save go in a subfolder there (`test/gemma-28-tests/`), and a replaced test page
-  moves to `test/older versions/`. Plans, diagrams and comparisons stay at the top.
+- **Every page goes in `docs/`** (since 30 Sep 2026; before that in `cli docs/` beside it,
+  which is gone). Diagrams, previews, reports, test and result pages, PDFs: anything made
+  about Agentic Coder is saved there, as one self-contained HTML file where it is a page, in
+  one of its groups: `diagrams/` (how Agentic Coder is built), `reports/` (what got built, by
+  day), `tests/` (measured runs and checks), `design rounds/`, `other/`, `older versions/` (a
+  page replaced by a newer one moves there; nothing is deleted, and the hub still opens it
+  from its old link) and `gemma-docs/`. The report builders write there directly
+  (`docsPath` in `docs/tools/to-docs.mjs`, which is the MAIN folder's docs/ even from a
+  worktree); a page made by hand is saved there too. `/docs` in Agentic Coder (the hub) lists
+  the folder live by these groups; a file left at the top shows as unsorted until it is filed.
+- **The repo is public, so git keeps only those groups** (plus `docs/README.md` and
+  `docs/tools/`): `.gitignore` is an allow-list, `docs/*` then `!docs/<group>/`. Everything
+  else in docs/ stays on the Mac, above all **`docs/private/`**, the owner's own things:
+  `memory-about-you/` (Agentic Coder's memory about them; `~/.agentic/memory` is a link to
+  it), `design examples/` (the design cards), `morning briefs/`, `gemma-runs/` (logs,
+  scripts and markers of Gemma test runs), `claude-code-runs/` and private pages. A page
+  that must not be public goes in `docs/private/`, never in a group. A new group means a
+  new line in PAGE_GROUPS and in `.gitignore` (models/test/docs-mirror.test.mjs holds the
+  two together).
+- **Gemma pages go in `docs/gemma-docs/`, not in the other groups** (the user's rule, 28 Sep
+  2026; public since 30 Sep 2026). Any report, diagram, flow, test page or other page about
+  Gemma (the model, its tests, its thinking, its harness) is saved there; a replaced version
+  moves to its `older versions/`. **Tests go in its `test/` folder** (the user's rule, 28 Sep
+  evening): a test wizard or runbook, a run's timeline, a test's results page. The logs,
+  summaries and scripts a test run leaves go in `docs/private/gemma-runs/<test>/`, not
+  beside the pages; raw model results still stay in `models/gemma-4-12b/results/`.
 - **The Bonsai-era pages** (24–28 Sep 2026) left the DOCS folder on 28 Sep: they are in
   `~/Desktop/SEP/agentic-coder backups/bonsai-docs/` (on the Mac only, not in git), and in git
   history under `docs/`. The restore points from before the 24–28 Sep changes (git bundles,
   zips, tgz) are in `~/Desktop/SEP/agentic-coder backups/`, also on the Mac only.
-- **Before a commit, run `bun run docs`.** It mirrors that folder's six page groups into `docs/`
-  (and rewrites `docs/README.md`, the index); commit `docs/` with the rest. It stops if the
-  folder is missing or looks emptied, and changes nothing then. Only the groups in `PAGE_GROUPS`
-  (`docs/tools/to-docs.mjs`) are copied, because the repo is public: never add the owner's
-  folders to that list, and never point `AGENTIC_DOCS` at a folder of private files.
+- **Before a commit of pages, run `bun run docs`.** It rewrites `docs/README.md` (the index
+  GitHub shows) and stops with an error when git tracks a file of docs/ outside the groups,
+  or a page holds the home folder's path or name (`ownerMarks`; write it as `~`). Commit
+  pages from the main folder, where they are saved, by path. `bun run check` runs the same
+  two checks ("Private pages stay private"). Never point `AGENTIC_DOCS` at a folder of
+  private files.
 - **Tests:** `bun run test` runs both parts, the test files side by side (four at once;
   `AGENTIC_TEST_JOBS=6` for more, `=1` for one after the other). A test that drives the app
   must end with the app quitting: with text left in the prompt, quit with `quitTyped`.
@@ -55,10 +59,10 @@
   what was tested, the code it ran on, the result, the seconds, where the raw results are,
   and its results page in the DOCS folder if one was made. `bun run test:record` adds runs
   that are on the Mac but not yet in the record. A saved copy of the record page is written to
-  `cli docs/tests/agentic-coder-test-record.html`, so it is mirrored with the other pages.
+  `docs/tests/agentic-coder-test-record.html` (the main folder's), so it goes out with the next commit of pages.
 - **The memory** (`terminal/src/agent/facts.mjs`, `recall.mjs`, `lessons.mjs`) keeps what Agentic Coder
   learns as small files, on the Mac only: `~/.agentic/memory` about the user (on this Mac a link to
-  `cli docs/memory-about-you/`), `<project>/.agentic/memory` about a project. Work on the tests' own
+  `docs/private/memory-about-you/`), `<project>/.agentic/memory` about a project. Work on the tests' own
   starter files (`models/evals/battle/<set>/<id>/project/`, `models/evals/bench/tasks/<id>/project/`
   and their answers) is practice: no lesson is saved from it (`practiceWork` in `lessons.mjs`). A test never touches the real one: with `AGENTIC_HOME` (or `BONSAI_HOME`) set the user's memory
   is kept inside it, and the app tests run with `AGENTIC_MEMORY_SAVE=off` unless they test saving.

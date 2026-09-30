@@ -14,7 +14,7 @@
 //                 (<dir>/app and <dir>/model, each a bench/run.mjs --out), no model
 //   --dry: print the two commands it would run, and stop
 // From a copy of the repo (a worktree nobody else edits), AGENTIC_REPO=~/Desktop/agentic-coder
-// sends the raw runs to the main folder's models/ and the page to its cli docs.
+// sends the raw runs to the main folder's models/ and the page to its docs/.
 // Stop (the Arena's Stop, SIGTERM): the run under way saves what it did, the other way is not
 // started, and the page shows what ran.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -29,7 +29,7 @@ import { buildPromptPage, sideTotals, flips } from './prompt-ab-page.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo this code runs from
 const home = process.env.AGENTIC_REPO ?? root; // where the results go
-const docsDir = process.env.AGENTIC_DOCS ?? (home === root ? DOCS_DIR : join(home, 'cli docs'));
+const docsDir = process.env.AGENTIC_DOCS ?? (home === root ? DOCS_DIR : join(home, 'docs'));
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[opt('model', DEFAULT_MODEL)];

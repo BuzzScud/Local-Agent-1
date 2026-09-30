@@ -1,6 +1,6 @@
 // UI component battle (▶ Run tests → UI component battle, `/test components`):
 // do Gemma and Qwen build a small UI component well, and is the design folder
-// (cli docs/design examples) working? The user's own component requests
+// (docs/private/design examples) working? The user's own component requests
 // (components.json), in three parts, on one model a run:
 //   1 · Card pick    no model: is each request seen as a page request, and
 //                    which cards of the design folder go along with it
@@ -8,7 +8,7 @@
 //                    layout check (what /design turns on)
 //   3 · Folder off   the same requests with neither, so every page has a
 //                    before and an after
-// Run it on Gemma and on Qwen: the results page (one a day, cli docs/tests/)
+// Run it on Gemma and on Qwen: the results page (one a day, docs/tests/)
 // puts the two side by side, with a blind vote on the pictures.
 // The rules, written before the first run (30 Sep 2026):
 //   a card pick passes when the request is seen as a page request and an
@@ -23,7 +23,7 @@
 //   --page-only [--date 2026-09-30]: the page again from what is saved, no model
 //   --dry: print the card pick and the command it would run, and stop
 // From a copy of the repo, AGENTIC_REPO=~/Desktop/agentic-coder sends the raw
-// runs to the main folder's models/ and the page to its cli docs.
+// runs to the main folder's models/ and the page to its docs/.
 // Stop (the Tests tab's Stop, SIGTERM): the page under way is stopped, the rest
 // is not started, and the results page shows what ran.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -81,7 +81,7 @@ export function writeBattlePage({ home, docsDir, date, requests }) {
 
 async function main() {
   const home = process.env.AGENTIC_REPO ?? root; // where the results go
-  const docsDir = process.env.AGENTIC_DOCS ?? (home === root ? DOCS_DIR : join(home, 'cli docs'));
+  const docsDir = process.env.AGENTIC_DOCS ?? (home === root ? DOCS_DIR : join(home, 'docs'));
   const args = process.argv.slice(2);
   const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
   const today = new Date().toLocaleDateString('en-CA'); // the local date, 2026-09-30
@@ -108,7 +108,7 @@ async function main() {
   // Part 1: the card pick.
   const dir = designDir();
   const sets = dir ? readCards(dir).sets : [];
-  if (!dir || !sets.length) { console.error('refused: the "design examples" folder is missing or empty (cli docs/design examples; AGENTIC_DESIGN_DIR names another).'); return 6; }
+  if (!dir || !sets.length) { console.error('refused: the "design examples" folder is missing or empty (docs/private/design examples; AGENTIC_DESIGN_DIR names another).'); return 6; }
   console.log(`UI component battle on ${model.name}${think ? ', thinking at High' : ', thinking off'}: ${requests.length} request${requests.length === 1 ? '' : 's'}, three parts`);
   console.log(`Part 1 · Card pick (no model). design examples: ${sets.map((s) => `${s.name} ${s.cards.length}`).join(' · ')}`);
   const picks = requests.map((p) => cardPick(p, { dir }));

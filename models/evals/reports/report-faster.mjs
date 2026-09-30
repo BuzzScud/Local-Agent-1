@@ -6,12 +6,12 @@
 // Each dir holds the summary.json that models/evals/bench/run.mjs writes.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { DOCS_DIR } from '../../../docs/tools/to-docs.mjs';
 
 const [beforeDir, afterDir, outArg] = process.argv.slice(2);
 if (!beforeDir || !afterDir) { console.error('usage: report-faster.mjs <before dir> <after dir> [out.html]'); process.exit(1); }
-// Gemma pages live in gemma-docs/ inside the repo's "cli docs" folder (on this Mac only, not in git).
-const out = outArg ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'cli docs', 'gemma-docs', 'test', 'gemma-faster-results-2026-09-28.html');
+// Gemma pages live in docs/gemma-docs/ (a published group since 30 Sep 2026).
+const out = outArg ?? join(DOCS_DIR, 'gemma-docs', 'test', 'gemma-faster-results-2026-09-28.html');
 const load = (d) => JSON.parse(readFileSync(join(d, 'summary.json'), 'utf8'));
 const B = load(beforeDir);
 const A = load(afterDir);

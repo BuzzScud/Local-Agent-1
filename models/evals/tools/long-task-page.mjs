@@ -9,13 +9,14 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { MODELS, modelFolder } from '../../index.mjs';
+import { DOCS_DIR } from '../../../docs/tools/to-docs.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const ROUND = 'long-task-2026-09-29';
-// Gemma pages live in gemma-docs/ inside the repo's "cli docs" folder (on this Mac only, not in git).
-const OUT = opt('out', join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'cli docs', 'gemma-docs', 'test', 'gemma-vs-qwen-long-task-2026-09-29.html'));
+// Gemma pages live in docs/gemma-docs/ (a published group since 30 Sep 2026).
+const OUT = opt('out', join(DOCS_DIR, 'gemma-docs', 'test', 'gemma-vs-qwen-long-task-2026-09-29.html'));
 const TOL = 64; // words a step may lose off its end (the reply as the template writes it back) and still count as only adding on
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);

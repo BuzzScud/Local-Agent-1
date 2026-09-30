@@ -1,6 +1,6 @@
 // /rules: what the model reads at the start of every conversation, numbered,
 // and short commands to change it (design 1 of the 28 Sep design round,
-// cli docs/design rounds/rules-command-2-designs-2026-09-28.html).
+// docs/design rounds/rules-command-2-designs-2026-09-28.html).
 //   Always       facts marked "always": read in full at every start
 //   Other notes  one line each at the start, the whole fact when a request fits
 //   Off          switched off with /rules off: kept in retired/, /rules on brings one back

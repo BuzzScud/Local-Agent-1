@@ -5,6 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startWeightsServer, listDocs, findDocsDir, HUB_PORT } from '../src/app/weights.mjs';
+import { findPrivateDir } from '../src/app/docs-dir.mjs';
 
 function standIn() {
   const dir = mkdtempSync(join(tmpdir(), 'agentic-weights-'));
@@ -192,17 +193,44 @@ test('the Arena tab: /arena starts the runner when it is not up and sends the ta
   expect(out.hub).toContain("return show(`/arena${a ? `?${a}` : ''}`");
 });
 
-test('the DOCS folder is "cli docs" at the top of the repo, and a Mac that still has the older name keeps working', () => {
+test('the DOCS folder is the repo\'s docs/, from a worktree the main folder\'s, and the design cards are in its private/', () => {
   const was = { docs: process.env.AGENTIC_DOCS, bdocs: process.env.BONSAI_DOCS, repo: process.env.AGENTIC_REPO };
   try {
     delete process.env.AGENTIC_DOCS; delete process.env.BONSAI_DOCS;
     const repo = mkdtempSync(join(tmpdir(), 'agentic-docsdir-'));
     process.env.AGENTIC_REPO = repo;
-    mkdirSync(join(repo, 'agentic-coder DOCS'));
-    expect(findDocsDir()).toBe(join(repo, 'agentic-coder DOCS'));
-    mkdirSync(join(repo, 'cli docs'));
-    expect(findDocsDir()).toBe(join(repo, 'cli docs'));
+    mkdirSync(join(repo, 'cli docs')); // the old name is not looked for any more
+    expect(findDocsDir()).not.toBe(join(repo, 'cli docs'));
+    mkdirSync(join(repo, 'docs'));
+    expect(findDocsDir()).toBe(join(repo, 'docs'));
+    expect(findPrivateDir()).toBe(null); // a fresh clone has no private/
+    mkdirSync(join(repo, 'docs', 'private'));
+    expect(findPrivateDir()).toBe(join(repo, 'docs', 'private'));
+    // a worktree of it: its .git is a file naming <main>/.git/worktrees/<name>
+    mkdirSync(join(repo, '.git', 'worktrees', 'w'), { recursive: true });
+    const tree = mkdtempSync(join(tmpdir(), 'agentic-docsdir-tree-'));
+    mkdirSync(join(tree, 'docs'));
+    writeFileSync(join(tree, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'w')}\n`);
+    process.env.AGENTIC_REPO = tree;
+    expect(findDocsDir()).toBe(join(repo, 'docs'));
   } finally { for (const [k, v] of [['AGENTIC_DOCS', was.docs], ['BONSAI_DOCS', was.bdocs], ['AGENTIC_REPO', was.repo]]) { if (v == null) delete process.env[k]; else process.env[k] = v; } }
+});
+
+test('the /docs pages: the index and the tools are no pages, private/ keeps its memory to itself, and a page moved to older versions still opens from its old link', async () => {
+  const docs = mkdtempSync(join(tmpdir(), 'agentic-docs-served-'));
+  const put = (f, text) => { mkdirSync(join(docs, f, '..'), { recursive: true }); writeFileSync(join(docs, f), text); };
+  put('README.md', '# index'); put('tools/sync-docs.mjs', '// tool'); put('tests/new-run.html', '<title>New run</title>');
+  put('older versions/old-run.html', '<title>Old run</title>'); put('private/memory-about-you/index.md', '# private'); put('private/mine.html', '<title>Mine</title>');
+  const s = startWeightsServer({ path: null, docsDir: docs, port: 0, cwd: docs });
+  try {
+    const base = s.url.replace(/\/$/, '');
+    const list = await (await fetch(`${base}/docs.json`)).json();
+    expect(list.pages.map((p) => p.file).sort()).toEqual(['older versions/old-run.html', 'private/mine.html', 'tests/new-run.html']);
+    expect(await (await fetch(`${base}/docs/tests/old-run.html`)).text()).toContain('Old run'); // its test-record link, from before the move
+    expect((await fetch(`${base}/docs/tests/nowhere.html`)).status).toBe(404);
+    expect((await fetch(`${base}/docs/private/memory-about-you/index.md`)).status).toBe(404);
+    expect((await fetch(`${base}/docs/tools/sync-docs.mjs`)).status).toBe(404);
+  } finally { s.stop(); }
 });
 
 // Every model in /model is served under its own name, with the Harness tab's tags, and each

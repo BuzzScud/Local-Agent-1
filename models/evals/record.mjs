@@ -268,11 +268,14 @@ export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top
 }
 
 // The same page the hub shows, with the record written into it, saved into
-// the DOCS folder. Skipped quietly when the folder or the page's source is
-// not here (a worktree, a frozen copy): the hub still reads the record live.
+// the DOCS folder (the repo's docs/). Skipped quietly when the folder or the
+// page's source is not here, and in a worktree or a frozen copy (its docs/
+// would carry the page into a branch): the hub still reads the record live.
 // Only the real record goes to the repo's DOCS folder; any other record needs
 // the folder named (docsDir, or AGENTIC_DOCS).
-export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD ? (['cli docs', 'agentic-coder DOCS', 'bonsai-code DOCS'].map((n) => join(repo, n)).find((p) => existsSync(p)) ?? join(repo, 'cli docs')) : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
+// The main folder's .git is a folder; a worktree's is a file.
+const isMainFolder = (dir) => { try { return statSync(join(dir, '.git')).isDirectory(); } catch { return false; } };
+export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD && isMainFolder(repo) ? join(repo, 'docs') : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
   try {
     if ((process.env.AGENTIC_NO_DOCS ?? process.env.BONSAI_NO_DOCS) || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
     const html = readFileSync(template, 'utf8');
