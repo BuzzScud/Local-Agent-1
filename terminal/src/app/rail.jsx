@@ -120,6 +120,7 @@ export function ToolNode({ it }) {
     case 'same': return <Node g="○" c={C.dim}><Head verb="Read" c="ansi256(250)" what={what} detail="already read above, unchanged" /></Node>;
     case 'list': return <Node g="○" c={C.dim}><Head verb="Listed" c="ansi256(250)" what={it.arg} detail={plural(v.count, 'path')} /></Node>;
     case 'search': return <Node g="○" c={C.dim}><Head verb="Searched" c="ansi256(250)" what={it.arg} detail={plural(v.count, 'match')} /></Node>;
+    case 'agent': return <Node g="◆" c={it.error ? C.bad : C.accent}><Head verb={it.label} c={it.error ? C.bad : C.accent} what={it.arg} detail={`${plural(v.steps ?? 0, 'step')} · ${fmtSecs(v.secs ?? 0)}${v.reason && !['done', 'answered'].includes(v.reason) ? ` · ${v.reason}` : ''}`} hint="ctrl+o for its steps and report" /></Node>;
     case 'websearch': return <Node g="○" c={C.dim}><Head verb="Searched the web" c="ansi256(250)" what={it.arg} detail={`${plural(v.count, 'result')}${v.service ? ` · ${v.service}` : ''}`} hint={v.content ? 'ctrl+o to expand' : undefined} /></Node>;
     case 'fetched': return v.moved
       ? <Node g="○" c={C.warn}><Head verb="Fetched" c={C.warn} what={it.arg} detail={`moves to ${v.moved}, not followed`} /></Node>

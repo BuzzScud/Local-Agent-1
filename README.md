@@ -118,6 +118,22 @@ Anthropic's own web search and fetch instead: they run on Anthropic's side, bill
 without asking here (the Claude API row turns them off). `coding -p` uses the same settings; with
 `--yes` it does not ask.
 
+### Helpers (subagents)
+
+The model can hand one piece of work to a helper: a second agent that starts fresh (it sees none
+of the conversation), works with its own tools, and sends back only its report, so a search that
+takes many reads does not fill the conversation. An **explore** helper only reads (files, the code
+search, the web) and reports what it found with file:line; a **general** helper may also edit and
+run commands, each change asked about as your mode says (a no ends the turn, as for any change).
+While a helper works, one line shows its steps as they come; after, it is one step in the
+conversation, and ctrl+o shows its steps and its report. esc stops it with the rest.
+
+Helpers are offered when the model decides (`/effort`, Who decides: Model) and on the Claude API.
+On this Mac one runs at a time, on the model server's second slot, so the conversation keeps its
+place on the first and goes on without reading everything again; on the Claude API several in
+one reply run side by side. `"subagents": false` in settings.json leaves them out. The Subagent
+check in the Arena tests them with the real model.
+
 ### A model on another machine
 
 The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, a

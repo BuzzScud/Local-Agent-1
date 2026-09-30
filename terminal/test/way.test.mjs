@@ -284,7 +284,8 @@ test('switching the way mid-conversation changes the prompt and the tools for th
   await fake.close();
   const [a, b] = chats(fake).slice(-2);
   expect(a.tools.length).toBe(8);
-  expect(b.tools.length).toBe(13);
+  expect(b.tools.length).toBe(14); // the app's eight, the model's own five, and Agent (a helper)
+  expect(b.tools.at(-1).function.name).toBe('Agent');
   agent.setWay('app');
   expect(agent.messages[0].content).toContain(ONE_AT_A_TIME);
 });

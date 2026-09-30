@@ -117,6 +117,21 @@ export const WEB_TOOL_DEFS = [
 ];
 const webDefs = (web) => WEB_TOOL_DEFS.filter((d) => (d.name === 'WebSearch' ? web?.search : web?.fetch));
 
+// A helper (a subagent) the model hands one piece of work to: it starts fresh (it sees none of
+// the conversation), works with its own tools, and only its report comes back. explore: it
+// reads only (files, the code search, the web); general: it may also edit and run commands,
+// each change asked about as your mode says. On this Mac one runs at a time, on the server's
+// side slot, so the conversation's place on the main slot is kept; on the Claude API several
+// in one reply run side by side. Offered when the model decides (/effort's Who decides) and
+// on the Claude API; a helper has no Agent of its own.
+export const AGENT_TOOL_DEF = {
+  name: 'Agent',
+  description: 'Hand one self-contained piece of work to a helper that starts fresh and reports back. kind explore: it only reads (files, code search, the web) and reports what it found, with file:line; for a search that would take many reads, so only its findings come back to you. kind general: it may also edit files and run commands. It sees none of this conversation: put the whole task, and what to report, in prompt.',
+  parameters: { type: 'object', properties: { description: str('A few words on what it does'), prompt: str('The whole task, and what to report back'), kind: { type: 'string', enum: ['explore', 'general'], description: 'explore (read only, the default) or general' } }, required: ['prompt'] },
+};
+// The tools an explore helper is given (the others are left out of its list and refused).
+export const EXPLORE_TOOLS = new Set(['Read', 'List', 'Search', 'Map', 'CodeSearch', 'WebFetch', 'WebSearch', 'TodoWrite']);
+
 // Read as the model sees it on Model: a path, or several paths at once.
 const READ_MANY = {
   ...TOOL_DEFS[0],
@@ -125,8 +140,9 @@ const READ_MANY = {
 };
 // The tools of a way: 'app' (the default, as before) or 'model' (the tools above join them).
 // web: { search, fetch } (/web): the web tools join them.
-export const toolDefs = (way = 'app', web = null) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), ...webDefs(web)];
-export const toolSchemas = (way = 'app', web = null) => toolDefs(way, web).map((d) => ({ type: 'function', function: d }));
+// agents: the Agent tool joins them (a helper's own list never has it).
+export const toolDefs = (way = 'app', web = null, { agents = false } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), ...webDefs(web), ...(agents ? [AGENT_TOOL_DEF] : [])];
+export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way, web, opts).map((d) => ({ type: 'function', function: d }));
 
 // Small models reach for other common argument names; accept them.
 const ALIASES = {
@@ -148,11 +164,13 @@ const ALIASES = {
   fact: ['fact', 'text', 'memory', 'note', 'content'],
   about: ['about', 'scope', 'kind', 'type'],
   url: ['url', 'address', 'link', 'uri', 'href', 'page'],
+  prompt: ['prompt', 'task', 'instructions', 'request', 'message'],
+  description: ['description', 'title', 'summary', 'name'],
   find: ['find', 'search', 'look_for'],
 };
 
 // A tool's definition, on either way (Read's own takes paths only on Model).
-const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS].find((d) => d.name === name);
+const defOf = (name, way = 'app') => [...toolDefs(way), ...WEB_TOOL_DEFS, AGENT_TOOL_DEF].find((d) => d.name === name);
 
 export function normalizeArgs(name, raw, way = 'model') {
   const def = defOf(name, way);
@@ -241,6 +259,7 @@ export function display(name, args = {}) {
     case 'Remember': return { label: 'Remember', arg: String(args.fact ?? '').replace(/\s+/g, ' ').trim() };
     case 'WebSearch': return { label: 'Web Search', arg: `"${String(args.query ?? '').replace(/\s+/g, ' ').trim()}"` };
     case 'WebFetch': return { label: 'Fetch', arg: String(args.url ?? '') };
+    case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); return { label: args.kind === 'general' ? 'Agent' : 'Explore', arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
     default: return { label: name, arg: '' };
   }
 }

@@ -39,6 +39,7 @@ function ToolView({ it, width }) {
     case 'read': body = v.outline ? <Text>Outline: <Text bold>{v.parts}</Text> parts of {v.total} lines <Text color={C.dim}>(ctrl+o to expand)</Text></Text> : <Text>Read <Text bold>{v.lines}</Text> {v.lines === 1 ? 'line' : 'lines'}{v.total > v.lines ? ` of ${v.total}` : ''} <Text color={C.dim}>(ctrl+o to expand)</Text></Text>; break;
     case 'list': body = <Text>Listed <Text bold>{v.count}</Text> {v.count === 1 ? 'path' : 'paths'} <Text color={C.dim}>(ctrl+o to expand)</Text></Text>; break;
     case 'search': body = <Text>Found <Text bold>{v.count}</Text> {v.count === 1 ? 'match' : 'matches'} <Text color={C.dim}>(ctrl+o to expand)</Text></Text>; break;
+    case 'agent': body = <Text>{v.steps ?? 0} step{v.steps === 1 ? '' : 's'} · {Math.round(v.secs ?? 0)} s{v.reason && !['done', 'answered'].includes(v.reason) ? ` · ${v.reason}` : ''} <Text color={C.dim}>(ctrl+o for its steps and report)</Text></Text>; break;
     case 'websearch': body = <Text>Found <Text bold>{v.count}</Text> {v.count === 1 ? 'result' : 'results'}{v.service ? ` · ${v.service}` : ''}{v.content ? <Text color={C.dim}> (ctrl+o to expand)</Text> : null}</Text>; break;
     case 'fetched': body = v.moved ? <Text color={C.warn}>Moves to another site: {v.moved} (not followed)</Text> : <Text>Received <Text bold>{webSize(v.bytes)}</Text>{v.status ? ` (${v.status})` : ''}{v.lines ? `, ${v.lines} of ${v.total} lines` : ''}{v.content ? <Text color={C.dim}> (ctrl+o to expand)</Text> : null}</Text>; break;
     case 'diff': {
@@ -497,7 +498,7 @@ function PermissionPrompt({ app }) {
   const cmdLines = String(req.args?.command ?? '').split('\n');
   return (
     <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
-      <Text bold color={C.ask}>{title}</Text>
+      <Text bold color={C.ask}>{title}{req.helper ? <Text color={C.dim}>  · asked by the {req.helper} helper</Text> : null}</Text>
       {req.name === 'Ask' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
           <Text>{req.args.question}</Text>

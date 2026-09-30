@@ -22,7 +22,7 @@ import { llmCalls } from './flows/llm.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -45,8 +45,9 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     design: design ?? { auto: false, check: false },
     helpers: on, embedder: mem?.embedder ?? embedder ?? own,
     way: wayOf(way ?? wayEnv() ?? 'app'), hooks: hooksEnv() !== undefined ? hooksOn(hooksEnv()) : hooksOn(hooks ?? []),
-    // The web tools (/web): coding -p passes them; the benches pass none, so their runs measure the same every time.
-    web,
+    // The web tools (/web) and helpers (the Agent tool): coding -p passes them; the benches pass
+    // none, so their runs measure the same every time.
+    web, subagents,
     // Starting over from its notes: the instructions come back from their saved reading.
     rewarm: warm && slots ? (sig) => warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: agent.tools(), thinking, effort: agent.effort, slot: slots.main, signal: sig }) : undefined,
     // approve(req) → false says no to one request even when auto-approving.
@@ -87,6 +88,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
       onEvent(type, ev);
     });
   }
+  // A step under way (a helper's progress): to onEvent only, not the log.
+  agent.on('tool-running', (ev) => onEvent('tool-running', ev));
   // The turn's own counts (steps, reads, thinking): the last turn-end wins.
   let counts = {};
   agent.on('turn-end', (ev) => { counts = ev; });

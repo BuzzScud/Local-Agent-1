@@ -6,7 +6,7 @@ import { endpointOf } from '../../../models/index.mjs';
 import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS } from './tools.mjs';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -256,6 +256,13 @@ export function safeArgs(args) {
 export const CHECK_INS = { steps: 6, secs: 300 };
 const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash']);
 
+// A helper's steps at most (its own limit, under the conversation's).
+const HELPER_STEPS = 30;
+// A helper's instructions: the conversation's (the project, its rules), then what a helper is.
+export function helperPrompt(system, kind) {
+  return `${system}\n\n# You are a helper\nThe main agent handed you one task. You see only this task, not its conversation, and you cannot ask the user anything. Work it out with your tools, then end with a short report for the main agent: ${kind === 'explore' ? 'what you found, with file:line or the page it came from. You only read: do not change anything; say what should change instead.' : 'what you changed (files and lines) and what you checked, or what stopped you.'}`;
+}
+
 // The web addresses (http or https) a request names, each once.
 export const webAddresses = (text) => [...new Set(String(text ?? '').match(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi) ?? [])].map((u) => u.replace(/[.,;:!?]+$/, ''));
 
@@ -275,7 +282,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -283,6 +290,8 @@ export class Agent extends EventEmitter {
     this.hooks = hooksOn(hooks ?? []);
     // /web: { search: 'off' | 'brave' | 'tavily', fetch, claude } (null: no web tools, as in a practice run).
     this.web = web;
+    // The Agent tool (helpers): "subagents": false in settings.json leaves it out.
+    this.subagents = subagents !== false;
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions, thinkBudgetSecs });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
     // or one given on its own (the practice bench runs without the memory).
@@ -331,7 +340,13 @@ export class Agent extends EventEmitter {
   // The prompt of this way: the model's own tool lines when it decides (way.mjs wayPrompt).
   setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
-  tools() { return toolSchemas(this.way, this.webTools()); }
+  tools() {
+    const all = toolSchemas(this.way, this.webTools(), { agents: this.agentsOn() });
+    return this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all;
+  }
+  // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, and on the
+  // Claude API; never inside a helper; "subagents": false in settings.json leaves it out.
+  agentsOn() { return !this.isHelper && this.subagents !== false && (this.way === 'model' || endpointOf(this.url)?.kind === 'claude'); }
   // The web tools on offer (/web): WebSearch with a search service, WebFetch with reading pages.
   // On the Claude API both are Anthropic's own (claude.mjs), unless /web's Claude row is off.
   webTools() {
@@ -1027,13 +1042,16 @@ export class Agent extends EventEmitter {
         let out = null;
         let stopped = null;
         let landed = false;
-        for (const c of calls) {
+        // Several helpers in one reply on the Claude API run side by side (each has its own
+        // conversation there); on this Mac one after the other, on the server's side slot.
+        const together = calls.length > 1 && calls.every((c) => c.name === 'Agent') && endpointOf(this.url)?.kind === 'claude' ? Promise.all(calls.map((c) => this.runTool(c, signal))) : null;
+        for (const [ci, c] of calls.entries()) {
           if (stopped || signal?.aborted) {
             this.messages.push({ role: 'tool', tool_call_id: c.id, content: stopped ? 'Not run: a call before it in the same reply ended the turn.' : 'Interrupted.' });
             continue;
           }
           toolsUsed++;
-          out = await this.runTool(c, signal);
+          out = together ? (await together)[ci] : await this.runTool(c, signal);
           if (c.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + (out.readKeys?.length || 1);
           if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
           const result = { role: 'tool', tool_call_id: c.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
@@ -1663,6 +1681,12 @@ export class Agent extends EventEmitter {
       return { text: parsed.error, error: true };
     }
     const args = parsed.args;
+    // A helper refuses a tool it was not given (an explore helper does not change anything).
+    if (this.toolFilter && !this.toolFilter.has(call.name)) {
+      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'this helper only reads' }, error: true });
+      return { text: `${call.name} is not one of this helper's tools: it only reads. Report what should change instead.`, error: true };
+    }
+    if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
     // Read of a web address, with WebFetch on: read as the page it is (asked about as WebFetch is).
     if (call.name === 'Read' && typeof args.path === 'string' && /^https?:\/\//i.test(args.path.trim()) && this.webTools()?.fetch) return this.runTool({ id, name: 'WebFetch', args: JSON.stringify({ url: args.path.trim(), ...(args.find ? { find: args.find } : {}), ...(args.offset ? { offset: args.offset } : {}) }) }, signal);
@@ -1829,6 +1853,44 @@ export class Agent extends EventEmitter {
       images.push(...(out.images ?? []));
     }
     return { text: parts.join('\n\n'), error: failed === paths.length, readKeys, ...(images.length ? { images } : {}) };
+  }
+
+  // A helper (Agent): a second agent with a fresh conversation, the same model, folder, mode,
+  // permissions and web, on the side slot when the server has one (the conversation's place
+  // on the main slot stays), and no Agent of its own. Its steps show on one line as it goes;
+  // only its report comes back. esc stops it with the rest.
+  async runHelper(id, args, shown, signal) {
+    const kind = args.kind === 'general' ? 'general' : 'explore';
+    const t0 = Date.now();
+    const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
+    const helper = new Agent({
+      url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind), thinking: this.thinking, effort: this.effort, ctx: this.ctx,
+      mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash,
+      way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, permissions: this.permissions, waitForServer: this.waitForServer,
+      // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
+      ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
+    });
+    Object.assign(helper, { isHelper: true, toolFilter: kind === 'explore' ? EXPLORE_TOOLS : null, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
+    if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn) };
+    const steps = [];
+    let report = '';
+    const say = (last) => this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` });
+    helper.on('tool', (ev) => { steps.push(`${ev.error ? '✗' : '⏺'} ${ev.label}(${String(ev.arg ?? '').slice(0, 80)})`); say(`${ev.label}(${String(ev.arg ?? '').slice(0, 50)})`); });
+    helper.on('assistant', (ev) => { if (ev.final) report = String(ev.text ?? ''); });
+    say('');
+    let reason;
+    try { reason = await helper.send(args.prompt, { signal }); } catch (e) { reason = 'error'; report ||= `It stopped: ${e.message}`; }
+    const secs = (Date.now() - t0) / 1000;
+    this.stats.requests += helper.stats.requests;
+    const done = reason === 'done' || reason === 'answered';
+    const body = report.trim() || '(it ended without a report)';
+    const view = { kind: 'agent', steps: steps.length, secs, reason, content: `${steps.join('\n')}${steps.length ? '\n\n' : ''}${body}` };
+    if (signal?.aborted) { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'interrupted' }, error: true }); return { text: 'Interrupted.', stop: 'interrupted' }; }
+    // You said no to one of its changes (with nothing more to say): the turn ends there, as it does for the conversation's own.
+    if (reason === 'declined') { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'you said no' }, error: true }); return { text: 'The user said no to a change the helper wanted to make. Wait for their next message.', error: true, stop: 'declined' }; }
+    this.emit('tool', { id, name: 'Agent', ...shown, view, error: !done && !report.trim() });
+    return { text: `The ${kind} helper's report (${steps.length} step${steps.length === 1 ? '' : 's'}, ${Math.round(secs)} s${done ? '' : `, it stopped: ${reason}`}):\n${body}`, error: !done && !report.trim() };
   }
 
   // The model's own tools (tools.mjs MODEL_TOOL_DEFS): what the app did for it before its

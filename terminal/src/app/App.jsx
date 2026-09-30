@@ -333,6 +333,8 @@ export function App({ opts, win, onRestart }) {
       way: limitsRef.current.way, hooks: hooksFrom(settings),
       // The web (/web): a search service and reading pages, each asked about first.
       web: webSettings(settings.web),
+      // Helpers the model can hand work to (the Agent tool), unless "subagents": false.
+      subagents: settings.subagents !== false,
       // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
       helpers, embedder, ranker: embedder, rewind: rewindRef.current,
       // The design examples and the layout check (/design), as saved.

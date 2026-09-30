@@ -315,7 +315,7 @@ if (opts.print) {
       // Who decides (--way, else AGENTIC_WAY, else /effort's row in limits) and the hooks /hooks left on.
       way: opts.way, hooks: hooksFrom(settings),
       // The web as /web left it: a search service and reading pages (each asks, or --yes allows).
-      web: webSettings(settings.web),
+      web: webSettings(settings.web), subagents: settings.subagents !== false,
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
       design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.

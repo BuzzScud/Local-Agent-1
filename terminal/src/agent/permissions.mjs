@@ -332,6 +332,8 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
   // and two run a focused path, whose every change asks as your mode says (so plan mode refuses them).
   if (name === 'Map' || name === 'CodeSearch') return { decision: 'allow', why: 'it only reads' };
+  // A helper: the call itself changes nothing; each thing it does is asked about as your mode says.
+  if (name === 'Agent') return { decision: 'allow', why: args?.kind === 'general' ? 'each change the helper makes asks as your mode says' : 'the helper only reads' };
   if (name === 'Remember') return { decision: 'allow', why: 'it writes to the memory, not to the project' };
   if (name === 'Rename' || name === 'TestFirst') return mode === 'plan' ? { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' } : { decision: 'allow', why: 'each change it makes asks as your mode says' };
   // The web: a search sends its words to the search service, a page is read from a site. Each asks

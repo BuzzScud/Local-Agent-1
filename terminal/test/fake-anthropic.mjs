@@ -2,7 +2,7 @@
 // Claude API remote without a key or a bill: GET /v1/models, and POST
 // /v1/messages streaming the same events the real one does (message_start,
 // content blocks for thinking, text and tool_use, message_delta, message_stop).
-// Each reply: { thinking?, search?: { query, results: [{ url, title }] }, fetch?: { url, text }, text?, tool?: { name, args },
+// Each reply: { delayMs?, tools?: [{ name, args }, …], thinking?, search?: { query, results: [{ url, title }] }, fetch?: { url, text }, text?, tool?: { name, args },
 // stop? ('refusal', 'pause_turn'), error?: { status, type, message } }. search and fetch: Anthropic's own web tools, done on its side.
 // seen: every request's path, its key, beta and version headers, and its body.
 import { createServer } from 'node:http';
@@ -20,7 +20,9 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     let raw = '';
     for await (const c of req) raw += c;
     const body = raw ? JSON.parse(raw) : null;
-    seen.push({ path: req.url, method: req.method, key: req.headers['x-api-key'] ?? null, beta: req.headers['anthropic-beta'] ?? null, version: req.headers['anthropic-version'] ?? null, body });
+    const entry = { path: req.url, method: req.method, key: req.headers['x-api-key'] ?? null, beta: req.headers['anthropic-beta'] ?? null, version: req.headers['anthropic-version'] ?? null, body, at: Date.now(), end: null };
+    seen.push(entry);
+    res.on('finish', () => { entry.end = Date.now(); });
     const json = (status, obj) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
     const error = (status, type, message) => json(status, { type: 'error', error: { type, message } });
     if (req.headers['x-api-key'] !== key) return error(401, 'authentication_error', 'invalid x-api-key');
@@ -40,8 +42,10 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
       blocks.push({ type: 'web_fetch_tool_result', tool_use_id: `srvtoolu_f${n}`, content: { type: 'web_fetch_result', url: reply.fetch.url, content: { type: 'document', source: { type: 'text', media_type: 'text/plain', data: reply.fetch.text } }, retrieved_at: '2026-09-30T00:00:00Z' } });
     }
     if (reply.text) blocks.push({ type: 'text', text: reply.text });
-    if (reply.tool) blocks.push({ type: 'tool_use', id: `toolu_${n}`, name: reply.tool.name, input: reply.tool.args });
-    const stop = reply.stop ?? (reply.tool ? 'tool_use' : 'end_turn');
+    for (const [i, t] of [...(reply.tool ? [reply.tool] : []), ...(reply.tools ?? [])].entries()) blocks.push({ type: 'tool_use', id: `toolu_${n}${i ? `_${i}` : ''}`, name: t.name, input: t.args });
+    const stop = reply.stop ?? (reply.tool || reply.tools ? 'tool_use' : 'end_turn');
+    // delayMs: the reply is held that long first (a test sees two requests at once).
+    if (reply.delayMs) await new Promise((r) => setTimeout(r, reply.delayMs));
     const usage = { input_tokens: 1200 + n, output_tokens: 30, cache_read_input_tokens: 900, cache_creation_input_tokens: 0 };
     if (!body.stream) return json(200, { id, type: 'message', role: 'assistant', model: body.model, content: blocks, stop_reason: stop, stop_sequence: null, usage });
     res.writeHead(200, { 'content-type': 'text/event-stream' });
