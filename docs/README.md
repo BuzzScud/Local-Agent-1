@@ -8,7 +8,10 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 308 KB | 2026-09-30 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 313 KB | 2026-09-30 |
+| [tests/agentic-coder-web-check-gemma-2026-09-30-1753.html](tests/agentic-coder-web-check-gemma-2026-09-30-1753.html) | page | Web check · Gemma 4 12B QAT | 10 KB | 2026-09-30 |
+| [tests/agentic-coder-web-check-qwen-2026-09-30-1751.html](tests/agentic-coder-web-check-qwen-2026-09-30-1751.html) | page | Web check · Qwen3.5 9B | 10 KB | 2026-09-30 |
+| [older versions/agentic-coder-web-check-qwen-2026-09-30-1747.html](older%20versions/agentic-coder-web-check-qwen-2026-09-30-1747.html) | page | Web check · Qwen3.5 9B | 10 KB | 2026-09-30 |
 | [tests/agentic-coder-picture-tokens-gemma-2026-09-30-1722.html](tests/agentic-coder-picture-tokens-gemma-2026-09-30-1722.html) | page | Picture tokens · Gemma 4 12B QAT | 8 KB | 2026-09-30 |
 | [tests/agentic-coder-vision-check-gemma-2026-09-30-1718.html](tests/agentic-coder-vision-check-gemma-2026-09-30-1718.html) | page | Vision check · Gemma 4 12B QAT | 11 KB | 2026-09-30 |
 | [tests/agentic-coder-vision-check-qwen-2026-09-30-1712.html](tests/agentic-coder-vision-check-qwen-2026-09-30-1712.html) | page | Vision check · Qwen3.5 9B | 11 KB | 2026-09-30 |
