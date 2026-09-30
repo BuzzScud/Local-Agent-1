@@ -13,7 +13,8 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { HOME, ModelServer, LINGER_SECS, stopIdleServers, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord } from '../../../models/index.mjs';
+import { HOME, ModelServer, LINGER_SECS, stopIdleServers, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote } from '../../../models/index.mjs';
+import { loadSettings } from './store.mjs';
 import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
 import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
 
@@ -142,7 +143,9 @@ export class AutoSave {
       const file = join(JOBS(), `${Date.now()}-${process.pid}.json`);
       // ask: with the window gone there is no one to ask, so what it would
       // save is kept for the next start (askPending).
-      writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: a.url, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
+      // On a remote (/remote) the job connects again itself (its tunnel ends with this window); its key is never written here.
+      const remote = Boolean(a.model?.remote);
+      writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: remote ? null : a.url, remote, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
       const [cmd, ...args] = self();
       spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
       return true;
@@ -155,10 +158,16 @@ export class AutoSave {
 // next start to show, and never prints: nobody is watching.
 export async function runJob(file) {
   const job = JSON.parse(readFileSync(file, 'utf8'));
-  const model = modelById(job.model) ?? MODELS[DEFAULT_MODEL];
+  let model = modelById(job.model) ?? MODELS[DEFAULT_MODEL];
   let server = null;
   let url = job.url;
-  try {
+  let remote = null;
+  if (job.remote) {
+    try { remote = await connectRemote(loadSettings(job.cwd).remote ?? {}); } catch { rmSync(file, { force: true }); return null; }
+    url = remote.url;
+    model = remote.model;
+    if (remote.slots < 2) job.slot = null;
+  } else try {
     // The model this window left loaded: using it keeps it from being stopped.
     const s = new ModelServer(model);
     const st = await s.start({ ctx: job.ctx ?? 16384, lingerSecs: LINGER_SECS });
@@ -175,6 +184,7 @@ export async function runJob(file) {
     rmSync(file, { force: true });
     await embedder?.stop({ keep: true }).catch(() => {});
     await server?.stop({ keep: true }).catch(() => {});
+    remote?.stop();
     if (job.stopAfter) { try { stopIdleServers(); } catch { /* it stops on its own later */ } }
   }
   return out;

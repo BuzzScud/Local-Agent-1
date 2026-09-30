@@ -15,7 +15,8 @@ import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mj
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE } from '../../../models/index.mjs';
+import { REMOTE_ROWS, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, toProfile, connectionChanged, formWarning, kindWord } from './remote-form.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -110,9 +111,12 @@ export function App({ opts, win, onRestart }) {
   // Where Agentic Coder works; it can move into a project named from the home folder.
   const [cwd, setCwd] = useState(opts.cwd);
   const settings = useRef(loadSettings(opts.cwd)).current;
+  // /remote on (and no --url or --local): the model on another machine. Until
+  // it answers, `model` is a stand-in named after it.
+  const remoteAtStart = !opts.url && !opts.local && Boolean(settings.remote?.use);
   // The model can change while the window is open (/model switches to the
   // edited copy and back), so it is state; the last pick is kept in settings.
-  const [model, setModel] = useState(() => modelById(opts.modelId) ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL]);
+  const [model, setModel] = useState(() => (remoteAtStart ? remoteModel(settings.remote) : modelById(opts.modelId) ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL]));
   // The limits /effort moves (limits.mjs), kept in settings.json. `model`
   // stays the registry's; the agent and the server get it with the thinking cap.
   const limitsRef = useRef(null);
@@ -240,6 +244,11 @@ export function App({ opts, win, onRestart }) {
   }, []);
   const serverRef = useRef(null);
   const restartRef = useRef(null);
+  // The remote in use (/remote): its connection ({ url, stop, … } from
+  // connectRemote), why it last failed, and the model on this Mac to go back to.
+  const remoteRef = useRef({ conn: null, why: null, on: remoteAtStart });
+  const localModelRef = useRef(null);
+  const remoteFnRef = useRef({});
   const abortRef = useRef(null);
   const historyRef = useRef(loadHistory(cwd));
   const histIdx = useRef(null);
@@ -299,7 +308,8 @@ export function App({ opts, win, onRestart }) {
         const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes, protect: saved?.protect }) : null;
         setPerm({ req, selected: 0, options: permissionOptions(req, offer?.rule ?? null, saved?.broken ? null : offer?.rule ?? null), resolve, offer });
       }),
-      waitForServer: async () => { if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },
+      // A remote that stopped answering is connected again (a new tunnel, say); if it cannot be, the reply stops and you are asked.
+      waitForServer: async () => { if (remoteRef.current.on) await remoteFnRef.current.reconnect(); else if (restartRef.current) await restartRef.current; else if (serverRef.current) await serverRef.current.restart(); },
       // A conversation that starts over from its notes: the instructions come
       // back from their saved reading (a server Agentic Coder started itself).
       rewarm: async (signal) => {
@@ -359,6 +369,15 @@ export function App({ opts, win, onRestart }) {
       return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else ask first' }] };
     }
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
+    if (id === 'remote-down') {
+      const local = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
+      const why = remoteRef.current.why ?? 'it did not answer';
+      return { title: `The remote model is not answering · ${remoteLabel(settings.remote)}`, blurb: `${why[0].toUpperCase()}${why.slice(1)}. Nothing loads on this Mac unless you pick it.`, what: 'the remote', current: null, options: [
+        { id: 'retry', label: 'Try again', note: 'connect to it again' },
+        { id: 'local', label: `Use ${local.name} on this Mac for now`, note: `loads it here (about ${Math.round((local.bytes ?? 7e9) / 1e9)} GB); the remote stays on for next time` },
+        { id: 'edit', label: 'Open /remote', note: 'change the address, the key or how it connects' },
+      ] };
+    }
     if (id === 'mouse') return { title: 'Mouse in the prompt box', blurb: 'Drag over the text you are typing to highlight it: copied at once, delete removes it, typing replaces it. While the box has text the mouse is Agentic Coder’s; hold fn for Terminal’s own highlight. Kept for next time.', what: 'the mouse', current: S.current.mouse ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'click, drag to highlight, double click for a word' }, { id: 'off', label: 'Off', note: 'the mouse stays Terminal’s; option+click still works' }] };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
   };
@@ -436,6 +455,119 @@ export function App({ opts, win, onRestart }) {
     setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
+
+  // ---- /remote: the model on another machine (remote-form.mjs, models/runtime/remote.mjs) ----
+  // To the remote: connect first (the tunnel when it goes by SSH, the key from
+  // the Keychain, the check), and only then let the model on this Mac go.
+  // One that does not answer changes nothing when this Mac's model is running;
+  // at the start (none running) it asks what to do (remote-down).
+  const useRemote = async (r, { atStart = false } = {}) => {
+    if (!atStart && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return false; }
+    const before = { model, server: serverRef.current };
+    if (!model.remote) localModelRef.current = model;
+    remoteRef.current.conn?.stop();
+    remoteRef.current.conn = null;
+    remoteRef.current.on = true;
+    setModel(remoteModel(r));
+    setStarting(true); setStartPhase('connecting');
+    let conn;
+    try { conn = await connectRemote(r); } catch (e) {
+      remoteRef.current.why = e.message;
+      setStarting(false);
+      if (before.server && !before.model.remote) {
+        remoteRef.current.on = false;
+        setModel(before.model);
+        // Kept, but off: the next start does not try a remote that just failed.
+        if (settings.remote?.use) settings.remote = saveSettings({ remote: { ...settings.remote, use: false } }).remote;
+        push({ type: 'note', text: `The remote at ${remoteLabel(r)} did not answer, so nothing changed: ${e.message}. Still on ${before.model.name}, on this Mac; the remote is saved but off (/remote to fix it and try again).`, tone: 'error' });
+        return false;
+      }
+      push({ type: 'note', text: `The remote model at ${remoteLabel(r)} did not answer: ${e.message}.`, tone: 'error' });
+      openChoice('remote-down');
+      return false;
+    }
+    remoteRef.current.conn = conn;
+    remoteRef.current.why = null;
+    serverRef.current = null;
+    await before.server?.stop().catch(() => {});
+    setRamGb(null);
+    memoryNote.current = null;
+    const m = conn.model;
+    setModel(m);
+    agent.url = conn.url;
+    agent.model = modelWithLimits(m, limitsRef.current);
+    agent.ctx = conn.ctx; setCtx(conn.ctx);
+    agent.slots = conn.slots > 1 ? { main: 0, side: 1 } : null;
+    setStartPhase('reading');
+    try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: setStartPhase }); } catch {}
+    setStarting(false);
+    push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · ${Math.round(conn.ctx / 1024)}k context. Your prompts, your code and the files it reads now go to ${remoteLabel(r)}; /remote switches back.`, tone: 'dim' });
+    const risk = remoteRisk(r);
+    if (risk) push({ type: 'note', text: `⚠ ${risk}.`, tone: 'warn' });
+    const q = queuedRef.current;
+    if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => remoteFnRef.current.send?.(q), 50); }
+    // At the start, as after a start here: the last window's second look is asked about, then (first use here) what is written is read.
+    else if (atStart) setTimeout(() => { autoRef.current.atStart(); }, 3000).unref?.();
+    return true;
+  };
+  // Back to the model on this Mac: the tunnel closes, the model loads here (switchModel).
+  const useLocal = async ({ note } = {}) => {
+    if (S.current.live !== IDLE || agent.busy) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+    remoteRef.current.on = false;
+    remoteRef.current.conn?.stop();
+    remoteRef.current.conn = null;
+    const back = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
+    localModelRef.current = null;
+    agent.slots = null;
+    await switchModel(back, () => note ?? `Back on ${back.name}, on this Mac.`);
+  };
+  // The remote stopped answering in the middle of a reply: connect again once
+  // (a new tunnel, say). If it cannot be reached, the reply stops and you are asked.
+  const reconnect = async () => {
+    remoteRef.current.conn?.stop();
+    remoteRef.current.conn = null;
+    try {
+      const conn = await connectRemote(settings.remote ?? DEFAULT_REMOTE);
+      remoteRef.current.conn = conn;
+      agent.url = conn.url;
+      push({ type: 'note', text: `Connected to the remote again (${remoteLabel(settings.remote)}).`, tone: 'dim' });
+    } catch (e) {
+      remoteRef.current.why = e.message;
+      setTimeout(() => openChoice('remote-down'), 0);
+      throw new Error(`the remote model at ${remoteLabel(settings.remote)} stopped answering: ${e.message}`);
+    }
+  };
+  // The form opens on what is in use in this window, and the rest as saved.
+  const openRemoteForm = () => setPicker(openForm({ ...DEFAULT_REMOTE, ...(settings.remote ?? {}), use: Boolean(remoteRef.current.on) }));
+  // Test: the rows as they are now (the tunnel opened and closed for it);
+  // its findings land on the Test row, unless the form moved on meanwhile.
+  const runRemoteTest = (pk) => {
+    const id = (remoteRef.current.tests = (remoteRef.current.tests ?? 0) + 1);
+    setPicker({ ...pk, test: { running: true, id }, error: null });
+    testForm(pk).then((res) => setPicker((p) => {
+      if (p?.kind !== 'remote' || p.test?.id !== id) return p;
+      // One model on an OpenAI-compatible server, and none named: that one.
+      const values = !p.values.model && p.values.kind === 'openai' && res.models?.length === 1 ? { ...p.values, model: res.models[0] } : p.values;
+      return { ...p, values, test: { ...res, id } };
+    }));
+  };
+  // Save: the key to the Keychain, the rest to settings.json; then switch when
+  // Use changed (or the remote in use now points somewhere else).
+  const saveRemote = (pk) => {
+    const r = toProfile(pk);
+    if (formWarning(pk)?.tone === 'error') { setPicker({ ...pk, error: 'Nothing was saved: fix the line above first.' }); return; }
+    const keyChanged = pk.key !== null;
+    const switching = r.use !== Boolean(remoteRef.current.on) || (r.use && connectionChanged(settings.remote, r, keyChanged));
+    if (switching && (S.current.live !== IDLE || agent.busy || S.current.starting)) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting). Nothing was saved: save again when it is done.' }); return; }
+    if (keyChanged) {
+      try { if (pk.key) saveKey(pk.key); else removeKey(); } catch (e) { setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return; }
+    }
+    setPicker(null);
+    settings.remote = saveSettings({ remote: r }).remote;
+    if (switching) { if (r.use) useRemote(r); else useLocal(); return; }
+    push({ type: 'note', text: `Remote saved${r.address ? ` (${remoteLabel(r)} · ${kindWord(r.kind)}${r.key ? ' · with a key' : ''})` : ''}. ${r.use ? 'In use now.' : 'This window stays on this Mac; Use: Remote switches.'}`, tone: 'dim' });
+  };
+  remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm };
   // /settings: the commands kept out of the / menu, each row with what it
   // holds right now (none reads blank); enter runs the row's command.
   const openSettings = () => {
@@ -562,6 +694,12 @@ export function App({ opts, win, onRestart }) {
   });
   const applyChoice = (id, value) => {
     if (id === 'memory-save') { const p = pendingSaveRef.current; pendingSaveRef.current = null; p?.resolve(value === 'save'); return; }
+    if (id === 'remote-down') {
+      if (value === 'retry') useRemote(settings.remote);
+      else if (value === 'local') useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.' });
+      else openRemoteForm();
+      return;
+    }
     if (id === 'mode') {
       const o = MODE_OPTIONS.find((x) => x.id === value); if (!o) return;
       setMode(o.id);
@@ -595,7 +733,7 @@ export function App({ opts, win, onRestart }) {
     const changes = limitChanges(limitsRef.current, next);
     if (!effortChanged && !changes.length) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
     const restart = changes.some((c) => c.restart);
-    if (restart && !opts.url) {
+    if (restart && !opts.url && !model.remote) {
       // A restart needs a quiet model: no reply running, and no start still going
       // (a prompt queued meanwhile would be sent to the server just stopped).
       const why = S.current.starting ? 'still starting. Wait until it is ready' : S.current.live !== IDLE || agent.busy ? 'in the middle of a reply. Let it finish (or press esc)' : null;
@@ -611,6 +749,7 @@ export function App({ opts, win, onRestart }) {
     const list = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
     if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.`, tone: 'dim' }); return; }
     if (opts.url) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model server was given with --url, so restart it yourself for the context or thinking cap to take effect.`, tone: 'warn' }); return; }
+    if (model.remote) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model runs on the remote: its context is set there (coding serve --ctx, or /remote's Context row), and the new cap is asked for with each reply.`, tone: 'dim' }); return; }
     push({ type: 'note', text: `Saved: ${list}. Restarting ${model.name} for it (about a minute); the conversation stays.`, tone: 'dim' });
     switchModel(model, (ctx) => `${model.name} restarted: context ${Math.round(ctx / 1024)}k · thinking cap ${showLimit('thinking', next.thinking)}.`);
   };
@@ -766,10 +905,13 @@ export function App({ opts, win, onRestart }) {
   const battleRef = useRef({ released: false });
   battleRef.current.switchModel = switchModel;
   battleRef.current.sendPrompt = sendPrompt;
+  remoteFnRef.current.send = sendPrompt;
   battleRef.current.model = model;
   useEffect(() => {
     if (opts.url) return undefined;
     const tick = setInterval(async () => {
+      // On a remote, nothing here holds the memory an Arena run needs.
+      if (remoteRef.current.on) return;
       const b = battleRef.current;
       const h = battleHold();
       if (b.released) {
@@ -806,6 +948,8 @@ export function App({ opts, win, onRestart }) {
         setTimeout(() => { if (alive) autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();
         return;
       }
+      // /remote on: the model on another machine; nothing loads here.
+      if (remoteAtStart) { await remoteFnRef.current.useRemote(settings.remote, { atStart: true }); return; }
       await waitForBattle(() => alive);
       if (!alive) return;
       // --ctx wins; then the context /effort saved; then what fits (chooseContext).
@@ -933,6 +1077,7 @@ export function App({ opts, win, onRestart }) {
     await agent.embedder?.stop({ keep: true }).catch(() => {});
     await agent.reranker?.stop({ keep: true }).catch(() => {});
     await serverRef.current?.stop({ keep: handed });
+    remoteRef.current.conn?.stop();
     exit();
   }, [exit, saveNow, agent]);
 
@@ -1014,6 +1159,19 @@ export function App({ opts, win, onRestart }) {
 
   const doctor = useCallback(() => {
     const ok = (b) => (b ? '✓' : '✗');
+    // On a remote: where it is, how it connects, how it answered; this Mac's model files do not matter.
+    if (model.remote) {
+      const c = remoteRef.current.conn;
+      const r = settings.remote ?? DEFAULT_REMOTE;
+      push({ type: 'panel', title: 'Doctor · on a remote model', pad: 22, rows: [
+        [`${ok(Boolean(c))} remote`, c ? `${remoteLabel(r)} · ${kindWord(r.kind)} · ${r.connect === 'ssh' ? `SSH tunnel on port ${c.tunnel?.port}` : r.connect} · answered in ${c.info.ms ?? '?'} ms` : `not connected: ${remoteRef.current.why ?? 'not started'}`],
+        [`${ok(!r.key || Boolean(c))} API key`, r.key ? `${keyStore() === 'keychain' ? 'in the Keychain' : 'in the key file'} (••••${r.keyEnd ?? ''})` : 'none'],
+        [`${ok(Boolean(c))} model`, c ? `${c.info.model ?? model.name} · context ${Math.round(agent.ctx / 1024)}k${c.slots > 1 ? ` · ${c.slots} slots` : ''}` : '—'],
+        [`${ok(!remoteRisk(r))} privacy`, remoteRisk(r) ?? (r.connect === 'ssh' ? 'through ssh' : r.connect === 'https' ? 'https' : 'http on a private network')],
+        [`${ok(true)} terminal`, `${process.env.TERM_PROGRAM ?? 'unknown'} · ${process.env.COLORTERM === 'truecolor' ? 'true colour' : '256 colours'} · ${columns}×${rows}`],
+      ] });
+      return;
+    }
     const bin = serverBinOf(model);
     const ver = spawnSync(bin, ['--version'], { encoding: 'utf8' });
     const file = modelPath(model);
@@ -1304,12 +1462,35 @@ export function App({ opts, win, onRestart }) {
         setPicker({ title: 'Resume a conversation', index: 0, items: list.map((s) => ({ key: s.id, label: s.title, desc: `${new Date(s.updated).toLocaleString()} · ${s.turns} prompt${s.turns === 1 ? '' : 's'}` })) });
         break;
       }
+      case 'remote': {
+        // /remote alone: the form. on / off: switch without it.
+        const w = arg.toLowerCase();
+        const r = settings.remote ?? DEFAULT_REMOTE;
+        if (w === 'off') {
+          settings.remote = saveSettings({ remote: { ...r, use: false } }).remote;
+          if (remoteRef.current.on) remoteFnRef.current.useLocal();
+          else push({ type: 'note', text: 'Already on the model on this Mac. The remote stays off for next time too.', tone: 'dim' });
+          break;
+        }
+        if (w === 'on') {
+          if (!r.address) { push({ type: 'note', text: 'No remote is set up yet: fill in the form, then Save.', tone: 'dim' }); remoteFnRef.current.openForm(); break; }
+          settings.remote = saveSettings({ remote: { ...r, use: true } }).remote;
+          if (!remoteRef.current.conn) remoteFnRef.current.useRemote(settings.remote);
+          else push({ type: 'note', text: `Already on the remote (${remoteLabel(r)}).`, tone: 'dim' });
+          break;
+        }
+        if (w) { push({ type: 'note', text: '/remote alone opens the form; /remote on and /remote off switch.', tone: 'dim' }); break; }
+        remoteFnRef.current.openForm();
+        break;
+      }
       case 'model': {
         // The model list and the thinking level in one picker. Each model's
         // edited copy, when one is saved, is one more row after the models.
         const levels = model.thinkingLevels ?? [];
         const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
-        const models = [...Object.values(MODELS), ...editedModels()];
+        // A remote set up in /remote is one more row.
+        const r = settings.remote;
+        const models = [...Object.values(MODELS), ...editedModels(), ...(r?.address ? [{ id: 'remote', remoteRow: true, name: `Remote · ${remoteLabel(r)}`, kind: r.kind }] : [])];
         setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => m.id === model.id)), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
         break;
       }
@@ -1324,7 +1505,7 @@ export function App({ opts, win, onRestart }) {
           ['search', `embedder ${showLimit('embedder', limitsRef.current.embedder)} · retriever ${showLimit('retriever', limitsRef.current.retriever).toLowerCase()} · reranker ${showLimit('reranker', limitsRef.current.reranker)}${agent.reranker?.last ? ` (last ${(agent.reranker.last.ms / 1000).toFixed(1)} s for ${agent.reranker.last.pieces})` : ''} · /effort moves them`],
           ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /effort moves them`],
           ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
-          ['server', serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
+          ['server', model.remote ? `remote ${remoteLabel(settings.remote)} · ${kindWord(settings.remote?.kind)}${remoteRef.current.conn ? '' : ' · not connected'}` : serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
         ] });
         break;
       case 'doctor':
@@ -1464,6 +1645,14 @@ export function App({ opts, win, onRestart }) {
 
   usePaste((text) => {
     setPopup(null); // a paste closes the /help box, like any key
+    // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
+    const rp = S.current.picker;
+    if (rp?.kind === 'remote') {
+      const row = REMOTE_ROWS[rp.index];
+      if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
+      else if (row.type === 'text' || row.type === 'secret') setPicker({ ...startEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
+      return;
+    }
     if (S.current.perm || S.current.picker || (S.current.btw && !S.current.answerWait)) return;
     setInput((s) => withUndo(s, insertText(s, text.replace(/\r\n?/g, '\n'))));
   });
@@ -1668,12 +1857,49 @@ export function App({ opts, win, onRestart }) {
         setThinking(on, on ? lv.id : undefined);
         setPicker(null);
         const picked = pk.models[pk.index];
+        // The remote's row: /remote's Use turns to Remote. A model here while on the remote: back to this Mac.
+        if (picked.remoteRow) {
+          if (!model.remote || !remoteRef.current.conn) { settings.remote = saveSettings({ remote: { ...settings.remote, use: true } }).remote; useRemote(settings.remote); }
+          else push({ type: 'note', text: `${model.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
+          return;
+        }
+        if (model.remote) {
+          localModelRef.current = picked;
+          settings.remote = saveSettings({ model: picked.id, remote: { ...(settings.remote ?? DEFAULT_REMOTE), use: false } }).remote;
+          useLocal({ note: `Now on ${picked.name}, on this Mac. /remote turns the remote back on.` });
+          return;
+        }
         // A different model — or the same edited copy with newer edits saved
         // since — restarts the model server in place; the window stays.
         const changed = picked.id !== model.id || (picked.edited && model.edited && picked.edited.saved !== model.edited.saved);
         if (changed) { saveSettings({ model: picked.id }); switchModel(picked); }
         else push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
       }
+      return;
+    }
+    // /remote: ↑↓ a row, ←→ a choice row, enter (or a letter) edits a text row,
+    // runs Test, or saves; while a row is being edited, its keys only.
+    if (cur.picker?.kind === 'remote') {
+      const pk = cur.picker;
+      if (pk.editing) {
+        if (key.return) setPicker(commitEdit(pk));
+        else if (key.escape) setPicker({ ...pk, editing: null });
+        else if (key.ctrl && ch === 'c') { setPicker(null); push({ type: 'note', text: 'Remote kept as it was.', tone: 'dim' }); }
+        else setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
+        return;
+      }
+      const n = REMOTE_ROWS.length;
+      const row = REMOTE_ROWS[pk.index];
+      const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab && ch >= ' ';
+      if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
+      else if (key.leftArrow || key.rightArrow) setPicker(moveRow(pk, row.id, key.rightArrow ? 1 : -1));
+      else if (key.return && (row.type === 'text' || row.type === 'secret')) setPicker(startEdit(pk, row.id));
+      else if (key.return && row.id === 'test') runRemoteTest(pk);
+      else if (key.return) saveRemote(pk);
+      // Typing on a text row starts it over with what you type (enter keeps the old text to change it).
+      else if (typed && (row.type === 'text' || row.type === 'secret')) setPicker({ ...startEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
+      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Remote kept as it was.', tone: 'dim' }); }
       return;
     }
     // /effort: ↑↓ a row (Effort first, then the limits), ←→ lower / raise it, enter saves all of it (on the last row: everything back to its default), esc keeps them
@@ -1884,7 +2110,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle, onRemote: Boolean(model.remote),
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

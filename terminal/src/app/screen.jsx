@@ -13,6 +13,7 @@ import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
+import { REMOTE_ROWS, showValue, rowNote, formWarning, kindWord } from './remote-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
 import { StartPage, READING_TIP } from './start.jsx';
@@ -529,7 +530,7 @@ function PermissionPrompt({ app }) {
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
-  const SHOW = 15; // the whole / menu (the rest is in /settings)
+  const SHOW = 16; // the whole / menu (the rest is in /settings)
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
   return (
@@ -655,6 +656,7 @@ const START_PHASE = {
   reading: 'reading its instructions, about 30 s the first time ',
   restoring: 'restoring its instructions from last time ',
   waiting: 'waiting for memory ',
+  connecting: 'connecting to it ',
 };
 
 // /mode and /meters alone: their choices as a menu, like Claude Code's.
@@ -845,6 +847,62 @@ function LimitsPicker({ app }) {
   );
 }
 
+// /remote: the model on another machine in one form (remote-form.mjs). A
+// choice row shows its value between ◀ ▶; a text row its value, or what is
+// being typed with the cursor (the API key as dots); • marks a change not
+// saved yet. The last Test's findings sit on the Test row.
+function RemotePicker({ app }) {
+  const pk = app.picker;
+  const lw = Math.max(...REMOTE_ROWS.map((r) => r.label.length)) + 2;
+  const vw = 22;
+  const warn = formWarning(pk);
+  const typing = (e) => {
+    const shown = e.id === 'key' ? '•'.repeat(e.value.length) : e.value;
+    const room = Math.max(8, app.width - lw - 12);
+    const from = Math.max(0, e.cursor - room + 1);
+    const before = shown.slice(from, e.cursor), at = shown[e.cursor] ?? ' ', after = shown.slice(e.cursor + 1, from + room);
+    return <><Text>{from ? '…' : ''}{before}</Text><Text inverse>{at}</Text><Text>{after}</Text>{e.id === 'key' ? <Text color={C.dim}>  {e.value.length} characters</Text> : null}</>;
+  };
+  const changed = (id) => (id === 'key' ? pk.key !== null : id in pk.values && pk.values[id] !== pk.saved[id]);
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Remote model</Text>
+      <Text color={C.dim} wrap="truncate-end">Where the model runs. Test checks the rows as they are, before anything is saved. Kept for next time.</Text>
+      {REMOTE_ROWS.map((r, i) => {
+        const on = i === pk.index;
+        const e = pk.editing?.id === r.id ? pk.editing : null;
+        const choice = r.type === 'choice' || (r.id === 'model' && pk.test?.models?.length > 1);
+        const unsaved = changed(r.id);
+        const v = showValue(pk, r.id);
+        const note = rowNote(pk, r.id);
+        const tone = r.id === 'test' && pk.test && !pk.test.running ? (pk.test.ok ? C.ok : C.bad) : undefined;
+        return (
+          <React.Fragment key={r.id}>
+            {r.id === 'test' ? <Text> </Text> : null}
+            <Text wrap="truncate-end">
+              <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.label.padEnd(lw)}</Text>
+              {e ? typing(e) : (
+                <>
+                  <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '◀ ' : '  '}</Text>
+                  <Text color={tone ?? (unsaved ? C.accent : r.type === 'action' ? C.dim : undefined)} bold={unsaved}>{v.padEnd(vw)}</Text>
+                  <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '▶ ' : '  '}</Text>
+                  <Text color={unsaved ? C.accent : C.faint}>{unsaved ? '•' : ' '}</Text>
+                  <Text color={tone ?? C.dim}>{'  '}{r.id === 'test' && pk.test && !pk.test.running ? '' : note}</Text>
+                </>
+              )}
+            </Text>
+            {/* What the last Test found, on lines of its own (they can be long). */}
+            {r.id === 'test' && pk.test && !pk.test.running ? <Box paddingLeft={lw + 4}><Text color={tone}>{note}</Text></Box> : null}
+          </React.Fragment>
+        );
+      })}
+      {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="truncate-end">{warn.text}</Text> : null}
+      {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
+      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : `↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · ${kindWord(pk.values.kind)}`}</Text>
+    </Box>
+  );
+}
+
 // A box in the middle of the window (/help): a title, a line or two, and the
 // address it opened. Any key closes it.
 function Popup({ app }) {
@@ -876,17 +934,18 @@ function ModelPicker({ app }) {
       <Text> </Text>
       {pk.models.map((m, i) => {
         const on = i === pk.index;
-        // the names in one column, however long the longest is (an edited copy's is its model's plus " · edited")
+        // the names in one column, however long the longest is (an edited copy's is its model's plus " · edited"; a remote's carries its address)
         const nameW = Math.max(16, ...pk.models.map((x) => x.name.length + 2));
-        const descOf = (x) => (x.edited
+        const descOf = (x) => (x.remoteRow ? `${kindWord(x.kind)} · another machine` : x.edited
           ? `${(x.bytes / 1e9).toFixed(1)} GB · ${x.edited.edits.length} edit${x.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(x.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
           : `${(x.bytes / 1e9).toFixed(1)} GB · on this Mac`);
         const desc = descOf(m); const descW = Math.max(24, ...pk.models.map((x) => descOf(x).length + 2));
+        const inUse = m.remoteRow ? app.onRemote : !app.onRemote && m.name === app.modelName;
         return (
-          <Text key={m.id}>
+          <Text key={m.id} wrap="truncate-end">
             <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {m.name.padEnd(nameW)}</Text>
             <Text color={C.dim}>{desc.padEnd(descW)}</Text>
-            {m.name === app.modelName ? <Text color={C.ok}>✔ in use</Text> : null}
+            {inUse ? <Text color={C.ok}>✔ in use</Text> : null}
           </Text>
         );
       })}
@@ -1134,6 +1193,8 @@ export function Screen({ app }) {
         <ChoicePicker app={app} />
       ) : app.picker?.kind === 'limits' ? (
         <LimitsPicker app={app} />
+      ) : app.picker?.kind === 'remote' ? (
+        <RemotePicker app={app} />
       ) : app.picker?.kind === 'settings' ? (
         <SettingsPicker app={app} />
       ) : app.picker?.kind === 'rewind' ? (

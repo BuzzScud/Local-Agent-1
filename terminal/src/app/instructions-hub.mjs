@@ -105,7 +105,10 @@ export const tokenHooks = {
     } catch {}
     if (!server) return null;
     const by = server.model.replace(/\.gguf$/i, '');
-    const post = async (path, body) => (await fetch(`http://127.0.0.1:${server.port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal })).json();
+    // `coding serve` running here asks for its key (models/runtime/serve.mjs).
+    let auth = {};
+    try { if (server.serve?.keyFile) auth = { authorization: `Bearer ${readFileSync(server.serve.keyFile, 'utf8').split('\n')[0].trim()}` }; } catch {}
+    const post = async (path, body) => (await fetch(`http://127.0.0.1:${server.port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...auth }, body: JSON.stringify(body), signal })).json();
     try {
       const counts = await Promise.all(texts.map(async (content) => (await post('/tokenize', { content })).tokens.length));
       let toolsKept = null;

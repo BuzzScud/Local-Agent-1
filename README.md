@@ -3,7 +3,8 @@
 *Formerly Bonsai Code (renamed 28 Sep 2026, when the brain became swappable).*
 
 *Local-Agent-1.* A Claude Code–style coding agent for your terminal, running a local model on
-this Mac. Nothing leaves the machine.
+this Mac. Nothing leaves the machine, unless you point it at a model on another machine of
+yours with [`/remote`](#a-model-on-another-machine).
 
 ## Install
 
@@ -83,6 +84,41 @@ coding "fix the tests"     # start with a first prompt
 coding -c                  # continue the last conversation in this folder
 coding -p "what does x do" # answer once and exit
 ```
+
+### A model on another machine
+
+The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, or
+a hosted API. Type `/remote` in Agentic Coder and fill in one form:
+
+| Row | What goes in it |
+|---|---|
+| Use | This Mac or Remote |
+| Connect | http (a home network or Tailscale), https (across the internet), or an SSH tunnel (Agentic Coder opens `ssh -L` itself, with your ssh keys) |
+| Address | an IP or a name (`192.168.1.40`, `studio.local`), a whole `https://…/v1` address, or for SSH `user@host` or a name from `~/.ssh/config` |
+| Port | the model's port (8080 for `coding serve` and llama-server) |
+| API key | typed or pasted; kept in the macOS Keychain, never in a file of the repo or in settings.json |
+| Server | llama.cpp (`coding serve`, llama-server) or OpenAI-compatible (vLLM, Ollama, LM Studio, OpenRouter, OpenAI) |
+| Model | the name the server wants (Test lists them); blank for llama.cpp |
+| Context | the server's own, or one you pick |
+
+**Test** checks it before anything is saved (reached, key accepted, what it runs, one word back).
+**Save** keeps it and switches. When the remote does not answer, Agentic Coder says why and asks:
+try again, use the model on this Mac for now, or open the form. `/remote on` and `/remote off`
+switch without the form; `/model` lists the remote as one more row; `coding -p` follows it
+(`--local` runs on this Mac instead).
+
+On the other machine, if it is a Mac or a Linux box with this repo installed:
+
+```
+coding serve              # Gemma for other machines, behind a new API key; prints what to type into /remote
+coding serve --local      # this machine only: reach it with Connect = SSH tunnel
+coding serve --https cert.pem key.pem   # https with your certificate (tailscale cert makes one)
+```
+
+With a remote in use, your prompts, your code and the files Agentic Coder reads go to that
+machine. Plain http to an address on the internet sends them unencrypted, so the form warns
+about it; use https or the SSH tunnel there. The memory's small search models still run on
+this Mac.
 
 ## Two parts
 

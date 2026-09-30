@@ -1459,7 +1459,7 @@ export class Agent extends EventEmitter {
         return { ...turn, aborted: true };
       }
       else if (retry && /fetch failed|ECONNREFUSED|socket|terminated/i.test(`${e.message} ${e.cause?.message ?? ''}`) && this.waitForServer) {
-        this.emit('note', { text: 'The model server stopped; restarting it and trying again…', tone: 'warn' });
+        this.emit('note', { text: this.model?.remote ? 'The remote model stopped answering; connecting again…' : 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
       } else if (retry && /context|exceed/i.test(e.message)) {

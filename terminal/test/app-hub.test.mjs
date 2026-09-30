@@ -109,7 +109,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(r.snapshots.pasted).toMatch(/> pasted words/);
   const { COMMANDS } = await import('../src/app/commands.mjs');
   expect(served.data.commands.map((c) => c.name)).toEqual(COMMANDS.map((c) => c.name)); // every command, from the same list
-  expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'meters', 'mouse']);
+  expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'remote', 'meters', 'mouse']);
   expect(served.data.keys.flatMap((g) => g.rows.map(([k]) => k))).toContain('shift + ← →');
   expect(served.data.modes.map((m) => m.id)).toEqual(['ask', 'edits', 'plan']);
   expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'high']); // Gemma: no Medium

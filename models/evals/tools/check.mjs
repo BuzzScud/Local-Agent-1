@@ -84,6 +84,9 @@ export const listensWide = (text) => /['"`]0\.0\.0\.0['"`]|hostname:\s*['"`](?!1
 // page's own script, which is part of the repo (the edit writer and the weights
 // reader check both get it from there).
 export const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
+// Opens a server to the network on purpose: `coding serve`, the model for another
+// machine's /remote, only when it is run, and only behind its API key.
+export const LISTENS_WIDE_OK = ['models/runtime/serve.mjs'];
 export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text);
 
 // ---- which files are the app ---------------------------------------------------------------
@@ -278,13 +281,13 @@ function connections({ files }) {
     const text = readFileSync(join(root, f), 'utf8');
     hostsIn(text).forEach((h) => places.add(h));
     for (const h of newHosts(text)) strange.push(`${f} names ${h}`);
-    if (listensWide(text)) wide.push(`${f} opens a server to the network, not to this Mac only`);
+    if (listensWide(text) && !LISTENS_WIDE_OK.includes(f)) wide.push(`${f} opens a server to the network, not to this Mac only`);
     if (isCode(f) && buildsCode(text) && !BUILDS_CODE_OK.includes(f)) builds.push(`${f} builds code from text while running (eval / new Function)`);
   }
   const bad = [...strange, ...wide, ...builds];
   if (bad.length) return wrong(`${bad.length} thing${bad.length > 1 ? 's' : ''} in how the code connects or runs`, few(bad, 8));
   const out = [...places].filter((h) => !['127.0.0.1', 'localhost', 'host', 'www.w3.org'].includes(h)).sort();
-  return fine(`names only this Mac, ${out.join(', ')}; servers open to this Mac only`);
+  return fine(`names only this Mac, ${out.join(', ')}; servers open to this Mac only (coding serve opens the model on purpose, behind its key)`);
 }
 
 function leftovers({ files }) {

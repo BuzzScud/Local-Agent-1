@@ -6,12 +6,16 @@
 //     that fits the Mac's memory, the saved warm-up, and coding setup;
 //   - the embedder: the small model that compares meanings, for the memory;
 //   - the reranker: the small model that orders what the search found (/effort);
+//   - a remote: a model on another machine (/remote), its key, its SSH tunnel,
+//     and `coding serve`, which opens this Mac's model to another one;
 //   - the Arena: starting its runner, and whether a run there holds the memory;
 //   - the Test builder: making tests of your own (the hub's Test builder, over the Arena).
 export { HOME, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, thinkingLevel, thinkingKwargs, modelPath, draftPath, modelFolder } from './registry.mjs';
 export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
 export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
+export { REMOTE_KINDS, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, GENERIC_REMOTE, remoteModel, connectRemote } from './runtime/remote.mjs';
+export { serve, serveArgs, serveKey, lanAddresses, SERVE_KEY_FILE } from './runtime/serve.mjs';
 export { setup, RUNTIME } from './runtime/setup.mjs';
 export { Embedder, embedderReady } from './runtime/embed.mjs';
 export { Reranker, rerankerReady } from './runtime/rerank.mjs';

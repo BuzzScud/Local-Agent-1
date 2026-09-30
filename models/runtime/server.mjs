@@ -7,6 +7,7 @@ import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath } from '../registry.mjs';
+import { setEndpoint } from './remote.mjs';
 
 // One small file per running server: which process owns it, on which port.
 const REG_DIR = join(HOME, 'servers');
@@ -77,7 +78,8 @@ export function scanServers() {
 // downloads it) and not switched off with AGENTIC_HELPER=off.
 export const hasDraft = (model) => Boolean(model?.draft && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' && existsSync(draftPath(model)));
 
-export function serverArgs(model, { ctx, port, draft = false }) {
+// host: where it listens ('127.0.0.1', this Mac only; `coding serve` opens it wider, serve.mjs).
+export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1' }) {
   // A model that only compares meanings: the engine's embedding mode, one
   // slot, room for a few short texts at once.
   if (model.kind === 'embedding') {
@@ -94,7 +96,7 @@ export function serverArgs(model, { ctx, port, draft = false }) {
   }
   return [
     '-m', modelPath(model),
-    '--host', '127.0.0.1', '--port', String(port),
+    '--host', host, '--port', String(port),
     '-c', String(ctx), '-ngl', '99', '-fa', 'on',
     '-ctk', 'q8_0', '-ctv', 'q8_0',
     '-np', String(model.slots ?? 1), ...(model.slots > 1 ? ['-kvu'] : []), '--no-webui',
@@ -143,24 +145,29 @@ export class ModelServer extends EventEmitter {
     this.restarts = 0;
   }
 
-  get url() { return `http://127.0.0.1:${this.port}`; }
+  get url() { return `${this.https ? 'https' : 'http'}://127.0.0.1:${this.port}`; }
 
   // lingerSecs > 0: the server stays loaded that long after the last window
   // using it is gone (see LINGER_SECS); 0 stops it with this process.
   // helper: false starts without the guessing helper even when its file is
   // there (chooseContext turns it off at High effort when memory is short).
-  async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0, helper } = {}) {
+  // listen: `coding serve` (serve.mjs): { host, port, args } — the address it
+  // opens, its fixed port, and the key and https flags. Never shared from here.
+  async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0, helper, listen = null } = {}) {
     this.lingerSecs = lingerSecs;
     const bin = serverBinOf(this.model);
     if (!existsSync(bin)) throw new Error(`The model server (${engineOf(this.model).tag}) is missing at ${bin}. Run: coding setup`);
     if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: coding setup`);
     const live = scanServers();
-    const same = share && live.find((e) => e.model === this.model.file);
+    // One `coding serve` runs over https is not shared (its certificate names another host).
+    const same = share && !listen && live.find((e) => e.model === this.model.file && !e.serve?.https);
     if (same) {
       try {
         const r = await fetch(`http://127.0.0.1:${same.port}/health`);
         if (r.ok) {
           Object.assign(this, { port: same.port, ctx: same.ctx, shared: same, child: null, draft: Boolean(same.draft) });
+          // `coding serve` running here: this window uses it too, with its key.
+          if (same.serve?.keyFile) { try { setEndpoint(this.url, { kind: 'llama', key: readFileSync(same.serve.keyFile, 'utf8').split('\n')[0].trim(), label: 'coding serve' }); } catch {} }
           // idle: kept loaded from an earlier start, no other window on it now.
           const idle = Boolean(same.linger) && !(same.users ?? []).some((p) => p !== process.pid);
           if (same.linger) addUser(same.port);
@@ -169,9 +176,11 @@ export class ModelServer extends EventEmitter {
       } catch {}
     }
     this.shared = null;
-    let port = DEFAULT_PORT;
+    let port = listen?.port ?? DEFAULT_PORT;
+    if (listen && !(await portFree(port))) throw new Error(`port ${port} is in use; pick another with --port`);
     while (!(await portFree(port))) { port++; if (port > DEFAULT_PORT + 20) throw new Error('no free port near 17600'); }
     this.port = port;
+    this.https = Boolean(listen?.https);
     this.ctx = ctx;
     this.stopping = false;
     mkdirSync(LOG_DIR, { recursive: true });
@@ -183,10 +192,11 @@ export class ModelServer extends EventEmitter {
     // The log is the server's own output file (not a pipe through this
     // process), so a server that stays loaded keeps writing after we exit.
     const logFd = openSync(logPath, 'a');
-    const child = spawn(bin, serverArgs(this.model, { ctx, port, draft }), { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
+    const args = listen ? [...serverArgs(this.model, { ctx, port, draft, host: listen.host }), ...listen.args] : serverArgs(this.model, { ctx, port, draft });
+    const child = spawn(bin, args, { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
     closeSync(logFd);
     this.child = child;
-    writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString(), ...(lingerSecs ? { linger: lingerSecs } : {}) }));
+    writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString(), ...(lingerSecs ? { linger: lingerSecs } : {}), ...(listen ? { serve: { host: listen.host, keyFile: listen.keyFile ?? null, https: this.https } } : {}) }));
     if (lingerSecs) { addUser(port); watch(child.pid, port, lingerSecs); }
     child.on('exit', (code, signal) => {
       appendFileSync(logPath, `=== exit code=${code} signal=${signal}\n`);
@@ -203,7 +213,8 @@ export class ModelServer extends EventEmitter {
     while (Date.now() - started < timeoutMs) {
       if (child.exitCode !== null) throw new Error(`llama-server exited while loading (code ${child.exitCode}); see ${join(LOG_DIR, 'server.log')}`);
       try {
-        const r = await fetch(`${this.url}/health`);
+        // Its own https server on this Mac: the certificate names the host others reach it by.
+        const r = await fetch(`${this.url}/health`, this.https ? { tls: { rejectUnauthorized: false } } : undefined);
         if (r.ok) return;
       } catch {}
       await new Promise((r) => setTimeout(r, 250));
@@ -319,6 +330,7 @@ function whoStarted(r, byPid) {
     if (/evals\/battle\//.test(p.cmd)) return 'a battle (Gemma vs Qwen)';
     if (/probe|speed|compare/i.test(p.cmd)) return 'a speed test';
     if (/(^|\s)(-p|--print)(\s|$)/.test(p.cmd) && /coding|agentic|cli\.jsx/.test(p.cmd)) return 'a coding -p run';
+    if (/(^|\s)serve(\s|$)/.test(p.cmd) && /coding|agentic|cli\.jsx/.test(p.cmd)) return 'coding serve (for another machine)';
   }
   return /probe/i.test(r.cmd) ? 'a speed test' : 'another program';
 }

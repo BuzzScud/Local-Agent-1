@@ -4,13 +4,24 @@
 // route(request) may answer a request out of turn (the memory's save, which
 // comes whenever the app finds a pause): its reply is sent and the scripted
 // ones stay in line.
+// key: it answers only with that API key (as llama-server --api-key does;
+// /health stays open); props: it says what it runs (/props, /v1/models), as a
+// remote is asked by /remote. seen: every request's path and key header.
 import { createServer } from 'node:http';
 
-export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null } = {}) {
+export const FAKE_PROPS = { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf' };
+export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null, key = null, props = false } = {}) {
   const queue = [...replies];
   const requests = [];
+  const seen = [];
+  let down = false;
   const server = createServer(async (req, res) => {
+    seen.push({ path: req.url, method: req.method, auth: req.headers.authorization ?? null });
+    if (down) { req.socket.destroy(); return; }
     if (req.url === '/health') { res.end('{"status":"ok"}'); return; }
+    if (key && req.headers.authorization !== `Bearer ${key}`) { res.writeHead(401, { 'content-type': 'application/json' }); res.end('{"error":{"message":"Invalid API Key","type":"authentication_error"}}'); return; }
+    if (props && req.method === 'GET' && req.url === '/props') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(FAKE_PROPS)); return; }
+    if (props && req.method === 'GET' && req.url === '/v1/models') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ object: 'list', data: [{ id: 'fake-model', context_length: 65536 }] })); return; }
     let body = '';
     for await (const c of req) body += c;
     const json = body ? JSON.parse(body) : {};
@@ -36,6 +47,7 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null 
   });
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => {
     const { port } = server.address();
-    resolve({ url: `http://127.0.0.1:${port}`, requests, close: () => new Promise((r) => server.close(r)), remaining: () => queue.length });
+    // kill: every request from now on has its connection dropped (a machine that went away).
+    resolve({ url: `http://127.0.0.1:${port}`, port, requests, seen, close: () => new Promise((r) => server.close(r)), kill: () => { down = true; }, remaining: () => queue.length });
   }));
 }

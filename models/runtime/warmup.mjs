@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync } from
 import { join } from 'node:path';
 import { SLOT_DIR, engineOf, thinkingKwargs, modelPath } from '../registry.mjs';
 import { hasDraft } from './server.mjs';
+import { endpointOf, authHeaders } from './remote.mjs';
 
 export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a line)
 // Whole first reads, this session's part included (folder, date, git, notes):
@@ -19,7 +20,7 @@ export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a 
 export const KEEP_WHOLE = 4;
 
 async function post(url, path, body, signal) {
-  const r = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal });
+  const r = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body), signal });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error?.message ?? `HTTP ${r.status}`);
   return j;
@@ -41,6 +42,9 @@ export function pruneSaved(dir = SLOT_DIR, keep = KEEP_SAVED, kind = /^warm-[0-9
 // at High effort even when the file is there); default: the env/file check.
 export async function warmUp({ url, model, system, tools, thinking, effort, slot = 0, sessionMark, helper: helperOn, onPhase = () => {}, signal }) {
   const kw = thinkingKwargs(model, thinking, effort);
+  // A remote (/remote) that is not llama.cpp cannot read ahead: its first reply reads the instructions.
+  const ep = endpointOf(url);
+  if (ep?.remote && ep.kind !== 'llama') return { restored: false, skipped: true };
   try {
     // The prompt exactly as the model sees it, up to the user's first words.
     const MARK = '\u0001USER\u0001';
@@ -49,6 +53,14 @@ export async function warmUp({ url, model, system, tools, thinking, effort, slot
     const cut = (sessionMark ? upToUser.indexOf(sessionMark) : -1);
     if (prompt.indexOf(MARK) < 0 || cut < 0) throw new Error('prompt layout not recognised');
     const shared = upToUser.slice(0, cut);
+    // A llama.cpp server on another machine: the instructions are read into
+    // its memory (reused while it runs), and nothing is saved on its disk,
+    // where no one here would clear the files (~210 MB each).
+    if (ep?.remote) {
+      onPhase('reading');
+      await post(url, '/completion', { prompt: upToUser, n_predict: 0, cache_prompt: true, id_slot: slot }, signal);
+      return { restored: false, remote: true };
+    }
     // A saved state belongs to one engine build, one helper setup and one set
     // of WEIGHTS: the file's name plus when it last changed. An edited copy
     // saved again under the same name gets new keys, so a state read with

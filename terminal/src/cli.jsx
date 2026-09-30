@@ -5,7 +5,7 @@ import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel } from '../../models/index.mjs';
 import { readLimits, modelWithLimits } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -88,6 +88,8 @@ function parse(argv) {
     // side jobs (sorting, the memory's save) get their own and leave the conversation's alone.
     else if (a === '--slots') o.slots = Number(val());
     else if (a === '--no-flows') o.flows = false;
+    // --local: this run uses the model on this Mac even when /remote is on.
+    else if (a === '--local') o.local = true;
     else rest.push(a);
   }
   if (rest.length) o.prompt = rest.join(' ');
@@ -188,6 +190,36 @@ if (process.argv[2] === 'morning') {
     process.exit(1);
   }
 }
+// coding serve: this machine's model for another machine's /remote (models/runtime/serve.mjs).
+// --port N (8080) · --local (this machine only, for an SSH tunnel) · --ctx 32k ·
+// --model gemma|qwen · --https cert.pem key.pem · --new-key
+if (process.argv[2] === 'serve') {
+  const a = process.argv.slice(3);
+  const at = (f) => a.indexOf(f);
+  const val = (f) => (at(f) >= 0 ? a[at(f) + 1] : undefined);
+  // How many values each switch takes; anything else is a word it does not know.
+  const TAKES = { '--port': 1, '--ctx': 1, '--model': 1, '--https': 2, '--local': 0, '--new-key': 0 };
+  const odd = [];
+  for (let i = 0; i < a.length; i++) { if (a[i] in TAKES) i += TAKES[a[i]]; else if (a[i] !== '-h' && a[i] !== '--help') odd.push(a[i]); }
+  if (odd.length || a.includes('-h') || a.includes('--help')) {
+    process.stdout.write(`coding serve: this machine's model for /remote on another machine.\n  --port N          where it listens (${SERVE_PORT})\n  --local           this machine only: reach it with an SSH tunnel\n  --ctx 32k         the context (else what fits in memory)\n  --model ${Object.keys(MODELS).join('|')}\n  --https cert.pem key.pem   https with your certificate (tailscale cert makes one)\n  --new-key         make a new API key (the old one stops working)\n`);
+    process.exit(odd.length ? 2 : 0);
+  }
+  const ctxText = val('--ctx');
+  const ctx = ctxText ? (/^\d+k$/i.test(ctxText) ? Number.parseInt(ctxText, 10) * 1024 : Number(ctxText)) : null;
+  const port = Number(val('--port') ?? SERVE_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) { process.stderr.write('coding serve: --port takes a number from 1 to 65535\n'); process.exit(2); }
+  let s = null;
+  const stop = async () => { await s?.stop().catch(() => {}); process.exit(0); };
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+  process.on('SIGHUP', stop);
+  try {
+    s = await serve({ modelId: val('--model') ?? modelById(loadSettings(process.cwd()).model)?.base ?? modelById(loadSettings(process.cwd()).model)?.id ?? DEFAULT_MODEL, port, local: a.includes('--local'), ctx, cert: val('--https'), certKey: at('--https') >= 0 ? a[at('--https') + 2] : undefined, newKey: a.includes('--new-key') });
+    s.server.on('crash', ({ code, signal }) => { process.stderr.write(`coding serve: the model stopped (code ${code ?? signal}); see ~/.agentic-coder/logs/server.log\n`); process.exit(1); });
+  } catch (e) { process.stderr.write(`coding serve: ${e.message}\n`); await s?.stop().catch(() => {}); process.exit(1); }
+  await new Promise(() => {});
+}
 if (process.argv[2] === 'setup') {
   try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\ncoding setup: ${e.message}\n`); process.exit(1); }
 }
@@ -210,6 +242,18 @@ if (opts.print) {
   let url = opts.url;
   let ctx = opts.ctx ?? (limits.context || undefined);
   let slots = url && opts.slots > 1 ? { main: 0, side: 1 } : undefined;
+  // The remote /remote saved, when it is on (--local runs on this Mac instead).
+  let remote = null;
+  let runModel = model;
+  if (!url && !opts.local && settings.remote?.use) {
+    try { remote = await connectRemote(settings.remote); } catch (e) { process.stderr.write(`coding: the remote model at ${remoteLabel(settings.remote)} did not answer: ${e.message}. coding -p --local runs on this Mac.\n`); process.exit(1); }
+    const risk = remoteRisk(settings.remote);
+    process.stderr.write(`· On the remote model: ${remote.model.name}${risk ? ` · ⚠ ${risk}` : ''}\n`);
+    url = remote.url;
+    ctx = opts.ctx ?? remote.ctx;
+    runModel = modelWithLimits(remote.model, limits);
+    if (remote.slots > 1) slots = { main: 0, side: 1 };
+  }
   if (!url) {
     const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
     const c = chooseContext(model, { effort: thinkOn ? opts.effort ?? settings.effort : undefined });
@@ -228,11 +272,11 @@ if (opts.print) {
     if (st.slots > 1) slots = { main: 0, side: 1 };
     url = server.url;
   }
-  const stop = () => server?.stop();
+  const stop = () => { remote?.stop(); return server?.stop(); };
   process.on('SIGINT', async () => { await stop(); process.exit(130); });
   try {
     const r = await runHeadless({
-      prompt: opts.prompt, cwd: opts.cwd, url, model, ctx: ctx ?? 32768,
+      prompt: opts.prompt, cwd: opts.cwd, url, model: runModel, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots, limits,
       // What you saved with /permissions: commands that run without asking, and the ones that never run.
       permissions: (dir) => rulesFor(dir),

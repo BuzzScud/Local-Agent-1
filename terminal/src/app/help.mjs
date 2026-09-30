@@ -77,6 +77,7 @@ export function cliRows(lingerMins = 30) {
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
       ['coding stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
+      ['coding serve', 'this machine’s model for /remote on another machine, behind an API key (--local: for an SSH tunnel; --port, --ctx, --model, --https cert key, --new-key)'],
       ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (the Arena with the Test builder open over it), memory, instructions, help'],
       ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
       ['coding morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],
@@ -88,6 +89,7 @@ export function cliRows(lingerMins = 30) {
       ['--mode ask|edits|plan', 'start in this permission mode'],
       ['--yes', 'with -p: allow edits and commands without asking (your /permissions never-list still holds)'],
       ['--url http://host:port', 'use a llama-server that is already running'],
+      ['--local', 'use the model on this Mac even when /remote is on'],
       ['--no-flows', 'always work step by step (skip the focused fix/change/rename paths)'],
       ['-v, --version', 'print the version'],
       ['-h, --help', 'this help'],
@@ -99,7 +101,7 @@ export function cliRows(lingerMins = 30) {
 export function cliHelpText({ version, modelName, lingerMins }) {
   const { usage, options } = cliRows(lingerMins);
   const pad = (rows) => rows.map(([a, b]) => `  ${a.padEnd(26)}${b}`).join('\n');
-  return `coding ${version} — a coding agent in your terminal, running ${modelName} on this Mac\n\nUsage\n${pad(usage)}\n\nOptions\n${pad(options)}\n`;
+  return `coding ${version} — a coding agent in your terminal, running ${modelName} on this Mac (or on another machine: /remote)\n\nUsage\n${pad(usage)}\n\nOptions\n${pad(options)}\n`;
 }
 
 // Where Agentic Coder keeps things. [where, what]
@@ -107,6 +109,8 @@ export const PLACES = [
   ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
   ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the mouse, the model'],
   ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
+  ['Keychain · agentic-coder-remote', 'the API key of the model /remote uses (settings.json keeps only its last 4 characters)'],
+  ['~/.agentic-coder/serve.key', 'the API key coding serve asks other machines for (readable by you only)'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
   ['~/.agentic-coder/logs', 'the model server and update logs'],
@@ -126,7 +130,7 @@ export const SAFETY = [
   'Files like .env, keys and .git always ask before a change, even in Auto-edit.',
   '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, or reach services already running.',
-  'Everything runs on this Mac. Nothing you type is sent anywhere.',
+  'Everything runs on this Mac. Nothing you type is sent anywhere, unless you turn on /remote: then your prompts, your code and the files it reads go to the machine you named, and it says so when it switches.',
 ];
 
 export const TIPS = [

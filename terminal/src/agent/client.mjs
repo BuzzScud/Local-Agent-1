@@ -1,11 +1,40 @@
 // Streams one chat completion from llama-server (OpenAI format) and turns the
 // SSE chunks into simple events: reasoning, text, tool-call pieces, done.
-import { thinkingKwargs } from '../../../models/index.mjs';
+// A remote (/remote) is asked the same way, with its API key; an
+// OpenAI-compatible one (not llama.cpp) gets only the standard fields.
+import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
+
+// What only llama.cpp's server reads: the slot, its prompt cache, the
+// thinking switch and cap, its extra sampling. Not sent to another kind.
+const LLAMA_ONLY = ['cache_prompt', 'id_slot', 'chat_template_kwargs', 'thinking_budget_tokens', 'top_k', 'min_p', 'repeat_penalty', 'typical_p', 'n_probs'];
+// Standard fields a server may still refuse (an older one, or a model that
+// cannot think): named in its error, they are left out of the next call to it.
+const OPTIONAL = ['reasoning_effort', 'parallel_tool_calls', 'stream_options', 'presence_penalty', 'frequency_penalty', 'top_p', 'temperature', 'seed'];
+const refused = new Map(); // url → the fields that server refused
+
+// The body as an OpenAI-compatible server takes it (exported for the tests).
+export function openaiBody(body, { model, effort, thinking, url } = {}) {
+  const out = { ...body, model };
+  for (const k of LLAMA_ONLY) delete out[k];
+  if (thinking && effort) out.reasoning_effort = effort;
+  for (const k of refused.get(url) ?? []) {
+    if (k === 'max_tokens' && out.max_tokens !== undefined) { out.max_completion_tokens = out.max_tokens; delete out.max_tokens; } else delete out[k];
+  }
+  return out;
+}
+
+// The field a 400 names as not taken, when it is one we can leave out.
+export function refusedField(status, text, body) {
+  if (status !== 400 && status !== 422) return null;
+  if (/max_tokens/.test(text) && /max_completion_tokens/.test(text) && body.max_tokens !== undefined) return 'max_tokens';
+  return OPTIONAL.find((k) => body[k] !== undefined && new RegExp(`\\b${k}\\b`).test(text)) ?? null;
+}
 
 // toolChoice 'none' keeps the tool list in the prompt (so the saved reading of
 // the instructions still matches) but lets the model only write text.
 export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra }) {
-  const body = {
+  const ep = endpointOf(url);
+  let body = {
     model: 'coding',
     messages,
     stream: true,
@@ -22,12 +51,22 @@ export async function* streamChat({ url, messages, tools, toolChoice = 'auto', t
   if (thinking && thinkCap) body.thinking_budget_tokens = thinkCap;
   if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; body.parallel_tool_calls = false; }
   if (extra) Object.assign(body, extra);
-  const res = await fetch(`${url}/v1/chat/completions`, {
-    method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-  });
-  if (!res.ok) {
+  if (ep?.kind === 'openai') body = openaiBody(body, { model: ep.model, effort: body.chat_template_kwargs?.reasoning_effort ?? (thinking ? effort : null), thinking, url });
+  let res;
+  for (let tries = 0; ; tries++) {
+    res = await fetch(`${url}/v1/chat/completions`, {
+      method: 'POST', signal, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body),
+    });
+    if (res.ok) break;
     const text = await res.text().catch(() => '');
-    throw new Error(`model server ${res.status}: ${text.slice(0, 300)}`);
+    const field = ep?.kind === 'openai' && tries < 4 ? refusedField(res.status, text, body) : null;
+    if (field) {
+      refused.set(url, new Set([...(refused.get(url) ?? []), field]));
+      body = openaiBody(body, { model: ep.model, url });
+      continue;
+    }
+    if (ep && (res.status === 401 || res.status === 403)) throw new Error(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`);
+    throw new Error(`${ep ? `remote model server (${ep.label ?? url})` : 'model server'} ${res.status}: ${text.slice(0, 300)}`);
   }
   const decoder = new TextDecoder();
   let buf = '';
@@ -51,7 +90,9 @@ export async function* streamChat({ url, messages, tools, toolChoice = 'auto', t
       const ch = j.choices?.[0];
       if (!ch) continue;
       const d = ch.delta ?? {};
-      if (d.reasoning_content) yield { type: 'reasoning', text: d.reasoning_content };
+      // llama.cpp and vLLM call the thinking reasoning_content; OpenRouter and Ollama, reasoning.
+      const thought = d.reasoning_content || (typeof d.reasoning === 'string' ? d.reasoning : '');
+      if (thought) yield { type: 'reasoning', text: thought };
       if (d.content) yield { type: 'text', text: d.content };
       for (const tc of d.tool_calls ?? []) {
         yield { type: 'tool', index: tc.index ?? 0, id: tc.id, name: tc.function?.name, args: tc.function?.arguments ?? '' };

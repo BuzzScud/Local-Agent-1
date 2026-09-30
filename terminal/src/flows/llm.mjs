@@ -3,7 +3,7 @@
 // thinking: think first, at the chat's level (Medium/High); used for writing
 // code and tests. Sorting and choosing (JSON answers) never think.
 import { streamChat } from '../agent/client.mjs';
-import { thinkingKwargs } from '../../../models/index.mjs';
+import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
 
 // Whoever wants a count of every focused call's tokens (the agent, while a
 // focused path runs, for the "done" line and the practice bench).
@@ -51,9 +51,10 @@ const withInstructions = (system, instructions) => (instructions ? `${instructio
 // then asks with complete().
 const noOdds = new Set(); // servers that could not: not asked again
 export async function decide({ url, model, slot, system, user, instructions = '', options, lead = '', signal }) {
-  if (noOdds.has(url)) return null;
+  // An OpenAI-compatible remote (/remote) has no template, tokens or chances to ask for.
+  if (noOdds.has(url) || (endpointOf(url) && endpointOf(url).kind !== 'llama')) return null;
   const post = async (path, body) => {
-    const res = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal });
+    const res = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body), signal });
     return res.ok ? res.json() : null;
   };
   llmCalls.n++;
