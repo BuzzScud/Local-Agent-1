@@ -161,7 +161,7 @@ test('the Tests tab: the page is built in, and /tests.json is the test record re
   } finally { s.stop(); if (was == null) delete process.env.AGENTIC_TEST_RECORD; else process.env.AGENTIC_TEST_RECORD = was; }
 });
 
-test('the Battle tab: /battle starts the arena when it is not up and sends the tab to its page; the hub lists the tab', () => {
+test('the Battle tab: /battle starts the arena when it is not up and sends the tab to its page; ?new=1 opens its New test window; the hub lists the tab', () => {
   const home = mkdtempSync(join(tmpdir(), 'agentic-battle-hub-'));
   const port = 21000 + Math.floor(Math.random() * 20000);
   const script = `
@@ -172,6 +172,7 @@ test('the Battle tab: /battle starts the arena when it is not up and sends the t
     out.status = r.status; out.location = r.headers.get('location');
     out.page = await (await fetch(out.location)).text();
     out.again = (await fetch(s.url + 'battle', { redirect: 'manual' })).status; // already up: no second runner
+    out.fresh = (await fetch(s.url + 'battle?new=1', { redirect: 'manual' })).headers.get('location'); // + New test on the Tests tab
     out.hub = await (await fetch(s.url)).text();
     s.stop();
     console.log(JSON.stringify(out));
@@ -186,7 +187,9 @@ test('the Battle tab: /battle starts the arena when it is not up and sends the t
   expect(out.page).toContain('<title>Battle</title>');
   expect(out.again).toBe(302);
   expect(out.hub).toContain('<button data-tab="battle">Battle</button>');
-  expect(out.hub).toContain("if (tab === 'battle') return show('/battle'");
+  expect(out.fresh).toBe(`http://127.0.0.1:${port}/?new=1`);
+  expect(out.hub).toContain("return show(n ? '/battle?new=1' : '/battle'");
+  expect(out.hub).toContain("e.data?.agentic === 'new-test'"); // the Tests tab's + New test
 });
 
 test('the DOCS folder is "cli docs" at the top of the repo, and a Mac that still has the older name keeps working', () => {

@@ -713,6 +713,9 @@ body.compact .tch { padding: 5px 14px; }
     return F.rows;
   }
   // The three steps, the same in the New test page and the Edit tests window.
+  // A test of your own needs at least one check, so a run of it can pass or fail: Save waits for one.
+  const checkMissing = () => Boolean(F) && suiteOf(F) === 'mine' && !(rowsNow().some((r) => r.on) || (F.hasScript && F.useScript));
+  const saveBtns = () => { const off = checkMissing() ? ' disabled data-tip="Tick at least one check first (step 3)"' : ''; return `<button class="btn" data-act="save"${off}>Save</button><button class="btn pri" data-act="saverun"${off}>Save and run ▶</button>`; };
   function formSteps() {
     const k = kindNow(), rows = rowsNow(), script = F.hasScript && F.useScript, any = rows.some((r) => r.on) || script;
     const editing = Boolean(F.id);
@@ -733,7 +736,7 @@ body.compact .tch { padding: 5px 14px; }
         </div></div>
         <div class="stp"><div class="sh"><span class="no">3</span>How do we know it worked?</div><div class="sb scroll">
           <div class="checks">${F.hasScript ? `<div class="check${script ? ' on' : ''}" data-act="script"><span class="bx">✓</span><span class="ct">Its own check${script ? '' : ' (off)'}</span><span class="cd">${script ? `this test's own check script: ${esc((F.rules ?? []).join(' · ') || 'its rules')}` : 'off: it no longer runs. Turn it off when you change what the test asks.'}</span></div>` : ''}${rows.map((r, i) => `<div class="check${r.on ? ' on' : ''}" data-act="check" data-i="${i}"><span class="bx">✓</span><span class="ct">${esc(r.t)}</span><span class="cd">${esc(r.d)}</span>${r.ph && r.on ? `<input type="text" data-val="${i}" value="${esc(r.val)}" placeholder="${esc(r.ph)}">` : ''}</div>`).join('')}</div>
-          <div class="vonly">${any ? 'Every ticked check must hold. Your vote decides which did it better.' : 'No checks ticked: only your vote decides.'}</div>
+          <div class="vonly">${any ? 'Every ticked check must hold. Your vote decides which did it better.' : suiteOf(F) === 'mine' ? 'Tick at least one check: a test of yours needs one, so a run of it can pass or fail. Save waits for it.' : 'No checks ticked: only your vote decides.'}</div>
         </div></div>
       </div>`;
   }
@@ -743,7 +746,7 @@ body.compact .tch { padding: 5px 14px; }
       <div class="modal newm" role="dialog" aria-modal="true" aria-label="New test">
         <div class="mhead"><b>New test</b><span class="sub">Three steps. It runs on both models, one after the other: 1 run each, Low, each stopped at 10 min.</span><span class="fill"></span><button class="mx" data-act="mclose" aria-label="Close">✕</button></div>
         <div class="mform1">${formSteps()}</div>
-        <div class="mfoot"><span class="help">Saved in <code>~/.agentic-coder/battle/tests/</code>, a folder you can also edit by hand · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Cancel</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div>
+        <div class="mfoot"><span class="help">Saved in <code>~/.agentic-coder/battle/tests/</code>, a folder you can also edit by hand · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Cancel</button>${saveBtns()}</div>
       </div>`;
   }
   // Edit tests: a window over the page, every test on the left, the one you pick on the right.
@@ -764,7 +767,7 @@ body.compact .tch { padding: 5px 14px; }
           <div class="mlist scroll">${[...OWN, 'mine'].map(group).join('')}</div>
           <div class="mform"><div class="mtitle"><h3>${esc(name || 'Untitled test')}</h3><span class="chip">${OWN.includes(F.suite) ? `${SUITE_NAME[F.suite]} · test ${F.n}${F.variant ?? ''}` : 'My tests'}</span>${keeps ? `<span class="chip" data-tip="The Practice 28 grade a model, so they never change: Save makes your copy of test ${F.n} (${F.n}b, ${F.n}c …) with your changes.">Save makes a copy · test ${F.n} stays as it is</span>` : ''}${F.copyOf ? `<span class="chip">your copy of test ${F.n}</span>` : ''}${F.edited ? `<span class="chip">edited ${esc(new Date(F.edited).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span>` : ''}${dirty() ? '<span class="chip unsaved">not saved yet</span>' : ''}<span class="fill"></span>${OWN.includes(F.suite) && F.edited && !F.copyOf ? '<button class="btn" data-act="mreset">Put back the original</button>' : ''}<button class="btn stop" data-act="delete">Delete test</button></div>${formSteps()}</div>
         </div>
-        <div class="mfoot"><button class="btn" data-act="mprev"${idx <= 0 ? ' disabled' : ''}>‹ Previous</button><button class="btn" data-act="mnext"${idx < 0 || idx >= list.length - 1 ? ' disabled' : ''}>Next ›</button><span class="help">${idx + 1} of ${list.length} · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Close</button><button class="btn" data-act="save">Save</button><button class="btn pri" data-act="saverun">Save and run ▶</button></div>
+        <div class="mfoot"><button class="btn" data-act="mprev"${idx <= 0 ? ' disabled' : ''}>‹ Previous</button><button class="btn" data-act="mnext"${idx < 0 || idx >= list.length - 1 ? ' disabled' : ''}>Next ›</button><span class="help">${idx + 1} of ${list.length} · ⌘S saves · Esc closes</span><span class="fill"></span><button class="btn" data-act="mclose">Close</button>${saveBtns()}</div>
       </div>`;
   }
   const snapshotF = () => JSON.stringify([F.prompt, F.nameTouched ? F.name : '', kindNow(), rowsNow().map((r) => [r.type, r.on, r.val]), F.ask, F.files.map((f) => f.path), F.removed, F.useScript]);
@@ -828,6 +831,7 @@ body.compact .tch { padding: 5px 14px; }
     const k = kindNow();
     const root = S.modal ? modalEl : mainEl;
     if (!F.prompt.trim()) { toast('Type what it should do first (step 1).', true); $('#f-prompt', root)?.focus(); return; }
+    if (checkMissing()) { toast('Tick at least one check first (step 3): a test of yours needs one, so a run of it can pass or fail.', true); return; }
     const checks = rowsNow().filter((r) => r.on).map((r) => ({ type: r.type, value: r.val }));
     const miss = rowsNow().find((r) => r.on && r.ph && r.ph.trim() && !String(r.val).trim() && ['answer-has', 'file-has', 'page-has', 'saved'].includes(r.type));
     if (miss) { toast(`"${miss.t.replace('…', '')}" needs something to look for, or untick it.`, true); return; }
@@ -1000,7 +1004,10 @@ body.compact .tch { padding: 5px 14px; }
   window.addEventListener('resize', () => { setCompact(); redrawTimeline(); fades(); });
   setCompact();
   setInterval(tickClocks, 1000);
-  poll(true);
+  // ?new=1 (+ New test on the hub's Tests tab): the New test window opens once the tests are read.
+  const askedNew = new URLSearchParams(location.search).get('new') === '1';
+  if (askedNew) history.replaceState(null, '', location.pathname);
+  poll(true).then(() => { if (askedNew && !S.modal) openForm(); });
 })();
 </script>
 </body>

@@ -181,7 +181,7 @@ function finishJob(code) {
   const rec = [...lines].reverse().find((l) => l.startsWith('recorded in the test record: '));
   job.endedAt = Date.now();
   job.status = job.stopAsked ? 'stopped' : code === 0 ? 'done' : 'failed';
-  job.result = { ...(t ? countLines(t, lines) : {}), code: code ?? null, recorded: rec ? rec.slice('recorded in the test record: '.length) : null };
+  job.result = { ...(t ? countLines(t, lines, job.total ?? t.total) : {}), code: code ?? null, recorded: rec ? rec.slice('recorded in the test record: '.length) : null };
   if (job.status !== 'stopped' && code !== 0) job.result.why = lines.filter((l) => l.trim()).slice(-3).join(' · ').slice(0, 300);
   delete job.stopAsked;
   saveJob();
@@ -217,7 +217,7 @@ function startJob({ test, model, n, think }) {
   try { cmd = runCommand(String(test ?? ''), { model, n, think: think === true, models: IDS }); } catch (e) { return { code: 400, error: e.message }; }
   const t = cmd.test;
   const id = `${stamp()}-${t.id}${cmd.n != null ? `-${cmd.n}` : ''}${t.model ? `-${model}` : ''}${cmd.think ? '-think' : ''}`;
-  job = { id, test: t.id, name: t.name, n: cmd.n, model: t.model ? model : null, modelName: t.model ? MODELS[model].name : null, think: cmd.think, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
+  job = { id, test: t.id, name: t.name, n: cmd.n, total: cmd.total ?? null, model: t.model ? model : null, modelName: t.model ? MODELS[model].name : null, think: cmd.think, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
   busy = true; stopAsked = false; lastUse = Date.now();
   runJob(cmd).catch((e) => { log(`test run ${id}: ${e.stack ?? e.message}`); if (jobLive()) finishJob(null); })
     .finally(() => { busy = false; jobChild = null; waiting = null; if (!job?.pid || !alive(job.pid)) clearHold(); stopAsked = false; lastUse = Date.now(); setTimeout(tick, 500); });
@@ -273,7 +273,7 @@ function jobView() {
   const lines = jobLines(job);
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
   return { ...job, dir: undefined, stopAsked: undefined, stopping: Boolean(job.stopAsked), waiting: job.status === 'waiting' ? (waiting ?? 'Getting the memory ready…') : null,
-    lines: lines.slice(-400), lineCount: lines.length, count: t ? countLines(t, lines) : null, now: Date.now() };
+    lines: lines.slice(-400), lineCount: lines.length, count: t ? countLines(t, lines, job.total ?? t.total) : null, now: Date.now() };
 }
 
 function tick() {

@@ -94,17 +94,25 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 .rt-l{font-size:12px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:var(--mute)}
 .rt-chips{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 .rt-chips button{font:inherit;font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--mute);cursor:pointer;white-space:nowrap}
-.rt-chips button:hover:not(:disabled){color:var(--ink);border-color:var(--faint)}
+.rt-chips button:hover:not(:disabled):not([aria-pressed="true"]){color:var(--ink);border-color:var(--faint)}
 .rt-chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .rt-chips button:disabled{cursor:default}
-.rt-chips select{font:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.rt-chips button .n{font-size:11.5px;font-weight:600;margin-left:6px;opacity:.75}
+/* One practice task: which one, by name (the second row, beside Thinking); + New test at that row's end. */
+.rt-task{display:flex;align-items:center;gap:8px;min-width:0}
+.rt-task select{font:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);max-width:330px;min-width:0}
+.rt-new{font:inherit;font-size:13px;font-weight:600;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--c-before);cursor:pointer;white-space:nowrap;margin-left:auto}
+.rt-new:hover{border-color:var(--c-before)}
+/* A narrow window stacks the bar: the Task row keeps its place for every test there, so nothing under it moves when you switch. */
+.rt-task.ghost{display:none}
+@media (max-width:600px){.rt-task.ghost{display:flex;visibility:hidden}}
 .rt-think{display:flex;align-items:center;gap:4px}.rt-think .rt-l{margin-right:4px}
 .rt-think button{font:inherit;font-size:13px;padding:4px 11px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--mute);cursor:pointer;white-space:nowrap}
-.rt-think button:hover:not(:disabled){color:var(--ink);border-color:var(--faint)}
+.rt-think button:hover:not(:disabled):not([aria-pressed="true"]){color:var(--ink);border-color:var(--faint)}
 .rt-think button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .rt-think button:disabled{cursor:default}
 .rt-think kbd{font:600 11px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--mute);background:var(--card);margin-left:3px}
-.rt-status{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 220px}
+.rt-status{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:7px;min-width:0;flex:1 1 120px}
 .rt-status span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rt-status i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--up)}.rt-status i.busy{background:var(--warn)}
 .rt-go{grid-column:2;grid-row:1 / span 2;font:inherit;font-weight:650;font-size:15px;border:0;border-radius:11px;padding:9px 20px;cursor:pointer;white-space:nowrap;background:var(--c-before);color:#fff}
@@ -355,7 +363,8 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { /* no storage */ } return null; };
     const q = new URL(location.href).searchParams;
     let testId = q.get('test') || store('agentic-tests-run-test') || 'practice28';
-    let taskN = Number(q.get('n')) || Number(store('agentic-tests-run-n')) || 10;
+    // One practice task: which of the Practice 28, by its key ('12', or '18b' for a copy of yours).
+    let taskKey = String(q.get('n') || store('agentic-tests-run-n') || '10');
     // Thinking: off (Low, the way a battle runs) or on (High). The switch, or the T key, sets it; kept here.
     let think = (q.get('think') ?? store('agentic-tests-run-think')) === 'on';
     const thinkOf = (v) => (v.job ? Boolean(v.job.think) : Boolean(v.t.think && think));
@@ -364,6 +373,12 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     const oneModel = () => models.some((m) => m.id === pick);
     const list = () => st.catalog.filter((t) => (pick === 'none' ? !t.model : oneModel() ? t.model : false));
     const testOf = (id) => st.catalog.find((t) => t.id === id);
+    // The practice test picked: the one kept here while it still exists, else the default (10).
+    const keyNow = (t) => (t.choices?.some((c) => c.key === taskKey) ? taskKey : t.choices?.find((c) => c.key === t.pick?.default)?.key ?? t.choices?.[0]?.key ?? taskKey);
+    const choiceOf = (v) => { const k = v.job?.n != null ? String(v.job.n) : keyNow(v.t); return v.t.choices?.find((c) => c.key === k) ?? { key: k, only: `p${k}`, title: '', copy: false }; };
+    const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+    // Tests that load the model for each test they play (the Battle runner's way).
+    const perTest = (t) => ['work28', 'new28', 'task', 'mine'].includes(t.id);
     const shortName = (name) => String(name ?? '').split(' ')[0];
     const mmss = (s) => `${Math.floor(s / 60)} min ${String(Math.floor(s % 60)).padStart(2, '0')} s`;
     // Its earlier line in the record (before `before`), for this model and thinking on or off (its
@@ -381,7 +396,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const t = testOf(testId) && list().some((x) => x.id === testId) ? testOf(testId) : list()[0];
       if (!t) return null;
       const m = t.model ? pick : null;
-      const j = st.job && st.job.test === t.id && (st.job.model ?? null) === m && (t.id !== 'task' || st.job.n === taskN) && Boolean(st.job.think) === Boolean(t.think && think) ? st.job : null;
+      const j = st.job && st.job.test === t.id && (st.job.model ?? null) === m && (t.id !== 'task' || String(st.job.n) === keyNow(t)) && Boolean(st.job.think) === Boolean(t.think && think) ? st.job : null;
       return { job: j, t, m };
     }
     function line(l) {
@@ -396,7 +411,12 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     }
     function top(v) {
       const running = isLive(st.job);
-      const chips = list().map((t) => `<button type="button" data-t="${t.id}" aria-pressed="${v && v.t.id === t.id}"${running ? ' disabled' : ''}>${esc(t.name)}</button>${t.pick && v && v.t.id === t.id ? `<select id="rt-n" aria-label="Which practice task"${running ? ' disabled' : ''}>${Array.from({ length: t.pick.max - t.pick.min + 1 }, (_, i) => t.pick.min + i).map((n) => `<option${n === (running ? st.job.n : taskN) ? ' selected' : ''}>${n}</option>`).join('')}</select>` : ''}`).join('');
+      const chips = list().map((t) => `<button type="button" data-t="${t.id}" aria-pressed="${v && v.t.id === t.id}"${running ? ' disabled' : ''}>${esc(t.name)}${t.own ? `<span class="n">${t.total ?? 0}</span>` : ''}</button>`).join('');
+      // Which practice test, by number and name (your copies under their original); the whole title shows on hover and in the stages below.
+      const c = v && v.t.pick ? choiceOf(v) : null;
+      const ghost = !c && v?.t.model ? '<span class="rt-task ghost" aria-hidden="true"><span class="rt-l">Task</span><select tabindex="-1" disabled><option>10 · Fix an off-by-one bug</option></select></span>' : '';
+      const task = c ? `<label class="rt-task" title="${esc(`${c.key} · ${c.title}${c.copy ? ' (your copy)' : ''}`)}"><span class="rt-l">Task</span><select id="rt-n" aria-label="Which practice task"${running ? ' disabled' : ''}>${v.t.choices.map((x) => `<option value="${esc(x.key)}"${x.key === c.key ? ' selected' : ''}>${esc(x.key)} · ${esc(cut(x.title, 36))}${x.copy ? ' (your copy)' : ''}</option>`).join('')}</select></label>` : '';
+      const none = Boolean(v && v.t.own && !v.t.total); // My tests, and you have none yet
       // Thinking: the run's own while one runs; a test that takes no model has none.
       const th = v ? thinkOf(v) : false, can = Boolean(v && v.t.think && !running);
       const sw = `<div class="rt-think" role="group" aria-label="Thinking" title="${v && !v.t.think ? (v.t.model ? 'This test never thinks: a sort writes nothing' : 'This test takes no model, so no thinking') : running ? 'The run under way keeps its setting' : 'Thinking off (Low) or on (High) · the T key switches it'}"><span class="rt-l">Thinking</span>${[['off', 'Off'], ['on', 'On']].map(([k, w]) => `<button type="button" data-think="${k}" aria-pressed="${(k === 'on') === th}"${can ? '' : ' disabled'}>${w}</button>`).join('')}<kbd>T</kbd></div>`;
@@ -406,10 +426,10 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
         : st.battle ? '<i class="busy"></i><span>A battle is running (the Battle tab): Run waits until it ends or you stop it there</span>'
         : `<i></i><span>Loaded now: ${held.length ? held.map((x) => `${esc(x.model)} (${esc(x.who)}${/window/.test(x.who) ? ': it lets go when you press Run' : ''})`).join(', ') : 'nothing'}</span>`;
       const label = running ? (st.job.stopping || sending === 'stop' ? 'Stopping' : '■ Stop') : sending === 'run' ? 'Starting' : v ? `▶ Run${v.t.model ? ` on ${shortName(modelName(v.m))}` : ''}` : '▶ Run';
-      const off = sending || (running && st.job.stopping) || (!running && (st.battle || !v));
+      const off = sending || (running && st.job.stopping) || (!running && (st.battle || !v || none));
       return `<div class="rt-box rt-top"><div class="rt-row"><span class="rt-l">Test</span><div class="rt-chips" id="rt-chips">${chips}</div></div>
         <button type="button" class="rt-go${running ? ' stop' : ''}" id="rt-go"${off ? ' disabled' : ''}>${label}</button>
-        <div class="rt-row">${sw}<span class="rt-status">${status}</span></div>${err ? `<p class="rt-err">${esc(err)}</p>` : ''}</div>`;
+        <div class="rt-row">${sw}${task || ghost}<span class="rt-status">${status}</span><button type="button" class="rt-new" id="rt-new" title="Make a test of your own: opens the Battle tab's New test window. It needs at least one check.">+ New test</button></div>${err ? `<p class="rt-err">${esc(err)}</p>` : ''}</div>`;
     }
     function body(v) {
       const { job: j, t, m } = v;
@@ -419,7 +439,8 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const last = lastRun(t, m, j ? j.startedAt : Infinity, th);
       const other = t.model ? models.find((x) => x.id !== m) : null;
       const cnt = j?.count ?? { done: null, total: t.total };
-      const readyRe = { practice28: /^server up/, task: /^server up/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/, sorting: /^loaded in/ }[t.id];
+      const readyRe = { practice28: /^server up/, task: /one at a time/, requests: /^server up/, long: /^loaded in/, work28: /one at a time/, new28: /one at a time/, mine: /one at a time/, sorting: /^loaded in/ }[t.id];
+      const c = t.pick ? choiceOf(v) : null;
       const loaded = !t.model || (j && (lines.some((l) => readyRe?.test(l)) || (cnt.done ?? 0) > 0 || ended));
       const secsNow = j ? Math.max(0, Math.round(((ended ? j.endedAt : j.now ?? Date.now()) - (j.runStartedAt ?? j.startedAt)) / 1000)) : 0;
       // The stages: done, the one under way, or still to come.
@@ -430,13 +451,14 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const pct = cnt.total && cnt.done != null ? Math.min(100, Math.round((cnt.done / cnt.total) * 100)) : t.minutes && j ? Math.min(100, Math.round((secsNow / (t.minutes * 60)) * 100)) : null;
       const doing = j && phase >= 2
         ? `${cnt.done != null ? `${cnt.done} of ${cnt.total} done · ${cnt.passed} passed` : t.minutes ? `${mmss(secsNow)} of at most ${t.minutes} min` : ended ? 'finished' : `running · ${mmss(secsNow)}`}${pct != null ? `<div class="rt-bar"><div style="width:${pct}%"></div></div>` : ''}`
-        : `${esc(t.what)}${last?.secs ? ` · about ${Math.max(1, Math.round(last.secs / 60))} min last time` : ''}`;
+        : t.own && !t.total ? 'You have no tests of your own yet. + New test (at the end of the bar above) makes one in the Battle tab; it needs at least one check.'
+        : `${c ? `“${esc(c.title)}”${c.copy ? ', your copy' : ''} · as the Battle tab keeps it, 10 min at most` : esc(t.what)}${last?.secs ? ` · about ${Math.max(1, Math.round(last.secs / 60))} min last time` : ''}`;
       const recText = ended ? (j.result?.recorded ? `in the record: ${esc(j.result.recorded)}` : j.status === 'stopped' ? 'stopped: what ran is in the record as stopped' : st.fake ? 'a practice run: nothing is recorded' : 'no line was recorded') : 'its line lands in the record when it ends';
       const stages = (t.model
         ? stage(0, 'Free the memory', phase === 0 ? esc(j.waiting ?? 'waiting') : phase > 0 ? 'nothing else holds a model' : 'unloads a model nobody uses; an open Agentic Coder window lets go of its own once its reply ends')
-          + stage(1, `Load ${esc(modelName(m))}`, `${phase > 1 || ended ? (t.id === 'work28' || t.id === 'new28' ? 'each test loads it for itself' : 'loaded') : phase === 1 ? 'loading…' : 'one model at a time, like a battle'} · ${thinkWords(th)}`)
+          + stage(1, `Load ${esc(modelName(m))}`, `${phase > 1 || ended ? (perTest(t) ? 'each test loads it for itself' : 'loaded') : phase === 1 ? 'loading…' : 'one model at a time, like a battle'} · ${thinkWords(th)}`)
         : stage(0, 'No model needed', 'it starts at once and holds no memory', true))
-        + stage(2, esc(t.name) + (t.pick ? ` ${j?.n ?? taskN}` : ''), doing)
+        + stage(2, esc(t.name) + (c ? ` ${esc(c.key)}` : ''), doing)
         + stage(3, 'In the record', recText);
       // Its result, once it ended.
       let res = '';
@@ -455,10 +477,10 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
         : 'nothing running<b>—</b>Nothing starts by itself: only ▶ Run starts a run, and ■ Stop is there while it goes.';
       const cmd = (th && t.commandThink ? t.commandThink : t.command)?.[t.model ? m : 'none'] ?? '';
       const out = j ? lines.map(line).join('') || '<div><span class="d">(nothing printed yet)</span></div>'
-        : `<div><span class="p">%</span> <span class="w">${esc(t.id === 'task' ? cmd.replace(/--only \d+/, `--only ${taskN}`) : cmd)}</span></div><div> </div><div><span class="d">That is what ▶ Run starts, from the repo’s top. What it prints comes here, live.</span></div>${last ? `<div><span class="d">Last time on this ${t.model ? 'model' : 'Mac'}: ${esc(brief(last))}${last.secs ? `, ${esc(mmss(last.secs))}` : ''}.</span></div>` : ''}`;
+        : `<div><span class="p">%</span> <span class="w">${esc(c ? cmd.replace(/--only \S+/, `--only ${c.only}`) : cmd)}</span></div><div> </div><div><span class="d">That is what ▶ Run starts, from the repo’s top. What it prints comes here, live.</span></div>${last ? `<div><span class="d">Last time on this ${t.model ? 'model' : 'Mac'}: ${esc(brief(last))}${last.secs ? `, ${esc(mmss(last.secs))}` : ''}.</span></div>` : ''}`;
       const tag = st.fake ? 'practice mode: no model' : running ? 'live' : ended ? `its last run` : 'what it runs';
       return `<div class="rt-main"><div class="rt-box rt-stages">${stages}${res}<div class="rt-clock">${clockTxt}</div></div>
-        <div class="rt-term"><div class="rt-bar2"><i></i><i></i><i></i><span>${esc(t.model ? modelName(m) : 'No model')} · ${esc(t.name)}${t.pick ? ` ${j?.n ?? taskN}` : ''}${th ? ' · thinking on' : ''}</span><em class="${running ? 'live' : ''}">${esc(tag)}</em></div><div class="rt-out" id="rt-out">${out}</div></div></div>`;
+        <div class="rt-term"><div class="rt-bar2"><i></i><i></i><i></i><span>${esc(t.model ? modelName(m) : 'No model')} · ${esc(t.name)}${c ? ` ${esc(c.key)}` : ''}${th ? ' · thinking on' : ''}</span><em class="${running ? 'live' : ''}">${esc(tag)}</em></div><div class="rt-out" id="rt-out">${out}</div></div></div>`;
     }
     function render() {
       if (box.hidden) return;
@@ -506,10 +528,16 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       if (k) { go(k.dataset.kind); return; }
       if (e.target.closest('#rt-go') && !e.target.closest('#rt-go').disabled) {
         if (isLive(st.job)) send('/tests/stop');
-        else { const v = shown(); if (v) send('/tests/run', { test: v.t.id, model: v.t.model ? pick : null, n: v.t.pick ? taskN : null, think: thinkOf(v) }); }
+        else { const v = shown(); if (v) send('/tests/run', { test: v.t.id, model: v.t.model ? pick : null, n: v.t.pick ? keyNow(v.t) : null, think: thinkOf(v) }); }
+        return;
+      }
+      // + New test: the Battle tab's New test window (the hub switches to it; this page alone opens the hub there).
+      if (e.target.closest('#rt-new')) {
+        if (window.parent !== window) { try { parent.postMessage({ agentic: 'new-test' }, location.origin); return; } catch { /* not the hub's frame */ } }
+        location.href = '/?tab=battle&new=1';
       }
     });
-    box.addEventListener('change', (e) => { if (e.target.id === 'rt-n') { taskN = Number(e.target.value); store('agentic-tests-run-n', String(taskN)); render(); } });
+    box.addEventListener('change', (e) => { if (e.target.id === 'rt-n') { taskKey = e.target.value; store('agentic-tests-run-n', taskKey); render(); } });
     function setThink(on) { think = on; store('agentic-tests-run-think', on ? 'on' : 'off'); err = ''; render(); }
     // T switches thinking (not while a run goes, nor for a test that takes no model).
     document.addEventListener('keydown', (e) => {
@@ -547,7 +575,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 <li>Each kind of test has its own tab. It shows as many runs as fit the window and pages through the rest, newest first; pick a run to see all of it (its notes, the code it ran on, its settings, its raw results and its results page).</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li>
-<li>${live ? '▶ Run a test runs one test on the model picked, with thinking off (Low, the way a battle runs) or on (High): the Thinking switch, or the T key (or, under Not model-specific, the unit tests or the repo check). The Battle arena\'s runner runs it: it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile, and the run keeps going if you close the window. Nothing starts by itself; its line lands here when it ends. <code>/test</code> in Agentic Coder opens it.' : 'In the hub this page also has ▶ Run a test, to run one test on one model from the page.'}</li></ul>
+<li>${live ? '▶ Run a test runs one test on the model picked, with thinking off (Low, the way a battle runs) or on (High): the Thinking switch, or the T key (or, under Not model-specific, the unit tests or the repo check). The Battle arena\'s runner runs it: it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile, and the run keeps going if you close the window. Nothing starts by itself; its line lands here when it ends. <code>/test</code> in Agentic Coder opens it. One practice task runs the one you pick by name, as the Battle tab keeps it (an edit, or a copy of yours like 18b, counts); My tests runs every test you made there, and + New test opens its New test window (a test of yours needs at least one check).' : 'In the hub this page also has ▶ Run a test, to run one test on one model from the page.'}</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;
   draw();
 })();

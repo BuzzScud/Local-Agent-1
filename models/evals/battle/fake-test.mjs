@@ -1,18 +1,20 @@
 // A stand-in for a test the hub's ▶ Run a test starts (AGENTIC_BATTLE_FAKE=1): no model, a few
 // seconds, lines in the shape the real one prints (so the page counts them the same way), and no
 // line in the test record. For the tests and previews of the Tests tab and the runner.
-//   node models/evals/battle/fake-test.mjs --test practice28 [--model gemma] [--n 10] [--think on]
+//   node models/evals/battle/fake-test.mjs --test practice28 [--model gemma] [--n 10 | 18b] [--think on]
 // Stopped (SIGTERM or SIGINT), it says so and ends with what it has, like the real ones.
 import { readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { pickTasks } from '../bench/pick-tasks.mjs';
+import { practiceChoice } from '../run-tests.mjs';
+import { listMetas, practiceList } from './store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
-const test = opt('test'); const model = opt('model', 'gemma'); const n = Number(opt('n', 10));
+const test = opt('test'); const model = opt('model', 'gemma'); const n = opt('n', '10');
 const thinking = `thinking ${opt('think', 'off') === 'on' ? 'on (High)' : 'off (Low)'}`;
 const ms = Number(process.env.AGENTIC_BATTLE_FAKE_MS ?? 250);
 let stopped = false;
@@ -36,8 +38,8 @@ async function items(list, line, head, tail) {
   say(tail(ok, done));
 }
 
-if (test === 'practice28' || test === 'task') {
-  const tasks = pickTasks(readdirSync(join(HERE, '..', 'bench', 'tasks')), test === 'task' ? { only: [String(n)] } : { set: 28 });
+if (test === 'practice28') {
+  const tasks = pickTasks(readdirSync(join(HERE, '..', 'bench', 'tasks')), { set: 28 });
   await items(tasks, (t, p) => `    · Plan()\n    · Read(main.mjs)\n${p ? 'PASS' : 'FAIL'}  think=off  ${t.padEnd(16)} ${String(3 + (t.length % 9)).padStart(4)}s  6 steps (0 its own)  3 model calls  0 errors${p ? '' : '  a practice fail'}`,
     `server up on http://127.0.0.1:17600 · practice run: no model (${model}) · ${thinking}`,
     (ok, d) => `thinking off: ${ok}/${d} passed${stopped ? ' · stopped' : ''}\nnot recorded in the test record: a practice run (no model ran)`);
@@ -49,11 +51,14 @@ if (test === 'practice28' || test === 'task') {
   say(`${model} · practice run: no model · ${thinking}`); say('loading the model…'); await wait(); say('loaded in 0 s · getting ready…');
   for (const f of ['src/cli.jsx', 'src/agent/agent.mjs', 'src/agent/prompt.mjs', 'src/app/App.jsx']) { if (stopped) break; await wait(); say(`  0:0${f.length % 9} Read ${f}`); }
   say(`${stopped ? 'stopped' : 'done'} after 0:02 · 4 steps · a practice run`); say('not recorded in the test record: a practice run (no model ran)');
-} else if (test === 'work28' || test === 'new28') {
-  const list = folders(join(HERE, test));
+} else if (test === 'work28' || test === 'new28' || test === 'task' || test === 'mine') {
+  // As run-set.mjs prints them: One practice task is one Practice 28 test (a copy of yours too), My tests yours.
+  const name = { work28: 'Work 28', new28: 'New 28', task: 'Practice 28', mine: 'My tests' }[test];
+  const only = practiceChoice(n)?.only ?? `p${n}`; // its folder, as the real one names it: p12-feature-currency
+  const list = test === 'task' ? [[...listMetas(), ...practiceList()].map((t) => t.id).find((id) => id.startsWith(`${only}-`)) ?? only] : test === 'mine' ? listMetas().filter((t) => t.suite === 'mine').map((t) => t.id).sort() : folders(join(HERE, test));
   await items(list, (t, p) => `${p ? 'PASS' : 'FAIL'}  ${t.padEnd(26)} ${String(4 + (t.length % 7)).padStart(4)}s   5 steps${p ? '' : '  — a practice fail'}`,
-    `${model} · ${test === 'work28' ? 'Work 28' : 'New 28'} · ${thinking} · ${list.length} tests, one at a time · practice run: no model`,
-    (ok, d) => `${test === 'work28' ? 'Work 28' : 'New 28'}: ${ok} of ${d} passed${stopped ? ' · stopped' : ''}\nnot recorded in the test record: a practice run (no model ran)`);
+    `${model} · ${name} · ${thinking} · ${list.length} test${list.length === 1 ? '' : 's'}, one at a time · practice run: no model`,
+    (ok, d) => `${name}: ${ok} of ${d} passed${stopped ? ' · stopped' : ''}\nnot recorded in the test record: a practice run (no model ran)`);
 } else if (test === 'unit') {
   await items(['app-menus', 'battle', 'record', 'hub-flow'], (f) => `(pass) ${f}.test.mjs`, 'bun test ./terminal/test ./models/test · practice run', (ok, d) => `\n ${d} pass\n 0 fail\nRan ${d} tests across ${d} files. · a practice run`);
 } else if (test === 'check') {

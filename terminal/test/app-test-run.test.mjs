@@ -47,7 +47,7 @@ test('/test opens the Tests tab on ▶ Run a test with this model picked; a name
   expect(text).toMatch(/&model=gemma&test=practice28 · Practice 28 is picked on Gemma 4 12B QAT/);
   expect(text).toMatch(/&model=gemma&test=task&n=12 · One practice task 12 is picked on Gemma 4 12B QAT/);
   expect(text).toMatch(/&model=none&test=unit · Unit tests is picked, then press Run/);
-  expect(text).toContain('No test called "nonsense". Try one of: practice 28, one practice task, real requests, long task, work 28, new 28, sorting check, unit tests, repo check');
+  expect(text).toContain('No test called "nonsense". Try one of: practice 28, one practice task, real requests, long task, work 28, new 28, my tests, sorting check, unit tests, repo check');
   expect(hub).toContain('runAsk'); // the hub hands run=1, the model and the test on to the Tests tab
   expect(page).toContain('id="runpane"');
 }, T);

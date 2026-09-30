@@ -113,6 +113,15 @@ export function listTests(home = battleHome()) {
     : (a.n ?? 0) - (b.n ?? 0) || String(a.variant ?? '').localeCompare(String(b.variant ?? ''))));
 }
 
+// Every test's meta.json alone (no prompt, no files): light enough for the Tests tab to read each
+// time it asks what it can run.
+export function listMetas(home = battleHome()) {
+  const P = paths(home);
+  let ids = [];
+  try { ids = readdirSync(P.tests); } catch { return []; }
+  return ids.map((id) => { const m = readJson(join(P.tests, id, 'meta.json')); return m ? { ...m, id } : null; }).filter(Boolean);
+}
+
 // The next free letter for a copy of Practice 28 test n: b, c, … (never one used before, even by a
 // deleted copy or an old result, so a copy's results are only ever its own).
 function nextVariant(n, home = battleHome()) {
@@ -154,6 +163,9 @@ export function saveTest({ id = null, title, kind, prompt, checks = [], ask = ''
   let dir = join(P.tests, tid);
   if (id && !existsSync(join(dir, 'meta.json'))) throw new Error('no such test');
   let old = readJson(join(dir, 'meta.json'), {});
+  // A test of your own needs a check, so a run of it can pass or fail (the sets that come with the
+  // repo keep theirs: a question there may still be decided by your vote).
+  if ((old.suite ?? suite) === 'mine' && !checks.length) throw new Error('tick at least one check (step 3), so a run of it can pass or fail');
   // A Practice 28 test itself never changes (it is what grades a model): the edit becomes a copy,
   // test 18 → 18b, with the original's files, and the original stays as it was.
   if (id && old.suite === 'practice' && !old.copyOf) {

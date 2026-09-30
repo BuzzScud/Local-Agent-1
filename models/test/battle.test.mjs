@@ -83,8 +83,11 @@ test('tests are kept as folders: the three sets are copied once (without their a
   expect(existsSync(join(home, 'tests', 'escape.txt'))).toBe(false);
   expect(existsSync(join(home, 'escape.txt'))).toBe(false);
   // An edit keeps the id and the files unless told to remove them.
-  store.saveTest({ id: m.id, title: 'Tax 2', kind: 'question', prompt: 'Which function computes tax, and its rate?', checks: [] }, home);
-  expect(store.listTests(home).at(-1)).toMatchObject({ id: m.id, title: 'Tax 2', files: ['src/billing.mjs'], checks: [] });
+  // A test of yours needs a check, new or edited, so a run of it can pass or fail.
+  expect(() => store.saveTest({ id: m.id, title: 'Tax 2', kind: 'question', prompt: 'Which function computes tax, and its rate?', checks: [] }, home)).toThrow('tick at least one check');
+  expect(() => store.saveTest({ title: 'Loose', kind: 'code', prompt: 'Tidy it up' }, home)).toThrow('tick at least one check');
+  store.saveTest({ id: m.id, title: 'Tax 2', kind: 'question', prompt: 'Which function computes tax, and its rate?', checks: [{ type: 'answer-has', value: 'rate' }] }, home);
+  expect(store.listTests(home).at(-1)).toMatchObject({ id: m.id, title: 'Tax 2', files: ['src/billing.mjs'], checks: [{ type: 'answer-has', value: 'rate' }] });
   expect(() => store.saveTest({ kind: 'code', prompt: ' ' }, home)).toThrow('needs a prompt');
 });
 
@@ -211,7 +214,8 @@ test('run all queues the New 28, stop pauses the line, a page test keeps its pag
   expect(st.queue.length).toBeGreaterThan(20);
   expect(st.tests.some((t) => t.latest?.status === 'stopped')).toBe(true);
   await post('/api/clearqueue');
-  const page = await post('/api/tests', { title: 'A page', kind: 'page', prompt: 'Make page.html', checks: [], run: true });
+  expect((await post('/api/tests', { title: 'A page', kind: 'page', prompt: 'Make page.html', checks: [], run: true })).body.error).toContain('tick at least one check');
+  const page = await post('/api/tests', { title: 'A page', kind: 'page', prompt: 'Make page.html', checks: [{ type: 'offline' }], run: true });
   const done = await until(async () => (await get('/api/state')).tests.find((t) => t.id === page.body.id && t.latest?.status === 'done'));
   const b = await get(`/api/battle?id=${encodeURIComponent(done.latest.id)}`);
   expect(b.runs.A.pages).toEqual(['page.html']);

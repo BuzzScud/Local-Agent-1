@@ -143,7 +143,8 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       // The arena runs on its own (it keeps going when this window closes): started here when it is
       // not up, then shown at its own address.
       if (url.pathname === '/battle') {
-        try { const b = await startBattle(); return Response.redirect(b.url, 302); }
+        // ?new=1 (+ New test on the Tests tab): the arena opens its New test window.
+        try { const b = await startBattle(); return Response.redirect(url.searchParams.get('new') === '1' ? `${b.url.replace(/\/?$/, '/')}?new=1` : b.url, 302); }
         catch (e) { return page(`<!doctype html><meta charset="utf-8"><body style="font:14px -apple-system,sans-serif;padding:24px"><h3>The Battle arena did not start</h3><p>${String(e.message).replace(/[<>&]/g, '')}</p><p>Open the Battle tab again to try once more.</p>`); }
       }
       if (url.pathname === '/memory') return page(memoryHtml);

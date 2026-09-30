@@ -75,6 +75,10 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     const a = new URLSearchParams(); for (const k of ['model', 'test', 'n', 'think']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
     q.searchParams.delete('run'); history.replaceState(null, '', q); return a;
   })();
+  // ?tab=battle&new=1, or + New test on the Tests tab (a message from its frame): the Battle tab with
+  // its New test window open. Taken once, like runAsk.
+  let newAsk = (() => { const q = new URL(location.href); if (!q.searchParams.has('new')) return false; q.searchParams.delete('new'); history.replaceState(null, '', q); return true; })();
+  window.addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.agentic === 'new-test') { newAsk = true; open('battle'); } });
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
 
   function setTab(tab) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
@@ -109,7 +113,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
     if (tab === 'tests' && !page && runAsk) { const a = runAsk.toString(); runAsk = null; return show(`/tests${a ? `?${a}` : ''}#run`, 'run a test on one model'); }
     if (tab === 'tests' && !page) return show('/tests', 'every test run and its result');
-    if (tab === 'battle') return show('/battle', 'Gemma vs Qwen, one model at a time');
+    if (tab === 'battle') { const n = newAsk; newAsk = false; return show(n ? '/battle?new=1' : '/battle', 'Gemma vs Qwen, one model at a time'); }
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }

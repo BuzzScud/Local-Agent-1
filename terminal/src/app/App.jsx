@@ -1264,10 +1264,10 @@ export function App({ opts, win, onRestart }) {
       }
       case 'test': {
         // The hub's Tests tab on ▶ Run a test, with this window's model picked: pick a test (or name
-        // one: /test practice 28, /test work28, /test 12 for practice task 12) and press Run. The run is
+        // one: /test practice 28, /test work28, /test 12 for practice task 12, /test 18b for your copy of it) and press Run. The run is
         // the Battle arena runner's: this window lets go of its model while it runs, and it keeps
         // going when this window closes.
-        const num = /^(?:task\s*)?(\d{1,2})$/i.exec(arg);
+        const num = /^(?:task\s*)?(\d{1,2}[b-z]?)$/i.exec(arg);
         const t = arg ? (findRunTest(arg) ?? (num ? RUN_TESTS.find((x) => x.id === 'task') : null)) : null;
         if (arg && !t) { push({ type: 'note', text: `No test called "${arg}". Try one of: ${RUN_TESTS.map((x) => x.name.toLowerCase()).join(', ')}, or a practice task's number (/test 12). /test alone opens the list.`, tone: 'warn' }); break; }
         const mine = model.edited ? model.edited.base : model.id;

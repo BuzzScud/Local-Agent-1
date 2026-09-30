@@ -1,8 +1,9 @@
-// One model, one Battle set: the Work 28 or the New 28 on Gemma (or Qwen) alone, one test at a
-// time, each the way the arena runs it (run-one.mjs: Low, the context helpers, a throwaway copy of
-// the test's files, its own checks, 10 minutes at most once the model is loaded). The hub's
-// ▶ Run a test starts it; it runs from Terminal too:
-//   node models/evals/battle/run-set.mjs --model gemma --set work28 [--only w01,w05] [--out dir] [--think on]
+// One model, one Battle set: the Work 28, the New 28, the Practice 28 or your own tests (My tests)
+// on Gemma (or Qwen) alone, one test at a time, each the way the arena runs it (run-one.mjs: Low,
+// the context helpers, a throwaway copy of the test's files, its own checks, 10 minutes at most
+// once the model is loaded). The hub's ▶ Run a test starts it (One practice task is
+// --set practice --only p12, or p18b for a copy of yours); it runs from Terminal too:
+//   node models/evals/battle/run-set.mjs --model gemma --set work28|new28|practice|mine [--only w01,w05] [--out dir] [--think on]
 // --think on: thinking on, at High (a battle runs Low); each test still stops at 10 minutes.
 // It plays your copies in the arena (~/.agentic-coder/battle/tests/), so an edit made there is what
 // runs. One line per test as it ends, then a line in the test record (Battle sets). Raw results:
@@ -23,7 +24,7 @@ const REPO = resolve(HERE, '..', '..', '..');
 const FAKE = process.env.AGENTIC_BATTLE_FAKE === '1';
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
-const SETS = ['work28', 'new28'];
+const SETS = ['work28', 'new28', 'practice', 'mine'];
 const model = MODELS[opt('model')];
 const set = opt('set');
 if (!model || !SETS.includes(set)) { console.error(`usage: run-set.mjs --model <${Object.keys(MODELS).join('|')}> --set <${SETS.join('|')}> [--only w01,w05]`); process.exit(2); }
@@ -84,6 +85,11 @@ const whyOf = (r) => {
 };
 const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')} s`;
 const name = SUITES[set];
+// Its line in the test record: one practice test by its number and title ("Practice test 18b: …"),
+// your own tests as My tests, a whole set as "The Work 28".
+const one = set === 'practice' && tests.length === 1 ? tests[0] : null;
+const recName = (ran) => (one ? `Practice test ${one.n}${one.variant ?? ''}: ${one.title}, one model`
+  : `${set === 'mine' ? name : `The ${name}`}${only ? ` (${ran} picked)` : ''}, one model`);
 console.log(`${model.name} · ${name} · thinking ${thinking ? 'on (High)' : 'off (Low)'} · ${tests.length} test${tests.length === 1 ? '' : 's'}, one at a time, each stops at 10 minutes${FAKE ? ' · practice run: no model' : ''}`);
 const rows = [];
 const t0 = Date.now();
@@ -103,7 +109,7 @@ const secs = rows.reduce((s, r) => s + r.secs, 0);
 writeFileSync(join(outDir, 'summary.json'), JSON.stringify({ model: model.id, set, thinking, only: only ?? null, fake: FAKE, stopped: stopping, at: new Date(t0).toISOString(), passed, total: rows.length, secs, rows }, null, 1));
 console.log(`${name} on ${model.name.split(' ')[0]}: ${passed} of ${rows.length} passed${stopping ? ' · stopped' : ''} · ${clock(secs)} of test time, ${clock((Date.now() - t0) / 1000)} in all`);
 const failed = rows.filter((r) => !r.pass).map((r) => r.id);
-if (rows.length) recordTest({ kind: 'sets', model: model.id, name: `The ${name}${only ? ` (${rows.length} picked)` : ''}, one model`, code: codeLabel(REPO), effort: thinking ? 'high' : 'low', ctx: 32768,
+if (rows.length) recordTest({ kind: 'sets', model: model.id, name: recName(rows.length), code: codeLabel(REPO), effort: thinking ? 'high' : 'low', ctx: 32768,
   passed, total: rows.length, secs, part: Boolean(only) || stopping, result: stopping ? 'stopped' : undefined,
   note: [FAKE ? 'practice run: no model ran' : '', failed.length ? `failed: ${failed.join(', ')}` : ''].filter(Boolean).join(' · '), raw: outDir });
 console.log(`saved ${outDir}/summary.json`);

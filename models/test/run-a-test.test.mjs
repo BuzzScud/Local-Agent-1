@@ -15,8 +15,8 @@ process.env.AGENTIC_HOME = HOME;
 process.env.AGENTIC_BATTLE_PORT = String(PORT);
 process.env.AGENTIC_TEST_RECORD = join(HOME, 'record.jsonl');
 const { pickTasks } = await import('../evals/bench/pick-tasks.mjs');
-const { RUN_TESTS, runCommand, runCatalog, findRunTest, countLines, runTestById } = await import('../evals/run-tests.mjs');
-const { holdText } = await import('../evals/battle/store.mjs');
+const { RUN_TESTS, runCommand, runCatalog, findRunTest, countLines, runTestById, practiceChoices, practiceChoice, ownCount } = await import('../evals/run-tests.mjs');
+const { holdText, seedSuites, saveTest } = await import('../evals/battle/store.mjs');
 const { readRecord } = await import('../evals/record.mjs');
 const REPO = join(import.meta.dir, '..', '..');
 const NODE = process.execPath.endsWith('bun') ? 'node' : process.execPath;
@@ -38,21 +38,27 @@ test('each test the tab can run: its script is there, its command names the mode
   const models = ['gemma', 'qwen'];
   for (const t of RUN_TESTS) {
     expect(existsSync(join(REPO, t.script))).toBe(true);
+    if (t.own) continue; // My tests, with none yet: below
     const c = runCommand(t.id, { model: 'qwen', models });
     expect(c.argv[0]).toBe(t.script);
     if (t.model) expect(c.argv.slice(1, 3)).toEqual(['--model', 'qwen']);
     else expect(c.argv).not.toContain('--model');
   }
   expect(runCommand('practice28', { model: 'gemma', models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'gemma', '--think', 'off', '--set', '28']);
-  expect(runCommand('task', { model: 'gemma', n: 12, models }).argv.slice(-2)).toEqual(['--only', '12']);
-  expect(runCommand('task', { model: 'gemma', models }).n).toBe(10);
-  expect(() => runCommand('task', { model: 'gemma', n: 29, models })).toThrow('a task number from 1 to 28');
+  // One practice task: the Practice 28 test picked, as the Battle tab keeps it (run-set.mjs --set practice).
+  expect(runCommand('task', { model: 'gemma', n: 12, models }).argv).toEqual(['models/evals/battle/run-set.mjs', '--model', 'gemma', '--set', 'practice', '--only', 'p12']);
+  expect(runCommand('task', { model: 'gemma', n: '3', models }).argv.slice(-2)).toEqual(['--only', 'p03']);
+  expect(runCommand('task', { model: 'gemma', models }).n).toBe('10');
+  expect(() => runCommand('task', { model: 'gemma', n: 29, models })).toThrow('no practice test "29" (1 to 28, or a copy of yours like 18b)');
+  expect(() => runCommand('task', { model: 'gemma', n: '18b', models })).toThrow('no practice test "18b"');
+  // My tests: none yet, so nothing to run.
+  expect(() => runCommand('mine', { model: 'gemma', models })).toThrow('you have no tests of your own yet');
   expect(() => runCommand('practice28', { model: 'bonsai', models })).toThrow('pick a model');
   expect(() => runCommand('nope', { model: 'gemma', models })).toThrow('no test "nope"');
   expect(runCommand('unit', { models }).argv).toEqual(['models/evals/tools/run-suite.mjs']);
   // Thinking on (the tab's switch): at High, in each runner's own words; a test with no model takes none.
   expect(runCommand('practice28', { model: 'gemma', think: true, models }).argv).toEqual(['models/evals/bench/run.mjs', '--model', 'gemma', '--think', 'on', '--effort', 'high', '--set', '28']);
-  expect(runCommand('task', { model: 'qwen', n: 5, think: true, models }).argv.slice(-6)).toEqual(['--think', 'on', '--effort', 'high', '--only', '5']);
+  expect(runCommand('task', { model: 'qwen', n: 5, think: true, models }).argv.slice(-4)).toEqual(['--only', 'p05', '--think', 'on']);
   expect(runCommand('requests', { model: 'gemma', think: true, models }).argv.slice(-2)).toEqual(['--think', 'on']);
   expect(runCommand('long', { model: 'gemma', think: true, models }).argv).toContain('high');
   expect(runCommand('long', { model: 'gemma', models }).argv.join(' ')).toContain('--effort low');
@@ -81,10 +87,29 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(cat.find((t) => t.id === 'check').command.none).toBe('node models/evals/tools/check.mjs --fast');
   expect(cat.find((t) => t.id === 'requests').commandThink.qwen).toBe('node models/evals/bench/words/real.mjs --model qwen --think on');
   expect(cat.find((t) => t.id === 'check').commandThink).toBeUndefined();
+  expect(cat.find((t) => t.id === 'task').command.gemma).toBe('node models/evals/battle/run-set.mjs --model gemma --set practice --only p10');
+  expect(cat.find((t) => t.id === 'task').choices).toHaveLength(28);
+  expect(cat.find((t) => t.id === 'mine')).toMatchObject({ own: true, total: 0 });
   // Progress from what it printed so far.
   expect(countLines(runTestById('practice28'), ['server up', '    · Plan()', 'PASS  think=off  1-json-flag', 'FAIL  think=off  10-fix', 'thinking off: 1/2 passed'])).toEqual({ done: 2, passed: 1, total: 28 });
   expect(countLines(runTestById('requests'), ['OK   #1 [code] "hello"', 'FAIL #2 [code] "x"'])).toEqual({ done: 2, passed: 1, total: 28 });
   expect(countLines(runTestById('long'), ['anything']).done).toBeNull();
+});
+
+test('One practice task picks from the Practice 28 as the Battle tab keeps them: your copy after its original; My tests counts yours', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-picks-'));
+  expect(practiceChoices(home).map((c) => c.key).slice(0, 3)).toEqual(['1', '2', '3']); // before the arena starts: the repo's
+  seedSuites(home);
+  saveTest({ id: 'p18-writing-noncode-folder', title: 'A shorter story', kind: 'writing', prompt: 'Write two sentences into TEST.txt', checks: [] }, home);
+  const cs = practiceChoices(home);
+  expect(cs).toHaveLength(29);
+  expect(cs.slice(17, 19)).toEqual([expect.objectContaining({ key: '18', only: 'p18', copy: false }), { key: '18b', only: 'p18b', title: 'A shorter story', copy: true }]);
+  for (const n of ['18b', 'p18b', 'P18B', 'p18b-writing-noncode-folder']) expect(practiceChoice(n, home)?.only).toBe('p18b');
+  expect(practiceChoice('01', home)?.key).toBe('1');
+  expect(practiceChoice('18c', home)).toBeNull();
+  expect(() => saveTest({ title: 'No check', kind: 'question', prompt: 'Which port?', checks: [] }, home)).toThrow('tick at least one check');
+  saveTest({ title: 'Port', kind: 'question', prompt: 'Which port?', checks: [{ type: 'answer-has', value: '8080' }] }, home);
+  expect(ownCount(home)).toBe(1);
 });
 
 test('what the app says while a test run holds the memory names the test and its model', () => {
@@ -113,6 +138,27 @@ test('a Battle set on one model: a line per test, the checks as the arena runs t
   expect(line.note).toContain('practice run: no model ran');
   expect(new RegExp(runTestById('work28').record.name).test(line.name)).toBe(true);
   expect((await collect(runSet(['--set', 'nope']))).code).toBe(2);
+}, 60_000);
+
+test('One practice task and My tests on one model: run-set plays the pick (or every test of yours) and names its line so the tab finds it', async () => {
+  const r = await collect(runSet(['--set', 'practice', '--only', 'p12', '--out', join(HOME, 'sets-p')]));
+  expect(r.code).toBe(0);
+  expect(r.out).toContain('Gemma 4 12B QAT · Practice 28 · thinking off (Low) · 1 test, one at a time');
+  expect(r.out).toMatch(/^(PASS|FAIL|NONE)  p12-feature-currency\s/m);
+  let line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.kind === 'sets' && x.name.startsWith('Practice test'));
+  expect(line).toMatchObject({ name: 'Practice test 12: Add a currency option to formatMoney(), one model', total: 1, part: true });
+  expect(new RegExp(runTestById('task').record.name).test(line.name)).toBe(true);
+  // Yours: one, with a check, so a run of it can pass or fail.
+  saveTest({ title: 'Port', kind: 'question', prompt: 'Which port does it listen on?', checks: [{ type: 'answer-has', value: '8080' }] });
+  expect(runCommand('mine', { model: 'gemma', models: ['gemma'] }).total).toBe(1);
+  expect(runCatalog(['gemma']).find((t) => t.id === 'mine').total).toBe(1);
+  const m = await collect(runSet(['--set', 'mine', '--out', join(HOME, 'sets-m')]));
+  expect(m.code).toBe(0);
+  expect(m.out).toContain('· My tests · thinking off (Low) · 1 test, one at a time');
+  line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.kind === 'sets' && x.name.startsWith('My tests'));
+  expect(line).toMatchObject({ name: 'My tests, one model', total: 1, part: false });
+  expect(new RegExp(runTestById('mine').record.name).test(line.name)).toBe(true);
+  expect(countLines(runTestById('mine'), ['PASS  m-port-x   4s', 'x'], 3)).toEqual({ done: 1, passed: 1, total: 3 });
 }, 60_000);
 
 test('a Battle set with thinking on: each test is asked for it, and the record says High', async () => {
