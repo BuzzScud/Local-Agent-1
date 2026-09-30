@@ -34,14 +34,18 @@ const seen = (html) => html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<sc
 // One model's twin rows where every model is drawn: [name, value, marked the better one].
 const twins = (html, id) => [...html.matchAll(new RegExp(`<g class="tw(?: sm)?( best)?" data-model="${id}">.*?<text class="twn"[^>]*>([^<]*)</text><text class="twv"[^>]*>([^<]*)</text></g>`, 'g'))].map((m) => ({ name: m[2], value: m[3], best: Boolean(m[1]) }));
 
-test('the hub has a built-in Flow tab: the page is drawn when it opens, with its eight tabs, every model in /model on it, nothing loaded from outside', async () => {
+test('the hub has a built-in Flow page, in the Structure tab: the page is drawn when it opens, with its eight tabs, every model in /model on it, nothing loaded from outside', async () => {
   const s = startWeightsServer({ path: null, docsDir: null, port: 0, cwd: mkdtempSync(join(tmpdir(), 'agentic-flow-')) });
   try {
     const base = s.url.replace(/\/$/, '');
     const hub = await (await fetch(base + '/')).text();
-    expect(hub).toContain('<button data-tab="flow">Flow</button>');
-    expect(hub).toContain("if (tab === 'flow') return show('/flow'");
-    expect(hub).toMatch(/const builtIn = [^\n]*t === 'flow'/); // it opens before the DOCS folder is read, and without one
+    // Flow is one of the Structure tab's two pages, picked from the menu under that tab (a second click, or its caret); it is no tab of its own.
+    expect(hub).not.toContain('data-tab="flow"');
+    expect(hub).toContain('<button data-tab="structure" aria-haspopup="menu" aria-expanded="false" title="Structure and Flow: click again for the menu">Structure<i class="caret" aria-hidden="true"></i></button>');
+    expect(hub).toMatch(/<div class="menu" id="menu" role="menu" aria-label="Page of the Structure tab" hidden><button type="button" role="menuitemradio" data-view="structure" aria-checked="true">.*<b>Structure<\/b>.*<button type="button" role="menuitemradio" data-view="flow" aria-checked="false">.*<b>Flow<\/b>/);
+    expect(hub).toContain("if (tab === 'structure' && view === 'flow') return show('/flow'");
+    expect(hub).toContain("if (tab === 'flow') { tab = 'structure'; view = 'flow'; }"); // an old address and `coding hub flow` open it there
+    expect(hub).toMatch(/const builtIn = [^\n]*t === 'flow' \|\| \(t === 'structure' && view === 'flow'\)/); // it opens before the DOCS folder is read, and without one
     const r = await fetch(base + '/flow');
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toContain('text/html');
@@ -59,8 +63,9 @@ test('the hub has a built-in Flow tab: the page is drawn when it opens, with its
     for (const m of data.models) { expect(page).toContain(`data-model="${m.id}"`); expect(page).toContain(`data-pick="${m.id}"`); expect(data.folders[m.id]).toEqual(expect.any(String)); }
     if (data.paths) expect(data.paths.map((p) => p.id)).toEqual(PATHS);
     const help = await (await fetch(base + '/help')).text();
-    expect(help).toContain("['Flow', 'how Agentic Coder works, as a flow diagram in eight tabs");
+    expect(help).toContain("['Structure', 'two pages behind one tab, picked with the switch beside it. Structure: where every part of Agentic Coder lives (the tab opens on it). Flow: how Agentic Coder works, as a flow diagram in eight tabs");
     expect(help).toContain('every model in /model drawn into it');
+    expect(help).not.toContain("['Flow',");
   } finally { s.stop(); }
 });
 
@@ -180,7 +185,7 @@ test('one list of steps for the hub: the Flow tab draws all of them, the Harness
   STAGES.forEach((g, i) => { expect(flow).toMatch(new RegExp(`<g class="stage"><path[^>]*/><text[^>]*>${g.name}</text></g>`)); expect(harness).toContain(`<h3><span class="n">${i + 1}</span>${g.name}</h3>`); });
   expect(count(harness, '<section class="card step">')).toBe(STAGES.length);
   // Each page says how its count meets the other's, from the same list.
-  expect(harness).toContain(`The Flow tab draws these ${STAGES.length} as ${STEPS.length} steps: “It sorts” is Sort and Ask; “It works” is Recall and Work.`);
+  expect(harness).toContain(`The Flow page, beside Structure, draws these ${STAGES.length} as ${STEPS.length} steps: “It sorts” is Sort and Ask; “It works” is Recall and Work.`);
   expect(flow).toContain(`${STEPS.length} steps from your Enter key to “done”. The line over them is the Harness tab’s ${STAGES.length}: “It sorts” is Sort and Ask; “It works” is Recall and Work.`);
   // The amber dot on a step's box: the steps that can call the model, no others, each on its own box.
   STEPS.forEach((s, i) => expect(flow.match(new RegExp(`<g class="node [^"]*"><rect[^>]*/><text class="h"[^>]*>${i + 1} · ${s.name}</text>.*?</g>`))[0].includes('<circle class="dotm"')).toBe(s.model));

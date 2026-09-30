@@ -27,6 +27,18 @@ header .now { color: var(--ink3); font-size: 12px; overflow: hidden; text-overfl
 header button, header h1, header a { flex: none; }
 header a { color: var(--accent); font-size: 12px; text-decoration: none; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
 header a:hover { background: var(--panel); }
+/* The Structure tab holds two pages, Structure and Flow: its caret opens a small menu that picks one */
+header button .caret { display: inline-block; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; margin-left: 7px; vertical-align: 2px; opacity: .65; }
+.menu { position: fixed; z-index: 10; width: 356px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px; box-shadow: 0 12px 32px rgba(0, 0, 0, .28); }
+.menu[hidden] { display: none; }
+.menu button { font: inherit; width: 100%; display: grid; grid-template-columns: 22px minmax(0, 1fr) 16px; gap: 10px; align-items: center; text-align: left; padding: 8px 10px; border: none; border-radius: 8px; background: none; color: var(--ink); cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--panel); outline: none; }
+.menu button svg { width: 20px; height: 20px; stroke: var(--ink2); fill: none; stroke-width: 1.5; stroke-linejoin: round; }
+.menu b { display: block; font-weight: 600; font-size: 13.5px; }
+.menu small { display: block; color: var(--ink3); font-size: 12px; line-height: 1.35; }
+.menu .tick { font-style: normal; color: var(--accent); visibility: hidden; font-size: 13px; }
+.menu button[aria-checked="true"] .tick { visibility: visible; }
+.menu .hint { color: var(--ink3); font-size: 11px; padding: 6px 10px 3px; border-top: 1px solid var(--line); margin-top: 4px; }
 main { flex: 1; min-height: 0; position: relative; }
 iframe { width: 100%; height: 100%; border: none; background: var(--surface); display: block; }
 #list { position: absolute; inset: 0; overflow: auto; padding: 20px 24px; display: none; }
@@ -48,8 +60,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <h1>Agentic Coder hub</h1>
   <button data-tab="weights">Weights</button>
   <button data-tab="harness">Harness</button>
-  <button data-tab="structure">Structure</button>
-  <button data-tab="flow">Flow</button>
+  <button data-tab="structure" aria-haspopup="menu" aria-expanded="false" title="Structure and Flow: click again for the menu">Structure<i class="caret" aria-hidden="true"></i></button>
   <button data-tab="arena">Arena</button>
   <button data-tab="builder">Test builder</button>
   <button data-tab="memory">Memory</button>
@@ -60,6 +71,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <span class="now" id="now"></span>
   <a id="own" href="/weights" target="_blank" rel="noopener">open in its own tab ↗</a>
 </header>
+<div class="menu" id="menu" role="menu" aria-label="Page of the Structure tab" hidden><button type="button" role="menuitemradio" data-view="structure" aria-checked="true"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="6" height="4" rx="1.2"/><rect x="11.5" y="8" width="6" height="4" rx="1.2"/><rect x="11.5" y="14" width="6" height="4" rx="1.2"/><path d="M5.5 7v9h6M5.5 10h6"/></svg><span><b>Structure</b><small>where every part of Agentic Coder lives</small></span><i class="tick">✓</i></button><button type="button" role="menuitemradio" data-view="flow" aria-checked="false"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3.5" width="6" height="4.5" rx="1.2"/><rect x="12" y="3.5" width="6" height="4.5" rx="1.2"/><rect x="7" y="12.5" width="6" height="4.5" rx="1.2"/><path d="M8 5.75h4M15 8v2.5h-5v2M5 8v2.5h5"/></svg><span><b>Flow</b><small>how a request moves through it, both models</small></span><i class="tick">✓</i></button><p class="hint">The tab opens on Structure · 1 or 2 picks · Esc closes</p></div>
 <main>
   <iframe id="frame" title="page"></iframe>
   <div id="list"></div>
@@ -67,7 +79,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
 <script>
 (function () {
   const $ = (s) => document.querySelector(s);
-  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own');
+  const frame = $('#frame'), list = $('#list'), now = $('#now'), own = $('#own'), menu = $('#menu'), stab = document.querySelector('header > button[data-tab="structure"]');
   let docs = null; // { dir, missing, pinned: { harness, structure }, pages: [{ file, title, kind, size, saved }] }
   // The Arena is the Tests tab and the Battle tab as one (30 Sep 2026): an address that names either opens it.
   const ALIAS = { tests: 'arena', battle: 'arena' };
@@ -92,7 +104,14 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   });
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
 
-  function setTab(tab) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
+  function setTab(tab) { for (const b of document.querySelectorAll('header > button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
+  // The Structure tab's two pages (30 Sep 2026): Structure, the folder map (the pinned DOCS page), and Flow (/flow). The
+  // switch beside the tab shows only there; a click on the tab always opens Structure, and ?view=flow keeps Flow on a reload.
+  function setView(view) {
+    for (const b of menu.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.view === (view ?? '')));
+    closeMenu();
+    const q = new URL(location.href); if (view === 'flow') q.searchParams.set('view', 'flow'); else q.searchParams.delete('view'); history.replaceState(null, '', q);
+  }
   function show(url, label) {
     list.classList.remove('on'); frame.classList.remove('off');
     if (frame.getAttribute('src') !== url) frame.src = url;
@@ -111,8 +130,13 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
       + docs.groups.map((g) => { const ps = docs.pages.filter((p) => p.group === g); return `<h2>${g} · ${ps.length}${BLURB[g] ? ` <span style="text-transform:none;letter-spacing:0;font-weight:400">— ${BLURB[g]}</span>` : ''}</h2>` + ps.map((p) => row(p)).join(''); }).join('')
       + `<p class="note" style="margin-top:18px;font-size:12px">Read live from <code>${docs.dir}</code>: each group is a subfolder there. Save a page into one and it shows here on the next visit; a file at the top level shows as unsorted.</p>`;
   }
-  function open(tab, page) {
+  // The menu under the Structure tab: a click on the tab while it is open (or on its caret) shows it; a pick, Esc or a click elsewhere closes it.
+  function openMenu() { const r = stab.getBoundingClientRect(); menu.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 364))}px`; menu.style.top = `${r.bottom + 6}px`; menu.hidden = false; stab.setAttribute('aria-expanded', 'true'); (menu.querySelector('[aria-checked="true"]') ?? menu.querySelector('button')).focus(); }
+  function closeMenu() { menu.hidden = true; stab.setAttribute('aria-expanded', 'false'); }
+  function open(tab, page, view) {
     tab = ALIAS[tab] ?? tab;
+    // Flow was a tab of its own until 30 Sep 2026: an old address or `coding hub flow` opens it in Structure.
+    if (tab === 'flow') { tab = 'structure'; view = 'flow'; }
     if (frame.getAttribute('src') === '/instructions' && tab !== 'instructions' && frame.contentWindow?.instructionsDirty?.()) {
       if (!confirm('Discard unsaved instruction edits and leave this tab?')) return;
       frame.contentWindow.instructionsLeaving = true;
@@ -124,11 +148,12 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
       frame.src = 'about:blank';
     }
     setTab(tab);
+    setView(tab === 'structure' && !page ? (view === 'flow' ? 'flow' : 'structure') : null);
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
     if (tab === 'help') return show('/help', 'every command, key and setting');
     if (tab === 'instructions') return show('/instructions', 'general behavior and planning');
     if (tab === 'harness' && !page) return show('/harness', 'one harness, every model beside the others');
-    if (tab === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
+    if (tab === 'structure' && view === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
     // The Arena runs on its own address (its runner's): /arena starts it when it is not up and sends the frame there.
     if (tab === 'arena') { const a = runAsk ? runAsk.toString() : ''; runAsk = null; return show(`/arena${a ? `?${a}` : ''}`, 'run a test on one model, or battle two'); }
     if (tab === 'builder' && !page) { const n = newAsk; newAsk = false; return show(n ? '/builder?new=1' : '/builder', 'make your own tests: easy, medium, hard'); }
@@ -136,15 +161,33 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'docs' && !page) return showList();
     if (!docs) { list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; return; }
     const p = page ? docs.pages.find((x) => x.file === page) : docs.pinned[tab];
+    // No folder map in the DOCS folder: the Structure tab says so and keeps its switch, so Flow is still one click away.
+    if (!p && tab === 'structure') { frame.classList.add('off'); list.classList.add('on'); now.textContent = ''; own.style.display = 'none'; list.innerHTML = docs.missing ? `<p class="note">The DOCS folder was not found, so the folder map cannot be shown. Agentic Coder looks for <code>${docs.dir || 'cli docs'}</code> at the top of the repo. Flow, beside it, needs no folder.</p>` : '<p class="note">No structure page in the DOCS folder. Flow, beside it, needs no page.</p>'; return; }
     if (!p) { setTab('docs'); showList(); if (!docs.missing) list.insertAdjacentHTML('afterbegin', `<p class="note">No ${page ? `page called <code>${page}</code>` : `${tab} page`} in the DOCS folder.</p>`); return; }
     show('/docs/' + p.file.split('/').map(encodeURIComponent).join('/'), p.title || p.name);
   }
-  for (const b of document.querySelectorAll('header button')) b.onclick = () => open(b.dataset.tab);
+  for (const b of document.querySelectorAll('header > button')) b.onclick = (e) => {
+    if (b === stab && (b.classList.contains('on') || e.target.closest('.caret'))) { if (!b.classList.contains('on')) open('structure'); return menu.hidden ? openMenu() : closeMenu(); }
+    open(b.dataset.tab);
+  };
+  for (const b of menu.querySelectorAll('button')) b.onclick = () => open('structure', null, b.dataset.view);
+  document.addEventListener('click', (e) => { if (!menu.hidden && !menu.contains(e.target) && !stab.contains(e.target)) closeMenu(); });
+  document.addEventListener('keydown', (e) => {
+    if (menu.hidden) return;
+    const items = [...menu.querySelectorAll('button')], at = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { closeMenu(); stab.focus(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+    else if (e.key === '1' || e.key === '2') items[Number(e.key) - 1].click();
+  });
+  // A click inside the page below moves the focus into its frame: the hub's window loses it, and the menu closes.
+  window.addEventListener('blur', () => { if (!menu.hidden) closeMenu(); });
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = ALIAS[q.searchParams.get('tab')] ?? (q.searchParams.get('tab') || 'weights'); const page = q.searchParams.get('page');
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || t === 'arena' || t === 'builder' || t === 'memory' || t === 'instructions';
-  if (builtIn(tab) && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
+  const view = q.searchParams.get('view');
+  // Flow, in the Structure tab, opens before the DOCS folder is read, like the tabs built into the app.
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || (t === 'structure' && view === 'flow') || t === 'arena' || t === 'builder' || t === 'memory' || t === 'instructions';
+  if (builtIn(tab) && !page) open(tab, null, view); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();
 </script>

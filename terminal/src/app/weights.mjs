@@ -1,13 +1,13 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Arena · Test builder · Memory · Instructions · All docs · Help
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure (its two pages: Structure and Flow) · Arena · Test builder · Memory · Instructions · All docs · Help
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned structure page (and a harness page kept there, under All docs)
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
 //   /harness, /harness.json the Harness tab: one harness, every model in /model beside the others, read live (harness-hub.mjs)
-//   /flow, /flow.json the Flow tab: how Agentic Coder works as a flow diagram, every model in /model drawn into it, read live (flow-hub.mjs)
+//   /flow, /flow.json the Flow page, in the Structure tab: how Agentic Coder works as a flow diagram, every model in /model drawn into it, read live (flow-hub.mjs)
 //   /arena            the Arena tab: run a test on one model, or battle two. It is the arena runner's own page
 //                     (models/evals/battle/): started when it is not up, and told this hub's address so its
 //                     Record button can show the page below. /battle is the same (its name before 30 Sep 2026)

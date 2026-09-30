@@ -78,7 +78,7 @@ const who = (ws, note = {}) => `<span class="who">${ws.map((w) => `<span>${dot(w
 const LEGEND = `<p class="legend"><span>${dot('m')}${the_model}, the brain (writes the words and code)</span><span>${dot('h')}the harness (the code around it)</span><span>${dot('u')}you</span></p>`;
 
 // The five steps of this tab are the hub's one list of steps (steps.mjs), told as its stages: the
-// Flow tab draws the same list as seven boxes, so the two tabs cannot disagree.
+// Flow page (in the Structure tab) draws the same list as seven boxes, so the two cannot disagree.
 const STEPS = STAGES.map((g) => ({ ...g, text: g.text.replace('{The model}', THE_MODEL) }));
 // The tools as the page names them; one added to the app shows under its own name.
 const TOOL_WORDS = { TodoWrite: 'a to-do list', Ask: 'a question to you' };
@@ -130,7 +130,7 @@ export function harnessPage(d) {
 
   // ── 1 · the flow
   const steps = `<div class="steps">${STEPS.map((s, i) => `<section class="card step"><h3><span class="n">${i + 1}</span>${s.name}</h3><p>${s.text}</p>${who(s.who, s.note)}</section>${i < STEPS.length - 1 ? '<i class="arr">→</i>' : ''}`).join('')}</div>`;
-  const sameLine = `<p class="sameline"><b>The same whichever model is loaded:</b> the ${STEPS.length} steps · the ${tools.length} tools · the 3 safety gates · ${S.steps} steps and ${S.tries} tries at most · your OK before any change. Only one model is loaded at a time on this Mac; <code>/model</code> swaps them. The Flow tab draws these ${STEPS.length} as ${FLOW_STEPS.length} steps: ${stagesInWords()}.</p>`;
+  const sameLine = `<p class="sameline"><b>The same whichever model is loaded:</b> the ${STEPS.length} steps · the ${tools.length} tools · the 3 safety gates · ${S.steps} steps and ${S.tries} tries at most · your OK before any change. Only one model is loaded at a time on this Mac; <code>/model</code> swaps them. The Flow page, beside Structure, draws these ${STEPS.length} as ${FLOW_STEPS.length} steps: ${stagesInWords()}.</p>`;
   const flow = `<h2>One request, from start to done</h2><p class="lead">The coloured dots show who does each part. ${THE_MODEL} only writes. The harness decides what gets written to your files, and when.</p>${LEGEND}${steps}${sameLine}${pair([R.passed, R.time, R.read, R.write, R.mem], M.length > 1 ? sw(`The model in steps 2 to ${STEPS.length} is one of these ${M.length === 2 ? 'two' : M.length}`, `{name} in steps 2 to ${STEPS.length}`) : `The model in steps 2 to ${STEPS.length}`)}`;
 
   // ── 2 · step 3
