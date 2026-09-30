@@ -18,7 +18,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady } from '../../../index.mjs';
-import { runHeadless, outsidePath, claimsAlreadyThere } from '../../../../terminal/index.mjs';
+import { runHeadless, outsidePath, claimsAlreadyThere, testSettings, modelWithLimits } from '../../../../terminal/index.mjs';
+// A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
+const panel = testSettings();
+const CTX = panel?.context ?? 32768;
 import { recordTest, codeLabel } from '../../record.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -78,7 +81,7 @@ const SERVICES = /\b(psql|pg_ctl|pg_isready|mysql|mysqladmin|mariadb|redis-cli|m
 const approve = (req) => !(req.name === 'Bash' && SERVICES.test(String(req.args?.command ?? '')));
 
 const only = opt('only', null)?.split(',').map(Number);
-const model = MODELS[opt('model', DEFAULT_MODEL)];
+const model = MODELS[opt('model', DEFAULT_MODEL)] && modelWithLimits(MODELS[opt('model', DEFAULT_MODEL)], panel ?? {});
 const thinking = opt('think', 'off') === 'on';
 const effort = thinking ? 'high' : undefined;
 const limitMin = thinking ? 12 : 6;
@@ -99,7 +102,7 @@ const stop = (sig) => {
 };
 process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
-const started = await server.start({ ctx: 32768 });
+const started = await server.start({ ctx: CTX });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
 console.log(`server up on ${server.url}, ctx 32768, thinking ${thinking ? 'on (High)' : 'off (Low)'}; ${only ? `${only.length} of the ${REQUESTS.length}` : `the ${REQUESTS.length}`} requests, one at a time`);
 const rows = [];
@@ -125,7 +128,7 @@ try {
     const t0 = Date.now();
     let run; let crash = null;
     try {
-      run = await runHeadless({ prompt, cwd, url: server.url, model, thinking, effort, ctx: 32768, autoApprove: true, approve, answers, signal: ac.signal, slots, warm: !!slots,
+      run = await runHeadless({ prompt, cwd, url: server.url, model, thinking, effort, ctx: CTX, autoApprove: true, approve, answers, signal: ac.signal, slots, warm: !!slots,
         memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: false } : false,
         onEvent: (type, ev) => log.push({ type, ...ev }) });
     } catch (e) { crash = String(e.message ?? e); }

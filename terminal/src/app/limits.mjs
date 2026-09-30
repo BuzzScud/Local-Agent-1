@@ -5,7 +5,7 @@
 // value costs (said next to it in the panel). Saved as "limits" in
 // settings.json; only the ones moved off their default are kept, so a new
 // default reaches you.
-import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
+import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
 import { SEARCH } from '../agent/search.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
@@ -152,6 +152,44 @@ export function readLimits(settings, model) {
     if (l.choice ? steps.includes(v) : typeof v === 'number' && Number.isFinite(v) && v >= steps[0] && v <= steps.at(-1)) out[l.id] = v;
   }
   if (out.trimAt >= out.summarizeAt) { out.trimAt = defaultLimits(model).trimAt; out.summarizeAt = defaultLimits(model).summarizeAt; }
+  return out;
+}
+
+// ---------- The Tests page's control panel (its Run tab) ----------
+// A run started there uses the tests' defaults (the app's, except Context: the tests run at 32k,
+// so results compare) with the rows you changed on top. The runner hands the changed rows to the
+// run as AGENTIC_TEST_SETTINGS (JSON); the test runners, runHeadless and the test record read them.
+export const TEST_CTX = 32768;
+export const testDefaults = (model) => ({ ...defaultLimits(model), context: TEST_CTX });
+// The changed rows a run was given, or null.
+export function testSettings(env = process.env) {
+  let v = null;
+  try { v = JSON.parse(env.AGENTIC_TEST_SETTINGS || 'null'); } catch { return null; }
+  return v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length ? v : null;
+}
+// All the limits of such a run on `model`: the tests' defaults, the changed rows on top (a value out
+// of a row's range is left at its default, as in settings.json). null when it was given none.
+export function testLimits(model, settings = testSettings()) {
+  if (!settings) return null;
+  const out = readLimits({ limits: settings }, model);
+  if (!out.context) out.context = TEST_CTX;
+  return out;
+}
+// What the Run tab's panel shows for each model: /effort's rows with their steps, how each reads
+// and what it costs (with `freeBytes` free for the run), the effort levels, and the tests' defaults.
+// Context's note depends on the Search rows (their models sit beside it): one per embedder × reranker.
+export function panelData(models, { freeBytes = null } = {}) {
+  const out = {};
+  for (const model of models) {
+    const defs = testDefaults(model);
+    const env = (values) => ({ model, values, freeBytes, effortOn: true, searchBytes: (v) => searchBytes([EMBEDDERS[v.embedder], RERANKERS[v.reranker]].filter(Boolean), () => false) });
+    const pairs = ['off', ...Object.keys(EMBEDDERS)].flatMap((em) => ['off', ...Object.keys(RERANKERS)].map((rr) => [em, rr]));
+    const rows = LIMITS.map((l) => ({ id: l.id, label: l.label, group: l.group ?? 'Limits', def: defs[l.id],
+      steps: l.steps(model).filter((v) => !(l.id === 'context' && v === 0)).map((v) => ({ v, show: showLimit(l.id, v), note: limitNote(l.id, env({ ...defs, [l.id]: v })),
+        ...(l.id === 'context' ? { bySearch: Object.fromEntries(pairs.map(([em, rr]) => [`${em}|${rr}`, limitNote('context', env({ ...defs, context: v, embedder: em, reranker: rr }))])) } : {}) })) }));
+    const levels = (model.thinkingLevels ?? []).map((lv) => ({ id: lv.id, show: lv.label ?? lv.id, note: effortNote(lv, defs.thinking) }));
+    out[model.id] = { rows, levels, defs };
+  }
   return out;
 }
 

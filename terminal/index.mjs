@@ -34,6 +34,6 @@ export { CodeIndex, partsOf, partKey, CUT as CODE_CUT, MARGIN as CODE_MARGIN } f
 // How the pieces that come along are chosen, for the code search check (models/evals/bench/code/).
 export { choose } from './src/agent/search.mjs';
 export { loadSettings } from './src/app/store.mjs';
-export { readLimits, modelWithLimits } from './src/app/limits.mjs';
+export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX } from './src/app/limits.mjs';
 export { designDir, readCards, isDesignRequest } from './src/agent/design.mjs';
 export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/layoutcheck.mjs';

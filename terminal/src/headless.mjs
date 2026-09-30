@@ -1,7 +1,7 @@
 // Runs one prompt start to finish without the terminal UI: used by the
 // practice-task runner and by `coding -p "…"`.
 import { Agent } from './agent/agent.mjs';
-import { applyLimits, applySearch } from './app/limits.mjs';
+import { applyLimits, applySearch, testLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
 import { toolSchemas } from './agent/tools.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
@@ -63,6 +63,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   });
   // The limits /effort saved (coding -p passes them; the practice bench does
   // not), with its Search rows: the embedder, the retriever and the reranker.
+  // A run from the Tests page's control panel brings its settings (AGENTIC_TEST_SETTINGS) when none are passed.
+  limits ??= testLimits(model);
   if (limits) { applyLimits(agent, limits); applySearch(agent, limits); }
   // coding -p started the server itself: restore (or read) the instructions first.
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});

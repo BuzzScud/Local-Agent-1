@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -116,6 +116,33 @@ test('the thinking cap reaches the model copy; the registry model is never chang
   expect(m.file).toBe(model.file);
   expect(model.thinkingBudget).toBe(was);
   expect(modelWithLimits(model, { thinking: was })).toBe(model);
+});
+
+test('a test run from the Run tab: the tests\' defaults are the app\'s but 32k, it gets only the rows changed, and a value out of range falls back', () => {
+  expect(testDefaults(model)).toEqual({ ...defaultLimits(model), context: TEST_CTX });
+  for (const env of [{}, { AGENTIC_TEST_SETTINGS: 'not json' }, { AGENTIC_TEST_SETTINGS: '[4]' }, { AGENTIC_TEST_SETTINGS: '{}' }]) expect(testSettings(env)).toBeNull();
+  expect(testSettings({ AGENTIC_TEST_SETTINGS: '{"tries":4}' })).toEqual({ tries: 4 });
+  expect(testLimits(model, null)).toBeNull(); // no settings: the run is as it always was
+  const l = testLimits(model, { tries: 4, steps: 999 });
+  expect(l.tries).toBe(4);
+  expect(l.steps).toBe(defaultLimits(model).steps);
+  expect(l.context).toBe(TEST_CTX);
+  expect(testLimits(model, { context: 16384 }).context).toBe(16384);
+});
+
+test('the Run tab\'s panel: every /effort row with its steps and what each costs, the effort levels, and Context\'s note for each pair of Search models', () => {
+  const p = panelData([model], { freeBytes: 20e9 })[model.id];
+  expect(p.rows.map((r) => r.id)).toEqual(LIMITS.map((l) => l.id));
+  expect(p.defs).toEqual(testDefaults(model));
+  for (const r of p.rows) {
+    expect(r.steps.some((s) => s.v === r.def)).toBe(true);
+    for (const s of r.steps) { expect(typeof s.show).toBe('string'); expect(s.note.length).toBeGreaterThan(0); }
+  }
+  const ctx = p.rows.find((r) => r.id === 'context');
+  expect(ctx.steps.some((s) => s.v === 0)).toBe(false); // Auto is the app's: a test run names its size
+  expect(Object.keys(ctx.steps[0].bySearch)).toContain('off|off');
+  expect(ctx.steps[0].bySearch['off|off']).not.toBe(ctx.steps[0].bySearch[`${p.defs.embedder}|off`]);
+  expect(p.levels.map((l) => l.id)).toEqual((model.thinkingLevels ?? []).map((l) => l.id));
 });
 
 test('the agent stops after the steps /effort set, and says where to move it', async () => {

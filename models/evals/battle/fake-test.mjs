@@ -17,6 +17,8 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i
 const test = opt('test'); const model = opt('model', 'gemma'); const n = opt('n', '10');
 const thinking = `thinking ${opt('think', 'off') === 'on' ? 'on (High)' : 'off (Low)'}`;
 const ms = Number(process.env.AGENTIC_BATTLE_FAKE_MS ?? 250);
+// The control panel's settings, as a real run gets them (AGENTIC_TEST_SETTINGS): said first, so a test sees them arrive.
+if (process.env.AGENTIC_TEST_SETTINGS) console.log(`settings: ${process.env.AGENTIC_TEST_SETTINGS}`);
 let stopped = false;
 const onStop = () => { if (!stopped) { stopped = true; console.log('\nstopping: what ran is kept (a practice run: nothing is recorded)'); } };
 process.on('SIGTERM', onStop);

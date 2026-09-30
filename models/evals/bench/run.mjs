@@ -26,7 +26,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady } from '../../index.mjs';
-import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf } from '../../../terminal/index.mjs';
+import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings } from '../../../terminal/index.mjs';
+// A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
+const panel = testSettings();
 import { recordTest, codeLabel } from '../record.mjs';
 import { pickTasks } from './pick-tasks.mjs';
 
@@ -35,7 +37,7 @@ const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const thinkModes = { on: [true], off: [false], both: [false, true] }[opt('think', 'both')];
 const only = opt('only', null)?.split(',');
-const ctx = Number(opt('ctx', 32768));
+const ctx = Number(opt('ctx', panel?.context ?? 32768));
 const perTaskMs = Number(opt('timeout', 900)) * 1000; // the 27B writes ~10 tokens/s
 const reps = Number(opt('reps', 1));
 const effort = opt('effort', undefined); // with --think on: medium (default) or high
@@ -47,7 +49,7 @@ const base = MODELS[opt('model', DEFAULT_MODEL)];
 if (!base) { console.error(`no model ${opt('model')}; models: ${Object.keys(MODELS).join(', ')}`); process.exit(1); }
 // --temp / --budget try other settings without touching the app's defaults.
 const temp = opt('temp', null);
-const budget = opt('budget', null);
+const budget = opt('budget', panel?.thinking ?? null);
 const model = { ...base,
   sampling: temp ? { ...base.sampling, temperature: Number(temp) } : base.sampling,
   thinkingSampling: temp ? { ...base.thinkingSampling, temperature: Number(temp) } : base.thinkingSampling,

@@ -12,17 +12,19 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync, appendFileSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { MODELS, ModelServer, Embedder, embedderReady } from '../../index.mjs';
-import { runHeadless, helpersOn } from '../../../terminal/index.mjs';
+import { runHeadless, helpersOn, testSettings, modelWithLimits } from '../../../terminal/index.mjs';
+// A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
+const panel = testSettings();
 import { runChecks, snapshot } from './checks.mjs';
 import { LIMIT_SECS, readJson } from './store.mjs';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
-const model = MODELS[opt('model')];
+const model = MODELS[opt('model')] && modelWithLimits(MODELS[opt('model')], panel ?? {});
 const test = opt('test');
 const out = opt('out');
 const limitMs = Number(opt('timeout', LIMIT_SECS)) * 1000;
-const ctx = Number(opt('ctx', 32768));
+const ctx = Number(opt('ctx', panel?.context ?? 32768));
 const thinking = opt('think', 'off') === 'on';
 if (!model || !test || !out) { console.error('usage: run-one.mjs --model <id> --test <dir> --out <dir>'); process.exit(2); }
 mkdirSync(join(out, 'files'), { recursive: true });

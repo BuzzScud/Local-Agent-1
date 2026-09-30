@@ -277,8 +277,11 @@ test('Practice 28 on Gemma: it holds the memory as a test run (named, on its own
   const hold = JSON.parse(readFileSync(join(HOME, 'battle', 'running.json'), 'utf8'));
   expect(hold).toMatchObject({ kind: 'test', state: 'running', title: 'Practice 28 on Gemma 4 12B QAT', pid: running.job.pid });
   expect(running.loaded).toEqual([{ model: 'Gemma 4 12B QAT', who: 'this test run' }]);
-  // One at a time: a second run, and a battle, both wait for this one.
-  expect((await post('/api/testrun', { test: 'unit' }, { 'x-agentic-key': key() })).status).toBe(409);
+  // One at a time: a second run waits in the line (the Run tab's ▶ while one runs), and a battle waits.
+  const q = await post('/api/testrun', { test: 'unit', key: 'unit-while-busy' }, { 'x-agentic-key': key() });
+  expect([q.status, q.body.queued]).toEqual([200, 1]);
+  expect((await get('/api/testrun')).line.map((x) => x.key)).toEqual(['unit-while-busy']);
+  expect((await post('/api/testunqueue', { key: 'unit-while-busy' }, { 'x-agentic-key': key() })).body.removed).toBe(1); // taken back out: this test waits for one run only
   expect((await post('/api/start', {}, { origin: O })).body.error).toBe('a test is running in the Tests tab: stop it there first');
   await idle();
   const done = (await get('/api/testrun')).job;
@@ -320,3 +323,39 @@ test('Stop: the run is told to stop, saves what it has, and ends as stopped; a r
   await idle();
   expect((await get('/api/testrun')).job).toMatchObject({ test: 'unit', model: null, status: 'done' });
 }, 60_000);
+
+// The Run tab's line: each ▶ is one run. A press while one runs waits in the line and starts when the
+// run before it ends; ■ Stop ends a run and the next starts; ✕ takes a waiting one out; the line is
+// kept in state.json; the control panel's settings reach the run (the stand-in prints them) and its
+// result carries the press's key.
+test('the line of runs: waits its turn, Stop moves on, ✕ takes one out, kept in state.json, the panel\'s settings reach the run', async () => {
+  const k = { 'x-agentic-key': key() };
+  expect((await post('/api/testrun', { test: 'practice28', model: 'gemma', key: 'p28', settings: { context: 65536, reranker: 'qwen3-reranker-0.6b', evil: 'x' } }, k)).body.ok).toBe(true);
+  const s1 = await until(async () => { const x = await get('/api/testrun'); return x.job?.key === 'p28' && x.job.status === 'running' && x.job.lines.length ? x : null; });
+  expect(s1.job.settings).toEqual({ context: 65536, reranker: 'qwen3-reranker-0.6b' }); // only known rows
+  expect(s1.job.lines[0].startsWith('settings: ')).toBe(true);
+  expect(JSON.parse(s1.job.lines[0].slice('settings: '.length))).toEqual({ context: 65536, reranker: 'qwen3-reranker-0.6b' }); // what the run was handed
+  expect(s1.job.id).toMatch(/-practice28-gemma-set$/);
+  expect((await post('/api/testrun', { test: 'unit', key: 'u' }, k)).body.queued).toBe(1);
+  expect((await post('/api/testrun', { test: 'check', key: 'c' }, k)).body.queued).toBe(2);
+  expect((await post('/api/testrun', { test: 'unit', key: 'u' }, k)).body).toMatchObject({ queued: 1, already: true }); // a second press of the same row
+  expect((await post('/api/testrun', { test: 'practice28', model: 'gemma', key: 'p28' }, k)).body.already).toBe(true); // the one running
+  expect(JSON.parse(readFileSync(join(HOME, 'battle', 'state.json'), 'utf8')).testLine.map((x) => x.key)).toEqual(['u', 'c']);
+  expect((await post('/api/testunqueue', { key: 'c' }, k)).body.removed).toBe(1);
+  expect((await get('/api/testrun')).line.map((x) => x.key)).toEqual(['u']);
+  // ■ Stop on the running one: it ends as stopped and the next in the line starts by itself
+  await post('/api/teststop', {}, k);
+  const s2 = await until(async () => { const x = await get('/api/testrun'); return x.job?.key === 'u' ? x : null; });
+  expect(s2.line).toEqual([]);
+  expect(s2.done[0]).toMatchObject({ key: 'p28', test: 'practice28', model: 'gemma', status: 'stopped', settings: { context: 65536, reranker: 'qwen3-reranker-0.6b' } });
+  expect(s2.job.settings).toBeNull(); // a test with no model takes no settings
+  await until(async () => (await get('/api/testrun')).done[0]?.key === 'u');
+  expect((await get('/api/testrun')).done.slice(0, 2).map((d) => [d.key, d.status])).toEqual([['u', 'done'], ['p28', 'stopped']]);
+  // Stop all: the line is emptied and the run under way ends
+  await post('/api/testrun', { test: 'work28', model: 'qwen', key: 'w' }, k);
+  await post('/api/testrun', { test: 'unit', key: 'u2' }, k);
+  expect((await post('/api/teststopall', {}, k)).body.ok).toBe(true);
+  await until(async () => { const x = await get('/api/testrun'); return x.done[0]?.key === 'w' && !['waiting', 'running'].includes(x.job?.status) ? x : null; });
+  const end = await get('/api/testrun');
+  expect([end.line, end.job.key, end.done[0].status]).toEqual([[], 'w', 'stopped']);
+}, 90_000);

@@ -1,4 +1,4 @@
-// The hub's Tests tab, ▶ Run a test (src/app/tests.html, the routes in src/app/weights.mjs): the hub
+// The hub's Tests tab, ▶ Run tests (src/app/tests.html, the routes in src/app/weights.mjs): the hub
 // passes the page's asks to the Battle arena's runner with the runner's key, and refuses any other
 // site; a runner from before test runs is restarted, but only while it is idle. The runner runs in
 // practice mode here (no model); its own tests: models/test/run-a-test.test.mjs.
@@ -86,4 +86,29 @@ test('the hub passes the Tests tab\'s asks along with the key: the list, a run s
   expect(page).not.toContain(':8758');
   const stop = await fetch(`${H}/tests/stop`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   expect(stop.status).toBe(409); // nothing is running now
+}, 60_000);
+
+test('the Run tab: run.json carries the control panel, the line and the finished runs; a run takes its settings and key along; ✕ Not next and Stop all go through, from this hub only', async () => {
+  const H = hub.url.replace(/\/$/, '');
+  const post = (p, body, origin = H) => fetch(`${H}${p}`, { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body) });
+  await idle();
+  const look = await (await fetch(`${H}/tests/run.json`)).json();
+  const pm = Object.values(look.panel.models)[0];
+  expect(pm.rows.find((r) => r.id === 'context').def).toBe(32768); // the tests run at 32k
+  expect(pm.rows.map((r) => r.id)).toContain('tries');
+  expect(Array.isArray(look.line) && Array.isArray(look.done)).toBe(true);
+  const r = await post('/tests/run', { test: 'task', model: 'gemma', n: 12, think: false, settings: { tries: 4 }, key: 'task|12|gemma|low|{"tries":4}' });
+  expect(r.status).toBe(200);
+  await idle();
+  const after = await get('/api/testrun');
+  expect(after.job).toMatchObject({ test: 'task', key: 'task|12|gemma|low|{"tries":4}', settings: { tries: 4 }, status: 'done' });
+  expect(after.job.lines[0]).toBe('settings: {"tries":4}'); // the run was given them
+  expect(after.done[0]).toMatchObject({ key: after.job.key, status: 'done' });
+  expect(await (await post('/tests/unqueue', { key: 'nothing-waits' })).json()).toMatchObject({ ok: true, removed: 0 });
+  expect((await post('/tests/stopall', {})).status).toBe(200);
+  expect((await post('/tests/stopall', {}, 'https://evil.example')).status).toBe(403);
+  expect((await post('/tests/unqueue', { key: 'x' }, 'https://evil.example')).status).toBe(403);
+  expect((await fetch(`${H}/tests/unqueue`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' })).status).toBe(415);
+  const page = await (await fetch(`${H}/tests`)).text();
+  for (const s of ['Run tests</button>', "'/tests/unqueue'", "'/tests/stopall'", 'data-act="ready"']) expect(page).toContain(s);
 }, 60_000);

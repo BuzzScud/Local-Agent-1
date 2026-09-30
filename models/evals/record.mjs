@@ -16,6 +16,9 @@
 //   page    its results page in the DOCS folder ("tests/agentic-coder-….html"), if one was made
 //   bar     what counts as a pass when it is not "every one" ("at most 4 wrong"); only then
 //   failed  the unit tests that failed, by name ("hub-run.test.mjs › stop ends the run"); only then
+//   settings the rows of the Tests page's control panel the run changed from the tests' defaults
+//            ({ reranker: 'qwen3-reranker-0.6b', context: 65536 }); only then. Runs compare only
+//            with runs at the same settings.
 // A later line with the same id replaces the earlier one.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join, dirname, basename, resolve, relative } from 'node:path';
@@ -117,6 +120,12 @@ export function readRecord(file = recordFile()) {
   return [...byId.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 }
 
+// The settings a run was started with from the Tests page's control panel (the runner passes them
+// as AGENTIC_TEST_SETTINGS), or null. Read here, not from the terminal part: the record is part of it.
+export function panelSettings(env = process.env) {
+  try { const v = JSON.parse(env.AGENTIC_TEST_SETTINGS || 'null'); return v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length ? v : null; } catch { return null; }
+}
+
 // Adds one run to the record. It never throws: a test must not fail because
 // its result could not be written down. Returns the line, or null.
 export function recordTest(row, { file = recordFile(), snapshot = true, quiet = false } = {}) {
@@ -126,7 +135,8 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
     const result = row.result ?? (row.total != null && row.passed != null ? (row.passed === row.total && row.total > 0 ? 'pass' : 'fail') : 'fail');
     const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), model: row.model ?? null, effort: row.effort ?? null, ctx: row.ctx ?? null,
       passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: rawPlace(row.raw), page: row.page ?? '',
-      ...(row.bar ? { bar: String(row.bar) } : {}), ...(Array.isArray(row.failed) && row.failed.length ? { failed: row.failed.map(String).slice(0, 50) } : {}) };
+      ...(row.bar ? { bar: String(row.bar) } : {}), ...(Array.isArray(row.failed) && row.failed.length ? { failed: row.failed.map(String).slice(0, 50) } : {}),
+      ...(() => { const s = row.settings ?? panelSettings(); return s ? { settings: s } : {}; })() };
     mkdirSync(dirname(file), { recursive: true });
     appendFileSync(file, `${JSON.stringify(line)}\n`);
     if (!quiet) console.log(`recorded in the test record: ${line.name} — ${line.total != null ? `${line.passed} of ${line.total}` : line.result}${line.secs != null ? `, ${line.secs.toLocaleString()} s` : ''}`);

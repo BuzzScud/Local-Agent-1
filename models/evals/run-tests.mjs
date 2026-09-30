@@ -88,7 +88,20 @@ export function practiceChoice(n, home) {
 // `models` (the ids in the registry); one that takes none ignores it. `n` names the practice test of
 // "One practice task" (12, or a copy like 18b); `think` turns thinking on where the test can take it
 // (else it is off). `total` is how many tests the run has, where the list can change (My tests).
-export function runCommand(id, { model = null, n = null, think = false, models = [] } = {}) {
+// The rows the Tests page's control panel may change for a run (/effort's rows; their ranges are
+// checked again where they are used, terminal/src/app/limits.mjs testLimits). Named choices are ids.
+const PANEL_ROWS = { embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number' };
+export function cleanSettings(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out = {};
+  for (const [k, kind] of Object.entries(PANEL_ROWS)) {
+    const x = v[k];
+    if (kind === 'choice' ? typeof x === 'string' && /^[a-z0-9][a-z0-9.-]{0,40}$/i.test(x) : typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1e6) out[k] = x;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+export function runCommand(id, { model = null, n = null, think = false, models = [], settings = null } = {}) {
   const t = runTestById(id);
   if (!t) throw new Error(`no test "${id}"`);
   if (t.model && !models.includes(model)) throw new Error(`pick a model to run ${t.name} on (${models.join(' or ')})`);
@@ -102,7 +115,9 @@ export function runCommand(id, { model = null, n = null, think = false, models =
   const total = t.own ? ownCount() : t.total;
   if (t.own && !total) throw new Error('you have no tests of your own yet: + New test (in the Battle tab) makes one');
   const on = Boolean(t.think && think);
-  return { test: t, n: key, think: on, total, argv: [t.script, ...t.args(t.model ? model : null, pickArg, on)] };
+  // The control panel's changed rows reach the run as AGENTIC_TEST_SETTINGS (a test with no model takes none).
+  const set = t.model ? cleanSettings(settings) : null;
+  return { test: t, n: key, think: on, total, settings: set, env: set ? { AGENTIC_TEST_SETTINGS: JSON.stringify(set) } : {}, argv: [t.script, ...t.args(t.model ? model : null, pickArg, on)] };
 }
 
 // What the page needs to show them (no functions): the list, with each one's command as text,

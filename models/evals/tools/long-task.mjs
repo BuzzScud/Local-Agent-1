@@ -16,7 +16,7 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, hasDraft, recordTest, codeLabel } from '../../index.mjs';
-import { runHeadless, loadSettings, readLimits, modelWithLimits } from '../../../terminal/index.mjs';
+import { runHeadless, loadSettings, readLimits, modelWithLimits, testLimits } from '../../../terminal/index.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
@@ -32,7 +32,8 @@ export const TASK = 'Explain, step by step, what happens from the moment I press
 // Your limits as /effort saved them (context, thinking cap, steps, trim points),
 // and your effort; the same for every model, so the runs compare.
 const settings = loadSettings(root);
-const limits = readLimits(settings, base0);
+// From the Tests page's control panel, its settings; run by hand, the limits /effort saved.
+const limits = testLimits(base0) ?? readLimits(settings, base0);
 const model = modelWithLimits(base0, limits);
 const ctx = Number(opt('ctx', limits.context || 32768));
 const thinking = opt('effort', settings.effort ?? 'high') !== 'low';

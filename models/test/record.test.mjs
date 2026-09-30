@@ -184,3 +184,19 @@ test('the Overview grid has a column for each whole test of one model ▶ Run a 
   expect(new RegExp(board.find((t) => t.id === 'sorting').re).test('Sorting check')).toBe(true);
   expect(new RegExp(health.find((t) => t.id === 'unit').re).test('Unit tests, both parts')).toBe(true);
 });
+
+test('a run from the Run tab keeps the panel rows it changed (settings), from the runner\'s env or given; a run with none has no settings', () => {
+  const { file } = scratch();
+  const was = process.env.AGENTIC_TEST_SETTINGS;
+  try {
+    process.env.AGENTIC_TEST_SETTINGS = JSON.stringify({ tries: 4 });
+    recordTest({ id: 'a', at: '2026-09-30T01:00:00.000Z', kind: 'tasks', name: 'The 28 practice tasks', passed: 20, total: 28 }, quiet(file));
+    delete process.env.AGENTIC_TEST_SETTINGS;
+    recordTest({ id: 'b', at: '2026-09-30T02:00:00.000Z', kind: 'tasks', name: 'The 28 practice tasks', passed: 21, total: 28, settings: { steps: 20 } }, quiet(file));
+    recordTest({ id: 'c', at: '2026-09-30T03:00:00.000Z', kind: 'suite', name: 'Unit tests', passed: 5, total: 5 }, quiet(file));
+  } finally { if (was == null) delete process.env.AGENTIC_TEST_SETTINGS; else process.env.AGENTIC_TEST_SETTINGS = was; }
+  const byId = Object.fromEntries(readRecord(file).map((r) => [r.id, r]));
+  expect(byId.a.settings).toEqual({ tries: 4 });
+  expect(byId.b.settings).toEqual({ steps: 20 });
+  expect('settings' in byId.c).toBe(false);
+});

@@ -184,6 +184,7 @@ function finishJob(code) {
   job.result = { ...(t ? countLines(t, lines, job.total ?? t.total) : {}), code: code ?? null, recorded: rec ? rec.slice('recorded in the test record: '.length) : null };
   if (job.status !== 'stopped' && code !== 0) job.result.why = lines.filter((l) => l.trim()).slice(-3).join(' · ').slice(0, 300);
   delete job.stopAsked;
+  state.testDone = [{ key: job.key ?? null, id: job.id, test: job.test, model: job.model, n: job.n, think: job.think, settings: job.settings ?? null, status: job.status, result: job.result, secs: Math.round(((job.endedAt ?? Date.now()) - (job.runStartedAt ?? job.startedAt)) / 1000), endedAt: job.endedAt }, ...state.testDone].slice(0, 30);
   saveJob();
   log(`test run ${job.id} ${job.status}${code != null ? ` (exit ${code})` : ''}`);
 }
@@ -196,7 +197,7 @@ async function runJob(cmd) {
   if (t.model && !(await waitForMemory(title, 1, job.model, 'test'))) { job.stopAsked = true; finishJob(null); return; }
   job.waiting = null;
   const fd = openSync(join(job.dir, 'run.log'), 'w');
-  const env = { ...process.env }; delete env.FORCE_COLOR;
+  const env = { ...process.env, ...cmd.env }; delete env.FORCE_COLOR;
   const argv = FAKE ? [join(HERE, 'fake-test.mjs'), '--test', t.id, '--model', job.model ?? 'none', '--n', String(job.n ?? ''), '--think', job.think ? 'on' : 'off'] : [join(REPO, cmd.argv[0]), ...cmd.argv.slice(1)];
   const child = spawn(FAKE ? process.execPath : NODE, argv, { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
   closeSync(fd);
@@ -211,13 +212,41 @@ async function runJob(cmd) {
   jobChild = null;
   finishJob(code);
 }
-function startJob({ test, model, n, think }) {
+// ---------- The line of test runs (the Tests page's Run tab) ----------
+// Each ▶ you press is one run: it starts at once when nothing runs, else it waits in this line
+// (only one model fits) and starts when the run before it ends; ■ Stop ends a run and the next one
+// starts. The line is kept in state.json, so it outlives a restart of this runner. `key` is the
+// page's name for the row the press came from; the line, the run and its result carry it back.
+state.testLine ??= [];
+state.testDone ??= [];
+const lineItem = (b) => ({ key: String(b.key ?? '').slice(0, 200) || null, test: String(b.test ?? ''), model: b.model ?? null, n: b.n ?? null, think: b.think === true, settings: b.settings ?? null });
+function pressRun(body) {
+  const item = lineItem(body);
+  let cmd;
+  try { cmd = runCommand(item.test, { model: item.model, n: item.n, think: item.think, models: IDS, settings: item.settings }); } catch (e) { return { code: 400, error: e.message }; }
+  item.settings = cmd.settings;
+  if (!busy) return startJob(item);
+  if (item.key && (state.testLine.some((x) => x.key === item.key) || (jobLive() && job.key === item.key))) return { ok: true, queued: state.testLine.findIndex((x) => x.key === item.key) + 1, already: true };
+  state.testLine.push(item); saveState();
+  log(`test run queued: ${item.test}${item.model ? ` on ${item.model}` : ''} (${state.testLine.length} in the line)`);
+  return { ok: true, queued: state.testLine.length };
+}
+function unqueue(key) {
+  const before = state.testLine.length;
+  state.testLine = state.testLine.filter((x) => x.key !== key); saveState();
+  return { ok: true, removed: before - state.testLine.length };
+}
+function stopAll() {
+  state.testLine = []; saveState();
+  return jobLive() ? stopJob() : { ok: true };
+}
+function startJob({ test, model, n, think, settings = null, key = null }) {
   if (busy) return { code: 409, error: jobLive() ? 'a test is running: stop it first' : 'a battle is running (the Battle tab): stop it first' };
   let cmd;
-  try { cmd = runCommand(String(test ?? ''), { model, n, think: think === true, models: IDS }); } catch (e) { return { code: 400, error: e.message }; }
+  try { cmd = runCommand(String(test ?? ''), { model, n, think: think === true, models: IDS, settings }); } catch (e) { return { code: 400, error: e.message }; }
   const t = cmd.test;
-  const id = `${stamp()}-${t.id}${cmd.n != null ? `-${cmd.n}` : ''}${t.model ? `-${model}` : ''}${cmd.think ? '-think' : ''}`;
-  job = { id, test: t.id, name: t.name, n: cmd.n, total: cmd.total ?? null, model: t.model ? model : null, modelName: t.model ? MODELS[model].name : null, think: cmd.think, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
+  const id = `${stamp()}-${t.id}${cmd.n != null ? `-${cmd.n}` : ''}${t.model ? `-${model}` : ''}${cmd.think ? '-think' : ''}${cmd.settings ? '-set' : ''}`;
+  job = { id, key, test: t.id, name: t.name, n: cmd.n, total: cmd.total ?? null, model: t.model ? model : null, modelName: t.model ? MODELS[model].name : null, think: cmd.think, settings: cmd.settings, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
   busy = true; stopAsked = false; lastUse = Date.now();
   runJob(cmd).catch((e) => { log(`test run ${id}: ${e.stack ?? e.message}`); if (jobLive()) finishJob(null); })
     .finally(() => { busy = false; jobChild = null; waiting = null; if (!job?.pid || !alive(job.pid)) clearHold(); stopAsked = false; lastUse = Date.now(); setTimeout(tick, 500); });
@@ -278,6 +307,12 @@ function jobView() {
 
 function tick() {
   if (busy) return;
+  if (state.testLine.length) {
+    const next = state.testLine.shift(); saveState();
+    const r = startJob(next);
+    if (!r.ok) { log(`test run from the line not started: ${r.error}`); setTimeout(tick, 200); }
+    return;
+  }
   if (!state.queue.length || state.paused) {
     if (!state.queue.length && Date.now() - lastUse > IDLE_EXIT_MS) { log('idle for a long time: stopping'); rmSync(P.pid, { force: true }); process.exit(0); }
     return;
@@ -338,7 +373,7 @@ http.createServer(async (req, res) => {
       if (url.pathname === '/' || url.pathname === '/index.html') return send(res, 200, readFileSync(join(HERE, 'battle.html'), 'utf8'), 'text/html; charset=utf-8');
       if (url.pathname === '/api/ping') return send(res, 200, { ok: true, pid: process.pid, fake: FAKE });
       if (url.pathname === '/api/state') return send(res, 200, view());
-      if (url.pathname === '/api/testrun') return send(res, 200, { job: jobView(), battle: busy && !jobLive(), loaded: loadedNow(), fake: FAKE });
+      if (url.pathname === '/api/testrun') return send(res, 200, { job: jobView(), line: state.testLine, done: state.testDone, battle: busy && !jobLive(), loaded: loadedNow(), fake: FAKE });
       if (url.pathname === '/api/battle') { const b = battleView(url.searchParams.get('id') ?? ''); return b ? send(res, 200, b) : send(res, 404, { error: 'no such battle' }); }
       // A page a model made: /files/<battle>/<A|B>/<its path>
       const m = /^\/files\/([^/]+)\/(A|B)\/(.+)$/.exec(url.pathname);
@@ -346,10 +381,10 @@ http.createServer(async (req, res) => {
       return send(res, 404, { error: 'not found' });
     }
     // A test run is started and stopped through the hub, which sends the key; nothing else may.
-    if (url.pathname === '/api/testrun' || url.pathname === '/api/teststop') {
+    if (['/api/testrun', '/api/teststop', '/api/testunqueue', '/api/teststopall'].includes(url.pathname)) {
       if (!keyOk(req.headers['x-agentic-key'])) return send(res, 403, { error: 'wrong key' });
       const body = await readBody(req, 1e5);
-      const r = url.pathname === '/api/testrun' ? startJob(body) : stopJob();
+      const r = url.pathname === '/api/testrun' ? pressRun(body) : url.pathname === '/api/teststop' ? stopJob() : url.pathname === '/api/testunqueue' ? unqueue(String(body.key ?? '')) : stopAll();
       return send(res, r.code ?? 200, r);
     }
     // Only this page may change anything: another site's page cannot.

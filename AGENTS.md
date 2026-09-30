@@ -43,8 +43,8 @@
   Raw results of model tests stay on the Mac in `models/<model>/results/` (not in git);
   a test's working copy of another project goes outside the repo, not into `results/`.
 - **Every test run goes in the test record**, which the hub shows on its Tests tab
-  (`/settings` → Tests in Agentic Coder, `coding hub tests`; its ▶ Run a test tab, `/test`, runs the tests in
-  `models/evals/run-tests.mjs` on one model). The record is one file on the Mac,
+  (`/settings` → Tests in Agentic Coder, `coding hub tests`; its ▶ Run tests tab, `/test`, runs the tests in
+  `models/evals/run-tests.mjs`, each with its own ▶, with the settings of its control panel kept in the record). The record is one file on the Mac,
   `~/.agentic-coder/tests/record.jsonl`, one line per run. `bun run test`, `bun run eval`
   and `bun run eval:words` add their own line when they finish, so run the tests through
   those (a bare `bun test` is not recorded). Any other measured run (a real-bug try, a

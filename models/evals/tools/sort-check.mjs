@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { loadavg } from 'node:os';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, hasDraft, recordTest, codeLabel } from '../../index.mjs';
-import { modelSort, SORT_LINES, SORT_KINDS } from '../../../terminal/index.mjs';
+import { modelSort, SORT_LINES, SORT_KINDS, testSettings } from '../../../terminal/index.mjs';
 import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
 import { buildSortPage } from './sort-page.mjs';
 
@@ -31,7 +31,7 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 if (!model) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const MAX_WRONG = 4;
-const CTX = 8192; // the question is under 300 tokens; the side slot the app sorts in
+const CTX = testSettings()?.context ?? 8192; // the question is under 300 tokens; the side slot the app sorts in (the Tests page's panel can set it)
 const LINES = SORT_LINES.filter((l) => SORT_KINDS.includes(l.path) || l.path === 'unsorted');
 const wantOf = (l) => (SORT_KINDS.includes(l.path) ? l.path : l.want ?? null);
 const total = LINES.filter(wantOf).length;
