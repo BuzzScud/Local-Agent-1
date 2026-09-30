@@ -10,6 +10,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 |---|---|---|---|---|
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 287 KB | 2026-09-30 |
 | [tests/agentic-coder-weights-reader-check-2026-09-30-1506.html](tests/agentic-coder-weights-reader-check-2026-09-30-1506.html) | page | Weights reader check | 10 KB | 2026-09-30 |
+| [tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html](tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html) | page | Remote check · Gemma 4 12B QAT | 12 KB | 2026-09-30 |
 | [tests/agentic-coder-thinking-old-vs-new-gemma-2026-09-30-1432.html](tests/agentic-coder-thinking-old-vs-new-gemma-2026-09-30-1432.html) | page | Thinking old vs new · Gemma 4 12B QAT | 14 KB | 2026-09-30 |
 | [diagrams/agentic-coder-question-walkthrough-2026-09-30.html](diagrams/agentic-coder-question-walkthrough-2026-09-30.html) | page | Question Walkthrough | 43 KB | 2026-09-30 |
 | [tests/agentic-coder-thinking-old-vs-new-qwen-2026-09-30-1427.html](tests/agentic-coder-thinking-old-vs-new-qwen-2026-09-30-1427.html) | page | Thinking old vs new · Qwen3.5 9B | 14 KB | 2026-09-30 |
