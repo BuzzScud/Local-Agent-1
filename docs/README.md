@@ -8,16 +8,26 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-thinking-old-vs-new-gemma-2026-09-30-1432.html](tests/agentic-coder-thinking-old-vs-new-gemma-2026-09-30-1432.html) | page | Thinking old vs new · Gemma 4 12B QAT | 14 KB | 2026-09-30 |
+| [diagrams/agentic-coder-question-walkthrough-2026-09-30.html](diagrams/agentic-coder-question-walkthrough-2026-09-30.html) | page | Question Walkthrough | 43 KB | 2026-09-30 |
+| [tests/agentic-coder-thinking-old-vs-new-qwen-2026-09-30-1427.html](tests/agentic-coder-thinking-old-vs-new-qwen-2026-09-30-1427.html) | page | Thinking old vs new · Qwen3.5 9B | 14 KB | 2026-09-30 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 272 KB | 2026-09-30 |
+| [tests/agentic-coder-two-at-once-gemma-2026-09-30-1355.html](tests/agentic-coder-two-at-once-gemma-2026-09-30-1355.html) | page | Two at once · Gemma 4 12B QAT | 7 KB | 2026-09-30 |
+| [tests/agentic-coder-two-at-once-qwen-2026-09-30-1349.html](tests/agentic-coder-two-at-once-qwen-2026-09-30-1349.html) | page | Two at once · Qwen3.5 9B | 7 KB | 2026-09-30 |
+| [tests/agentic-coder-weights-reader-check-2026-09-30-1303.html](tests/agentic-coder-weights-reader-check-2026-09-30-1303.html) | page | Weights reader check | 10 KB | 2026-09-30 |
 | [diagrams/agentic-coder-flow-diagram-2026-09-30.html](diagrams/agentic-coder-flow-diagram-2026-09-30.html) | page | Agentic Coder flow diagram | 85 KB | 2026-09-30 |
 | [design rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html](design%20rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html) | page | Flow tab for both models: 2 designs | 250 KB | 2026-09-30 |
 | [design rounds/agentic-coder-test-builder-2-designs-2026-09-30.html](design%20rounds/agentic-coder-test-builder-2-designs-2026-09-30.html) | page | Test builder designs | 82 KB | 2026-09-30 |
 | [design rounds/agentic-coder-arena-4-designs-2026-09-30.html](design%20rounds/agentic-coder-arena-4-designs-2026-09-30.html) | page | Arena · 4 designs | 221 KB | 2026-09-30 |
+| [tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html](tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html) | page | Prompt old vs new · Gemma 4 12B QAT | 21 KB | 2026-09-30 |
+| [tests/agentic-coder-prompt-old-vs-new-qwen-2026-09-30-0700.html](tests/agentic-coder-prompt-old-vs-new-qwen-2026-09-30-0700.html) | page | Prompt old vs new · Qwen3.5 9B | 21 KB | 2026-09-30 |
+| [tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0602.html](tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0602.html) | page | Prompt old vs new · Gemma 4 12B QAT | 20 KB | 2026-09-30 |
+| [tests/agentic-coder-prompt-old-vs-new-qwen-2026-09-30-0602.html](tests/agentic-coder-prompt-old-vs-new-qwen-2026-09-30-0602.html) | page | Prompt old vs new · Qwen3.5 9B | 20 KB | 2026-09-30 |
 | [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-09-30 |
 | [design rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html](design%20rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html) | page | Start page designs | 917 KB | 2026-09-30 |
 | [design rounds/agentic-coder-start-page-live-preview-2026-09-29.html](design%20rounds/agentic-coder-start-page-live-preview-2026-09-29.html) | page | Start page preview | 374 KB | 2026-09-30 |
 | [design rounds/agentic-coder-start-page-4-designs-2026-09-29.html](design%20rounds/agentic-coder-start-page-4-designs-2026-09-29.html) | page | Start page designs | 342 KB | 2026-09-30 |
 | [design rounds/agentic-coder-conversation-2-designs-2026-09-29.html](design%20rounds/agentic-coder-conversation-2-designs-2026-09-29.html) | page | Conversation redesign | 172 KB | 2026-09-30 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 258 KB | 2026-09-30 |
 | [tests/agentic-coder-weather-widget-session-2026-09-29.html](tests/agentic-coder-weather-widget-session-2026-09-29.html) | page | Weather widget session | 176 KB | 2026-09-30 |
 | [other/agentic-coder-code-search-plan-2026-09-29.html](other/agentic-coder-code-search-plan-2026-09-29.html) | page | Code search plan | 25 KB | 2026-09-29 |
 | [tests/agentic-coder-sorting-check-gemma-2026-09-29-1846.html](tests/agentic-coder-sorting-check-gemma-2026-09-29-1846.html) | page | Sorting check · Gemma 4 12B QAT | 57 KB | 2026-09-29 |

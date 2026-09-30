@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt old vs new · Qwen3.5 9B</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--line:#e3dfd5;--soft:#efece4;--best:#f3d9cc;--bestInk:#8a3a1c;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small,td small{display:block;color:var(--mute);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.best{background:var(--best);color:var(--bestInk);font-weight:700}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--mute)}
+.pager{display:flex;align-items:center;gap:10px;margin-top:auto}.pager button{font:inherit;font-size:13px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer}
+.pager button:disabled{background:var(--soft);color:var(--mute);cursor:default}.pager span{font-size:13px;color:var(--mute)}
+.fill{flex:1;min-height:0;overflow:hidden}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 6px}ul.how code,pre{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+pre{margin:4px 0 0;white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:8px 10px;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card{padding:7px 12px}.card .v{font-size:20px}th,td{padding:5px 10px}}
+@media (max-width:760px),(max-height:520px){body{overflow:auto;height:auto}.panel{overflow:visible}.fill{overflow:visible}td.task{white-space:normal}.table-wrap{overflow-x:auto}}
+</style>
+</head>
+<body>
+<header><h1>Prompt old vs new · Qwen3.5 9B</h1><span class="date">Thinking at High · Sep 30, 2026</span></header>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main class="panel" id="panel"><noscript>This page draws its tables with JavaScript.</noscript></main>
+<script id="data" type="application/json">{"rows":[{"task":"15-notests-fahrenheit","old":{"pass":true,"secs":166,"steps":5,"ownSteps":0,"modelCalls":6,"toolErrors":0,"thinkTokens":1912,"why":""},"new":{"pass":true,"secs":126,"steps":5,"ownSteps":0,"modelCalls":6,"toolErrors":0,"thinkTokens":1460,"why":""}},{"task":"13-feature-python","old":{"pass":true,"secs":98,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":1335,"why":""},"new":{"pass":true,"secs":199,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":3007,"why":""}},{"task":"21-bigfile-two-places","old":{"pass":true,"secs":371,"steps":14,"ownSteps":9,"modelCalls":18,"toolErrors":2,"thinkTokens":639,"why":""},"new":{"pass":true,"secs":338,"steps":12,"ownSteps":7,"modelCalls":16,"toolErrors":1,"thinkTokens":589,"why":""}},{"task":"24-fix-test-passing","old":{"pass":true,"secs":52,"steps":9,"ownSteps":5,"modelCalls":7,"toolErrors":0,"thinkTokens":229,"why":""},"new":{"pass":true,"secs":58,"steps":10,"ownSteps":6,"modelCalls":8,"toolErrors":1,"thinkTokens":243,"why":""}},{"task":"8-rename-method","old":{"pass":true,"secs":0,"steps":6,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"why":""},"new":{"pass":true,"secs":0,"steps":6,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"why":""}},{"task":"22-vague-fix-the-bug","old":{"pass":true,"secs":77,"steps":9,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":1063,"why":""},"new":{"pass":true,"secs":85,"steps":9,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":1167,"why":""}},{"task":"10-fix-off-by-one","old":{"pass":true,"secs":41,"steps":6,"ownSteps":0,"modelCalls":3,"toolErrors":1,"thinkTokens":228,"why":""},"new":{"pass":true,"secs":55,"steps":6,"ownSteps":0,"modelCalls":3,"toolErrors":1,"thinkTokens":503,"why":""}},{"task":"26-bigproject-change","old":{"pass":true,"secs":173,"steps":14,"ownSteps":5,"modelCalls":9,"toolErrors":0,"thinkTokens":308,"why":""},"new":{"pass":true,"secs":119,"steps":12,"ownSteps":3,"modelCalls":7,"toolErrors":0,"thinkTokens":129,"why":""}},{"task":"17-writing-notes-api","old":{"pass":true,"secs":26,"steps":3,"ownSteps":2,"modelCalls":4,"toolErrors":0,"thinkTokens":177,"why":""},"new":{"pass":true,"secs":24,"steps":3,"ownSteps":2,"modelCalls":4,"toolErrors":0,"thinkTokens":114,"why":""}},{"task":"14-notests-perimeter","old":{"pass":true,"secs":104,"steps":5,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":1314,"why":""},"new":{"pass":true,"secs":239,"steps":5,"ownSteps":0,"modelCalls":8,"toolErrors":0,"thinkTokens":3135,"why":""}},{"task":"1-json-flag","old":{"pass":true,"secs":225,"steps":6,"ownSteps":0,"modelCalls":8,"toolErrors":0,"thinkTokens":3614,"why":""},"new":{"pass":true,"secs":311,"steps":6,"ownSteps":0,"modelCalls":10,"toolErrors":0,"thinkTokens":4663,"why":""}},{"task":"2-fix-bug","old":{"pass":true,"secs":34,"steps":6,"ownSteps":0,"modelCalls":2,"toolErrors":1,"thinkTokens":386,"why":""},"new":{"pass":true,"secs":23,"steps":6,"ownSteps":0,"modelCalls":2,"toolErrors":1,"thinkTokens":123,"why":""}},{"task":"9-rename-constant","old":{"pass":true,"secs":0,"steps":6,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"why":""},"new":{"pass":true,"secs":0,"steps":6,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"why":""}},{"task":"25-bigproject-question","old":{"pass":true,"secs":58,"steps":3,"ownSteps":0,"modelCalls":2,"toolErrors":0,"thinkTokens":291,"why":""},"new":{"pass":true,"secs":55,"steps":3,"ownSteps":0,"modelCalls":2,"toolErrors":0,"thinkTokens":227,"why":""}},{"task":"19-multifile-symbol","old":{"pass":true,"secs":258,"steps":10,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":3818,"why":""},"new":{"pass":true,"secs":156,"steps":10,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":2008,"why":""}},{"task":"27-negative-money","old":{"pass":true,"secs":144,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":2121,"why":""},"new":{"pass":true,"secs":281,"steps":6,"ownSteps":0,"modelCalls":8,"toolErrors":0,"thinkTokens":4147,"why":""}},{"task":"23-oneword-api","old":{"pass":true,"secs":100,"steps":7,"ownSteps":0,"modelCalls":6,"toolErrors":0,"thinkTokens":1157,"why":""},"new":{"pass":true,"secs":115,"steps":7,"ownSteps":0,"modelCalls":6,"toolErrors":0,"thinkTokens":1393,"why":""}},{"task":"7-question-tax","old":{"pass":true,"secs":12,"steps":2,"ownSteps":0,"modelCalls":2,"toolErrors":0,"thinkTokens":108,"why":""},"new":{"pass":true,"secs":13,"steps":2,"ownSteps":0,"modelCalls":2,"toolErrors":0,"thinkTokens":99,"why":""}},{"task":"18-writing-noncode-folder","old":{"pass":true,"secs":38,"steps":3,"ownSteps":1,"modelCalls":4,"toolErrors":0,"thinkTokens":151,"why":""},"new":{"pass":true,"secs":44,"steps":3,"ownSteps":1,"modelCalls":4,"toolErrors":0,"thinkTokens":121,"why":""}},{"task":"12-feature-currency","old":{"pass":true,"secs":119,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":1744,"why":""},"new":{"pass":true,"secs":101,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":1217,"why":""}},{"task":"28-python-multifile","old":{"pass":false,"secs":885,"steps":4,"ownSteps":0,"modelCalls":17,"toolErrors":0,"thinkTokens":0,"why":"no new test"},"new":{"pass":true,"secs":797,"steps":13,"ownSteps":4,"modelCalls":24,"toolErrors":0,"thinkTokens":319,"why":""}},{"task":"11-fix-sort-text","old":{"pass":true,"secs":19,"steps":6,"ownSteps":0,"modelCalls":2,"toolErrors":1,"thinkTokens":101,"why":""},"new":{"pass":true,"secs":21,"steps":6,"ownSteps":0,"modelCalls":2,"toolErrors":1,"thinkTokens":137,"why":""}}],"old":{"tasks":22,"passed":21,"secs":3000,"median":87.5,"modelCalls":120,"ownSteps":22,"toolErrors":5,"thinkTokens":20696},"new":{"tasks":22,"passed":22,"secs":3160,"median":93,"modelCalls":132,"ownSteps":23,"toolErrors":5,"thinkTokens":24801},"flips":{"fixed":["28-python-multifile"],"broke":[]}}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const VERDICT = "<b>The new prompt holds.</b> It passed 22 of 22 against 21 for the old one, in 5% more time.", CHIPS = "<span class=\"chip ok\">✓ passes: new 22 ≥ old 21</span><span class=\"chip ok\">✓ time: new at most 10% longer (+5%)</span><span class=\"chip ok\">✓ every task run with both (22)</span>";
+const CHANGED = ["<b>Work habits</b>: 8 lines after “Tool use”, in the part of the prompt kept on disk (about 200 tokens). This is the one change the practice tasks see.<pre>Work habits\n- Once you know enough to act, act. Do not read a file again or ask again about what is already settled.\n- When there are several ways, pick the best one and say why in one line; do not list them all.\n- Read a file before you overwrite it. Before anything hard to undo, use Ask first.\n- Report what really happened: a failed check is &quot;failed&quot;, with the line that failed; name any step you skipped. When it is done and checked, say so plainly.\n- Look at files with Read, Search and List, not cat, grep or ls in Bash.\n- If the user says no to a tool call, do not send it again: ask, or try another way.\n- When memory fills, the app keeps notes and you keep going. Do not rush to finish.\n- A remembered fact can be out of date: check that a file or name still exists before you rely on it.</pre>","<b>Which notes win</b>: one line above the project notes. Not in the practice tasks: they have no notes files, and they run without the memory.<pre>These are the user&#39;s and this project&#39;s own rules. When they disagree with the working instructions above, they win, except the Rules the app enforces (blocked folders and commands). The user&#39;s words in this conversation win over both.</pre>","<b>Each notes file named by its kind</b>: “From ~/AGENTS.md (the user's own rules, for every folder under the home folder):” where it was “From ~/AGENTS.md:”. Not in the practice tasks.","<b>Room for the notes files</b>: 9,000 characters, was 6,000. Not in the practice tasks.","<b>The date</b>: the Mac’s own calendar day in both runs. The old prompt’s UTC date was a bug, so the old run gets the fix too."], METHOD = ["Model: Qwen3.5 9B, thinking on at High. The practice tasks 15,13,21,24,8,22,10,26,17,14,1,2,9,25,19,27,23,7,18,12,28,11 with each prompt, old first, one after the other on the same Mac.","Each side is <code>bench/run.mjs … --prompt old|new --no-record</code>: the same tasks, checks, helpers and context as a Practice 28 run; only the system prompt differs.","The rule, written before the first run: the new prompt holds when it passes at least as many tasks as the old one and takes at most 10% longer in all (the seconds of the tasks both ran).","A task's seconds run from its first request to its last reply; loading the model is not in them. Thinking tokens are the model's own count where it gives one.","Code: <code>95d4c49</code>. Run Sep 30, 2026, 6:02 AM."], RAW = ["models/qwen3.5-9b/results/prompt-ab-think-2026-09-30"];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const TABS = [['result', 'Result'], ['tasks', 'Task by task'], ['changed', 'What changed'], ['how', 'How it was measured']];
+let tab = Math.max(0, TABS.findIndex(([id]) => '#' + id === location.hash)), page = 0;
+const num = (n) => (n == null ? '—' : Math.round(n).toLocaleString('en-US'));
+const pct = (a, b) => (a && b != null ? (b >= a ? '+' : '−') + Math.abs(Math.round(100 * (b - a) / a)) + '%' : '');
+// Old and new side by side; the better cell marked (higher or lower is better, said on the row).
+function row(name, sub, a, b, better, show = num) {
+  const best = a != null && b != null && a !== b && better ? ((better === 'low') === (b < a) ? 'b' : 'a') : null;
+  return '<tr><td><b>' + name + '</b><small>' + sub + '</small></td><td class="num' + (best === 'a' ? ' best' : '') + '">' + show(a) + '</td><td class="num' + (best === 'b' ? ' best' : '') + '">' + show(b) + '</td><td class="num dim">' + (better ? pct(a, b) : '') + '</td></tr>';
+}
+const cell = (x) => x ? '<span class="' + (x.pass ? 'ok' : 'no') + '">' + (x.pass ? 'PASS' : 'FAIL') + '</span> <span class="dim">· ' + num(x.secs) + ' s · ' + num(x.ownSteps ?? x.steps) + ' steps</span>' : '<span class="dim">— not run</span>';
+function draw() {
+  document.getElementById('tabs').innerHTML = TABS.map(([id, name], i) => '<button type="button" role="tab" aria-selected="' + (i === tab) + '" data-i="' + i + '">' + (i + 1) + ' · ' + name + '</button>').join('');
+  const p = document.getElementById('panel'), id = TABS[tab][0], o = D.old, n = D.new, f = D.flips;
+  if (id === 'result') {
+    const cards = '<div class="card"><div class="k">Old prompt · passed · higher is better</div><div class="v">' + o.passed + ' of ' + o.tasks + '</div><div class="s">' + num(o.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">New prompt · passed · higher is better</div><div class="v">' + n.passed + ' of ' + n.tasks + '</div><div class="s">' + num(n.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">Time in all · lower is better</div><div class="v">' + (pct(o.secs, n.secs) || '—') + '</div><div class="s">new against old</div></div>'
+      + '<div class="card"><div class="k">Tasks that moved</div><div class="v">' + f.fixed.length + ' fixed · ' + f.broke.length + ' broke</div><div class="s">' + (f.fixed.length + f.broke.length ? esc([...f.fixed.map((t) => '+' + t), ...f.broke.map((t) => '−' + t)].join(', ')) : 'none') + '</div></div>';
+    p.innerHTML = '<p class="verdict">' + VERDICT + '</p><div class="chips">' + CHIPS + '</div><div class="cards">' + cards + '</div><div class="table-wrap"><table><thead><tr><th>Measure</th><th class="num">Old prompt<small>before 30 Sep</small></th><th class="num">New prompt<small>Work habits and the rest</small></th><th class="num">Change</th></tr></thead><tbody>'
+      + row('Tasks passed', 'each task’s own check · higher is better', o.passed, n.passed, 'high')
+      + row('Seconds in all', 'the tasks both ran · lower is better', o.secs, n.secs, 'low')
+      + row('Seconds a task', 'the median · lower is better', o.median, n.median, 'low')
+      + row('Model calls', 'in all · lower is better', o.modelCalls, n.modelCalls, 'low')
+      + row('Its own steps', 'tool calls the model made · lower is better', o.ownSteps, n.ownSteps, 'low')
+      + row('Tool errors', 'calls that came back as an error · lower is better', o.toolErrors, n.toolErrors, 'low')
+      + row('Thinking', 'tokens, about · lower is better when the passes hold', o.thinkTokens, n.thinkTokens, 'low')
+      + '</tbody></table></div>';
+  } else if (id === 'tasks') {
+    p.innerHTML = '<p class="verdict">Each practice task with the old prompt and the new one: its check, its seconds and the model’s own steps. A task that moved is named in the last column.</p><div class="fill" id="fill"><div class="table-wrap"><table><thead><tr><th>Task</th><th>Old prompt</th><th>New prompt</th><th>Moved</th></tr></thead><tbody></tbody></table></div></div><div class="pager"><button type="button" id="prev">‹ Back</button><button type="button" id="next">Next ›</button><span id="at"></span></div>';
+    const fill = document.getElementById('fill'), body = p.querySelector('tbody'), list = D.rows;
+    const moved = (r) => !r.old || !r.new ? '' : !r.old.pass && r.new.pass ? '<span class="ok">fixed</span>' : r.old.pass && !r.new.pass ? '<span class="no">broke</span>' : '<span class="dim">same</span>';
+    const rowHtml = (r) => '<tr><td class="task">' + esc(r.task) + '</td><td>' + cell(r.old) + '</td><td>' + cell(r.new) + '</td><td>' + moved(r) + '</td></tr>';
+    body.innerHTML = list.length ? rowHtml(list[0]) : '<tr><td colspan="4" class="dim">No tasks ran.</td></tr>';
+    const small = matchMedia('(max-width:760px),(max-height:520px)').matches;
+    const rh = body.firstElementChild?.getBoundingClientRect().height || 36, th = p.querySelector('thead').getBoundingClientRect().height;
+    const per = small ? list.length || 1 : Math.max(1, Math.floor((fill.clientHeight - th) / rh));
+    const pages = Math.max(1, Math.ceil(list.length / per)); page = Math.min(page, pages - 1);
+    if (list.length) body.innerHTML = list.slice(page * per, page * per + per).map(rowHtml).join('');
+    document.getElementById('at').textContent = list.length ? 'Page ' + (page + 1) + ' of ' + pages + ' · tasks ' + (page * per + 1) + '–' + Math.min(list.length, page * per + per) + ' of ' + list.length : '';
+    document.getElementById('prev').disabled = page === 0; document.getElementById('next').disabled = page >= pages - 1;
+    document.getElementById('prev').onclick = () => { page--; draw(); }; document.getElementById('next').onclick = () => { page++; draw(); };
+  } else if (id === 'changed') {
+    p.innerHTML = '<ul class="how">' + CHANGED.map((m) => '<li>' + m + '</li>').join('') + '</ul>';
+  } else {
+    p.innerHTML = '<ul class="how">' + METHOD.map((m) => '<li>' + m + '</li>').join('') + (RAW.length ? '<li>Raw results, on this Mac: ' + RAW.map((r) => '<code>' + r + '</code>').join(', ') + '</li>' : '') + '<li>Nothing on this page loads from the internet.</li></ul>';
+  }
+}
+document.getElementById('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) { tab = Number(b.dataset.i); page = 0; try { history.replaceState(null, '', '#' + TABS[tab][0]); } catch {} draw(); } };
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = Number(e.key);
+  if (k >= 1 && k <= TABS.length) { tab = k - 1; page = 0; draw(); }
+  else if (e.key === 'ArrowRight') { tab = (tab + 1) % TABS.length; page = 0; draw(); }
+  else if (e.key === 'ArrowLeft') { tab = (tab + TABS.length - 1) % TABS.length; page = 0; draw(); }
+});
+addEventListener('resize', () => draw());
+draw();
+</script>
+</body>
+</html>
