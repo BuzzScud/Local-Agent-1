@@ -6,6 +6,12 @@ export default {
   folder: 'gemma-4-12b',
   id: 'gemma',
   name: 'Gemma 4 12B QAT',
+  // Who made it, and its speed on this Mac in tokens a second: the hub's Harness
+  // tab shows these beside the other models'. read: the live check of 28 Sep
+  // 2026 (126-128). write: with both speed helpers, the mean of the four kinds
+  // of writing in the speed probe below.
+  by: 'Google',
+  measured: { read: 127, write: 17.2 },
   file: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf',
   url: 'https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf',
   sha256: '90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370',

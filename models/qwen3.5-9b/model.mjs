@@ -9,6 +9,14 @@ export default {
   folder: 'qwen3.5-9b',
   id: 'qwen',
   name: 'Qwen3.5 9B',
+  // Who made it, and its speed on this Mac in tokens a second: the hub's Harness
+  // tab shows these beside the other models'. read: the quick check of 29 Sep
+  // 2026 (results/quick-check-2026-09-29). write: with its MTP helper, the mean
+  // of the four kinds of writing in the speed test below.
+  by: 'Alibaba’s Qwen team',
+  measured: { read: 190, write: 18.1 },
+  // What to watch for, seen in use by hand: the Harness tab's verdict says it.
+  watch: ['Said “done” when it was not, three times on pages tried by hand (29 Sep 2026).'],
   // Kept under its own name here: Unsloth's MTP repo names it like the plain file.
   file: 'Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf',
   url: 'https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/Qwen3.5-9B-UD-Q5_K_XL.gguf',

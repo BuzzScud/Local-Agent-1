@@ -110,6 +110,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
     if (tab === 'help') return show('/help', 'every command, key and setting');
     if (tab === 'instructions') return show('/instructions', 'general behavior and planning');
+    if (tab === 'harness' && !page) return show('/harness', 'one harness, every model beside the others');
     if (tab === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
     if (tab === 'tests' && !page && runAsk) { const a = runAsk.toString(); runAsk = null; return show(`/tests${a ? `?${a}` : ''}#run`, 'run a test on one model'); }
     if (tab === 'tests' && !page) return show('/tests', 'every test run and its result');
@@ -125,7 +126,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'flow' || t === 'tests' || t === 'battle' || t === 'memory' || t === 'instructions';
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || t === 'tests' || t === 'battle' || t === 'memory' || t === 'instructions';
   if (builtIn(tab) && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();

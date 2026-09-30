@@ -26,7 +26,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, MODELS_DIR } from '../registry.mjs';
-import { RUN_TESTS } from './run-tests.mjs';
+import { RUN_TESTS, practiceChoices } from './run-tests.mjs';
 
 export const KINDS = {
   tasks: ['Practice tasks', 'the 28 practice tasks, each with its own check'],
@@ -163,6 +163,56 @@ export const overviewTests = () => ({
 // What the Tests tab and the snapshot page both show.
 export function recordData(file = recordFile()) {
   return { rows: readRecord(file), kinds: KINDS, models: installedModels(), ...overviewTests(), file: file.startsWith(homedir()) ? file.replace(homedir(), '~') : basename(file), made: new Date().toISOString() };
+}
+
+// What the record holds about the listed models side by side (the hub's Harness tab):
+//   run   the newest practice-task run every one of them did under the same name, effort, context
+//         and panel settings, task by task from each run's raw results. Only the tasks they all
+//         ran count. null while they have no such run.
+//   sort  each model's newest whole Sorting check ({ right, total }), or null.
+// The prompt test keeps two sides in its raw results: the new prompt's is read (the app as it is).
+// `top` is the repo the raw results sit in: the launcher names it (the built app has no folder of its own).
+const rawDir = (raw, top) => { const p = String(raw ?? ''); return p.startsWith('~/') ? join(homedir(), p.slice(2)) : p.startsWith('/') ? p : p && !p.startsWith('a temporary folder') ? join(top, p) : null; };
+function taskRows(dir) {
+  for (const f of [join(dir, 'summary.json'), join(dir, 'new', 'summary.json')]) {
+    try { const d = JSON.parse(readFileSync(f, 'utf8')); if (Array.isArray(d.results) && d.results.length) return d.results; } catch { /* not there, or not a task run */ }
+  }
+  return null;
+}
+const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+const middle = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
+export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top = (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) ?? repo, home } = {}) {
+  const rows = readRecord(file);
+  const whole = (r) => r.result !== 'stopped';
+  const sort = Object.fromEntries(ids.map((id) => { const r = rows.find((x) => x.name === 'Sorting check' && x.model === id && !x.part && whole(x) && x.total); return [id, r ? { right: r.passed, total: r.total, at: r.at } : null]; }));
+  const same = (r) => JSON.stringify([r.name, r.effort ?? null, r.ctx ?? null, r.settings ?? null]);
+  const titles = new Map(practiceChoices(home).map((c) => [c.key, c.title]));
+  const tried = new Set();
+  for (const r of rows) {
+    if (r.kind !== 'tasks' || !ids.includes(r.model) || !whole(r) || tried.has(same(r))) continue;
+    tried.add(same(r));
+    const lines = ids.map((id) => rows.find((x) => x.kind === 'tasks' && x.model === id && whole(x) && same(x) === same(r)));
+    if (lines.some((l) => !l)) continue;
+    const raws = lines.map((l) => { const d = rawDir(l.raw, top); return d ? taskRows(d) : null; });
+    if (raws.some((x) => !x)) continue;
+    const num = (t) => parseInt(t, 10) || 0;
+    const shared = [...new Set(raws[0].map((x) => x.task))].filter((t) => raws.every((rs) => rs.some((x) => x.task === t))).sort((a, b) => num(a) - num(b) || a.localeCompare(b));
+    if (!shared.length) continue;
+    const models = Object.fromEntries(ids.map((id, i) => {
+      // A task run several times passes when every run did; its time is the mean.
+      const tasks = Object.fromEntries(shared.map((t) => { const reps = raws[i].filter((x) => x.task === t); const bad = reps.find((x) => !x.pass); return [t, { pass: !bad, secs: Math.round(mean(reps.map((x) => x.secs ?? 0))), why: bad ? (bad.reason === 'interrupted' ? 'time' : String(bad.why || bad.reason || '')) : '', think: Math.round(mean(reps.map((x) => x.thinkTokens ?? 0))), calls: Math.round(mean(reps.map((x) => x.modelCalls ?? 0))) }]; }));
+      const all = Object.values(tasks);
+      const tps = raws[i].filter((x) => shared.includes(x.task) && x.tps).map((x) => x.tps);
+      return [id, { at: lines[i].at, page: lines[i].page ?? '', passed: all.filter((t) => t.pass).length, secs: all.reduce((n, t) => n + t.secs, 0), median: middle(all.map((t) => t.secs)), thinkTokens: all.reduce((n, t) => n + t.think, 0), modelCalls: all.reduce((n, t) => n + t.calls, 0), write: tps.length ? +middle(tps).toFixed(1) : null, tasks }];
+    }));
+    const timed = Object.values(models).flatMap((m) => Object.values(m.tasks)).filter((t) => t.why === 'time').map((t) => t.secs);
+    return {
+      run: { name: String(r.name).replace(/, tasks [\w, ]+$/, ''), at: lines.map((l) => l.at).sort().at(-1), effort: r.effort ?? null, ctx: r.ctx ?? null, thinking: Boolean(raws[0][0].thinking), limitMins: timed.length ? Math.round(Math.max(...timed) / 60) : null,
+        tasks: shared.map((t) => ({ id: t, n: num(t), title: titles.get(String(num(t))) ?? t.replace(/^\d+-/, '').replace(/-/g, ' ') })), models },
+      sort,
+    };
+  }
+  return { run: null, sort };
 }
 
 // The same page the hub shows, with the record written into it, saved into

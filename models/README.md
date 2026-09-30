@@ -34,8 +34,12 @@ numbers live in the 27B's comparison pages.
    the server options it needs, and `engine` if it needs one other than the default
    (`ENGINES` in `registry.mjs`). A speed helper is `draft`: a file of its own (Gemma's MTP),
    or `inFile: true` when it is a layer inside the model file (Qwen3.5's MTP build).
+   Three more lines feed the hub's Harness tab, which shows every listed model beside the
+   others: `by` (who made it), `measured` (its reading and writing speed on this Mac, tokens a
+   second) and, when there is one, `watch` (what to look out for, seen in use by hand).
 2. Import it in `registry.mjs` and add it to the list.
-3. `coding setup` fetches it; `/model` in the terminal lists it.
+3. `coding setup` fetches it; `/model` in the terminal lists it, and the Harness tab shows it
+   by itself (`coding hub harness`).
 4. Test it the way the 27B was: `node models/evals/bench/run.mjs --model <id>` and
    `node models/evals/bench/words/real.mjs --model <id>`; results land in `models/<name>/results/`.
 

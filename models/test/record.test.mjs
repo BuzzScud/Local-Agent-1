@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 import { RUN_TESTS } from '../evals/run-tests.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'agentic-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
@@ -199,4 +199,48 @@ test('a run from the Run tab keeps the panel rows it changed (settings), from th
   expect(byId.a.settings).toEqual({ tries: 4 });
   expect(byId.b.settings).toEqual({ steps: 20 });
   expect('settings' in byId.c).toBe(false);
+});
+
+// The hub's Harness tab reads the models side by side from here.
+const taskRun = (top, raw, rows, sub = '') => { const dir = join(top, raw, sub); mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'summary.json'), JSON.stringify({ ctx: 32768, effort: 'high', results: rows })); };
+const row = (task, pass, secs, more = {}) => ({ task, pass, secs, thinking: true, thinkTokens: 100, modelCalls: 2, tps: 15, why: '', reason: 'done', ...more });
+
+test('side by side: the newest task run both models did under the same name and settings, only the tasks both ran, task by task from the raw results', () => {
+  const { dir, file } = scratch();
+  const line = (model, at, raw, more = {}) => recordTest({ kind: 'tasks', name: 'Prompt old vs new, tasks 1,2,21', at, model, effort: 'high', ctx: 32768, passed: 2, total: 3, part: true, raw, ...more }, quiet(file));
+  // The prompt test keeps its task rows one folder down, under new/; a plain run keeps them at the top.
+  taskRun(dir, 'models/gemma-4-12b/results/run-a', [row('1-json-flag', true, 300, { tps: 14 }), row('2-fix-bug', true, 50, { tps: 16 }), row('21-bigfile-two-places', false, 880, { reason: 'interrupted', why: 'tests still fail', tps: 0 })], 'new');
+  taskRun(dir, 'models/qwen3.5-9b/results/run-a', [row('2-fix-bug', true, 20, { tps: 18 }), row('1-json-flag', true, 200, { tps: 20 }), row('21-bigfile-two-places', true, 340, { tps: 19 }), row('9-only-qwen', true, 5)]);
+  line('gemma', '2026-09-30T11:00:20.000Z', 'models/gemma-4-12b/results/run-a');
+  line('qwen', '2026-09-30T11:00:10.000Z', 'models/qwen3.5-9b/results/run-a');
+  // A newer run only one of them did is passed over, and so is one that was stopped.
+  recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T12:00:00.000Z', model: 'qwen', effort: 'high', ctx: 32768, passed: 1, total: 1, raw: 'models/qwen3.5-9b/results/run-a' }, quiet(file));
+  line('qwen', '2026-09-30T13:00:00.000Z', 'models/qwen3.5-9b/results/run-a', { result: 'stopped' });
+  recordTest({ kind: 'other', name: 'Sorting check', at: '2026-09-29T22:49:18.000Z', model: 'gemma', passed: 81, total: 82, result: 'pass' }, quiet(file));
+  const { run, sort } = sideBySide(['gemma', 'qwen'], { file, top: dir, home: join(dir, 'no-arena') });
+  expect(run).toMatchObject({ name: 'Prompt old vs new', at: '2026-09-30T11:00:20.000Z', effort: 'high', ctx: 32768, thinking: true, limitMins: 15 });
+  expect(run.tasks.map((t) => t.id)).toEqual(['1-json-flag', '2-fix-bug', '21-bigfile-two-places']); // by number; the task only Qwen ran is left out
+  expect(run.tasks[0]).toMatchObject({ n: 1, title: expect.stringContaining('--json') });
+  expect(run.models.gemma).toMatchObject({ passed: 2, secs: 1230, median: 300, thinkTokens: 300, modelCalls: 6, write: 15 });
+  expect(run.models.gemma.tasks['21-bigfile-two-places']).toMatchObject({ pass: false, secs: 880, why: 'time' });
+  expect(run.models.qwen).toMatchObject({ passed: 3, secs: 560, median: 200, write: 19 });
+  expect(sort).toEqual({ gemma: { right: 81, total: 82, at: '2026-09-29T22:49:18.000Z' }, qwen: null });
+});
+
+test('side by side: no run in common, raw results that are gone, or a different setting mean no run (never a throw)', () => {
+  const { dir, file } = scratch();
+  expect(sideBySide(['gemma', 'qwen'], { file, top: dir })).toEqual({ run: null, sort: { gemma: null, qwen: null } });
+  const line = (model, more = {}) => recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: `2026-09-30T1${model === 'gemma' ? 0 : 1}:00:00.000Z`, model, effort: 'high', ctx: 32768, passed: 1, total: 1, raw: `models/${model}/results/run-b`, ...more }, quiet(file));
+  line('gemma'); line('qwen');
+  expect(sideBySide(['gemma', 'qwen'], { file, top: dir }).run).toBe(null); // the lines are there, the raw results are not
+  taskRun(dir, 'models/gemma/results/run-b', [row('3-add-function', true, 10)]);
+  taskRun(dir, 'models/qwen/results/run-b', [row('3-add-function', true, 12)]);
+  expect(sideBySide(['gemma', 'qwen'], { file, top: dir }).run.tasks).toHaveLength(1);
+  // One model alone: its own newest run.
+  expect(sideBySide(['qwen'], { file, top: dir }).run.models.qwen.passed).toBe(1);
+  // The same test at another context is another test: it does not pair with the first.
+  const other = scratch();
+  recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T10:00:00.000Z', model: 'gemma', effort: 'high', ctx: 32768, passed: 1, total: 1, raw: 'models/gemma/results/run-b' }, quiet(other.file));
+  recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T11:00:00.000Z', model: 'qwen', effort: 'high', ctx: 65536, passed: 1, total: 1, raw: 'models/qwen/results/run-b' }, quiet(other.file));
+  expect(sideBySide(['gemma', 'qwen'], { file: other.file, top: dir }).run).toBe(null);
 });

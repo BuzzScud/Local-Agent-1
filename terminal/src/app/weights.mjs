@@ -3,9 +3,10 @@
 //   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Tests · Battle · Memory · All docs · Help
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
-//   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned harness and structure pages
+//   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned structure page (and a harness page kept there, under All docs)
 //   /docs/<group>/<file>  one page from that folder (html, pdf, png), read live
 //   /help, /help.json the Help page and what it lists (help.mjs)
+//   /harness, /harness.json the Harness tab: one harness, every model in /model beside the others, read live (harness-hub.mjs)
 //   /flow             the Flow tab: how Agentic Coder works as a flow diagram (flow.html, drawn by scripts/flow-page.mjs)
 //   /tests, /tests.json   the test record: every test run and its result, read live from ~/.agentic-coder/tests/record.jsonl
 //   /tests/run.json, POST /tests/run, /tests/stop, /tests/unqueue, /tests/stopall   the Tests tab's Run tab:
@@ -26,6 +27,7 @@ import flowHtml from './flow.html' with { type: 'text' };
 import instructionsHtml from './instructions.html' with { type: 'text' };
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
+import { harnessRoute } from './harness-hub.mjs';
 import { helpData, VERSION } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, readEdited, writeEdited, removeEdited, editedFileName, recordData, startBattle, testRun, runCatalog, availableBytes, serverProcesses, freeAfterQuit } from '../../../models/index.mjs';
 import { panelData } from './limits.mjs';
@@ -163,6 +165,7 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/weights') return page(html);
       if (url.pathname === '/help') return page(helpHtml);
       if (url.pathname === '/flow') return page(flowHtml);
+      if (url.pathname === '/harness' || url.pathname === '/harness.json') return harnessRoute(url, cwd);
       if (url.pathname === '/tests') return page(testsHtml);
       // The arena runs on its own (it keeps going when this window closes): started here when it is
       // not up, then shown at its own address.
