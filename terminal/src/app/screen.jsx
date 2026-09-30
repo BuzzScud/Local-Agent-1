@@ -14,6 +14,7 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
+import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -186,19 +187,19 @@ export function doneCounts(it) {
 export function Item({ it, width, model, cwd, loaded }) {
   switch (it.type) {
     case 'welcome': return <Welcome model={model} cwd={cwd} width={width} loaded={loaded} />;
-    case 'user': return (
-      <Box flexDirection="column">
-        <Row mark=">" markColor={C.dim}><Text color={C.dim}>{it.text}</Text></Row>
-        {it.attached?.length ? <Result><Text color={C.dim}>Attached {it.attached.map((a) => `${a.path} (${plural(a.lines, 'line')})`).join(', ')}</Text></Result> : null}
-      </Box>
-    );
-    case 'thinking': return <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
+    // Your message on its grey strip; an answer you typed to its question mid-turn is a step of the turn.
+    case 'user': return it.rail
+      ? <Node g="›" c={C.accent}><Text><Text color={C.dim}>You: </Text>{it.text}</Text></Node>
+      : <UserStrip text={it.text} attached={it.attached} width={width} />;
+    case 'machine': return <MachineLine it={it} />;
+    case 'thinking': return it.rail ? <ThoughtNode it={it} /> : <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
     // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".
-    case 'done': return <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}</Text></Text>;
-    case 'text': return <Row><Markdown text={it.text} /></Row>;
-    case 'tool': return <ToolView it={it} width={width} />;
+    case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}</Text></Text>;
+    case 'text': return it.rail ? <ReplyNode text={it.text} /> : <Row><Markdown text={it.text} /></Row>;
+    case 'tool': return it.rail ? <ToolNode it={it} /> : <ToolView it={it} width={width} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
     case 'note': {
+      if (it.rail) return it.check ? <CheckNode check={it.check} /> : <NoteNode it={it} />;
       const color = it.tone === 'error' ? C.bad : it.tone === 'warn' ? C.warn : it.tone === 'ok' ? C.ok : C.dim;
       return <Row mark={it.tone === 'error' ? '✗' : '·'} markColor={color}><Text color={color}>{it.text}</Text></Row>;
     }
@@ -231,7 +232,12 @@ export function Item({ it, width, model, cwd, loaded }) {
         ))}
       </Box>
     );
-    case 'tries': return (
+    case 'tries': return it.rail ? (
+      <Box flexDirection="column">
+        <Node g="◆" c={it.failed ? C.warn : C.ok}><Text bold>{it.label}</Text></Node>
+        <Pipe><Text><Marks marks={it.marks} />  <Text color={C.dim}>{it.summary}{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''}</Text></Text></Pipe>
+      </Box>
+    ) : (
       <Box flexDirection="column">
         <Row markColor={it.failed ? C.warn : C.ok}><Text bold>{it.label}</Text></Row>
         <Result><Text><Marks marks={it.marks} />  <Text color={C.dim}>{it.summary}{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''}</Text></Text></Result>
@@ -314,12 +320,13 @@ function StartIcon({ app }) {
 export function Spinner({ app }) {
   const { live, now } = app;
   const secs = Math.max(0, (now - live.turnStart) / 1000);
-  const note = live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : '';
+  const doing = live.rail ? doingWords(live) : '';
+  const note = `${doing ? ` · ${doing}` : ''}${live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : ''}`;
   const icon = spinFrame(app.spinner, secs, { tokens: live.tokens, sinceToken: live.lastTokenAt ? (now - live.lastTokenAt) / 1000 : Infinity });
   return (
     <Box marginBottom={1} width={app.width}>
       <Text wrap="truncate-end">
-        <Text color={icon.color}>{icon.glyph}</Text><Text color={C.accent}> {live.verb}…</Text>
+        {live.rail ? <Text color={RAIL}>{'  ╰─ '}</Text> : null}<Text color={icon.color}>{icon.glyph}</Text><Text color={C.accent}> {live.verb}…</Text>
         <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(live.tokens)} tokens{note} · esc to interrupt)</Text>
       </Text>
     </Box>
@@ -353,6 +360,7 @@ export function LiveArea({ app }) {
   if (live.phase !== 'working') return null;
   // An open /btw panel is taller than the prompt box it replaces: the reply shows less.
   const maxLines = app.btw ? Math.max(2, rows - 16 - (btwLayout(app).panelRows - 4)) : Math.max(6, rows - 16);
+  if (live.rail) return <LiveRail app={app} maxLines={maxLines} />;
   const blocks = [];
   // While it thinks: one folded line above the spinner, as in Claude Code
   // (ctrl+o shows the thinking once the turn is over).
@@ -386,6 +394,39 @@ export function LiveArea({ app }) {
     );
   }
   if (!app.perm) blocks.push(<Spinner key="spin" app={app} />);
+  return <Box flexDirection="column">{blocks}</Box>;
+}
+
+// A turn under way, on the rail: what came along (until the first step prints it), the thinking
+// (its latest two lines, live), the reply as it is written, the file being written, a tool
+// running, and the working line at the rail's end.
+function LiveRail({ app, maxLines }) {
+  const { live, width } = app;
+  const blocks = [];
+  if (live.pre) blocks.push(<MachineLine key="pre" it={live.pre} />);
+  if (live.thinking && !live.text && !live.writing) blocks.push(<Box key="think" flexDirection="column"><Pipe /><ThinkingLive thinking={live.thinking} now={app.now} width={width} /></Box>);
+  if (live.text) {
+    const shown = tailToFit(live.text, maxLines, width - 6);
+    blocks.push(
+      <Box key="text" flexDirection="column"><Pipe />
+        <Box maxHeight={maxLines} overflow="hidden" flexDirection="column" justifyContent="flex-end">
+          <Box flexDirection="column" flexShrink={0}><ReplyNode text={shown} /></Box>
+        </Box>
+      </Box>,
+    );
+  }
+  if (live.writing) blocks.push(<Box key="writing" flexDirection="column"><Pipe /><WritingNode writing={live.writing} /></Box>);
+  if (live.tries) {
+    const t = live.tries;
+    blocks.push(
+      <Box key="tries" flexDirection="column"><Pipe />
+        <Node g="◆" c={C.dim}><Text><Text bold>{t.label}</Text><Text color={C.dim}> ({Math.min(t.n, t.max)} of up to {t.max})</Text></Text></Node>
+        <Pipe><Text><Marks marks={t.marks} pending />{t.tokens ? <Text color={C.dim}>  writing… {plural(t.tokens, 'token')}</Text> : <Text color={C.dim}>  checking…</Text>}</Text></Pipe>
+      </Box>,
+    );
+  }
+  if (live.running) blocks.push(<Box key="running" flexDirection="column"><Pipe /><Node g="▸" c={C.dim}><Text color={C.dim}><Text bold>{live.running.label}</Text>  {live.running.arg}</Text><Text color={C.dim}>Running…</Text></Node></Box>);
+  if (!app.perm) blocks.push(<Box key="spin" flexDirection="column"><Pipe /><Spinner app={app} /></Box>);
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
@@ -951,17 +992,26 @@ function TooSmall({ app }) {
 // warning into the terminal.
 const itemHeights = new Map();
 const rowsKey = (it, ctx) => `${it.key}\0${ctx.width}`;
+// An item as printed: a turn's step brings the rail line linking it to the step before and has no
+// blank line under it; the turn's end line, and everything outside a turn, has one. Your message's
+// strip has its own padding.
+export const gapUnder = (it) => (it.rail ? (it.type === 'done' ? 1 : 0) : it.type === 'user' ? 0 : 1);
+export function ItemFrame({ it, width, model, cwd, loaded }) {
+  return (
+    <Box flexDirection="column" marginBottom={gapUnder(it)} width={width}>
+      {it.rail && it.type !== 'machine' ? <Pipe /> : null}
+      <Item it={it} width={width} model={model} cwd={cwd} loaded={loaded} />
+    </Box>
+  );
+}
 export function primeRows(items, ctx) {
   let added = false;
   for (const it of items) {
     const k = rowsKey(it, ctx);
     if (itemHeights.has(k)) continue;
     if (itemHeights.size > 5000) itemHeights.clear();
-    const out = renderToString(
-      <Box flexDirection="column" marginBottom={1} width={ctx.width}>
-        <Item it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} loaded={ctx.loaded} />
-      </Box>, { columns: ctx.width });
-    itemHeights.set(k, out.split('\n').length); // the margin under it is the last line
+    const out = renderToString(<ItemFrame it={it} width={ctx.width} model={ctx.modelName} cwd={ctx.cwdShort} loaded={ctx.loaded} />, { columns: ctx.width });
+    itemHeights.set(k, out.split('\n').length); // the margin under it (gapUnder) is its last line
     added = true;
   }
   return added;
@@ -1014,9 +1064,7 @@ export function Screen({ app }) {
         {(it) => (
           // Static lines are laid out on their own, so they need the width
           // too; without it long lines are wrapped by the terminal mid-word.
-          <Box key={it.key} flexDirection="column" marginBottom={1} width={width}>
-            <Item it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} />
-          </Box>
+          <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} />
         )}
       </Static>
       <Box ref={liveRef} flexDirection="column" minHeight={fill} maxHeight={Math.max(fill, app.rows - 1)} overflow="hidden" justifyContent="flex-end">

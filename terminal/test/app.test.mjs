@@ -23,8 +23,9 @@ test('classic: the whole task, answering each question by key', async () => {
     { wait: 'tests pass' }, ...quit,
   ] });
   await fake.close();
-  for (const s of ['> add a --json flag to export.mjs', '∴ Thought for', '⏺ Read(export.mjs)', 'Read 19 lines', '⏺ Update Todos', '⏺ Update(export.mjs)', 'Updated export.mjs with 1 addition',
-    "14 +   if (argv.includes('--json'))", '⏺ Bash(node --test)', '✔ --json prints the rows as JSON', 'accept edits on', 'Saved. Continue this conversation with: coding -c']) expect(r.text).toContain(s);
+  // The turn on its rail: your message on its strip, then each step with its mark, closed by ╰─.
+  for (const s of ['› add a --json flag to export.mjs', '◇ thought', '○ Read  export.mjs · 19 lines', '☐ Update Todos', '✎ Changed  export.mjs · +1 line',
+    "14  +   if (argv.includes('--json'))", '❯ Ran  node --test', '✔ --json prints the rows as JSON', '╰─ ⠿', 'accept edits on', 'Saved. Continue this conversation with: coding -c']) expect(r.text).toContain(s);
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain("argv.includes('--json')");
   expect(existsSync(join(base, 'home', 'sessions'))).toBe(true);
 }, T);
@@ -48,22 +49,23 @@ test('Agentic Coder asks: answer by number, or type an answer on the prompt line
   await fake.close();
   expect(r.snapshots.asking).toContain('Agentic Coder asks');
   expect(r.snapshots.asking).toMatch(/1\. export\.mjs[\s│]+2\. trades\.json[\s│]+3\. Type an answer[\s│]+4\. Stop here/);
-  for (const s of ['⏺ Ask(Which file should change?)', 'You: export.mjs', '> --json', 'You: --json', 'Named it --json.']) expect(r.text).toContain(s);
+  for (const s of ['› Ask  Which file should change?', 'You: export.mjs', 'You: --json', 'Named it --json.']) expect(r.text).toContain(s);
+  expect(r.text).not.toContain('› You: --json'); // the Ask step shows a typed answer; it is not echoed as a step of its own
 }, T);
 
-test('working: "∴ Thinking…" above the spinner, which shows time and tokens; esc interrupts', async () => {
+test('working: the live thinking line above the spinner, which shows time, tokens and what it is doing; esc interrupts', async () => {
   const { cwd, env } = setup();
   const slow = [{ reasoning: 'I should read export.mjs first to see how main builds its output, then decide where the flag goes. '.repeat(3), text: 'Done.' }];
   const fake = await startFakeServer(slow, { delayMs: 60, chunk: 3 });
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: 'hello' }, { key: 'enter' }, { wait: '∴ Thinking…' }, { sleep: 1200 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
+    { wait: '? for shortcuts' }, { type: 'hello' }, { key: 'enter' }, { wait: '◇ thinking' }, { sleep: 1200 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.thinking).toMatch(/∴ Thinking…/);
-  expect(r.snapshots.thinking).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · esc to interrupt\)/);
+  expect(r.snapshots.thinking).toMatch(/◇ thinking · \d+s · \d+ tokens?/);
+  expect(r.snapshots.thinking).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · thinking · esc to interrupt\)/);
   expect(r.snapshots.thinking).not.toMatch(/┃/); // no streaming window: one layout, like Claude Code
-  expect(r.text).toContain('∴ Thought for'); // what it had thought so far is kept, folded
-  expect(r.text).toContain('Interrupted · What should Agentic Coder do instead?');
+  expect(r.text).toContain('◇ thought'); // what it had thought so far is kept, folded
+  expect(r.text).toMatch(/╰─ ■ Interrupted · What should Agentic Coder do instead\?/); // the end line closes the rail
 }, T);
 
 test('a finished turn leaves its time behind, like Claude Code: "⠿ Worked for 2s · done 12:58 PM"', async () => {
@@ -109,7 +111,7 @@ test('focused paths on screen: the plan, the try counter, the rename prompt and 
     { wait: 'Renamed median to middleValue' }, ...quit,
   ] });
   await fake.close();
-  for (const s of ['⏺ Plan', '☐ Run the tests', '⏺ Trying fixes', '✗ ✓', 'passes all 4 tests', '⏺ Update(stats.mjs)', 'Fixed stats.mjs; all 4 tests pass']) expect(r.text).toContain(s);
+  for (const s of ['☐ Plan', '☐ Run the tests', '◆ Trying fixes', '✗ ✓', 'passes all 4 tests', '✎ Changed  stats.mjs', 'Fixed stats.mjs; all 4 tests pass']) expect(r.text).toContain(s);
   expect(r.snapshots.asking).toContain('Edit file');
   expect(r.snapshots.rename).toMatch(/Rename median to middleValue: \d+ uses in 2 files\?/);
   expect(r.text).toMatch(/Renamed median to middleValue: \d+ uses in 2 files; all 4 tests pass/);

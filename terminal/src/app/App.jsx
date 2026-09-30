@@ -49,6 +49,8 @@ import { isQuit } from '../flows/words.mjs';
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
 const VERBS = [['Baking', 'Baked'], ['Brewing', 'Brewed'], ['Cogitating', 'Cogitated'], ['Computing', 'Computed'], ['Conjuring', 'Conjured'], ['Cooking', 'Cooked'], ['Crafting', 'Crafted'], ['Crunching', 'Crunched'], ['Deliberating', 'Deliberated'], ['Forging', 'Forged'], ['Hatching', 'Hatched'], ['Ideating', 'Ideated'], ['Marinating', 'Marinated'], ['Mulling', 'Mulled'], ['Musing', 'Mused'], ['Noodling', 'Noodled'], ['Percolating', 'Percolated'], ['Pondering', 'Pondered'], ['Puzzling', 'Puzzled'], ['Ruminating', 'Ruminated'], ['Simmering', 'Simmered'], ['Stewing', 'Stewed'], ['Synthesizing', 'Synthesized'], ['Tinkering', 'Tinkered'], ['Working', 'Worked'], ['Wrangling', 'Wrangled']];
+// A turn's end line when it did not finish its job (rail.jsx); the note before it says why.
+const END_WORDS = { stuck: 'Stopped: it was stuck', limit: 'Stopped at the step limit', error: 'Stopped by an error', declined: 'Stopped: you said no' };
 const PLACEHOLDERS = ['Try "explain what this project does"', 'Try "add a test for …"', 'Try "fix the failing tests"', 'Try "find where … is set"'];
 const MODES = ['ask', 'edits', 'plan'];
 const IDLE = { phase: 'idle' };
@@ -208,8 +210,20 @@ export function App({ opts, win, onRestart }) {
   // space above the prompt box is right on the first frame; measured just
   // after the current step, never inside a render or an effect (a second
   // Ink render in there breaks the first one's layout).
+  // A turn under way: what it prints are steps on the rail (rail.jsx). What came along with the
+  // request (the notes, the design cards, how it was sorted) is held until the turn's first step,
+  // then printed as one line; the turn's last layout check is kept for its end line.
+  const railOn = useRef(false);
+  const pre = useRef(null);
+  const lastCheck = useRef(null);
   const push = useCallback((...its) => {
-    const made = its.map((it) => ({ key: `i${++seq}`, ...it }));
+    let list = its;
+    if (railOn.current && pre.current && its.some((it) => it.type !== 'machine')) {
+      list = [{ type: 'machine', ...pre.current }, ...its];
+      pre.current = null;
+      setLive((l) => ({ ...l, pre: null }));
+    }
+    const made = list.map((it) => ({ key: `i${++seq}`, ...(railOn.current && it.rail === undefined ? { rail: true } : {}), ...it }));
     queueMicrotask(() => {
       try { primeRows(made, measure.current); } catch {}
       setItems((xs) => [...xs, ...made]);
@@ -657,8 +671,9 @@ export function App({ opts, win, onRestart }) {
       const secs = (t - first) / 1000;
       return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + 1, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
     };
+    const addPre = (patch) => { pre.current = { ...(pre.current ?? {}), ...patch }; setLive((l) => ({ ...l, pre: pre.current })); };
     const offs = [
-      on('turn-start', () => { const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true }); }),
+      on('turn-start', () => { railOn.current = true; pre.current = null; lastCheck.current = null; const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       on('waiting', () => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0 }))),
       on('reasoning', ({ all }) => setLive((l) => stream(l, { thinking: { text: all, startedAt: l.thinking?.startedAt ?? Date.now(), tokens: (l.thinking?.tokens ?? 0) + 1 } }))),
       on('text', ({ all }) => setLive((l) => stream(l, { text: all }))),
@@ -681,11 +696,16 @@ export function App({ opts, win, onRestart }) {
         else if (v.content) fold({ title: `${ev.label}(${ev.arg})`, text: v.content });
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
-      on('note', ({ text, tone }) => push({ type: 'note', text, tone })),
+      // During a turn the design cards join the line of what came along; a layout check is a step.
+      on('note', ({ text, tone, design, check }) => {
+        if (design && railOn.current) { addPre({ design }); return; }
+        if (check) lastCheck.current = check;
+        push({ type: 'note', text, tone, ...(check ? { check } : {}) });
+      }),
       // What came along with the request (memory, Claude's notes): one line; ctrl+o lists it.
-      on('context', (c) => { push({ type: 'context', ...c }); fold({ context: c }); }),
+      on('context', (c) => { fold({ context: c }); if (railOn.current) addPre({ contexts: [...(pre.current?.contexts ?? []), c] }); else push({ type: 'context', ...c }); }),
       // Which path the request took, under the request.
-      on('sorted', ({ text }) => push({ type: 'sorted', text })),
+      on('sorted', ({ text }) => { if (railOn.current) addPre({ sorted: text }); else push({ type: 'sorted', text }); }),
       // Saying yes to "Work in <project>?" counts as trusting that folder.
       on('cwd', ({ cwd: dir }) => { setCwd(dir); try { saveTrust(dir); } catch {} }),
       // Focused paths: the live try counter, its finished line, the current step.
@@ -702,10 +722,15 @@ export function App({ opts, win, onRestart }) {
         setPerm(null);
         answerRef.current = null;
         setAnswerWait(false);
-        if (reason === 'interrupted') { push({ type: 'note', text: 'Interrupted · What should Agentic Coder do instead?', tone: 'warn' }); setPlaceholder('Tell Agentic Coder what to do instead'); }
-        // A finished turn leaves its time behind, as in Claude Code: "⠿ Worked for 41s · done 12:58 PM".
-        // With the counts that say where the time went: steps, reads, thinking.
-        else if (reason === 'done' && secs >= 1) push({ type: 'done', past, secs, at: Date.now(), steps, reads, thinkTokens });
+        // The turn's end line closes the rail: how it ended, its time and counts ("╰─ ⠿ Worked for
+        // 41s · 5 steps · done 12:58 PM"), and the layout problems its last check left.
+        const left = lastCheck.current?.problems?.length ?? 0;
+        const at = Date.now();
+        if (reason === 'interrupted') { push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at }); setPlaceholder('Tell Agentic Coder what to do instead'); }
+        else if (reason === 'done') push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left });
+        else push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left });
+        railOn.current = false;
+        pre.current = null;
         if (reason === 'declined') setPlaceholder('Tell Agentic Coder what to do instead');
         saveNow();
         const q = queuedRef.current;
@@ -1339,7 +1364,8 @@ export function App({ opts, win, onRestart }) {
       const resolve = answerRef.current;
       answerRef.current = null;
       setAnswerWait(false);
-      push({ type: 'user', text: value });
+      // During a turn the Ask step shows the answer ("You: …"); an echo of it would say it twice.
+      if (!railOn.current) push({ type: 'user', text: value });
       addHistory(cwd, value);
       historyRef.current.push(value);
       setPlaceholder(pick(PLACEHOLDERS));

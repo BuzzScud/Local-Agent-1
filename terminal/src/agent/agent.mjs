@@ -395,8 +395,10 @@ export class Agent extends EventEmitter {
       const r = await layoutCheck(abs, { chrome });
       if (r.skipped) { this.emit('note', { text: `Layout check skipped for ${rel}: ${r.skipped}.`, tone: 'dim' }); continue; }
       const n = r.problems.length;
-      if (!n) this.emit('note', { text: `Layout check, ${rel}: nothing broken at 1440 px, on a phone or in dark mode (${r.secs.toFixed(1)} s).`, tone: 'dim' });
-      else this.emit('note', { text: `Layout check, ${rel}: ${n} problem${n === 1 ? '' : 's'}${again ? ' left' : ''} (${r.secs.toFixed(1)} s)${again ? `: ${r.problems.slice(0, 3).join(' ')}` : ', sent back to fix.'}`, tone: 'warn' });
+      // `check` is the same result for the screen, which draws it as a step with each problem named.
+      const check = { page: rel, problems: r.problems, secs: r.secs, again };
+      if (!n) this.emit('note', { text: `Layout check, ${rel}: nothing broken at 1440 px, on a phone or in dark mode (${r.secs.toFixed(1)} s).`, tone: 'dim', check });
+      else this.emit('note', { text: `Layout check, ${rel}: ${n} problem${n === 1 ? '' : 's'}${again ? ' left' : ''} (${r.secs.toFixed(1)} s)${again ? `: ${r.problems.slice(0, 3).join(' ')}` : ', sent back to fix.'}`, tone: 'warn', check });
       if (n) notes.push(layoutNote(rel, r.problems));
     }
     if (this.turn) this.turn.layout = { pages, problems: notes.length, again };
@@ -698,7 +700,8 @@ export class Agent extends EventEmitter {
         if (notes) {
           this.turn.design = { request, notes: notes.text, cards: notes.cards.map((c) => c.file) };
           this.ctxUsed += tokensOf(notes.text);
-          this.emit('note', { text: `Design examples: ${notes.cards.map((c) => c.file.replace(/\.md$/i, '')).join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim' });
+          // `design` names the cards for the screen (it folds them into the line under your message).
+          this.emit('note', { text: `Design examples: ${notes.cards.map((c) => c.file.replace(/\.md$/i, '')).join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.cards.map((c) => c.file.replace(/\.md$/i, '')) });
         } else if (forced) this.emit('note', { text: 'No design examples found (the "design examples" folder is missing or has no cards in the sets that are on).', tone: 'warn' });
       } catch {}
     }

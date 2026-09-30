@@ -18,10 +18,12 @@ export function checkScreen(lines, { cols, rows, anchored = false, scrollback = 
   add('one footer', count(/(for shortcuts|shell mode:)/) <= 1, `${count(/(for shortcuts|shell mode:)/)} seen`);
   add('one spinner', count(/esc to interrupt\)/) <= 1, `${count(/esc to interrupt\)/)} seen`);
   // A border piece on its own line (─────╮ without its ╭, or a lone │) is a leftover.
-  const frags = text.filter((l) => /^\s*─/.test(l) && BORDER.test(l) || /^\s+│\s*$/.test(l));
+  // The conversation's rail (rail.jsx) sits at column 2: "  │", "  ╰─ ", "  ┊"; boxes start at column 0.
+  const rail = (l) => /^ {2}(│|╰─ |┊)/.test(l);
+  const frags = text.filter((l) => !rail(l) && (/^\s*─/.test(l) && BORDER.test(l) || /^\s+│\s*$/.test(l)));
   add('box borders whole', !frags.length, frags.slice(0, 2).map((l) => l.trim().slice(0, 40)).join(' | '));
   const open = text.filter((l) => /^\s*╭/.test(l)).length;
-  const close = text.filter((l) => /^\s*╰/.test(l)).length;
+  const close = text.filter((l) => /^\s*╰/.test(l) && !rail(l)).length;
   add('every box closed', Math.abs(open - close) <= 1, `${open} ╭ vs ${close} ╰`);
   if (anchored && expectBox) {
     let last = text.length - 1;

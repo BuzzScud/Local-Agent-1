@@ -28,7 +28,7 @@ test('facts come back with the request that fits them; /memory shows both memori
   ] });
   await fake.close();
   expect(r.snapshots.welcome).toMatch(/memory/); // the welcome names what the start read
-  expect(r.snapshots.asked).toMatch(/⏺ Context · 1 brought along · \+\d+ tokens/);
+  expect(r.snapshots.asked).toMatch(/┊ 1 note\b[^\n]*\(ctrl\+o\)/); // what came along, in the line under the request
   expect(r.snapshots.asked).toContain('(ctrl+o to expand)');
   // ctrl+o opens the newest fold (the file read); again, the one before: what came along, where from, how close and its size
   expect(r.snapshots.listed).toMatch(/memory\s+The flags are read in export\.mjs, in main\(\)\.\s+(fit \d\.\d\d · )?\d+ tokens/);

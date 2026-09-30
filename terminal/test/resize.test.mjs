@@ -84,7 +84,7 @@ test('text and enter arriving together (a busy app) still send the message', asy
     await t.waitFor('? for shortcuts');
     t.key('explain the tests\r'); // one write: the app reads it as one chunk
     await t.waitFor('Got it.');
-    expect(await t.screen()).toContain('> explain the tests');
+    expect(await t.screen()).toContain('› explain the tests');
   } finally { await t.close(); await fake.close(); }
 }, T);
 

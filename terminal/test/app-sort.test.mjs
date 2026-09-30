@@ -27,9 +27,9 @@ test('a question with answers to pick, the line that says where the request went
   expect(r.snapshots.asking).toMatch(/1\. Explain how the API works[\s│]+2\. Fix a broken API endpoint[\s│]+3\. Add a new API endpoint[\s│]+4\. Type an answer[\s│]+5\. Stop here/);
   // The pick is shown as your answer, then sorted: explaining is a question.
   expect(r.text).toContain('You: Explain how the API works');
-  expect(r.snapshots.sorted).toMatch(/⎿\s+Sorted as: question · step by step/);
+  expect(r.snapshots.sorted).toMatch(/┊ question, step by step/);
   // The short line after it is not asked about and not sorted on its own.
-  expect(r.snapshots.followed).toMatch(/> can you add it to my desktop\?\s+⎿\s+Sorted as: follow-up · continues the conversation/);
+  expect(r.snapshots.followed).toMatch(/› can you add it to my desktop\?\s+┊ follow-up, continues the conversation/);
   expect(r.snapshots.followed).not.toMatch(/Agentic Coder asks/);
   // Three calls wrote text: the question, the answer, the follow-up's answer.
   expect(fake.remaining()).toBe(0);
@@ -43,7 +43,8 @@ test('thanks get the quick reply and no line', async () => {
     { wait: 'You’re welcome.' }, { sleep: 200 }, { snapshot: 'thanks' }, ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.thanks).toContain('> its perfect , thank you');
+  expect(r.snapshots.thanks).toContain('› its perfect , thank you');
   expect(r.snapshots.thanks).not.toContain('Sorted as');
+  expect(r.snapshots.thanks).not.toContain('┊');
   expect(r.snapshots.thanks).not.toContain('Agentic Coder asks');
 }, T);
