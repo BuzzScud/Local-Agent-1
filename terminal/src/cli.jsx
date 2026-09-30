@@ -266,10 +266,10 @@ if (opts.print) {
   // What the start loaded, for the welcome box: the notes read into the
   // model, settings a folder file set, and the git state.
   try {
-    const { projectNotes, gitSummary } = await import('./agent/prompt.mjs');
+    const { projectNotes, gitSummary, notesRoom } = await import('./agent/prompt.mjs');
     const st = loadSettings(opts.cwd);
     if (memoryOn(st)) { try { openMemory(opts.cwd); } catch {} }
-    const names = [...new Set(projectNotes(opts.cwd, 6000, { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
+    const names = [...new Set(projectNotes(opts.cwd, notesRoom(), { memory: memoryOn(st) }).files.map((p) => (p.endsWith('/.bonsai/notes.md') ? '.bonsai/notes.md' : p.endsWith('/memory') ? 'memory' : p.split('/').pop())))];
     const git = gitSummary(opts.cwd);
     opts.loaded = [
       names.join(' + ') || 'no AGENTS.md',

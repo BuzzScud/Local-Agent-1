@@ -12,7 +12,8 @@
 //     (models/evals/bench/design/).
 export { runHeadless } from './src/headless.mjs';
 export { Agent, claimsAlreadyThere } from './src/agent/agent.mjs';
-export { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './src/agent/prompt.mjs';
+// WORK_HABITS and NOTES_RANK: what the old/new prompt test (models/evals/tools/prompt-ab.mjs) shows it compared.
+export { systemPrompt, projectNotes, gitSummary, SESSION_MARK, WORK_HABITS, NOTES_RANK } from './src/agent/prompt.mjs';
 export { toolSchemas } from './src/agent/tools.mjs';
 export { outsidePath } from './src/agent/permissions.mjs';
 export { streamChat } from './src/agent/client.mjs';

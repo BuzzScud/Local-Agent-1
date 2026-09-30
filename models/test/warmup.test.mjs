@@ -56,12 +56,12 @@ test('the first start reads the shared instructions and saves them; the next sta
     const f = await fake();
     const tools = [{ type: 'function', function: { name: 'Read' } }];
     const phases1 = [];
-    const system = systemPrompt({ cwd: '/tmp/a', git: 'x', date: new Date('2026-09-25') });
+    const system = systemPrompt({ cwd: '/tmp/a', git: 'x', date: new Date(2026, 8, 25, 12) });
     const r1 = await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system, tools, thinking: false, slot: 0, onPhase: (p) => phases1.push(p) });
     const reads1 = f.calls.filter((c) => c.path === '/completion').map((c) => c.body.prompt);
     // another project, another day: the shared part is the same, so it restores
     const phases2 = [];
-    const system2 = systemPrompt({ cwd: '/tmp/b', git: 'y', date: new Date('2027-01-02'), notes: 'Use tabs.' });
+    const system2 = systemPrompt({ cwd: '/tmp/b', git: 'y', date: new Date(2027, 0, 2, 12), notes: 'Use tabs.' });
     f.calls.length = 0;
     const r2 = await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system: system2, tools, thinking: false, slot: 0, onPhase: (p) => phases2.push(p) });
     const reads2 = f.calls.filter((c) => c.path === '/completion').map((c) => c.body.prompt);
@@ -92,7 +92,7 @@ test('the first start reads the shared instructions and saves them; the next sta
 test('the same instructions again (same folder, day and git state) restore in one step, with nothing read', () => {
   const out = inChild(`
     const f = await fake();
-    const system = systemPrompt({ cwd: '/tmp/a', git: 'x', date: new Date('2026-09-25') });
+    const system = systemPrompt({ cwd: '/tmp/a', git: 'x', date: new Date(2026, 8, 25, 12) });
     const r1 = await warmUp({ sessionMark: SESSION_MARK, url: f.url, model, system, tools: [], thinking: false, slot: 0 });
     f.calls.length = 0;
     const phases = [];

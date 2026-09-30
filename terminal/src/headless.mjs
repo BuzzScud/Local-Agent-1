@@ -2,7 +2,7 @@
 // practice-task runner and by `coding -p "…"`.
 import { Agent } from './agent/agent.mjs';
 import { applyLimits, applySearch } from './app/limits.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from './agent/prompt.mjs';
+import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
 import { toolSchemas } from './agent/tools.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
@@ -29,7 +29,7 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   const on = helpersOn(helpers);
   const own = !mem?.embedder && !embedder && (rank || on.has('rag')) && embedderReady() ? new Embedder() : null;
   const ranker = rank && !mem?.embedder ? embedder ?? own : null;
-  const system = systemPrompt({ cwd, notes: projectNotes(cwd, 6000, { memory: Boolean(mem), home: mem?.home }).text, git: gitSummary(cwd) });
+  const system = systemPrompt({ cwd, notes: projectNotes(cwd, notesRoom(), { memory: Boolean(mem), home: mem?.home }).text, git: gitSummary(cwd) });
   const agent = new Agent({
     url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots, memory: mem, ranker,
     // What you saved with /permissions (coding -p passes it; the practice bench does not, so its runs measure the same every time).

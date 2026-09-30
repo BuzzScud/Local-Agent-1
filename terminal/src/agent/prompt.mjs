@@ -16,15 +16,39 @@ export function isHomeFolder(cwd, home = homedir()) {
 
 const HOME_NOTE = `Here: the user's home folder, not a project. Answer a general question (math, how something works) from what you know, without tools. Search, Read or List files only when the user asks about their own files, code or notes, or names a file. When the user asks you to make, change or look at a file or folder ("make a file on my Desktop"), do it straight away with the tools; Desktop, Documents and Downloads are folders here.`;
 
+// AGENTIC_PROMPT=old: the prompt as it was before 30 Sep 2026, for the
+// old/new comparison (models/evals): no Work habits, the notes files neither
+// labelled nor ranked, and 6,000 characters of room for them. The local date
+// is in both: the old UTC one was a bug.
+export const promptVersion = () => (process.env.AGENTIC_PROMPT === 'old' ? 'old' : 'new');
+// Room for the notes files. 9,000 fits this repo's AGENTS.md and the home
+// one whole (6,765 + 1,443 characters on 30 Sep 2026); 6,000 left the home
+// one out and cut the repo's mid-section.
+export const notesRoom = () => (promptVersion() === 'old' ? 6000 : 9000);
+
+// What a notes file is, as the model is told (Claude Code names each file's
+// kind the same way): the folder's own rules, a folder above it, the user's
+// own rules in the home folder, or private notes kept out of git.
+function kindOf(path, cwd, home) {
+  if (/\/\.(?:agentic|bonsai)\/notes\.md$/.test(path)) return { kind: 'private', label: 'private notes for this folder, kept out of git' };
+  const dir = dirname(path);
+  if (dir === home) return { kind: 'home', label: "the user's own rules, for every folder under the home folder" };
+  if (dir === cwd) return { kind: 'project', label: "this project's rules" };
+  return { kind: 'parent', label: `rules for every folder under ${dir.replace(home, '~')}` };
+}
+
 // AGENTS.md (or CLAUDE.md), and private .bonsai/notes.md files (kept out of
 // git), from the project folder up to the home folder; then what the memory
 // holds (facts.mjs): the rules that always apply and one line per fact.
 // A notes file whose lines were carried over into the memory is not read
 // twice. memory: false leaves the memory out (practice runs, tests).
-export function projectNotes(cwd, maxChars = 6000, { memory = true, home: homeDir } = {}) {
+// sources: each file as the model gets it (whole, part or left out, and its
+// kind), then the memory; the hub's Project context tab shows them.
+export function projectNotes(cwd, maxChars = notesRoom(), { memory = true, home: homeDir } = {}) {
   const found = [];
   let dir = cwd;
   const home = homeDir ?? homedir();
+  const labelled = promptVersion() !== 'old';
   for (let i = 0; i < 8; i++) {
     for (const name of ['AGENTS.md', 'CLAUDE.md']) {
       const p = join(dir, name);
@@ -44,20 +68,24 @@ export function projectNotes(cwd, maxChars = 6000, { memory = true, home: homeDi
     if (dir === home || dir === dirname(dir)) break;
     dir = dirname(dir);
   }
+  const sources = found.map((f) => ({ path: f.path, name: f.path.replace(home, '~'), ...kindOf(f.path, cwd, home), chars: f.text.length, status: 'left', left: [], text: '' }));
   let out = '';
   for (let i = 0; i < found.length; i++) {
     const f = found[i];
-    const name = f.path.replace(home, '~');
-    const block = `From ${name}:\n${f.text}\n\n`;
-    if (out.length + block.length <= maxChars) { out += block; continue; }
+    const s = sources[i];
+    const name = s.name;
+    const block = `From ${name}${labelled ? ` (${s.label})` : ''}:\n${f.text}\n\n`;
+    if (out.length + block.length <= maxChars) { out += block; Object.assign(s, { status: 'whole', text: f.text }); continue; }
     // Too long for what is left: whole sections, never half a sentence, and
     // the model is told which headings (and which files) it does not have.
-    const rest = found.slice(i + 1).map((g) => g.path.replace(home, '~'));
+    const rest = sources.slice(i + 1).map((g) => g.name);
     const restNote = (names) => (names.length ? `(Left out to fit: ${names.join(', ')}.)\n` : '');
-    // Room for the heading line below (the file's name and up to three left-out headings) and the note.
-    const part = fitSections(f.text, maxChars - out.length - name.length - 250 - restNote(rest).length);
-    if (part.text) out += `From ${name} (part of it, to fit${part.left.length ? `; left out: ${namesOf(part.left)}` : ''}):\n${part.text}\n\n`;
-    else rest.unshift(name);
+    // Room for the heading line below (the file's name, its kind and up to three left-out headings) and the note.
+    const part = fitSections(f.text, maxChars - out.length - name.length - (labelled ? s.label.length + 3 : 0) - 250 - restNote(rest).length);
+    if (part.text) {
+      out += `From ${name} (${labelled ? `${s.label}; ` : ''}part of it, to fit${part.left.length ? `; left out: ${namesOf(part.left)}` : ''}):\n${part.text}\n\n`;
+      Object.assign(s, { status: 'part', left: part.left, text: part.text });
+    } else rest.unshift(name);
     out += restNote(rest);
     break;
   }
@@ -65,9 +93,13 @@ export function projectNotes(cwd, maxChars = 6000, { memory = true, home: homeDi
   if (memory) {
     let m = null;
     try { m = memoryNotes(cwd, { home }); } catch { /* a memory that cannot be read is left out, the start goes on */ }
-    if (m?.text) { out = `${out.trim()}${out.trim() ? '\n\n' : ''}Memory\n${m.text}`; files.push(...m.files); }
+    if (m?.text) {
+      out = `${out.trim()}${out.trim() ? '\n\n' : ''}Memory\n${m.text}`;
+      files.push(...m.files);
+      sources.push({ path: m.files.join(' · '), name: 'Memory', kind: 'memory', label: 'what Agentic Coder saved about the user and this project', chars: m.text.length, status: 'whole', left: [], text: m.text, facts: m.facts });
+    }
   }
-  return { text: out.trim(), files };
+  return { text: out.trim(), files, sources };
 }
 
 // The sections of a notes file (a heading and what follows it, up to the
@@ -151,8 +183,29 @@ You: Renamed getUser to fetchUser in both files; the tests pass.
 // of it to disk and restore it in a fraction of a second (models/runtime/warmup.mjs).
 export const SESSION_MARK = 'This session\n';
 
+// How Claude Code has Opus and Fable work, where the General list does not
+// already say it, in words a 9–12B model follows. Built in and before
+// SESSION_MARK, so it is saved with the warm-up; the focused calls do not get it.
+export const WORK_HABITS = `Work habits
+- Once you know enough to act, act. Do not read a file again or ask again about what is already settled.
+- When there are several ways, pick the best one and say why in one line; do not list them all.
+- Read a file before you overwrite it. Before anything hard to undo, use Ask first.
+- Report what really happened: a failed check is "failed", with the line that failed; name any step you skipped. When it is done and checked, say so plainly.
+- Look at files with Read, Search and List, not cat, grep or ls in Bash.
+- If the user says no to a tool call, do not send it again: ask, or try another way.
+- When memory fills, the app keeps notes and you keep going. Do not rush to finish.
+- A remembered fact can be out of date: check that a file or name still exists before you rely on it.`;
+
+// Which notes win, said once above them (Claude Code says its CLAUDE.md files
+// override its defaults). The app's blocks hold whatever the notes say.
+export const NOTES_RANK = "These are the user's and this project's own rules. When they disagree with the working instructions above, they win, except the Rules the app enforces (blocked folders and commands). The user's words in this conversation win over both.";
+
+// The user's calendar day, not UTC's: after 8 pm in New York the UTC date is already tomorrow.
+export const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions }) {
-  const today = date.toISOString().slice(0, 10);
+  const today = localDay(date);
+  const now = promptVersion() !== 'old';
   return `You are Agentic Coder, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.
 
 You are inside the project's folder. Use paths relative to it, and "." for the folder itself. Never type a full path.
@@ -164,11 +217,11 @@ Tool use
 - To change an existing file, use Edit with old_text copied exactly from Read, without line numbers. Include enough context to match once. Use Write for new files.
 - Call one tool at a time and wait for its result.
 
-${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
+${now ? `${WORK_HABITS}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
 - Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 
 ${math ? `${math}\n\n` : ''}${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}${isHomeFolder(cwd) ? `\n${HOME_NOTE}` : ''}
-${notes ? `\nProject notes\n${notes}\n` : ''}`;
+${notes ? `\nProject notes\n${now ? `${NOTES_RANK}\n\n` : ''}${notes}\n` : ''}`;
 }
