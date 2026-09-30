@@ -8,6 +8,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-09-30 |
 | [design rounds/agentic-coder-conversation-2-designs-2026-09-29.html](design%20rounds/agentic-coder-conversation-2-designs-2026-09-29.html) | page | Conversation redesign | 172 KB | 2026-09-30 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 258 KB | 2026-09-30 |
 | [tests/agentic-coder-weather-widget-session-2026-09-29.html](tests/agentic-coder-weather-widget-session-2026-09-29.html) | page | Weather widget session | 176 KB | 2026-09-30 |

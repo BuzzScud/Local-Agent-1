@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run tests designs</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1c1b18;--mute:#5f5b52;--faint:#8c877c;--line:#e3dfd5;--soft:#efece4;--accent:#2f6fdb;--ok:#1d7a46;--bad:#b3261e;--warn:#8a5a00;--run:#2f6fdb}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#8a877f;--line:#2e3037;--soft:#24262c;--accent:#7aa7ff;--ok:#5fd08f;--bad:#ff8a80;--warn:#f0c060;--run:#7aa7ff}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#8a877f;--line:#2e3037;--soft:#24262c;--accent:#7aa7ff;--ok:#5fd08f;--bad:#ff8a80;--warn:#f0c060;--run:#7aa7ff}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1260px;margin:0 auto;padding:12px 16px 12px;display:flex;flex-direction:column;min-height:100vh}
+@media (min-width:1000px) and (min-height:640px){html,body{height:100%;overflow:hidden}main{height:100vh;min-height:0}}
+.preview{flex:none;display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:6px 10px;border:1px dashed var(--faint);border-radius:10px;margin-bottom:10px;font-size:13px;color:var(--mute)}
+.preview b{font-weight:600;color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
+.seg button{font:inherit;font-size:13px;padding:4px 11px;border:0;background:none;color:var(--mute);cursor:pointer;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:600}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}.lede{color:var(--mute);margin:1px 0 8px;font-size:13.5px}
+.tabs{display:flex;gap:7px;flex-wrap:wrap;flex:none;margin-bottom:10px}
+.tabs span{font-size:13px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute)}
+.tabs span.on{color:var(--ink);border-color:var(--ink);font-weight:600}.tabs span i{font-style:normal;color:var(--run);margin-right:5px}
+.stage{flex:1;min-height:0;display:flex;flex-direction:column}
+.bar{flex:none;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.bar .l{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:600;margin-right:4px}
+.sum{margin-left:auto;font-size:13.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.sum b{color:var(--ink)}
+.go{font:inherit;font-weight:650;font-size:14.5px;border:0;border-radius:10px;padding:8px 18px;background:var(--accent);color:#fff;cursor:pointer;white-space:nowrap}
+.go.stop{background:var(--bad)}.go:disabled{background:var(--soft);color:var(--mute);cursor:default}
+.ghost{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);cursor:pointer}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
+table{border-collapse:collapse;width:100%;table-layout:fixed}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;height:36px}
+thead th{position:sticky;top:0;z-index:1;background:var(--soft);color:var(--mute);font-size:12.5px;font-weight:600;height:32px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--soft)}tbody tr[aria-selected="true"]{background:var(--soft)}tbody tr[aria-selected="true"] .nm{font-weight:600}
+tbody tr.off{cursor:default;color:var(--faint)}tbody tr.off:hover{background:none}
+.tg{display:inline-grid;place-items:center;width:18px;height:18px;border:1.5px solid var(--faint);border-radius:5px;font-size:12px;line-height:1;color:transparent;vertical-align:middle}
+.tg.on{background:var(--accent);border-color:var(--accent);color:#fff}.tg.dis{border-style:dashed;opacity:.5}
+.q{color:var(--mute);font-size:12.5px;margin-left:6px}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}.meas{color:var(--mute)}.never{color:var(--faint)}
+.st{font-weight:700;margin-right:6px}.st.run{color:var(--run)}.st.done{color:var(--ok)}.st.next{color:var(--faint)}
+.detail{padding:14px 16px;overflow:auto}
+.detail h3{font-size:17px;margin:2px 0 6px}.detail .k{color:var(--mute);font-size:12.5px}.detail p{margin:0 0 10px}
+.detail code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anywhere}
+.mini{display:grid;grid-template-columns:auto repeat(2,minmax(0,1fr));gap:4px 10px;font-size:13px;margin:4px 0 12px}.mini .h{color:var(--mute);font-size:12px}
+.term{background:#18191d;border-radius:12px;color:#e7e5df;display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:1}
+.term .tb{flex:none;display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid #2e3037;color:#8e8b84;font-size:12px}
+.term .tb em{font-style:normal;font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7fd092;background:rgba(127,208,146,.12);border-radius:6px;padding:2px 7px;margin-left:auto}
+.term .o{flex:1;min-height:0;overflow:hidden;padding:8px 12px;display:flex;flex-direction:column;justify-content:flex-end;font:12px/1.45 ui-monospace,"SF Mono",Menlo,monospace}
+.term .o div{white-space:pre;overflow:hidden;text-overflow:ellipsis}.term .g{color:#7fd092}.term .d{color:#8e8b84}.term .w{color:#fff}
+.prog{height:6px;border-radius:99px;background:var(--soft);overflow:hidden;margin:6px 0 10px}.prog i{display:block;height:100%;background:var(--run)}
+/* Design 1 · List + detail */
+.d1{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.d1 .split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px}
+.d1 .list{overflow:auto}.d1 aside{display:flex;flex-direction:column}
+/* Design 1 + control panel */
+.d1p{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.d1p .split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 620px;gap:12px}
+.d1p .left{display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0}.d1p .split>*{min-width:0}.d1p .list{overflow:auto;flex:1;min-height:0}
+.d1p .about{flex:none;padding:10px 14px;font-size:13.5px}.d1p .about p{margin:2px 0 0;color:var(--mute)}
+.panel{display:flex;flex-direction:column;min-height:0;padding:10px 0;font-size:13.5px}
+.panel .ph{display:flex;align-items:baseline;gap:8px;padding:0 14px 6px}.panel .ph b{font-size:15px}.panel .ph span{color:var(--mute);font-size:12.5px}
+.panel .gh{display:flex;align-items:center;gap:8px;color:var(--faint);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;padding:6px 14px 2px}.panel .gh::after{content:'';flex:1;border-top:1px solid var(--line)}
+.pr{display:grid;grid-template-columns:132px 150px minmax(0,1fr);align-items:center;gap:8px;padding:3px 14px;cursor:pointer;min-height:28px}
+.pr:hover{background:var(--soft)}.pr[aria-selected="true"]{background:var(--soft)}.pr[aria-selected="true"] .lb{font-weight:600}
+.pr .lb{white-space:nowrap}.pr .val{display:flex;align-items:center;gap:4px;min-width:0}
+.pr .val button{font:inherit;font-size:12px;border:0;background:none;color:var(--mute);cursor:pointer;padding:0 4px}.pr .val button:disabled{opacity:.3;cursor:default}
+.pr .val b{flex:1;min-width:0;text-align:center;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.pr .nt{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pr .nt i{font-style:normal;font-weight:600;margin-right:6px}.pr .nt i.ch{color:var(--accent)}.pr .nt i.df{color:var(--faint)}
+.pr.dim{opacity:.55}.pr .nt.warn{color:var(--warn)}
+.panel .full{margin:8px 14px 0;padding:8px 10px;border-radius:9px;background:var(--soft);font-size:12.5px;color:var(--ink)}.panel .full b{font-weight:600}
+.panel .pf{margin-top:auto;padding:8px 14px 0;display:flex;align-items:center;gap:10px;color:var(--mute);font-size:12.5px;border-top:1px solid var(--line)}
+/* Design 2 · Run line */
+.d2{flex:1;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr) 400px;gap:12px}
+.col{display:flex;flex-direction:column;min-height:0}.col>h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 6px;font-weight:600}
+.tl{overflow:auto;padding:4px 0}.tl .grp{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);padding:8px 12px 2px;font-weight:600}
+.tl .it{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer}.tl .it:hover{background:var(--soft)}.tl .it .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl .it.off{color:var(--faint);cursor:default}.tl .it.off:hover{background:none}
+.add{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--accent);padding:1px 8px;cursor:pointer}
+.line{overflow:auto;padding:8px;display:flex;flex-direction:column;gap:8px;flex:1}
+.card{border:1px solid var(--line);border-radius:12px;padding:9px 12px;display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:4px 10px;align-items:center;background:var(--card);cursor:pointer}
+.card[aria-selected="true"]{border-color:var(--ink)}.card .num{color:var(--faint);font-weight:700}.card .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{font:inherit;font-size:12px;border:1px solid var(--line);border-radius:7px;background:var(--soft);padding:1px 8px;cursor:pointer;color:var(--ink);margin-right:4px}
+.card .acts button{font:inherit;font-size:12px;border:0;background:none;color:var(--mute);cursor:pointer;padding:2px 4px}
+.card.done{opacity:.75}.card.run{border-color:var(--run);box-shadow:inset 3px 0 0 var(--run)}
+.linefoot{flex:none;display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line)}
+.empty{color:var(--mute);padding:16px;font-size:13.5px}
+/* Design 3 · Matrix */
+.d3{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px}
+.d3 .mat{overflow:auto;display:flex;flex-direction:column}
+.matrix th,.matrix td{text-align:center;height:40px}.matrix th:first-child,.matrix td:first-child{text-align:left}
+.matrix thead tr:first-child th{height:28px;font-size:12px}
+.cell{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:3px 9px;min-width:88px;max-width:100%;justify-content:center;font-size:12.5px;cursor:pointer;background:var(--card)}
+.cell.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--card))}.cell.na{border-style:dashed;cursor:default;color:var(--faint)}
+.cell .tg{width:15px;height:15px;font-size:10px}
+.colpick{font:inherit;font-size:11.5px;border:0;background:none;color:var(--accent);cursor:pointer;padding:0}
+.legend{font-size:12.5px;color:var(--mute);padding:8px 12px;border-top:1px solid var(--line)}
+@media (max-width:999px),(max-height:639px){.d1 .split,.d1p .split,.d2,.d3{grid-template-columns:1fr}.pr{grid-template-columns:104px 150px minmax(0,1fr)}.d2>*,.d1>*,.d3>*{min-width:0}.seg{flex-wrap:wrap;max-width:100%}.term .o div{white-space:pre-wrap;word-break:break-all}.bar,.linefoot{flex-wrap:wrap}.sum{white-space:normal}.term{min-height:300px}.d1 .list,.tl,.line,.d3 .mat{max-height:60vh}}
+</style>
+</head>
+<body><main>
+<div class="preview" id="preview"><b>Preview</b><span>Design</span><span class="seg" id="pd"></span><span>Show</span><span class="seg" id="ps"></span><span style="margin-left:auto">Real test list and record; Run is a preview here: nothing starts.</span></div>
+<h1>Agentic Coder test record</h1>
+<p class="lede">Every test run on this Mac, newest first. A run adds its own line when it finishes.</p>
+<div class="tabs"><span class="on"><i>▶</i>Run tests</span><span>Overview</span><span>Practice tasks</span><span>Battle sets</span><span>Unit tests</span><span>Repo check</span><span>Other</span><span>How it is kept</span></div>
+<div class="stage" id="stage"></div>
+</main>
+<script>
+const DATA = {"models":[{"id":"gemma","name":"Gemma 4 12B QAT"},{"id":"qwen","name":"Qwen3.5 9B"}],"tests":[{"id":"practice28","name":"Practice 28","what":"the 28 practice tasks, each with its own check","model":true,"think":true,"total":28,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/bench/run.mjs --model gemma --think off --set 28","cmds":{"gemma":"node models/evals/bench/run.mjs --model gemma --think off --set 28","qwen":"node models/evals/bench/run.mjs --model qwen --think off --set 28"},"cmdsThink":{"gemma":"node models/evals/bench/run.mjs --model gemma --think on --effort high --set 28","qwen":"node models/evals/bench/run.mjs --model qwen --think on --effort high --set 28"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":1357,"estWhy":"Gemma, 28 Sep (26 of 28), not in the record as a whole run"},{"id":"task","name":"One practice task","what":"one of the Practice 28 as the Battle tab keeps it (an edit or a copy of yours made there counts), 10 minutes at most: pick it by name","model":true,"think":true,"total":1,"minutes":null,"choices":["1 · Add a --json flag to an export script","2 · Fix the bug that makes the tests fail","3 · Add a titleCase() function, with a test","4 · Rename calcTotal to totalPrice","5 · Which port does the server listen on?","6 · What is paginate()'s default page size?","7 · Which function computes tax, at what rate?","8 · Rename the method getTotal to computeTotal","9 · Rename the constant MAX_ITEMS to ITEM_LIMIT","10 · Fix an off-by-one bug","11 · Fix a text sort","12 · Add a currency option to formatMoney()","13 · Python: add clamp(), with a test","14 · Add perimeter() to a project with no tests","15 · Fix toFahrenheit() in a project with no tests","16 · Write a short lighthouse story","17 · Write NOTES.md about how an API works","18 · An all-caps ask: a \"TEST\" file with a story","19 · Add a currency symbol across 3 files","20 · Add a cap argument that 2 callers use","21 · Fix a bug in two places of a big file","22 · \"fix the bug\" (vague: it must ask first)","23 · \"api\" (one word: it must ask first)","24 · \"fix the test\" (vague: it must ask first)","25 · Big project: where is the test command decided?","26 · Big project: skip a tmp folder in List and Search","27 · Put the minus sign before the $","28 · Python: add a fee field across 2 files"],"own":false,"cmd":"node models/evals/battle/run-set.mjs --model gemma --set practice --only p10","cmds":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set practice --only p10","qwen":"node models/evals/battle/run-set.mjs --model qwen --set practice --only p10"},"cmdsThink":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set practice --only p10 --think on","qwen":"node models/evals/battle/run-set.mjs --model qwen --set practice --only p10 --think on"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":60,"estWhy":"one task: 5 s to 2.5 min"},{"id":"requests","name":"Real requests","what":"28 everyday requests in throwaway folders: where each goes, and that blocked commands stay blocked","model":true,"think":true,"total":28,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/bench/words/real.mjs --model gemma","cmds":{"gemma":"node models/evals/bench/words/real.mjs --model gemma","qwen":"node models/evals/bench/words/real.mjs --model qwen"},"cmdsThink":{"gemma":"node models/evals/bench/words/real.mjs --model gemma --think on","qwen":"node models/evals/bench/words/real.mjs --model qwen --think on"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":1597,"estWhy":"the Bonsai 27B's run, 25 Sep"},{"id":"long","name":"Long task","what":"one long, read-heavy question: where the time goes and what it reads twice (stops by itself at 20 min)","model":true,"think":true,"total":null,"minutes":20,"choices":null,"own":false,"cmd":"node models/evals/tools/long-task.mjs --model gemma --effort low --minutes 20 --record","cmds":{"gemma":"node models/evals/tools/long-task.mjs --model gemma --effort low --minutes 20 --record","qwen":"node models/evals/tools/long-task.mjs --model qwen --effort low --minutes 20 --record"},"cmdsThink":{"gemma":"node models/evals/tools/long-task.mjs --model gemma --effort high --minutes 20 --record","qwen":"node models/evals/tools/long-task.mjs --model qwen --effort high --minutes 20 --record"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":1200,"estWhy":"stops by itself at 20 min"},{"id":"work28","name":"Work 28","what":"the Battle set about your own work, on this model alone","model":true,"think":true,"total":28,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/battle/run-set.mjs --model gemma --set work28","cmds":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set work28","qwen":"node models/evals/battle/run-set.mjs --model qwen --set work28"},"cmdsThink":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set work28 --think on","qwen":"node models/evals/battle/run-set.mjs --model qwen --set work28 --think on"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":null,"estWhy":"no whole run yet: up to 10 min a test, 28 tests"},{"id":"new28","name":"New 28","what":"the Battle’s New 28 set, on this model alone","model":true,"think":true,"total":28,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/battle/run-set.mjs --model gemma --set new28","cmds":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set new28","qwen":"node models/evals/battle/run-set.mjs --model qwen --set new28"},"cmdsThink":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set new28 --think on","qwen":"node models/evals/battle/run-set.mjs --model qwen --set new28 --think on"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":null,"estWhy":"no whole run yet: up to 10 min a test, 28 tests"},{"id":"mine","name":"My tests","what":"every test you made in the Battle tab (+ New test), one after another, each the way a battle runs it: 10 minutes at most","model":true,"think":true,"total":0,"minutes":null,"choices":null,"own":true,"cmd":"node models/evals/battle/run-set.mjs --model gemma --set mine","cmds":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set mine","qwen":"node models/evals/battle/run-set.mjs --model qwen --set mine"},"cmdsThink":{"gemma":"node models/evals/battle/run-set.mjs --model gemma --set mine --think on","qwen":"node models/evals/battle/run-set.mjs --model qwen --set mine --think on"},"last":{"gemma/low":null,"gemma/high":null,"qwen/low":null,"qwen/high":null},"est":null,"estWhy":"no tests of your own yet"},{"id":"sorting","name":"Sorting check","what":"how the model sorts 85 requests into a kind (question, fix, change, rename, other): right answers and seconds a sort, with a results page","model":true,"think":false,"total":82,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/tools/sort-check.mjs --model gemma","cmds":{"gemma":"node models/evals/tools/sort-check.mjs --model gemma","qwen":"node models/evals/tools/sort-check.mjs --model qwen"},"cmdsThink":null,"last":{"gemma/low":{"res":"81/82","ok":true,"secs":166,"at":"2026-09-29T22:49:18.012Z"},"gemma/high":"n/a","qwen/low":{"res":"80/82","ok":true,"secs":122,"at":"2026-09-29T22:46:31.635Z"},"qwen/high":"n/a"},"est":166,"estWhy":"its last run"},{"id":"unit","name":"Unit tests","what":"bun test over both parts, with the stand-in model (no real one loads)","model":false,"think":false,"total":null,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/tools/run-suite.mjs","cmds":{"none":"node models/evals/tools/run-suite.mjs"},"cmdsThink":null,"last":{"none":{"res":"676/677","ok":false,"secs":135,"at":"2026-09-30T03:22:23.167Z"}},"est":135,"estWhy":"its last run"},{"id":"check","name":"Repo check","what":"is anything in the repo that should not be: secrets, packages, where the code connects (the fast one: no model files, no unit tests)","model":false,"think":false,"total":null,"minutes":null,"choices":null,"own":false,"cmd":"node models/evals/tools/check.mjs --fast","cmds":{"none":"node models/evals/tools/check.mjs --fast"},"cmdsThink":null,"last":{"none":{"res":"9/10","ok":false,"secs":4,"at":"2026-09-30T03:21:39.449Z"}},"est":4,"estWhy":"its last run"},{"id":"hard28","name":"Hard 28","what":"the hard set, being planned (not built yet)","model":true,"think":true,"total":28,"soon":true,"last":{},"est":null,"estWhy":"not built yet","cmd":""}],"live":["(pass) a smaller thinking cap for one call goes with that call; the server's cap is never raised [10.83ms]","terminal/test/weights.test.mjs:","(pass) the pages, the model facts and exact byte ranges come back; bad ranges are refused [5.40ms]","(pass) the DOCS folder: groups from its subfolders, every page newest first with its title, the newest harness and str","(pass) the hub keeps its usual address when it is free, and a second hub on the same address falls back to another fre","(pass) a test never takes the real hub's port 8757; a normal start does, and AGENTIC_HUB_PORT=0 means any free port [1","(pass) edits: save builds the copy + manifest and tells the app; a bad edit changes nothing; revert removes both [41.6","(pass) the Tests tab: the page is built in, and /tests.json is the test record read live, newest first [2.64ms]","(pass) the Battle tab: /battle starts the arena when it is not up and sends the tab to its page; ?new=1 opens its New ","(pass) the DOCS folder is \"cli docs\" at the top of the repo, and a Mac that still has the older name keeps working [0.","terminal/test/home.test.mjs:","(pass) from the home folder: a plain answer for a general question; a named project is asked about, then worked in [28","terminal/test/tools.test.mjs:","(pass) edit: exact match once [0.21ms]","(pass) edit: more than one match asks for context or replace_all, naming the lines [0.08ms]","(pass) edit: tolerates trailing spaces and wrong indentation, re-indenting the new text [0.09ms]","(pass) edit: not found points at the closest line [0.06ms]","(pass) diff puts an inserted blank line first [0.11ms]","(pass) arguments: aliases, bad JSON, missing fields, unknown tool [0.29ms]","(pass) paths outside the project folder are refused for changes [0.46ms]","(pass) Read, List and Search [22.00ms]","(pass) Edit and Write change files and report a diff [18.49ms]","(pass) Bash runs in the project folder and reports the exit code [42.86ms]","(pass) display names match Claude Code"],"panel":{"gemma":{"rows":[{"id":"embedder","label":"Embedder","group":"Search","def":"bge-m3","steps":[{"v":"off","show":"Off","note":"words only: the code search (Oracle) pauses"},{"v":"bge-m3","show":"BGE-M3","note":"finds pieces by meaning · ~1.1 GB"}]},{"id":"retriever","label":"Retriever","group":"Search","def":"meaning","steps":[{"v":"meaning","show":"Meaning","note":"by meaning alone"},{"v":"hybrid","show":"Hybrid","note":"meaning + words, merged (RRF) · same results in the 29 Sep test"}]},{"id":"reranker","label":"Reranker","group":"Search","def":"off","steps":[{"v":"off","show":"Off","note":"the search’s own order"},{"v":"qwen3-reranker-0.6b","show":"Qwen3 0.6B","note":"reads the best 15 with your request · ~2 s a search, ~1.2 GB"}]},{"id":"context","label":"Context","group":"Limits","def":32768,"steps":[{"v":16384,"show":"16k","note":"needs 7.2 GB (1.1 search) of 10.6 free · a full re-read ~2 min","bySearch":{"off|off":"needs 6.1 GB of 10.6 free · a full re-read ~2 min","off|qwen3-reranker-0.6b":"needs 7.3 GB (1.2 search) of 10.6 free · a full re-read ~2 min","bge-m3|off":"needs 7.2 GB (1.1 search) of 10.6 free · a full re-read ~2 min","bge-m3|qwen3-reranker-0.6b":"needs 8.4 GB (2.3 search) of 10.6 free · a full re-read ~2 min"}},{"v":32768,"show":"32k","note":"needs 7.4 GB (1.1 search) of 10.6 free · a full re-read ~3 min","bySearch":{"off|off":"needs 6.3 GB of 10.6 free · a full re-read ~3 min","off|qwen3-reranker-0.6b":"needs 7.5 GB (1.2 search) of 10.6 free · a full re-read ~3 min","bge-m3|off":"needs 7.4 GB (1.1 search) of 10.6 free · a full re-read ~3 min","bge-m3|qwen3-reranker-0.6b":"needs 8.6 GB (2.3 search) of 10.6 free · a full re-read ~3 min"}},{"v":65536,"show":"64k","note":"needs 7.7 GB (1.1 search) of 10.6 free · a full re-read ~7 min","bySearch":{"off|off":"needs 6.6 GB of 10.6 free · a full re-read ~7 min","off|qwen3-reranker-0.6b":"needs 7.8 GB (1.2 search) of 10.6 free · a full re-read ~7 min","bge-m3|off":"needs 7.7 GB (1.1 search) of 10.6 free · a full re-read ~7 min","bge-m3|qwen3-reranker-0.6b":"needs 8.9 GB (2.3 search) of 10.6 free · a full re-read ~7 min"}},{"v":131072,"show":"128k","note":"needs 8.2 GB (1.1 search) of 10.6 free · a full re-read ~13 min","bySearch":{"off|off":"needs 7.1 GB of 10.6 free · a full re-read ~13 min","off|qwen3-reranker-0.6b":"needs 8.3 GB (1.2 search) of 10.6 free · a full re-read ~13 min","bge-m3|off":"needs 8.2 GB (1.1 search) of 10.6 free · a full re-read ~13 min","bge-m3|qwen3-reranker-0.6b":"needs 9.4 GB (2.3 search) of 10.6 free · a full re-read ~13 min"}},{"v":262144,"show":"256k","note":"needs 9.4 GB (1.1 search) of 10.6 free · a full re-read ~26 min","bySearch":{"off|off":"needs 8.3 GB of 10.6 free · a full re-read ~26 min","off|qwen3-reranker-0.6b":"needs 9.5 GB (1.2 search) of 10.6 free · a full re-read ~26 min","bge-m3|off":"needs 9.4 GB (1.1 search) of 10.6 free · a full re-read ~26 min","bge-m3|qwen3-reranker-0.6b":"needs 10.6 GB (2.3 search) of 10.6 free · a full re-read ~26 min"}}]},{"id":"thinking","label":"Thinking cap","group":"Limits","def":4096,"steps":[{"v":1024,"show":"1,024 tokens","note":"up to ~79 s per think (High only)"},{"v":2048,"show":"2,048 tokens","note":"up to ~3 min per think (High only)"},{"v":4096,"show":"4,096 tokens","note":"up to ~5 min per think (High only)"},{"v":8192,"show":"8,192 tokens","note":"up to ~11 min per think (High only)"}]},{"id":"tries","label":"Tries per fix","group":"Limits","def":8,"steps":[{"v":2,"show":"2","note":"each try ~20 s on Low, up to a few min on High"},{"v":4,"show":"4","note":"each try ~20 s on Low, up to a few min on High"},{"v":8,"show":"8","note":"each try ~20 s on Low, up to a few min on High"},{"v":12,"show":"12","note":"each try ~20 s on Low, up to a few min on High"},{"v":16,"show":"16","note":"each try ~20 s on Low, up to a few min on High"}]},{"id":"steps","label":"Steps per request","group":"Limits","def":40,"steps":[{"v":20,"show":"20","note":"stops a request after 20 tool steps"},{"v":40,"show":"40","note":"stops a request after 40 tool steps"},{"v":60,"show":"60","note":"stops a request after 60 tool steps"},{"v":80,"show":"80","note":"stops a request after 80 tool steps"},{"v":120,"show":"120","note":"stops a request after 120 tool steps"}]},{"id":"outputLines","label":"Command output","group":"Limits","def":80,"steps":[{"v":40,"show":"40 lines","note":"the first 20 and last 20 lines of each command"},{"v":80,"show":"80 lines","note":"the first 40 and last 40 lines of each command"},{"v":160,"show":"160 lines","note":"the first 80 and last 80 lines of each command"},{"v":320,"show":"320 lines","note":"the first 160 and last 160 lines of each command"}]},{"id":"timeoutSecs","label":"Command timeout","group":"Limits","def":120,"steps":[{"v":60,"show":"60 s","note":"a command still running then is stopped"},{"v":120,"show":"2 min","note":"a command still running then is stopped"},{"v":300,"show":"5 min","note":"a command still running then is stopped"},{"v":600,"show":"10 min","note":"a command still running then is stopped"}]},{"id":"trimAt","label":"Trim at","group":"Limits","def":0.78,"steps":[{"v":0.6,"show":"60%","note":"of the context: old tool output is dropped"},{"v":0.7,"show":"70%","note":"of the context: old tool output is dropped"},{"v":0.78,"show":"78%","note":"of the context: old tool output is dropped"},{"v":0.85,"show":"85%","note":"of the context: old tool output is dropped"}]},{"id":"summarizeAt","label":"Summarize at","group":"Limits","def":0.85,"steps":[{"v":0.8,"show":"80%","note":"of the context, with the next reply: the chat is summarized"},{"v":0.85,"show":"85%","note":"of the context, with the next reply: the chat is summarized"},{"v":0.9,"show":"90%","note":"of the context, with the next reply: the chat is summarized"}]}],"levels":[{"id":"low","show":"Low","note":"answers straight away (fastest)"},{"id":"high","show":"High","note":"thinks first; stopped at 4,096 tokens"}],"defs":{"embedder":"bge-m3","retriever":"meaning","reranker":"off","context":32768,"thinking":4096,"tries":8,"steps":40,"outputLines":80,"timeoutSecs":120,"trimAt":0.78,"summarizeAt":0.85}},"qwen":{"rows":[{"id":"embedder","label":"Embedder","group":"Search","def":"bge-m3","steps":[{"v":"off","show":"Off","note":"words only: the code search (Oracle) pauses"},{"v":"bge-m3","show":"BGE-M3","note":"finds pieces by meaning · ~1.1 GB"}]},{"id":"retriever","label":"Retriever","group":"Search","def":"meaning","steps":[{"v":"meaning","show":"Meaning","note":"by meaning alone"},{"v":"hybrid","show":"Hybrid","note":"meaning + words, merged (RRF) · same results in the 29 Sep test"}]},{"id":"reranker","label":"Reranker","group":"Search","def":"off","steps":[{"v":"off","show":"Off","note":"the search’s own order"},{"v":"qwen3-reranker-0.6b","show":"Qwen3 0.6B","note":"reads the best 15 with your request · ~2 s a search, ~1.2 GB"}]},{"id":"context","label":"Context","group":"Limits","def":32768,"steps":[{"v":16384,"show":"16k","note":"needs 6.2 GB (1.1 search) of 10.6 free · a full re-read ~2 min","bySearch":{"off|off":"needs 5.1 GB of 10.6 free · a full re-read ~2 min","off|qwen3-reranker-0.6b":"needs 6.3 GB (1.2 search) of 10.6 free · a full re-read ~2 min","bge-m3|off":"needs 6.2 GB (1.1 search) of 10.6 free · a full re-read ~2 min","bge-m3|qwen3-reranker-0.6b":"needs 7.4 GB (2.3 search) of 10.6 free · a full re-read ~2 min"}},{"v":32768,"show":"32k","note":"needs 6.5 GB (1.1 search) of 10.6 free · a full re-read ~3 min","bySearch":{"off|off":"needs 5.4 GB of 10.6 free · a full re-read ~3 min","off|qwen3-reranker-0.6b":"needs 6.6 GB (1.2 search) of 10.6 free · a full re-read ~3 min","bge-m3|off":"needs 6.5 GB (1.1 search) of 10.6 free · a full re-read ~3 min","bge-m3|qwen3-reranker-0.6b":"needs 7.7 GB (2.3 search) of 10.6 free · a full re-read ~3 min"}},{"v":65536,"show":"64k","note":"needs 7.0 GB (1.1 search) of 10.6 free · a full re-read ~7 min","bySearch":{"off|off":"needs 5.9 GB of 10.6 free · a full re-read ~7 min","off|qwen3-reranker-0.6b":"needs 7.1 GB (1.2 search) of 10.6 free · a full re-read ~7 min","bge-m3|off":"needs 7.0 GB (1.1 search) of 10.6 free · a full re-read ~7 min","bge-m3|qwen3-reranker-0.6b":"needs 8.2 GB (2.3 search) of 10.6 free · a full re-read ~7 min"}},{"v":131072,"show":"128k","note":"needs 8.2 GB (1.1 search) of 10.6 free · a full re-read ~13 min","bySearch":{"off|off":"needs 7.1 GB of 10.6 free · a full re-read ~13 min","off|qwen3-reranker-0.6b":"needs 8.3 GB (1.2 search) of 10.6 free · a full re-read ~13 min","bge-m3|off":"needs 8.2 GB (1.1 search) of 10.6 free · a full re-read ~13 min","bge-m3|qwen3-reranker-0.6b":"needs 9.4 GB (2.3 search) of 10.6 free · a full re-read ~13 min"}},{"v":262144,"show":"256k","note":"needs 10.4 GB (1.1 search) of 10.6 free · a full re-read ~26 min","bySearch":{"off|off":"needs 9.3 GB of 10.6 free · a full re-read ~26 min","off|qwen3-reranker-0.6b":"needs 10.5 GB (1.2 search) of 10.6 free · a full re-read ~26 min","bge-m3|off":"needs 10.4 GB (1.1 search) of 10.6 free · a full re-read ~26 min","bge-m3|qwen3-reranker-0.6b":"⚠ needs 11.6 GB (2.3 search) of 10.6 free · a full re-read ~26 min"}}]},{"id":"thinking","label":"Thinking cap","group":"Limits","def":4096,"steps":[{"v":1024,"show":"1,024 tokens","note":"up to ~79 s per think (High only)"},{"v":2048,"show":"2,048 tokens","note":"up to ~3 min per think (High only)"},{"v":4096,"show":"4,096 tokens","note":"up to ~5 min per think (High only)"},{"v":8192,"show":"8,192 tokens","note":"up to ~11 min per think (High only)"}]},{"id":"tries","label":"Tries per fix","group":"Limits","def":8,"steps":[{"v":2,"show":"2","note":"each try ~20 s on Low, up to a few min on High"},{"v":4,"show":"4","note":"each try ~20 s on Low, up to a few min on High"},{"v":8,"show":"8","note":"each try ~20 s on Low, up to a few min on High"},{"v":12,"show":"12","note":"each try ~20 s on Low, up to a few min on High"},{"v":16,"show":"16","note":"each try ~20 s on Low, up to a few min on High"}]},{"id":"steps","label":"Steps per request","group":"Limits","def":40,"steps":[{"v":20,"show":"20","note":"stops a request after 20 tool steps"},{"v":40,"show":"40","note":"stops a request after 40 tool steps"},{"v":60,"show":"60","note":"stops a request after 60 tool steps"},{"v":80,"show":"80","note":"stops a request after 80 tool steps"},{"v":120,"show":"120","note":"stops a request after 120 tool steps"}]},{"id":"outputLines","label":"Command output","group":"Limits","def":80,"steps":[{"v":40,"show":"40 lines","note":"the first 20 and last 20 lines of each command"},{"v":80,"show":"80 lines","note":"the first 40 and last 40 lines of each command"},{"v":160,"show":"160 lines","note":"the first 80 and last 80 lines of each command"},{"v":320,"show":"320 lines","note":"the first 160 and last 160 lines of each command"}]},{"id":"timeoutSecs","label":"Command timeout","group":"Limits","def":120,"steps":[{"v":60,"show":"60 s","note":"a command still running then is stopped"},{"v":120,"show":"2 min","note":"a command still running then is stopped"},{"v":300,"show":"5 min","note":"a command still running then is stopped"},{"v":600,"show":"10 min","note":"a command still running then is stopped"}]},{"id":"trimAt","label":"Trim at","group":"Limits","def":0.78,"steps":[{"v":0.6,"show":"60%","note":"of the context: old tool output is dropped"},{"v":0.7,"show":"70%","note":"of the context: old tool output is dropped"},{"v":0.78,"show":"78%","note":"of the context: old tool output is dropped"},{"v":0.85,"show":"85%","note":"of the context: old tool output is dropped"}]},{"id":"summarizeAt","label":"Summarize at","group":"Limits","def":0.85,"steps":[{"v":0.8,"show":"80%","note":"of the context, with the next reply: the chat is summarized"},{"v":0.85,"show":"85%","note":"of the context, with the next reply: the chat is summarized"},{"v":0.9,"show":"90%","note":"of the context, with the next reply: the chat is summarized"}]}],"levels":[{"id":"low","show":"Low","note":"answers straight away (fastest)"},{"id":"high","show":"High","note":"thinks first; stopped at 4,096 tokens"}],"defs":{"embedder":"bge-m3","retriever":"meaning","reranker":"off","context":32768,"thinking":4096,"tries":8,"steps":40,"outputLines":80,"timeoutSecs":120,"trimAt":0.78,"summarizeAt":0.85}}},"freeGB":10.6,"loadedNow":1,"made":"2026-09-30T03:44:36.234Z"};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const M = DATA.models, T = DATA.tests;
+const byId = (id) => T.find((t) => t.id === id);
+const mName = (id) => M.find((m) => m.id === id)?.name ?? id;
+const short = (id) => mName(id).split(' ')[0];
+const dur = (s) => (s == null ? '?' : s < 60 ? `${Math.max(1, Math.round(s))} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, '0')} min`);
+const day = (iso) => { const d = new Date(iso); return `${d.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]}`; };
+const usable = (t) => !t.soon && !(t.own && !t.total);
+const lastOf = (t, model, effort) => (t.model ? t.last[`${model}/${t.think ? effort : 'low'}`] : t.last.none);
+const lastWords = (c) => (c === 'n/a' ? '<span class="never">never thinks</span>' : !c ? '<span class="never">never run</span>' : `<span class="${c.ok ? 'ok' : 'bad'}">${c.ok ? '✓' : '✗'} ${esc(c.res)}</span><span class="q">${day(c.at)}</span>`);
+const est = (t) => t.est;
+// The command ▶ starts for this model and effort (the catalog's own text, as the hub shows it).
+const cmdFor = (t, model, effort) => ((t.think && effort === 'high' && t.cmdsThink ? t.cmdsThink : t.cmds)?.[t.model ? model : 'none'] ?? t.cmd);
+const tgl = (on, dis) => `<span class="tg${on ? ' on' : ''}${dis ? ' dis' : ''}">✓</span>`;
+// The running moment shown by "Running": the same line in every design.
+const RUNLINE = [{ id: 'check', model: null, effort: 'low', st: 'done', res: '✓ 9 of 10 checks', secs: 4 }, { id: 'unit', model: null, effort: 'low', st: 'run', secs: 76 }, { id: 'practice28', model: 'qwen', effort: 'low', st: 'next' }, { id: 'requests', model: 'qwen', effort: 'low', st: 'next' }];
+const st = { design: 'd1p', panelRow: 0, vals: {}, show: 'pick', model: 'qwen', effort: 'low', focus: 'practice28', picked: new Set(['practice28', 'requests', 'unit', 'check']), flow: { done: {}, running: null, queue: [] }, line: [{ id: 'practice28', model: 'qwen', effort: 'low' }, { id: 'requests', model: 'qwen', effort: 'low' }, { id: 'practice28', model: 'gemma', effort: 'low' }], lineSel: 0,
+  cells: new Set(['practice28|qwen/low', 'requests|qwen/low', 'practice28|gemma/low', 'requests|gemma/low']) };
+try { Object.assign(st, (({ design, show }) => ({ design: design ?? st.design, show: show ?? st.show }))(JSON.parse(localStorage.getItem('runtab-designs-v2') || '{}'))); } catch {}
+const seg = (list, v) => list.map(([k, w]) => `<button type="button" data-v="${k}" aria-pressed="${k === v}">${w}</button>`).join('');
+const modelSeg = () => `<span class="l">Model</span><span class="seg" data-set="model">${seg(M.map((m) => [m.id, m.name]), st.model)}</span>`;
+const effortSeg = () => `<span class="l">Effort</span><span class="seg" data-set="effort">${seg([['low', 'Low · thinking off'], ['high', 'High · thinking on']], st.effort)}</span>`;
+function liveView(title) {
+  const done = RUNLINE.filter((r) => r.st === 'done').length;
+  return `<div class="k">Running ${done + 1} of ${RUNLINE.length}${title ? ` · ${esc(title)}` : ''}</div><h3>Unit tests <span class="q">no model · 1 min 16 s</span></h3>
+    <div class="prog"><i style="width:${Math.round((done + 0.55) / RUNLINE.length * 100)}%"></i></div>
+    <div class="term"><div class="tb">bun run test · both parts<em>live</em></div><div class="o">${DATA.live.map((l) => `<div>${/^\(pass\)/.test(l) ? `<span class="g">(pass)</span>${esc(l.slice(6))}` : `<span class="w">${esc(l)}</span>`}</div>`).join('')}</div></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="ghost" type="button">Skip this one</button><button class="go stop" type="button">■ Stop the rest</button></div>`;
+}
+const runSummary = () => `2 of 4 · 1 min 20 s so far · about ${dur(RUNLINE.filter((r) => r.st !== 'done').reduce((n, r) => n + (est(byId(r.id)) ?? 0), 0) - 76)} left`;
+
+// ---------- Design 1 · List + detail ----------
+function d1() {
+  const running = st.show === 'run';
+  const picked = T.filter((t) => st.picked.has(t.id));
+  const total = picked.reduce((n, t) => n + (est(t) ?? 0), 0);
+  const rows = T.map((t) => {
+    const r = running ? RUNLINE.find((x) => x.id === t.id) : null;
+    const on = st.picked.has(t.id) && usable(t);
+    const lead = running ? (r ? `<span class="st ${r.st}">${r.st === 'done' ? '✓' : r.st === 'run' ? '●' : RUNLINE.indexOf(r) + 1}</span>` : '') : tgl(on, !usable(t));
+    const lastCell = t.soon ? '<span class="never">being planned</span>' : t.own && !t.total ? '<span class="never">none made yet</span>' : lastWords(lastOf(t, st.model, st.effort));
+    return `<tr data-t="${t.id}" aria-selected="${st.focus === t.id}" class="${usable(t) ? '' : 'off'}"><td>${lead}</td><td class="nm">${esc(t.name)}${!t.model ? '<span class="q">no model</span>' : !t.think ? '<span class="q">no thinking</span>' : ''}</td><td>${r?.res ? `<span class="ok">${esc(r.res)}</span>` : lastCell}</td><td>${r?.st === 'done' ? dur(r.secs) : est(t) != null ? `≈ ${dur(est(t))}` : '<span class="never">?</span>'}</td></tr>`;
+  }).join('');
+  const f = byId(st.focus);
+  const mini = f.model ? `<div class="mini"><span></span><span class="h">Low</span><span class="h">High</span>${M.map((m) => `<span class="h">${esc(m.name)}</span><span>${lastWords(f.last[`${m.id}/low`])}</span><span>${lastWords(f.last[`${m.id}/high`])}</span>`).join('')}</div>` : `<div class="mini"><span class="h">No model</span><span>${lastWords(f.last.none)}</span><span></span></div>`;
+  const detail = running ? liveView() : `<div class="k">${f.model ? `runs on the model you pick${f.think ? '' : ', never thinks'}` : 'takes no model'}</div><h3>${esc(f.name)}</h3><p>${esc(f.what)}</p>
+    ${f.choices ? `<div class="k">Which task</div><p><select style="font:inherit;font-size:13px;max-width:100%">${f.choices.map((c) => `<option>${esc(c)}</option>`).join('')}</select></p>` : ''}
+    <div class="k">Last runs</div>${mini}<div class="k">Takes about</div><p>${est(f) != null ? dur(est(f)) : 'not known yet'} <span class="q">${esc(f.estWhy)}</span></p>${f.cmd ? `<div class="k">What it runs</div><p><code>${esc(cmdFor(f, st.model, st.effort))}</code></p>` : ''}`;
+  return `<div class="d1"><div class="bar">${modelSeg()}${effortSeg()}<span class="sum">${running ? runSummary() : `Tests without a model ignore these; the Sorting check never thinks.`}</span></div>
+    <div class="split"><div class="box list"><table><colgroup><col style="width:44px"><col><col style="width:190px"><col style="width:96px"></colgroup><thead><tr><th>${running ? '' : 'Run'}</th><th>Test</th><th>Last on ${esc(short(st.model))} · ${st.effort === 'low' ? 'Low' : 'High'}</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <aside class="box detail">${detail}</aside></div>
+    <div class="bar"><span class="sum" style="margin-left:0">${running ? '<b>Running</b> · closing Agentic Coder does not stop it' : `<b>${picked.length} picked</b> · about ${dur(total)} · one after another`}</span><span style="margin-left:auto;display:flex;gap:8px">${running ? '<button class="go stop" type="button">■ Stop</button>' : `<button class="ghost" type="button" data-act="clear">Clear</button><button class="go" type="button" data-act="run"${picked.length ? '' : ' disabled'}>▶ Run ${picked.length} ${picked.length === 1 ? 'test' : 'tests'} on ${esc(short(st.model))}</button>`}</span></div></div>`;
+}
+
+// ---------- Design 1 + control panel ----------
+// /effort's rows for the run, per model: the values start at the tests' defaults; a changed row is marked.
+const P = () => DATA.panel[st.model];
+const valOf = (id) => (st.vals[st.model]?.[id] ?? P().defs[id]);
+const setVal = (id, v) => { (st.vals[st.model] ??= {})[id] = v; };
+const changed = () => P().rows.filter((r) => valOf(r.id) !== r.def);
+const panelRows = () => [{ id: '_model' }, { id: '_effort' }, ...P().rows];
+function moveRow(i, dir) {
+  const r = panelRows()[i];
+  if (r.id === '_model') { const k = M.findIndex((m) => m.id === st.model); st.model = M[(k + dir + M.length) % M.length].id; return; }
+  if (r.id === '_effort') { const lv = P().levels; const k = lv.findIndex((l) => l.id === st.effort); st.effort = lv[Math.max(0, Math.min(lv.length - 1, k + dir))].id; return; }
+  const k = r.steps.findIndex((x) => x.v === valOf(r.id)); setVal(r.id, r.steps[Math.max(0, Math.min(r.steps.length - 1, (k < 0 ? 0 : k) + dir))].v);
+}
+function panelHtml() {
+  const rows = panelRows();
+  let group = '';
+  const line = (i, label, show, note, tag, canL, canR, dim) => `<div class="pr${dim ? ' dim' : ''}" data-pr="${i}" aria-selected="${st.panelRow === i}"><span class="lb">${esc(label)}</span><span class="val"><button type="button" data-mv="${i}" data-d="-1"${canL ? '' : ' disabled'}>◀</button><b>${esc(show)}</b><button type="button" data-mv="${i}" data-d="1"${canR ? '' : ' disabled'}>▶</button></span><span class="nt">${tag}${esc(note)}</span></div>`;
+  return rows.map((r, i) => {
+    if (r.id === '_model') { const k = M.findIndex((m) => m.id === st.model); return line(i, 'Model', mName(st.model), `${esc(DATA.freeGB)} GB free for a run`, '', M.length > 1, M.length > 1); }
+    if (r.id === '_effort') { const lv = P().levels, k = lv.findIndex((l) => l.id === st.effort); return line(i, 'Effort', lv[k].show, lv[k].note, '', k > 0, k < lv.length - 1); }
+    const k = r.steps.findIndex((x) => x.v === valOf(r.id)), stp = r.steps[k] ?? r.steps[0], isDef = valOf(r.id) === r.def;
+    const head = r.group !== group ? `<div class="gh">${esc(r.group)}</div>` : '';
+    group = r.group;
+    const note = r.id === 'context' ? `${isDef ? 'the tests run at 32k · ' : ''}${ctxNote(stp)}` : stp.note;
+    return head + line(i, r.label, stp.show, note, `<i class="${isDef ? 'df' : 'ch'}">${isDef ? 'default' : 'changed'}</i>`, k > 0, k < r.steps.length - 1, r.id === 'thinking' && st.effort === 'low');
+  }).join('');
+}
+// Context's note for the Search rows as they are now (they decide the memory it needs beside the model).
+const ctxNote = (stp) => stp.bySearch?.[`${valOf('embedder')}|${valOf('reranker')}`] ?? stp.note;
+// The picked row's whole note (a row's note is cut to fit; this line is not).
+function fullNote() {
+  const r = panelRows()[st.panelRow];
+  if (!r || r.id === '_model') return `<div class="full"><b>Model</b> · ${esc(mName(st.model))}: a run frees whatever is loaded first, so ${esc(DATA.freeGB)} GB is free for it.</div>`;
+  if (r.id === '_effort') { const lv = P().levels.find((l) => l.id === st.effort); return `<div class="full"><b>Effort</b> · ${esc(lv.show)}: ${esc(lv.note)}</div>`; }
+  const stp = r.steps.find((x) => x.v === valOf(r.id)) ?? r.steps[0];
+  return `<div class="full"><b>${esc(r.label)}</b> · ${esc(stp.show)}: ${esc(r.id === 'context' ? ctxNote(stp) : stp.note)}${valOf(r.id) === r.def ? ' (the tests\' default)' : ` (the tests run with ${esc(r.steps.find((x) => x.v === r.def)?.show ?? r.def)})`}</div>`;
+}
+// The run list (after ▶ Run): each picked test has its own button. Nothing starts by itself; only one
+// model fits, so a ▶ pressed while another test runs lines it up as next. flow: what has run, what runs, what is next.
+const DEMO = () => ({ done: { check: { res: '✓ 9 of 10 checks', secs: 4, ok: true } }, running: 'unit', queue: ['practice28'] });
+function flowAct(act, id) {
+  const f = st.flow;
+  if (act === 'run') { if (!f.running) f.running = id; else if (f.running !== id && !f.queue.includes(id)) f.queue.push(id); }
+  else if (act === 'unnext') f.queue = f.queue.filter((x) => x !== id);
+  else if (act === 'stop') { f.done[id] = { res: '■ stopped', secs: 0, ok: false, stopped: true }; f.running = f.queue.shift() ?? null; }
+  else if (act === 'all') { const left = [...st.picked].filter((x) => usable(byId(x)) && !f.done[x] && x !== f.running); if (!f.running) f.running = left.shift() ?? null; f.queue = [...new Set([...f.queue, ...left])]; }
+  st.show = f.running ? 'run' : 'ready';
+}
+function runListRow(t) {
+  const f = st.flow, d = f.done[t.id], isRun = f.running === t.id, qi = f.queue.indexOf(t.id);
+  const lead = isRun ? '<span class="st run">●</span>' : d ? `<span class="st ${d.ok ? 'done' : 'next'}">${d.ok ? '✓' : '■'}</span>` : qi >= 0 ? `<span class="st next">${qi + 1}</span>` : '<span class="st next">·</span>';
+  const res = isRun ? '<span class="st run">running…</span>' : d ? `<span class="${d.ok ? 'ok' : 'warn'}">${esc(d.res)}</span>` : qi >= 0 ? `<span class="never">next${qi ? ` after ${qi}` : ''}</span>` : '<span class="never">not started</span>';
+  const btn = isRun ? `<button class="ghost" type="button" data-flow="stop" data-id="${t.id}" style="color:var(--bad)">■ Stop</button>`
+    : qi >= 0 ? `<button class="ghost" type="button" data-flow="unnext" data-id="${t.id}">✕ Not next</button>`
+    : `<button class="${f.running ? 'ghost' : 'go'}" type="button" data-flow="run" data-id="${t.id}" style="padding:5px 12px;font-size:13px">▶ ${d ? 'Run again' : f.running ? 'Run next' : 'Run'}</button>`;
+  const on = t.model ? `<span class="q">${esc(short(st.model))} · ${t.think ? (st.effort === 'low' ? 'Low' : 'High') : 'no thinking'}</span>` : '<span class="q">no model</span>';
+  return `<tr data-t="${t.id}" aria-selected="${st.focus === t.id}"><td>${lead}</td><td class="nm">${esc(t.name)}${on}</td><td>${res}</td><td>${d ? dur(d.secs) : est(t) != null ? `≈ ${dur(est(t))}` : '<span class="never">?</span>'}</td><td style="text-align:right">${btn}</td></tr>`;
+}
+function liveFor(id, settings) {
+  const t = byId(id);
+  const real = id === 'unit';
+  const f = st.flow, doneN = Object.keys(f.done).length, all = [...st.picked].filter((x) => usable(byId(x))).length;
+  return `<div style="padding:0 14px 8px;font-size:12.5px;color:var(--mute)">This run: ${settings}</div><div style="padding:0 14px;display:flex;flex-direction:column;flex:1;min-height:0">
+    <div class="k">Running · ${doneN} of ${all} done${f.queue.length ? ` · ${f.queue.length} next` : ''}</div><h3>${esc(t.name)} <span class="q">${t.model ? `${esc(mName(st.model))} · ${st.effort === 'low' ? 'Low' : 'High'}` : 'no model'}${real ? ' · 1 min 16 s' : ''}</span></h3>
+    <div class="prog"><i style="width:${real ? 55 : 8}%"></i></div>
+    <div class="term"><div class="tb"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cmdFor(t, st.model, st.effort))}</span><em>live</em></div><div class="o">${real ? DATA.live.map((l) => `<div>${/^\(pass\)/.test(l) ? `<span class="g">(pass)</span>${esc(l.slice(6))}` : `<span class="w">${esc(l)}</span>`}</div>`).join('') : '<div><span class="d">(what it prints shows here, line by line, as it runs)</span></div>'}</div></div></div>`;
+}
+function d1p() {
+  const mode = st.show; // 'pick' · 'ready' · 'run'
+  const picked = T.filter((t) => st.picked.has(t.id) && usable(t));
+  const total = picked.reduce((n, t) => n + (est(t) ?? 0), 0);
+  const ch = changed();
+  const settings = `${esc(mName(st.model))} · ${st.effort === 'low' ? 'Low' : 'High'}${ch.length ? ` · ${ch.map((r) => `${r.label} ${r.steps.find((x) => x.v === valOf(r.id))?.show}`).join(' · ')}` : ' · the tests\' defaults'}`;
+  const f = st.flow;
+  if (mode !== 'pick') {
+    const rows = picked.map(runListRow).join('');
+    const doneN = picked.filter((t) => f.done[t.id]).length, waiting = picked.filter((t) => !f.done[t.id] && f.running !== t.id && !f.queue.includes(t.id)).length;
+    const right = f.running ? liveFor(f.running, settings)
+      : `<div class="ph"><b>This run</b><span>${settings}</span></div><div style="padding:0 14px"><p class="q" style="margin:0 0 10px">The panel is set; <button class="colpick" type="button" data-act="back">change it</button> before you start a test.</p>
+         <div class="term" style="min-height:260px"><div class="tb">live output<em style="color:#8e8b84;background:rgba(142,139,132,.12)">waiting</em></div><div class="o"><div><span class="d">Press ▶ Run on a test: what it prints shows here, live.</span></div><div><span class="d">Only one model fits, so one test runs at a time; ▶ on another while one runs makes it next.</span></div></div></div></div>`;
+    return `<div class="d1p"><div class="split"><div class="left"><div class="box list"><table><colgroup><col style="width:36px"><col><col style="width:128px"><col style="width:76px"><col style="width:124px"></colgroup><thead><tr><th></th><th>Run list · ${picked.length} picked</th><th>Result</th><th>Time</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty">Nothing picked: go back and tick some tests.</td></tr>'}</tbody></table></div>
+      <div class="box about"><b>Each test runs when you say.</b> <span class="q">▶ Run starts it; while one runs, ▶ Run next lines it up; ✕ Not next takes it back out; ■ Stop ends it and the next one starts. A fail never stops the others.</span></div></div>
+      <aside class="box panel">${right}</aside></div>
+      <div class="bar"><span class="sum" style="margin-left:0"><b>${f.running ? '1 running' : 'Nothing started yet'}</b> · ${doneN} done · ${f.queue.length} next · ${waiting} not started${f.running ? ' · closing Agentic Coder does not stop it' : ''}</span><span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="ghost" type="button" data-act="back">← Change the picks</button>${waiting || !f.running ? `<button class="go" type="button" data-flow="all">▶ Run ${f.running ? 'the rest' : 'all'}, in order</button>` : ''}${f.running ? '<button class="go stop" type="button" data-flow="stopall">■ Stop all</button>' : ''}</span></div></div>`;
+  }
+  const rows = T.map((t) => {
+    const on = st.picked.has(t.id) && usable(t);
+    const lastCell = t.soon ? '<span class="never">being planned</span>' : t.own && !t.total ? '<span class="never">none made yet</span>' : (t.model && ch.length) ? '<span class="never">never at these settings</span>' : lastWords(lastOf(t, st.model, st.effort));
+    return `<tr data-t="${t.id}" aria-selected="${st.focus === t.id}" class="${usable(t) ? '' : 'off'}"><td>${tgl(on, !usable(t))}</td><td class="nm">${esc(t.name)}${!t.model ? '<span class="q">no model</span>' : !t.think ? '<span class="q">no thinking</span>' : ''}</td><td>${lastCell}</td><td>${est(t) != null ? `≈ ${dur(est(t))}` : '<span class="never">?</span>'}</td></tr>`;
+  }).join('');
+  const fo = byId(st.focus);
+  const right = `<div class="ph"><b>This run</b><span>↑↓ picks a row · ←→ changes it · kept for next time</span></div>${panelHtml()}${fullNote()}<div class="pf"><span>${ch.length ? `${ch.length} ${ch.length === 1 ? 'row' : 'rows'} changed: results are kept with these settings, apart from default runs` : 'All at the tests\' defaults: results compare with every earlier run'}</span><button class="ghost" type="button" data-act="reset" style="margin-left:auto"${ch.length ? '' : ' disabled'}>Reset all</button></div>`;
+  return `<div class="d1p"><div class="split"><div class="left"><div class="box list"><table><colgroup><col style="width:44px"><col><col style="width:200px"><col style="width:90px"></colgroup><thead><tr><th>Run</th><th>Test</th><th>${ch.length ? 'Last at these settings' : `Last on ${esc(short(st.model))} · ${st.effort === 'low' ? 'Low' : 'High'}`}</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="box about"><b>${esc(fo.name)}</b> <span class="q">${fo.model ? (fo.think ? 'uses the whole panel' : 'uses the panel, never thinks') : 'takes no model: the panel does not apply'}</span><p>${esc(fo.what)}</p><p><code style="font:12px ui-monospace,Menlo,monospace">${esc(cmdFor(fo, st.model, st.effort))}</code></p></div></div>
+    <aside class="box panel">${right}</aside></div>
+    <div class="bar"><span class="sum" style="margin-left:0"><b>${picked.length} picked</b> · about ${dur(total)} · ${settings}</span><span style="margin-left:auto;display:flex;gap:8px"><button class="ghost" type="button" data-act="clear">Clear</button><button class="go" type="button" data-act="ready"${picked.length ? '' : ' disabled'}>▶ Run ${picked.length} ${picked.length === 1 ? 'test' : 'tests'} on ${esc(short(st.model))}</button></span></div></div>`;
+}
+
+// ---------- Design 2 · Run line ----------
+function d2() {
+  const running = st.show === 'run';
+  const line = running ? RUNLINE : st.line;
+  const groups = [['Sets of 28', ['practice28', 'requests', 'work28', 'new28', 'hard28']], ['Quick checks', ['task', 'sorting', 'long', 'mine']], ['No model', ['unit', 'check']]];
+  const list = groups.map(([g, ids]) => `<div class="grp">${g}</div>${ids.map((id) => byId(id)).filter(Boolean).map((t) => `<div class="it${usable(t) ? '' : ' off'}" data-t="${t.id}"><span class="n">${esc(t.name)}</span>${usable(t) ? `<span class="q">${est(t) != null ? `≈ ${dur(est(t))}` : ''}</span><button class="add" type="button" data-add="${t.id}"${running ? ' disabled' : ''}>+ add</button>` : `<span class="q">${t.soon ? 'planned' : 'none yet'}</span>`}</div>`).join('')}`).join('');
+  const cards = line.map((l, i) => {
+    const t = byId(l.id);
+    const cls = running ? (l.st === 'done' ? ' done' : l.st === 'run' ? ' run' : '') : '';
+    const mod = t.model ? `<button class="chip" type="button" data-cyc="model" data-i="${i}">${esc(short(l.model))}</button>${t.think ? `<button class="chip" type="button" data-cyc="effort" data-i="${i}">${l.effort === 'low' ? 'Low' : 'High'}</button>` : '<span class="q">no thinking</span>'}` : '<span class="q">no model</span>';
+    const right = running ? (l.st === 'done' ? `<span class="ok">${esc(l.res)}</span>` : l.st === 'run' ? '<span class="st run">● running</span>' : '<span class="never">next</span>') : `<span class="acts"><button type="button" data-mv="-1" data-i="${i}" title="Earlier">↑</button><button type="button" data-mv="1" data-i="${i}" title="Later">↓</button><button type="button" data-rm="${i}" title="Take it out">✕</button></span>`;
+    return `<div class="card${cls}" data-i="${i}" aria-selected="${!running && st.lineSel === i}"><span class="num">${i + 1}</span><div style="min-width:0"><div class="t">${esc(t.name)}</div><div>${mod}<span class="q">${est(t) != null ? `≈ ${dur(est(t))}` : '? min'}</span></div></div>${right}</div>`;
+  }).join('') || '<div class="empty">The line is empty: + add a test on the left.</div>';
+  const total = line.reduce((n, l) => n + (est(byId(l.id)) ?? 0), 0);
+  const sel = byId((st.line[st.lineSel] ?? st.line[0] ?? { id: 'practice28' }).id), sl = st.line[st.lineSel] ?? st.line[0];
+  const right = running ? liveView('the line') : `<div class="k">Line ${st.lineSel + 1}${sl?.model ? ` · on ${esc(mName(sl.model))} · ${sl.effort === 'low' ? 'thinking off' : 'thinking on'}` : ''}</div><h3>${esc(sel.name)}</h3><p>${esc(sel.what)}</p>
+    <div class="k">Last time</div><p>${lastWords(sel.model ? sel.last[`${sl?.model ?? st.model}/${sel.think ? sl?.effort ?? 'low' : 'low'}`] : sel.last.none)}</p><div class="k">Takes about</div><p>${est(sel) != null ? dur(est(sel)) : 'not known yet'} <span class="q">${esc(sel.estWhy)}</span></p>${sel.cmd ? `<div class="k">What it runs</div><p><code>${esc(cmdFor(sel, sl?.model ?? st.model, sl?.effort ?? 'low'))}</code></p>` : ''}
+    <p class="q" style="margin-left:0">The same test can be in the line twice: once on each model, or at each effort.</p>`;
+  return `<div class="d2"><div class="col"><h2>Tests</h2><div class="box tl">${list}</div></div>
+    <div class="col"><h2>Run line</h2><div class="box" style="display:flex;flex-direction:column;flex:1;min-height:0"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px"><span class="q" style="margin:0">+ add uses</span>${modelSeg()}${effortSeg()}</div>
+      <div class="line">${cards}</div><div class="linefoot"><span class="sum" style="margin-left:0">${running ? runSummary() : `<b>${line.length} in the line</b> · about ${dur(total)}`}</span><span style="margin-left:auto;display:flex;gap:8px">${running ? '<button class="go stop" type="button">■ Stop</button>' : `<button class="ghost" type="button" data-act="clearline">Clear</button><button class="go" type="button" data-act="run"${line.length ? '' : ' disabled'}>▶ Run the line</button>`}</span></div></div></div>
+    <div class="col"><h2>${running ? 'Now' : 'The line picked'}</h2><aside class="box detail" style="flex:1;display:flex;flex-direction:column">${right}</aside></div></div>`;
+}
+
+// ---------- Design 3 · Matrix ----------
+function d3() {
+  const running = st.show === 'run';
+  const cols = M.flatMap((m) => ['low', 'high'].map((e) => ({ key: `${m.id}/${e}`, m, e })));
+  const runKey = (r) => `${r.id}|${r.model ? `${r.model}/${r.effort}` : 'none'}`;
+  const rows = T.map((t) => {
+    const cellFor = (key, dis) => {
+      if (dis) return '<td><span class="cell na">n/a</span></td>';
+      const k = `${t.id}|${key}`, c = key === 'none' ? t.last.none : t.last[key];
+      if (running) { const r = RUNLINE.find((x) => runKey(x) === k); if (r) return `<td><span class="cell"><span class="st ${r.st}">${r.st === 'done' ? '✓' : r.st === 'run' ? '●' : '·'}</span>${r.st === 'done' ? esc(r.res.replace(' checks', '')) : r.st === 'run' ? 'running' : 'next'}</span></td>`; }
+      const on = st.cells.has(k);
+      return `<td><span class="cell${on ? ' on' : ''}" data-cell="${k}">${tgl(on)}${c && c !== 'n/a' ? `<span class="${c.ok ? 'ok' : 'bad'}">${esc(c.res)}</span>` : '<span class="never">never</span>'}</span></td>`;
+    };
+    if (!usable(t)) return `<tr class="off"><td>${esc(t.name)}<span class="q">${t.soon ? 'planned' : 'none made yet'}</span></td>${cols.map(() => '<td></td>').join('')}<td></td></tr>`;
+    if (!t.model) return `<tr><td>${esc(t.name)}<span class="q">≈ ${dur(est(t))}</span></td>${cols.map(() => '<td><span class="cell na">·</span></td>').join('')}${cellFor('none')}</tr>`;
+    return `<tr><td>${esc(t.name)}<span class="q">${est(t) != null ? `≈ ${dur(est(t))}` : ''}</span></td>${cols.map((c) => cellFor(c.key, c.e === 'high' && !t.think)).join('')}<td><span class="cell na">·</span></td></tr>`;
+  }).join('');
+  const picks = [...st.cells].filter((k) => usable(byId(k.split('|')[0])));
+  const total = picks.reduce((n, k) => n + (est(byId(k.split('|')[0])) ?? 0), 0);
+  const order = ['gemma', 'qwen'].map((m) => picks.filter((k) => k.includes(`|${m}/`)).length).map((n, i) => (n ? `${n} on ${short(M[i]?.id)}` : '')).filter(Boolean).join(', then ');
+  const side = running ? liveView() : `<div class="k">What runs</div><h3>${picks.length} runs · about ${dur(total)}</h3><p>${order ? `${esc(order)}` : 'Pick cells in the grid.'}${picks.some((k) => k.endsWith('|none')) ? ', and the checks with no model first' : ''}. Runs on one model go together, so the model loads once.</p>
+    <div class="k">Reading the grid</div><p>A row is a test, a column one model at one effort. Each cell says the last result there; <span class="never">never</span> is a run that has not happened yet, which is what grading needs. Click a cell to pick it, a column's name to pick its whole column.</p>
+    <p class="q" style="margin-left:0">n/a: the Sorting check never thinks, so it has no High column.</p>`;
+  return `<div class="d3"><div class="box mat"><div style="overflow:auto;flex:1;min-height:0"><table class="matrix"><colgroup><col style="width:190px">${cols.map(() => '<col>').join('')}<col style="width:128px"></colgroup>
+    <thead><tr><th></th>${M.map((m) => `<th colspan="2">${esc(m.name)}</th>`).join('')}<th></th></tr><tr><th>Test</th>${cols.map((c) => `<th><button class="colpick" type="button" data-col="${c.key}">${c.e === 'low' ? 'Low' : 'High'} ▾</button></th>`).join('')}<th>No model</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="legend">${running ? runSummary() : 'Last result in each cell · ✓ picked to run · a column\'s name picks the whole column'}</div></div>
+    <aside class="box detail" style="display:flex;flex-direction:column">${side}<div style="margin-top:auto;padding-top:12px;display:flex;gap:8px;justify-content:flex-end">${running ? '' : `<button class="ghost" type="button" data-act="clearcells">Clear</button><button class="go" type="button" data-act="run"${picks.length ? '' : ' disabled'}>▶ Run ${picks.length}</button>`}</div></aside></div>`;
+}
+
+function draw() {
+  $('pd').innerHTML = seg([['d1p', '1 + panel (new)'], ['d1', '1 · List + detail'], ['d2', '2 · Run line'], ['d3', '3 · Matrix']], st.design);
+  $('ps').innerHTML = seg(st.design === 'd1p' ? [['pick', 'Picking tests'], ['ready', 'Ready to run'], ['run', 'Running']] : [['pick', 'Picking tests'], ['run', 'Running']], st.design !== 'd1p' && st.show === 'ready' ? 'pick' : st.show);
+  if (st.design !== 'd1p' && st.show === 'ready') st.show = 'pick';
+  if (st.design === 'd1p' && st.show === 'run' && !st.flow.running) st.flow = DEMO();
+  $('stage').innerHTML = st.design === 'd1p' ? d1p() : st.design === 'd1' ? d1() : st.design === 'd2' ? d2() : d3();
+  try { localStorage.setItem('runtab-designs-v2', JSON.stringify({ design: st.design, show: st.show })); } catch {}
+}
+$('pd').onclick = (e) => { const b = e.target.closest('button'); if (b) { st.design = b.dataset.v; draw(); } };
+$('ps').onclick = (e) => { const b = e.target.closest('button'); if (b) { st.show = b.dataset.v; st.flow = b.dataset.v === 'run' ? DEMO() : { done: {}, running: null, queue: [] }; draw(); } };
+$('stage').onclick = (e) => {
+  const sg = e.target.closest('.seg[data-set] button'); if (sg) { st[sg.parentElement.dataset.set] = sg.dataset.v; draw(); return; }
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'run') { st.show = 'run'; draw(); return; }
+  if (act === 'ready') { st.show = 'ready'; st.flow = { done: {}, running: null, queue: [] }; draw(); return; }
+  if (act === 'back') { st.show = 'pick'; draw(); return; }
+  const fl = e.target.closest('[data-flow]'); if (fl) { if (fl.dataset.flow === 'stopall') { st.flow.running = null; st.flow.queue = []; st.show = 'ready'; } else flowAct(fl.dataset.flow, fl.dataset.id); draw(); return; }
+  if (act === 'clear') { st.picked.clear(); draw(); return; }
+  if (act === 'reset') { st.vals[st.model] = {}; draw(); return; }
+  const pmv = e.target.closest('.panel [data-mv]'); if (pmv && !pmv.disabled) { st.panelRow = +pmv.dataset.mv; moveRow(+pmv.dataset.mv, +pmv.dataset.d); draw(); return; }
+  const prow = e.target.closest('[data-pr]'); if (prow) { st.panelRow = +prow.dataset.pr; draw(); return; }
+  if (act === 'clearline') { st.line = []; draw(); return; }
+  if (act === 'clearcells') { st.cells.clear(); draw(); return; }
+  if (st.show === 'run' || st.show === 'ready') { const tr = e.target.closest('tr[data-t]'); if (tr) { st.focus = tr.dataset.t; draw(); } return; }
+  const add = e.target.closest('[data-add]'); if (add) { st.line.push({ id: add.dataset.add, model: st.model, effort: st.effort }); st.lineSel = st.line.length - 1; draw(); return; }
+  const cyc = e.target.closest('[data-cyc]'); if (cyc) { const l = st.line[+cyc.dataset.i]; if (cyc.dataset.cyc === 'model') { const i = M.findIndex((m) => m.id === l.model); l.model = M[(i + 1) % M.length].id; } else l.effort = l.effort === 'low' ? 'high' : 'low'; draw(); return; }
+  const mv = e.target.closest('[data-mv]'); if (mv) { const i = +mv.dataset.i, j = i + +mv.dataset.mv; if (j >= 0 && j < st.line.length) { [st.line[i], st.line[j]] = [st.line[j], st.line[i]]; st.lineSel = j; } draw(); return; }
+  const rm = e.target.closest('[data-rm]'); if (rm) { st.line.splice(+rm.dataset.rm, 1); st.lineSel = Math.max(0, st.lineSel - 1); draw(); return; }
+  const card = e.target.closest('.card[data-i]'); if (card) { st.lineSel = +card.dataset.i; draw(); return; }
+  const col = e.target.closest('[data-col]'); if (col) { const key = col.dataset.col, ks = T.filter((t) => usable(t) && t.model && (key.endsWith('/low') || t.think)).map((t) => `${t.id}|${key}`); const all = ks.every((k) => st.cells.has(k)); ks.forEach((k) => (all ? st.cells.delete(k) : st.cells.add(k))); draw(); return; }
+  const cell = e.target.closest('[data-cell]'); if (cell) { const k = cell.dataset.cell; st.cells.has(k) ? st.cells.delete(k) : st.cells.add(k); draw(); return; }
+  // Design 1: a click on the first column (the toggle) picks the test; anywhere on the row shows it on the right.
+  const tr = e.target.closest('tr[data-t]'); if (tr) { const t = byId(tr.dataset.t); st.focus = t.id; if (usable(t) && e.target.closest('td:first-child')) (st.picked.has(t.id) ? st.picked.delete(t.id) : st.picked.add(t.id)); draw(); return; }
+};
+document.addEventListener('keydown', (e) => {
+  if (st.design === 'd1p' && st.show === 'pick') {
+    const n = panelRows().length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); st.panelRow = Math.max(0, Math.min(n - 1, st.panelRow + (e.key === 'ArrowDown' ? 1 : -1))); draw(); return; }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); moveRow(st.panelRow, e.key === 'ArrowRight' ? 1 : -1); draw(); return; }
+  }
+  if (st.design !== 'd1' || st.show === 'run' || e.target.closest('select')) return;
+  const ids = T.map((t) => t.id), i = ids.indexOf(st.focus);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); st.focus = ids[Math.max(0, Math.min(ids.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))]; draw(); }
+  else if (e.key === ' ') { e.preventDefault(); const t = byId(st.focus); if (usable(t)) { st.picked.has(t.id) ? st.picked.delete(t.id) : st.picked.add(t.id); draw(); } }
+});
+draw();
+</script>
+</body>
+</html>
