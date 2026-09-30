@@ -24,7 +24,7 @@ function makeRepo() {
 const heads = (repo) => ({ main: git(repo, 'rev-parse', 'main'), origin: null });
 
 test('the file list matches the launcher: code counts, docs, tests, results and READMEs do not', () => {
-  for (const p of ['terminal/src/app/App.jsx', 'terminal/src/app/help.html', 'terminal/rules/bug-fixing.md', 'models/index.mjs', 'models/bonsai-2-27b/model.mjs', 'models/evals/record.mjs', 'package.json']) expect([p, isAppCode(p)]).toEqual([p, true]);
+  for (const p of ['terminal/src/app/App.jsx', 'terminal/src/app/help.html', 'terminal/rules/bug-fixing.md', 'models/index.mjs', 'models/bonsai-2-27b/model.mjs', 'models/evals/record.mjs', 'models/evals/run-tests.mjs', 'package.json']) expect([p, isAppCode(p)]).toEqual([p, true]);
   for (const p of ['docs/README.md', 'agentic-coder DOCS/a.html', 'terminal/test/app.test.mjs', 'models/evals/bench/run.mjs', 'models/bonsai-2-27b/results/r.json', 'models/README.md', 'terminal/README.md', 'terminal/scripts/demo/spin.jsx', 'models/runtime/engine/x.patch']) expect([p, isAppCode(p)]).toEqual([p, false]);
 });
 
