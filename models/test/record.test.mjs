@@ -4,7 +4,8 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { RUN_TESTS } from '../evals/run-tests.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'agentic-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
 const quiet = (file) => ({ file, snapshot: false, quiet: true });
@@ -56,7 +57,7 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
   expect(json).not.toContain('</script>'); // a name cannot close the data block
   const data = JSON.parse(json);
   expect(data.rows[0].name).toBe('The 28 real requests </script><b>');
-  expect(Object.keys(data.kinds)).toEqual(['tasks', 'sets', 'requests', 'bug', 'suite', 'other']);
+  expect(Object.keys(data.kinds)).toEqual(['tasks', 'sets', 'requests', 'bug', 'suite', 'check', 'other']);
   expect(writeSnapshot({ file, docsDir: join(dir, 'not-there') })).toBe(null);
   expect(recordData(file).rows).toHaveLength(1);
 });
@@ -134,4 +135,52 @@ test('the side panel lists the models whose file is on this Mac, and the record 
   const { file } = scratch();
   recordTest({ kind: 'tasks', name: 'a run', model: 'gemma', passed: 1, total: 1 }, quiet(file));
   expect(recordData(file).models).toEqual(installedModels());
+});
+
+test('the repo check has a tab of its own: its older lines, written as other, are filed under check and of no model', () => {
+  const { file } = scratch();
+  mkdirSync(join(file, '..'), { recursive: true });
+  appendFileSync(file, `${JSON.stringify({ id: 'other:1', at: '2026-09-29T10:00:00.000Z', kind: 'other', name: 'Repo check (fast)', passed: 9, total: 10, result: 'fail', note: 'wrong: Private on GitHub' })}\n`);
+  appendFileSync(file, `${JSON.stringify({ id: 'other:2', at: '2026-09-29T10:01:00.000Z', kind: 'other', name: 'Repo checker probe? no: a Sorting check', passed: 1, total: 1 })}\n`);
+  recordTest({ kind: 'check', name: 'Repo check (fast)', at: '2026-09-29T11:00:00.000Z', passed: 9, total: 9 }, quiet(file));
+  const rows = readRecord(file);
+  expect(rows.map((r) => [r.kind, r.model])).toEqual([['check', null], ['other', null], ['check', null]]);
+  expect(RUN_TESTS.find((t) => t.id === 'check').record.kind).toBe('check');
+});
+
+test('a result is a check (✓ or ✗), a check against its own bar, or a measurement with no pass or fail', () => {
+  expect(gradeOf({ result: 'pass', passed: 28, total: 28 })).toEqual({ grade: 'check', bar: '' });
+  expect(gradeOf({ result: 'fail', passed: 26, total: 28 })).toEqual({ grade: 'check', bar: '' });
+  expect(gradeOf({ result: 'fail', passed: 9, total: 9, note: 'bun test ended with code 1' })).toEqual({ grade: 'check', bar: '' }); // a failure stays one
+  expect(gradeOf({ result: 'measured', passed: null, total: null })).toEqual({ grade: 'measure', bar: '' });
+  expect(gradeOf({ result: 'pass', passed: 16, total: 50, note: 'handed 15/25' })).toEqual({ grade: 'measure', bar: '' }); // said pass with 16 of 50 and no bar: it counted
+  expect(gradeOf({ result: 'pass', passed: 81, total: 82, note: '81 of 82 sorted right (1 wrong; pass at most 4); 1.38 s a sort' })).toEqual({ grade: 'bar', bar: 'at most 4 wrong' });
+  expect(gradeOf({ result: 'fail', passed: 70, total: 82, bar: 'at most 4 wrong' })).toEqual({ grade: 'bar', bar: 'at most 4 wrong' });
+  expect(gradeOf({ result: 'stopped', passed: 3, total: 28 }).grade).toBe('check');
+});
+
+test('a line keeps its bar and the unit tests that failed, by name; a line without them has neither', () => {
+  const { file } = scratch();
+  const a = recordTest({ kind: 'other', name: 'Sorting check', model: 'gemma', passed: 81, total: 82, result: 'pass', bar: 'at most 4 wrong' }, quiet(file));
+  const b = recordTest({ kind: 'suite', name: 'Unit tests, both parts', passed: 642, total: 644, failed: ['hub-run.test.mjs › stop ends the run', 'app-sort.test.mjs › picks one'] }, quiet(file));
+  const c = recordTest({ kind: 'suite', name: 'Unit tests, both parts', passed: 644, total: 644, failed: [] }, quiet(file));
+  expect(a.bar).toBe('at most 4 wrong');
+  expect(b.failed).toEqual(['hub-run.test.mjs › stop ends the run', 'app-sort.test.mjs › picks one']);
+  expect('failed' in c || 'bar' in c).toBe(false);
+  const rows = readRecord(file);
+  expect(rows.find((r) => r.name === 'Sorting check')).toMatchObject({ grade: 'bar', bar: 'at most 4 wrong' });
+  expect(rows.filter((r) => r.failed).map((r) => r.failed.length)).toEqual([2]);
+});
+
+test('the Overview grid has a column for each whole test of one model ▶ Run a test can run, and a line for each check of no model', () => {
+  const { board, health } = overviewTests();
+  expect(board.map((t) => t.id)).toEqual(RUN_TESTS.filter((t) => t.model && !t.pick && !t.own).map((t) => t.id));
+  expect(board.every((t) => !t.part)).toBe(true);
+  expect(health.map((t) => t.id)).toEqual(['unit', 'check']);
+  const { file } = scratch();
+  recordTest({ kind: 'tasks', name: 'a run', model: 'gemma', passed: 1, total: 1 }, quiet(file));
+  expect(recordData(file)).toMatchObject({ board, health });
+  // each column finds its test's line in the record
+  expect(new RegExp(board.find((t) => t.id === 'sorting').re).test('Sorting check')).toBe(true);
+  expect(new RegExp(health.find((t) => t.id === 'unit').re).test('Unit tests, both parts')).toBe(true);
 });

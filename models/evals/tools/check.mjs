@@ -429,7 +429,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const fast = flags.has('--fast');
   const r = await check({ fast, tests: !flags.has('--no-tests'), offline: flags.has('--offline') });
   if (!process.env.CI && !(process.env.AGENTIC_NO_RECORD ?? process.env.BONSAI_NO_RECORD)) {
-    recordTest({ kind: 'other', name: `Repo check${fast ? ' (fast)' : ''}`, code: codeLabel(root), passed: r.done - r.wrong, total: r.done, secs: r.secs, result: r.wrong ? 'fail' : 'pass',
+    recordTest({ kind: 'check', name: `Repo check${fast ? ' (fast)' : ''}`, code: codeLabel(root), passed: r.done - r.wrong, total: r.done, secs: r.secs, result: r.wrong ? 'fail' : 'pass',
       note: [...r.results.filter((x) => x.mark === 'wrong').map((x) => `wrong: ${x.name}`), ...r.results.filter((x) => x.mark === 'look').map((x) => `to look at: ${x.name}`)].join(' · '), raw: '' });
   }
   process.exit(r.wrong ? 1 : 0);

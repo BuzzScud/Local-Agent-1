@@ -162,7 +162,7 @@ else if (docs) { writePage(out, rows, summary, prev); console.log(`results page:
 else console.log(`no results page: the DOCS folder is not here (${DOCS_DIR})`);
 
 if (!look) recordTest({
-  kind: 'other', name: 'Sorting check', model: model.id, ctx: CTX, passed: right, total: scored.length, secs, part: !full,
+  kind: 'other', name: 'Sorting check', model: model.id, ctx: CTX, passed: right, total: scored.length, secs, part: !full, bar: `at most ${MAX_WRONG} wrong`,
   result: !full ? 'stopped' : pass ? 'pass' : 'fail',
   note: `${right} of ${scored.length} sorted right (${wrong} wrong; pass at most ${MAX_WRONG}); ${summary.medianMs != null ? (summary.medianMs / 1000).toFixed(2) : '?'} s a sort; ${summary.odds} of ${rows.length} in one pass.${prev ? ` Before: ${prev.s.right} of ${prev.s.total}.` : ''}${broke ? ` Stopped: ${broke}.` : ''}`,
   raw: relative(root, out), page: summary.page,

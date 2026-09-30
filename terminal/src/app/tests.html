@@ -45,22 +45,43 @@ h1{font-size:26px;line-height:1.15;letter-spacing:-.02em;margin:0 0 4px}h2{font-
 .tabs button span{color:var(--faint);font-weight:400;margin-left:5px}
 .stage{flex:1;min-height:0;display:flex;flex-direction:column;margin-top:14px}
 .pane{flex:1;min-height:0;display:flex;flex-direction:column}.pane[hidden]{display:none}
-/* Overview: the latest run of each kind, then the 28-task check over time, which takes the rest of the height. */
-#overview{gap:18px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;flex:none}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0;cursor:pointer;font:inherit;color:inherit;text-align:left;display:flex;flex-direction:column;justify-content:flex-start}
-.card:hover{border-color:var(--faint)}.card:focus-visible{outline:2px solid var(--c-before);outline-offset:1px}
-.card .k{color:var(--mute);font-size:13px}.card .v{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:2px 0;font-variant-numeric:tabular-nums}
-.card .n{font-size:13.5px}.card .m{color:var(--mute);font-size:12.5px;margin-top:4px;overflow-wrap:anywhere}
-.ok{color:var(--up)}.bad{color:var(--down)}.stop{color:var(--warn)}
+/* Overview: the checks of no one model on one line, then each model's latest run of each test (a grid), then two charts: the unit tests run by run, and the cell picked in the grid over time. */
+#overview{gap:14px}
+.ok{color:var(--up)}.bad{color:var(--down)}.stop{color:var(--warn)}.meas{color:var(--mute)}
+.health{flex:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px}
+.hl{font:inherit;color:inherit;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 14px;min-width:0;cursor:pointer;display:flex;align-items:baseline;gap:10px}
+.hl:hover{border-color:var(--faint)}.hl:focus-visible{outline:2px solid var(--c-before);outline-offset:1px}
+.hl b{font-size:13px;color:var(--mute);font-weight:600;white-space:nowrap}.hl .v{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hl .m{color:var(--mute);font-size:12.5px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.board{flex:none;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.board table{table-layout:fixed}
+.board th,.board td{height:auto;padding:7px 12px;vertical-align:top}
+.board thead th{height:34px;vertical-align:middle}
+.board tbody th{font-size:14px;font-weight:600;background:none;color:var(--ink);vertical-align:middle}
+.board td{cursor:pointer;border-left:1px solid var(--line)}.board td:hover{background:var(--soft)}
+.board td[aria-selected="true"]{background:var(--soft);box-shadow:inset 0 -2px 0 var(--c-before)}
+.board td.none{cursor:default;color:var(--faint)}.board td.none:hover{background:none}
+.board .v{font-weight:700;font-variant-numeric:tabular-nums;font-size:15px}.board .m{color:var(--mute);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.board .go{font:inherit;font-size:12px;font-weight:600;color:var(--c-before);background:none;border:1px solid var(--line);border-radius:7px;padding:1px 8px;margin-left:6px;cursor:pointer}
+.board .go:hover{border-color:var(--c-before)}
+.up1{color:var(--up)}.dn1{color:var(--down)}
+.board .nomodel{padding:12px 14px;color:var(--mute);font-size:14px}
 #trend{flex:1;min-height:0;display:flex;flex-direction:column}#trend:empty{display:none}
-.charts{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;margin-top:10px}
-figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 10px;min-width:0;min-height:0;max-height:100%;align-self:start;display:flex;flex-direction:column}figcaption{color:var(--mute);font-size:13px;margin-top:6px}
+.charts{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px}
+figure h3 a,figure h3 button{font:inherit;font-size:12.5px;font-weight:500;color:var(--c-before);background:none;border:0;padding:0;margin-left:8px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.chart-empty{flex:1;display:grid;place-items:center;color:var(--mute);font-size:13.5px;text-align:center;min-height:130px;padding:0 20px}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 16px 10px;min-width:0;min-height:0;max-height:100%;display:flex;flex-direction:column}figcaption{color:var(--mute);font-size:12.5px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* The chart keeps its own shape and shrinks when the window is short. */
-.plot{position:relative;aspect-ratio:560/262;flex:0 1 auto;min-height:130px;max-width:620px;width:100%;margin:0 auto}.plot svg{position:absolute;inset:0;width:100%;height:100%}
+.plot{position:relative;flex:1 1 auto;min-height:130px;width:100%}.plot svg{position:absolute;inset:0}
 svg{display:block;overflow:visible}svg text{fill:var(--mute);font-size:11px;font-family:inherit}svg .grid{stroke:var(--line);stroke-width:1}svg .axis{stroke:var(--faint);stroke-width:1}svg .lbl{fill:var(--ink);font-weight:600}
 /* A kind's tab: one line of runs per row on the left, the picked run in full on the right, the pages under the rows. */
-.khead{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;flex:none;min-width:0}.khead .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.khead{display:flex;align-items:center;gap:12px;margin:0 0 10px;flex:none;min-width:0}.khead h2{white-space:nowrap;flex:none}.khead .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+/* Search and filters: which runs of the tab are listed. */
+.finds{display:flex;align-items:center;gap:6px;flex:none}
+.finds input{font:inherit;font-size:13px;width:220px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.finds input:focus{outline:2px solid var(--c-before);outline-offset:0;border-color:transparent}
+.finds button{font:inherit;font-size:12.5px;padding:3px 10px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap}
+.finds button:hover{color:var(--ink);border-color:var(--faint)}.finds button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
 .split{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px}
 .box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
 .rows{flex:1;min-height:0;overflow:hidden}
@@ -80,10 +101,15 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 .detail .v{font-size:1.4em;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}.detail .m{color:var(--mute);font-size:.867em;margin:2px 0 12px}
 .detail .note{font-size:.933em;margin:0 0 12px}.detail .note.cut{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:2px}.detail .more{color:var(--faint);font-size:.8em;margin:0 0 12px}
 .detail dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px;font-size:.9em}.detail dt{color:var(--mute)}.detail dd{margin:0;min-width:0}.detail code{font-size:.89em}
+.detail .bar{color:var(--mute);font-size:.867em;margin:-8px 0 10px}
+.detail .vs{font-size:.9em;margin:0 0 12px;padding:8px 10px;border-radius:10px;background:var(--soft)}
+.detail .fails{margin:0 0 12px;padding:0;list-style:none;font-size:.867em}.detail .fails li{margin:0 0 4px;overflow-wrap:anywhere}
+.detail .fails em{font-style:normal;font-size:.9em;font-weight:600;border-radius:6px;padding:0 6px;margin-left:6px;white-space:nowrap}
+.fl-flaky{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}.fl-again{color:var(--down);background:color-mix(in srgb,var(--down) 12%,transparent)}.fl-next{color:var(--up);background:color-mix(in srgb,var(--up) 12%,transparent)}.fl-new{color:var(--mute);background:var(--soft)}
 .about{max-width:860px;color:var(--mute);font-size:14px}.about li{margin:4px 0}.about h3{color:var(--ink);font-size:16px;margin:0 0 6px}
 .empty{background:var(--card);border:1px dashed var(--line);border-radius:14px;padding:22px;color:var(--mute);max-width:780px}
-@media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none;min-height:637px}.detail{overflow:visible}}
-@media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-when{width:92px!important}.col-time,.col-pg,td.tm,td.pg,th.tm,th.pg{display:none}}
+@media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none;min-height:637px}.detail{overflow:visible}.charts{flex:none}.plot{flex:none;aspect-ratio:560/262}.khead{flex-wrap:wrap}}
+@media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-when{width:92px!important}.col-time,.col-pg,td.tm,td.pg,th.tm,th.pg{display:none}.finds{flex-wrap:wrap}.finds input{width:100%}.board{overflow-x:auto}.board table{min-width:960px}}
 /* ▶ Run a test (the hub only): the test picked, a Run button, the stages it goes through and what it prints, live. Design 3 of 29 Sep 2026. */
 .tabs button.runtab{color:var(--ink)}.tabs button.runtab i{font-style:normal;color:var(--c-before);font-size:11px;margin-right:5px}
 #runpane{gap:12px}
@@ -161,13 +187,13 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 <div class="tabs" id="tabs" role="tablist" aria-label="Which tests to show"></div>
 <div class="stage">
 <section class="pane" id="runpane" role="tabpanel" aria-label="Run a test" hidden></section>
-<section class="pane" id="overview" role="tabpanel"><div class="cards" id="cards"></div><section id="trend"></section></section>
+<section class="pane" id="overview" role="tabpanel"><div class="health" id="health"></div><div id="board"></div><section id="trend"></section></section>
 <section class="pane" id="kindpane" role="tabpanel" hidden>
-<div class="khead"><h2 id="kname"></h2><p class="sub" id="ksub"></p></div>
+<div class="khead"><h2 id="kname"></h2><p class="sub" id="ksub"></p><div class="finds" role="search"><input type="search" id="find" placeholder="Search these runs   /" aria-label="Search the runs of this tab (its name, note, code, model, failed tests)" autocomplete="off"><span id="only"></span></div></div>
 <div class="split">
 <div class="box"><div class="rows" id="rowsbox"><table><colgroup><col class="col-when" style="width:150px"><col><col class="col-res" style="width:160px"><col class="col-time" style="width:96px"><col class="col-pg" style="width:70px"></colgroup>
 <thead><tr><th>When</th><th>Test</th><th>Result</th><th class="tm">Time</th><th class="pg" title="Has a results page">Page</th></tr></thead><tbody id="tbody"></tbody></table></div>
-<div class="pager"><button type="button" id="newer">‹ Newer</button><button type="button" id="older">Older ›</button><span class="at" id="at"></span><span class="keys">↑ ↓ pick a run · page up / down · ← → tabs</span></div></div>
+<div class="pager"><button type="button" id="newer">‹ Newer</button><button type="button" id="older">Older ›</button><span class="at" id="at"></span><span class="keys">↑ ↓ pick a run · page up / down · ← → tabs · / search</span></div></div>
 <div class="box detail" id="detail" aria-live="polite"></div>
 </div>
 </section>
@@ -191,9 +217,60 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   const clock = (iso) => { const d = new Date(iso); const h = d.getHours(); return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
   const secs = (s) => (s == null ? '—' : `${s.toLocaleString()} s`);
   const mins = (s) => (s == null || s < 90 ? '' : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`);
-  const mark = (r) => (r.result === 'pass' ? ['ok', '✓'] : r.result === 'stopped' ? ['stop', '■'] : ['bad', '✗']);
-  const words = (r) => (r.total != null ? `${r.passed} of ${r.total}${r.result === 'stopped' ? ' · stopped' : ''}` : r.result === 'pass' ? 'passed' : r.result === 'stopped' ? 'stopped' : 'failed');
-  const result = (r) => { const [c, m] = mark(r); return `<span class="${c}">${m} ${esc(words(r))}</span>`; };
+  // A measurement (a number with no pass or fail: 16 of 50 found, a speed) is grey and has no mark; a
+  // check is ✓ or ✗, against its bar where the bar is not "every one" (the record says which: `grade`).
+  const measured = (r) => r.grade === 'measure' && r.result !== 'stopped';
+  const mark = (r) => (r.result === 'stopped' ? ['stop', '■'] : measured(r) ? ['meas', ''] : r.result === 'pass' ? ['ok', '✓'] : ['bad', '✗']);
+  const words = (r) => (r.total != null ? `${r.passed} of ${r.total}${r.result === 'stopped' ? ' · stopped' : ''}` : r.result === 'stopped' ? 'stopped' : measured(r) ? 'measured' : r.result === 'pass' ? 'passed' : 'failed');
+  const result = (r) => { const [c, m] = mark(r); return `<span class="${c}"${measured(r) ? ' title="Measured: a number, not a pass or fail"' : r.bar ? ` title="Its bar: ${esc(r.bar)}"` : ''}>${m ? `${m} ` : ''}${esc(words(r))}</span>`; };
+  const barWords = (r) => (measured(r) ? `Measured: a number, not a pass or fail${r.total != null ? ' · higher is better' : ''}` : r.bar ? `Its bar: ${r.bar}` : '');
+
+  // The run before this one of the same test: its name, model, thinking (effort) and whether it was the
+  // whole set; a stopped run is left out. A part of a set (one task of 28) has none: each is another task.
+  const effortOf = (r) => (r.effort === 'high' || r.effort === 'medium' ? 'high' : 'low');
+  const sameTest = (a, b) => a.kind === b.kind && a.name === b.name && (a.model ?? null) === (b.model ?? null) && effortOf(a) === effortOf(b) && Boolean(a.part) === Boolean(b.part);
+  function before(r) {
+    if (r.part) return null;
+    const i = all.indexOf(r);
+    for (let k = i + 1; k < all.length; k++) if (all[k].result !== 'stopped' && sameTest(all[k], r)) return all[k];
+    return null;
+  }
+  // What changed since that run: one short phrase ("+1", "2 fewer", "same") and the whole sentence.
+  function change(r) {
+    const b = before(r);
+    if (!b || r.result === 'stopped') return null;
+    let short = '', dir = 0;
+    if (r.total != null && b.total != null) {
+      const miss = (x) => x.total - x.passed; // wrong ones: comparable even when the set grew (the unit tests)
+      const d = r.total === b.total ? r.passed - b.passed : miss(b) - miss(r);
+      dir = Math.sign(d);
+      short = d === 0 ? 'same' : r.total === b.total ? `${d > 0 ? '+' : '−'}${Math.abs(d)}` : `${Math.abs(d)} ${d > 0 ? 'fewer' : 'more'} failed`;
+    }
+    const ds = r.secs != null && b.secs != null ? r.secs - b.secs : null;
+    const time = ds == null || Math.abs(ds) < Math.max(3, b.secs * 0.05) ? '' : `${Math.abs(ds).toLocaleString()} s ${ds < 0 ? 'faster' : 'slower'}`;
+    const was = b.total != null ? `${b.passed} of ${b.total}` : words(b);
+    return { b, short, dir, text: `${short === 'same' ? 'The same result' : short || 'Ran'} vs the run before (${day(b.at)} ${clock(b.at)}: ${was})${time ? `, ${time}` : ''}.` };
+  }
+  // The change as a small arrow and number (↑ 1: one more right, or one fewer failed); all of it on hover.
+  const changeTag = (c) => (c && c.dir ? `<span class="q ${c.dir > 0 ? 'up1' : 'dn1'}" title="${esc(c.text)}">${c.dir > 0 ? '↑' : '↓'}${esc(c.short.match(/\d+/)[0])}</span>` : '');
+
+  // The unit tests that failed in a run (lines written since the record kept their names), each with
+  // what the next run said: flaky (it passed the next run, the code the same), passed the next run
+  // (the code had changed), failed again, or nothing yet (the newest run).
+  function failMarks(r) {
+    if (r.kind !== 'suite' || !r.failed?.length) return [];
+    const i = all.indexOf(r);
+    let next = null;
+    for (let k = i - 1; k >= 0; k--) if (all[k].kind === 'suite' && all[k].result !== 'stopped') { next = all[k]; break; }
+    return r.failed.map((name) => {
+      const times = all.filter((x) => x.kind === 'suite' && x.failed?.includes(name)).length;
+      if (!next) return { name, times, cls: 'fl-new', tag: 'newest run' };
+      if (next.failed?.includes(name)) return { name, times, cls: 'fl-again', tag: 'failed again next run' };
+      if (next.result === 'pass' || next.failed) return next.code === r.code ? { name, times, cls: 'fl-flaky', tag: 'flaky' } : { name, times, cls: 'fl-next', tag: 'passed next run' };
+      return { name, times, cls: 'fl-new', tag: '' };
+    });
+  }
+  const short = (name) => String(name).replace(/\.test\.(mjs|js|jsx) › /, ' › ');
   // In the hub a results page opens in the hub; in the saved copy it is a file beside this one.
   const href = (page) => (live ? `/?tab=docs&page=${encodeURIComponent(page)}` : `../${page.split('/').map(encodeURIComponent).join('/')}`);
   const RETIRED = { bonsai: 'Bonsai 27B' }; // a model whose file is no longer on this Mac: its runs are kept, it has no row in the panel
@@ -241,48 +318,152 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     $('lede').textContent = `${who()} on this Mac, newest first: ${rows.length} run${rows.length === 1 ? '' : 's'} since ${day(rows[rows.length - 1].at)}. A run adds its own line when it finishes.`;
   }
 
-  // Overview: one card per kind, its latest run; a card opens its kind's tab.
-  function cards() {
-    $('cards').innerHTML = order.map((k) => {
-      const mine = rows.filter((x) => x.kind === k);
-      const r = mine.find((x) => !x.part && x.result !== 'stopped') ?? mine[0]; const [c] = mark(r);
-      return `<button type="button" class="card" data-kind="${k}"><div class="k">${esc(KINDS[k][0])} · latest${k === 'bug' ? '' : r.part ? ' run, part of the set' : ' full run'}</div><div class="v ${c}">${esc(mark(r)[1])} ${esc(words(r))}</div><div class="n">${esc(r.name)}</div><div class="m">${day(r.at)} · ${clock(r.at)}${r.secs != null ? ` · ${secs(r.secs)}` : ''}${r.code ? ` · code ${esc(r.code)}` : ''}${pick === 'all' && r.model ? ` · ${esc(modelName(r.model))}` : ''}</div></button>`;
+  // ---------- Overview ----------
+  // The line of a test in the record: its kind, its name, and whether it is a whole run.
+  const BOARD = data.board ?? [], HEALTH = data.health ?? [];
+  const isOf = (t, r) => r.kind === t.kind && new RegExp(t.re).test(r.name) && Boolean(r.part) === Boolean(t.part);
+  const latestOf = (t, model) => { const mine = all.filter((r) => isOf(t, r) && (model === undefined || (r.model ?? null) === model)); return mine.find((r) => r.result !== 'stopped') ?? mine[0] ?? null; };
+
+  // The checks of no one model (the unit tests, the repo check): the latest run of each, on one line.
+  function health() {
+    $('health').innerHTML = pick !== 'all' && pick !== 'none' ? '' : HEALTH.map((t) => {
+      const r = latestOf(t, null);
+      if (!r) return `<button type="button" class="hl" data-kind="${esc(t.kind)}"><b>${esc(t.name)}</b><span class="m">never run</span></button>`;
+      const [c, m] = mark(r), f = failMarks(r);
+      const why = f.length ? `failed: ${f.map((x) => `${short(x.name)}${x.tag === 'flaky' ? ' (flaky)' : ''}`).join(', ')}`
+        : r.result === 'fail' && r.kind === 'check' ? r.note.split(' · ').filter((x) => x.startsWith('wrong:')).join(' · ')
+        : r.result === 'fail' && r.kind === 'suite' ? 'names not kept for this run' : '';
+      return `<button type="button" class="hl" data-kind="${esc(r.kind)}" title="${esc(`${r.name} · ${day(r.at)} ${clock(r.at)}${why ? ` · ${why}` : ''}`)}"><b>${esc(t.name)}</b><span class="v ${c}">${m} ${esc(words(r))}</span><span class="m">${day(r.at)} ${clock(r.at)}${why ? ` · ${esc(why)}` : ''}</span></button>`;
     }).join('');
   }
-  $('cards').onclick = (e) => { const c = e.target.closest('.card'); if (c) go(c.dataset.kind); };
+  $('health').onclick = (e) => { const b = e.target.closest('.hl'); if (b) go(b.dataset.kind); };
 
-  // The full 28-task runs at effort Off, oldest first: tasks passed, and seconds in all.
-  function line({ title, pts, get, fmt, floor, top, cap }) {
-    const W = 560, H = 262, L = 52, R = 22, T = 22, B = 46;
+  // The grid: each model on this Mac down the side (the one picked, or all), each test ▶ Run a test can
+  // run across the top; a cell is that model's latest whole run of that test and its change since the
+  // run before. A cell picked shows its runs over time in the chart under it.
+  let cell = null; // 'model|test'
+  try { cell = localStorage.getItem('agentic-tests-cell'); } catch { /* no storage */ }
+  const gridModels = () => (pick === 'all' ? models : models.filter((m) => m.id === pick));
+  const runsOf = (t, m) => all.filter((r) => isOf(t, r) && r.model === m && r.result !== 'stopped');
+  function board() {
+    const ms = gridModels();
+    if (!ms.length) { $('board').innerHTML = pick === 'none' ? '' : '<div class="board"><p class="nomodel">No model file is on this Mac: the grid lists each model you have.</p></div>'; return; }
+    const cells = ms.flatMap((m) => BOARD.map((t) => `${m.id}|${t.id}`));
+    if (!cell || !cells.includes(cell)) cell = cells.find((c) => { const [m, id] = c.split('|'); return runsOf(BOARD.find((t) => t.id === id), m).length > 1; }) ?? cells.find((c) => { const [m, id] = c.split('|'); return runsOf(BOARD.find((t) => t.id === id), m).length; }) ?? cells[0];
+    const td = (m, t) => {
+      const r = latestOf(t, m.id), key = `${m.id}|${t.id}`;
+      const run = live ? `<button type="button" class="go" data-run="${esc(t.id)}" data-model="${esc(m.id)}" title="Run ${esc(t.name)} on ${esc(m.name)} (▶ Run a test)">▶</button>` : '';
+      if (!r) {
+        const bits = t.id === 'practice28' ? all.filter((x) => x.kind === t.kind && x.part && x.model === m.id).length : 0;
+        return `<td class="none" data-cell="${key}"><div class="v">never run${run}</div><div class="m">${bits ? `${bits} one-task run${bits === 1 ? '' : 's'}` : '&nbsp;'}</div></td>`;
+      }
+      const [c, mk] = mark(r), ch = change(r);
+      return `<td data-cell="${key}" aria-selected="${key === cell}" title="${esc(`${t.name} on ${m.name}: ${words(r)}${r.bar ? ` (its bar: ${r.bar})` : measured(r) ? ' (measured)' : ''} · ${day(r.at)} ${clock(r.at)}${effortOf(r) === 'high' ? ' · thinking on' : ''}${ch ? ` · ${ch.text}` : ''}`)}"><div class="v ${c}">${mk ? `${mk} ` : ''}${esc(words(r))}${changeTag(ch)}${run}</div><div class="m">${day(r.at)}${r.bar ? ` · ${esc(r.bar.replace(/^at most (\d+)/, '≤ $1'))}` : measured(r) ? ' · measured' : ''}${effortOf(r) === 'high' ? ' · thinking on' : ''}</div></td>`;
+    };
+    $('board').innerHTML = `<div class="board"><table><colgroup><col style="width:168px">${BOARD.map(() => '<col>').join('')}</colgroup><thead><tr><th>Model</th>${BOARD.map((t) => `<th title="${esc(t.name)}">${esc(t.name)}</th>`).join('')}</tr></thead><tbody>${ms.map((m) => `<tr><th>${esc(m.name)}</th>${BOARD.map((t) => td(m, t)).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  $('board').onclick = (e) => {
+    const g = e.target.closest('.go');
+    if (g) { pick = g.dataset.model; try { localStorage.setItem('agentic-tests-model', pick); } catch { /* no storage */ } RT?.pickTest(g.dataset.run); go('run'); return; }
+    const td = e.target.closest('td[data-cell]');
+    if (td && !td.classList.contains('none')) { cell = td.dataset.cell; try { localStorage.setItem('agentic-tests-cell', cell); } catch { /* no storage */ } board(); trend(); }
+  };
+
+  // A line chart of one test's runs, oldest first, drawn at its box's own size (W × H px).
+  function line({ title, pts, get, fmt, floor, top }, W, H) {
+    const L = 52, R = 22, T = 22, B = 40;
     const vals = pts.map(get), lo = floor ?? Math.min(...vals), hi = Math.max(...vals);
-    const raw = (hi - lo || 1) / 4, pow = 10 ** Math.floor(Math.log10(raw)), f = raw / pow, step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * pow;
+    const raw = (hi - lo || 1) / 4, pow = 10 ** Math.floor(Math.log10(raw)), f = raw / pow, step = Math.max(1, (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * pow);
     const y0 = Math.floor(lo / step) * step, y1 = Math.max(top ?? 0, Math.ceil(hi / step) * step + (top ? 0 : step * 0.5));
     const X = (i) => L + (pts.length === 1 ? 0.5 : i / (pts.length - 1)) * (W - L - R);
-    const Y = (v) => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
-    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`;
+    const Y = (v) => T + (1 - (v - y0) / (y1 - y0 || 1)) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(title)}">`;
     for (let v = y0; v <= y1 + 1e-9; v += step) { s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 8}" y="${Y(v) + 3.5}" text-anchor="end">${Math.round(v).toLocaleString()}</text>`; }
     s += `<line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>`;
-    const every = Math.ceil(pts.length / 7);
+    const every = Math.ceil(pts.length / Math.max(2, Math.floor((W - L - R) / 90)));
     pts.forEach((p, i) => { if (i % every === 0 || i === pts.length - 1) { const a = i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle'; s += `<text x="${X(i)}" y="${H - B + 15}" text-anchor="${a}">${day(p.at)}</text><text x="${X(i)}" y="${H - B + 28}" text-anchor="${a}" style="font-size:10px">${clock(p.at)}</text>`; } });
     s += `<polyline fill="none" stroke="var(--c-before)" stroke-width="2" stroke-linejoin="round" points="${pts.map((p, i) => `${X(i)},${Y(get(p))}`).join(' ')}"/>`;
     pts.forEach((p, i) => {
       s += `<g><circle cx="${X(i)}" cy="${Y(get(p))}" r="4.5" fill="var(--c-before)" stroke="var(--card)" stroke-width="2"/><circle cx="${X(i)}" cy="${Y(get(p))}" r="13" fill="transparent"><title>${esc(p.name)} · ${day(p.at)} ${clock(p.at)} · ${esc(fmt(get(p)))}${p.code ? ` · code ${esc(p.code)}` : ''}</title></circle></g>`;
       if (i === 0 || i === pts.length - 1) s += `<text class="lbl" x="${X(i)}" y="${Y(get(p)) - 10}" text-anchor="${i === 0 ? 'start' : 'end'}">${esc(fmt(get(p)))}</text>`;
     });
-    return `<figure><h3>${esc(title)}</h3><div class="plot">${s}</svg></div><figcaption>${cap}</figcaption></figure>`;
+    return `${s}</svg>`;
   }
+  // The unit tests run by run, oldest on the left: how many tests failed (none is a green dot).
+  function bars(pts, W, H) {
+    const L = 40, R = 14, T = 16, B = 30;
+    const miss = (p) => p.total - p.passed, hi = Math.max(4, ...pts.map(miss));
+    const step = hi <= 5 ? 1 : hi <= 10 ? 2 : 5, top = Math.ceil(hi / step) * step;
+    const w = (W - L - R) / pts.length, X = (i) => L + i * w, Y = (v) => T + (1 - v / top) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Unit tests that failed, run by run">`;
+    for (let v = 0; v <= top; v += step) s += `<line class="grid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 8}" y="${Y(v) + 3.5}" text-anchor="end">${v}</text>`;
+    s += `<line class="axis" x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}"/>`;
+    const every = Math.ceil(pts.length / Math.max(2, Math.floor((W - L - R) / 80)));
+    let said = ''; // the day is written once, then the time of day
+    pts.forEach((p, i) => {
+      const f = miss(p), cx = X(i) + w / 2, bw = Math.max(1.5, Math.min(12, w * 0.7));
+      const tip = `<title>${day(p.at)} ${clock(p.at)} · ${f ? `${f} failed of ${p.total}${p.failed?.length ? `: ${p.failed.map(short).join(', ')}` : ''}` : `all ${p.total} passed`} · code ${p.code}</title>`;
+      s += f ? `<g><rect x="${cx - bw / 2}" y="${Y(f)}" width="${bw}" height="${Y(0) - Y(f)}" rx="1.5" fill="var(--down)"/><rect x="${X(i)}" y="${T}" width="${w}" height="${H - T - B}" fill="transparent">${tip}</rect></g>`
+        : `<g><circle cx="${cx}" cy="${Y(0) - 4}" r="${Math.min(3, w / 3)}" fill="var(--up)"/><rect x="${X(i)}" y="${T}" width="${w}" height="${H - T - B}" fill="transparent">${tip}</rect></g>`;
+      if (i % every === 0 || i === pts.length - 1) { const d = day(p.at); s += `<text x="${cx}" y="${H - B + 15}" text-anchor="${i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle'}">${d === said ? clock(p.at) : d}</text>`; said = d; }
+    });
+    return `${s}</svg>`;
+  }
+  // The charts: each figure is placed first, then drawn at the size its box came out (and again when it changes).
+  let plots = [];
   function trend() {
-    const pts = rows.filter((r) => r.kind === 'tasks' && r.total === 28 && !r.part && r.result !== 'stopped' && (!r.effort || /^(off|low)$/i.test(r.effort))).reverse();
-    if (pts.length < 2) { $('trend').innerHTML = ''; return; }
-    $('trend').innerHTML = `<h2>The 28-task check over time</h2><p class="sub">Each full run of the 28 practice tasks at the default effort, oldest on the left. Point at a dot for the run behind it; every run is in the Practice tasks tab.</p><div class="charts">${
-      line({ title: 'Tasks passed, of 28', pts, get: (p) => p.passed, fmt: (v) => `${v} of 28`, floor: Math.min(20, ...pts.map((p) => p.passed)), top: 28, cap: 'Higher is better; 28 is every task.' })}${
-      line({ title: 'Seconds for all 28', pts, get: (p) => p.secs, fmt: (v) => `${v.toLocaleString()} s`, cap: 'Lower is better. One run each, so a few percent either way is run-to-run noise.' })}</div>`;
+    const figs = [];
+    plots = [];
+    const fig = (title, open, draw, cap, empty) => { if (draw) plots.push(draw); figs.push(`<figure><h3>${esc(title)}${open}</h3>${draw ? `<div class="plot" data-p="${plots.length - 1}"></div>` : `<div class="chart-empty">${empty}</div>`}<figcaption title="${esc(cap)}">${esc(cap)}</figcaption></figure>`); };
+    const suite = all.filter((r) => r.kind === 'suite' && r.total != null && r.result !== 'stopped').slice(0, 60).reverse();
+    if (suite.length && (pick === 'all' || pick === 'none')) {
+      const red = suite.filter((p) => p.passed < p.total).length;
+      fig('Unit tests: how many failed, run by run', '<button type="button" data-kind="suite">all runs ›</button>', (W, H) => bars(suite, W, H),
+        `The last ${suite.length} runs, oldest on the left; ${red} had a test fail. Lower is better; a green dot is none. Point at one for its names.`);
+    }
+    const [mid, tid] = (cell ?? '').split('|'), t = BOARD.find((x) => x.id === tid), m = models.find((x) => x.id === mid);
+    if (t && m && gridModels().some((x) => x.id === mid)) {
+      const pts = runsOf(t, m.id).reverse(), counted = pts.every((p) => p.total != null);
+      const title = `${t.name} on ${m.name}, over time`, open = `<button type="button" data-kind="${esc(t.kind)}">all runs ›</button>`;
+      if (pts.length < 2) fig(title, pts.length ? open : '', null, 'Pick a cell in the grid to see its runs here.', pts.length ? `One run so far (${esc(words(pts[0]))}, ${day(pts[0].at)}). Run it again to see a line.` : `No run yet.${live ? ' ▶ in its cell runs it.' : ''}`);
+      else fig(title, open, (W, H) => line({ title, pts, get: counted ? (p) => p.passed : (p) => p.secs, fmt: counted ? (v) => `${v} of ${pts.at(-1).total}` : (v) => `${v.toLocaleString()} s`, floor: counted ? Math.max(0, Math.min(...pts.map((p) => p.passed)) - 2) : undefined, top: counted ? Math.max(...pts.map((p) => p.total)) : undefined }, W, H),
+        counted ? `Right answers, higher is better; ${pts.length} whole runs, oldest on the left. Pick another cell to change it.` : `Seconds, lower is better; ${pts.length} runs, oldest on the left.`);
+    }
+    $('trend').innerHTML = figs.length ? `<div class="charts">${figs.join('')}</div>` : '';
+    drawPlots();
   }
+  function drawPlots() {
+    for (const el of $('trend').querySelectorAll('.plot')) {
+      const { width, height } = el.getBoundingClientRect(), W = Math.round(width), H = Math.round(height);
+      if (W < 50 || H < 50 || el.dataset.size === `${W}x${H}`) continue;
+      el.dataset.size = `${W}x${H}`; el.innerHTML = plots[+el.dataset.p](W, H);
+    }
+  }
+  new ResizeObserver(() => { if (!$('overview').hidden) drawPlots(); }).observe($('trend'));
+  $('trend').onclick = (e) => { const b = e.target.closest('button[data-kind]'); if (b) go(b.dataset.kind); };
 
   // A kind's tab. As many runs as fit the box make a page (one line each, so every page holds the same number); the picked run is shown in full beside them.
   let page = 0, sel = 0, per = 12; // the page shown, the run picked (its place in the kind's list), runs per page
   const fits = () => matchMedia('(min-width:900px) and (min-height:560px)').matches;
-  const mine = () => rows.filter((r) => r.kind === kind);
+  // Search and filters (each tab keeps its own until the page closes): the words match a run's name, note,
+  // code, model and the tests that failed in it; Failed and Has a page narrow the list.
+  const finds = {}, onlys = {};
+  const ONLY = [['all', 'All'], ['failed', 'Failed'], ['page', 'Has a page']];
+  const hay = (r) => `${r.name} ${r.note} ${r.code} ${modelName(r.model)} ${(r.failed ?? []).join(' ')}`.toLowerCase();
+  const keep = (r) => {
+    const o = onlys[kind] ?? 'all', words = (finds[kind] ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    return (o === 'all' || (o === 'failed' ? r.result === 'fail' && !measured(r) : Boolean(r.page))) && words.every((w) => hay(r).includes(w));
+  };
+  const everyOf = () => rows.filter((r) => r.kind === kind);
+  const mine = () => everyOf().filter(keep);
+  function filters() {
+    const o = onlys[kind] ?? 'all';
+    $('only').innerHTML = ONLY.map(([k, w]) => `<button type="button" data-only="${k}" aria-pressed="${k === o}">${w}</button>`).join('');
+    if ($('find').value !== (finds[kind] ?? '')) $('find').value = finds[kind] ?? '';
+  }
+  $('only').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; onlys[kind] = b.dataset.only; sel = 0; table(); };
+  $('find').oninput = () => { finds[kind] = $('find').value; sel = 0; table(); };
+  $('find').onkeydown = (e) => { if (e.key === 'Escape') { $('find').value = ''; finds[kind] = ''; sel = 0; table(); $('find').blur(); } else if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); $('find').blur(); } };
   function fit() {
     if (!fits()) { per = 15; return; }
     const box = $('rowsbox'), th = box.querySelector('thead').getBoundingClientRect().height || 36, tr = $('tbody').rows[0];
@@ -297,7 +478,10 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       r.raw ? ['Raw results', `<code>${esc(r.raw)}</code>`] : null,
       ['Results page', r.page ? `<a href="${href(r.page)}"${live ? ' target="_top"' : ''}>open the page</a>` : '—'],
     ].filter(Boolean);
-    $('detail').innerHTML = `<div class="k">${esc(KINDS[r.kind]?.[0] ?? r.kind)} · run ${sel + 1} of ${mine().length}</div><h3>${esc(r.name)}</h3><div class="v ${c}">${m} ${esc(words(r))}</div><div class="m">${day(r.at)} · ${clock(r.at)} · ${secs(r.secs)}${mins(r.secs) ? ` (${mins(r.secs)})` : ''}</div>${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}<dl>${dl.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+    const ch = change(r), bw = barWords(r), f = failMarks(r);
+    const fails = f.length ? `<ul class="fails">${f.map((x) => `<li>${esc(short(x.name))}${x.tag ? `<em class="${x.cls}">${esc(x.tag)}</em>` : ''}${x.times > 1 ? ` <span class="q">failed in ${x.times} runs</span>` : ''}</li>`).join('')}</ul>`
+      : r.kind === 'suite' && r.result === 'fail' ? '<p class="more">Which tests failed was not kept for this run: a run records their names from 29 Sep on.</p>' : '';
+    $('detail').innerHTML = `<div class="k">${esc(KINDS[r.kind]?.[0] ?? r.kind)} · run ${sel + 1} of ${mine().length}</div><h3>${esc(r.name)}</h3><div class="v ${c}">${m ? `${m} ` : ''}${esc(words(r))}</div><div class="m">${day(r.at)} · ${clock(r.at)} · ${secs(r.secs)}${mins(r.secs) ? ` (${mins(r.secs)})` : ''}</div>${bw ? `<p class="bar">${esc(bw)}</p>` : ''}${ch ? `<p class="vs">${esc(ch.text)}</p>` : ''}${fails}${r.note ? `<p class="note">${esc(r.note)}</p>` : ''}<dl>${dl.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
     fitDetail();
   }
   function fitDetail() {
@@ -312,18 +496,20 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     for (let n = Math.round(note.scrollHeight / lh) - 1; n >= 1 && over(); n--) note.style.webkitLineClamp = n;
   }
   function table() {
-    const list = mine(); fit();
+    const list = mine(); fit(); filters();
     const pages = Math.max(1, Math.ceil(list.length / per));
     sel = Math.min(Math.max(0, sel), list.length - 1); page = Math.floor(sel / per);
     const from = page * per, part = list.slice(from, from + per);
     $('kname').textContent = KINDS[kind][0];
-    $('ksub').textContent = `${KINDS[kind][1][0].toUpperCase() + KINDS[kind][1].slice(1)}. ${list.length} run${list.length === 1 ? '' : 's'}, newest first.`;
+    const every = everyOf().length;
+    $('ksub').textContent = `${KINDS[kind][1][0].toUpperCase() + KINDS[kind][1].slice(1)}. ${list.length === every ? `${every} run${every === 1 ? '' : 's'}` : `${list.length} of ${every} runs match`}, newest first.`;
     $('tbody').innerHTML = part.map((r, i) => `<tr data-i="${from + i}" aria-selected="${from + i === sel}" title="${esc(r.name)}">
 <td>${day(r.at)}<span class="q">${clock(r.at)}</span></td>
 <td class="t">${esc(r.name)}${pick === 'all' && r.model ? `<span class="q">${esc(modelName(r.model))}</span>` : ''}</td>
-<td class="r">${result(r)}</td>
+<td class="r">${result(r)}${changeTag(change(r))}</td>
 <td class="tm">${secs(r.secs)}</td>
 <td class="pg">${r.page ? '↗' : ''}</td></tr>`).join('');
+    if (!list.length) $('tbody').innerHTML = `<tr><td colspan="5" class="pg" style="text-align:left">No run of this tab matches${finds[kind] ? ` “${esc(finds[kind])}”` : ''}${(onlys[kind] ?? 'all') !== 'all' ? ` with ${esc(ONLY.find(([k]) => k === onlys[kind])[1])}` : ''}. Esc clears the search.</td></tr>`;
     $('at').textContent = `Page ${page + 1} of ${pages} · runs ${list.length ? from + 1 : 0}–${from + part.length} of ${list.length}`;
     $('newer').disabled = page === 0; $('older').disabled = page >= pages - 1;
     detail(list[sel]);
@@ -340,15 +526,30 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); go(t[(at + (e.key === 'ArrowRight' ? 1 : t.length - 1)) % t.length]); return; }
     if (/^[1-9]$/.test(e.key) && +e.key <= t.length) { go(t[+e.key - 1]); return; }
     if ($('kindpane').hidden) return;
+    if (e.key === '/') { e.preventDefault(); $('find').focus(); $('find').select(); return; }
     const n = mine().length;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = Math.min(Math.max(0, sel + (e.key === 'ArrowDown' ? 1 : -1)), n - 1); table(); }
     else if (e.key === 'PageDown' || e.key === 'PageUp') { e.preventDefault(); turn(e.key === 'PageDown' ? 1 : -1); }
     else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); sel = e.key === 'Home' ? 0 : n - 1; table(); }
   });
 
-  // The record read again (a run from ▶ Run a test has just added its line).
+  // The record read again: when a run from ▶ Run a test ends, and every 10 s while the page is in view
+  // (a run started anywhere else, `bun run test` in a Terminal, adds its line too). Redrawn only when it
+  // changed; the run picked stays picked.
+  const sig = (rs) => `${rs.length}|${rs[0]?.id ?? ''}|${rs[0]?.at ?? ''}`;
   async function reloadRecord() {
-    try { const d = await (await fetch('/tests.json', { cache: 'no-store' })).json(); data = d; all = d.rows ?? []; KINDS = d.kinds ?? {}; models = d.models ?? []; draw(); } catch { /* the next visit reads it */ }
+    try {
+      const d = await (await fetch('/tests.json', { cache: 'no-store' })).json();
+      if (sig(d.rows ?? []) === sig(all)) return;
+      const was = !$('kindpane').hidden ? mine()[sel]?.id : null;
+      data = d; all = d.rows ?? []; KINDS = d.kinds ?? {}; models = d.models ?? [];
+      draw();
+      if (was && !$('kindpane').hidden) { const i = mine().findIndex((r) => r.id === was); if (i >= 0 && i !== sel) { sel = i; table(); } }
+    } catch { /* the next look reads it */ }
+  }
+  if (live) {
+    setInterval(() => { if (!document.hidden) reloadRecord(); }, 10000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reloadRecord(); });
   }
 
   // ---------- ▶ Run a test (in the hub only): one test on one model ----------
@@ -546,7 +747,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       if (v && v.t.think && !isLive(st.job)) { e.preventDefault(); setThink(!think); }
     });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !box.hidden) poll(); });
-    return { show() { render(); poll(); }, hide() { clearTimeout(timer); timer = null; }, render };
+    return { show() { render(); poll(); }, hide() { clearTimeout(timer); timer = null; }, render, pickTest(id) { testId = id; store('agentic-tests-run-test', id); err = ''; } };
   })();
 
   function draw() {
@@ -560,19 +761,22 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     if (!rows.length) {
       kind = 'all'; if (live) tabs(); else $('tabs').innerHTML = ''; $('trend').innerHTML = '';
       $('overview').hidden = false; $('kindpane').hidden = true; $('foot').hidden = true;
-      $('cards').innerHTML = all.length
+      $('health').innerHTML = '';
+      $('board').innerHTML = all.length
         ? `<div class="empty">No run of ${esc(modelName(pick))} has been recorded yet. ${live && pick !== 'all' ? 'Run one from ▶ Run a test' : `Run the 28-task check on it (<code>bun run eval --model ${esc(pick)}</code>)`} and its line will appear here.</div>`
         : '<div class="empty">No test has been recorded yet. The 28-task check (<code>bun run eval</code>), the real requests (<code>bun run eval:words</code>) and the unit tests (<code>bun run test</code>) each add a line here when they finish.</div>';
       return;
     }
     tabs();
     $('overview').hidden = kind !== 'all'; $('kindpane').hidden = kind === 'all' || kind === 'about'; $('foot').hidden = kind !== 'about';
-    if (kind === 'all') { cards(); trend(); } else if (kind !== 'about') table();
+    if (kind === 'all') { health(); board(); trend(); } else if (kind !== 'about') table();
   }
   $('foot').innerHTML = `<h3>How this record is kept</h3><ul>
 <li>The record is one file on this Mac, <code>${esc(data.file ?? '')}</code>, one line per run. The 28-task check, the real requests, a real-bug run and the unit tests each add their line when they finish; any other check adds one with <code>recordTest()</code> from <code>models/evals/record.mjs</code>.</li>
 <li>The side panel picks a model. A run is filed under the model it used (the <code>model</code> on its line). A line written before that was added is filed by the model its results folder or its words name; the unit tests and the checks are of no one model, so they sit under Not model-specific.</li>
-<li>Each kind of test has its own tab. It shows as many runs as fit the window and pages through the rest, newest first; pick a run to see all of it (its notes, the code it ran on, its settings, its raw results and its results page).</li>
+<li>The Overview shows the unit tests and the repo check on one line, then a grid: each model down the side, each test ▶ Run a test can run across the top, and in each cell that model's latest whole run and its change since the run before. Pick a cell to see its runs over time under the grid.</li>
+<li>Each kind of test has its own tab. It shows as many runs as fit the window and pages through the rest, newest first; the search box (the / key) and Failed · Has a page narrow the list. Pick a run to see all of it: its change since the run before, its notes, the code it ran on, its settings, its raw results and its results page.</li>
+<li>A check is ✓ or ✗; where it passes with fewer than all right, its bar shows beside it ("at most 4 wrong"). A measurement (16 of 50 found, a speed) is a grey number with no mark: it counts something, it does not pass or fail. A unit-test run that fails keeps the names of the tests that failed, and each is marked by the run after it: flaky (it passed the next run on the same code), passed the next run (the code had changed), or failed again.</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li>
 <li>${live ? '▶ Run a test runs one test on the model picked, with thinking off (Low, the way a battle runs) or on (High): the Thinking switch, or the T key (or, under Not model-specific, the unit tests or the repo check). The Battle arena\'s runner runs it: it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile, and the run keeps going if you close the window. Nothing starts by itself; its line lands here when it ends. <code>/test</code> in Agentic Coder opens it. One practice task runs the one you pick by name, as the Battle tab keeps it (an edit, or a copy of yours like 18b, counts); My tests runs every test you made there, and + New test opens its New test window (a test of yours needs at least one check).' : 'In the hub this page also has ▶ Run a test, to run one test on one model from the page.'}</li></ul>

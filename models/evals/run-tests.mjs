@@ -50,7 +50,7 @@ export const RUN_TESTS = [
     stop: 'SIGTERM', record: { kind: 'suite', name: '^Unit tests', part: false } },
   { id: 'check', name: 'Repo check', what: 'is anything in the repo that should not be: secrets, packages, where the code connects (the fast one: no model files, no unit tests)', model: false, total: null,
     script: 'models/evals/tools/check.mjs', args: () => ['--fast'],
-    stop: 'SIGTERM', record: { kind: 'other', name: '^Repo check', part: false } },
+    stop: 'SIGTERM', record: { kind: 'check', name: '^Repo check', part: false } },
 ];
 
 export const runTestById = (id) => RUN_TESTS.find((t) => t.id === id) ?? null;
