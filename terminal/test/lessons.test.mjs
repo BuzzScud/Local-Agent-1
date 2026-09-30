@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { saveLessons, savePrompt, lessonText, worthSaving, knownAlready, fromTask, saveLine, writtenBefore, seedMemory, saysHow, practiceWork, MAX_FACTS } from '../src/agent/lessons.mjs';
+import { saveLessons, savePrompt, lessonText, worthSaving, knownAlready, fromTask, saveLine, writtenBefore, seedMemory, saysHow, practiceWork, isTestPrompt, SAVE_SEEN, MAX_FACTS } from '../src/agent/lessons.mjs';
 import { memoryDirs, applyChanges, readFacts, readState, undoLast } from '../src/agent/facts.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { startFakeServer } from './fake-server.mjs';
@@ -189,4 +189,32 @@ test('a turn that taught nothing new starts no save: it went well on what the me
 test('an instruction about this one task is not the user saying how they like things done', () => {
   for (const t of ["Which port does this project's server listen on, and where is that set? Don't change any files.", 'explain the export, no code changes', 'fix the bug but do not touch the tests', 'make sure the tests pass', 'add a flag without changing the output']) expect([t, saysHow(t)]).toEqual([t, false]);
   for (const t of ['always run the tests before you say done', 'from now on, explain simply', "don't ask me so many questions", 'I prefer tabs', 'never use rm -rf', 'next time show me the diff first', 'please stop using emojis']) expect([t, saysHow(t)]).toEqual([t, true]);
+});
+
+test('a test prompt pasted into the app is practice, wherever it ran: a header or a cut still match, a short or a real request never does', () => {
+  const notes = 'Create one self-contained HTML file called notes.html that works when I double-click it, with all the CSS and JavaScript inside the file, nothing loaded from the internet. The page shows a "+ New note" button above a list of note cards.';
+  const roll = 'Fix a futures roll that stays in the old year. The contract list in contracts.mjs rolls to the next quarter, but in December it keeps the old year, so the front month shows as last year.';
+  const prompts = [notes, roll];
+  expect(isTestPrompt(notes, prompts)).toBe(true);
+  expect(isTestPrompt(`w01 · Fix a futures roll that stays in the old year\n----------\n${roll}`, prompts)).toBe(true); // a header above it
+  expect(isTestPrompt(notes.slice(0, 160), prompts)).toBe(true); // cut short
+  expect(isTestPrompt(notes.replace('double-click', 'open'), prompts)).toBe(true); // a word changed
+  expect(isTestPrompt('run the tests', prompts)).toBe(false); // too short to tell
+  expect(isTestPrompt('Create one HTML page on my Desktop that lists my trading desks with their ports and whether each one is up right now.', prompts)).toBe(false);
+  expect(isTestPrompt(notes, [])).toBe(false);
+  expect(practiceWork(turn({ request: notes, files: ['notes.html'] }), '/Users/me', { prompts })).toBe(true);
+  expect(practiceWork(passed, '/Users/me/work/repo', { prompts })).toBe(false);
+});
+
+test('the save shows the model only the saved facts closest to what happened, and still refuses a repeat of any of them', async () => {
+  const where = place();
+  const many = Array.from({ length: 30 }, (_, i) => ({ kind: 'project', text: `Deploy step ${i + 1} for the orbit server goes through ssh number ${i + 1}.` }));
+  applyChanges(where.project, { add: [...many, { kind: 'project', text: 'The legend z-index lives in legend.js.' }] });
+  const { fake, out } = await save({ add: [{ kind: 'project', text: 'Deploy step 7 for the orbit server goes through ssh number 7.' }], drop: [] }, { where });
+  const prompt = JSON.stringify(fake.requests[0]);
+  const shown = (prompt.match(/\] \(project\)/g) ?? []).length;
+  expect(shown).toBe(SAVE_SEEN);
+  expect(prompt).toContain('The legend z-index lives in legend.js.'); // the one about this turn is among them
+  expect(out.added).toEqual([]);
+  expect(out.refused.map((r) => r.why)).toEqual(['saved already']);
 });

@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { memoryDirs, dirFor, parseFact, formatFact, readFacts, applyChanges, undoLast, restoreFact, markUsed, changeTrust, pinFact, tidy, openMemory, memoryNotes, looksSecret, namesMissingFile, readLog, FIRST_FACTS, RETIRE_AT } from '../src/agent/facts.mjs';
+import { memoryDirs, dirFor, parseFact, formatFact, readFacts, applyChanges, undoLast, restoreFact, markUsed, changeTrust, pinFact, tidy, openMemory, memoryNotes, looksSecret, namesMissingFile, fileNames, countDay, health, healthLine, readLog, FIRST_FACTS, RETIRE_AT } from '../src/agent/facts.mjs';
 
 const place = () => {
   const home = mkdtempSync(join(tmpdir(), 'agentic-facts-'));
@@ -176,4 +176,31 @@ test('what is read at every start: the rules in full, then one short line per fa
   expect(n.text.length).toBeLessThan(1900);
   expect(n.facts).toBe(63);
   expect(n.text).not.toContain('What you know about the user'); // only the two rules, already shown in full
+});
+
+test('the project is looked through once for many facts, with the same answers as one look per fact', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agentic-names-'));
+  mkdirSync(join(root, 'src', 'deep'), { recursive: true });
+  mkdirSync(join(root, 'node_modules', 'x'), { recursive: true });
+  writeFileSync(join(root, 'src', 'deep', 'legend.js'), '');
+  writeFileSync(join(root, 'node_modules', 'x', 'hidden.js'), '');
+  const facts = ['Lowering the z-index in legend.js fixed it.', 'The fix is in nosuchfile.mjs.', 'The helper is in hidden.js.', 'Run the tests with bun.'].map((text) => ({ kind: 'worked', text }));
+  const names = fileNames(root);
+  expect(facts.map((f) => namesMissingFile(f, root, names))).toEqual(facts.map((f) => namesMissingFile(f, root)));
+  expect(facts.map((f) => namesMissingFile(f, root, names))).toEqual([false, true, true, false]);
+});
+
+test('the health line: requests with a fact, saves offered and taken, what was taken out, from the last 7 days', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-health-'));
+  const repo = join(home, 'repo'); mkdirSync(join(repo, '.git'), { recursive: true });
+  const dirs = memoryDirs(repo, home);
+  openMemory(repo, { home, today: '2026-09-30' }); // the first rules are not saves
+  countDay(dirs, { requests: 1, found: 1 }, '2026-09-30');
+  countDay(dirs, { requests: 1 }, '2026-09-30');
+  countDay(dirs, { asked: 1, yes: 1 }, '2026-09-29');
+  countDay(dirs, { asked: 1, no: 1 }, '2026-09-10'); // too old
+  applyChanges(dirs.project, { add: [{ kind: 'project', text: 'Run the tests with bun run test.' }] }, { why: 'save' });
+  const h = health(dirs, { today: '2026-09-30' });
+  expect(h).toMatchObject({ requests: 2, found: 1, asked: 1, yes: 1, no: 0, saved: 1 });
+  expect(healthLine(h)).toBe('facts came with 1 of 2 requests · 1 fact saved (1 of 1 offers taken) · 0 taken out · trust moved 0 times');
 });

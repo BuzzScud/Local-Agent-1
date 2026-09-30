@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { memoryDirs, readFacts, markUsed, namesMissingFile, looksLikeEvent } from './facts.mjs';
+import { memoryDirs, readFacts, markUsed, namesMissingFile, fileNames, filesIn, looksLikeEvent, countDay } from './facts.mjs';
 import { choose } from './search.mjs';
 
 export const TOP = 3; // at most this many facts travel with a request
@@ -36,7 +36,10 @@ async function vectorsFor(dir, facts, embedder, signal) {
     const made = await embedder.embed(want.map(wording), { signal });
     want.forEach((f, i) => { kept[f.id] = { h: hash(f.text), v: pack(made[i]) }; });
   }
-  const ids = new Set(facts.map((f) => f.id));
+  // Only a fact that left the folder loses its numbers: a recall (which
+  // leaves out the rules read at every start) and a save (which reads them
+  // all) would otherwise throw away each other's.
+  const ids = new Set([...facts, ...readFacts(dir)].map((f) => f.id));
   const gone = Object.keys(kept).filter((id) => !ids.has(id));
   for (const id of gone) delete kept[id];
   if (want.length || gone.length) { try { writeFileSync(file, JSON.stringify({ model: embedder.model.file, facts: kept })); } catch { /* read-only folder: worked out again next time */ } }
@@ -83,8 +86,12 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   const root = dirs.project ? dirname(dirname(dirs.project)) : null;
   // What is always read is in the instructions already; a fact about a file
   // that is gone is left where it is (tidy retires it).
-  const facts = [...readFacts(dirs.you), ...readFacts(dirs.project)].filter((f) => !f.always && !namesMissingFile(f, root));
-  if (!facts.length || !String(text).trim()) return { facts: [], skipped: [], how: 'none', ms: Date.now() - t0 };
+  const names = root ? fileNames(root) : null;
+  const facts = [...readFacts(dirs.you), ...readFacts(dirs.project)].filter((f) => !f.always && !namesMissingFile(f, root, names));
+  if (!facts.length || !String(text).trim()) {
+    if (mark && String(text).trim()) countDay(dirs, { requests: 1 }, today);
+    return { facts: [], skipped: [], how: 'none', ms: Date.now() - t0 };
+  }
   let scored = null;
   let how = 'words';
   let note = null;
@@ -125,8 +132,62 @@ export async function recall(cwd, text, { embedder = null, home = homedir(), top
   const picked = chosen.picked;
   const skipped = scored.filter((s) => event(s) && s.score >= cut).slice(0, top);
   if (mark && picked.length) for (const dir of new Set(picked.map((s) => s.fact.dir))) markUsed(dir, picked.filter((s) => s.fact.dir === dir).map((s) => s.fact.id), today);
+  if (mark) countDay(dirs, { requests: 1, found: picked.length ? 1 : 0 }, today);
   const plain = (s) => ({ ...s.fact, close: Math.round(s.close * 1000) / 1000 });
   return { facts: picked.map(plain), skipped: skipped.map(plain), how, ms: Date.now() - t0, chosen, ...(note || chosen.note ? { note: note ?? chosen.note } : {}), ...(near ? { near: real.filter((s) => !picked.includes(s)).slice(0, near).map(plain) } : {}) };
+}
+
+// Which of the facts that came with a request the turn really used, from
+// what it did (each step's file, command or search) and its answer. Trust
+// changes only for these: before, every fact that came along gained or lost
+// trust with the task, whether it had anything to do with it or not.
+//   a fact that names a file: that file was read, changed or named
+//   a fact with a `command`: that command was run
+//   any other fact: two of its words or more, and at least 40% of them
+const COMMAND = /`([^`]{3,80})`/g;
+export function usedFacts(recalled = [], evidence = '') {
+  const said = String(evidence).toLowerCase();
+  if (!said.trim()) return [];
+  const words = new Set(wordsOf(said));
+  return recalled.filter((f) => {
+    const text = String(f.text ?? '');
+    const files = filesIn(text).map((p) => p.split('/').pop().toLowerCase());
+    if (files.length) return files.some((n) => said.includes(n));
+    const commands = [...text.matchAll(COMMAND)].map((m) => m[1].toLowerCase().trim());
+    if (commands.length) return commands.some((c) => said.includes(c));
+    const mine = [...new Set(wordsOf(text))];
+    const shared = mine.filter((w) => words.has(w)).length;
+    return shared >= 2 && shared >= 0.4 * mine.length;
+  });
+}
+
+// Each fact's numbers by `dir\0id`, from the vectors.json beside it.
+export async function factVectors(facts, embedder, signal) {
+  const out = new Map();
+  for (const dir of new Set(facts.map((f) => f.dir))) {
+    if (!dir || !existsSync(dir)) continue;
+    for (const [id, v] of await vectorsFor(dir, facts.filter((f) => f.dir === dir), embedder, signal)) out.set(`${dir}\0${id}`, v);
+  }
+  return out;
+}
+
+// The n facts closest to a text, best first (by meaning, or by words when
+// the small model is not here); all of them when there are n or fewer. The
+// save shows the model these, not every fact: 200 facts would be about
+// 8,000 tokens, some 40 seconds of reading, on every save.
+export async function closest(facts, text, { embedder = null, n = 15, signal } = {}) {
+  if (facts.length <= n) return facts;
+  const key = (f) => `${f.dir}\0${f.id}`;
+  let score = null;
+  if (embedder) {
+    try {
+      const vec = await factVectors(facts, embedder, signal);
+      const [q] = await embedder.embed([String(text).slice(0, 2000)], { signal });
+      score = (f) => (vec.has(key(f)) ? dot(q, vec.get(key(f))) : -1);
+    } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
+  }
+  if (!score) { const w = byWords(text, facts); score = (f) => w.get(key(f)) ?? 0; }
+  return facts.map((f, i) => ({ f, i, s: score(f) })).sort((a, b) => b.s - a.s || a.i - b.i).slice(0, n).map((x) => x.f);
 }
 
 const LABEL = { you: 'about you', project: 'this project', worked: 'this worked', failed: 'this failed before: do not try it again', mistake: 'a mistake to avoid', recipe: 'steps that worked before' };

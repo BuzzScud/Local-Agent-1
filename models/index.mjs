@@ -21,5 +21,7 @@ export { readEdited, writeEdited, removeEdited, editedModel, editedFileName, mod
 export { startBattle, battleHold, battleUrl } from './evals/battle/start.mjs';
 export { RUN_TESTS, runCatalog, findRunTest, runTestById } from './evals/run-tests.mjs';
 export { battleCounts } from './evals/battle/store.mjs';
+// Every test prompt this Mac knows, so the memory never learns from a test pasted into the app.
+export { testPrompts } from './evals/prompts.mjs';
 // The Test builder: your own tests, read and changed straight in the arena's store (no runner needed).
 export { builderData, suggestFor, readList, saveOwn, pasteTests, setLevel, duplicateOwn, deleteOwn, restoreOwn, exportOwn, importOwn, tryChecks } from './evals/battle/builder.mjs';

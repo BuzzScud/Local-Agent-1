@@ -398,24 +398,40 @@ function pinFactNow(dir, id, pinned = true) {
 export function filesIn(text) {
   return [...String(text).matchAll(/(?:^|[\s`'"(])((?:[\w@.-]+\/)+[\w@.-]+\.[A-Za-z]\w{0,5}|[\w@-]+\.(?:mjs|cjs|jsx?|tsx?|py|rb|go|rs|md|json|html|css|sh|toml|ya?ml))(?=$|[\s`'",:;!?)]|\.(?:\s|$))/g)].map((m) => m[1]);
 }
-export function namesMissingFile(fact, root) {
+// names: a fileNames(root) made once for many facts (a recall, a tidy);
+// without it the project is looked through again for each fact.
+export function namesMissingFile(fact, root, names = null) {
   if (!root || ABOUT_YOU.has(fact.kind)) return false;
   const files = filesIn(fact.text).filter((p) => !p.includes('<') && !p.startsWith('~'));
   if (!files.length) return false;
-  const found = (p) => existsSync(join(root, p)) || (!p.includes('/') && existsSync(root) && findByName(root, p));
+  const found = (p) => existsSync(join(root, p)) || (!p.includes('/') && existsSync(root) && (names ? names.has(p) : fileNames(root).has(p)));
   return !files.some(found);
 }
 const SKIP = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.venv', 'venv', '__pycache__', 'results']);
-function findByName(root, name, depth = 0, seen = { n: 0 }) {
-  if (depth > 5 || seen.n > 4000) return false;
-  let entries;
-  try { entries = readdirSync(root, { withFileTypes: true }); } catch { return false; }
-  for (const e of entries) {
-    seen.n++;
-    if (e.name === name) return true;
-    if (e.isDirectory() && !SKIP.has(e.name) && !e.name.startsWith('.') && findByName(join(root, e.name), name, depth + 1, seen)) return true;
-  }
-  return false;
+// The names in a project (five folders deep, about 4,000 entries at most),
+// read on the first question: looking through the project for each fact
+// that names a file cost 2 to 14 ms a fact on every request (measured on
+// agentic-coder and MAIN2026, 30 Sep 2026).
+export function fileNames(root) {
+  let set = null;
+  const read = () => {
+    if (set) return set;
+    set = new Set();
+    const seen = { n: 0 };
+    const walk = (dir, depth) => {
+      if (depth > 5 || seen.n > 4000) return;
+      let entries;
+      try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        seen.n++;
+        set.add(e.name);
+        if (e.isDirectory() && !SKIP.has(e.name) && !e.name.startsWith('.')) walk(join(dir, e.name), depth + 1);
+      }
+    };
+    walk(root, 0);
+    return set;
+  };
+  return { has: (name) => read().has(name) };
 }
 
 // Keeps the memory clean: repeats merge, a fact about a file that is gone
@@ -425,6 +441,7 @@ function tidyNow(dir, { today = day(), root = null } = {}) {
   const batch = `tidy-${Date.now()}`;
   const out = { merged: [], retired: [] };
   const seen = new Map();
+  const names = root ? fileNames(root) : null;
   for (const f of readFacts(dir).sort(byWorth)) {
     const key = norm(f.text);
     const first = seen.get(key);
@@ -437,7 +454,7 @@ function tidyNow(dir, { today = day(), root = null } = {}) {
     }
     seen.set(key, f);
     if (f.always || f.pinned) continue;
-    if (namesMissingFile(f, root)) { retireFact(dir, f, 'the file it names is gone', batch); out.retired.push({ fact: f, why: 'the file it names is gone' }); continue; }
+    if (namesMissingFile(f, root, names)) { retireFact(dir, f, 'the file it names is gone', batch); out.retired.push({ fact: f, why: 'the file it names is gone' }); continue; }
     const since = f.last ?? f.saved;
     const days = since ? Math.floor((Date.parse(today) - Date.parse(since)) / 86_400_000) : 0;
     if (days >= UNUSED_DAYS) { retireFact(dir, f, `not used in ${days} days`, batch); out.retired.push({ fact: f, why: `not used in ${days} days` }); }
@@ -462,6 +479,49 @@ const readState = (dir) => { try { return JSON.parse(readFileSync(join(dir, 'sta
 const writeState = (dir, patch) => locked(dir, () => writeStateNow(dir, patch));
 const writeStateNow = (dir, patch) => { mkdirSync(dir, { recursive: true }); const next = { ...readState(dir), ...patch }; writeFileSync(join(dir, 'state.json'), `${JSON.stringify(next, null, 1)}\n`); return next; };
 export { readState, writeState };
+
+// How the memory is doing, for /memory's health line: counts by day in
+// your memory's state.json (the last 14 days), beside what the logs hold.
+//   requests  requests the memory was asked about · found  of them, with a fact
+//   asked · yes · no  saves offered, taken, skipped
+const HEALTH_DAYS = 14;
+export function countDay(dirs, counts, today = day()) {
+  if (!dirs?.you) return;
+  try {
+    locked(dirs.you, () => {
+      const h = readState(dirs.you).health ?? {};
+      const d = { ...(h[today] ?? {}) };
+      for (const [k, n] of Object.entries(counts)) if (n) d[k] = (d[k] ?? 0) + n;
+      h[today] = d;
+      writeStateNow(dirs.you, { health: Object.fromEntries(Object.entries(h).sort(([a], [b]) => a.localeCompare(b)).slice(-HEALTH_DAYS)) });
+    });
+  } catch { /* a count lost, never the work */ }
+}
+// Not saves: the rules of the first start, Claude's lines, a carried-over notes file.
+const NOT_LEARNED = new Set(['first use', "from Claude's notes", 'carried over from notes.md']);
+export function health(dirs, { today = day(), days = 7 } = {}) {
+  const since = new Date(Date.parse(today) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const out = { days, requests: 0, found: 0, asked: 0, yes: 0, no: 0, saved: 0, retired: 0, trust: 0 };
+  for (const [d, c] of Object.entries(readState(dirs.you).health ?? {})) if (d >= since) for (const k of ['requests', 'found', 'asked', 'yes', 'no']) out[k] += c[k] ?? 0;
+  for (const dir of [dirs.you, dirs.project].filter(Boolean)) {
+    for (const l of readLog(dir)) {
+      if (String(l.at).slice(0, 10) < since) continue;
+      if ((l.what === 'add' || l.what === 'replace') && !NOT_LEARNED.has(l.why)) out.saved++;
+      else if (l.what === 'retire') out.retired++;
+      else if (l.what === 'trust') out.trust++;
+    }
+  }
+  return out;
+}
+export function healthLine(h) {
+  const n = (k, one, many = `${one}s`) => `${h[k]} ${h[k] === 1 ? one : many}`;
+  return [
+    h.requests ? `facts came with ${h.found} of ${n('requests', 'request')}` : 'no requests yet',
+    `${n('saved', 'fact')} saved${h.asked ? ` (${h.yes} of ${h.asked} offers taken)` : ''}`,
+    `${h.retired} taken out`,
+    `trust moved ${h.trust === 1 ? 'once' : `${h.trust} times`}`,
+  ].join(' · ');
+}
 
 // First use: the two rules go into your own memory, and the lines of an
 // older notes file (.bonsai/notes.md, from "update memory") become facts.

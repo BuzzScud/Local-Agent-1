@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { recall, recallNotes, wordsOf, looksLikeEvent } from '../src/agent/recall.mjs';
+import { recall, recallNotes, wordsOf, looksLikeEvent, usedFacts } from '../src/agent/recall.mjs';
 import { memoryDirs, applyChanges, readFacts, changeTrust, openMemory } from '../src/agent/facts.mjs';
 import { digest } from '../src/agent/memory.mjs';
 import { Agent } from '../src/agent/agent.mjs';
@@ -159,11 +159,13 @@ test('Agentic Coder got stuck: the facts it used lose trust; you stop it: they l
   expect(stuck.events.find((e) => e.type === 'settled').warnings[0]).toContain('kept repeating');
   expect(trustOf(stuck.project, 'The flags are read')).toBe(-1);
 
+  // Stopped before it did or said anything: nothing shows the fact was used,
+  // so its trust stays (30 Sep 2026: trust moves only for facts a turn used).
   const stopped = await converse([{ reasoning: 'thinking about it '.repeat(200), text: 'Done.' }], ['where are the flags read, the json export?'], { abortAfterMs: 60 });
   expect(stopped.reasons).toEqual(['interrupted']);
-  expect(trustOf(stopped.project, 'The flags are read')).toBe(-2);
+  expect(trustOf(stopped.project, 'The flags are read')).toBe(0);
 
-  const told = await converse([{ text: 'In main().' }, { text: 'Sorry.' }, { text: 'Yes.' }], ['where are the flags read, the json export?', 'no, that is wrong', 'nope, still wrong']);
+  const told = await converse([{ text: 'In main() of export.mjs.' }, { text: 'Sorry.' }, { text: 'Yes.' }], ['where are the flags read, the json export?', 'no, that is wrong', 'nope, still wrong']);
   expect(told.events.filter((e) => e.type === 'settled').map((e) => e.outcome)).toEqual(['done', 'done', 'done']);
   expect(told.agent.lessons[0].corrected).toBe('no, that is wrong');
   expect(trustOf(told.project, 'The flags are read')).toBe(-2); // the second "wrong" is about the second turn, which used no fact
@@ -181,9 +183,32 @@ test('with no memory given, a conversation is as before: nothing brought back, n
 });
 
 test('a turn that went well on a fact it was given is marked as known, and a correction takes the mark away', async () => {
-  const { events, agent } = await converse([{ text: 'In main().' }, { text: 'Sorry.' }], ['where are the flags read, the json export?', 'no, that is wrong']);
+  const { events, agent } = await converse([{ text: 'In main() of export.mjs.' }, { text: 'Sorry.' }], ['where are the flags read, the json export?', 'no, that is wrong']);
   const [first] = events.filter((e) => e.type === 'settled');
   expect(first.recalled).toHaveLength(1);
   expect(first.known).toBe(true); // nothing new to learn: no save would start
   expect(agent.lessons[0]).toMatchObject({ known: false, corrected: 'no, that is wrong' }); // until the user said it was wrong
+});
+
+test('trust moves only for the facts a turn really used: a file it touched or named, a command it ran, or most of its words', async () => {
+  const flags = { id: 'flags', text: 'The flags are read in export.mjs.' };
+  const tests = { id: 'tests', text: 'Run the tests with `node --test`.' };
+  const docs = { id: 'docs', text: 'Every page about the app goes in the DOCS folder.' };
+  const you = { id: 'you', text: 'When you explain, keep it simple: the result first.' };
+  const ids = (xs) => xs.map((f) => f.id);
+  expect(ids(usedFacts([flags, tests, docs], 'Read export.mjs\nEdit export.mjs'))).toEqual(['flags']);
+  expect(ids(usedFacts([flags, tests, docs], 'Bash node --test\nThey pass.'))).toEqual(['tests']);
+  expect(ids(usedFacts([flags, tests, docs], 'Write cli docs/page.html\nThe page is saved in the DOCS folder.'))).toEqual(['docs']);
+  // One shared word is not use; an empty turn uses nothing.
+  expect(ids(usedFacts([docs, you], 'Read notes.md\nThe folder is empty.'))).toEqual([]);
+  expect(usedFacts([flags, tests], '')).toEqual([]);
+  // In a conversation: it got stuck reading another file, so the fact that
+  // came along (and was never touched) keeps its trust.
+  const other = { tool: { name: 'Read', args: { path: 'README.md' } } };
+  const { project, events } = await converse([other, other, other, other, other, other], ['where are the flags read, the json export?']);
+  const settled = events.find((e) => e.type === 'settled');
+  expect(settled).toMatchObject({ outcome: 'stuck' });
+  expect(settled.recalled.map((f) => f.text)).toEqual(['The flags are read in export.mjs.']);
+  expect(settled.used).toEqual([]);
+  expect(trustOf(project, 'The flags are read')).toBe(0);
 });

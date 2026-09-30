@@ -8,9 +8,11 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { testPrompts } from '../../../models/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { digest } from './memory.mjs';
-import { memoryDirs, dirFor, readFacts, applyChanges, tidy, readState, writeState, namesMissingFile, KINDS } from './facts.mjs';
+import { memoryDirs, dirFor, readFacts, applyChanges, tidy, readState, writeState, namesMissingFile, fileNames, countDay, KINDS } from './facts.mjs';
+import { closest, factVectors } from './recall.mjs';
 
 export const MAX_FACTS = 5;
 
@@ -41,14 +43,15 @@ export function lessonText(l, i) {
   for (const f of l.findings ?? []) lines.push(`  it found: ${one(f)}`);
   for (const w of l.warnings ?? []) lines.push(`  trouble: ${one(w)}`);
   if (l.summary) lines.push(`  result: ${one(l.summary, 300)}`);
-  if (l.recalled?.length) lines.push(`  it used from memory: ${l.recalled.map((f) => `"${one(f.text, 80)}"`).join(', ')}`);
+  const used = l.used ?? l.recalled;
+  if (used?.length) lines.push(`  it used from memory: ${used.map((f) => `"${one(f.text, 80)}"`).join(', ')}`);
   if (l.corrected) lines.push(`  then the user CORRECTED it: "${one(l.corrected)}"`);
   return lines.join('\n');
 }
 
 // request: the user asked for the save ("update memory", "remember that …").
 // review: a whole conversation read again, slowly (the review at night).
-export function savePrompt({ lessons, conversation, saved, today, seeding = false, request = null, review = false }) {
+export function savePrompt({ lessons, conversation, saved, today, seeding = false, request = null, review = false, declined = [] }) {
   const jobs = saved.filter((f) => f.kind === 'worked' || f.kind === 'recipe');
   return {
     system: [
@@ -70,6 +73,7 @@ export function savePrompt({ lessons, conversation, saved, today, seeding = fals
       `Jobs done before:\n${jobs.length ? jobs.map((f) => `- ${one(f.text, 160)}`).join('\n') : '(none)'}`,
       `${seeding ? 'What was done here before Agentic Coder had a memory' : review ? 'A conversation of today, read again; the quick saves after each task may have missed something' : 'What happened'}:\n${lessons.length ? lessons.map(lessonText).join('\n') : '(no task, only talk)'}`,
       `The conversation:\n${conversation || '(none)'}`,
+      ...(declined.length ? [`The user said no to saving these; never offer them again, in any words:\n${declined.slice(-15).map((t) => `- ${one(t, 160)}`).join('\n')}`] : []),
       ...(request ? [`The user now says: ${one(request, 400)}\nIf they say what to remember, save exactly that (kind "you" when it is about how they like to work, "project" when it is about this project).`] : []),
     ].join('\n\n'),
   };
@@ -96,7 +100,7 @@ export function knownAlready(l, { cwd, home = homedir() } = {}) {
   if (!['passed', 'done'].includes(l.outcome) || l.corrected || l.warnings?.length) return false;
   if ((l.tries ?? []).some((t) => t.failed || /✗/.test(t.marks))) return false;
   if (SAYS_HOW.test(l.request)) return false;
-  if (l.recalled?.length) return true;
+  if ((l.used ?? l.recalled)?.length) return true;
   const dirs = memoryDirs(cwd, home);
   const from = fromTask(l.request);
   return [...readFacts(dirs.project), ...readFacts(dirs.you)].some((f) => f.from === from);
@@ -108,36 +112,111 @@ export function knownAlready(l, { cwd, home = homedir() } = {}) {
 // the app is a way to watch a test, and what it "learns" would be about the
 // test (and would sit in your memory as if it were about you).
 const PRACTICE = /(^|\/)models\/evals\/(battle\/[^/]+|bench\/tasks)\/[^/]+\/(project|solution|reference)(\/|$)/;
-export function practiceWork(l, cwd = '.') {
-  return [cwd, ...(l.files ?? []).map((f) => resolve(cwd, String(f)))].some((p) => PRACTICE.test(String(p)));
+// A test's prompt pasted into the app is practice too, wherever it ran: of
+// the first three saves (28–29 Sep 2026) two came from test prompts (an HTML
+// card, w01), in the home folder, with no test file in sight. prompts: every
+// test prompt this Mac knows (testPrompts, models part).
+export function practiceWork(l, cwd = '.', { prompts = null } = {}) {
+  if ([cwd, ...(l.files ?? []).map((f) => resolve(cwd, String(f)))].some((p) => PRACTICE.test(String(p)))) return true;
+  try { return isTestPrompt(l.request, prompts ?? testPrompts()); } catch { return false; }
+}
+
+// Runs of five words in a row. A request is a test's prompt when most of
+// the runs of the shorter of the two are in the other: a header pasted
+// above it ("w01 · …"), a cut at 600 characters or a word changed here and
+// there still match; a short request ("run the tests") never does.
+const RUN = 5;
+const MIN_WORDS = 12;
+const SAME = 0.6;
+const runsOf = (text, max = 120) => {
+  const w = String(text ?? '').toLowerCase().match(/[a-z0-9]+/g)?.slice(0, max) ?? [];
+  const out = new Set();
+  for (let i = 0; i + RUN <= w.length; i++) out.add(w.slice(i, i + RUN).join(' '));
+  return { words: w.length, runs: out };
+};
+let known = { list: null, runs: [] };
+export function isTestPrompt(request, prompts = []) {
+  const r = runsOf(request);
+  if (r.words < MIN_WORDS || !prompts.length) return false;
+  if (known.list !== prompts) known = { list: prompts, runs: prompts.map((p) => runsOf(p)) };
+  return known.runs.some((t) => {
+    if (t.runs.size < 4) return false;
+    let shared = 0;
+    for (const x of t.runs) if (r.runs.has(x)) shared++;
+    return shared / Math.min(t.runs.size, r.runs.size) >= SAME;
+  });
 }
 
 // Is there anything to learn from? A turn that ended with a result, a
 // correction, or the user saying how they want things.
-export function worthSaving(lessons) {
-  return lessons.some((l) => !l.saved && !l.known && !l.practice && (['passed', 'failed', 'stuck', 'stopped'].includes(l.outcome) || l.corrected || l.files?.length || SAYS_HOW.test(l.request)));
+// again: the review at quit, which reads saved turns again too.
+export function worthSaving(lessons, { again = false } = {}) {
+  return lessons.some((l) => (again || !l.saved) && !l.known && !l.practice && (['passed', 'failed', 'stuck', 'stopped'].includes(l.outcome) || l.corrected || l.files?.length || SAYS_HOW.test(l.request)));
 }
 
-// The save itself. Answers what was added, replaced and dropped, in both
-// memories; never throws for what the model wrote, only when it was stopped.
+// The save itself: what the model would change is worked out (proposeSave),
+// asked about when asking is on, then written (applySave). Answers what was
+// added, replaced and dropped, in both memories; never throws for what the
+// model wrote, only when it was stopped.
 //   lessons   the turns since the last save (agent.lessons, not yet saved)
 //   messages  the conversation (for the digest)
-export async function saveLessons({ url, model, slot, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, why = 'save', request = null, review = false, confirm = null }) {
+//   declined  facts you said no to in this conversation: never offered again
+// A declined save answers declined: the texts said no to, for the next one.
+export async function saveLessons({ url, model, slot, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, why = 'save', request = null, review = false, confirm = null, declined = [] }) {
+  const p = await proposeSave({ url, model, slot, cwd, home, lessons, messages, signal, today, embedder, seeding, request, review, declined });
+  const out = { added: [], replaced: [], retired: [], refused: p.refused, secs: p.secs, tokens: p.tokens };
+  if (p.none) return out;
+  // Asked first (the user's pick, 28 Sep 2026): what would change is shown and
+  // nothing is written without a yes. 'later' leaves the turns for the next pause.
+  if (confirm && (p.adds.length || p.drops.length)) {
+    const ok = await confirm(shownOf(p));
+    if (signal?.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
+    if (ok !== 'later') countDay(memoryDirs(cwd, home), { asked: 1, yes: ok ? 1 : 0, no: ok ? 0 : 1 }, today);
+    if (ok === 'later') return { ...out, later: true };
+    if (!ok) {
+      for (const l of p.fresh) l.saved = true;
+      rememberDeclined(memoryDirs(cwd, home), p.adds.map((a) => a.text));
+      return { ...out, skipped: p.adds.length + p.drops.length, declined: p.adds.map((a) => a.text) };
+    }
+  }
+  const done = applySave({ cwd, home, adds: p.adds, drops: p.drops }, { today, why });
+  for (const l of p.fresh) l.saved = true;
+  return { ...done, refused: [...p.refused, ...done.refused], secs: p.secs, tokens: p.tokens };
+}
+
+// What a proposal would change, as the Save / Skip panel lists it.
+export const shownOf = (p) => ({ add: p.adds.map((a) => ({ kind: a.kind, text: a.text })), drop: p.drops.map((d) => ({ id: d.id, text: d.text, why: d.why })) });
+
+// The facts at most shown to the model as "Saved already" (the closest to
+// what happened); the check for repeats below still looks at all of them.
+export const SAVE_SEEN = 15;
+
+// What the model would save, checked, and nothing written.
+// Answers { none } when there was nothing to read, else { fresh (the turns
+// read), adds, drops, refused, secs, tokens }.
+export async function proposeSave({ url, model, slot, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, request = null, review = false, declined = [] }) {
   // The review reads every turn again, saved or not; repeats are refused below.
   const unsaved = review ? lessons : lessons.filter((l) => !l.saved);
   const practice = (l) => l.practice || practiceWork(l, cwd);
   const fresh = unsaved.filter((l) => !practice(l));
+  const nothing = { none: true, fresh, adds: [], drops: [], refused: [], secs: 0, tokens: 0 };
   // Only practice turns and nobody asked: nothing is read, nothing saved.
-  if (!seeding && !request && unsaved.length && !fresh.length) return { added: [], replaced: [], retired: [], refused: [], secs: 0, tokens: 0 };
+  if (!seeding && !request && unsaved.length && !fresh.length) return nothing;
   const dirs = memoryDirs(cwd, home);
+  // What you ask to save now is saved, even a fact you once skipped.
+  declined = request ? [] : [...new Set([...declined, ...declinedBefore(dirs)])];
   const saved = [...readFacts(dirs.you), ...readFacts(dirs.project)];
-  const p = savePrompt({ lessons: fresh, conversation: seeding ? String(messages[0]?.content ?? '') : digest(messages, 6000), saved, today, seeding, request, review });
+  const conversation = seeding ? String(messages[0]?.content ?? '') : digest(messages, 6000);
+  const about = [request ?? '', ...fresh.map((l, i) => lessonText(l, i)), conversation.slice(-2000)].join('\n');
+  const seen = await closest(saved, about, { embedder, n: SAVE_SEEN, signal });
+  const p = savePrompt({ lessons: fresh, conversation, saved: seen, today, seeding, request, review, declined });
   const r = await complete({ url, model, slot, signal, temperature: 0, maxTokens: 600, schema: SAVE_SCHEMA, system: p.system, user: p.user });
   if (signal?.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
-  const out = { added: [], replaced: [], retired: [], refused: [], secs: r.secs, tokens: r.tokens };
+  const refused = [];
   const answer = r.json ?? { add: [], drop: [] };
-  const batch = `${why}-${Date.now()}`;
   const from = (a) => { const l = fresh[(a.turn ?? 0) - 1]; return seeding ? 'what was done here before' : l ? fromTask(l.request) : 'the conversation'; };
+  const root = dirs.project ? dirname(dirname(dirs.project)) : null;
+  const names = root ? fileNames(root) : null;
   // Checked against what the turns show: a "worked" needs a turn that
   // passed, a "failed" one that failed, a recipe a job done before.
   const allowed = (a) => {
@@ -145,7 +224,11 @@ export async function saveLessons({ url, model, slot, cwd, home = homedir(), les
     const any = (test) => (l ? test(l) : fresh.some(test));
     if (!KINDS.includes(a.kind)) return 'not a kind of fact';
     // A file the fact names has to be there: the model can make a path up.
-    if (dirs.project && namesMissingFile({ kind: a.kind, text: `${a.text} ${(a.steps ?? []).join(' ')}` }, dirname(dirname(dirs.project)))) return 'names a file that is not in the project';
+    if (root && namesMissingFile({ kind: a.kind, text: `${a.text} ${(a.steps ?? []).join(' ')}` }, root, names)) return 'names a file that is not in the project';
+    if (declined.some((t) => normText(t) === normText(a.text))) return 'you said no to it before';
+    // Checked here too, not only when written: a proposal kept for the next
+    // start (the review at quit) must not ask about what is saved already.
+    if (!a.replaces && saved.some((f) => normText(f.text) === normText(a.text))) return 'saved already';
     if (seeding) return null;
     if (a.kind === 'worked' && !any((x) => x.outcome === 'passed')) return 'no check passed in these turns';
     if (a.kind === 'failed' && !any((x) => x.outcome === 'failed' || x.outcome === 'stuck' || x.tries?.some((t) => t.failed || /✗/.test(t.marks)))) return 'nothing failed in these turns';
@@ -156,39 +239,46 @@ export async function saveLessons({ url, model, slot, cwd, home = homedir(), les
   const adds = [];
   for (const a of (answer.add ?? []).slice(0, MAX_FACTS)) {
     const no = allowed(a);
-    if (no) { out.refused.push({ text: one(a.text, 80), why: no }); continue; }
+    if (no) { refused.push({ text: one(a.text, 80), why: no }); continue; }
     adds.push({ ...a, from: from(a) });
   }
-  // The same fact in other words is a repeat too, when the small model can tell.
-  if (embedder && adds.length && saved.length) {
+  // The same fact in other words is a repeat too, when the small model can
+  // tell: of a saved fact (its numbers are kept, only the new ones are
+  // worked out) or of one you said no to.
+  if (embedder && adds.length && (saved.length || declined.length)) {
     try {
-      const v = await embedder.embed([...adds.map((a) => a.text), ...saved.map((f) => f.text)], { signal });
-      const dot = (x, y) => { let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * y[i]; return s; };
+      const vec = saved.length ? await factVectors(saved, embedder, signal) : new Map();
+      const recent = declined.slice(-30);
+      const v = await embedder.embed([...adds.map((a) => a.text), ...recent], { signal });
+      const no = recent.map((t, k) => ({ text: t, v: v[adds.length + k] }));
       for (let i = adds.length - 1; i >= 0; i--) {
         if (adds[i].replaces) continue;
-        const twin = saved.find((f, k) => dot(v[i], v[adds.length + k]) >= 0.9);
-        if (twin) { out.refused.push({ text: one(adds[i].text, 80), why: `saved already, in other words: ${one(twin.text, 60)}` }); adds.splice(i, 1); }
+        const twin = saved.find((f) => vec.has(`${f.dir}\0${f.id}`) && dotOf(v[i], vec.get(`${f.dir}\0${f.id}`)) >= 0.9);
+        const said = !twin && no.find((d) => dotOf(v[i], d.v) >= 0.9);
+        if (twin) refused.push({ text: one(adds[i].text, 80), why: `saved already, in other words: ${one(twin.text, 60)}` });
+        else if (said) refused.push({ text: one(adds[i].text, 80), why: 'you said no to it before, in other words' });
+        if (twin || said) adds.splice(i, 1);
       }
     } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; }
   }
-  // Asked first (the user's pick, 28 Sep 2026): what would change is shown and
-  // nothing is written without a yes. 'later' leaves the turns for the next pause.
-  if (confirm) {
-    const byId = new Map(saved.map((f) => [f.id, f]));
-    const drops = (answer.drop ?? []).filter((d) => byId.has(d.id)).map((d) => ({ id: d.id, text: byId.get(d.id).text, why: one(d.why, 120) }));
-    if (adds.length || drops.length) {
-      const ok = await confirm({ add: adds.map((a) => ({ kind: a.kind, text: a.text })), drop: drops });
-      if (signal?.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
-      if (ok === 'later') return { ...out, later: true };
-      if (!ok) { for (const l of fresh) l.saved = true; return { ...out, skipped: adds.length + drops.length }; }
-    }
-  }
+  const byId = new Map(saved.map((f) => [f.id, f]));
+  const drops = (answer.drop ?? []).filter((d) => byId.has(d.id)).map((d) => ({ id: d.id, text: byId.get(d.id).text, why: one(d.why, 120) }));
+  return { fresh, adds, drops, refused, secs: r.secs, tokens: r.tokens };
+}
+
+// Writes a proposal into both memories (one batch in each log), then tidies
+// once a day. A proposal kept since the window closed is written the same
+// way: the folders are found again from cwd.
+export function applySave({ cwd, home = homedir(), adds = [], drops = [] }, { today = new Date().toISOString().slice(0, 10), why = 'save' } = {}) {
+  const dirs = memoryDirs(cwd, home);
+  const out = { added: [], replaced: [], retired: [], refused: [] };
+  const batch = `${why}-${Date.now()}`;
   for (const dir of [dirs.you, dirs.project].filter(Boolean)) {
     const mine = (a) => dirFor(dirs, a.kind) === dir;
     const here = new Set(readFacts(dir).map((f) => f.id));
     const replace = adds.filter((a) => mine(a) && a.replaces && here.has(a.replaces)).map((a) => ({ id: a.replaces, by: a }));
     const add = adds.filter((a) => mine(a) && !(a.replaces && here.has(a.replaces)));
-    const retire = (answer.drop ?? []).filter((d) => here.has(d.id)).map((d) => ({ id: d.id, reason: one(d.why, 120) || 'a turn showed it to be wrong' }));
+    const retire = drops.filter((d) => here.has(d.id)).map((d) => ({ id: d.id, reason: d.why || 'a turn showed it to be wrong' }));
     if (!add.length && !replace.length && !retire.length) continue;
     const res = applyChanges(dir, { add, replace, retire }, { batch, today, why });
     out.added.push(...res.added.map((f) => ({ ...f, dir })));
@@ -196,12 +286,24 @@ export async function saveLessons({ url, model, slot, cwd, home = homedir(), les
     out.retired.push(...res.retired.map((f) => ({ ...f, dir })));
     out.refused.push(...res.refused);
   }
-  for (const l of fresh) l.saved = true;
   // Once a day the memory is tidied: repeats, facts about files that are
   // gone, facts not used in a long time.
   out.tidied = tidyDue(dirs, today);
   return out;
 }
+
+// What you said no to, kept in your memory's state.json (the last 100), so
+// a fact skipped once is not offered again by a later save or the review.
+const DECLINED_KEEP = 100;
+export const declinedBefore = (dirs) => { try { return readState(dirs.you).declined ?? []; } catch { return []; } };
+export function rememberDeclined(dirs, texts = []) {
+  const add = texts.map((t) => String(t).trim()).filter(Boolean);
+  if (!add.length) return;
+  try { writeState(dirs.you, { declined: [...new Set([...declinedBefore(dirs), ...add])].slice(-DECLINED_KEEP) }); } catch { /* not kept: asked again next time */ }
+}
+
+const normText = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const dotOf = (x, y) => { let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * y[i]; return s; };
 
 export function tidyDue(dirs, today) {
   const did = [];

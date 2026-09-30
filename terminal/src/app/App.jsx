@@ -26,11 +26,11 @@ import { copyToClipboard } from './clipboard.mjs';
 import { matchCommands, COMMANDS, SETTINGS } from './commands.mjs';
 import { startWeightsServer, listDocs, findDocsDir } from './weights.mjs';
 import { MODE_OPTIONS, VERSION } from './help.mjs';
-import { memoryDirs, readFacts, readLog, undoSave, openMemory } from '../agent/facts.mjs';
+import { memoryDirs, readFacts, readLog, undoSave, openMemory, health, healthLine } from '../agent/facts.mjs';
 import { rulesList, changeRules, looksLikeEvent, ALWAYS_MAX } from './rules.mjs';
 import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
-import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
+import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_STYLES, styleWords } from '../agent/design.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
@@ -319,8 +319,7 @@ export function App({ opts, win, onRestart }) {
   // default, "memorySave": "ask"); "auto" in settings.json saves unasked.
   const pendingSaveRef = useRef(null);
   const askRef = useRef(null);
-  const saveEnv = process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE; // off · on/auto · ask
-  const saveMode = saveEnv === 'on' || saveEnv === 'auto' ? 'auto' : saveEnv === 'ask' ? 'ask' : (settings.memorySave ?? 'ask');
+  const saveMode = saveModeOf(settings); // ask · auto · off (off: nothing is saved on its own)
   autoRef.current ??= new AutoSave({ agent, ask: saveMode === 'ask' ? (p) => askRef.current(p) : null, say: (text) => push({ type: 'note', text, tone: 'dim' }), sessionsDir: join(HOME, 'sessions', cwd.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100) || 'root') });
 
   // Everything the key handler needs, always current.
@@ -349,7 +348,11 @@ export function App({ opts, win, onRestart }) {
   // applyChoice is also what the typed forms use, so both say the same.
   // (/effort opens the Effort and limits panel instead: openEffortLimits.)
   const choiceMenu = (id) => {
-    if (id === 'memory-save') return { title: 'Remember for next time?', blurb: 'What Agentic Coder learned in that task is listed above. /memory undo takes a save back.', what: 'memory', current: 'save', options: [{ id: 'save', label: 'Save', note: 'read at every start from now on' }, { id: 'skip', label: 'Skip', note: 'nothing is saved; /update memory saves later' }] };
+    if (id === 'memory-save') {
+      // Asked at a start about what the last window's second look found, or after a task.
+      const again = pendingSaveRef.current?.again;
+      return { title: 'Remember for next time?', blurb: again ? 'What the last window found when it read the conversation again is listed above. /memory undo takes a save back.' : 'What Agentic Coder learned in that task is listed above. /memory undo takes a save back.', what: 'memory', current: 'save', options: [{ id: 'save', label: 'Save', note: 'read at every start from now on' }, { id: 'skip', label: 'Skip', note: 'not saved, and not offered again; /update memory still saves it if you ask' }] };
+    }
     if (id === 'startmode') {
       const st = startModeFor(agent.cwd);
       const now = st && !st.here ? ` Now it starts in ${modeWord(st.mode)}, saved ${st.where === 'everywhere' ? 'for every folder' : `for ${st.key.replace(homedir(), '~')}`}.` : '';
@@ -554,8 +557,8 @@ export function App({ opts, win, onRestart }) {
     // Not over something you are doing: typing, or another menu open. Asked
     // again at the next pause.
     if (S.current.picker || S.current.input?.value?.trim() || pendingSaveRef.current || S.current.btw) { resolve('later'); return; }
-    pendingSaveRef.current = { resolve };
-    push({ type: 'panel', title: `Learned in that task · ${p.add.length + p.drop.length} change${p.add.length + p.drop.length === 1 ? '' : 's'}`, pad: 0, rows: [...p.add.map((f) => [`+ ${f.text.replace(/\s+/g, ' ').slice(0, 140)}`]), ...p.drop.map((d) => [`− ${d.text.replace(/\s+/g, ' ').slice(0, 110)} (${d.why})`])] });
+    pendingSaveRef.current = { resolve, again: Boolean(p.again) };
+    push({ type: 'panel', title: `${p.title ?? 'Learned in that task'} · ${p.add.length + p.drop.length} change${p.add.length + p.drop.length === 1 ? '' : 's'}`, pad: 0, rows: [...p.add.map((f) => [`+ ${f.text.replace(/\s+/g, ' ').slice(0, 140)}`]), ...p.drop.map((d) => [`− ${d.text.replace(/\s+/g, ' ').slice(0, 110)} (${d.why})`])] });
     openChoice('memory-save');
   });
   const applyChoice = (id, value) => {
@@ -797,7 +800,13 @@ export function App({ opts, win, onRestart }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (opts.url) { setStarting(false); return; }
+      if (opts.url) {
+        setStarting(false);
+        // A server given by hand: what the last window's second look would
+        // save is still asked about (no model needed); the first-use reading waits for a start of its own.
+        setTimeout(() => { if (alive) autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();
+        return;
+      }
       await waitForBattle(() => alive);
       if (!alive) return;
       // --ctx wins; then the context /effort saved; then what fits (chooseContext).
@@ -875,8 +884,9 @@ export function App({ opts, win, onRestart }) {
       setStarting(false);
       const q = queuedRef.current;
       if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
-      // First use here: what is already written is read once, in the background.
-      else setTimeout(() => { autoRef.current.seed(); }, 3000).unref?.();
+      // What the last window's second look would save is asked about; then
+      // (first use here) what is already written is read, in the background.
+      else setTimeout(() => { autoRef.current.atStart(); }, 3000).unref?.();
     })();
     return () => { alive = false; serverRef.current?.stop({ keep: true }); weightsRef.current?.stop(); weightsRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1143,23 +1153,31 @@ export function App({ opts, win, onRestart }) {
           push({ type: 'panel', title: 'Memory · the last save taken back', pad: 14, rows: [...u.did.map((d) => [d.what, d.fact.text.replace(/\s+/g, ' ').slice(0, 110)]), ['/memory undo again takes back the save before it']] });
           break;
         }
-        const rows = [];
+        // Folders said short: under the project as ./…, under home as ~/…
+        const short = (p) => {
+          const s = p?.startsWith(cwd) ? `.${p.slice(cwd.length)}` : tilde(p);
+          if (s.length <= 34) return s;
+          const two = s.split('/').slice(-2).join('/');
+          return `…/${two.length <= 32 ? two : s.split('/').pop()}`; // whole folder names, never cut mid-word
+        };
+        const sections = [];
         for (const [title, dir] of [['About you', dirs.you], ['This project', dirs.project]]) {
           const facts = dir ? readFacts(dir).sort((x, y) => Number(y.always) - Number(x.always) || y.trust - x.trust || y.used - x.used) : [];
           if (!facts.length) continue;
-          rows.push([`${title} · ${facts.length} fact${facts.length === 1 ? '' : 's'}`, tilde(dir)]);
-          for (const f of facts.slice(0, 8)) rows.push([`  ${f.always ? 'always' : f.kind}${f.pinned ? ' · pinned' : ''}`, `${f.text.replace(/\s+/g, ' ').slice(0, 96)}${f.text.length > 96 ? '…' : ''}${f.always ? '' : `  (trust ${f.trust}, used ${f.used})`}`]);
-          if (facts.length > 8) rows.push(['', `and ${facts.length - 8} more: /memory open shows them all in the browser`]);
+          sections.push({ title, where: short(dir), facts: facts.slice(0, 8).map((f) => ({ id: f.id, kind: f.kind, always: f.always, pinned: f.pinned, trust: f.trust, used: f.used, text: f.text.replace(/\s+/g, ' ') })), more: Math.max(0, facts.length - 8) });
         }
         // Claude's notes are not Agentic Coder's to change: only how many there are, and where.
+        let claude = null;
         if (agent.memory.claude) {
           const c = notesCount(agent.memory.claude === true ? notesDir() : notesDir({ setting: agent.memory.claude }));
-          if (c.dir) rows.push([`Claude's notes · ${c.used}`, `${tilde(c.dir)}  (read only; ${c.leftOut.length} about sign-ins, servers or secrets are left out)`]);
+          if (c.dir) claude = { used: c.used, where: tilde(c.dir), leftOut: c.leftOut.length };
         }
-        if (!rows.length) { push({ type: 'note', text: 'Nothing saved yet. After a task Agentic Coder shows what it would remember and asks; "/update memory" or "remember that …" saves at once.', tone: 'dim' }); break; }
+        if (!sections.length && !claude) { push({ type: 'note', text: 'Nothing saved yet. After a task Agentic Coder shows what it would remember and asks; "/update memory" or "remember that …" saves at once.', tone: 'dim' }); break; }
         const last = [dirs.you, dirs.project].filter(Boolean).flatMap((d) => readLog(d)).filter((l) => l.what !== 'trust').sort((x, y) => String(y.at).localeCompare(String(x.at)))[0];
-        rows.push([last ? `last change ${String(last.at).slice(0, 16).replace('T', ' ')}` : '', '/memory undo takes the last save back · /memory open shows it in the browser']);
-        push({ type: 'panel', title: `Memory · ${agent.memory.embedder ? 'facts are found by meaning' : 'facts are found by their words (coding setup adds the small model)'}`, pad: 22, rows });
+        const at = last ? new Date(last.at) : null;
+        const when = at ? `${at.getDate()} ${at.toLocaleString('en-US', { month: 'short' })}, ${at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : null;
+        // How it is doing: is it learning, and do the facts come with requests?
+        push({ type: 'memory', how: agent.memory.embedder ? 'meaning' : 'words', sections, claude, health: healthLine(health(dirs)), last: when });
         break;
       }
       case 'rules': {

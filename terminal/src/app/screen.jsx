@@ -141,6 +141,62 @@ function Rules({ it, width, model }) {
   );
 }
 
+// /memory: what the memory keeps, laid out like /rules. One line per fact,
+// cut at the window's edge; its kind on the left, its trust and use on the
+// right; each memory under its own heading with its folder; then how the
+// memory did in the last 7 days. (Before 30 Sep 2026 it was a two-column
+// panel whose long lines wrapped under the labels.)
+const MEM_KIND = { always: C.accent, you: C.accentDim, project: C.dim, worked: C.ok, failed: C.warn, mistake: C.bad, recipe: C.plan };
+function MemoryPanel({ it, width }) {
+  const W = Math.max(60, Math.min(width, 104));
+  const line = '─'.repeat(W - 4);
+  const head = (title, note, right) => (
+    <Box flexDirection="column" marginTop={1}>
+      <Box paddingLeft={2} width={W}>
+        <Box flexShrink={0}><Text><Text bold>{title}</Text>{note ? <Text color={C.dim}>  {note}</Text> : null}</Text></Box>
+        {right ? <Box flexGrow={1} justifyContent="flex-end" paddingLeft={2} minWidth={0}><Text color={C.faint} wrap="truncate-start">{right}</Text></Box> : null}
+      </Box>
+      <Box paddingLeft={2}><Text color={C.faint}>{line}</Text></Box>
+    </Box>
+  );
+  // Signed and padded, so every row's trust starts and ends in the same place.
+  const trustText = (f) => `trust ${(f.trust > 0 ? `+${f.trust}` : String(f.trust)).padStart(2)} · used ${f.used}`;
+  const trustColor = (f) => (f.trust > 0 ? C.ok : f.trust < 0 ? C.warn : C.dim);
+  // Numbers stand out in a line of words.
+  const counted = (text) => String(text).split(/(\d+)/).map((x, i) => (i % 2 ? <Text key={i} bold>{x}</Text> : x));
+  return (
+    <Box flexDirection="column">
+      <Row mark="⏺" markColor={C.accent}><Text><Text bold>Memory</Text><Text color={C.dim}> · {it.how === 'meaning' ? 'facts are found by meaning' : 'facts are found by their words (coding setup adds the small model)'}</Text></Text></Row>
+      {it.sections.map((sec) => (
+        <Box key={sec.title} flexDirection="column">
+          {head(sec.title, `${sec.facts.length + sec.more} fact${sec.facts.length + sec.more === 1 ? '' : 's'}`, sec.where)}
+          {sec.facts.map((f) => (
+            <Box key={f.id} paddingLeft={4} width={W}>
+              <Box width={9} flexShrink={0}><Text color={MEM_KIND[f.always ? 'always' : f.kind] ?? C.dim}>{f.always ? 'always' : f.kind}</Text></Box>
+              <Box flexGrow={1} flexShrink={1} minWidth={0}><Text wrap="truncate-end">{f.text}{f.pinned ? <Text color={C.dim}>  · pinned</Text> : null}</Text></Box>
+              {f.always ? null : <Box width={20} flexShrink={0} justifyContent="flex-end"><Text color={trustColor(f)}>{trustText(f)}</Text></Box>}
+            </Box>
+          ))}
+          {sec.more ? <Box paddingLeft={4}><Text color={C.dim}>and {sec.more} more · /memory open shows them all</Text></Box> : null}
+        </Box>
+      ))}
+      {it.claude ? (
+        <>
+          {head("Claude's notes", `${it.claude.used} · read only`, it.claude.where)}
+          <Box paddingLeft={4} width={W}><Text color={C.dim} wrap="truncate-end">{it.claude.leftOut} about sign-ins, servers or secrets are left out</Text></Box>
+        </>
+      ) : null}
+      {it.health ? (
+        <>
+          {head('Last 7 days', null, it.last ? `last change ${it.last}` : null)}
+          <Box paddingLeft={4} width={W}><Text>{counted(it.health)}</Text></Box>
+        </>
+      ) : null}
+      <Box paddingLeft={2} marginTop={1} width={W}><Text color={C.dim}>/memory undo takes the last save back · /memory open shows every fact in the browser</Text></Box>
+    </Box>
+  );
+}
+
 // The counts on the done line: " · 9 steps · 4 reads · ~1,820 thinking tokens"
 // (a count of 0 is left out; old saved sessions have none).
 export function doneCounts(it) {
@@ -185,6 +241,7 @@ export function Item({ it, width, model, cwd, loaded, start }) {
       </Box>
     );
     case 'rules': return <Rules it={it} width={width} model={model} />;
+    case 'memory': return <MemoryPanel it={it} width={width} />;
     case 'context': return <Context it={it} width={width} />;
     case 'panel': return (
       <Box flexDirection="column">

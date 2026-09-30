@@ -22,7 +22,7 @@ test('facts come back with the request that fits them; /memory shows both memori
     { wait: 'Recent activity' }, { snapshot: 'welcome' },
     { type: 'where are the flags read in export.mjs?' }, { key: 'enter' }, { wait: 'In main(), from argv.' }, { sleep: 200 }, { snapshot: 'asked' },
     { key: 'ctrlO' }, { wait: 'ctrl+o again opens the one before' }, { key: 'ctrlO' }, { wait: 'The flags are read in export.mjs' }, { sleep: 200 }, { snapshot: 'listed' },
-    { type: '/memory' }, { key: 'enter' }, { wait: 'This project · 2 facts' }, { sleep: 200 }, { snapshot: 'panel' },
+    { type: '/memory' }, { key: 'enter' }, { wait: 'This project  2 facts' }, { sleep: 200 }, { snapshot: 'panel' },
     { type: '/memory undo' }, { key: 'enter' }, { wait: 'the last save taken back' }, { sleep: 200 }, { snapshot: 'undone' },
     ...quit,
   ] });
@@ -38,9 +38,12 @@ test('facts come back with the request that fits them; /memory shows both memori
   expect(sent.messages[0].content).toContain('Memory\nAlways\n');
   expect(sent.messages[0].content).toContain('When you are stuck, ask the user what to do instead of guessing or stopping.');
   expect(sent.messages[0].content).toContain('- The flags are read in export.mjs, in main().');
-  expect(r.snapshots.panel).toMatch(/About you · 2 facts/);
-  expect(r.snapshots.panel).toMatch(/always\s+Before you change anything, say in one plain, simple sentence/);
-  expect(r.snapshots.panel).toMatch(/project\s+The flags are read in export\.mjs, in main\(\)\.\s+\(trust 0, used 1\)/);
+  // One line a fact under a heading for each memory; trust and use in a column on the right (30 Sep 2026).
+  expect(r.snapshots.panel).toMatch(/About you {2}2 facts/);
+  expect(r.snapshots.panel).toMatch(/always {3}Before you change anything, say in one plain, simple sentence/);
+  expect(r.snapshots.panel).toMatch(/project {2}The flags are read in export\.mjs, in main\(\)\.\s+trust {2}0 · used 1\n/);
+  expect(r.snapshots.panel).toMatch(/This project {2}2 facts\s+\.\/\.agentic\/memory\n/);
+  expect(r.snapshots.panel).toMatch(/Last 7 days\s+last change \d+ \w{3}, \d+:\d\d [AP]M/);
   expect(r.snapshots.panel).toContain('facts are found by their words');
   expect(r.snapshots.undone).toMatch(/removed\s+The flags are read in export\.mjs/);
   expect(readFacts(m.project)).toEqual([]);
@@ -79,7 +82,8 @@ test('what a task taught is saved after the window closed, and the next start sa
 
 // Asking first (the default, the user's pick on 28 Sep 2026): after a task the
 // facts are listed and a Save / Skip menu opens; nothing is written without a
-// yes, and closing the window saves nothing on its own.
+// yes, and closing the window saves nothing on its own (its second look keeps
+// what is new for the next start, and never a fact you skipped).
 const task = [
   { wait: '? for shortcuts' }, { type: 'add a --json flag to export.mjs' }, { key: 'enter' },
   { wait: 'Do you want to make this edit' }, { sleep: 200 }, { key: 'enter' },
@@ -114,10 +118,37 @@ test('asking first: Skip (esc) keeps nothing, and quitting does not save on its 
   await fake.close();
   expect(r.text).toContain('/update memory saves what matters at any time');
   expect(readFacts(m.project)).toEqual([]);
-  await new Promise((res) => setTimeout(res, 1500)); // a hand-off would have run by now
+  // Quitting hands the conversation to the second look (30 Sep 2026); the
+  // fact you skipped is refused there, so nothing is kept to ask about again.
   const jobs = join(base, 'home', 'memory-jobs');
-  expect(existsSync(jobs) ? readdirSync(jobs) : []).toEqual([]);
+  const list = () => (existsSync(jobs) ? readdirSync(jobs) : []);
+  await new Promise((res) => setTimeout(res, 500));
+  for (let i = 0; i < 100 && list().some((f) => f.endsWith('.json')); i++) await new Promise((res) => setTimeout(res, 100));
+  expect(list()).toEqual([]);
+  expect(readFacts(m.project)).toEqual([]);
 }, T * 2);
+
+test('the second look when the window closes: what is new is kept, and the next start asks about it (Save writes it)', async () => {
+  const { cwd, env, base } = setup();
+  const m = memories(base, cwd);
+  const more = { add: [{ kind: 'you', text: 'When a change adds a flag, add a test for it and run the tests before saying it is done.' }], drop: [] };
+  const fake = await startFakeServer(demoReplies, { route: (json) => (isSave(json) ? { text: JSON.stringify(JSON.stringify(json.messages).includes('read again') ? more : learned) } : null) });
+  const e = { ...env, AGENTIC_MEMORY_SAVE: 'ask' };
+  const args = ['--url', fake.url, '--no-flows', '--slots', '2'];
+  await runInPty({ cwd, env: e, args, timeoutMs: 60_000, steps: [...task, { wait: 'Remember for next time?', ms: 30_000 }, { sleep: 200 }, { key: 'enter' }, { wait: 'Memory: 1 saved' }, ...quit] });
+  const jobs = join(base, 'home', 'memory-jobs');
+  for (let i = 0; i < 150 && !(existsSync(jobs) && readdirSync(jobs).some((f) => f.endsWith('.pending'))); i++) await new Promise((r) => setTimeout(r, 100));
+  expect(readdirSync(jobs).filter((f) => f.endsWith('.pending'))).toHaveLength(1);
+  expect(readFacts(m.you).map((f) => f.text)).not.toContain(more.add[0].text); // kept, not saved
+  const next = await runInPty({ cwd, env: e, args, timeoutMs: 60_000, steps: [
+    { wait: 'Learned last time, read again when the window closed', ms: 20_000 }, { sleep: 200 }, { snapshot: 'asked' },
+    { key: 'enter' }, { wait: 'Memory: 1 saved' }, ...quit,
+  ] });
+  await fake.close();
+  expect(next.snapshots.asked).toContain(`+ ${more.add[0].text}`);
+  expect(readFacts(m.you).map((f) => f.text)).toContain(more.add[0].text);
+  expect(readdirSync(jobs).filter((f) => f.endsWith('.pending'))).toEqual([]);
+}, T * 3);
 
 test('/update memory saves at once (it does not restart the app); /update memory <what> saves that', async () => {
   const { cwd, env, base } = setup();

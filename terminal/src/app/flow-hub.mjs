@@ -332,7 +332,7 @@ export function flowPage(d, { dated = '' } = {}) {
     f.arrow([[570, 322], [570, 388]], { label: 'fits', lp: [578, 360], a: 'start' });
     f.arrow([[400, 430], [450, 430]]); f.arrow([[690, 430], [740, 430]]); f.arrow([[980, 430], [1030, 430]]);
     f.arrow([[1130, 388], [1130, 322], [1040, 322]], { d: true, label: 'score', lp: [1138, 355], a: 'start' });
-    f.text(20, 520, [`The memory belongs to the terminal, not to a model: ${many ? `${list(M.map(short))} read the same facts` : 'a model swapped in reads the same facts'}. Nothing is ever deleted: taken-out facts go to retired/.`, 'coding memory-review reads the day’s conversations again at night, only if you schedule it.'], { k: 's' });
+    f.text(20, 520, [`The memory belongs to the terminal, not to a model: ${many ? `${list(M.map(short))} read the same facts` : 'a model swapped in reads the same facts'}. Nothing is ever deleted: taken-out facts go to retired/.`, 'When a window closes the conversation is read again, and what is new is asked about at the next start; coding memory-review does the same at night, only if you schedule it.'], { k: 's' });
   }
 
   /* 7 · Test bench */

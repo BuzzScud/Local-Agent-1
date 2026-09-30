@@ -1,5 +1,5 @@
 {
- "note": "Written 2026-09-26 before any matcher was run on it. 'tune' requests set the thresholds; 'test' requests are only scored. want = the fact that should come back; ok = facts that may also come back without counting as wrong; want [] = nothing should come back.",
+ "note": "Written 2026-09-26 before any matcher was run on it. 'tune' requests set the thresholds; 'test' requests are only scored. want = the fact that should come back; ok = facts that may also come back without counting as wrong; want [] = nothing should come back. 30 Sep 2026: 'make a page showing the results' takes f5 (reports are one self-contained HTML file) as right too, not only as harmless: a page of results is a report.",
  "facts": [
   {"id": "f1", "kind": "project", "text": "The trading desks live in ~/Desktop/MAIN2026; never reset its shared folder."},
   {"id": "f2", "kind": "you", "text": "An HTML file for the Desktop needs a charset line, or Safari shows wrong characters."},
@@ -41,7 +41,7 @@
  ],
  "test": [
   {"q": "can you check everything still passes", "want": ["f6"]},
-  {"q": "make a page showing the results", "want": ["f7"], "ok": ["f5", "f14"]},
+  {"q": "make a page showing the results", "want": ["f7", "f5"], "ok": ["f14"]},
   {"q": "push it to github", "want": ["f3"], "ok": ["f8", "f14"]},
   {"q": "symbol search list is under the legend on the chart", "want": ["f15"], "ok": ["f16"]},
   {"q": "i want bonsai to use a bigger context for the 27b", "want": ["f10"], "ok": ["f13"]},

@@ -2,18 +2,30 @@
 // first (settings.json "memorySave": "ask"; "auto" saves on its own, as below):
 //   - a little after a task ends, in the background, on the side slot; the
 //     moment you send a message the save stops and waits for the next pause;
-//   - when the window closes: what is still unsaved is handed to a small
-//     process of its own (`coding memory-save <job>`), which finishes after
-//     the window is gone and leaves a line for the next start.
+//   - when the window closes, a second look: every turn of the conversation
+//     is read again, slowly, by a small process of its own (`coding
+//     memory-save <job>`) after the window is gone (the user's pick, 30 Sep
+//     2026, in place of the night review). Asking first, what it would save
+//     is kept (a .pending file) and asked about at the next start in that
+//     folder; saving on its own, it saves and leaves a line for the next start.
 // AGENTIC_MEMORY_SAVE=off turns saving on its own off ("update memory" still
 // works); "memory": false in settings.json turns the whole memory off.
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { HOME, ModelServer, LINGER_SECS, stopIdleServers, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord } from '../../../models/index.mjs';
-import { saveLessons, seedMemory, worthSaving, saveLine } from '../agent/lessons.mjs';
+import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
+import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
+
+const normText = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export const memoryOn = (settings = {}) => settings.memory !== false && (process.env.AGENTIC_NO_MEMORY ?? process.env.BONSAI_NO_MEMORY) !== '1';
+// How a save is made: 'ask' (the default, the user's pick on 28 Sep 2026),
+// 'auto' (saves unasked) or 'off'. AGENTIC_MEMORY_SAVE wins over settings.json.
+export function saveModeOf(settings = {}) {
+  const env = process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE;
+  return env === 'on' || env === 'auto' ? 'auto' : env === 'ask' ? 'ask' : env === 'off' ? 'off' : (settings.memorySave ?? 'ask');
+}
 const savingOn = () => (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off';
 const JOBS = () => join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? HOME, 'memory-jobs');
 export const WAIT_MS = 10_000; // a pause this long after a task starts a save
@@ -62,6 +74,46 @@ export class AutoSave {
     return this.running;
   }
 
+  // At a start: what the last window's second look would save is asked
+  // about first, then (first use here) what is already written is read.
+  async atStart() {
+    try { await this.askPending(); } catch { /* asked again at the next start */ }
+    return this.seed();
+  }
+
+  // The proposals kept since a window here closed (asking first): Save
+  // writes them, Skip drops them for good (never offered again), and when
+  // the moment is wrong (you are typing) they wait for the next start.
+  async askPending() {
+    if (!this.agent.memory || !this.ask) return 0;
+    let n = 0;
+    for (const p of pendingFor(this.agent.cwd)) {
+      // Saved meanwhile (by another window, or by hand): not asked about again.
+      const dirs = memoryDirs(p.cwd, (p.home ?? this.agent.memory.home) ?? undefined);
+      const facts = [...readFacts(dirs.you), ...readFacts(dirs.project)];
+      const have = new Set(facts.map((f) => normText(f.text)));
+      const ids = new Set(facts.map((f) => f.id));
+      p.adds = p.adds.filter((a) => !have.has(normText(a.text)));
+      p.drops = p.drops.filter((d) => ids.has(d.id));
+      if (!p.adds.length && !p.drops.length) { rmSync(p.file, { force: true }); continue; }
+      const ok = await this.ask({ ...shownOf(p), title: 'Learned last time, read again when the window closed', again: true });
+      if (ok === 'later') break;
+      rmSync(p.file, { force: true });
+      const home = p.home ?? this.agent.memory.home;
+      countDay(memoryDirs(p.cwd, home ?? undefined), { asked: 1, yes: ok ? 1 : 0, no: ok ? 0 : 1 });
+      if (ok) {
+        const out = applySave({ cwd: p.cwd, home, adds: p.adds, drops: p.drops }, { why: 'review at quit' });
+        const line = saveLine(out);
+        if (line) this.say(line);
+        n += out.added.length;
+      } else {
+        rememberDeclined(memoryDirs(p.cwd, home ?? undefined), p.adds.map((a) => a.text));
+        this.say('Not saved · it will not be offered again');
+      }
+    }
+    return n;
+  }
+
   // First use in this project: what is already written is read once.
   seed() {
     if (!this.canRunNow) return Promise.resolve(null);
@@ -82,15 +134,15 @@ export class AutoSave {
   // is done (as quitting did before). Answers true when a save was handed over.
   leave({ stopAfter = false } = {}) {
     this.cancel();
-    // Asking first (settings memorySave 'ask', the default): with the window
-    // gone there is no one to ask, so nothing is saved on its own.
-    if (this.ask) return false;
     const a = this.agent;
-    if (!this.on || !worthSaving(a.lessons) || !a.url || /:0$/.test(a.url)) return false;
+    // The second look reads every turn again, saved or not (practice turns never).
+    if (!this.on || !worthSaving(a.lessons, { again: true }) || !a.url || /:0$/.test(a.url)) return false;
     try {
       mkdirSync(JOBS(), { recursive: true });
       const file = join(JOBS(), `${Date.now()}-${process.pid}.json`);
-      writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: a.url, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, lessons: a.lessons.filter((l) => !l.saved), messages: slim(a.messages) }));
+      // ask: with the window gone there is no one to ask, so what it would
+      // save is kept for the next start (askPending).
+      writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: a.url, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
       const [cmd, ...args] = self();
       spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
       return true;
@@ -118,14 +170,46 @@ export async function runJob(file) {
   let embedder = null;
   try {
     embedder = embedderReady() ? new Embedder() : null;
-    out = await saveLessons({ url, model, slot: job.slot ?? undefined, cwd: job.cwd, home: job.home ?? undefined, lessons: job.lessons, messages: job.messages, embedder, why: 'save on quit' });
-    writeFileSync(file.replace(/\.json$/, '.done'), JSON.stringify({ at: new Date().toISOString(), cwd: job.cwd, line: saveLine(out), added: out.added.length, replaced: out.replaced.length, retired: out.retired.length, secs: out.secs }));
+    out = await keepOrSave({ file, job, url, model, embedder });
   } finally {
     rmSync(file, { force: true });
     await embedder?.stop({ keep: true }).catch(() => {});
     await server?.stop({ keep: true }).catch(() => {});
     if (job.stopAfter) { try { stopIdleServers(); } catch { /* it stops on its own later */ } }
   }
+  return out;
+}
+
+// The save a closed window handed over: the second look (job.review) or a
+// plain save of the unsaved turns (an older job). Asking first (job.ask),
+// what it would change is kept in a .pending file beside the job for the
+// next start; otherwise it is saved and a .done line is left.
+export async function keepOrSave({ file, job, url, model, embedder = null, why = 'save on quit' }) {
+  const home = job.home ?? undefined;
+  const p = await proposeSave({ url, model, slot: job.slot ?? undefined, cwd: job.cwd, home, lessons: job.lessons, messages: job.messages, embedder, review: Boolean(job.review) });
+  if (job.ask) {
+    if (p.adds.length || p.drops.length) writeFileSync(file.replace(/\.json$/, '.pending'), JSON.stringify({ at: new Date().toISOString(), cwd: job.cwd, home: job.home ?? null, adds: p.adds, drops: p.drops, secs: p.secs }));
+    return { added: [], replaced: [], retired: [], refused: p.refused, kept: p.adds.length + p.drops.length, secs: p.secs };
+  }
+  const out = p.none ? { added: [], replaced: [], retired: [], refused: [] } : applySave({ cwd: job.cwd, home, adds: p.adds, drops: p.drops }, { why });
+  writeFileSync(file.replace(/\.json$/, '.done'), JSON.stringify({ at: new Date().toISOString(), cwd: job.cwd, line: saveLine(out), added: out.added.length, replaced: out.replaced.length, retired: out.retired.length, secs: p.secs }));
+  return { ...out, secs: p.secs };
+}
+
+// What a closed window's second look would save here, kept for the next
+// start (asking first). One older than two weeks is let go.
+const PENDING_DAYS = 14;
+export function pendingFor(cwd) {
+  const out = [];
+  try {
+    for (const f of readdirSync(JOBS()).filter((x) => x.endsWith('.pending')).sort()) {
+      const file = join(JOBS(), f);
+      let p;
+      try { p = JSON.parse(readFileSync(file, 'utf8')); } catch { rmSync(file, { force: true }); continue; }
+      if (Date.now() - Date.parse(p.at) > PENDING_DAYS * 86_400_000) { rmSync(file, { force: true }); continue; }
+      if (p.cwd === cwd && (p.adds?.length || p.drops?.length)) out.push({ ...p, adds: p.adds ?? [], drops: p.drops ?? [], file });
+    }
+  } catch { /* nothing kept */ }
   return out;
 }
 

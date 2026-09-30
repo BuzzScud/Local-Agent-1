@@ -18,7 +18,7 @@ import { HOME, LOG_DIR, MODELS, DEFAULT_MODEL, ModelServer, scanServers, liveUse
 import { saveLessons, tidyDue } from '../agent/lessons.mjs';
 import { memoryDirs } from '../agent/facts.mjs';
 import { loadSettings } from './store.mjs';
-import { memoryOn, jobsDir } from './autosave.mjs';
+import { memoryOn, jobsDir, saveModeOf, keepOrSave } from './autosave.mjs';
 
 export const HOURS = [1, 2, 3, 4, 5];
 export const IDLE_MINS = 30;
@@ -105,6 +105,17 @@ export async function review({ now = false, url = null, model = null, state = lo
   try {
     for (const s of sessions) {
       if (!alone()) { out.stopped = true; say('an Agentic Coder window opened; stopping'); break; }
+      // Asking first (the default): what it would save is kept and asked
+      // about at the next start in that folder, as the review at quit does.
+      if (saveModeOf(loadSettings(s.cwd)) === 'ask') {
+        mkdirSync(jobsDir(), { recursive: true });
+        const k = await keepOrSave({ file: join(jobsDir(), `review-${Date.now()}-${out.read}.json`), job: { cwd: s.cwd, review: true, ask: true, slot, lessons: s.lessons, messages: s.messages }, url, model, embedder });
+        out.read++; out.kept = (out.kept ?? 0) + (k.kept ?? 0);
+        st.sessions[s.key] = s.updated;
+        st.projects[s.cwd] = today;
+        say(`read "${s.title.slice(0, 50)}" in ${s.cwd}: ${k.kept ?? 0} kept to ask about, ${k.refused.length} refused, ${(k.secs ?? 0).toFixed(0)} s`);
+        continue;
+      }
       const r = await saveLessons({ url, model, slot, cwd: s.cwd, lessons: s.lessons, messages: s.messages, today, embedder, review: true, why: 'night review' });
       out.read++; out.added += r.added.length; out.replaced += r.replaced.length; out.retired += r.retired.length;
       st.sessions[s.key] = s.updated;

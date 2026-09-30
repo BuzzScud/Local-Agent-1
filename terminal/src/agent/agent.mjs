@@ -28,10 +28,10 @@ import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
-import { isMemoryRequest, memoryFile, readMemory, applyMemory, digest, memoryPrompt, MEMORY_SCHEMA } from './memory.mjs';
+import { isMemoryRequest } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
-import { recall, recallNotes } from './recall.mjs';
+import { recall, recallNotes, usedFacts } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
 import { saveLessons, knownAlready, practiceWork } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
@@ -530,7 +530,7 @@ export class Agent extends EventEmitter {
   async send(text, { signal, shown } = {}) {
     this.corrected(text);
     this.turn = null;
-    const happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [] };
+    const happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [], did: [] };
     this.happened = happened;
     this.requestStarted = Date.now(); // its time for thinking starts now (steppedDown)
     this.steppedAt = null;
@@ -1034,7 +1034,17 @@ export class Agent extends EventEmitter {
     if (!last || last.corrected || !CORRECTS.test(String(text).trim())) return;
     last.corrected = String(text).slice(0, 200);
     last.known = false; // a turn that had to be corrected taught something
-    this.trust(last.recalled, -2, 'you corrected Agentic Coder');
+    this.trust(last.used ?? last.recalled, -2, 'you corrected Agentic Coder');
+  }
+
+  // Of the facts that came with the request, the ones the turn really used:
+  // what its steps touched and ran, and its answer (recall.mjs).
+  usedThisTurn(h) {
+    if (!h.recalled?.length) return [];
+    // Only this message's answers: an earlier turn's words are not evidence.
+    const from = h.message ? this.messages.indexOf(h.message) : -1;
+    const answer = from < 0 ? '' : this.messages.slice(from + 1).filter((m) => m.role === 'assistant' && typeof m.content === 'string').map((m) => m.content).join('\n');
+    try { return usedFacts(h.recalled, [...h.did, ...h.files, h.check?.cmd ?? '', String(answer).slice(0, 4000)].join('\n')); } catch { return []; }
   }
 
   trust(recalled, delta, reason) {
@@ -1056,6 +1066,7 @@ export class Agent extends EventEmitter {
       at: h.at, request: h.request.slice(0, 600), kind: this.lastRoute?.kind ?? routeByRules(h.request)?.kind ?? null, reason, outcome,
       files: [...h.files].slice(0, 12), check: h.check ?? null, tries: h.tries.slice(-6), findings: (t?.findings ?? []).slice(-4), asked: (t?.asked ?? []).slice(-3),
       warnings: h.warnings.slice(-4), summary: h.flow?.summary ?? null, recalled: h.recalled,
+      used: this.usedThisTurn(h),
     };
     // A turn that went well on what the memory already holds teaches nothing
     // new: no save is started for it (the review at night still reads it).
@@ -1065,7 +1076,7 @@ export class Agent extends EventEmitter {
     this.lessons.push(lesson);
     this.lessons = this.lessons.slice(-20);
     const delta = { stopped: -2, stuck: -1, failed: -1, passed: +1 }[outcome] ?? 0;
-    this.trust(h.recalled, delta, { stopped: 'you stopped Agentic Coder', stuck: 'Agentic Coder got stuck', failed: 'the task failed its check', passed: 'the task passed its check' }[outcome]);
+    this.trust(lesson.used, delta, { stopped: 'you stopped Agentic Coder', stuck: 'Agentic Coder got stuck', failed: 'the task failed its check', passed: 'the task passed its check' }[outcome]);
     this.emit('settled', lesson);
     return lesson;
   }
@@ -1376,38 +1387,17 @@ export class Agent extends EventEmitter {
     return reason;
   }
 
-  // "update memory": the facts worth keeping from this conversation go into
-  // the file Agentic Coder reads at every start here (memory.mjs), no question asked.
+  // "update memory": the facts worth keeping from this conversation, saved
+  // at once (updateFacts). With the memory off ("memory": false) nothing is
+  // saved; before 30 Sep 2026 it went to a notes file of its own instead.
   async updateMemory(request, started, signal) {
     if (this.memory) return this.updateFacts(request, started, signal);
-    let reason = 'done';
-    const home = homedir();
-    const file = memoryFile(this.cwd);
-    const short = file.startsWith(home) ? `~${file.slice(home.length)}` : file;
-    try {
-      this.emit('flow-step', { index: 0, count: 1, text: 'Updating memory' });
-      const saved = readMemory(file);
-      const p = memoryPrompt({ request, saved, conversation: digest(this.messages.slice(0, -1)), today: new Date().toISOString().slice(0, 10) });
-      const r = await complete({ url: this.url, model: this.model, slot: this.slots?.side, signal, temperature: 0, maxTokens: 700, schema: MEMORY_SCHEMA, system: p.system, user: p.user });
-      if (signal?.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
-      const res = applyMemory(file, r.json ?? { add: [], drop: [] });
-      const text = res.added.length || res.dropped.length
-        ? `Saved to memory (${short}):\n${res.added.map((l) => `- ${l}`).join('\n')}${res.dropped.length ? `\n\nRemoved as out of date:\n${res.dropped.map((l) => `- ${l}`).join('\n')}` : ''}`
-        : `Nothing new to remember from this conversation. Your memory here is ${short}${saved.length ? ` (${saved.length} line${saved.length === 1 ? '' : 's'})` : ''}.`;
-      this.emit('flow-step', null);
-      this.messages.push({ role: 'assistant', content: text });
-      this.emit('assistant', { text, reasoning: '', secs: r.secs, thinkSecs: 0, tokens: r.tokens, final: true });
-      this.emit('note', { text: `Memory: ${short} · read at every start ${/^~\/\.(bonsai|agentic)\//.test(short) ? 'anywhere in your home folder' : 'in this project'}${res.chars > 4500 ? ' · getting long: /memory shows it, edit it freely' : ''}.`, tone: 'dim' });
-    } catch (e) {
-      this.emit('flow-step', null);
-      if (signal?.aborted || e.name === 'AbortError') reason = 'interrupted';
-      else { reason = 'error'; this.emit('note', { text: `Could not update the memory (${e.message}).`, tone: 'error' }); }
-    } finally {
-      this.busy = false;
-    }
-    if (reason === 'interrupted') this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
-    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000 });
-    return reason;
+    const text = 'The memory is off here ("memory": false in settings.json), so nothing was saved. Take that line out to have Agentic Coder remember.';
+    this.messages.push({ role: 'assistant', content: text });
+    this.emit('assistant', { text, reasoning: '', secs: 0, thinkSecs: 0, tokens: 0, final: true });
+    this.busy = false;
+    this.emit('turn-end', { reason: 'done', secs: (Date.now() - started) / 1000 });
+    return 'done';
   }
 
   // One model reply, streamed.
@@ -1633,6 +1623,8 @@ export class Agent extends EventEmitter {
     // A command the fence stopped, in a message a note of Claude's came with: back to the note.
     if (this.claudeCame && out.error && /outside the project folder/.test(String(out.text))) out.text += ' If the note that came with the request answers it, answer from the note now.';
     if (readKey && !out.error) Object.assign(out, { readKey, mtime });
+    // What this step did, for which facts the turn really used (usedFacts).
+    if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${call.name} ${args.path ?? args.command ?? args.pattern ?? ''}`.slice(0, 300));
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);
     // This message's searches, newest first: a Read of a long file shows what they found in it.
     if (this.turn && !out.error && call.name === 'Search' && args.pattern) this.turn.searches = [args.pattern, ...(this.turn.searches ?? []).filter((p) => p !== args.pattern)].slice(0, 3);

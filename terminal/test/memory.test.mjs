@@ -1,10 +1,10 @@
 // "update memory" (src/agent/memory.mjs): recognised without catching code
-// changes, saved to the right file without a question, merged without repeats.
+// changes; where a folder's memory lives; with the memory off, nothing saved.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isMemoryRequest, memoryFile, applyMemory, readMemory, digest } from '../src/agent/memory.mjs';
+import { isMemoryRequest, memoryFile, digest } from '../src/agent/memory.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
@@ -27,23 +27,11 @@ test('the right file: the home folder\'s, the git repo\'s top, or the folder its
   expect(memoryFile(plain, home)).toBe(join(plain, '.bonsai', 'notes.md'));
 });
 
-test('merging: new facts added once, named lines dropped, the user\'s own text kept, kept out of git', () => {
-  const repo = mkdtempSync(join(tmpdir(), 'agentic-mem-repo-')); mkdirSync(join(repo, '.git', 'info'), { recursive: true });
-  const file = join(repo, '.bonsai', 'notes.md');
-  let r = applyMemory(file, { add: ['Prefers tabs over spaces', 'Tests run with bun test'], drop: [] });
-  expect(r.added).toHaveLength(2);
-  expect(readFileSync(file, 'utf8')).toContain('# Agentic Coder memory');
-  writeFileSync(file, readFileSync(file, 'utf8') + '\nMy own line, not a fact.\n');
-  r = applyMemory(file, { add: ['prefers TABS over spaces!', 'Deploys go through ssh orbit'], drop: ['Tests run with bun test'] });
-  expect(r.added).toEqual(['Deploys go through ssh orbit']); // the repeat is skipped
-  expect(r.dropped).toEqual(['Tests run with bun test']);
-  expect(readMemory(file)).toEqual(['Prefers tabs over spaces', 'Deploys go through ssh orbit']);
-  expect(readFileSync(file, 'utf8')).toContain('My own line, not a fact.');
-  expect(readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8')).toContain('.bonsai/');
+test('the digest: what was said, without tool output', () => {
   expect(digest([{ role: 'user', content: 'hi' }, { role: 'tool', content: 'x' }, { role: 'assistant', content: 'Hello' }])).toBe('User: hi\nAgentic Coder: Hello');
 });
 
-test('"update memory" in a conversation saves straight to the file: no question about where', async () => {
+test('"update memory" with the memory off: says so, asks the model nothing, writes no notes file', async () => {
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-mem-agent-'));
   const fake = await startFakeServer([{ text: '{"add":["Likes self-contained HTML files on the Desktop"],"drop":[]}' }]);
   const asked = [];
@@ -53,10 +41,9 @@ test('"update memory" in a conversation saves straight to the file: no question 
   const reason = await agent.send('update memory');
   await fake.close();
   expect(reason).toBe('done');
-  expect(asked).toHaveLength(0); // never asks where
-  expect(fake.requests).toHaveLength(1); // one focused question to the model, nothing else
-  expect(JSON.stringify(fake.requests[0])).toContain('make notes.html on my Desktop');
-  expect(readMemory(join(cwd, '.agentic', 'notes.md'))).toEqual(['Likes self-contained HTML files on the Desktop']);
-  expect(said.at(-1)).toContain('Saved to memory');
-  expect(existsSync(join(cwd, '.agentic', 'notes.md'))).toBe(true);
+  expect(asked).toHaveLength(0);
+  expect(fake.requests).toHaveLength(0);
+  expect(said.at(-1)).toContain('The memory is off here');
+  expect(existsSync(join(cwd, '.agentic', 'notes.md'))).toBe(false);
+  expect(existsSync(join(cwd, '.bonsai', 'notes.md'))).toBe(false);
 });

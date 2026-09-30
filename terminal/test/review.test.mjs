@@ -32,7 +32,7 @@ test('the scheduler\'s file: once an hour in those hours, the installed app, in 
 });
 
 // In its own process with its own home (the folders are read when the code loads).
-function inChild(body, files = () => {}) {
+function inChild(body, files = () => {}, { save = 'auto' } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'agentic-review-'));
   const repo = join(base, 'repo');
   mkdirSync(join(repo, '.git'), { recursive: true });
@@ -45,6 +45,7 @@ function inChild(body, files = () => {}) {
     const { startFakeServer } = await import(${src('test/fake-server.mjs')});
     const { memoryDirs, readFacts, applyChanges } = await import(${src('src/agent/facts.mjs')});
     const { MODELS, DEFAULT_MODEL } = await import(${src('../models/index.mjs')});
+    const { AutoSave, pendingFor } = await import(${src('src/app/autosave.mjs')});
     const repo = ${JSON.stringify(repo)};
     const dirs = memoryDirs(repo);
     const model = MODELS[DEFAULT_MODEL];
@@ -54,7 +55,7 @@ function inChild(body, files = () => {}) {
     console.log(JSON.stringify(out));
     process.exit(0);
   `;
-  const r = spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: join(base, 'home'), AGENTIC_MEMORY: join(base, 'about-you') }, timeout: 30_000 });
+  const r = spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: join(base, 'home'), AGENTIC_MEMORY: join(base, 'about-you'), AGENTIC_MEMORY_SAVE: save }, timeout: 30_000 });
   if (r.status !== 0) throw new Error(r.stderr || r.stdout);
   return { ...JSON.parse(r.stdout.trim().split('\n').pop()), base };
 }
@@ -100,4 +101,79 @@ test('an Agentic Coder window opens while it reads: it stops at once, and picks 
   expect(o.first).toMatchObject({ read: 1, stopped: true });
   expect(o.left).toEqual(['talk 2']);
   expect(o.next).toMatchObject({ read: 1, stopped: false });
+});
+
+test('asking first (the default): the review saves nothing, keeps what it would save, and the next start in that folder asks', () => {
+  const o = inChild(`
+    const answer = { add: [{ kind: 'you', text: 'Explain things simply, in plain words.' }], drop: [] };
+    const fake = await startFakeServer([], { route: () => ({ text: JSON.stringify(answer) }) });
+    out.first = await review({ url: fake.url, model, state: night, today: '2026-09-27' });
+    await fake.close();
+    out.savedNow = readFacts(dirs.you).length;
+    out.kept = pendingFor(repo).map((p) => p.adds.map((a) => a.text));
+    out.elsewhere = pendingFor('/somewhere/else').length;
+    // The next start: a Skip is never offered again; a later start with a yes saves.
+    const said = [];
+    const asked = [];
+    const skip = new AutoSave({ agent: { cwd: repo, memory: {}, lessons: [] }, ask: async (p) => { asked.push(p.title); return false; }, say: (t) => said.push(t) });
+    out.skipped = await skip.askPending();
+    out.afterSkip = [readFacts(dirs.you).length, pendingFor(repo).length];
+    out.asked = asked;
+    out.said = said;
+  `, ({ repo, sessions }) => { writeFileSync(join(sessions, 'a.json'), session(repo, 1)); }, { save: 'ask' });
+  expect(o.first).toMatchObject({ ran: true, read: 1, kept: 1 });
+  expect(o.savedNow).toBe(0);
+  expect(o.kept).toEqual([['Explain things simply, in plain words.']]);
+  expect(o.elsewhere).toBe(0);
+  expect(o.asked).toEqual(['Learned last time, read again when the window closed']);
+  expect([o.skipped, o.afterSkip]).toEqual([0, [0, 0]]);
+  expect(o.said).toEqual(['Not saved · it will not be offered again']);
+});
+
+test('the review at quit, asking first: kept for the next start, where Save writes it and a declined fact is refused from then on', () => {
+  const o = inChild(`
+    const { keepOrSave, jobsDir } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src/app/autosave.mjs'))});
+    const { proposeSave } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src/agent/lessons.mjs'))});
+    const { mkdirSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const answer = { add: [{ kind: 'you', text: 'Explain things simply, in plain words.' }, { kind: 'you', text: 'Say where a page was saved, with its full path.' }], drop: [] };
+    const fake = await startFakeServer([], { route: () => ({ text: JSON.stringify(answer) }) });
+    const lessons = [{ request: 'always explain things simply', kind: 'other', outcome: 'done', reason: 'done', files: [], tries: [], findings: [], warnings: [], recalled: [], saved: true }];
+    mkdirSync(jobsDir(), { recursive: true });
+    out.kept = await keepOrSave({ file: join(jobsDir(), 'quit-1.json'), job: { cwd: repo, review: true, ask: true, lessons, messages: [{ role: 'user', content: 'always explain things simply' }] }, url: fake.url, model });
+    const yes = new AutoSave({ agent: { cwd: repo, memory: {}, lessons: [] }, ask: async () => true, say: () => {} });
+    out.saved = await yes.askPending();
+    out.you = readFacts(dirs.you).map((f) => f.text).sort();
+    // The next quit reads the same turns: what is saved is not kept to ask again,
+    // and a kept proposal saved meanwhile is dropped without a question.
+    out.again = await keepOrSave({ file: join(jobsDir(), 'quit-2.json'), job: { cwd: repo, review: true, ask: true, lessons, messages: [] }, url: fake.url, model });
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(join(jobsDir(), 'quit-3.pending'), JSON.stringify({ at: new Date().toISOString(), cwd: repo, home: null, adds: [{ kind: 'you', text: 'Explain things simply, in plain words.' }], drops: [] }));
+    let asks = 0;
+    const quiet = new AutoSave({ agent: { cwd: repo, memory: {}, lessons: [] }, ask: async () => { asks++; return true; }, say: () => {} });
+    await quiet.askPending();
+    out.askedAgain = [asks, pendingFor(repo).length];
+    // Said no to one: the next proposal refuses it.
+    const no = new AutoSave({ agent: { cwd: repo, memory: {}, lessons: [] }, ask: async () => false, say: () => {} });
+    const { rememberDeclined } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src/agent/lessons.mjs'))});
+    rememberDeclined(dirs, ['Use tabs, not spaces, in every file.']);
+    const again = { add: [{ kind: 'you', text: 'Use tabs, not spaces, in every file.' }], drop: [] };
+    const fake2 = await startFakeServer([], { route: () => ({ text: JSON.stringify(again) }) });
+    const p = await proposeSave({ url: fake2.url, model, cwd: repo, lessons, messages: [], review: true });
+    out.refused = p.refused.map((r) => r.why);
+    out.promptSaysNo = JSON.stringify(fake2.requests[0]).includes('The user said no to saving these');
+    // Asked for in so many words, a skipped fact is saved all the same.
+    const p2 = await proposeSave({ url: fake2.url, model, cwd: repo, lessons, messages: [], request: 'remember that I use tabs, not spaces, in every file' });
+    out.asked = p2.adds.map((a) => a.text);
+    await fake.close(); await fake2.close();
+  `, ({ repo }) => {}, { save: 'ask' });
+  expect(o.kept).toMatchObject({ kept: 2, added: [] });
+  expect(o.saved).toBe(2);
+  expect(o.you).toEqual(['Explain things simply, in plain words.', 'Say where a page was saved, with its full path.']);
+  expect(o.refused).toEqual(['you said no to it before']);
+  expect(o.again).toMatchObject({ kept: 0 });
+  expect(o.again.refused.map((r) => r.why)).toEqual(['saved already', 'saved already']);
+  expect(o.askedAgain).toEqual([0, 0]);
+  expect(o.promptSaysNo).toBe(true);
+  expect(o.asked).toEqual(['Use tabs, not spaces, in every file.']);
 });
