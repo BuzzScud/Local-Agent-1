@@ -132,7 +132,7 @@ const MADE_MORE = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:timeline|carousel|slidesho
 const CHART_ASK = /\b(?:show|draw|plot|display|put|turn|visuali[sz]e)\b[^.?!]{0,60}?\b(?:as|into|in|on) (?:a |an )?(?:[\w-]+ ){0,2}(?:charts?|graphs?|plots?|dashboards?|maps?|timelines?)\b|^\s*(?:please )?(?:chart|graph|plot|visuali[sz]e) (?:my|our|the|all)\b/i;
 const LOOKS = /\b(?:look(?:s|ing)? (?:better|nicer|good|great|cleaner|modern|professional|prettier|ugly|bad|off|dated|plain|boring)|prettier|nicer looking|better looking|more modern|redesign|restyle|the design|visual(?:ly)?)\b/i;
 const NOT_UI_FILE = /\b[\w-]+\.(py|rb|go|rs|java|kt|swift|c|cc|cpp|h|sh|sql|ya?ml|toml|json|csv|txt|md)\b/i;
-const CODE_ONLY = /\b(function|method|class|helper|endpoint|parser|stdout|stderr|exception|unit tests?|test suite|api route|database|schema|migration|regex|cli|command line|script)\b/i;
+const CODE_ONLY = /\b(function|method|class|helper|endpoint|parser|stdout|stderr|exception|unit tests?|test suite|api route|database|schema|migration|regex|cli|command line|script|matplotlib|seaborn|pandas|numpy|plotly|jupyter|notebook)\b/i;
 const QUESTION = /^(?:(?:just|please|hey|hi|ok|so)[,\s]+)?(?:what|which|where|why|how|who|when|explain|describe|tell me|does|is|are|do|did|should)\b/i;
 
 export function isDesignRequest(text) {
@@ -147,9 +147,11 @@ export function isDesignRequest(text) {
 
 const clean = (s) => ` ${String(s).toLowerCase().replace(/[‘’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `;
 
-// Words that say nothing about the kind of page ("a small game", "a chat window"): a card's single
-// Words and the words of its name do not count them. A phrase with one ("simple page") still does.
-export const NOISE = new Set(['small', 'little', 'tiny', 'simple', 'basic', 'plain', 'quick', 'nice', 'window', 'page', 'pages', 'screen', 'screens', 'single', 'new', 'full', 'one']);
+// Words that say nothing about the kind of page ("a chat window", "a simple dashboard"): a card's
+// single Words and the words of its name do not count them. A phrase with one ("simple page") still
+// does. "small" stays a word: the user's own card requests ("a small percentage change", a compact
+// profile card) find the widget by it, and "a small game" now has a game card that wins by its name.
+export const NOISE = new Set(['little', 'tiny', 'simple', 'basic', 'plain', 'quick', 'nice', 'window', 'page', 'pages', 'screen', 'screens', 'single', 'new', 'full', 'one']);
 
 // How well a card fits a request: its Words found in the request (a phrase
 // counts twice) and the words of its name.

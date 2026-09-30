@@ -55,7 +55,7 @@ const NOT = ['fix the bug in export.py', 'what does the dashboard do?', 'add a -
   'make the chart function faster', 'build the app', 'add a column to the users table', 'why is the page blank?', 'update the api route for /users', 'write a python script that renames my photos',
   'explain how the reranker works', 'run the tests',
   'add a map from user ids to names', 'build a chat bot that answers in slack', 'add a card field to the payment endpoint', 'add a player class to the engine',
-  'show the logs in the terminal', 'what does the calendar do?'];
+  'show the logs in the terminal', 'what does the calendar do?', 'plot the loss curve in a graph with matplotlib', 'make a chart of the results in a jupyter notebook'];
 test('a request to make or restyle a page is a design request; questions, fixes and code-only work are not', () => {
   expect(PAGES.filter((t) => !D.isDesignRequest(t))).toEqual([]);
   expect(NOT.filter((t) => D.isDesignRequest(t))).toEqual([]);
@@ -77,15 +77,15 @@ test('the rules always come, then the ONE best example; the others that fit are 
   expect(f.examples.map((c) => c.file)).toEqual(['fable/dashboard.md']);
 });
 
-test('a word that says nothing about the kind of page (window, small) does not pick a card', () => {
+test('a word that says nothing about the kind of page (window, simple) does not pick a card', () => {
   mkdirSync(join(FIX, 'your picks'), { recursive: true });
-  writeFileSync(join(FIX, 'your picks', 'wizard.md'), card('Step wizard in a window', { For: 'a runbook', Words: 'wizard, steps, small' }));
+  writeFileSync(join(FIX, 'your picks', 'wizard.md'), card('Step wizard in a window', { For: 'a runbook', Words: 'wizard, steps, simple' }));
   writeFileSync(join(FIX, 'opus', 'chat.md'), card('Chat', { For: 'a conversation', Words: 'chat, messages' }));
   try {
-    expect(D.scoreCard(D.readCards(FIX).cards.find((c) => c.file === 'your picks/wizard.md'), 'make a small chat window')).toBe(0);
+    expect(D.scoreCard(D.readCards(FIX).cards.find((c) => c.file === 'your picks/wizard.md'), 'make a simple chat window')).toBe(0);
     // before, "window" (its name) tied with "chat", and the user's own set won the tie
     expect(D.pickCards('make a chat window', { dir: FIX }).examples[0].file).toBe('opus/chat.md');
-    expect(D.pickCards('make a step by step wizard in a small window', { dir: FIX }).examples[0].file).toBe('your picks/wizard.md');
+    expect(D.pickCards('make a step by step wizard in a simple window', { dir: FIX }).examples[0].file).toBe('your picks/wizard.md');
   } finally { rmSync(join(FIX, 'your picks', 'wizard.md')); rmSync(join(FIX, 'opus', 'chat.md')); }
 });
 
