@@ -5,6 +5,77 @@
 *Local-Agent-1.* A Claude Code–style coding agent for your terminal, running a local model on
 this Mac. Nothing leaves the machine.
 
+## Install
+
+**You need:** a Mac with Apple Silicon (M1 or newer), 16 GB of memory, about 12 GB of free
+disk, and an internet connection for the first install.
+
+**Paste this into Terminal:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BuzzScud/Local-Agent-1/main/install.sh | sh
+```
+
+It does five steps and prints a ✓ after each:
+
+1. **Checks your Mac**: macOS, Apple Silicon, memory, and Apple's command line tools. If the
+   tools are missing, a window opens to install them. Finish it, then paste the line again.
+2. **Installs Bun** (what builds and runs the app), if you don't have it. It asks first.
+3. **Downloads Agentic Coder** into `~/agentic-coder`.
+4. **Builds the app** and adds the `coding` command (in `~/.local/bin`, added to your PATH).
+5. **Gets the model.** It asks first, then builds the model server (llama.cpp, about 3
+   minutes; it offers to install `cmake` with Homebrew if it's missing) and downloads about
+   8.5 GB: Gemma 4 12B plus three small helper models. If you say no, run `coding setup`
+   later.
+
+When it says **Done**, open a new Terminal window and start it in any project:
+
+```sh
+cd ~/your-project
+coding
+```
+
+You can run the installer again at any time. It updates the code and skips the parts that
+are already done. Options: `AGENTIC_DIR=~/somewhere` picks the folder, and `AGENTIC_YES=1`
+answers yes to every question (`curl … | AGENTIC_YES=1 sh`).
+
+<details>
+<summary>Install by hand instead (the same steps)</summary>
+
+```sh
+xcode-select --install                     # Apple's command line tools (skip if you have them)
+brew install cmake                         # needed to build the model server
+curl -fsSL https://bun.sh/install | bash   # Bun
+git clone https://github.com/BuzzScud/Local-Agent-1.git ~/agentic-coder
+cd ~/agentic-coder
+bun install
+bun run install-cli                        # builds the app, puts `coding` in ~/.local/bin
+export PATH="$HOME/.local/bin:$PATH"       # add this line to ~/.zshrc too
+coding setup                               # model server + models, about 8.5 GB
+```
+</details>
+
+**Check that it works:** `coding -p "what is 6 times 7"` should answer 42. The first
+answer takes a little longer while the model loads.
+
+<details>
+<summary>If something goes wrong</summary>
+
+| You see | Do this |
+|---|---|
+| `command not found: coding` | Open a new Terminal window, or run `export PATH="$HOME/.local/bin:$PATH"`. |
+| `cmake is missing` | `brew install cmake` (Homebrew: [brew.sh](https://brew.sh)), then `coding setup`. |
+| `… is damaged (SHA-256 …)` | A download broke. Delete the file it names, then run `coding setup` again. |
+| `The first build failed` | Its log is in `~/.agentic-coder/logs/update.log`. |
+| The model is slow or won't start | Close other big apps: the model needs most of a 16 GB Mac's memory. |
+</details>
+
+**Update:** `cd ~/agentic-coder && git pull`. The next `coding` rebuilds itself.
+**Uninstall:** delete `~/.local/bin/coding`, `~/.agentic-coder` (the model files and
+settings) and `~/agentic-coder`.
+
+## Use it
+
 ```
 cd any/project
 coding                     # start here
@@ -86,10 +157,10 @@ the Arena. They are kept on the Mac only, in `~/.agentic-coder/battle/tests/`.
 
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 
-Setup on a new Mac: `bun install`, `bun run install-cli`, then `coding setup` builds the model server (llama.cpp
-on the model's engine: Prism's with our Metal patch today, a few minutes; needs cmake and Apple's command line
-tools, see [`models/runtime/engine`](models/runtime/engine/README.md)) and downloads the model
-into `~/.agentic-coder`. Environment switches are `AGENTIC_*` (the old `BONSAI_*` names still work).
+Setup on a new Mac: see [Install](#install) at the top (`install.sh` does it in one line). `coding setup` builds
+the model server (llama.cpp on the model's engine: Prism's with our Metal patch today, see
+[`models/runtime/engine`](models/runtime/engine/README.md)) and downloads the models into `~/.agentic-coder`.
+Environment switches are `AGENTIC_*` (the old `BONSAI_*` names still work).
 
 ## Shared instructions
 
