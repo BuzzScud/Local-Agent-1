@@ -77,16 +77,16 @@ test('every model gets the same card: the same rows in the same order on every t
   expect(cards[0].rows[4].best).toBe(true);
   expect(page).toContain('Beta 9B &lt;b&gt;'); expect(page).not.toContain('Beta 9B <b>');
   // The Differences and Results tables: one column a model, in the same order.
-  for (const cls of ['diff', 'cmp', 'tasks']) expect(page).toMatch(new RegExp(`<table class="grid ${cls}">(<colgroup>.*?</colgroup>)?<thead><tr><th>[^<]*</th>(<th>#?[^<]*</th>)?<th>Alpha`));
+  for (const cls of ['diff', 'cmp', 'tasks']) expect(page).toMatch(new RegExp(`<table class="grid ${cls}">(<colgroup>.*?</colgroup>)?<thead><tr><th>(<span[^>]*>)?[^<]*(</span>)?</th>(<th>#?[^<]*</th>)?<th data-model="alpha">Alpha`));
   // A task's row keeps that order: Alpha's cell, then Beta's. Every model's column is one width (a <col> each).
-  expect(page).toContain('<th>Fix a big file</th><td class="no"><span class="mark">fail</span><span class="t">14:40</span></td><td class="ok best"><span class="mark">pass</span><span class="t">5:40</span></td>');
-  expect(page).toContain('<colgroup><col class="cn"><col><col class="cm"><col class="cm"></colgroup>');
+  expect(page).toContain('<th>Fix a big file</th><td data-model="alpha" class="no"><span class="mark">fail</span><span class="t">14:40</span></td><td data-model="beta" class="ok best"><span class="mark">pass</span><span class="t">5:40</span></td>');
+  expect(page).toContain('<colgroup><col class="cn"><col><col class="cm" data-model="alpha"><col class="cm" data-model="beta"></colgroup>');
   expect(page).toContain('81 of 82'); expect(page).toContain('80 of 82');
 });
 
 test('the verdict is worked out from the run: who was faster, who passed more, what was missed and why, and what to watch', () => {
   const page = harnessPage(harnessData(null, { models: CARDS, settings: SETTINGS, record: RECORD }));
-  const verdict = /<section class="card verdict">([\s\S]*?)<\/section>/.exec(page)[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const verdict = /<section class="card verdict when-all">([\s\S]*?)<\/section>/.exec(page)[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   expect(verdict).toContain('Faster Beta, about 2.0×. 15 min against 30 min for the same 3 tasks.');
   expect(verdict).toContain('Passes more Beta, by 1. 3 against 2. Alpha missed task 21: the 15-minute limit, not wrong code.');
   expect(verdict).toContain('Watch Beta: Said &quot;done&quot; when it was not.');
@@ -105,7 +105,7 @@ test('the verdict is worked out from the run: who was faster, who passed more, w
   const sp = harnessPage(harnessData(null, { models: CARDS, settings: SETTINGS, record: split }));
   expect(sp).toContain('<b>No clear winner:</b> Beta is faster, Alpha passes more.');
   // A quick failure is never the bold one: the slower pass is.
-  expect(sp).toContain('<th>Fix a big file</th><td class="ok best"><span class="mark">pass</span><span class="t">14:40</span></td><td class="no"><span class="mark">fail</span><span class="t">5:40</span></td>');
+  expect(sp).toContain('<th>Fix a big file</th><td data-model="alpha" class="ok best"><span class="mark">pass</span><span class="t">14:40</span></td><td data-model="beta" class="no"><span class="mark">fail</span><span class="t">5:40</span></td>');
   // The same number on both sides marks neither as better.
   const level = cardsOf(harnessPage(harnessData(null, { models: [CARDS[0], { ...CARDS[1], measured: { read: 120, write: 18 } }], settings: SETTINGS, record: RECORD })));
   expect([level[0].rows[2], level[1].rows[2]]).toEqual([{ label: expect.stringContaining('Reading speed'), best: false, value: '120' }, { label: expect.stringContaining('Reading speed'), best: false, value: '120' }]);
@@ -138,10 +138,10 @@ test('three models, or two that share a first word: every one still gets the sam
   expect(cards.map((c) => c.id)).toEqual(['alpha', 'beta', 'gamma', 'alpha', 'beta', 'gamma']);
   for (const c of cards.slice(0, 3)) expect(c.rows.map((r) => r.label)).toEqual(cards[0].rows.map((r) => r.label));
   expect(page).toContain('--models:3'); expect(page).toContain('class="two wideLeft res many"');
-  expect(page).toContain('<col class="cm"><col class="cm"><col class="cm"></colgroup>');
+  expect(page).toContain('<col class="cm" data-model="alpha"><col class="cm" data-model="beta"><col class="cm" data-model="gamma"></colgroup>');
   // "Alpha 12B" and "Alpha 27B" share a first word, so the task tables use their whole names; Beta keeps its short one.
-  expect(page).toContain('<th>Alpha 12B<small>min:sec</small></th><th>Beta<small>min:sec</small></th><th>Alpha 27B<small>min:sec</small></th>');
-  expect(page).toContain('one of these 3'); expect(page).toContain('The same for every model');
+  expect(page).toContain('<th data-model="alpha">Alpha 12B<small>min:sec</small></th><th data-model="beta">Beta<small>min:sec</small></th><th data-model="gamma">Alpha 27B<small>min:sec</small></th>');
+  expect(page).toContain('one of these 3'); expect(page).toContain('The same for every model'); expect(page).toContain('aria-pressed="true">All 3</button>');
   // A tie at the top marks no one: Beta and Alpha 27B both read fastest at 190? No: only Beta does.
   expect(cards[1].rows[2]).toMatchObject({ value: '190', best: true });
   expect(harnessPage(harnessData(null, { models: CARDS, settings: SETTINGS, record: RECORD }))).not.toContain('res many');
@@ -160,4 +160,33 @@ test('before the models share a run the tab says so: no blank rows, the speeds c
   // One model alone still draws: one card, one column.
   const one = harnessPage(harnessData(null, { models: [CARDS[0]], settings: { model: 'alpha' }, record: { run: null, sort: {} } }));
   expect(cardsOf(one).map((c) => c.id)).toEqual(['alpha', 'alpha']);
+  // …and with nothing to choose between, its name is no button and no words wait to be swapped.
+  expect(one).not.toContain('data-pick='); expect(one).not.toContain('class="sw" data-both="one set of steps');
+});
+
+test('a click on a model’s name shows the harness with that model alone: the names are buttons, and everything that is one model’s says whose it is', () => {
+  const page = harnessPage(harnessData(null, { models: CARDS, settings: SETTINGS, record: RECORD }));
+  // The buttons: one that shows every model (lit to start with), then one a model, with the names the words will use.
+  const picks = [...page.matchAll(/<button type="button" class="chip" data-pick="([^"]*)"(?: data-name="([^"]*)" data-short="([^"]*)")? aria-pressed="(true|false)">/g)].map((m) => m.slice(1));
+  expect(picks).toEqual([['', undefined, undefined, 'true'], ['alpha', 'Alpha 12B', 'Alpha', 'false'], ['beta', 'Beta 9B &lt;b&gt;', 'Beta', 'false']]);
+  expect(page).toContain('>Both</button>');
+  // Every card, header cell, cell and column of a model carries its id, as many for one model as for the other.
+  const count = (id) => [...page.matchAll(new RegExp(`<(article|th|td|col)[^>]* data-model="${id}"`, 'g'))].length;
+  expect(count('alpha')).toBeGreaterThan(20); expect(count('alpha')).toBe(count('beta'));
+  // No model's number sits in a cell that does not say whose it is.
+  expect([...page.matchAll(/<td(?! data-model)[^>]*>(?:<span class="mark">|\d+ of \d+<)/g)]).toHaveLength(0);
+  // The words that change: what they say with every model, and with one ({short} and {name} are filled in by the page).
+  const words = Object.fromEntries([...page.matchAll(/<span class="sw" data-both="([^"]*)" data-one="([^"]*)">([^<]*)<\/span>/g)].map((m) => { expect(m[3]).toBe(m[1]); return [m[1], m[2]]; }));
+  expect(words).toMatchObject({ 'The model': '{short}', 'the model': '{short}', model: '{short}', 'one set of steps, whichever model is the brain': 'with {name} as the brain',
+    'The model writes two tests': '{short} writes two tests', 'What differs': 'What it brings', 'The same 3 tasks on both': '{name} on the 3 tasks', 'This harness today, with either model': 'This harness today, with {name}' });
+  for (const one of Object.values(words)) expect(one).not.toMatch(/\bboth\b|the models|either model/i);
+  // How each did on its own, hidden until it is picked; the comparison shows only with every model.
+  const alone = Object.fromEntries([...page.matchAll(/<section class="card verdict" data-only="(\w+)" hidden>([\s\S]*?)<\/section>/g)].map((m) => [m[1], m[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')]));
+  expect(alone.alpha).toContain('How Alpha 12B did Passed 2 of 3. It missed task 21: the 15-minute limit, not wrong code. Time 30 min for the 3 tasks. A typical task took 10 min 20 s. Beside the other About 2.0× slower than Beta, and it passed 1 fewer.');
+  expect(alone.alpha).not.toContain('Watch');
+  expect(alone.beta).toContain('How Beta 9B &lt;b&gt; did Passed 3 of 3. It missed nothing. Time 15 min for the 3 tasks. A typical task took 5 min 40 s. Beside the other About 2.0× faster than Alpha, and it passed 1 more. Watch Said &quot;done&quot; when it was not.');
+  expect(page).toContain('<section class="card verdict when-all"><h3>Which model, when</h3>');
+  expect(page).toMatch(/<b class="when-all">Alpha 12B<br>or Beta 9B &lt;b&gt;<\/b><b data-only="alpha" hidden>Alpha 12B<\/b><b data-only="beta" hidden>/);
+  // The page's script does the swap, keeps the pick in the address and remembers it.
+  for (const bit of ["chips.forEach((c) => c.addEventListener('click', () => pick(c.dataset.pick, true)));", "el.hidden = Boolean(picked) && el.dataset.model !== picked", "localStorage.setItem('harness-model', picked)", "'#' + t.dataset.v + (picked ? '/' + picked : '')"]) expect(page).toContain(bit);
 });

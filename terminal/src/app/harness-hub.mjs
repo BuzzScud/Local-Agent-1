@@ -7,6 +7,9 @@
 //   /harness.json   the same facts as data
 // Every model gets the same card and the same rows, in the same order: the
 // page compares them piece against piece, so nothing about one is drawn differently.
+// A click on a model's name at the top shows the harness with that model alone: its
+// card, its columns, its name in the words, and how it did. It changes this page
+// only; the model the app runs is still picked with /model.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import shell from './harness.html' with { type: 'text' };
@@ -62,18 +65,23 @@ const samp = (s) => (s ? `${Number(s.temperature).toFixed(1)} · ${s.top_p} · $
 const list = (a) => (a.length > 1 ? `${a.slice(0, -1).join(', ')} and ${a.at(-1)}` : a.join(''));
 const NONE = '<span class="none">not run yet</span>';
 
+// Words that change when one model is picked at the top: `both` shows with every model, `one`
+// with the picked one ({short} and {name} become its names). The page's script swaps them.
+const sw = (both, one) => `<span class="sw" data-both="${esc(both)}" data-one="${esc(one)}">${esc(both)}</span>`;
+const THE_MODEL = sw('The model', '{short}'), the_model = sw('the model', '{short}');
+
 // Who does a part: one colour each, everywhere on the page.
 const WHO = { m: 'model', h: 'harness', u: 'you' };
 const dot = (w) => `<i class="dot ${WHO[w]}"></i>`;
-const who = (ws, note = {}) => `<span class="who">${ws.map((w) => `<span>${dot(w)}${WHO[w]}${note[w] ? ` <em>${note[w]}</em>` : ''}</span>`).join('')}</span>`;
-const LEGEND = `<p class="legend"><span>${dot('m')}the model, the brain (writes the words and code)</span><span>${dot('h')}the harness (the code around it)</span><span>${dot('u')}you</span></p>`;
+const who = (ws, note = {}) => `<span class="who">${ws.map((w) => `<span>${dot(w)}${w === 'm' ? sw('model', '{short}') : WHO[w]}${note[w] ? ` <em>${note[w]}</em>` : ''}</span>`).join('')}</span>`;
+const LEGEND = `<p class="legend"><span>${dot('m')}${the_model}, the brain (writes the words and code)</span><span>${dot('h')}the harness (the code around it)</span><span>${dot('u')}you</span></p>`;
 
 const STEPS = [
   { name: 'You ask', who: ['u'], text: 'You type a request and press Enter.' },
-  { name: 'It sorts', who: ['h', 'm'], note: { m: 'sometimes' }, text: 'Word rules pick the kind: rename, fix, change, question or task. The model is asked only when no rule fits.' },
+  { name: 'It sorts', who: ['h', 'm'], note: { m: 'sometimes' }, text: `Word rules pick the kind: rename, fix, change, question or task. ${THE_MODEL} is asked only when no rule fits.` },
   { name: 'It works', who: ['m', 'h'], text: 'Fix and change take a shortcut built for them. Rename needs no model at all. Everything else goes step by step.' },
   { name: 'It checks', who: ['u', 'h', 'm'], text: 'Before any change it asks for your OK. Afterwards it runs the project’s tests and checks that every part of your request was done.' },
-  { name: 'Done', who: ['m', 'h'], text: 'The model writes a sentence on what changed. The harness adds the files it touched and how many tests pass.' },
+  { name: 'Done', who: ['m', 'h'], text: `${THE_MODEL} writes a sentence on what changed. The harness adds the files it touched and how many tests pass.` },
 ];
 // The tools as the page names them; one added to the app shows under its own name.
 const TOOL_WORDS = { TodoWrite: 'a to-do list', Ask: 'a question to you' };
@@ -86,6 +94,9 @@ export function harnessPage(d) {
   const at = `${k(S.context)}${S.auto ? ' (auto)' : ''}`;
   // A model's name where there is little room: its first word, unless another model shares it or it is too short to tell.
   const short = (m) => { const w = m.name.split(' ')[0]; return esc(w.length > 2 && M.filter((o) => o.name.split(' ')[0] === w).length === 1 ? w : m.name); };
+  // What marks a card, a cell or a column as one model's: a pick at the top hides the others'.
+  const of = (m) => `data-model="${esc(m.id)}"`;
+  const both = M.length === 2 ? 'both' : 'every model';
   const tags = (m) => m.tags.map((t) => `<span class="tag${t === 'in use now' ? ' live' : ''}">${t}</span>`).join('');
 
   // The one that is strictly best in a row gets the mark; a tie marks no one.
@@ -112,44 +123,44 @@ export function harnessPage(d) {
   // The pair: every model in the same card, row for row.
   const pair = (rows, title) => {
     const rs = shown(rows);
-    return `<h4 class="pairtitle">${title}</h4><div class="pair" style="--rows:${rs.length};--models:${M.length}">${M.map((m) => `<article class="mc" data-model="${esc(m.id)}">
+    return `<h4 class="pairtitle">${title}</h4><div class="pair" style="--rows:${rs.length};--models:${M.length}">${M.map((m) => `<article class="mc" ${of(m)}>
       <header><b>${esc(m.name)}</b><span class="tags">${tags(m)}</span></header>
       ${rs.map(([label, dir, show, better, val]) => `<div class="row"><span class="k">${label}<small>${dir}</small></span><span class="v${bestOf(better, val) === m.id ? ' best' : ''}">${show(m)}</span></div>`).join('')}
     </article>`).join('')}</div>`;
   };
   // The same rows as a table, one column a model.
-  const grid = (cls, head, rows) => `<table class="grid ${cls}"><thead><tr><th>${head}</th>${M.map((m) => `<th>${esc(m.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([label, dir, show, better, val]) => { const b = bestOf(better, val); return `<tr><th>${label}${dir ? `<small>${dir}</small>` : ''}</th>${M.map((m) => `<td${b === m.id ? ' class="best"' : ''}>${show(m)}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`;
+  const grid = (cls, head, rows) => `<table class="grid ${cls}"><thead><tr><th>${head}</th>${M.map((m) => `<th ${of(m)}>${esc(m.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([label, dir, show, better, val]) => { const b = bestOf(better, val); return `<tr><th>${label}${dir ? `<small>${dir}</small>` : ''}</th>${M.map((m) => `<td ${of(m)}${b === m.id ? ' class="best"' : ''}>${show(m)}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`;
 
   // ── 1 · the flow
   const steps = `<div class="steps">${STEPS.map((s, i) => `<section class="card step"><h3><span class="n">${i + 1}</span>${s.name}</h3><p>${s.text}</p>${who(s.who, s.note)}</section>${i < STEPS.length - 1 ? '<i class="arr">→</i>' : ''}`).join('')}</div>`;
   const sameLine = `<p class="sameline"><b>The same whichever model is loaded:</b> the ${STEPS.length} steps · the ${tools.length} tools · the 3 safety gates · ${S.steps} steps and ${S.tries} tries at most · your OK before any change. Only one model is loaded at a time on this Mac; <code>/model</code> swaps them.</p>`;
-  const flow = `<h2>One request, from start to done</h2><p class="lead">The coloured dots show who does each part. The model only writes. The harness decides what gets written to your files, and when.</p>${LEGEND}${steps}${sameLine}${pair([R.passed, R.time, R.read, R.write, R.mem], M.length > 1 ? `The model in steps 2 to ${STEPS.length} is one of these ${M.length === 2 ? 'two' : M.length}` : `The model in steps 2 to ${STEPS.length}`)}`;
+  const flow = `<h2>One request, from start to done</h2><p class="lead">The coloured dots show who does each part. ${THE_MODEL} only writes. The harness decides what gets written to your files, and when.</p>${LEGEND}${steps}${sameLine}${pair([R.passed, R.time, R.read, R.write, R.mem], M.length > 1 ? sw(`The model in steps 2 to ${STEPS.length} is one of these ${M.length === 2 ? 'two' : M.length}`, `{name} in steps 2 to ${STEPS.length}`) : `The model in steps 2 to ${STEPS.length}`)}`;
 
   // ── 2 · step 3
   const li = (w, b, rest) => `<li class="${WHO[w]}">${dot(w)}<span><b>${b}</b> ${rest}</span></li>`;
   const step3 = `<h2>Inside step 3: how the work gets done</h2><p class="lead">Two ways, picked by the sorting step. Both are the same whichever model is loaded.</p>${LEGEND}
   <div class="two"><section class="card"><h3>The shortcut, for fix and change</h3>
-    <p class="sub">The model never edits your files. It writes tests and drafts, and the harness keeps only what passes.</p>
+    <p class="sub">${THE_MODEL} never edits your files. It writes tests and drafts, and the harness keeps only what passes.</p>
     <ol class="chain">
-      ${li('m', 'The model writes two tests', 'that should fail today and pass once the work is done. For a fix, the project’s own failing test does this job.')}
-      ${li('m', 'The model drafts two versions', 'of the change.')}
+      ${li('m', sw('The model writes two tests', '{short} writes two tests'), 'that should fail today and pass once the work is done. For a fix, the project’s own failing test does this job.')}
+      ${li('m', sw('The model drafts two versions', '{short} drafts two versions'), 'of the change.')}
       ${li('h', 'The harness picks the test the drafts agree with.', 'If no draft passes any test, it stops trusting the tests and goes step by step.')}
-      ${li('m', 'The model tries changes until one passes that test:', `up to ${S.tries} tries, each checked by the harness.`)}
+      ${li('m', sw('The model tries changes until one passes that test:', '{short} tries changes until one passes that test:'), `up to ${S.tries} tries, each checked by the harness.`)}
       ${li('u', 'You OK it.', '“Before I change anything: change convert.mjs (+1 −1). Go ahead?”')}
       ${li('h', 'The harness writes the change', 'and runs the tests again. A change that removed something you didn’t ask to remove is sent back.')}
     </ol></section>
   <section class="card"><h3>Step by step, for everything else</h3>
-    <p class="sub">The model asks for one tool at a time. The harness decides whether it runs.</p>
+    <p class="sub">${THE_MODEL} asks for one tool at a time. The harness decides whether it runs.</p>
     <ol class="chain arrows">
-      ${li('m', 'The model picks one tool:', `${tools.slice(0, -1).join(', ')}, or ${tools.at(-1)}.`)}
+      ${li('m', sw('The model picks one tool:', '{short} picks one tool:'), `${tools.slice(0, -1).join(', ')}, or ${tools.at(-1)}.`)}
       ${li('h', '3 safety gates.', 'Blocked words (rm -rf, sudo, git push). Your OK. A fence that keeps commands inside the project.')}
-      ${li('h', 'The harness runs it', 'and hands the result back to the model.')}
+      ${li('h', 'The harness runs it', `and hands the result back to ${the_model}.`)}
     </ol>
-    <p class="round">Round and round, <b>up to ${S.steps} steps</b>. It ends when the model answers instead of asking for a tool. It stops itself if it <b>repeats the same step</b> or hits <b>5 errors in a row</b>.</p></section></div>
-  ${pair([R.write, R.think, R.calls, R.sampling], 'What differs at this step')}`;
+    <p class="round">Round and round, <b>up to ${S.steps} steps</b>. It ends when ${the_model} answers instead of asking for a tool. It stops itself if it <b>repeats the same step</b> or hits <b>5 errors in a row</b>.</p></section></div>
+  ${pair([R.write, R.think, R.calls, R.sampling], M.length > 1 ? sw('What differs at this step', '{name} at this step') : 'At this step')}`;
 
   // ── 3 · differences
-  const diff = grid('diff', 'What differs', [
+  const diff = grid('diff', M.length > 1 ? sw('What differs', 'What it brings') : 'What it brings', [
     ['Made by', '', (m) => esc(m.by) || '—'],
     ['Model file', 'GB on disk', (m) => `${m.fileGB} GB`],
     ['Speed helper', 'guesses the next words', (m) => (m.helper ? (m.helper.extraGB ? `${m.helper.where} (${m.helper.extraGB} GB)` : m.helper.where) : 'none')],
@@ -173,11 +184,11 @@ export function harnessPage(d) {
     ['Thinking', `${levels.join(' or ') || 'on or off'}; a reply thinks up to ${num(S.thinkingCap)} tokens${budgets.length === 1 && budgets[0] !== S.thinkingCap ? ` (your setting; ${num(budgets[0])} as it comes)` : ''}`],
     ['Conversation size', `${at} now${longest.length === 1 ? `; up to ${k(longest[0])}` : ''}`],
   ];
-  const differences = `<h2>Where the models differ, and where they don’t</h2><p class="lead">The harness is one set of code. These are the only places the model changes anything. The better number in a row is bold.</p>
+  const differences = `<h2>${sw('Where the models differ, and where they don’t', 'What {name} brings, and what stays the same')}</h2><p class="lead">The harness is one set of code. These are the only places ${the_model} changes anything.<span class="when-all"> The better number in a row is bold.</span></p>
   <div class="two wideLeft"><div>${diff}</div><div class="stack">
-    <section class="card"><h3>The same for ${M.length === 2 ? 'both' : 'every model'}</h3><dl class="same">${SAME.map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl></section>
+    <section class="card"><h3>${sw(`The same for ${both}`, 'The same whichever model is loaded')}</h3><dl class="same">${SAME.map(([a, b]) => `<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl></section>
     <section class="card"><h3>Where a model plugs in</h3>
-      <div class="plug"><div><small>same</small><b>The harness</b><span>every screen, tool and check</span></div><i>→</i><div><small>same</small><b>One door</b><span>the only way to the model side</span></div><i>→</i><div><small>same</small><b>The engine</b><span>your build of llama.cpp</span></div><i>→</i><div class="m"><small>the brain</small><b>${M.map((m) => esc(m.name)).join('<br>or ')}</b><span>one loaded at a time</span></div></div>
+      <div class="plug"><div><small>same</small><b>The harness</b><span>every screen, tool and check</span></div><i>→</i><div><small>same</small><b>One door</b><span>the only way to the model side</span></div><i>→</i><div><small>same</small><b>The engine</b><span>your build of llama.cpp</span></div><i>→</i><div class="m"><small>the brain</small><b class="when-all">${M.map((m) => esc(m.name)).join('<br>or ')}</b>${M.map((m) => `<b data-only="${esc(m.id)}" hidden>${esc(m.name)}</b>`).join('')}<span>one loaded at a time</span></div></div>
       <p class="sub">A model is one settings card and two lines in the model list. One added there shows up on this tab by itself.</p></section>
   </div></div>`;
 
@@ -187,29 +198,41 @@ export function harnessPage(d) {
     results = `<h2>The same tasks on every model</h2><p class="lead">Each task is graded by a check the model never sees.</p>
     <section class="card empty"><h3>No test yet that ${M.length === 2 ? 'both models' : 'every model'} ran</h3><p class="sub">Run the same test on each model from the Tests tab (▶ Run tests), with the same settings. The newest one they have in common shows here, task by task.</p></section>`;
   } else {
-    const cell = (m, t) => { const r = m.run.tasks[t.id]; const fastest = r.pass && M.every((o) => o === m || !o.run.tasks[t.id].pass || r.secs < o.run.tasks[t.id].secs); return `<td class="${r.pass ? 'ok' : 'no'}${fastest ? ' best' : ''}"><span class="mark">${r.pass ? 'pass' : 'fail'}</span><span class="t">${mss(r.secs)}</span></td>`; };
-    const block = (ts) => `<table class="grid tasks"><colgroup><col class="cn"><col>${M.map(() => '<col class="cm">').join('')}</colgroup><thead><tr><th>#</th><th>Task</th>${M.map((m) => `<th>${short(m)}<small>min:sec</small></th>`).join('')}</tr></thead><tbody>${ts.map((t) => `<tr><td class="num">${t.n || ''}</td><th>${esc(t.title)}</th>${M.map((m) => cell(m, t)).join('')}</tr>`).join('')}</tbody></table>`;
+    const cell = (m, t) => { const r = m.run.tasks[t.id]; const fastest = r.pass && M.every((o) => o === m || !o.run.tasks[t.id].pass || r.secs < o.run.tasks[t.id].secs); return `<td ${of(m)} class="${r.pass ? 'ok' : 'no'}${fastest ? ' best' : ''}"><span class="mark">${r.pass ? 'pass' : 'fail'}</span><span class="t">${mss(r.secs)}</span></td>`; };
+    const block = (ts) => `<table class="grid tasks"><colgroup><col class="cn"><col>${M.map((m) => `<col class="cm" ${of(m)}>`).join('')}</colgroup><thead><tr><th>#</th><th>Task</th>${M.map((m) => `<th ${of(m)}>${short(m)}<small>min:sec</small></th>`).join('')}</tr></thead><tbody>${ts.map((t) => `<tr><td class="num">${t.n || ''}</td><th>${esc(t.title)}</th>${M.map((m) => cell(m, t)).join('')}</tr>`).join('')}</tbody></table>`;
     const half = Math.ceil(T / 2);
     const when = new Date(run.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     const setup = `thinking ${run.thinking ? 'on' : 'off'}${run.effort ? ` (${esc(String(run.effort)[0].toUpperCase() + String(run.effort).slice(1))})` : ''}${run.ctx ? `, ${k(run.ctx)}` : ''}`;
     // The verdict, worked out from the run: who was faster, who passed more, what each missed.
     const byTime = [...ran].sort((a, b) => a.run.secs - b.run.secs), fast = byTime[0], slow = byTime.at(-1);
     const byPass = [...ran].sort((a, b) => b.run.passed - a.run.passed), top = byPass[0], low = byPass.at(-1);
-    const missed = (m) => { const f = run.tasks.filter((t) => !m.run.tasks[t.id].pass); if (!f.length) return ''; const timed = f.filter((t) => m.run.tasks[t.id].why === 'time'); return `${short(m)} missed ${list(f.map((t) => `task ${t.n || esc(t.id)}`))}${timed.length === f.length ? `: ${run.limitMins ? `the ${run.limitMins}-minute limit` : 'out of time'}, not wrong code` : ''}.`; };
+    const missedOf = (m) => { const f = run.tasks.filter((t) => !m.run.tasks[t.id].pass); if (!f.length) return ''; const timed = f.filter((t) => m.run.tasks[t.id].why === 'time'); return `${list(f.map((t) => `task ${t.n || esc(t.id)}`))}${timed.length === f.length ? `: ${run.limitMins ? `the ${run.limitMins}-minute limit` : 'out of time'}, not wrong code` : ''}`; };
+    const missed = (m) => (missedOf(m) ? `${short(m)} missed ${missedOf(m)}.` : '');
+    const notShown = `This is one run: ${setup}. Other settings are not compared here, and these are practice tasks a check can grade: page and design work is judged in the Battle tab.`;
     const tie = top.run.passed === low.run.passed;
     const clear = fast !== slow && fast === top && !tie;
     const rowsV = [
       ['Faster', fast === slow ? `<b>${short(fast)}: ${mins(fast.run.secs)}</b> for the ${T} tasks.` : `<b>${short(fast)}, about ${(slow.run.secs / fast.run.secs).toFixed(1)}×.</b> ${mins(fast.run.secs)} against ${mins(slow.run.secs)} for the same ${T} tasks. It thought for ${num(fast.run.thinkTokens)} tokens, ${short(slow)} for ${num(slow.run.thinkTokens)}.`],
       ['Passes more', `${tie ? `<b>The same: ${top.run.passed} of ${T} each.</b>` : `<b>${short(top)}, by ${top.run.passed - low.run.passed}.</b> ${top.run.passed} against ${low.run.passed}.`} ${ran.map(missed).filter(Boolean).join(' ')}`],
       ...(M.some((m) => m.watch.length) ? [['Watch', M.filter((m) => m.watch.length).map((m) => `<b>${short(m)}:</b> ${m.watch.map(esc).join(' ')}`).join(' ') + ` Nothing in the ${T} tasks catches that.`]] : []),
-      ['Not shown', `This is one run: ${setup}. Other settings are not compared here, and these are practice tasks a check can grade: page and design work is judged in the Battle tab.`],
+      ['Not shown', notShown],
       ['So', fast === slow ? 'One model has run this so far.' : clear ? `<b>${short(fast)} for small fixes and features a test can check.</b>${fast.watch.length ? ' Read its “done” yourself where no test can.' : ''}` : tie ? `<b>${short(fast)} when speed matters;</b> they pass the same.` : `<b>No clear winner:</b> ${short(fast)} is faster, ${short(top)} passes more.`],
     ];
-    results = `<h2>The same ${T} tasks on ${M.length === 2 ? 'both' : 'every model'}</h2><p class="lead">Each task is graded by a check the model never sees.</p>
+    // One model picked: how it did on its own, and beside the quickest of the others.
+    const beside = (m) => { const o = byTime.find((x) => x !== m); if (!o) return ''; const d = m.run.passed - o.run.passed; return `About ${(Math.max(m.run.secs, o.run.secs) / Math.min(m.run.secs, o.run.secs)).toFixed(1)}× ${m.run.secs <= o.run.secs ? 'faster' : 'slower'} than ${short(o)}, and it passed ${d ? `${Math.abs(d)} ${d > 0 ? 'more' : 'fewer'}` : 'as many'}.`; };
+    const alone = (m) => [
+      ['Passed', `<b>${m.run.passed} of ${T}.</b> ${missedOf(m) ? `It missed ${missedOf(m)}.` : 'It missed nothing.'}`],
+      ['Time', `<b>${mins(m.run.secs)}</b> for the ${T} tasks. A typical task took ${clock(m.run.median)}.`],
+      ...(ran.length > 1 ? [[`Beside ${ran.length === 2 ? 'the other' : 'the others'}`, beside(m)]] : []),
+      ...(m.watch.length ? [['Watch', `${m.watch.map(esc).join(' ')} Nothing in the ${T} tasks catches that.`]] : []),
+      ['Not shown', notShown],
+    ];
+    results = `<h2>${M.length > 1 ? sw(`The same ${T} tasks on ${both}`, `{name} on the ${T} tasks`) : `The ${T} tasks`}</h2><p class="lead">Each task is graded by a check the model never sees.</p>
     <div class="two wideLeft res${M.length > 2 ? ' many' : ''}"><div><div class="two tasksTwo">${block(run.tasks.slice(0, half))}${block(run.tasks.slice(half))}</div>
-      <p class="foot">${esc(run.name)}, ${when}: ${setup}${run.limitMins ? `, ${run.limitMins} minutes a task at most` : ''}. The fastest pass in each row is bold.</p></div>
+      <p class="foot">${esc(run.name)}, ${when}: ${setup}${run.limitMins ? `, ${run.limitMins} minutes a task at most` : ''}.<span class="when-all"> The fastest pass in each row is bold.</span></p></div>
     <div class="stack"><section class="card"><h3>The totals</h3>${grid('cmp', '', [R.passed, R.time, R.typical])}</section>
-      <section class="card verdict"><h3>Which model, when</h3><dl>${rowsV.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section></div></div>`;
+      <section class="card verdict when-all"><h3>Which model, when</h3><dl>${rowsV.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section>
+      ${M.map((m) => `<section class="card verdict" data-only="${esc(m.id)}" hidden><h3>How ${esc(m.name)} did</h3><dl>${alone(m).map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section>`).join('')}</div></div>`;
   }
 
   // ── 5 · more like Opus 5.5
@@ -235,11 +258,15 @@ export function harnessPage(d) {
     ['More room to remember', 'done', 'built', `${at} is in use.${M.length === 2 && M[0].kbPerToken !== M[1].kbPerToken ? ` A token costs ${short(M[0])} ${M[0].kbPerToken} KB and ${short(M[1])} ${M[1].kbPerToken} KB.` : ''}`],
   ];
   const opus = `<h2>More like Opus 5.5: what has been copied</h2><p class="lead">Each row of the Opus 5.5 picture, next to what this harness does today. It is the same for every model, because all of it lives in the harness.</p>
-  <div class="two wideLeft"><div><table class="grid opus"><thead><tr><th>Opus 5.5</th><th>This harness today${either ? `, ${either}` : ''}</th><th>Status</th></tr></thead><tbody>${OPUS.map(([a, b, c, label]) => `<tr><th>${a}</th><td>${b}</td><td><span class="st ${c}">${label}</span></td></tr>`).join('')}</tbody></table></div>
+  <div class="two wideLeft"><div><table class="grid opus"><thead><tr><th>Opus 5.5</th><th>${either ? sw(`This harness today, ${either}`, 'This harness today, with {name}') : 'This harness today'}</th><th>Status</th></tr></thead><tbody>${OPUS.map(([a, b, c, label]) => `<tr><th>${a}</th><td>${b}</td><td><span class="st ${c}">${label}</span></td></tr>`).join('')}</tbody></table></div>
   <div class="stack"><section class="card"><h3>The four worth copying: where they stand</h3><ol class="four">${FOUR.map(([a, c, label, b], i) => `<li><span class="n">${i + 1}</span><div><b>${a}</b> <span class="st ${c}">${label}</span><p>${b}</p></div></li>`).join('')}</ol></section></div></div>`;
 
   const TABS = [['flow', 'The flow', flow], ['step3', 'Step 3', step3], ['differences', 'Differences', differences], ['results', 'Results', results], ['opus', 'More like Opus 5.5', opus]];
-  const body = `<div class="top"><h1>The harness</h1><span class="dateline">one set of steps, whichever model is the brain</span><span class="grow"></span><span class="chips">${M.map((m) => `<span class="chip">${dot('m')}${esc(m.name)}${tags(m)}</span>`).join('')}</span></div>
+  // The models' names: with more than one, each is a button that shows the harness with that model alone, beside one that brings them all back.
+  const chips = M.length > 1
+    ? `<span class="chips" role="group" aria-label="Show the harness with"><button type="button" class="chip" data-pick="" aria-pressed="true">${M.length === 2 ? 'Both' : `All ${M.length}`}</button>${M.map((m) => `<button type="button" class="chip" data-pick="${esc(m.id)}" data-name="${esc(m.name)}" data-short="${short(m)}" aria-pressed="false">${dot('m')}${esc(m.name)}${tags(m)}</button>`).join('')}</span>`
+    : `<span class="chips">${M.map((m) => `<span class="chip">${dot('m')}${esc(m.name)}${tags(m)}</span>`).join('')}</span>`;
+  const body = `<div class="top"><h1>The harness</h1><span class="dateline">${M.length > 1 ? sw('one set of steps, whichever model is the brain', 'with {name} as the brain') : 'one set of steps, whichever model is the brain'}</span><span class="grow"></span>${chips}</div>
   <nav role="tablist">${TABS.map(([id, name], i) => `<button role="tab" data-v="${id}" aria-selected="${i === 0}">${i + 1} · ${name}</button>`).join('')}</nav>
   ${TABS.map(([id, , html], i) => `<section class="view" data-v="${id}"${i ? ' hidden' : ''}>${html}</section>`).join('\n')}`;
   return shell.replace('<!--harness-->', () => body);

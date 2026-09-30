@@ -41,7 +41,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex: none; }
 .dot.model { background: var(--model); } .dot.harness { background: var(--accent); } .dot.you { background: var(--ink3); }
 .legend { display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink2); margin: 0 0 10px; }
-.legend span, .who span { display: inline-flex; align-items: center; white-space: nowrap; }
+/* a label stays on one line unless it is wider than its card (a picked model with a long name) */
+.legend > span, .who > span { display: inline-flex; align-items: baseline; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.legend .dot, .who .dot { align-self: center; }
 .who { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink3); }
 .who em { font-style: normal; text-transform: none; letter-spacing: 0; margin-left: 4px; }
 
@@ -50,6 +52,11 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chip { display: inline-flex; align-items: center; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; white-space: nowrap; }
 .tag { font-size: 11px; color: var(--ink3); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; margin-left: 7px; line-height: 17px; white-space: nowrap; }
 .tag.live { color: var(--ok); border-color: currentColor; }
+/* with more than one model the names are buttons: a click shows the harness with that model alone */
+button.chip { font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+button.chip:hover { border-color: var(--ink3); }
+button.chip[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+button.chip[aria-pressed="true"] .tag { color: inherit; border-color: currentColor; opacity: .8; }
 
 /* the pair: every model in the same card, row for row. The cards share one set
    of row lines (subgrid), so a row is the same height in each whatever it holds. */
@@ -64,6 +71,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mc .k small, .grid th small { display: block; color: var(--ink3); font-size: 11px; font-weight: 400; }
 .mc .v { text-align: right; font-variant-numeric: tabular-nums; font-size: 13.5px; white-space: nowrap; }
 .mc .v b { font-size: 16px; font-weight: 650; }
+/* one model picked: its card alone, kept to a width the eye can cross */
+body[data-picked] .pair { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+/* …and with no other model beside it, no number is set in bold as the better one */
+body[data-picked] .grid td.best { color: var(--ink2); font-weight: 400; } body[data-picked] .grid td.best b { color: var(--ink2); font-weight: 500; }
 .mc .v.best::before { content: "better"; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--ok); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-right: 8px; vertical-align: 2px; }
 
 /* layouts */
@@ -166,25 +177,49 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <!--harness-->
 </main>
 <script>
-// The tabs: a click, the keys 1-5 and ← → open one; #results in the address opens it too.
+// The tabs: a click, the keys 1-5 and ← → open one. The models' names at the top: a click shows
+// the harness with that model alone (its card, its columns, its name in the words), and the first
+// button brings every model back. Both are kept in the address (#results/qwen), and the model is
+// remembered for the next visit.
 (function () {
-  const tabs = [...document.querySelectorAll('[role="tab"]')], views = [...document.querySelectorAll('.view')];
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const tabs = $$('[role="tab"]'), views = $$('.view'), chips = $$('.chip[data-pick]');
+  let picked = '';
+  const place = () => { const t = tabs.find((x) => x.getAttribute('aria-selected') === 'true'); try { history.replaceState(null, '', '#' + t.dataset.v + (picked ? '/' + picked : '')); } catch {} };
   const show = (v, keep) => {
     if (!tabs.some((t) => t.dataset.v === v)) v = tabs[0].dataset.v;
     tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.v === v)));
     views.forEach((s) => { s.hidden = s.dataset.v !== v; });
-    if (keep) try { history.replaceState(null, '', '#' + v); } catch {}
+    if (keep) place();
+  };
+  const pick = (id, keep) => {
+    const chip = chips.find((c) => c.dataset.pick && c.dataset.pick === id);
+    picked = chip ? id : '';
+    if (picked) document.body.dataset.picked = picked; else delete document.body.dataset.picked;
+    chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.pick === picked)));
+    $$('[data-model]').forEach((el) => { el.hidden = Boolean(picked) && el.dataset.model !== picked; });
+    $$('[data-only]').forEach((el) => { el.hidden = el.dataset.only !== picked; });
+    $$('.when-all').forEach((el) => { el.hidden = Boolean(picked); });
+    $$('.sw').forEach((el) => { el.textContent = chip ? el.dataset.one.replaceAll('{short}', chip.dataset.short).replaceAll('{name}', chip.dataset.name) : el.dataset.both; });
+    if (keep) { try { if (picked) localStorage.setItem('harness-model', picked); else localStorage.removeItem('harness-model'); } catch {} place(); }
   };
   tabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.v, true)));
+  chips.forEach((c) => c.addEventListener('click', () => pick(c.dataset.pick, true)));
   document.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const at = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
     const to = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : e.key === 'ArrowRight' ? at + 1 : e.key === 'ArrowLeft' ? at - 1 : -1;
     if (to >= 0 && to < tabs.length) { e.preventDefault(); show(tabs[to].dataset.v, true); }
   });
-  // The address names a tab: at the start, and when it is changed by hand afterwards.
-  if (location.hash.length > 1) show(location.hash.slice(1));
-  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  // The address names a tab and, after a /, a model: at the start, and when it is changed by hand afterwards.
+  const fromAddress = (first) => {
+    const [v, m] = location.hash.slice(1).split('/');
+    if (v) show(v);
+    let saved = null; try { saved = localStorage.getItem('harness-model'); } catch {}
+    if (m !== undefined) pick(m); else if (first && saved) pick(saved);
+  };
+  fromAddress(true);
+  window.addEventListener('hashchange', () => fromAddress(false));
 })();
 </script>
 </body>
