@@ -8,6 +8,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [diagrams/agentic-coder-structure-2026-09-30.html](diagrams/agentic-coder-structure-2026-09-30.html) | page | Agentic Coder folder structure | 614 KB | 2026-09-30 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 287 KB | 2026-09-30 |
 | [tests/agentic-coder-weights-reader-check-2026-09-30-1506.html](tests/agentic-coder-weights-reader-check-2026-09-30-1506.html) | page | Weights reader check | 10 KB | 2026-09-30 |
 | [tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html](tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html) | page | Remote check · Gemma 4 12B QAT | 12 KB | 2026-09-30 |
@@ -42,7 +43,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-09-29 |
 | [diagrams/embedder-retriever-reranker-explained-v2.html](diagrams/embedder-retriever-reranker-explained-v2.html) | page | Embedder, retriever, reranker | 27 KB | 2026-09-29 |
 | [older versions/embedder-retriever-reranker-explained.html](older%20versions/embedder-retriever-reranker-explained.html) | page | Embedder, retriever, reranker | 22 KB | 2026-09-29 |
-| [diagrams/agentic-coder-structure-2026-09-29.html](diagrams/agentic-coder-structure-2026-09-29.html) | page | Agentic Coder folder structure | 199 KB | 2026-09-29 |
+| [older versions/agentic-coder-structure-2026-09-29.html](older%20versions/agentic-coder-structure-2026-09-29.html) | page | Agentic Coder folder structure | 199 KB | 2026-09-29 |
 | [older versions/agentic-coder-flow-diagram-2026-09-29.html](older%20versions/agentic-coder-flow-diagram-2026-09-29.html) | page | Agentic Coder flow diagram | 58 KB | 2026-09-29 |
 | [reports/agentic-coder-mac-memory-built-2026-09-28.html](reports/agentic-coder-mac-memory-built-2026-09-28.html) | page | Mac memory · built | 14 KB | 2026-09-29 |
 | [design rounds/rules-command-2-designs-2026-09-28.html](design%20rounds/rules-command-2-designs-2026-09-28.html) | page | Rules Command Designs | 13 KB | 2026-09-29 |
