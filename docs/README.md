@@ -8,7 +8,9 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-weather-widget-session-2026-09-29.html](tests/agentic-coder-weather-widget-session-2026-09-29.html) | page | Weather widget session | 176 KB | 2026-09-30 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 256 KB | 2026-09-30 |
+| [other/agentic-coder-code-search-plan-2026-09-29.html](other/agentic-coder-code-search-plan-2026-09-29.html) | page | Code search plan | 25 KB | 2026-09-29 |
 | [tests/agentic-coder-sorting-check-gemma-2026-09-29-1846.html](tests/agentic-coder-sorting-check-gemma-2026-09-29-1846.html) | page | Sorting check · Gemma 4 12B QAT | 57 KB | 2026-09-29 |
 | [tests/agentic-coder-sorting-check-qwen-2026-09-29-1844.html](tests/agentic-coder-sorting-check-qwen-2026-09-29-1844.html) | page | Sorting check · Qwen3.5 9B | 57 KB | 2026-09-29 |
 | [tests/agentic-coder-sorting-decision-model-2026-09-29.html](tests/agentic-coder-sorting-decision-model-2026-09-29.html) | page | Sorting a request: the decision-model idea | 185 KB | 2026-09-29 |
