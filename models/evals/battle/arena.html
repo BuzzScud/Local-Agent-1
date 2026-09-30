@@ -400,6 +400,7 @@ body.compact .tch { padding: 5px 14px; }
 .lgrp span { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
 .tg { display: inline-grid; place-items: center; width: 17px; height: 17px; border: 1.5px solid var(--ink3); border-radius: 5px; font-size: 11px; line-height: 1; color: transparent; background: none; padding: 0; cursor: pointer; }
 .tg.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tg.some { border-color: var(--accent); background: linear-gradient(var(--accent), var(--accent)) center / 9px 2.5px no-repeat; }
 .tg:disabled { border-style: dashed; opacity: .5; cursor: default; }
 .mk { font-weight: 700; } .mk.ok { color: var(--ok); } .mk.bad { color: var(--bad); } .mk.warn { color: var(--warn); } .mk.nil { color: var(--ink3); font-weight: 400; }
 
@@ -504,10 +505,11 @@ body.compact .tch { padding: 5px 14px; }
   const ask = new URLSearchParams(location.search);
   const HUB = (() => { const h = ask.get('hub'); const ok = (x) => /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(x ?? ''); try { if (ok(h)) sessionStorage.setItem('arena-hub', h); return ok(h) ? h : (ok(sessionStorage.getItem('arena-hub')) ? sessionStorage.getItem('arena-hub') : null); } catch { return ok(h) ? h : null; } })();
   if (location.search) history.replaceState(null, '', location.pathname);
-  // What you picked and set, kept for next time: the ticks, the open sets, what is shown, who runs it, the panel.
+  // What you picked and set, kept for next time: the ticks, what is shown, who runs it, the panel.
+  // The sets are not kept: every one starts shut each time the page opens.
   const KEEP = 'agentic-arena-v1';
   let ui = { ticked: [], open: {}, sel: null, who: 'both', effort: 'low', vals: {}, row: 0 };
-  try { ui = { ...ui, ...JSON.parse(store.get(KEEP) || '{}') }; } catch { /* as it starts */ }
+  try { ui = { ...ui, ...JSON.parse(store.get(KEEP) || '{}'), open: {} }; } catch { /* as it starts */ }
   const save = () => store.set(KEEP, JSON.stringify(ui));
   const S = { modal: false, st: null, m: {}, runs: {}, jobs: {}, jobLines: {}, view: {}, cmp: {}, tab: {}, openPrompt: false, hl: null, full: null, menu: false, runsOpen: false, rec: false, find: '', err: '', sending: false };
 
@@ -638,7 +640,7 @@ body.compact .tch { padding: 5px 14px; }
   const found = (t) => !S.find || `${numOf(t)} ${t.title} ${t.prompt}`.toLowerCase().includes(S.find);
   function listHtml() {
     const st = S.st; const [m1, m2] = st.models;
-    const tick = (k, off, label) => `<button type="button" class="tg${isTicked(k) && !off ? ' on' : ''}" data-tick="${esc(k)}" aria-pressed="${isTicked(k) && !off}" aria-label="Pick ${esc(label)}"${off ? ' disabled' : ''}>✓</button>`;
+    const tick = (k, off, label, some = 0) => `<button type="button" class="tg${isTicked(k) && !off ? ' on' : some ? ' some' : ''}" data-tick="${esc(k)}" aria-pressed="${isTicked(k) && !off ? 'true' : some ? 'mixed' : 'false'}" aria-label="Pick ${esc(label)}"${some ? ` data-tip="${some === 1 ? '1 test inside is ticked: open the set to see it' : `${some} tests inside are ticked: open the set to see them`}"` : ''}${off ? ' disabled' : ''}>✓</button>`;
     let rows = '<div class="lgrp">Sets<span>open one to pick single tests</span></div>';
     for (const s of st.sets) {
       const mine = inSet(s);
@@ -646,7 +648,9 @@ body.compact .tch { padding: 5px 14px; }
       if (S.find && !hits.length && !s.name.toLowerCase().includes(S.find)) continue;
       const agg = (m) => { const rs = s.ids.map((id) => testById(id)?.last?.[m.id]).filter(Boolean); return rs.length ? `<span class="c" data-tip="${esc(nameOf(m.id))}: ${rs.filter((r) => r.pass === true && !r.stopped && !r.overLimit && !r.error).length} of the ${rs.length} it ran passed">${rs.filter((r) => r.pass === true && !r.stopped && !r.overLimit && !r.error).length}/${rs.length}</span>` : '<span class="c"><span class="mk nil">–</span></span>'; };
       const inLine = (st.line ?? []).filter((x) => x.groupSet === s.id).length;
-      rows += `<div class="lrow${none ? ' off' : ''}${sel().kind === 'set' && sel().id === s.id ? ' sel' : ''}" data-set="${s.id}">${tick(`set:${s.id}`, none, s.name)}<span class="nm"><span class="tw">${none ? '' : `<i class="car${open ? '' : ' shut'}"></i>`}</span><b class="tt">${esc(s.name)}</b><small>${none ? 'none yet: + New makes one' : `${s.ids.length} test${s.ids.length === 1 ? '' : 's'}`}</small>${inLine ? `<span class="st q">${inLine} in line</span>` : ''}</span>${agg(m1)}${agg(m2)}</div>`;
+      // A shut set with ticked tests inside shows a bar in its box, so a tick is never out of sight.
+      const hid = open ? 0 : mine.filter((t) => isTicked(`test:${t.id}`)).length;
+      rows += `<div class="lrow${none ? ' off' : ''}${sel().kind === 'set' && sel().id === s.id ? ' sel' : ''}" data-set="${s.id}">${tick(`set:${s.id}`, none, s.name, hid)}<span class="nm"><span class="tw">${none ? '' : `<i class="car${open ? '' : ' shut'}"></i>`}</span><b class="tt">${esc(s.name)}</b><small>${none ? 'none yet: + New makes one' : `${s.ids.length} test${s.ids.length === 1 ? '' : 's'}`}</small>${inLine ? `<span class="st q">${inLine} in line</span>` : ''}</span>${agg(m1)}${agg(m2)}</div>`;
       if (open) for (const t of S.find ? hits : mine) rows += `<div class="lrow kid${sel().kind === 'test' && sel().id === t.id ? ' sel' : ''}" data-test="${esc(t.id)}">${tick(`test:${t.id}`, false, t.title)}<span class="nm" data-tip="${esc(t.title)}"><span class="tt">${numOf(t) ? `${numOf(t)} · ` : ''}${esc(t.title)}</span>${t.level && !s.level ? `<small>${LEVEL_NAME[t.level] ?? ''}</small>` : ''}${stateTag('test', t.id, t.toVote)}</span><span class="c">${markOf(t.last?.[m1.id])}</span><span class="c">${markOf(t.last?.[m2.id])}</span></div>`;
     }
     const cs = checks().filter((c) => !S.find || `${c.name} ${c.what}`.toLowerCase().includes(S.find));
@@ -1232,7 +1236,7 @@ body.compact .tch { padding: 5px 14px; }
       applyAsk();
       const s = sel();
       const okSel = (s.kind === 'test' && testById(s.id)) || (s.kind === 'set' && setById(s.id)) || (s.kind === 'check' && checkById(s.id));
-      if (!okSel) { const r = S.st.running; const t = r?.kind === 'test' ? testById(r.test) : tests().filter((x) => x.latest).sort((a, b) => String(b.latest.at).localeCompare(String(a.latest.at)))[0] ?? null; ui.sel = t ? { kind: 'test', id: t.id } : r?.kind === 'check' ? { kind: 'check', id: r.test } : { kind: 'set', id: S.st.sets[0]?.id }; if (t) ui.open[suiteOf(t)] = true; }
+      if (!okSel) { const r = S.st.running; const t = r?.kind === 'test' ? testById(r.test) : tests().filter((x) => x.latest).sort((a, b) => String(b.latest.at).localeCompare(String(a.latest.at)))[0] ?? null; ui.sel = t ? { kind: 'test', id: t.id } : r?.kind === 'check' ? { kind: 'check', id: r.test } : { kind: 'set', id: S.st.sets[0]?.id }; }
       const cur = sel();
       if (cur.kind === 'test') {
         const t = testById(cur.id), v = S.view[t.id];
@@ -1330,7 +1334,8 @@ body.compact .tch { padding: 5px 14px; }
       if (act === 'resume') { await api('/api/resume', {}); await poll(true); }
       if (act === 'clearline') { S.menu = false; await api('/api/clearline', {}); toast('The line is clear: nothing waits to run.'); await poll(true); }
       if (act === 'clearresults') { S.menu = false; draw(); if (confirm('Clear all results? Every run of a test and your votes move to the arena\'s trash folder (~/.agentic-coder/battle/trash); the score goes back to 0–0. Your tests and the test record stay.')) { const r = await api('/api/clearresults', {}); S.m = {}; S.view = {}; S.cmp = {}; toast(`Cleared: ${r.moved} result${r.moved === 1 ? '' : 's'} moved to the trash folder.`); await poll(true); } }
-      if (act === 'vote') { const det = lanesFor(selTest())?.det; const r = await api('/api/vote', { id: det.id, v: el.dataset.v }); toast(r.order ? `Model A was ${nameOf(r.order.A)}, Model B was ${nameOf(r.order.B)}.` : 'Saved.'); await poll(true); }
+      // A vote ends that test's turn: its tick comes off, so the next Run does not take it again.
+      if (act === 'vote') { const t = selTest(), det = lanesFor(t)?.det; const r = await api('/api/vote', { id: det.id, v: el.dataset.v }); ui.ticked = ui.ticked.filter((k) => k !== `test:${t.id}`); save(); toast(r.order ? `Model A was ${nameOf(r.order.A)}, Model B was ${nameOf(r.order.B)}.` : 'Saved.'); await poll(true); }
       if (act === 'tab') { S.tab[sel().id] = el.dataset.tab; S.hl = null; drawMain(true); }
       if (act === 'prompt') { S.openPrompt = !S.openPrompt; drawMain(true); }
       if (act === 'full') { S.full = Number(el.dataset.i); drawMain(true); }
