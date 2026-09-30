@@ -165,6 +165,20 @@ export function claimsAlreadyThere(text) {
   return /\b(?:already|was already|were already)\s+(?:in place|there|exists?|present|implemented|supported|set up|done|works?|working|has|had|in the (?:file|project|code))\b|\b(?:is|are|was|were)\s+already\b/i.test(text ?? '');
 }
 
+// A request for work (make, add, fix…) and an answer that says it was done:
+// with no file changed in the message, the answer is not true (Qwen, 29 Sep:
+// asked again for the weather page, it answered "Done" and wrote nothing).
+export function asksForWork(text) {
+  // "why is the build slow", "how do I add a flag": a question, not work.
+  if (/^\W*(why|what|how|where|when|which|who|explain|is|are|does|do)\b/i.test(text ?? '')) return false;
+  return /\b(add|fix|change|make|implement|create|build|rename|remove|delete|update|refactor|write|save|put|move|replace|edit|restyle|redesign|improve|convert|generate)\b/i.test(text ?? '');
+}
+export function claimsDone(text) {
+  const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
+  if (/\b(nothing (?:was |has been |is )?(?:changed|written|edited|done)|no (?:files?|changes?|edits?) (?:was |were |have been |has been )?(?:changed|made|written|needed)|(?:did|do|have|has|could|can)(?: not|n'?t)|cannot|unable|not (?:done|changed|made|finished|written))\b/i.test(t)) return false;
+  return /\b(done|finished|completed?|created|updated|added|fixed|implemented|saved|wrote|written|changed|built|made|applied|removed|replaced|renamed|moved)\b/i.test(t);
+}
+
 // Sentences where it names a cause or a fix ("The .hud creates a stacking
 // context…", "So the problem: .hud has z-index:4."): they survive trims and
 // summaries word for word, and one that names a fix before anything changed
@@ -426,7 +440,8 @@ export class Agent extends EventEmitter {
   // The layout check of the pages this message changed (flows/layoutcheck.mjs):
   // the text for the model when something is broken, else null. `again`: the
   // look after its fix, which only tells you what is left.
-  async checkLayout(again = false) {
+  // `quiet`: no notes (the look at the end of the turn, see stillBroken).
+  async checkLayout(again = false, { quiet = false } = {}) {
     if (!designSettings(this.designSaved).check || !this.turn?.startTexts?.size) return null;
     const pages = pagesToCheck(this.cwd, [...this.turn.startTexts.keys()]);
     if (!pages.length) return null;
@@ -436,6 +451,7 @@ export class Agent extends EventEmitter {
       return null;
     }
     const notes = [];
+    const left = [];
     for (const rel of pages) {
       const abs = resolvePath(this.cwd, rel).abs;
       let html = '';
@@ -447,10 +463,14 @@ export class Agent extends EventEmitter {
       const n = r.problems.length;
       // `check` is the same result for the screen, which draws it as a step with each problem named.
       const check = { page: rel, problems: r.problems, secs: r.secs, again };
+      if (quiet) { if (n) left.push({ page: rel, problems: r.problems }); continue; }
       if (!n) this.emit('note', { text: `Layout check, ${rel}: nothing broken at 1440 px, on a phone or in dark mode (${r.secs.toFixed(1)} s).`, tone: 'dim', check });
       else this.emit('note', { text: `Layout check, ${rel}: ${n} problem${n === 1 ? '' : 's'}${again ? ' left' : ''} (${r.secs.toFixed(1)} s)${again ? `: ${r.problems.slice(0, 3).join(' ')}` : ', sent back to fix.'}`, tone: 'warn', check });
-      if (n) notes.push(layoutNote(rel, r.problems));
+      if (n) { notes.push(layoutNote(rel, r.problems)); left.push({ page: rel, problems: r.problems }); }
     }
+    // After its fix: what is still broken, and how many edits the turn had then.
+    if (this.turn && again) { this.turn.layoutLeft = left.length ? left : null; this.turn.editsAtLook = this.turn.edits ?? 0; }
+    if (quiet) return null;
     if (this.turn) this.turn.layout = { pages, problems: notes.length, again };
     return notes.length ? notes.join('\n\n') : null;
   }
@@ -794,6 +814,7 @@ export class Agent extends EventEmitter {
       }
     }
     let verified = false;
+    let doneUnchanged = false; // sent back once for saying done with nothing changed
     let lostChecked = false;
     let layoutSent = false;
     let layoutDone = false;
@@ -875,6 +896,20 @@ export class Agent extends EventEmitter {
             nudges++;
             this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
             continue;
+          }
+          // It says the work is done, but nothing changed in this message: no
+          // Edit, no Write, and no command that could have written instead.
+          // Sent back once; if it still claims it with nothing changed, a note
+          // under the answer says so.
+          const t = this.turn;
+          if (!t.changed && !t.question && !t.carried && !t.ranCommand && this.hook('said-done') && asksForWork(t.request) && claimsDone(text)) {
+            if (!doneUnchanged) {
+              doneUnchanged = true;
+              this.emit('note', { text: 'It says the work is done, but no file changed; asked it to look again.', tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto('You said the work is done, but no file was changed in this message. If the request needs a change, make it now with the tools. If it was really done before this message, say which file has it and that nothing changed now, in one or two sentences.') });
+              continue;
+            }
+            this.emit('note', { text: 'Nothing was changed for this request: no file was written or edited.', tone: 'warn' });
           }
           // It created a file this turn, then says the work was already there.
           if (this.turn.created.length && this.hook('already') && claimsAlreadyThere(text)) {
@@ -1029,6 +1064,7 @@ export class Agent extends EventEmitter {
       this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
     }
     const t = this.turn ?? {};
+    await this.stillBroken(reason);
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0 });
     return reason;
   }
@@ -1703,6 +1739,7 @@ export class Agent extends EventEmitter {
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
       this.turn.changed = true;
       this.turn.testedAfterChange = false;
+      this.turn.edits = (this.turn.edits ?? 0) + 1;
       this.happened?.files.add(prepared.rel);
       // Each file as it was before this message's first change to it, for the
       // nothing-lost check at the end (lostSinceStart). A new file has none.
@@ -1731,6 +1768,8 @@ export class Agent extends EventEmitter {
       if (parsed.fromKept) this.emit('note', { text: `Wrote the kept content to ${prepared.rel}; it was not written again.`, tone: 'dim' });
       this.keptWrite = null;
     }
+    // A command may have written files the Edit and Write counts never see.
+    if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) { this.turn.testedAfterChange = true; this.turn.checkOk = !out.error; if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error }; }
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
@@ -1860,6 +1899,20 @@ export class Agent extends EventEmitter {
     const status = r.timedOut ? '\n(stopped after 2 minutes)' : r.code === 0 ? '' : `\n(exit code ${r.code})`;
     const text = `(This ran in a throwaway copy of the project: a question changes no files.)\n${(lines.join('\n') || '(no output)').slice(0, this.maxResultChars)}${status}`;
     return { text, error: r.code !== 0, view: { kind: 'bash', code: r.code, lines, ms: r.ms, timedOut: r.timedOut } };
+  }
+
+  // Problems the layout check still found after the model's fix get the last
+  // word: its answer may say "fixed" (Qwen, 30 Sep: "meets the 4.5:1 contrast"
+  // at 4.1:1; "fixed the horizontal scroll" at 401 px in a 390 px window), so
+  // the turn ends with the check's own line. Changed again since that look:
+  // looked at once more, quietly, so the line is never stale.
+  async stillBroken(reason) {
+    const t = this.turn;
+    if (!t?.layoutLeft || reason === 'interrupted') return;
+    if ((t.edits ?? 0) !== t.editsAtLook) { try { await this.checkLayout(true, { quiet: true }); } catch { return; } }
+    for (const { page, problems } of t.layoutLeft ?? []) {
+      this.emit('note', { text: `Still broken: ${problems[0].replace(/\.$/, '')}${problems.length > 1 ? ` (and ${problems.length - 1} more)` : ''}. The page check looked at ${page} again after the fix.`, tone: 'warn', stillBroken: { page, problems } });
+    }
   }
 
   // The functions this message's changes took away that the request neither

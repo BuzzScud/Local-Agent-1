@@ -264,6 +264,41 @@ test.skipIf(!chrome)('in a real browser: a page too wide for a phone and faint t
   expect(good.problems).toEqual([]);
 }, 60_000);
 
+// Qwen's weather page (29 Sep): "Load Different Data" picked a random scenario
+// and drew the sunny one anyway. Beside it, buttons that are fine but look dead
+// on a first click: a Reset on a fresh page, an Add with nothing typed, a Copy
+// that only copies, a Back that only works after Next.
+const BUTTONS = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Weather</title></head>
+<body><div id="w"></div><ol id="list"></ol><p id="n">0</p><input id="city">
+<button id="load">Load Different Data</button><button id="more">More</button><button id="reset">Reset</button>
+<button id="add">Add</button><button id="copy">Copy</button><button id="next">Next</button><button id="back">Back</button><button id="oops">Oops</button>
+<script>
+var data = { sunny: 'Sunny 24°', rainy: 'Rain 12°', snowy: 'Snow -2°' }, n = 0, card = 0;
+function render() { document.getElementById('w').textContent = data.sunny; }
+render();
+document.getElementById('load').onclick = function () { var keys = Object.keys(data); var randomKey = keys[Math.floor(Math.random() * keys.length)]; render(); };
+document.getElementById('more').onclick = function () { n++; document.getElementById('n').textContent = n; };
+document.getElementById('reset').onclick = function () { n = 0; document.getElementById('n').textContent = n; };
+document.getElementById('add').onclick = function () { var v = document.getElementById('city').value; if (!v) return; var li = document.createElement('li'); li.textContent = v; document.getElementById('list').appendChild(li); };
+document.getElementById('copy').onclick = function () { navigator.clipboard && navigator.clipboard.writeText('24°').catch(function () {}); };
+document.getElementById('next').onclick = function () { card++; document.title = 'Card ' + card; };
+document.getElementById('back').onclick = function () { if (card > 0) { card--; document.title = 'Card ' + card; } };
+document.getElementById('oops').onclick = function () { nothere(); };
+</script></body></html>`;
+
+test.skipIf(!chrome)('in a real browser: the click pass finds the dead button and the one that throws, and leaves the working ones alone', async () => {
+  const dir = join(tmpdir(), `agentic-design-clicks-${process.pid}`); mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'weather.html'), BUTTONS);
+  const r = await L.layoutCheck(join(dir, 'weather.html'), { chrome });
+  const clicks = r.problems.filter((p) => /^Clicking /.test(p));
+  expect(clicks.some((p) => /^Clicking "Load Different Data" \(button#load\) changes nothing/.test(p))).toBe(true);
+  expect(clicks.some((p) => /^Clicking "Oops" \(button#oops\) gives an error: .*nothere/.test(p))).toBe(true);
+  for (const fine of ['more', 'reset', 'add', 'copy', 'next', 'back']) expect(clicks.some((p) => p.includes(`button#${fine})`) && /changes nothing/.test(p))).toBe(false);
+  expect(L.layoutNote('weather.html', r.problems)).toMatch(/clicked its buttons/);
+  const plain = await L.layoutCheck(join(dir, 'weather.html'), { chrome, clicks: false });
+  expect(plain.problems.some((p) => /^Clicking /.test(p))).toBe(false);
+}, 60_000);
+
 test.skipIf(!chrome)('the agent: a page request brings the cards; the page it wrote is checked, sent back once, and checked again after the fix', async () => {
   const { Agent } = await import('../src/agent/agent.mjs');
   const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
@@ -298,4 +333,38 @@ test.skipIf(!chrome)('the agent: a page request brings the cards; the page it wr
   expect(notes.at(-1) ?? '').toMatch(/^Layout check, dash\.html: nothing broken/);
   expect(fake.remaining()).toBe(0);
   expect(readFileSync(join(cwd, 'dash.html'), 'utf8')).toContain('#595959');
+  // fixed for real: no "Still broken" line
+  expect(notes.some((t) => /^Still broken/.test(t))).toBe(false);
+}, 90_000);
+
+// Qwen, 30 Sep: "Changed the button text to meet the 4.5:1 contrast", and it was 4.1:1.
+test.skipIf(!chrome)('the agent: a "fix" the layout check does not agree with ends the turn with a "Still broken" line, after the answer', async () => {
+  const { Agent } = await import('../src/agent/agent.mjs');
+  const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
+  const { startFakeServer } = await import('./fake-server.mjs');
+  const { systemPrompt } = await import('../src/agent/prompt.mjs');
+  const cwd = join(tmpdir(), `agentic-design-still-${process.pid}`); rmSync(cwd, { recursive: true, force: true }); mkdirSync(cwd, { recursive: true });
+  const faint = GOOD.replace('color:#595959', 'color:#c8c8c8');
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'dash.html', content: faint } } },
+    { text: 'I made dash.html.' },
+    { tool: { name: 'Edit', args: { path: 'dash.html', old_text: 'color:#c8c8c8', new_text: 'color:#b0b0b0' } } },
+    { text: 'Darkened the date so it meets the 4.5:1 contrast requirement.' },
+  ]);
+  const seen = [];
+  const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'edits', flows: false, verify: false, checkIns: false, ask: async () => ({ choice: 'yes' }), design: { auto: false, check: true } });
+  agent.on('note', (e) => seen.push({ type: 'note', text: e.text }));
+  agent.on('assistant', (e) => { if (e.final) seen.push({ type: 'answer', text: e.text }); });
+  const keep = process.env.AGENTIC_LAYOUT;
+  process.env.AGENTIC_LAYOUT = 'on';
+  try { await agent.send('make a dashboard page for my miner'); } finally {
+    if (keep === undefined) delete process.env.AGENTIC_LAYOUT; else process.env.AGENTIC_LAYOUT = keep;
+    await fake.close();
+  }
+  const last = seen.at(-1);
+  expect(last.type).toBe('note');
+  expect(last.text).toMatch(/^Still broken: Text is too faint to read .*"Updated 3 min ago" \(p\.meta\) is #b0b0b0 on #ffffff .*The page check looked at dash\.html again after the fix\.$/);
+  // it comes after the answer that said it was fixed
+  expect(seen.findIndex((x) => x.type === 'answer' && /4\.5:1/.test(x.text))).toBeLessThan(seen.length - 1);
+  expect(fake.remaining()).toBe(0);
 }, 90_000);

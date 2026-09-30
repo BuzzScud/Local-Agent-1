@@ -14,6 +14,9 @@
 //   blank         a page that shows nothing
 //   head          no <meta charset> (the user's rule), no viewport line (phones
 //                 then show it zoomed out)
+//   dead button   a button that changes nothing when clicked, twice (a pass of
+//                 its own; Qwen, 29 Sep: "Load Different Data" said it swapped
+//                 5 scenarios and always drew the same one)
 // The problems go back to the model once (agent.mjs), in plain words with the
 // element and the numbers; after its fix the check runs again and says what is
 // left. How: a copy of the page in a scratch folder with two tags added at the
@@ -72,7 +75,28 @@ export const PROBE = String.raw`(function () {
   addEventListener('unhandledrejection', function (e) { var r = e.reason; errs.push('unhandled promise rejection: ' + (r && r.message ? r.message : String(r))); });
   var ce = console.error;
   console.error = function () { try { errs.push([].slice.call(arguments).map(String).join(' ')); } catch (x) {} return ce.apply(console, arguments); };
-  addEventListener('load', function () { setTimeout(measure, 800); });
+  var CLICKS = false;
+  // What a click did that the page itself may not show: a message box, a new
+  // window, a copy, a download, a sound, a save, a form sent.
+  var acted = 0;
+  function counts(obj, key) { try { var f = obj && obj[key]; if (typeof f !== 'function') return; obj[key] = function () { acted++; try { return f.apply(this, arguments); } catch (x) { return undefined; } }; } catch (x) {} }
+  if (CLICKS) {
+    window.alert = function () { acted++; };
+    window.confirm = function () { acted++; return true; };
+    window.prompt = function () { acted++; return 'test'; };
+    window.open = function () { acted++; return null; };
+    window.print = function () { acted++; };
+    counts(URL, 'createObjectURL');
+    counts(navigator.clipboard, 'writeText');
+    counts(HTMLMediaElement.prototype, 'play');
+    counts(HTMLMediaElement.prototype, 'pause');
+    try { counts(Storage.prototype, 'setItem'); } catch (x) {}
+    try { counts(window.speechSynthesis, 'speak'); } catch (x) {}
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) { counts(AC.prototype, 'resume'); counts(AC.prototype, 'createOscillator'); counts(AC.prototype, 'createBufferSource'); }
+    addEventListener('submit', function (e) { acted++; e.preventDefault(); }, true);
+  }
+  addEventListener('load', function () { setTimeout(CLICKS ? clicks : measure, 800); });
 
   function rgba(s) {
     var m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null;
@@ -158,11 +182,79 @@ export const PROBE = String.raw`(function () {
     out.contrast.sort(function (x, y) { return x.ratio - y.ratio; }); out.contrast = out.contrast.slice(0, 3);
     var media = [].slice.call(body.querySelectorAll('img,svg,canvas,video,iframe')).some(function (m) { var r = m.getBoundingClientRect(); return r.width * r.height > 1000; });
     out.blank = (body.innerText || '').trim().length < 2 && !media;
+    report(out);
+  }
+  function report(out) {
     var pre = document.createElement('pre'); pre.id = '__agentic_layout';
     pre.textContent = btoa(unescape(encodeURIComponent(JSON.stringify(out))));
-    (document.body || de).appendChild(pre);
+    (document.body || document.documentElement).appendChild(pre);
+  }
+  // The click look (a pass of its own, so a button that leaves the page
+  // cannot spoil the layout findings): each button is clicked and the page
+  // compared before and after. One that changes nothing is clicked again
+  // after all the others and with the empty boxes filled in (a "Reset" on a
+  // fresh page, a "Back" on the first card, an "Add" with nothing typed), and
+  // only one that still changes nothing is dead.
+  function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+  function state() {
+    var parts = [document.documentElement.outerHTML, document.title, location.hash, String(scrollX) + ',' + String(scrollY)];
+    [].slice.call(document.querySelectorAll('input, textarea, select')).forEach(function (f) { parts.push(f.value + '|' + f.checked); });
+    [].slice.call(document.querySelectorAll('audio, video')).forEach(function (m) { parts.push(m.paused + '|' + m.muted + '|' + m.volume + '|' + m.currentSrc); });
+    [].slice.call(document.querySelectorAll('canvas')).slice(0, 4).forEach(function (c) { try { parts.push(String(hash(c.toDataURL()))); } catch (x) { parts.push('?'); } });
+    return hash(parts.join('\u0001'));
+  }
+  function clickable() {
+    return [].slice.call(document.querySelectorAll('button, [role=button], input[type=button], input[type=submit], input[type=reset], [onclick]')).filter(function (el) {
+      var r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && !el.disabled && !el.closest('[aria-disabled="true"], a[href]') && shown(el) && !(el.form && el.form.getAttribute('action'));
+    });
+  }
+  function press(el) {
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(function (t) {
+      var E = t.indexOf('pointer') === 0 && window.PointerEvent ? PointerEvent : MouseEvent;
+      el.dispatchEvent(new E(t, { bubbles: true, cancelable: true, view: window }));
+    });
+    el.click();
+  }
+  function clicks() {
+    var out = { clicks: true, tried: 0, dead: [], clickErrors: [] };
+    var list = clickable().slice(0, 16), dead = [];
+    out.tried = list.length;
+    function one(el, done) {
+      if (!el || !el.isConnected || !shown(el)) { done(null); return; }
+      var nm = name(el), before = state(), a0 = acted, e0 = errs.length;
+      try { press(el); } catch (x) { errs.push(x && x.message ? x.message : String(x)); }
+      setTimeout(function () {
+        if (errs.length > e0 && out.clickErrors.length < 3) out.clickErrors.push({ el: nm, error: String(errs[e0]).slice(0, 160) });
+        done(acted !== a0 || state() !== before);
+      }, 300);
+    }
+    function fill() {
+      [].slice.call(document.querySelectorAll('input, textarea')).forEach(function (f) {
+        var t = (f.getAttribute('type') || 'text').toLowerCase();
+        if (f.value || f.disabled || f.readOnly || !shown(f) || !/^(text|search|number|email|url|tel|textarea)$/.test(f.tagName === 'TEXTAREA' ? 'textarea' : t)) return;
+        f.value = t === 'number' ? '3' : t === 'email' ? 'test@localhost' : t === 'url' ? 'http://localhost/' : 'test';
+        f.dispatchEvent(new Event('input', { bubbles: true }));
+        f.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+    var i = 0;
+    (function first() {
+      if (i >= list.length) { fill(); i = 0; return again(); }
+      var el = list[i++], nm = name(el);
+      one(el, function (changed) { if (changed === false) dead.push(nm); first(); });
+    })();
+    function again() {
+      if (i >= dead.length) { report(out); return; }
+      var nm = dead[i++], el = clickable().filter(function (c) { return name(c) === nm; })[0];
+      one(el, function (changed) { if (changed === false && out.dead.length < 5) out.dead.push(nm); again(); });
+    }
   }
 })();`;
+
+// The same probe for the click pass.
+export const CLICK_PROBE = PROBE.replace('var CLICKS = false;', 'var CLICKS = true;');
+export const CLICK_PASS = { name: 'clicks', width: 1440, height: 900, clicks: true };
 
 // The page with the probe and a <base> put first in <head>, on its first line.
 export function withProbe(html, pageDir, probeUrl) {
@@ -189,7 +281,8 @@ function run(chrome, args, ms) {
 async function pass(chrome, copyUrl, scratch, p) {
   const args = ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio',
     '--allow-file-access-from-files', `--user-data-dir=${join(scratch, `profile-${p.name}`)}`, `--window-size=${p.width},${p.height}`,
-    '--virtual-time-budget=4000', ...(p.dark ? ['--blink-settings=preferredColorScheme=0'] : []),
+    // The click pass needs page time for up to 32 clicks, 0.3 s each.
+    `--virtual-time-budget=${p.clicks ? 15000 : 4000}`, ...(p.dark ? ['--blink-settings=preferredColorScheme=0'] : []),
     // Linux runners without user namespaces cannot start Chrome's sandbox; the page is our own copy.
     ...(platform() === 'linux' ? ['--no-sandbox'] : []), '--dump-dom', copyUrl];
   const r = await run(chrome, args, PASS_MS);
@@ -199,18 +292,26 @@ async function pass(chrome, copyUrl, scratch, p) {
 }
 
 // Checks one page: { page, problems: [text], secs } or { skipped: why }.
-export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PASSES } = {}) {
+// clicks: also the click pass (CLICK_PASS), which presses every button.
+export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PASSES, clicks = true } = {}) {
   if (!chrome) return { skipped: 'no headless Chrome on this machine' };
   if (!existsSync(pageAbs)) return { skipped: `${pageAbs} is missing` };
   const t0 = Date.now();
   const html = readFileSync(pageAbs, 'utf8');
   const scratch = mkdtempSync(join(tmpdir(), 'agentic-layout-'));
   try {
-    writeFileSync(join(scratch, 'probe.js'), PROBE);
-    writeFileSync(join(scratch, 'page.html'), withProbe(html, dirname(pageAbs), pathToFileURL(join(scratch, 'probe.js')).href));
-    const results = await Promise.all(passes.map((p) => pass(chrome, pathToFileURL(join(scratch, 'page.html')).href, scratch, p)));
-    const failed = results.filter((r) => r.failed);
-    if (failed.length === results.length) return { skipped: `the browser could not open it (${failed[0].failed})` };
+    const copy = (probe, file) => {
+      writeFileSync(join(scratch, `${file}.js`), probe);
+      writeFileSync(join(scratch, `${file}.html`), withProbe(html, dirname(pageAbs), pathToFileURL(join(scratch, `${file}.js`)).href));
+      return pathToFileURL(join(scratch, `${file}.html`)).href;
+    };
+    const page = copy(PROBE, 'page');
+    const clickPage = clicks ? copy(CLICK_PROBE, 'page-clicks') : null;
+    const results = await Promise.all([...passes.map((p) => pass(chrome, page, scratch, p)), ...(clickPage ? [pass(chrome, clickPage, scratch, CLICK_PASS)] : [])]);
+    // A click pass that did not report (a button left the page, say) adds nothing.
+    const looks = results.filter((r) => !r.pass.clicks);
+    const failed = looks.filter((r) => r.failed);
+    if (failed.length === looks.length) return { skipped: `the browser could not open it (${failed[0].failed})` };
     return { page: pageAbs, problems: problemsOf(html, results), secs: (Date.now() - t0) / 1000 };
   } finally {
     try { rmSync(scratch, { recursive: true, force: true }); } catch {}
@@ -231,6 +332,11 @@ export function problemsOf(html, results) {
     const f = r.found;
     if (!f) continue;
     const at = where(r.pass);
+    if (f.clicks) {
+      for (const c of f.clickErrors ?? []) add(`clickerr:${c.el}`, `Clicking ${c.el} gives an error: ${c.error}.`);
+      for (const d of f.dead ?? []) add(`dead:${d}`, `Clicking ${d} changes nothing on the page, even after the other buttons were clicked and the empty boxes filled in. Make it do what it is for; if it only works with a server, a sound or something typed first, say so in one sentence.`);
+      continue;
+    }
     if (f.blank) add('blank', `The page shows nothing ${at}: no text or pictures appear.`);
     for (const e of f.errors ?? []) add(`err:${e}`, `The page reports an error: ${e}.`);
     if (!r.pass.dark && (f.sideways || f.wide.length)) {
@@ -249,7 +355,7 @@ export function problemsOf(html, results) {
 
 // What goes back to the model.
 export function layoutNote(rel, problems) {
-  return `The layout check opened ${rel} in a browser (1440×900, a 390-wide phone, and dark mode) and found:\n${problems.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n')}\nFix these in the page with Edit (small edits, not a rewrite), then say in one sentence what you changed.`;
+  return `The layout check opened ${rel} in a browser (1440×900, a 390-wide phone, and dark mode), clicked its buttons, and found:\n${problems.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n')}\nFix these in the page with Edit (small edits, not a rewrite), then say in one sentence what you changed.`;
 }
 
 // A page that only works through its own server (a Vite or React index.html,

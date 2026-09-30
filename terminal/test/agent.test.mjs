@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Agent, safeArgs, claimsAlreadyThere, AUTO, CHECK_INS } from '../src/agent/agent.mjs';
+import { Agent, safeArgs, claimsAlreadyThere, asksForWork, claimsDone, AUTO, CHECK_INS } from '../src/agent/agent.mjs';
 // Agentic Coder's "go ahead" nudge, as it reads now (labelled as automatic).
 const isNudge = (c) => c.startsWith(AUTO) && c.includes('did not do it');
 import { systemPrompt } from '../src/agent/prompt.mjs';
@@ -296,6 +296,38 @@ test('a created file is not "already in place": the model is sent back once', as
   const { events, agent } = await run(replies);
   expect(agent.messages.some((m) => m.role === 'user' && /You created report\.mjs in this turn/.test(m.content))).toBe(true);
   expect(events.filter((e) => e.type === 'assistant' && e.final).at(-1).text).toBe('I created report.mjs, which exports x.');
+});
+
+// Qwen, 29 Sep: asked again for the weather page, it answered "Done" and wrote nothing.
+test('"done" with no file changed: sent back once, then a note says nothing changed', async () => {
+  const { events, agent } = await run([{ text: 'Done! export.mjs now has a --json flag.' }, { text: 'Done.' }]);
+  expect(agent.messages.filter((m) => m.role === 'user' && m.content.startsWith(AUTO) && /no file was changed in this message/.test(m.content))).toHaveLength(1);
+  expect(events.filter((e) => e.type === 'note').map((e) => e.text)).toContain('Nothing was changed for this request: no file was written or edited.');
+});
+
+test('"done" with no file changed: an honest second answer gets no note; a command that ran is not second-guessed', async () => {
+  const honest = await run([{ text: 'Done.' }, { text: 'It was in export.mjs before this message; nothing changed now.' }]);
+  expect(honest.events.filter((e) => e.type === 'note').some((e) => /Nothing was changed/.test(e.text))).toBe(false);
+  expect(honest.events.filter((e) => e.type === 'assistant' && e.final)).toHaveLength(2);
+  const ran = await run([{ tool: { name: 'Bash', args: { command: 'ls' } } }, { text: 'Done.' }]);
+  expect(ran.agent.messages.some((m) => m.role === 'user' && /no file was changed in this message/.test(m.content))).toBe(false);
+});
+
+test('"done" with no file changed: on Model, only with the said-done hook on', () => {
+  const agent = new Agent({ url: 'http://127.0.0.1:1', model, cwd: project(), system: 'x' });
+  agent.way = 'model'; agent.hooks = new Set();
+  expect(agent.hook('said-done')).toBe(false);
+  agent.hooks = new Set(['said-done']);
+  expect(agent.hook('said-done')).toBe(true);
+  agent.way = 'app';
+  expect(agent.hook('said-done')).toBe(true);
+});
+
+test('asksForWork and claimsDone', () => {
+  for (const t of ['add a --json flag to export.mjs', 'make a weather widget page', 'fix the dead button']) expect([t, asksForWork(t)]).toEqual([t, true]);
+  for (const t of ['what does export.mjs do?', 'why is the build slow']) expect([t, asksForWork(t)]).toEqual([t, false]);
+  for (const t of ['Done.', 'I created weather.html with 5 scenarios.', 'Fixed: the button now swaps the data.']) expect([t, claimsDone(t)]).toEqual([t, true]);
+  for (const t of ['Nothing was changed; it was already in export.mjs.', 'I could not find export.mjs.', 'I did not change anything yet.', 'Which file should I use?']) expect([t, claimsDone(t)]).toEqual([t, false]);
 });
 
 test('claimsAlreadyThere', () => {

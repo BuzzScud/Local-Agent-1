@@ -98,7 +98,10 @@ test('a lone word: the model judges; when unclear it asks, and the answer travel
   expect(sorting.messages[1].content).toContain('Request: "api"');
   expect(sorting.messages[1].content).toContain('export.mjs'); // the file list
   expect(sorting.response_format.type).toBe('json_schema');
-  const loop = a.fake.requests.at(-1).messages;
+  // The loop's first request ends with the answer. ("Added the notes." with no
+  // file written is then sent back once: the done-with-nothing-changed check.)
+  const loop = a.fake.requests.find((r) => r.messages.at(-1)?.content === 'add notes about the API to NOTES.md').messages;
+  expect(a.fake.requests.at(-1).messages.at(-1).content).toMatch(/no file was changed in this message/);
   expect(loop.slice(-3).map((m) => [m.role, m.content])).toEqual([['user', 'api'], ['assistant', 'What should be done with the API?'], ['user', 'add notes about the API to NOTES.md']]);
   // The answer is what gets sorted: "just explain … change nothing" is a question, not a change.
   const c = await run('api', [{ text: '{"clear": false, "question": "What should be done with the API?"}' }, { text: 'It exports toCsv and main.' }], { flows: true, answer: { choice: 'answer', text: 'Just explain what the API in export.mjs does; change nothing.' } });

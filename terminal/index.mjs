@@ -12,7 +12,7 @@
 //     (models/evals/bench/design/).
 export { runHeadless } from './src/headless.mjs';
 // THINK_BUDGET_SECS and STEP_DOWN_CAP: the step-down the Thinking old vs new test (models/evals/tools/think-ab.mjs) names.
-export { Agent, claimsAlreadyThere, THINK_BUDGET_SECS, STEP_DOWN_CAP } from './src/agent/agent.mjs';
+export { Agent, claimsAlreadyThere, claimsDone, asksForWork, THINK_BUDGET_SECS, STEP_DOWN_CAP } from './src/agent/agent.mjs';
 // WORK_HABITS and NOTES_RANK: what the old/new prompt test (models/evals/tools/prompt-ab.mjs) shows it compared.
 export { systemPrompt, projectNotes, gitSummary, SESSION_MARK, WORK_HABITS, NOTES_RANK } from './src/agent/prompt.mjs';
 export { toolSchemas } from './src/agent/tools.mjs';
