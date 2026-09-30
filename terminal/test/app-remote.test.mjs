@@ -135,3 +135,39 @@ test('coding -p follows /remote: the answer comes from the remote; --local would
   expect(local.err).toContain('coding setup'); // no model here: it tried this Mac, not the remote
   await remote.close();
 }, T);
+
+test('/remote with Server: Claude API: Test lists the models, Save, and the reply comes through Anthropic’s Messages API with the key in x-api-key', async () => {
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const { cwd, env, base } = setup();
+  const here = await startFakeServer([]);
+  const claude = await startFakeAnthropic([{ text: 'ready' }, { thinking: 'A short hello will do.', text: 'Hello from Claude.' }]);
+  const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 80 }]).flat();
+  const right = (n) => Array.from({ length: n }, () => [{ key: 'right' }, { sleep: 80 }]).flat();
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--url', here.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/remote' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 },
+    ...right(1), // Use: Remote
+    ...down(2), { type: claude.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address: the stand-in
+    ...down(2), { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key
+    ...down(1), ...right(2), { sleep: 150 }, { snapshot: 'kind' }, // Server: llama.cpp → OpenAI-compatible → Claude API
+    ...down(3), { key: 'enter' }, { wait: '✔ it works' }, { sleep: 150 }, { snapshot: 'tested' },
+    ...down(1), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await here.close();
+  await claude.close();
+  expect(r.snapshots.kind).toMatch(/Server\s+◀ Claude API\s+▶/);
+  expect(r.snapshots.kind).toMatch(/Model\s+claude-opus-5-5/);
+  expect(r.snapshots.tested).toContain('model claude-opus-5-5 · 1000k context');
+  expect(r.snapshots.tested).toContain('answered "ready"');
+  expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain(`On the remote: claude-opus-5-5 · 127.0.0.1:${claude.port} · Claude API`);
+  const posts = claude.seen.filter((s) => s.path.startsWith('/v1/messages'));
+  expect(posts.length).toBeGreaterThanOrEqual(2);
+  expect(claude.seen.every((s) => s.key === claude.key)).toBe(true);
+  const chat = posts.at(-1).body;
+  expect(chat).toMatchObject({ model: 'claude-opus-5-5', stream: true });
+  expect(chat.system).toContain('Agentic Coder');
+  expect(chat.tools.length).toBeGreaterThan(3);
+  expect(settingsOf(base).remote).toMatchObject({ use: true, kind: 'claude', key: true });
+}, T);

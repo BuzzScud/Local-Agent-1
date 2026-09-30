@@ -29,6 +29,7 @@
     "test:binary": "bun run build && AGENTIC_BIN=$PWD/dist/agentic-coder bun test ./terminal/test/app.test.mjs ./terminal/test/app-menus.test.mjs ./terminal/test/app-start.test.mjs ./terminal/test/app-hub.test.mjs ./terminal/test/app-memory.test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.130.0",
     "ink": "^7.1.1",
     "react": "^19.3.0",
     "react-devtools-core": "file:terminal/scripts/shims/react-devtools-core"

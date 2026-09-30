@@ -5,7 +5,7 @@
 // text row edits it in place; Test checks the values as they are now, before
 // anything is saved; Save keeps them and switches when Use changed. The key
 // never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, CONNECTS, REMOTE_KINDS, SERVE_PORT, parseAddress, remoteProblem, remoteRisk, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
+import { DEFAULT_REMOTE, CONNECTS, REMOTE_KINDS, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, parseAddress, remoteProblem, remoteRisk, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
 
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
 export const REMOTE_ROWS = [
@@ -24,7 +24,7 @@ const CHOICES = { use: [false, true], connect: CONNECTS, kind: REMOTE_KINDS, con
 const WORDS = {
   use: (v) => (v ? 'Remote' : 'This Mac'),
   connect: (v) => ({ http: 'http', https: 'https', ssh: 'SSH tunnel' })[v] ?? v,
-  kind: (v) => ({ llama: 'llama.cpp', openai: 'OpenAI-compatible' })[v] ?? v,
+  kind: (v) => ({ llama: 'llama.cpp', openai: 'OpenAI-compatible', claude: 'Claude API' })[v] ?? v,
   context: (v) => (v ? `${Math.round(v / 1024)}k` : 'from server'),
 };
 export const kindWord = (k) => WORDS.kind(k);
@@ -50,21 +50,25 @@ export function moveRow(form, id, dir) {
   if (!steps) return form;
   const at = Math.max(0, steps.indexOf(form.values[id]));
   const v = steps[Math.max(0, Math.min(steps.length - 1, at + dir))];
-  return { ...form, values: { ...form.values, [id]: v }, error: null, ...(id === 'use' || id === 'context' ? {} : { test: null }) };
+  const values = { ...form.values, [id]: v };
+  // The Claude API is https only: a tunnel set before is turned to https.
+  if (id === 'kind' && v === 'claude' && values.connect === 'ssh') values.connect = 'https';
+  return { ...form, values, error: null, ...(id === 'use' || id === 'context' ? {} : { test: null }) };
 }
 
 // What a row shows between ◀ ▶ (or after its label).
 export function showValue(form, id) {
   const v = form.values;
   if (WORDS[id]) return WORDS[id](v[id]);
-  if (id === 'address') return v.address || 'not set';
-  if (id === 'port') return v.port ? String(v.port) : v.connect === 'ssh' || (v.kind === 'llama' && !parseAddress(v.address)?.scheme) ? `${SERVE_PORT}` : 'the address’s own';
+  const claude = v.kind === 'claude';
+  if (id === 'address') return v.address || (claude ? CLAUDE_HOST : 'not set');
+  if (id === 'port') return v.port ? String(v.port) : claude && !parseAddress(v.address)?.scheme ? '443' : v.connect === 'ssh' || (v.kind === 'llama' && !parseAddress(v.address)?.scheme) ? `${SERVE_PORT}` : 'the address’s own';
   if (id === 'key') {
     if (form.key === '') return 'none';
     if (form.key) return `${'•'.repeat(8)}${keyEnd(form.key)}`;
     return v.key ? `${'•'.repeat(8)}${v.keyEnd ?? ''}` : 'none';
   }
-  if (id === 'model') return v.model || (v.kind === 'llama' ? 'the one it runs' : 'not set');
+  if (id === 'model') return v.model || (claude ? DEFAULT_CLAUDE_MODEL : v.kind === 'llama' ? 'the one it runs' : 'not set');
   if (id === 'test') return form.test?.running ? 'checking…' : form.test ? (form.test.ok ? '✔ it works' : '✗ it does not') : 'enter to check';
   if (id === 'save') return 'enter to save';
   return '';
@@ -74,15 +78,17 @@ export function showValue(form, id) {
 export function rowNote(form, id) {
   const v = form.values;
   const t = form.test && !form.test.running ? form.test : null;
+  const claude = v.kind === 'claude';
+  const store = keyStore() === 'keychain' ? 'Keychain' : 'private key file';
   switch (id) {
-    case 'use': return v.use ? 'your prompts, code and the files it reads go to the remote' : 'the model loads on this Mac';
-    case 'connect': return v.connect === 'ssh' ? 'through ssh: nothing open to the network, uses your ssh keys' : v.connect === 'https' ? 'encrypted: across the internet, or a hosted API' : 'a home network or Tailscale';
-    case 'address': return v.connect === 'ssh' ? 'user@host, or a name from ~/.ssh/config' : 'an IP or a name · a whole http(s):// address works too';
-    case 'port': return v.connect === 'ssh' ? 'the model’s port on that machine (coding serve: 8080)' : 'blank: 8080 for llama.cpp, else the address’s own';
-    case 'key': return `enter to type or paste · kept in the ${keyStore() === 'keychain' ? 'Keychain' : 'private key file'}${form.key !== null ? ' · • not saved yet' : ''}`;
-    case 'kind': return v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'vLLM, Ollama, LM Studio, OpenRouter, OpenAI…';
-    case 'model': return t?.models?.length ? `←→ picks one of the ${t.models.length} it has` : v.kind === 'llama' ? 'blank: whatever it runs' : 'the name the server wants (Test lists them)';
-    case 'context': return t?.ctx ? `the server says ${Math.round(t.ctx / 1024)}k` : 'the server’s own, else 32k';
+    case 'use': return v.use ? (claude ? 'your prompts, code and the files it reads go to Anthropic, billed to the key' : 'your prompts, code and the files it reads go to the remote') : 'the model loads on this Mac';
+    case 'connect': return claude ? 'https: the Claude API has no plain http or tunnel' : v.connect === 'ssh' ? 'through ssh: nothing open to the network, uses your ssh keys' : v.connect === 'https' ? 'encrypted: across the internet, or a hosted API' : 'a home network or Tailscale';
+    case 'address': return claude ? `blank: ${CLAUDE_HOST}, Anthropic’s API` : v.connect === 'ssh' ? 'user@host, or a name from ~/.ssh/config' : 'an IP or a name · a whole http(s):// address works too';
+    case 'port': return claude ? 'blank: https’s own' : v.connect === 'ssh' ? 'the model’s port on that machine (coding serve: 8080)' : 'blank: 8080 for llama.cpp, else the address’s own';
+    case 'key': return claude ? `from console.anthropic.com · blank uses ANTHROPIC_API_KEY · kept in the ${store}${form.key !== null ? ' · • not saved yet' : ''}` : `enter to type or paste · kept in the ${store}${form.key !== null ? ' · • not saved yet' : ''}`;
+    case 'kind': return claude ? 'Anthropic’s Messages API, through its official SDK' : v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'vLLM, Ollama, LM Studio, OpenRouter, OpenAI…';
+    case 'model': return t?.models?.length ? `←→ picks one of the ${t.models.length} it has` : claude ? `blank: ${DEFAULT_CLAUDE_MODEL} (Test lists the others)` : v.kind === 'llama' ? 'blank: whatever it runs' : 'the name the server wants (Test lists them)';
+    case 'context': return claude ? `the server’s own, at most ${Math.round(CLAUDE_CTX / 1000)}k: each step sends the conversation again` : t?.ctx ? `the server says ${Math.round(t.ctx / 1024)}k` : 'the server’s own, else 32k';
     case 'test': return form.test?.running ? 'reaching it, checking the key, asking for one word…' : t ? t.steps.map((s) => `${s.ok ? '✔' : '✗'} ${s.text}`).join(' · ') : 'reaches it, checks the key, asks for one word';
     case 'save': return v.use !== form.saved.use ? (v.use ? 'keeps all of it and switches to the remote' : 'keeps all of it and goes back to this Mac') : 'keeps all of it';
     default: return '';
@@ -178,7 +184,7 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000 }
   let tunnel = null;
   try {
     let url;
-    if (r.connect === 'ssh') {
+    if (r.connect === 'ssh' && r.kind !== 'claude') {
       tunnel = await openTunnel({ dest: r.address, remotePort: r.port ?? SERVE_PORT, ssh });
       url = tunnel.url;
     } else url = directUrl(r);

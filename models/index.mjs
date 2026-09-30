@@ -16,6 +16,7 @@ export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes,
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { REMOTE_KINDS, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, GENERIC_REMOTE, remoteModel, connectRemote } from './runtime/remote.mjs';
 export { serve, serveArgs, serveKey, lanAddresses, SERVE_KEY_FILE } from './runtime/serve.mjs';
+export { CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, claudeSdk, claudeClient, claudeCaps, claudeProbe } from './runtime/claude.mjs';
 export { setup, RUNTIME } from './runtime/setup.mjs';
 export { Embedder, embedderReady } from './runtime/embed.mjs';
 export { Reranker, rerankerReady } from './runtime/rerank.mjs';

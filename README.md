@@ -87,25 +87,32 @@ coding -p "what does x do" # answer once and exit
 
 ### A model on another machine
 
-The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, or
-a hosted API. Type `/remote` in Agentic Coder and fill in one form:
+The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, a
+hosted API, or Claude. Type `/remote` in Agentic Coder and fill in one form:
 
 | Row | What goes in it |
 |---|---|
 | Use | This Mac or Remote |
 | Connect | http (a home network or Tailscale), https (across the internet), or an SSH tunnel (Agentic Coder opens `ssh -L` itself, with your ssh keys) |
-| Address | an IP or a name (`192.168.1.40`, `studio.local`), a whole `https://…/v1` address, or for SSH `user@host` or a name from `~/.ssh/config` |
+| Address | an IP or a name (`192.168.1.40`, `studio.local`), a whole `https://…/v1` address, or for SSH `user@host` or a name from `~/.ssh/config`; blank for the Claude API |
 | Port | the model's port (8080 for `coding serve` and llama-server) |
 | API key | typed or pasted; kept in the macOS Keychain, never in a file of the repo or in settings.json |
-| Server | llama.cpp (`coding serve`, llama-server) or OpenAI-compatible (vLLM, Ollama, LM Studio, OpenRouter, OpenAI) |
-| Model | the name the server wants (Test lists them); blank for llama.cpp |
-| Context | the server's own, or one you pick |
+| Server | llama.cpp (`coding serve`, llama-server), OpenAI-compatible (vLLM, Ollama, LM Studio, OpenRouter, OpenAI), or Claude API |
+| Model | the name the server wants (Test lists them); blank for llama.cpp, and `claude-opus-5-5` for the Claude API |
+| Context | the server's own, or one you pick (the Claude API: at most 200k unless you pick more) |
 
 **Test** checks it before anything is saved (reached, key accepted, what it runs, one word back).
 **Save** keeps it and switches. When the remote does not answer, Agentic Coder says why and asks:
 try again, use the model on this Mac for now, or open the form. `/remote on` and `/remote off`
 switch without the form; `/model` lists the remote as one more row; `coding -p` follows it
 (`--local` runs on this Mac instead).
+
+**Claude:** Use = Remote, Server = Claude API, paste an API key from console.anthropic.com
+(or leave it blank when `ANTHROPIC_API_KEY` is set), Test, Save. It goes through Anthropic's own
+Messages API and official SDK: High effort thinks first and shows its summarized thinking, Low
+asks for effort low, JSON answers are held to their schema, the conversation is cached, and a
+request the model declines is retried on Anthropic's fallback model. Every step sends the
+conversation again and is billed to the key.
 
 On the other machine, if it is a Mac or a Linux box with this repo installed:
 

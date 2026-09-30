@@ -8,6 +8,8 @@
 //                  on this Mac, the thinking switch and the side slot included.
 //   kind 'openai': any OpenAI-compatible server (vLLM, Ollama, LM Studio,
 //                  OpenRouter, OpenAI…): only the standard fields are sent.
+//   kind 'claude': the Claude API, through Anthropic's Messages API and its
+//                  official SDK (claude.mjs); the address defaults to Anthropic's.
 //   connect 'http' | 'https' | 'ssh': 'ssh' opens `ssh -L` to the machine and
 //                  talks to the model through it (no port open to the network).
 import { spawn, spawnSync } from 'node:child_process';
@@ -15,8 +17,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'n
 import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS } from '../registry.mjs';
+import { CLAUDE_HOST, CLAUDE_CTX, claudeProbe } from './claude.mjs';
 
-export const REMOTE_KINDS = ['llama', 'openai'];
+export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
+// The address used: what was typed, or Anthropic's for a Claude API remote left blank.
+const addressOf = (r) => String(r?.address ?? '').trim() || (r?.kind === 'claude' ? CLAUDE_HOST : '');
 export const CONNECTS = ['http', 'https', 'ssh'];
 // llama-server's own default port (and `coding serve`'s).
 export const SERVE_PORT = 8080;
@@ -63,9 +68,10 @@ export const validSshDest = (dest) => /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9._:[\]-]+
 
 // Where the calls go for a remote reached directly (http/https); null when the address is not usable.
 export function directUrl(r) {
-  const a = parseAddress(r?.address);
+  const a = parseAddress(addressOf(r));
   if (!a) return null;
-  const scheme = a.scheme ?? (r.connect === 'https' ? 'https' : 'http');
+  // The Claude API is https only (an http:// typed in full, a local stand-in say, is taken as typed).
+  const scheme = a.scheme ?? (r.connect === 'https' || r.kind === 'claude' ? 'https' : 'http');
   const port = a.port ?? r.port ?? (r.kind === 'llama' && !a.scheme ? SERVE_PORT : null);
   const host = a.host.includes(':') ? `[${a.host}]` : a.host;
   return `${scheme}://${host}${port ? `:${port}` : ''}${a.path}`;
@@ -73,22 +79,24 @@ export function directUrl(r) {
 
 // The remote in one short name for the screen: the host (and port when it is not the usual).
 export function remoteLabel(r) {
-  if (!r?.address) return 'no address';
-  if (r.connect === 'ssh') return `${r.address} (ssh)`;
-  const a = parseAddress(r.address);
-  if (!a) return r.address;
+  const address = addressOf(r);
+  if (!address) return 'no address';
+  if (r.connect === 'ssh' && r.kind !== 'claude') return `${address} (ssh)`;
+  const a = parseAddress(address);
+  if (!a) return address;
   const port = a.port ?? r.port;
   return `${a.host}${port && port !== SERVE_PORT ? `:${port}` : ''}`;
 }
 
 // What is wrong with a remote before anything is sent: one plain sentence, or null.
 export function remoteProblem(r) {
-  if (!r?.address?.trim()) return 'it has no address yet';
+  if (!addressOf(r)) return 'it has no address yet';
+  if (r.kind === 'claude' && r.connect === 'ssh') return 'the Claude API is reached over https, not an SSH tunnel (Connect: https)';
   if (r.connect === 'ssh') {
     if (!validSshDest(r.address.trim())) return 'the SSH address should be a name from ~/.ssh/config, host or user@host';
     return null;
   }
-  const a = parseAddress(r.address);
+  const a = parseAddress(addressOf(r));
   if (!a) return 'the address is not an IP, a name or an http(s) address';
   if (r.port != null && !(Number.isInteger(r.port) && r.port > 0 && r.port < 65536)) return 'the port should be a number from 1 to 65535';
   return null;
@@ -97,10 +105,10 @@ export function remoteProblem(r) {
 // A warning worth saying when the remote is used: your code travels in the
 // clear to an address on the internet. null when it does not.
 export function remoteRisk(r) {
-  if (!r || r.connect === 'ssh') return null;
-  const a = parseAddress(r.address);
+  if (!r || (r.connect === 'ssh' && r.kind !== 'claude')) return null;
+  const a = parseAddress(addressOf(r));
   if (!a) return null;
-  const scheme = a.scheme ?? (r.connect === 'https' ? 'https' : 'http');
+  const scheme = a.scheme ?? (r.connect === 'https' || r.kind === 'claude' ? 'https' : 'http');
   if (scheme === 'http' && !isPrivateHost(a.host)) return `plain http to ${a.host}, an address on the internet: your code${r.key ? ' and the API key' : ''} travel unencrypted. Use https or an SSH tunnel`;
   return null;
 }
@@ -251,6 +259,7 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
   const steps = [];
   const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
+  if (kind === 'claude') return claudeProbe({ url, key, model, reply, signal, timeoutMs, why });
   const t0 = Date.now();
   try {
     if (kind === 'llama') {
@@ -332,7 +341,7 @@ export function remoteModel(r, info = {}) {
     ?? (name && ours.find((m) => name.includes(m.file.toLowerCase().replace(/\.gguf$/, '')) || name === m.id))
     ?? null;
   const where = remoteLabel(r);
-  const ctx = r?.context || info.ctx || null;
+  const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
   const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where }, bytes: 0, draft: null, slots: info.slots ?? 1 };
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
   return { ...GENERIC_REMOTE, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: ctx ?? GENERIC_REMOTE.maxCtx };
@@ -352,7 +361,7 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
   if (r.key && !secret) throw new Error('The remote\'s API key is missing from the Keychain. Enter it again in /remote');
   let tunnel = null;
   let url;
-  if (r.connect === 'ssh') {
+  if (r.connect === 'ssh' && r.kind !== 'claude') {
     tunnel = await openTunnel({ dest: r.address.trim(), remotePort: r.port ?? SERVE_PORT, ssh });
     url = tunnel.url;
   } else url = directUrl(r);
@@ -360,7 +369,8 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
     const info = await probe({ url, kind: r.kind, key: secret, model: r.model, signal });
     if (!info.ok) throw new Error(info.error);
     const model = remoteModel(r, info);
-    const ctx = r.context || info.ctx || 32_768;
+    // Claude: the server's own (1M today), kept to CLAUDE_CTX unless the form asks for more.
+    const ctx = r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
     setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r) });
     return {
       url, ctx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel,

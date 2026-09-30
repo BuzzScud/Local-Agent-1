@@ -18,7 +18,7 @@ export const COMMANDS = [
   { name: 'rewind', desc: 'Put the files and the conversation back to before one of your messages (esc twice)' },
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
-  { name: 'remote', desc: 'Use a model on another machine: address, API key, http/https or an SSH tunnel, the kind of server; Test checks it', arg: '[on|off]', picker: true },
+  { name: 'remote', desc: 'Use a model on another machine or the Claude API: address, API key, http/https or an SSH tunnel, the kind of server; Test checks it', arg: '[on|off]', picker: true },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'mouse', desc: 'Drag to highlight the text you are typing in the prompt box: copied at once, delete removes it', arg: '[on|off]', picker: true },

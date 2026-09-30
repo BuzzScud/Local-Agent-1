@@ -1,8 +1,10 @@
 // Streams one chat completion from llama-server (OpenAI format) and turns the
 // SSE chunks into simple events: reasoning, text, tool-call pieces, done.
 // A remote (/remote) is asked the same way, with its API key; an
-// OpenAI-compatible one (not llama.cpp) gets only the standard fields.
+// OpenAI-compatible one (not llama.cpp) gets only the standard fields, and
+// the Claude API goes through Anthropic's own Messages API (claude.mjs).
 import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
+import { streamClaude } from './claude.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
 // thinking switch and cap, its extra sampling. Not sent to another kind.
@@ -34,6 +36,8 @@ export function refusedField(status, text, body) {
 // the instructions still matches) but lets the model only write text.
 export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra }) {
   const ep = endpointOf(url);
+  // The Claude API speaks its own Messages API (claude.mjs).
+  if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra }); return; }
   let body = {
     model: 'coding',
     messages,
