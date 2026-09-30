@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Question Walkthrough</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f6f2;--card:#fff;--text:#1c1b18;--text-2:#6b675e;--line:#e3dfd5;--accent:#2a78d6;--accent-ink:#1f5fae;--accent-soft:#e6eefa;--ok:#1f7a4d;--ok-soft:#e1f2e9;--bad:#b3261e;--bad-soft:#fbe6e4;--mute:#efede6}
+@media (prefers-color-scheme:dark){:root{--bg:#15161a;--card:#1d1f24;--text:#ecebe6;--text-2:#a4a19a;--line:#34363e;--accent:#6aa5f0;--accent-ink:#9cc4f7;--accent-soft:#22324a;--ok:#6fcf9a;--ok-soft:#1f3a2c;--bad:#f2928b;--bad-soft:#47231f;--mute:#26282e}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}
+.app{height:100vh;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:14px;padding:18px 24px;max-width:1800px;margin:0 auto}
+h1{font-size:22px;margin:0;font-weight:650}
+.sub{color:var(--text-2);margin:4px 0 0;font-size:15px}
+.q{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:2px 10px;color:var(--text)}
+.tabs{display:flex;gap:8px}
+.tab{font:inherit;font-weight:600;padding:9px 18px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text-2);cursor:pointer}
+.tab[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab:focus-visible,.btn:focus-visible,.dot:focus-visible,.row:focus-visible,.scard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app>main{min-height:0;display:grid;grid-template-rows:minmax(0,1fr)}
+.page{min-height:0;display:none}
+.page.on{display:grid;gap:16px;min-height:0}
+#p0.on{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);grid-template-rows:minmax(0,1fr)}
+#p1.on{grid-template-rows:auto minmax(0,1fr);grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
+#p2.on{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);grid-template-rows:minmax(0,1fr)}
+#p1 .cards{grid-column:1/-1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-height:0;overflow:hidden}
+.card h2{margin:0 0 4px;font-size:17px}
+.hint{color:var(--text-2);font-size:14px;margin:0 0 10px}
+/* tree */
+.tree{display:flex;flex-direction:column;gap:2px}
+.grp{font-weight:650;font-size:14px;color:var(--text-2);margin:8px 0 2px}
+.grp:first-child{margin-top:0}
+.row{display:flex;align-items:center;gap:8px;border:1px solid transparent;border-radius:9px;padding:3px 10px;font:inherit;color:var(--text);background:none;text-align:left;cursor:pointer;width:100%}
+.row .nm{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;white-space:nowrap}
+.row .nt{color:var(--text-2);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.row .chip{margin-left:auto;font-size:12px;font-weight:650;padding:2px 9px;border-radius:99px;background:var(--mute);color:var(--text-2);white-space:nowrap;min-width:92px;text-align:center}
+.row .mk{width:16px;color:var(--text-2);text-align:center;flex:none}
+.row.done .chip{background:var(--ok-soft);color:var(--ok)}
+.row.now{border-color:var(--accent);background:var(--accent-soft)}
+.row.now .chip{background:var(--accent);color:#fff}
+.row.now.block .chip{background:var(--bad);color:#fff}
+.row.done.block .chip{background:var(--bad-soft);color:var(--bad)}
+.l1{padding-left:26px}.l2{padding-left:42px}
+.views{display:flex;gap:6px;margin-left:auto;align-items:center}
+.views span{color:var(--text-2);font-size:14px;margin-right:4px}
+.vbtn{font:inherit;font-size:14px;font-weight:600;padding:7px 14px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text-2);cursor:pointer}
+.vbtn[aria-pressed=true]{background:var(--text);border-color:var(--text);color:var(--bg)}
+.vbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#pc.on{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
+.cmphead{grid-column:1/-1;display:flex;align-items:baseline;gap:14px}
+.cmphead h2{margin:0;font-size:24px}
+.cmphead .n{color:var(--text-2);font-weight:650;font-size:14px}
+.side h3{margin:0;font-size:19px;display:flex;align-items:center;gap:10px}
+.side h3 .own{font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--text-2);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
+.side .who{margin-left:auto}
+.side .say{font-size:16px;margin:10px 0 8px}
+.side dl{grid-template-columns:96px minmax(0,1fr)}
+.overview{grid-column:1/-1;padding:10px 16px}
+.overview tr[data-i]{cursor:pointer}
+.overview tr.cur td{background:var(--accent-soft);color:var(--text)}
+.overview td:nth-child(2){white-space:nowrap}
+.overview tr[data-i]:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.overview td,.overview th{padding:6px 10px}
+@media (min-width:981px){.overview table.m td.dc,.overview table.m th.dc{white-space:nowrap}}
+.overview td:nth-child(1){text-align:center;color:var(--text-2)}
+.srcnote{grid-column:1/-1;color:var(--text-2);font-size:13px;line-height:1.35;margin:0}
+/* step panel */
+.panel{display:flex;flex-direction:column;gap:10px}
+.kick{display:flex;align-items:center;gap:10px;color:var(--text-2);font-size:14px;font-weight:600}
+.who{font-size:12px;font-weight:700;letter-spacing:.04em;padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--text-2);background:var(--card)}
+.who.w-model{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
+.who.w-you{background:var(--mute)}
+.panel h2{font-size:26px;line-height:1.2;margin:0}
+.panel .say{font-size:17px;margin:0}
+dl{margin:6px 0 0;display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px 14px;font-size:15px}
+dt{color:var(--text-2);font-weight:600}
+dd{margin:0}
+dd ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+dd li span{color:var(--text-2)}
+/* step cards (tab 2) */
+.cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.scard{font:inherit;text-align:left;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:6px;min-height:118px}
+.scard[aria-current=step]{border-color:var(--accent);background:var(--accent-soft)}
+.scard .n{font-size:13px;color:var(--text-2);font-weight:650}
+.scard b{font-size:16px}
+.scard span.t{font-size:13.5px;color:var(--text-2);margin-top:auto}
+/* lanes */
+.lane{display:grid;grid-template-columns:70px minmax(0,1fr) 64px;align-items:center;gap:10px;margin:10px 0}
+.lane .who-n{font-weight:650}
+.bar{position:relative;height:38px;background:var(--mute);border-radius:9px;overflow:hidden}
+.seg{position:absolute;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden}
+.seg.think{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent)}
+.seg.write{background:var(--accent);color:#fff}
+.seg.app{background:var(--text);width:3px}
+.seg.on{box-shadow:inset 0 0 0 2px var(--text)}
+.lane .tot{text-align:right;font-weight:650}
+.axis{display:grid;grid-template-columns:70px minmax(0,1fr) 64px;gap:10px;color:var(--text-2);font-size:13px}
+.axis .ticks{position:relative;height:18px}
+.axis .ticks i{position:absolute;font-style:normal;transform:translateX(-50%)}
+.axis .ticks i:first-child{transform:none}
+.legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--text-2);font-size:13.5px;margin-top:10px}
+.legend s{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:6px;text-decoration:none}
+.note2{margin-top:8px;font-size:14px;color:var(--text-2)}
+/* detail */
+pre{margin:0;background:var(--mute);border-radius:10px;padding:10px 14px;font:12.5px/1.38 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+.said{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:0;background:var(--bg);font-size:15px}
+.said b{display:block;font-size:13px;color:var(--text-2);margin-bottom:2px}
+.det{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:calc(100% - 34px)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--text-2);font-weight:650;font-size:13px}
+td.c{text-align:center;white-space:nowrap}
+td.on{background:var(--ok-soft);color:var(--ok);font-weight:650}
+.two{display:grid;gap:12px}
+.list{margin:0;padding-left:20px;display:grid;gap:4px}
+/* footer */
+.foot{display:flex;align-items:center;gap:14px}
+.btn{font:inherit;font-weight:650;padding:10px 20px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;min-width:110px}
+.btn[aria-disabled=true]{background:var(--mute);border-color:var(--line);color:var(--text-2);cursor:default}
+.dots{display:flex;gap:8px;flex:1;justify-content:center}
+.dot{width:34px;height:34px;border-radius:99px;border:1px solid var(--line);background:var(--card);color:var(--text-2);font:inherit;font-weight:650;cursor:pointer}
+.dot[aria-current=step]{background:var(--accent);border-color:var(--accent);color:#fff}
+.dot.past{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.keys{color:var(--text-2);font-size:13.5px;min-width:220px;text-align:right}
+kbd{font:12px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
+@media (min-width:981px) and (max-width:1560px){.overview td,.overview th{padding:4px 8px;font-size:13.5px}.side .say{font-size:15px;margin:6px 0}.side dl{gap:6px 12px;font-size:14px}.side.card{padding:12px 16px}.cmphead h2{font-size:21px}}
+@media (max-height:830px) and (min-width:981px){.side dl dt:nth-of-type(3),.side dl dd:nth-of-type(3){display:none}.side .say{margin:6px 0}.cmphead h2{font-size:21px}pre{font-size:11px;line-height:1.28;padding:8px 12px}.scard{min-height:104px}.app{padding:12px 24px;gap:10px}.card{padding:14px 18px}.tab{padding:7px 16px}}
+@media (max-width:980px){
+  html,body{height:auto}
+  .app{height:auto;padding:14px 16px}
+  .app>main{display:block}
+  .page.on{gap:14px}
+  #p0.on,#p1.on,#p2.on,#pc.on{grid-template-columns:minmax(0,1fr);grid-template-rows:none}
+  .views{margin-left:0;flex-wrap:wrap}
+  .dc{display:none}
+  .tabs{flex-wrap:wrap}
+  .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .row .nt{display:none}
+  .keys{display:none}
+  .foot{flex-wrap:wrap}
+  .dots{flex-basis:100%;order:3}
+  dl{grid-template-columns:minmax(0,1fr)}
+  .axis,.lane{grid-template-columns:62px minmax(0,1fr) 48px}
+  .lane .who-n{font-size:14px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>When you ask the model a question</h1>
+    <p class="sub">The example: <span class="q">“Which function computes tax in this project, and what is its default rate? Don't change any files.”</span></p>
+  </header>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t0" aria-selected="true">1 · Where it looks</button>
+    <button class="tab" role="tab" id="t1" aria-selected="false">2 · What it does</button>
+    <button class="tab" role="tab" id="t2" aria-selected="false">3 · How this page is made</button>
+    <div class="views" id="views" role="group" aria-label="View"><span>View:</span><button class="vbtn" data-v="0" aria-pressed="true">Agentic Coder</button><button class="vbtn" data-v="1" aria-pressed="false">Compare with Claude Code</button><button class="vbtn" data-v="2" id="vModel" aria-pressed="false">Model decides vs Claude Code</button></div>
+  </div>
+
+  <main>
+    <section class="page on" id="p0" aria-labelledby="t0">
+      <div class="card">
+        <h2>The places it looks</h2>
+        <p class="hint">An example project. Yours has its own files; the order is the same. Click a place to jump to its step.</p>
+        <div class="tree" id="tree"></div>
+      </div>
+      <div class="card panel" id="panel0"></div>
+    </section>
+
+    <section class="page" id="p1" aria-labelledby="t1">
+      <div class="cards" id="cards"></div>
+      <div class="card">
+        <h2>Where the seconds went</h2>
+        <p class="hint">A real run from last night's test: thinking on, Effort High. Shorter is faster.</p>
+        <div id="lanes"></div>
+        <div class="legend"><span><s style="background:var(--text)"></s>the app reading (0.02 s)</span><span><s style="background:var(--accent-soft);border:1px solid var(--accent)"></s>model thinking</span><span><s style="background:var(--accent)"></s>model writing</span></div>
+        <p class="note2" id="laneNote"></p>
+      </div>
+      <div class="card" id="detail"></div>
+    </section>
+    <section class="page" id="pc" aria-label="Comparison">
+      <div class="cmphead" id="cmphead"></div>
+      <div class="card side" id="cmpA"></div>
+      <div class="card side" id="cmpB"></div>
+      <div class="card overview" id="cmpO"></div>
+      <p class="srcnote" id="cmpN"></p>
+    </section>
+    <section class="page" id="p2" aria-labelledby="t2">
+      <div class="card panel" id="panel2"></div>
+      <div class="card" id="made"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <button class="btn" id="back">Back</button>
+    <div class="dots" id="dots"></div>
+    <button class="btn" id="next">Next</button>
+    <div class="keys"><kbd>←</kbd> <kbd>→</kbd> step · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> tab · <kbd>C</kbd> compare · <kbd>M</kbd> model decides</div>
+  </footer>
+</div>
+<noscript><p style="padding:16px">This page needs JavaScript to step through. In short: the app reads your rules, your saved facts, a map of the project, and the files your question is about, then the model answers from that. It cannot change files in a question.</p></noscript>
+
+<script>
+// Tab 1: where it looks. Each step says which rows of the tree it touches, and how.
+const MODE={rules:'your rules',facts:'saved facts',map:'map saved',names:'name listed',whole:'read whole',parts:'closest parts',uses:'where used',read:'may read',blocked:'blocked'};
+const TREE=[
+ {g:'Your home folder  ~'},
+ {id:'homerules',l:1,nm:'AGENTS.md',nt:'your own rules'},
+ {id:'homemem',l:1,nm:'.agentic/memory/',nt:'facts about you',dir:1},
+ {id:'maps',l:1,nm:'.agentic-coder/maps/',nt:'maps it saved before',dir:1},
+ {g:'The project folder  my-project/'},
+ {id:'prules',l:1,nm:'AGENTS.md · CLAUDE.md',nt:'this project’s rules'},
+ {id:'pmem',l:1,nm:'.agentic/memory/',nt:'facts about this project',dir:1},
+ {id:'billing',l:1,nm:'billing.mjs',nt:'defines addTax'},
+ {id:'checkout',l:1,nm:'checkout.mjs',nt:'calls addTax'},
+ {id:'src',l:1,nm:'src/ …',nt:'all the other code',dir:1},
+ {id:'test',l:1,nm:'test/',nt:'tests',dir:1},
+ {g:'Everywhere else'},
+ {id:'out',l:1,nm:'the rest of your Mac',nt:'other projects, other folders',dir:1,block:1}
+];
+const S0=[
+ {who:'app',title:'It reads your rules',say:'Before the model sees your question, the app gathers the rules you wrote and puts them at the top of the model’s instructions.',
+  looks:[['AGENTS.md or CLAUDE.md','in the working folder and above, up to your home folder']],much:'Up to 9,000 characters of notes.',model:'No. The app does this alone.',rows:{homerules:'rules',prules:'rules'}},
+ {who:'app',title:'It brings back what you saved',say:'Things you told it to remember are kept as short facts. The ones closest in meaning to your question travel along with it.',
+  looks:[['.agentic/memory/','facts about this project'],['~/.agentic/memory/','facts about you']],much:'The 3 closest facts, at most.',model:'Not the chat model. A small separate one matches by meaning.',rows:{homemem:'facts',pmem:'facts'}},
+ {who:'app',title:'It draws a map of the project',say:'A short list of every code file: its name, its line count and the names defined inside it. The model gets the list as if it had looked around itself.',
+  looks:[['every code file in the project','names only, not the code'],['~/.agentic-coder/maps/','where the map is kept, so the next time is instant']],much:'Up to 4,500 characters. Skipped with fewer than 4 code files, and in your home folder.',model:'No.',rows:{maps:'map',billing:'names',checkout:'names',src:'names',test:'names'}},
+ {who:'app',title:'It reads what the question is about',say:'A file you name is read whole. With no file named, it finds the file that defines a name you used (addTax), and a tiny project is read in full. The model has not searched for anything yet.',
+  looks:[['a file your question names','read whole; a long file gives its parts and the lines that match'],['the file that defines a name you used','found with the map: addTax → billing.mjs']],much:'Up to about 45,000 characters.',model:'No.',rows:{billing:'whole'}},
+ {who:'app',title:'Two helpers add what is close',say:'A code search finds the functions closest in meaning to your question. Another helper finds where each name you used is used. Each adds something only when it is a close match.',
+  looks:[['the code search by meaning','closest functions in files not read whole'],['every file that uses your names','checkout.mjs calls addTax']],much:'A small shared budget. Often nothing is added.',model:'No. A small search model, not the chat model.',rows:{src:'parts',checkout:'uses'}},
+ {who:'model',title:'Now the model reads and looks further',say:'With all of that in front of it, the model answers. If something is missing it can List, Search or Read. It cannot change anything: Edit and Write are refused, and a command that might write runs in a throwaway copy.',
+  looks:[['any file inside the project','List, Search, Read'],['MATH/ and DESIGN/','your notes folders, read-only, only when /math or /design brought them in'],['anywhere outside the project','blocked']],much:'At most 40 steps. Nothing is ever changed.',model:'Yes.',rows:{src:'read',test:'read',out:'blocked'}}
+];
+
+// Tab 2: what it does, from the real run (qwen3.5-9b and gemma-4-12b, task 7, 30 Sep).
+const Q="Which function computes tax in this project, and what is its default rate? Don't change any files.";
+const BILL=`billing.mjs (12 lines):
+// Order totals.
+export function subtotal(lines) {
+  return lines.reduce((sum, l) => sum + l.price * l.qty, 0);
+}
+
+export function addTax(amount, rate = 0.0825) {
+  return Math.round(amount * (1 + rate) * 100) / 100;
+}
+
+export function discount(amount, percent) {
+  return amount * (1 - percent / 100);
+}
+
+checkout.mjs (5 lines):
+import { subtotal, addTax } from './billing.mjs';
+
+export function total(lines) {
+  return addTax(subtotal(lines));
+}`;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const said=(b,t)=>`<div class="said"><b>${b}</b>${t}</div>`;
+const S1=[
+ {who:'you',title:'You ask',t:'you press Enter',det:()=>said('What you typed',esc(Q))+`<p class="hint">Nothing has happened yet. The next step starts the same instant.</p>`,lanes:[]},
+ {who:'app',title:'It sorts',t:'0.0 s · words only',det:()=>said('What the app wrote down','<span class="mono">Sorted as: question · step by step</span>')+`<p>Word rules decide. Here the words “Don't change any files” and “Which …” say this is a question, so no model was asked to sort it.</p><p class="hint">A question gets no shortcut path. It goes to the step-by-step loop.</p>`,lanes:[]},
+ {who:'app',title:'It reads for the model',t:'0.02 s · no model',det:()=>`<p class="hint" style="margin:0">No file was named and the project is tiny, so the app read all of its code first, as if the model had opened the files:</p><pre>${esc(BILL)}</pre>`,lanes:['app']},
+ {who:'model',title:'The model answers',t:'Gemma 4.9 s · Qwen 3.8 s',det:()=>said('Gemma, straight away','The function that computes tax is <code>addTax</code> in <code>billing.mjs</code>, and its default rate is <code>0.0825</code> (or 8.25%).')+said('Qwen, first reply','<i>(empty)</i> It worked out the answer while thinking — “The function that computes tax is addTax in billing.mjs, and its default rate is 0.0825” — but sent nothing as its reply.')+`<p class="hint">Neither model searched, listed or opened a file. Everything was already in front of them.</p>`,lanes:['think1','write1','gwrite']},
+ {who:'app',title:'The safety net',t:'Qwen only · +9.5 s',det:()=>said('Gemma','— not needed: it answered the first time.')+said('What the app sent Qwen','<span class="mono">[Automatic note from Agentic Coder, not from the user] Reply to the user now, in one to three sentences.</span>')+said('Qwen, second reply','The <code>addTax</code> function in <code>billing.mjs</code> computes tax, and its default rate is 0.0825 (8.25%). It takes an amount and an optional rate parameter, applying the rate to calculate the total including tax.'),lanes:['think2','write2']},
+ {who:'app',title:'Done',t:'Gemma 4.9 s · Qwen 13.4 s',det:()=>said('What the app recorded','<span class="mono">settled · question · done · files changed: none</span>')+`<p style="margin:0 0 8px">The test’s three rules were all met by both models:</p><ul style="margin:0;padding-left:20px"><li>the answer names <code>addTax</code></li><li>the answer gives 0.0825 or 8.25%</li><li>no file was changed</li></ul><p class="hint" style="margin-top:10px">Same path, same answer. Qwen took longer only because its first reply came back empty.</p>`,lanes:[]}
+];
+
+// Tab 3: how this page is made. Each step has a plain line and the real piece it is about.
+const cell=(v)=>`<td class="c ${v!=='—'?'on':''}">${v}</td>`;
+// Real pieces of THIS file, printed live: a function prints its own source, a record prints itself, the stylesheet prints its own rules.
+const rules=(re)=>[...document.styleSheets[0].cssRules].filter(r=>re.test(r.selectorText||'')).map(r=>`${r.selectorText} { ${r.style.cssText} }`).join('\n');
+const S2=[
+ {title:'I read the app’s code',say:'I did not guess how it works. For each step I found the part of the code that does it, and copied its real limits.',inp:'The app’s source code',out:'6 steps, each with its real limits',
+  show:()=>`<table><tr><th>Step</th><th>Where in the code</th></tr>
+  <tr><td>Your rules</td><td><code>prompt.mjs</code> goes up to 8 folders, from the project to your home folder</td></tr>
+  <tr><td>Saved facts</td><td><code>facts.mjs</code> and <code>recall.mjs</code>: the 3 closest</td></tr>
+  <tr><td>Project map</td><td><code>repomap.mjs</code>: 4,500 characters; <code>agent.mjs</code>: only with 4+ code files</td></tr>
+  <tr><td>Files it reads</td><td><code>explain.mjs</code> and <code>agent.mjs</code> (prefetch): about 45,000 characters</td></tr>
+  <tr><td>Helpers</td><td><code>helpers.mjs</code>: the code search and where names are used</td></tr>
+  <tr><td>Blocked places</td><td><code>tools.mjs</code>: “is outside the project folder, which is not allowed”</td></tr></table>`},
+ {title:'I took a real recorded run',say:'Every test run saves a log with a time on each line. I used last night’s run of this exact question, so the seconds on tab 2 are real, not made up.',inp:'The saved log of the tax question',out:'The order of events and their times',
+  show:()=>`<pre>  0.00 s  sorted     Sorted as: question · step by step
+  0.00 s  route      question
+  0.02 s  tool       Read billing.mjs   (12 lines)
+  0.02 s  tool       Read checkout.mjs  (5 lines)
+  3.85 s  assistant  (empty reply)
+  3.85 s  note       The model gave an empty answer; asked it to reply.
+ 13.39 s  assistant  The addTax function in billing.mjs computes tax …
+ 13.39 s  settled    question · done · files changed: none</pre><p class="hint" style="margin:10px 0 0">This is Qwen’s log. Gemma’s has the same lines, but it answers at 4.94 s and has no empty reply. The Claude Code side of the comparison comes from a run I timed the same way, line by line.</p>`},
+ {title:'I wrote each step as a small record',say:'Nothing on the page is drawn by hand. Each step is one short record: its words, its limits, and which rows of the tree it touches.',inp:'The facts from steps 1 and 2',out:'6 records, one per step of tab 1',
+  show:()=>`<p class="hint" style="margin:0 0 8px">Step 3’s record, printed from this page while it runs:</p><pre>${esc(JSON.stringify(S0[2],null,1))}</pre><p class="hint" style="margin:10px 0 0">The last part, <code>rows</code>, is what lights up the tree.</p>`},
+ {title:'One rule draws every row',say:'For each row, the page looks back through the steps so far and takes the last one that touched it. This one function colours the whole tree, and it is shown here exactly as it is in the file.',inp:'One row, and the step you are on',out:'One line of HTML for that row',
+  show:()=>`<p class="hint" style="margin:0 0 8px">The function itself, printed from this page while it runs:</p><pre>${esc(rowHTML.toString())}</pre>`},
+ {title:'What one row becomes',say:'The row billing.mjs at step 4: the line of HTML the rule makes, the style rules that turn it blue and then green, and how it changes from step to step.',inp:'billing.mjs at step 4',out:'One outlined row with a blue pill',
+  show:()=>{const ids=['billing','src','out'];return `<table><tr><th>Row</th>${S0.map((_,i)=>`<th class="c">Step ${i+1}</th>`).join('')}</tr>${ids.map(id=>`<tr><td><code>${esc(TREE.find(r=>r.id===id).nm)}</code></td>${S0.map(st=>cell(st.rows[id]?MODE[st.rows[id]]:'—')).join('')}</tr>`).join('')}</table>
+  <p class="hint" style="margin:10px 0 6px">Green = a step that touches the row; “—” = it does not. The HTML made for billing.mjs at step 4:</p><pre>${esc(rowHTML(TREE.find(r=>r.id==='billing'),3))}</pre>
+  <p class="hint" style="margin:10px 0 6px">The style rules that colour it:</p><pre>${esc(rules(/^\.row\.(now|done)( \.chip)?$/))}</pre>`}},
+ {title:'I checked it in real browsers',say:'A page that looks right to me can still break on your screen. So I opened it in two browsers and measured it, every step of every tab.',inp:'The finished page',out:'0 problems, after 2 were found and fixed',
+  show:()=>{const css=document.querySelector('style').textContent.split('\n').length,js=document.scripts[0].textContent.split('\n').length;return `<div class="two"><div class="said"><b>What was opened</b>Chromium and Safari’s engine · light and dark · 1803×890, 1466×890, 1280×800 and a phone · every step of all 3 tabs: 288 checks, 0 problems at the end</div>
+  <div class="said"><b>What it looked for</b>The page scrolling, anything cut off, text running sideways, script errors</div>
+  <div class="said"><b>What it found</b><ul class="list"><li>A badge named “app” took the page’s own “app” style and stretched to fill the screen. Renamed.</li><li>The code box on tab 2, step 3 was cut off at the bottom. Made it fit.</li></ul></div>
+  <div class="said"><b>What the file is</b>One HTML file: ${css} lines of style, ${js} lines of script, no libraries, no images. You can open it in any text editor.</div></div>`}}
+];
+
+// The comparison: the same six steps, Agentic Coder beside Claude Code.
+// Claude Code's side: a real run I made on the same two files (bare folder, Opus 5.5, timed line by line),
+// and what this chat loaded at the start (file sizes measured).
+const C0={labels:['Looks at','How much'],note:'Agentic Coder: its code, and last night’s real run. Claude Code: a real run I made just now on the same two files in a bare folder (Opus 5.5, no memory), plus what this chat loaded at the start.',steps:[
+ {title:'Your rules',
+  a:{who:'app',say:'The app gathers your rules and puts them at the top of the model’s instructions.',list:[['AGENTS.md or CLAUDE.md','in the working folder and above']],much:'Up to 9,000 characters. It stops at your home folder.',dec:'The app'},
+  b:{who:'app',say:'Claude Code loads CLAUDE.md before the first word. A CLAUDE.md can pull another file in with @.',list:[['CLAUDE.md','in the working folder and above'],['AGENTS.md','pulled in by your CLAUDE.md, which only says @AGENTS.md']],much:'In this chat: CLAUDE.md 11 characters + AGENTS.md 1,443.',dec:'Claude Code'},
+  diff:'The same places now: only AGENTS.md or CLAUDE.md, in the working folder and above.'},
+ {title:'Saved facts',
+  a:{who:'app',say:'The app picks the facts that fit your question and sends them along.',list:[['.agentic/memory/','facts about this project'],['~/.agentic/memory/','facts about you']],much:'The 3 closest, found by meaning.',dec:'The app (a small search model)'},
+  b:{who:'model',say:'Claude Code loads a one-line index of your memory. The notes stay closed until the model decides to open one.',list:[['MEMORY.md','the index, loaded at the start'],['one note','opened only when the model asks for it']],much:'Index: 20,009 characters, 492 notes behind it. For your first question I opened 4.',dec:'The model'},
+  diff:'The app chooses the facts for the model. Claude chooses for itself, from an index.'},
+ {title:'Project map',
+  a:{who:'app',say:'A short list of every code file: its name, its lines and the names inside it.',list:[['every code file','names only, not the code'],['~/.agentic-coder/maps/','kept, so next time is instant']],much:'Up to 4,500 characters. Skipped with fewer than 4 code files.',dec:'The app'},
+  b:{who:'model',say:'There is no map. When it needs to know what is in the folder, the model runs a find command itself.',list:[['find . -type f …','one command, run by the model']],much:'In the tax run: one find. It listed 2 files.',dec:'The model'},
+  diff:'The app draws a map up front. Claude looks around when it needs to.'},
+ {title:'The files it reads',
+  a:{who:'app',say:'The app reads the files for the model, in one go: no search and no model call.',list:[['a file the question names','read whole'],['the file that defines a name you used','addTax → billing.mjs'],['a tiny project','all of it']],much:'Up to about 45,000 characters. In the run: 2 files, 0.02 s.',dec:'The app'},
+  b:{who:'model',say:'The model asks for the files itself, one request each. It can ask for several at once.',list:[['Read billing.mjs','its own Read tool'],['Read checkout.mjs','asked for at the same moment']],much:'In the tax run: 2 files, after the find and grep came back.',dec:'The model'},
+  diff:'The app reads for the model. Claude reads for itself.'},
+ {title:'Searching',
+  a:{who:'app',say:'A code search finds the closest functions by meaning, and another helper finds where each name is used.',list:[['the code search','closest functions in files not read whole'],['where names are used','e.g. checkout.mjs calls addTax']],much:'A small shared budget. Often nothing is added.',dec:'The app (small search models)'},
+  b:{who:'model',say:'It searches for the exact words, with grep inside a command. For a wide search it can hand the job to a helper agent.',list:[['grep -rniE \'tax\' …','run in the same command as the find'],['a helper agent','for big searches, reports back']],much:'In the tax run: one grep for “tax”. It found both files.',dec:'The model'},
+  diff:'The app can search by meaning. Claude searches for the words you used.'},
+ {title:'How far it may look',
+  a:{who:'app',say:'The model is kept inside the project. Nothing can be changed during a question.',list:[['the project folder','List, Search, Read'],['MATH/ and DESIGN/','read-only, only when brought in'],['the rest of your Mac','blocked']],much:'At most 40 steps. Edit and Write are refused.',dec:'The app'},
+  b:{who:'you',say:'A question is not locked. What Claude Code may do without asking is set by your permission mode.',list:[['the project folder and beyond','if your settings allow'],['a command or an edit','goes through your permission mode']],much:'As many rounds as it needs. The tax run took 3.',dec:'You, through permission prompts'},
+  diff:'The app locks the model inside the project. Claude asks you instead.'}
+]};
+const C1={labels:['What it does','Time'],note:'Agentic Coder: last night’s real run, Gemma and Qwen on this Mac. Claude Code: a real run I made just now, Opus 5.5 in the cloud, in a bare folder with the same two files. Different models, so the seconds are not a race.',steps:[
+ {title:'You ask',
+  a:{who:'you',say:'You type a request and press Enter.',list:[['@file · !command · /command','work in the prompt box']],much:'— instant.',dec:'You'},
+  b:{who:'you',say:'You type a request and press Enter. It goes to the model together with everything already loaded.',list:[['about 17,900 tokens','the instructions and tools, in front of the model before its first step']],much:'3.6 s for Claude Code to start up.',dec:'You'},
+  diff:'The same start.'},
+ {title:'It sorts',
+  a:{who:'app',say:'Word rules pick the kind: question, fix, change or rename. The model is asked only when no rule fits.',list:[['Sorted as: question · step by step','written down by the app']],much:'0.0 s. No model.',dec:'The app'},
+  b:{who:'model',say:'There is no sorting step. The model reads your message and decides what to do.',list:[['no rules, no label','it happens in the model’s first thinking']],much:'— inside the first round.',dec:'The model'},
+  diff:'The app sorts first. Claude decides as it goes.'},
+ {title:'The first look',
+  a:{who:'app',say:'The app reads both files for the model, before it says a word.',list:[['Read billing.mjs','12 lines'],['Read checkout.mjs','5 lines']],much:'0.02 s. No model call.',dec:'The app'},
+  b:{who:'model',say:'The model runs a find and a grep together, then reads what they found.',list:[['find + grep “tax”','one command, round 1'],['Read billing.mjs + Read checkout.mjs','both at once, round 2']],much:'About 6 s, in 2 rounds.',dec:'The model'},
+  diff:'The app takes these steps for the small model: every step Gemma takes itself is slow (about 12 tokens a second).'},
+ {title:'The answer',
+  a:{who:'model',say:'The model answers from what is in front of it.',list:[['Gemma','straight away: addTax, 0.0825'],['Qwen','first reply empty, answer in its thinking']],much:'Gemma 4.9 s · Qwen 3.8 s.',dec:'The model'},
+  b:{who:'model',say:'The model answers after its reads. It named the function and the rate, and added more.',list:[['addTax … billing.mjs:6, 8.25%','what you asked'],['also','addTax(100) = 108.25; only caller: checkout.mjs:4']],much:'2.6 s after the reads.',dec:'The model'},
+  diff:'Both got it right. Claude added a worked example and the caller.'},
+ {title:'Safety nets',
+  a:{who:'app',say:'The app enforces its rules in code.',list:[['an empty reply','sent back: “Reply to the user now”'],['Edit and Write','refused in a question; tests run after a change']],much:'Qwen +9.5 s. Gemma none.',dec:'The app'},
+  b:{who:'you',say:'Your permission mode decides what runs without asking. Your rules are followed by the model’s own judgement.',list:[['permission mode','what may run without asking'],['your AGENTS.md','followed by the model, not enforced']],much:'— nothing needed asking in this run.',dec:'You, through permission prompts'},
+  diff:'The app enforces its rules in code. Claude follows them and asks your permission.'},
+ {title:'Done',
+  a:{who:'app',say:'The app writes down what happened.',list:[['settled · question · done','files changed: none'],['a line in the test record','outcome and seconds']],much:'Gemma 4.9 s · Qwen 13.4 s.',dec:'The app'},
+  b:{who:'model',say:'The answer is the end. A normal run is saved as a conversation; nothing else is recorded.',list:[['the answer','4 model turns'],['cost','about $0.09 at API prices']],much:'13.0 s: 3.6 s start-up + 8.9 s of work.',dec:'The model'},
+  diff:'Close in time: Gemma 4.9 s, Qwen 13.4 s, Claude Code 13.0 s. The local models are free; Claude’s run cost about $0.09.'}
+]};
+// Who decides on Model (added 30 Sep 2026, the "Who decides" row in /effort): the same six steps,
+// from real runs on this Mac at 16:18 — practice task 7 (this question), thinking at High, Qwen3.5 9B
+// and Gemma 4 12B, each run with the app deciding and then with the model deciding (models/evals/tools/way-ab.mjs).
+const M2=[
+ {m:{who:'you',say:'You type a request and press Enter.',list:[['the same prompt box','@file · !command · /command']],much:'— instant.',dec:'You'},diff:'The same start.'},
+ {m:{who:'model',say:'There is no sorting step. The model reads your message and decides what to do.',list:[['no rules, no label','nothing is written under your message']],much:'— inside its first reply.',dec:'The model'},diff:'The same now: the model decides as it goes.'},
+ {m:{who:'model',say:'Nothing is read ahead. The model searches, then reads the file it found, one step a reply.',list:[['Qwen','Search “tax” twice, then Read billing.mjs: 3 replies'],['Gemma','Search “tax”, then Read billing.mjs: 2 replies'],['asked to read two files','both sent one Read with two paths: one reply']],much:'Qwen about 15 s · Gemma about 21 s, thinking included.',dec:'The model'},diff:'Same shape as Claude’s find, grep, read; each look is a reply.'},
+ {m:{who:'model',say:'The model answers from what it read.',list:[['Qwen','addTax in billing.mjs, default rate 0.0825 (8.25%)'],['Gemma','addTax in billing.mjs, default rate 0.0825']],much:'Qwen 5.2 s · Gemma 10.5 s.',dec:'The model'},diff:'Both right; neither added the caller or an example yet.'},
+ {m:{who:'you',say:'Your permission mode decides what runs without asking, as in Claude Code. The app’s checks are hooks, off unless you switch them on.',list:[['permission mode','Ask first, Auto-edit, or Plan (the only lock)'],['/hooks','10 checks, 0 on: empty reply, tests after a change, done check…']],much:'— nothing was needed: Qwen’s reply was not empty this time.',dec:'You, through permission prompts'},diff:'The same now: your mode is the safety net.'},
+ {m:{who:'model',say:'The answer is the end. The conversation is saved as before; the model saves a fact itself, with Remember, when one is worth keeping.',list:[['the answer','Qwen 4 replies · Gemma 3'],['Remember','not called: nothing worth keeping']],much:'Qwen 20 s · Gemma 32 s (the app deciding, the same minute: 12 s · 24 s).',dec:'The model'},diff:'All six as in Claude Code; here it cost +8 s on each model.'}
+];
+const C2={labels:C1.labels,note:'Agentic Coder with Who decides on Model: real runs on this Mac, 30 Sep 16:18, this question (practice task 7) at High on Qwen3.5 9B and Gemma 4 12B, each also run with the app deciding the same minute. Both ways passed on both models. Claude Code: the same run as the Compare view.',steps:C1.steps.map((x,k)=>({...x,m:M2[k].m,mdiff:M2[k].diff}))};
+const SEGS=[ // [id, lane, start s, length s, class, label]
+ ['app','q',0,0.02,'app',''],['think1','q',0.02,2.06,'think','thinking'],['write1','q',2.08,1.73,'write','writing'],['think2','q',3.81,3.79,'think','thinking'],['write2','q',7.6,5.75,'write','writing'],
+ ['app','g',0,0.02,'app',''],['gwrite','g',0.02,4.88,'write','writing']];
+const MAX=14;
+
+const $=id=>document.getElementById(id);
+const H=location.hash;
+let tab=H.startsWith('#made')?2:H.startsWith('#does')?1:0, step=[0,0,0,0,0,0], cmp=[H==='#where-vs'?1:0,H==='#does-vs'?1:H==='#does-model'?2:0];
+const sk=()=>tab===1&&cmp[1]===2?5:tab<2&&cmp[tab]?3+tab:tab;
+const STEPS=()=>tab===1&&cmp[1]===2?C2.steps:tab<2&&cmp[tab]?[C0,C1][tab].steps:[S0,S1,S2][tab];
+
+// A row shows the last step up to `at` that touched it: blue while that is the step you are on, green after.
+function rowHTML(r,at){
+ let last=-1;for(let i=0;i<=at;i++)if(S0[i].rows[r.id])last=i;
+ const st=last<0?'':last===at?'now':'done';
+ const mode=last<0?'':S0[last].rows[r.id];
+ return `<button class="row l${r.l||0} ${st} ${r.block?'block':''}" data-id="${r.id}" ${st==='now'?'aria-current="true"':''}><span class="mk">${r.dir?'▾':'·'}</span><span class="nm">${esc(r.nm)}</span><span class="nt">${esc(r.nt)}</span><span class="chip">${last<0?'—':MODE[mode]}</span></button>`;
+}
+function renderTree(){
+ $('tree').innerHTML=TREE.map(r=>r.g?`<div class="grp">${esc(r.g)}</div>`:rowHTML(r,step[0])).join('');
+ $('tree').querySelectorAll('.row').forEach(b=>b.onclick=()=>{const id=b.dataset.id;const i=S0.findIndex(s=>s.rows[id]);if(i>=0)go(i)});
+}
+function renderPanel(){
+ const s=S0[step[0]];
+ $('panel0').innerHTML=`<div class="kick"><span>Step ${step[0]+1} of ${S0.length}</span><span class="who w-${s.who}">${s.who==='model'?'THE MODEL':'THE APP, NO MODEL'}</span></div>
+ <h2>${esc(s.title)}</h2><p class="say">${esc(s.say)}</p>
+ <dl><dt>Looks at</dt><dd><ul>${s.looks.map(l=>`<li><code>${esc(l[0])}</code> <span>— ${esc(l[1])}</span></li>`).join('')}</ul></dd>
+ <dt>How much</dt><dd>${esc(s.much)}</dd><dt>Model used?</dt><dd>${esc(s.model)}</dd></dl>`;
+}
+function renderCards(){
+ $('cards').innerHTML=S1.map((s,i)=>`<button class="scard" data-i="${i}" ${i===step[1]?'aria-current="step"':''}><span class="n">Step ${i+1}</span><b>${esc(s.title)}</b><span class="who w-${s.who}" style="align-self:flex-start">${s.who==='model'?'THE MODEL':s.who==='you'?'YOU':'THE APP'}</span><span class="t">${esc(s.t)}</span></button>`).join('');
+ $('cards').querySelectorAll('.scard').forEach(b=>b.onclick=()=>go(+b.dataset.i));
+}
+function renderLanes(){
+ const on=S1[step[1]].lanes;
+ const pct=x=>(x/MAX*100).toFixed(2)+'%';
+ const lane=(key,name,tot)=>`<div class="lane"><span class="who-n">${name}</span><div class="bar">${SEGS.filter(g=>g[1]===key).map(g=>`<div class="seg ${g[4]} ${on.includes(g[0])?'on':''}" style="left:${pct(g[2])};width:${g[4]==='app'?'3px':pct(g[3])}">${g[4]==='app'?'':g[5]+' '+g[3].toFixed(1)+' s'}</div>`).join('')}</div><span class="tot">${tot}</span></div>`;
+ $('lanes').innerHTML=lane('g','Gemma','4.9 s')+lane('q','Qwen','13.4 s')+`<div class="axis"><span></span><div class="ticks">${[0,5,10].map(t=>`<i style="left:${pct(t)}">${t} s</i>`).join('')}</div><span></span></div>`;
+ $('laneNote').textContent=['','','The app’s part is the thin line at the start: 0.02 seconds.','Both models answered from what was already read. Qwen’s first reply was empty.','Qwen’s second reply is the long bar: it thought for 3.8 s, then wrote.','Gemma finished at 4.9 s; Qwen at 13.4 s.'][step[1]];
+}
+function renderMade(){
+ const s=S2[step[2]];
+ $('panel2').innerHTML=`<div class="kick"><span>Step ${step[2]+1} of ${S2.length}</span><span class="who w-you">HOW I MADE IT</span></div><h2>${esc(s.title)}</h2><p class="say">${esc(s.say)}</p><dl><dt>Went in</dt><dd>${esc(s.inp)}</dd><dt>Came out</dt><dd>${esc(s.out)}</dd></dl>`;
+ $('made').innerHTML=s.show();
+}
+function side(o,name,own,labels){
+ return `<h3>${name} <span class="own">${own}</span><span class="who w-${o.who}">${o.who==='model'?'THE MODEL':o.who==='you'?'YOU':'THE APP'}</span></h3><p class="say">${esc(o.say)}</p>
+ <dl><dt>${labels[0]}</dt><dd><ul>${o.list.map(l=>`<li><code>${esc(l[0])}</code> <span>— ${esc(l[1])}</span></li>`).join('')}</ul></dd><dt>${labels[1]}</dt><dd>${esc(o.much)}</dd><dt>Who decides</dt><dd>${esc(o.dec)}</dd></dl>`;
+}
+function renderCmp(){
+ const model=tab===1&&cmp[1]===2;
+ const C=model?C2:[C0,C1][tab],i=step[sk()],st=C.steps[i];
+ $('cmphead').innerHTML=`<span class="n">Step ${i+1} of ${C.steps.length}</span><h2>${esc(st.title)}</h2>`;
+ $('cmpA').innerHTML=model?side(st.m,'Agentic Coder','OURS · MODEL DECIDES',C.labels):side(st.a,'Agentic Coder','OURS',C.labels);
+ $('cmpB').innerHTML=side(st.b,'Claude Code','MINE',C.labels);
+ // Model decides: the app's way before, the model's way now, Claude Code; ✓ where the model's matches Claude's.
+ $('cmpO').innerHTML=model
+  ?`<table class="m"><tr><th>#</th><th>Step</th><th class="dc">App decided</th><th class="dc">Model decides now</th><th class="dc">Claude Code decides</th><th>How close now</th></tr>${C.steps.map((x,k)=>`<tr class="${k===i?'cur':''}" data-i="${k}" tabindex="0"><td>${k+1}</td><td>${esc(x.title)}</td><td class="dc">${esc(x.a.dec)}</td><td class="dc">${esc(x.m.dec)}${x.m.dec===x.b.dec?' ✓':''}</td><td class="dc">${esc(x.b.dec)}</td><td>${esc(x.mdiff)}</td></tr>`).join('')}</table>`
+  :`<table><tr><th>#</th><th>Step</th><th class="dc">Agentic Coder decides</th><th class="dc">Claude Code decides</th><th>The difference</th></tr>${C.steps.map((x,k)=>`<tr class="${k===i?'cur':''}" data-i="${k}" tabindex="0"><td>${k+1}</td><td>${esc(x.title)}</td><td class="dc">${esc(x.a.dec)}</td><td class="dc">${esc(x.b.dec)}</td><td>${esc(x.diff)}</td></tr>`).join('')}</table>`;
+ $('cmpO').querySelectorAll('tr[data-i]').forEach(r=>{r.onclick=()=>go(+r.dataset.i);r.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go(+r.dataset.i)}}});
+ $('cmpN').textContent=C.note;
+}
+function renderDetail(){
+ $('detail').innerHTML=`<h2>Step ${step[1]+1} · ${esc(S1[step[1]].title)}</h2><div class="det">${S1[step[1]].det()}</div>`;
+}
+function renderFoot(){
+ const n=STEPS().length,i=step[sk()];
+ $('back').setAttribute('aria-disabled',i===0);$('next').setAttribute('aria-disabled',i===n-1);
+ $('dots').innerHTML=STEPS().map((s,k)=>`<button class="dot ${k<i?'past':''}" data-k="${k}" ${k===i?'aria-current="step"':''} aria-label="Step ${k+1}: ${esc(s.title)}">${k+1}</button>`).join('');
+ $('dots').querySelectorAll('.dot').forEach(b=>b.onclick=()=>go(+b.dataset.k));
+}
+function render(){
+ ['t0','t1','t2'].forEach((id,i)=>$(id).setAttribute('aria-selected',i===tab));
+ const vs=tab<2&&cmp[tab]>0;
+ ['p0','p1','p2'].forEach((id,i)=>$(id).classList.toggle('on',tab===i&&!vs));
+ $('pc').classList.toggle('on',vs);
+ $('views').hidden=tab>1;
+ document.querySelectorAll('.vbtn').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.v===(tab<2?cmp[tab]:0)));
+ $('vModel').hidden=tab!==1; // the model's way is on tab 2 only
+ if(vs)renderCmp();else if(tab===0){renderTree();renderPanel()}else if(tab===1){renderCards();renderLanes();renderDetail()}else renderMade()
+ renderFoot();
+}
+function go(i){step[sk()]=Math.max(0,Math.min(STEPS().length-1,i));render()}
+function hash(){return ['#where','#does','#made'][tab]+(tab===1&&cmp[1]===2?'-model':tab<2&&cmp[tab]?'-vs':'')}
+function setTab(t){tab=t;history.replaceState(null,'',hash());render()}
+function setView(v){if(tab>1||(v===2&&tab!==1))return;cmp[tab]=v;history.replaceState(null,'',hash());render()}
+document.querySelectorAll('.vbtn').forEach(b=>b.onclick=()=>setView(+b.dataset.v));
+$('t0').onclick=()=>setTab(0);$('t1').onclick=()=>setTab(1);$('t2').onclick=()=>setTab(2);
+$('back').onclick=()=>go(step[sk()]-1);$('next').onclick=()=>go(step[sk()]+1);
+addEventListener('keydown',e=>{
+ if(e.metaKey||e.ctrlKey||e.altKey)return;
+ if(e.key==='ArrowRight')go(step[sk()]+1);else if(e.key==='ArrowLeft')go(step[sk()]-1);
+ else if(e.key==='1')setTab(0);else if(e.key==='2')setTab(1);else if(e.key==='3')setTab(2);else if(e.key==='c'||e.key==='C')setView(tab<2&&!cmp[tab]?1:0);else if(e.key==='m'||e.key==='M')setView(tab===1&&cmp[1]!==2?2:0);
+});
+render();
+</script>
+</body>
+</html>
