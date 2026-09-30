@@ -99,3 +99,50 @@ test('the model stays loaded after the window quits, the next start takes it ove
   expect(out.stoppedNow).toBe(1);
   expect(out.cGone).toBe(true);
 }, 45000);
+
+// 29 Sep, 22:02: a server stopped by hand, a new window's server registered the same port a
+// moment later, and the old server's watcher then deleted the new one's files. The watcher and
+// the app now remove a port's files only while they still name the server that quit.
+test('a server that quits removes its port files only while they still name it; a newer server on the port keeps its own', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-srv-own-'));
+  const script = `
+    import { spawn } from 'node:child_process';
+    import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+    import { join } from 'node:path';
+    const { HOME } = await import(${JSON.stringify(join(import.meta.dir, '../registry.mjs'))});
+    if (HOME !== process.env.AGENTIC_HOME) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
+    const { WATCH, dropRegistration } = await import(${JSON.stringify(join(import.meta.dir, '../runtime/server.mjs'))});
+    const reg = join(HOME, 'servers');
+    // The watcher: its server, no window using it, 1 s of linger, looking every 1 s.
+    const watched = async (namesIt) => {
+      const port = namesIt ? 17610 : 17611;
+      const R = join(reg, port + '.json'), U = join(reg, port + '.users');
+      mkdirSync(U, { recursive: true });
+      const srv = spawn('sleep', ['30']);
+      const newer = spawn('sleep', ['30']);
+      writeFileSync(R, JSON.stringify({ pid: namesIt ? srv.pid : newer.pid, owner: process.pid, port, ctx: 4096, model: 'm.gguf' }));
+      writeFileSync(join(U, String(process.pid)), '');
+      const w = spawn('/bin/sh', ['-c', WATCH, 'agentic-watch', String(srv.pid), U, R, '1', '1']);
+      // this window leaves: the watcher stops the idle server, then ends
+      const { rmSync } = await import('node:fs'); rmSync(join(U, String(process.pid)));
+      const sig = await new Promise((r) => srv.on('exit', (c, s) => r(s)));
+      await new Promise((r) => w.on('exit', r));
+      newer.kill();
+      return { sig, reg: existsSync(R), users: existsSync(U) };
+    };
+    const [own, newer] = await Promise.all([watched(true), watched(false)]);
+    // The app's side (a server's exit, stopServer): the same rule.
+    mkdirSync(join(reg, '17612.users'), { recursive: true });
+    writeFileSync(join(reg, '17612.json'), JSON.stringify({ pid: 4242, port: 17612 }));
+    const other = dropRegistration(17612, 999999);
+    const left = existsSync(join(reg, '17612.json')) && existsSync(join(reg, '17612.users'));
+    const mine = dropRegistration(17612, 4242);
+    const gone = !existsSync(join(reg, '17612.json')) && !existsSync(join(reg, '17612.users'));
+    console.log(JSON.stringify({ own, newer, app: { other, left, mine, gone, none: dropRegistration(17699, 1) } }));
+  `;
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 30000 });
+  const out = JSON.parse(r.stdout.trim().split('\n').pop());
+  expect(out.own).toEqual({ sig: 'SIGTERM', reg: false, users: false });   // its own files: removed
+  expect(out.newer).toEqual({ sig: 'SIGTERM', reg: true, users: true });   // a newer server's: kept
+  expect(out.app).toEqual({ other: false, left: true, mine: true, gone: true, none: false });
+}, 40_000);

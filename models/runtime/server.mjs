@@ -21,7 +21,11 @@ const usersDir = (port) => join(REG_DIR, `${port}.users`);
 const addUser = (port) => { mkdirSync(usersDir(port), { recursive: true }); writeFileSync(join(usersDir(port), String(process.pid)), ''); };
 const removeUser = (port) => rmSync(join(usersDir(port), String(process.pid)), { force: true });
 export const liveUsers = (port) => { try { return readdirSync(usersDir(port)).map(Number).filter((p) => p && alive(p)); } catch { return []; } };
-const WATCH = `S=$1; U=$2; R=$3; L=$4; T=$5; idle=0
+// When its server has quit, the watcher removes the port's files only while they still name that
+// server: on 29 Sep a server was stopped by hand, a new window's server registered the same port
+// within the watcher's sleep, and the old watcher then deleted the new one's files; the next window
+// took that copy for another program's and waited for it, and its own watcher saw no windows.
+export const WATCH = `S=$1; U=$2; R=$3; L=$4; T=$5; idle=0
 while kill -0 "$S" 2>/dev/null; do
   busy=0
   for f in "$U"/*; do [ -e "$f" ] || continue; if kill -0 "\${f##*/}" 2>/dev/null; then busy=1; else rm -f "$f"; fi; done
@@ -29,7 +33,7 @@ while kill -0 "$S" 2>/dev/null; do
   if [ "$idle" -ge "$L" ]; then kill -TERM "$S" 2>/dev/null; n=0; while kill -0 "$S" 2>/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n+1)); done; kill -KILL "$S" 2>/dev/null; break; fi
   sleep "$T"
 done
-rm -rf "$U" "$R"`;
+if grep -q '"pid":'"$S"'[,}]' "$R" 2>/dev/null; then rm -rf "$U" "$R"; fi`;
 function watch(pid, port, secs) {
   const step = Math.max(1, Math.min(10, Math.floor(secs / 3)));
   // Started through a shell that leaves at once, so the watcher is nobody's
@@ -187,7 +191,7 @@ export class ModelServer extends EventEmitter {
     child.on('exit', (code, signal) => {
       appendFileSync(logPath, `=== exit code=${code} signal=${signal}\n`);
       if (this.child === child) this.child = null;
-      rmSync(regFile(port), { force: true });
+      dropRegistration(port, child.pid);
       if (!this.stopping) this.emit('crash', { code, signal });
     });
     await this.waitHealthy(child);
@@ -253,11 +257,21 @@ function spawnSyncText(cmd, args) {
   return `${r.stdout ?? ''}${r.stderr ?? ''}`;
 }
 
+// A port's files removed, but only while they still name server `pid`: a newer server on the same
+// port keeps its own (see WATCH). true when they were removed.
+export function dropRegistration(port, pid) {
+  let owner = null;
+  try { owner = JSON.parse(readFileSync(regFile(port), 'utf8')).pid; } catch { return false; }
+  if (owner !== pid) return false;
+  rmSync(regFile(port), { force: true });
+  rmSync(usersDir(port), { recursive: true, force: true });
+  return true;
+}
+
 // One server from the list stopped, with its files (its watcher then ends).
 export function stopServer(e) {
   try { process.kill(e.pid, 'SIGTERM'); } catch {}
-  rmSync(regFile(e.port), { force: true });
-  rmSync(usersDir(e.port), { recursive: true, force: true });
+  dropRegistration(e.port, e.pid);
 }
 
 // `coding stop`: stops servers kept loaded that no open window is using.
