@@ -15,13 +15,19 @@
 //   node models/evals/bench/design/run.mjs --model gemma [--arms today,full | all] [--pages all | 1,3] [--minutes 8] [--record]
 //   node models/evals/bench/design/run.mjs --page-only      rebuilds the page from what is saved
 // One big model at a time: it refuses to start while another is loaded.
+// --set components (or the path of a JSON file, [{ id, name, prompt }]): those
+// requests instead of the five, for the UI component battle (components.mjs,
+// which gives --out and makes the page and the record line itself). Such a run
+// uses the tests' settings (32k, or the Tests page's panel), not the app's saved
+// ones, takes its pictures closer (900×620, a component is small), and keeps
+// each run's steps (log.json).
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, hasDraft, recordTest, codeLabel } from '../../../index.mjs';
-import { runHeadless, loadSettings, readLimits, modelWithLimits, layoutCheck, findChrome, designDir, readCards } from '../../../../terminal/index.mjs';
+import { runHeadless, loadSettings, readLimits, modelWithLimits, testLimits, testDefaults, layoutCheck, findChrome, designDir, readCards } from '../../../../terminal/index.mjs';
 import { buildPage, resultsDirs, PAGE_OUT } from './page.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -51,15 +57,23 @@ export const ARMS = {
   fable: { label: 'Fable cards only', design: { auto: true, check: false, sets: ['fable'] } },
 };
 
+// A named set of requests, or a file of them: [{ id, name, prompt, file? }].
+export const SETS = { components: join(here, 'components.json') };
+export function readSet(name) {
+  const list = JSON.parse(readFileSync(SETS[name] ?? name, 'utf8'));
+  return list.map((p) => ({ file: `${p.id}.html`, ...p }));
+}
+
 const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 
-// One screenshot, as a small JPEG (sips on a Mac; the PNG elsewhere).
-function shoot(chrome, page, out, w, h) {
+// One screenshot, as a small JPEG (sips on a Mac; the PNG elsewhere): half
+// the window's size, or `scale` of it.
+function shoot(chrome, page, out, w, h, scale = 0.5) {
   const png = out.replace(/\.jpg$/, '.png');
   const prof = mkdtempSync(join(tmpdir(), 'agentic-shot-'));
   const r = spawnSync(chrome, ['--headless', '--disable-gpu', '--no-first-run', '--hide-scrollbars', `--user-data-dir=${prof}`, `--window-size=${w},${h}`, '--virtual-time-budget=3000', `--screenshot=${png}`, `file://${page}`], { timeout: 30_000, stdio: 'ignore' });
   if (r.status !== 0 || !existsSync(png)) return null;
-  const s = spawnSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '62', '-Z', String(Math.round(w / 2)), png, '--out', out], { stdio: 'ignore' });
+  const s = spawnSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '62', '-Z', String(Math.round(Math.max(w, h) * scale)), png, '--out', out], { stdio: 'ignore' });
   return s.status === 0 && existsSync(out) ? basename(out) : basename(png);
 }
 
@@ -81,7 +95,11 @@ async function main() {
   const armIds = (opt('arms', 'today,full') === 'all' ? Object.keys(ARMS) : opt('arms', 'today,full').split(',')).map((a) => a.trim()).filter(Boolean);
   const bad = armIds.filter((a) => !ARMS[a]);
   if (bad.length) { console.error(`no arm ${bad.join(', ')}; the arms: ${Object.keys(ARMS).join(', ')}`); return 2; }
-  const pages = opt('pages', 'all') === 'all' ? PAGES : opt('pages').split(',').map((n) => PAGES[Number(n) - 1] ?? PAGES.find((p) => p.id === n)).filter(Boolean);
+  const set = opt('set', null);
+  let from = PAGES;
+  if (set) { try { from = readSet(set); } catch (e) { console.error(`no set "${set}" (${e.message})`); return 2; } }
+  const pages = opt('pages', 'all') === 'all' ? from : opt('pages').split(',').map((n) => from[Number(n) - 1] ?? from.find((p) => p.id === n)).filter(Boolean);
+  if (!pages.length) { console.error(`no page ${opt('pages')}; the pages: ${from.map((p) => p.id).join(', ')}`); return 2; }
   const chrome = findChrome();
   if (!chrome) { console.error('refused: no headless Chrome on this Mac to measure the pages (Chrome, or Playwright\'s own).'); return 5; }
   const dir = designDir();
@@ -91,7 +109,7 @@ async function main() {
   for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS']) delete process.env[k];
 
   const settings = loadSettings(root);
-  const limits = readLimits(settings, base0);
+  const limits = set ? testLimits(base0) ?? testDefaults(base0) : readLimits(settings, base0);
   const model = modelWithLimits(base0, limits);
   const ctx = Number(opt('ctx', limits.context || 32768));
   const thinking = opt('effort', settings.effort ?? 'low') !== 'low';
@@ -109,7 +127,7 @@ async function main() {
   const fit = contextCheck(model, ctx, { draft: hasDraft(model) });
   if (!fit.fits) { console.error(`refused: ${fit.note}`); return 4; }
 
-  const outDir = opt('out', join(home, 'models', basename(modelFolder(model)), 'results', `design-bench-${today}`));
+  const outDir = opt('out', join(home, 'models', basename(modelFolder(model)), 'results', `design-${set ? 'components' : 'bench'}-${today}`));
   mkdirSync(outDir, { recursive: true });
   const runsFile = join(outDir, 'runs.json');
   const saved = existsSync(runsFile) ? JSON.parse(readFileSync(runsFile, 'utf8')) : [];
@@ -121,7 +139,8 @@ async function main() {
   const stopAll = async () => { try { await srv.stop(); } catch {} };
   let stopping = false;
   let current = null;
-  process.on('SIGINT', async () => {
+  // Control-C, or the Tests tab's Stop (SIGTERM).
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => {
     if (!stopping) { stopping = true; console.log('\nstopping after this page (Control-C again quits at once)…'); current?.abort(); return; }
     await stopAll(); process.exit(130);
   });
@@ -163,11 +182,12 @@ async function main() {
       if (made) {
         copyFileSync(made, join(keep, basename(made)));
         measured = await layoutCheck(made, { chrome });
-        shots.desktop = shoot(chrome, made, join(keep, 'desktop.jpg'), 1440, 900);
-        shots.phone = shoot(chrome, made, join(keep, 'phone.jpg'), 390, 844);
+        shots.desktop = set ? shoot(chrome, made, join(keep, 'desktop.jpg'), 900, 620, 1) : shoot(chrome, made, join(keep, 'desktop.jpg'), 1440, 900);
+        shots.phone = shoot(chrome, made, join(keep, 'phone.jpg'), 390, 844, set ? 0.75 : 0.5);
       }
+      if (set && r?.log) writeFileSync(join(keep, 'log.json'), JSON.stringify(r.log, null, 1));
       const row = {
-        at: new Date().toISOString(), code: codeLabel(root), model: model.id, name: model.name, effort: effort ?? 'low', arm, page: pg.id, secs, error,
+        at: new Date().toISOString(), code: codeLabel(root), model: model.id, name: model.name, effort: effort ?? 'low', arm, page: pg.id, ...(pg.name ? { title: pg.name } : {}), secs, error,
         reason: ac.signal.aborted && !stopping ? 'time' : r?.reason ?? (error ? 'error' : 'stopped'), tools, outTokens: r?.outTokens ?? null, thinkTokens: r?.thinkTokens ?? null,
         file: made ? relative(home, join(keep, basename(made))) : null, bytes: made ? statSync(made).size : 0,
         problems: measured?.problems ?? null, skipped: measured?.skipped ?? null, shots,
@@ -179,12 +199,15 @@ async function main() {
       if (i >= 0) saved[i] = row; else saved.push(row);
       writeFileSync(runsFile, JSON.stringify(saved, null, 1));
       console.log(`${mmss(secs * 1000)} · ${made ? `${basename(made)} · ${row.problems == null ? `not measured (${row.skipped})` : `${row.problems.length} layout problem${row.problems.length === 1 ? '' : 's'}`}` : 'no page made'}${row.reason === 'time' ? ' · stopped at the time limit' : ''}`);
+      // The line the Tests tab counts: a page with nothing for the layout check to find passes.
+      if (set && !(stopping && row.reason !== 'time' && !made)) console.log(`${row.problems && !row.problems.length ? 'PASS' : 'FAIL'} ${arm === 'today' ? 'folder off' : 'folder on'} · ${pg.id} · ${!made ? 'no page made' : row.problems == null ? 'not measured' : `${row.problems.length} layout problem${row.problems.length === 1 ? '' : 's'}`} · ${mmss(secs * 1000)}`);
     }
   }
   current = null;
   await stopAll();
   const wall = (Date.now() - t0) / 1000;
   console.log(`${stopping ? 'stopped' : 'done'} after ${mmss(wall * 1000)} · saved ${relative(home, runsFile)}`);
+  if (set) return 0; // the caller's page and record line
   const page = buildPage({ dirs: resultsDirs(home, today), out: PAGE_OUT(home, today) });
   if (page) console.log(`page: ${relative(home, page)}`);
   if (args.includes('--record')) {

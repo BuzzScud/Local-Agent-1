@@ -12,10 +12,28 @@
 //           A model test without it never thinks (the sorting check: a sort writes nothing)
 //   pick    One practice task: which of the Practice 28 (a number, or a copy of yours like 18b)
 //   own     My tests: its total is how many tests of your own the Battle tab has
+//   lines   UI component battle: its total is three lines a request in its list (a list you add to)
 //   stop    the signal the Stop button sends first: each runner then saves what it has
 //   record  its line in the test record: kind, a name pattern, and whether it is a full run (its
 //           effort, low or high, tells a run with thinking from one without)
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { listMetas, practiceList } from './battle/store.mjs';
+
+// The UI component battle's requests (bench/design/components.json): each prints three lines, a
+// card pick, a page with the design folder on and one with it off. null: the list is not here.
+// Read from the repo each time: beside this file, or, inside the built app, in the repo the
+// launcher names (AGENTIC_REPO).
+const COMPONENTS = ['bench', 'design', 'components.json'];
+export function componentLines() {
+  for (const dir of [dirname(fileURLToPath(import.meta.url)), process.env.AGENTIC_REPO ? join(process.env.AGENTIC_REPO, 'models', 'evals') : null]) {
+    try { if (dir) return JSON.parse(readFileSync(join(dir, ...COMPONENTS), 'utf8')).length * 3; } catch { /* not there: the next place */ }
+  }
+  return null;
+}
+// How many items a run of `t` has: counted now where the list can change.
+const totalOf = (t) => (t.own ? ownCount() : t.lines ? t.lines() : t.total);
 
 // run.mjs's words for thinking: on at High (Gemma and Qwen have no Medium), or off.
 const thinkRun = (think) => (think ? ['--think', 'on', '--effort', 'high'] : ['--think', 'off']);
@@ -48,6 +66,9 @@ export const RUN_TESTS = [
   { id: 'prompt', name: 'Prompt old vs new', what: 'the Practice 28 twice: with the prompt from before 30 Sep (no Work habits) and with today’s; it holds when the new one passes as many and takes at most 10% longer, with a results page', model: true, think: true, total: 56, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/prompt-ab.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'tasks', name: '^Prompt old vs new$', part: false } },
+  { id: 'components', name: 'UI component battle', what: 'your UI component requests in three parts: which design cards each one gets (no model), the pages built with the design folder on, and again with it off; run it on both models for the battle, with a results page and a blind vote', model: true, think: true, total: null, lines: componentLines, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/bench/design/components.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^UI component battle$', part: false } },
   { id: 'unit', name: 'Unit tests', what: 'bun test over both parts, with the stand-in model (no real one loads)', model: false, total: null,
     script: 'models/evals/tools/run-suite.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'suite', name: '^Unit tests', part: false } },
@@ -112,7 +133,7 @@ export function runCommand(id, { model = null, n = null, think = false, models =
     if (!c) throw new Error(`${t.name}: no practice test "${n}" (1 to 28, or a copy of yours like 18b)`);
     key = c.key; pickArg = c.only;
   }
-  const total = t.own ? ownCount() : t.total;
+  const total = totalOf(t);
   if (t.own && !total) throw new Error('you have no tests of your own yet: + New test (in the Battle tab) makes one');
   const on = Boolean(t.think && think);
   // The control panel's changed rows reach the run as AGENTIC_TEST_SETTINGS (a test with no model takes none).
@@ -128,7 +149,7 @@ export function runCatalog(models = []) {
   const first = practiceChoice(RUN_TESTS.find((t) => t.pick)?.pick.default)?.only ?? choices[0]?.only;
   const text = (t, think) => Object.fromEntries((t.model ? models : [null]).map((m) => [m ?? 'none', ['node', t.script, ...t.args(m, t.pick ? first : null, think)].join(' ')]));
   return RUN_TESTS.map((t) => ({
-    id: t.id, name: t.name, what: t.what, model: t.model, think: Boolean(t.think), total: t.own ? ownCount() : t.total, count: t.count ?? null, minutes: t.minutes ?? null, pick: t.pick ?? null, record: t.record,
+    id: t.id, name: t.name, what: t.what, model: t.model, think: Boolean(t.think), total: totalOf(t), count: t.count ?? null, minutes: t.minutes ?? null, pick: t.pick ?? null, record: t.record,
     ...(t.pick ? { choices } : {}), ...(t.own ? { own: true } : {}),
     command: text(t, false), ...(t.think ? { commandThink: text(t, true) } : {}),
   }));

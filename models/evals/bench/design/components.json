@@ -1,0 +1,20 @@
+[
+  {
+    "id": "data-card",
+    "n": 1,
+    "name": "Data metric card",
+    "prompt": "Build a single self-contained HTML file for a modern data card that a dashboard could drop in anywhere. The card should show a title, one large primary number, a short label, a small percentage change with an up or down indicator, and a thin sparkline or progress bar. Use only inline CSS and a tiny bit of JavaScript so the file works when opened locally with no build step and no extra assets. Make the layout clean, slightly rounded, and readable on both desktop and phone. Keep the whole thing under one file and ready to copy-paste."
+  },
+  {
+    "id": "notification",
+    "n": 5,
+    "name": "Notification card",
+    "prompt": "Write a self-contained HTML file for an in-app notification card. Show an app icon or colored badge, a title, two lines of body text, a timestamp, and two small actions such as Dismiss and View. Style it with CSS in the same file and add light JavaScript only if a close button needs to hide the card. It should look like a modern product toast or inbox item and stay readable on a phone. No external libraries or extra files."
+  },
+  {
+    "id": "media-player",
+    "n": 7,
+    "name": "Mini media player",
+    "prompt": "Create a self-contained HTML file for a compact media player card. Show album art as a colored block or CSS shape, track title, artist name, a progress bar, and play, skip, and like buttons. Use only HTML, CSS, and a small amount of JavaScript to toggle play state and move the progress bar. The file must work when opened locally with no audio file required. Keep the look clean and app-like so it could live in a sidebar or mobile sheet."
+  }
+]
