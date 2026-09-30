@@ -118,7 +118,7 @@ test('a check: it holds the memory as its own process, prints live and counts; o
   expect(unit).toMatchObject({ kind: 'check', test: 'unit', who: null, think: false, settings: null, status: 'done' });
   const jobs = (await get('/api/jobs?test=sorting')).jobs;
   expect(jobs.map((j) => j.model)).toEqual(['qwen', 'gemma']);
-  expect(st.checks.map((c) => c.id)).toEqual(['requests', 'long', 'sorting', 'twoatonce', 'prompt', 'thinking', 'components', 'edited', 'unit', 'check', 'reader']); // the sets are not checks here
+  expect(st.checks.map((c) => c.id)).toEqual(['requests', 'long', 'sorting', 'twoatonce', 'remote', 'prompt', 'thinking', 'components', 'edited', 'unit', 'check', 'reader']); // the sets are not checks here
   expect(st.checks.find((c) => c.id === 'unit')).toMatchObject({ model: false, last: { none: null } });
 }, 90_000);
 

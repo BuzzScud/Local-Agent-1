@@ -74,8 +74,9 @@ test('each test the tab can run: its script is there, its command names the mode
   expect([u.think, u.argv.includes('--think')]).toEqual([false, false]);
   for (const t of RUN_TESTS) if (!t.model) expect(Boolean(t.think)).toBe(false);
   // A sort writes nothing and the speed check writes with thinking off, so they never think; Thinking old vs new sets its own (High).
+  // The remote check asks at Low.
   // The edited copy check asks a model and its edited copy the same questions with thinking off, so it never thinks either.
-  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting', 'twoatonce', 'thinking', 'edited']);
+  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting', 'twoatonce', 'remote', 'thinking', 'edited']);
   const ed = runCommand('edited', { model: 'qwen', think: true, models });
   expect([ed.think, ed.argv]).toEqual([false, ['models/evals/tools/edited-check.mjs', '--model', 'qwen']]);
   expect(countLines(runTestById('edited'), ['original: loaded in 9 s', 'PASS original · 17 × 23 → "391"', 'FAIL edited · the capital of Japan → "Kyoto"', 'ASKED edited · “<start_of_turn>” (row 3): a special token or a space, nothing to write back'])).toEqual({ done: 3, passed: 1, total: null });
