@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test builder designs</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--acc:#2a78d6;--hub:#fcfcfb;--hubline:#e3e2dc;--hubink2:#52514e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#77746d;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--acc:#5b9cf0;--hub:#1a1a19;--hubline:#34342f;--hubink2:#c3c2b7}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#77746d;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--acc:#5b9cf0;--hub:#1a1a19;--hubline:#34342f;--hubink2:#c3c2b7}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100vh}
+button,input,textarea{font:inherit;color:inherit}
+@media (min-width:900px) and (min-height:560px){html,body{height:100%;overflow:hidden}body{height:100vh;min-height:0}}
+/* The strip that belongs to this preview only (not part of the tab). */
+.pv{flex:none;display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;padding:6px 16px;border-bottom:1px dashed var(--faint);font-size:13px;color:var(--mute)}
+.pv b{color:var(--ink);font-weight:600}
+.pv .grp{display:flex;align-items:center;gap:8px}
+.pv .real{flex:1 1 260px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:none;padding:4px 11px;color:var(--mute);cursor:pointer;white-space:nowrap;border-left:1px solid var(--line)}
+.seg button:first-child{border-left:0}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--card);font-weight:600}
+.seg button small{font-size:11.5px;font-weight:400;opacity:.8;margin-left:5px}
+/* A copy of the hub's own top bar, with the new tab lit. */
+.hub{flex:none;display:flex;align-items:center;gap:6px;padding:0 12px;border-bottom:1px solid var(--hubline);background:var(--hub);height:44px;overflow:hidden}
+.hub h1{font-size:15px;margin:0 14px 0 4px;font-weight:600;white-space:nowrap}
+.hub span.t{color:var(--hubink2);padding:7px 12px;white-space:nowrap;border-radius:8px}
+.hub span.t.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--acc);border-radius:8px 8px 0 0;font-weight:600}
+main{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 16px 12px;max-width:1500px;width:100%;margin:0 auto}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
+.q{color:var(--mute);font-size:12.5px;font-weight:400}
+.fill{flex:1}
+/* Buttons: the one that acts (blue), the quiet ones, the small ones in a header. A button that cannot act is solid grey. */
+.go{font-weight:650;border:0;border-radius:10px;padding:7px 16px;background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap}
+.go:hover:not(:disabled){filter:brightness(1.07)}
+.ghost{padding:6px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);cursor:pointer;white-space:nowrap}
+.ghost:hover:not(:disabled){border-color:var(--mute)}
+.go:disabled,.ghost:disabled,.mini:disabled{background:var(--soft);color:var(--mute);border-color:var(--line);cursor:default}
+.mini{font-size:12.5px;font-weight:600;padding:2px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--acc);cursor:pointer;white-space:nowrap}
+.mini:hover:not(:disabled){border-color:var(--acc)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.st-saved{color:var(--up);font-size:12px;white-space:nowrap}.st-draft{color:var(--warn);font-size:12px;white-space:nowrap}
+/* The editor's parts (both designs use the same parts, placed differently). */
+label.l,.l{display:block;font-size:12.5px;font-weight:600;color:var(--mute);white-space:nowrap}
+.f-row{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;gap:10px;min-height:32px}
+.f-col{display:flex;flex-direction:column;gap:4px;min-height:0}
+.f-col.grow{flex:1}
+input.in{width:100%;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card)}
+textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);line-height:1.5}
+.hint{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ck-h{display:flex;align-items:baseline;gap:8px;min-width:0;margin-bottom:4px}.ck-h b{font-size:15px;white-space:nowrap}.ck-h .q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ck{display:grid;grid-template-columns:20px minmax(0,max-content) minmax(64px,1fr);align-items:center;gap:8px;padding:3px 6px;margin:0 -6px;border-radius:8px;cursor:pointer;min-height:28px}
+.ck:hover{background:var(--soft)}
+.tg{display:inline-grid;place-items:center;width:18px;height:18px;border:1.5px solid var(--faint);border-radius:5px;font-size:12px;line-height:1;color:transparent}
+.ck.on .tg{background:var(--acc);border-color:var(--acc);color:#fff}
+.ck .cl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.ck:not(.on) .cl{color:var(--mute)}
+.ck .cw{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:right}
+.ck .cw.ok{color:var(--up);font-weight:600}.ck .cw.bad{color:var(--down)}.ck .cw.bad b{font-weight:700}
+.eye{margin-top:6px;padding:6px 10px;border-radius:9px;background:var(--soft);font-size:12.5px;color:var(--mute);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.eye b{color:var(--ink);font-weight:600;margin-right:6px}
+.tried{margin-top:8px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;font-size:12.5px;color:var(--mute)}
+.tried ul{margin:5px 0 0;padding:0 0 0 16px}.tried li{margin:2px 0;overflow-wrap:anywhere}.tried li b{font-weight:600}
+.tried b{color:var(--ink)}.tried .ok{color:var(--up);font-weight:700}.tried .bad{color:var(--down);font-weight:700}
+.link{color:var(--acc);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-size:inherit}
+.set{display:grid;grid-template-columns:92px auto minmax(0,1fr);align-items:center;gap:10px;min-height:30px;font-size:13.5px}
+.set .v{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.set .v button{border:0;background:none;color:var(--mute);cursor:pointer;padding:1px 6px;border-radius:6px;font-size:12px}.set .v button:hover:not(:disabled){background:var(--soft);color:var(--ink)}.set .v button:disabled{opacity:.3;cursor:default}
+.set .n{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.none{color:var(--mute);font-size:13px;padding:8px 12px}
+/* Design 1 · List + editor: your tests by level on the left, the picked one on the right. */
+.d1{flex:1;min-height:0;display:grid;grid-template-columns:350px minmax(0,1fr);gap:12px}
+.lst{display:flex;flex-direction:column}
+.lst-h{flex:none;display:flex;align-items:baseline;gap:8px;padding:10px 14px 6px}.lst-h b{font-size:15px}
+.lst-b{flex:1;min-height:0;overflow:auto;scrollbar-width:none;padding:0 6px}.lst-b::-webkit-scrollbar{display:none}
+.gh{display:flex;align-items:center;gap:8px;padding:8px 8px 3px}
+.gh .gn{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.gh .gm{color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:5px 8px;border-radius:8px;cursor:pointer;min-height:30px}
+.row .mv{display:inline-flex;gap:2px;grid-column:2 / -1}.row .mv button{border:0;background:var(--line);color:var(--mute);border-radius:6px;font-size:11.5px;font-weight:700;padding:2px 7px;cursor:pointer}.row .mv button:hover{color:var(--ink)}
+.row:hover{background:var(--soft)}.row[aria-selected="true"]{background:var(--soft)}.row[aria-selected="true"] .rt{font-weight:650}
+.row .rt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row .rm{color:var(--mute);font-size:12px;white-space:nowrap}
+.lst-f{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}
+.lst-f .ghost{padding:5px 8px;font-size:13px;text-align:center}
+.ed{display:grid;grid-template-columns:minmax(0,1fr) 430px;grid-template-rows:minmax(0,1fr) auto}
+.ed-l{display:flex;flex-direction:column;gap:6px;padding:14px 16px;min-height:0;min-width:0}
+.ed-r{display:flex;flex-direction:column;padding:14px 16px;border-left:1px solid var(--line);min-height:0;min-width:0;overflow:hidden}
+.ed-r .sets{margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
+.ed-f{grid-column:1 / -1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 16px;border-top:1px solid var(--line)}
+/* Pasting a list: the text on the left, what was read from it on the right. */
+.paste{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;min-height:0}
+.paste .pa-l{display:flex;flex-direction:column;gap:4px;padding:14px 16px;min-height:0;min-width:0}
+.paste .pa-r{display:flex;flex-direction:column;padding:14px 16px;border-left:1px solid var(--line);min-height:0;min-width:0}
+.pa-list{flex:1;min-height:0;overflow:auto;scrollbar-width:none}.pa-list::-webkit-scrollbar{display:none}
+.pa-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line)}
+.pa-row .n{color:var(--mute);font-variant-numeric:tabular-nums}.pa-row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.pa-row .m{color:var(--mute);font-size:12.5px;white-space:nowrap}
+.paste .acts{padding-top:10px;justify-content:flex-end}
+/* Design 2 · Board: a column per level, the picked card's editor in a strip under them. */
+.d2{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.tray{flex:none;display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;padding:7px 12px}
+.tray .tl{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:9px;padding:2px 3px 2px 9px;cursor:grab;background:var(--card);max-width:100%}
+.chip[aria-selected="true"]{border-color:var(--ink)}
+.chip .ct{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;max-width:170px}
+.chip .mv{display:inline-flex;gap:2px}.chip .mv button,.card .mv button{border:0;background:var(--soft);color:var(--mute);border-radius:6px;font-size:11.5px;font-weight:700;padding:2px 6px;cursor:pointer}
+.chip .mv button:hover,.card .mv button:hover:not(:disabled){color:var(--ink);background:var(--line)}
+.tray .tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}.tray .tools .ghost{padding:4px 10px;font-size:13px}
+.cols{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.col{display:flex;flex-direction:column}.col.over{border-color:var(--acc)}
+.col-h{flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);min-width:0}
+.col-h b{font-size:15px}.col-h .q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.col-b{flex:1;min-height:0;overflow:auto;scrollbar-width:none;padding:6px;display:flex;flex-direction:column;gap:4px}.col-b::-webkit-scrollbar{display:none}
+.card{flex:none;border:1px solid transparent;border-radius:10px;padding:5px 9px;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;align-items:center}
+.card:hover{background:var(--soft)}.card[aria-selected="true"]{background:var(--soft);border-color:var(--faint)}
+.card .ct{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .cp{grid-column:1 / -1;color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .cm{color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .mv{display:inline-flex;gap:2px;justify-self:end}.card .mv button:disabled{opacity:.3;cursor:default}
+.drawer{flex:0 0 clamp(268px,42%,340px);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) 348px;min-height:0}
+.drawer>div{padding:10px 14px;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.drawer>div+div{border-left:1px solid var(--line)}
+.drawer .dr-l{gap:6px}.drawer .f-row{grid-template-columns:44px minmax(0,1fr)}
+.drawer .dr-r .acts{margin-top:auto;padding-top:8px;gap:6px}.drawer .acts .ghost{padding:5px 10px;font-size:13px}.drawer .acts .go{padding:6px 12px;font-size:13.5px}.drawer .acts .fill{flex-basis:100%;height:0}.drawer .set{grid-template-columns:84px auto minmax(0,1fr)}
+.drawer .ck{min-height:26px;padding-top:2px;padding-bottom:2px}
+.drawer.paste{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.d2.pasting .drawer{flex:1}.d2.pasting .cols{flex:0 0 46px}.d2.pasting .col-b{display:none}.d2.pasting .col-h{border-bottom:0}
+@media (min-width:900px) and (max-height:800px){.ck{min-height:25px;padding-top:1px;padding-bottom:1px}.f-row{min-height:30px}.set{min-height:27px}.row{min-height:27px;padding-top:3px;padding-bottom:3px}.card{padding-top:3px;padding-bottom:3px}.card .cm{display:none}}
+@media (max-width:1400px) and (min-width:900px){.d1{grid-template-columns:300px minmax(0,1fr)}.ed{grid-template-columns:minmax(0,1fr) 390px}.drawer{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 330px}.hub span.t{padding:7px 9px}}
+@media (max-width:899px),(max-height:559px){
+  .d1{display:block}.lst{margin-bottom:12px}.lst-b{overflow:visible}.ed{display:block}.ed-r{border-left:0;border-top:1px solid var(--line)}.ed-r .sets{margin-top:12px}
+  .paste,.drawer.paste{display:block}.paste .pa-r{border-left:0;border-top:1px solid var(--line)}textarea.in{min-height:200px}
+  .cols{display:block}.col{margin-bottom:10px}.col-b{overflow:visible}.drawer{display:block;flex:none}.drawer>div+div{border-left:0;border-top:1px solid var(--line)}.drawer .dr-r .acts{margin-top:10px}
+  .d2.pasting .cols{display:none}
+  .hub{overflow-x:auto;scrollbar-width:none}.hub::-webkit-scrollbar{display:none}.hub h1{display:none}.pv .real{text-align:left;white-space:normal}
+  .seg{display:flex;flex-wrap:wrap}.seg button{flex:1 1 auto;border-left:0;border-top:1px solid var(--line);margin-top:-1px}label.l,.l{white-space:normal}.f-row,.drawer .f-row{grid-template-columns:1fr;gap:4px;margin-bottom:6px}.pv .seg button{padding:4px 8px}
+  .ck{grid-template-columns:20px minmax(0,1fr)}.ck .cl{white-space:normal}.ck .cw{grid-column:2;text-align:left;white-space:normal}
+  .hint{white-space:normal}.set{grid-template-columns:92px auto}.set .n{grid-column:1 / -1;white-space:normal}
+}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:8px 14px;border-radius:10px;font-size:13px;max-width:min(92vw,720px);opacity:0;pointer-events:none;transition:opacity .15s;z-index:9}
+#toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="pv">
+  <div class="grp"><b>Preview</b><span>Design</span><span class="seg" id="pv-design"><button data-design="1">1 · List + editor</button><button data-design="2">2 · Board</button></span></div>
+  <div class="grp"><span>Show</span><span class="seg" id="pv-moment"><button data-moment="paste">Paste a list</button><button data-moment="sort">Set levels</button><button data-moment="edit">Edit a test</button><button data-moment="try">Try the checks</button></span></div>
+  <span class="real" title="Real: your 7 prompts from ~/Desktop/prompt testing.txt, the checks suggested for each, and what those checks say on 4 pages a model made earlier. An example only: which level each test sits in (you set that). Nothing here is saved to the app.">Real: your 7 prompts, the suggested checks, the results on 4 earlier pages. Example: the levels. Nothing is saved.</span>
+</div>
+<div class="hub" aria-hidden="true">
+  <h1>Agentic Coder hub</h1>
+  <span class="t">Weights</span><span class="t">Harness</span><span class="t">Structure</span><span class="t">Flow</span><span class="t">Tests</span><span class="t on">Test builder</span><span class="t">Battle</span><span class="t">Memory</span><span class="t">Instructions</span><span class="t">All docs</span><span class="t">Help</span>
+</div>
+<main id="stage"></main>
+<input type="file" id="pagefile" accept=".html,.htm,text/html" hidden>
+<div id="toast" role="status"></div>
+<script>
+const DATA = {"built":"2026-09-30T14:35:51.468Z","source":"~/Desktop/prompt testing.txt","text":"Prompt 1 — Data metric card\nBuild a single self-contained HTML file for a modern data card that a dashboard could drop in anywhere. The card should show a title, one large primary number, a short label, a small percentage change with an up or down indicator, and a thin sparkline or progress bar. Use only inline CSS and a tiny bit of JavaScript so the file works when opened locally with no build step and no extra assets. Make the layout clean, slightly rounded, and readable on both desktop and phone. Keep the whole thing under one file and ready to copy-paste.\n\n\nPrompt 2 — User profile card\nCreate one self-contained HTML file that renders a compact user profile card. Include an avatar circle, name, role or handle, a short bio line, two or three small stat chips, and a primary action button. Style everything with CSS in a <style> tag and add only light JavaScript if you need a hover or click state. The file must open in a browser by itself with no frameworks, fonts from CDNs only if needed, and no other files. Keep the design simple, balanced, and usable as a reusable web-app component.\n\n\nPrompt 3 — Pricing plan card\nBuild one self-contained HTML file for a pricing plan card that could sit in a SaaS landing page. Show a plan name, a monthly price, a short tagline, a list of five included features with check marks, and a full-width sign-up button. Put all styles in a style tag and keep JavaScript optional, only for a hover or selected state. The file must open locally with no build tools and no extra assets. Make the card feel premium, compact, and easy to drop into another layout.\n\n\nPrompt 4 — Weather widget\nCreate a single HTML file that renders a small weather widget for a city. Include the city name, current temperature, a weather condition label, a simple icon made with CSS or SVG, and a four-item hourly forecast row. Use only inline CSS and a little JavaScript so dummy data can swap if needed. The widget should look like a phone home-screen tile and work offline when the file is opened in a browser. Keep everything in one file and ready to reuse.\n\n\nPrompt 5 — Notification card\nWrite a self-contained HTML file for an in-app notification card. Show an app icon or colored badge, a title, two lines of body text, a timestamp, and two small actions such as Dismiss and View. Style it with CSS in the same file and add light JavaScript only if a close button needs to hide the card. It should look like a modern product toast or inbox item and stay readable on a phone. No external libraries or extra files.\n\n\nPrompt 6 — Task or ticket card\nMake one HTML file that displays a project task card. Include a status pill, a title, a short description, an assignee avatar and name, a due date, and a small tag row. Keep CSS and any tiny interaction script inside the file so it opens by itself. The card should feel like a Kanban board item: tidy, scannable, and slightly elevated. Design it so someone could copy the file into a dashboard without changing paths.\n\n\n\nPrompt 7 — Mini music or media player\nCreate a self-contained HTML file for a compact media player card. Show album art as a colored block or CSS shape, track title, artist name, a progress bar, and play, skip, and like buttons. Use only HTML, CSS, and a small amount of JavaScript to toggle play state and move the progress bar. The file must work when opened locally with no audio file required. Keep the look clean and app-like so it could live in a sidebar or mobile sheet.","tests":[{"n":1,"title":"Data metric card","prompt":"Build a single self-contained HTML file for a modern data card that a dashboard could drop in anywhere. The card should show a title, one large primary number, a short label, a small percentage change with an up or down indicator, and a thin sparkline or progress bar. Use only inline CSS and a tiny bit of JavaScript so the file works when opened locally with no build step and no extra assets. Make the layout clean, slightly rounded, and readable on both desktop and phone. Keep the whole thing under one file and ready to copy-paste.","kind":"page","sample":{"file":"~/Desktop/SEP/28 SEP CODE/data-card.html","name":"data-card.html","saved":"2026-09-28T20:47:38.101Z","bytes":4629,"html":"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Data Card</title>\n    <style>\n        :root {\n            --card-bg: #ffffff;\n            --card-text: #1a1a1a;\n            --accent-color: #3b82f6;\n            --success-color: #10b981;\n            --danger-color: #ef4444;\n            --muted-text: #6b7280;\n            --border-color: #e5e7eb;\n            --sparkline-color: #9ca3af;\n            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);\n        }\n\n        @media (prefers-color-scheme: dark) {\n            :root {\n                --card-bg: #1f2937;\n                --card-text: #f9fafb;\n                --accent-color: #60a5fa;\n                --success-color: #34d399;\n                --danger-color: #f87171;\n                --muted-text: #9ca3af;\n                --border-color: #374151;\n                --sparkline-color: #4b5563;\n                --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);\n            }\n        }\n\n        * {\n            box-sizing: border-box;\n            margin: 0;\n            padding: 0;\n        }\n\n        body {\n            font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;\n            background-color: var(--border-color);\n            display: flex;\n            justify-content: center;\n            align-items: center;\n            min-height: 100vh;\n            padding: 20px;\n        }\n\n        .data-card {\n            background-color: var(--card-bg);\n            color: var(--card-text);\n            width: 100%;\n            max-width: 320px;\n            padding: 24px;\n            border-radius: 16px;\n            box-shadow: var(--shadow);\n            border: 1px solid var(--border-color);\n            transition: transform 0.2s ease;\n        }\n\n        .data-card:active {\n            transform: scale(0.98);\n        }\n\n        .card-header {\n            display: flex;\n            justify-content: space-between;\n            align-items: flex-start;\n            margin-bottom: 16px;\n        }\n\n        .card-title {\n            font-size: 14px;\n            font-weight: 600;\n            color: var(--muted-text);\n            text-transform: uppercase;\n            letter-spacing: 0.025em;\n        }\n\n        .percentage-change {\n            font-size: 12px;\n            font-weight: 700;\n            display: flex;\n            align-items: center;\n            gap: 2px;\n        }\n\n        .percentage-change.up {\n            color: var(--success-color);\n        }\n\n        .percentage-change.down {\n            color: var(--danger-color);\n        }\n\n        .card-body {\n            margin-bottom: 20px;\n        }\n\n        .primary-number {\n            font-size: 42px;\n            font-weight: 800;\n            letter-spacing: -0.02em;\n            line-height: 1;\n            margin-bottom: 4px;\n        }\n\n        .label {\n            font-size: 14px;\n            color: var(--muted-text);\n        }\n\n        .card-footer {\n            height: 40px;\n            width: 100%;\n            margin-top: 10px;\n        }\n\n        .sparkline {\n            width: 100%;\n            height: 100%;\n            stroke: var(--accent-color);\n            stroke-width: 2;\n            fill: none;\n            stroke-linecap: round;\n            stroke-linejoin: round;\n        }\n\n        /* Progress Bar style fallback if no sparkline preferred */\n        .progress-bar {\n            width: 100%;\n            height: 6px;\n            background-color: var(--border-color);\n            border-radius: 3px;\n            overflow: hidden;\n        }\n\n        .progress-fill {\n            height: 100%;\n            background-color: var(--accent-color);\n            width: 65%;\n            border-radius: 3px;\n        }\n    </style>\n</head>\n<body>\n\n    <div class=\"data-card\">\n        <div class=\"card-header\">\n            <div class=\"card-title\">Monthly Revenue</div>\n            <div class=\"percentage-change up\">\n                <span>↑</span> 12.5%\n            </div>\n        </div>\n        \n        <div class=\"card-body\">\n            <div class=\"primary-number\">$42,850</div>\n            <div class=\"label\">Active Subscriptions</div>\n        </div>\n\n        <div class=\"card-footer\">\n            <\!-- Sparkline SVG -->\n            <svg class=\"sparkline\" viewBox=\"0 0 100 30\" preserveAspectRatio=\"none\">\n                <path d=\"M0,25 L10,22 L20,24 L30,15 L40,18 L50,5 L60,10 L70,20 L80,12 L90,25 L100,18\" />\n            </svg>\n        </div>\n    </div>\n\n</body>\n</html>\n","results":{"scripts-valid:":{"pass":false,"why":"data-card.html: the page has no script of its own"},"offline:":{"pass":true,"why":""},"page-has:%":{"pass":true,"why":""},"page-made:":{"pass":true,"why":""},"drawn:":{"pass":true,"why":""},"layout:":{"pass":false,"why":"2 problems: Text is too faint to read at 1440×900: \"↑ 12.5%\" (div.percentage-change.up) is #10b981 on #ffffff (2.5:1; needs 4.5:1).","problems":["Text is too faint to read at 1440×900: \"↑ 12.5%\" (div.percentage-change.up) is #10b981 on #ffffff (2.5:1; needs 4.5:1).","Text is too faint to read at 1440×900: \"↑\" (span) is #10b981 on #ffffff (2.5:1; needs 4.5:1)."],"secs":0.2}}}},{"n":2,"title":"User profile card","prompt":"Create one self-contained HTML file that renders a compact user profile card. Include an avatar circle, name, role or handle, a short bio line, two or three small stat chips, and a primary action button. Style everything with CSS in a <style> tag and add only light JavaScript if you need a hover or click state. The file must open in a browser by itself with no frameworks, fonts from CDNs only if needed, and no other files. Keep the design simple, balanced, and usable as a reusable web-app component.","kind":"page","sample":{"file":"~/Desktop/SEP/28 SEP CODE/profile-card.html","name":"profile-card.html","saved":"2026-09-28T20:54:34.646Z","bytes":4568,"html":"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>User Profile Card</title>\n    <style>\n        :root {\n            --card-bg: #ffffff;\n            --card-text: #1f2937;\n            --accent-color: #4f46e5;\n            --accent-hover: #4338ca;\n            --text-muted: #6b7280;\n            --chip-bg: #f3f4f6;\n            --chip-text: #374151;\n            --border-color: #e5e7eb;\n            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);\n        }\n\n        @media (prefers-color-scheme: dark) {\n            :root {\n                --card-bg: #1f2937;\n                --card-text: #f9fafb;\n                --accent-color: #818cf8;\n                --accent-hover: #a5b4fc;\n                --text-muted: #9ca3af;\n                --chip-bg: #374151;\n                --chip-text: #f3f4f6;\n                --border-color: #374151;\n                --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);\n            }\n        }\n\n        * {\n            box-sizing: border-box;\n            margin: 0;\n            padding: 0;\n        }\n\n        body {\n            font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;\n            background-color: var(--border-color);\n            display: flex;\n            justify-content: center;\n            align-items: center;\n            min-height: 100vh;\n            padding: 20px;\n        }\n\n        .profile-card {\n            background-color: var(--card-bg);\n            color: var(--card-text);\n            width: 100%;\n            max-width: 340px;\n            padding: 32px 24px;\n            border-radius: 24px;\n            box-shadow: var(--shadow);\n            border: 1px solid var(--border-color);\n            text-align: center;\n        }\n\n        .avatar {\n            width: 80px;\n            height: 80px;\n            background: linear-gradient(135deg, var(--accent-color), #9333ea);\n            border-radius: 50%;\n            margin: 0 auto 16px;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            font-size: 32px;\n            font-weight: bold;\n            color: white;\n            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);\n        }\n\n        .name {\n            font-size: 20px;\n            font-weight: 700;\n            margin-bottom: 4px;\n        }\n\n        .handle {\n            font-size: 14px;\n            color: var(--text-muted);\n            margin-bottom: 16px;\n        }\n\n        .bio {\n            font-size: 14px;\n            line-height: 1.5;\n            color: var(--card-text);\n            opacity: 0.8;\n            margin-bottom: 24px;\n            padding: 0 10px;\n        }\n\n        .stats-container {\n            display: flex;\n            justify-content: center;\n            gap: 8px;\n            margin-bottom: 32px;\n        }\n\n        .stat-chip {\n            background-color: var(--chip-bg);\n            color: var(--chip-text);\n            padding: 4px 12px;\n            border-radius: 999px;\n            font-size: 12px;\n            font-weight: 600;\n        }\n\n        .btn-primary {\n            background-color: var(--accent-color);\n            color: white;\n            border: none;\n            padding: 12px 24px;\n            border-radius: 12px;\n            font-size: 16px;\n            font-weight: 600;\n            cursor: pointer;\n            width: 100%;\n            transition: background-color 0.2s, transform 0.1s;\n        }\n\n        .btn-primary:hover {\n            background-color: var(--accent-hover);\n        }\n\n        .btn-primary:active {\n            transform: scale(0.98);\n        }\n    </style>\n</head>\n<body>\n\n    <div class=\"profile-card\">\n        <div class=\"avatar\">JD</div>\n        <h1 class=\"name\">Jane Doe</h1>\n        <p class=\"handle\">@janedoe_dev</p>\n        <p class=\"bio\">Full-stack engineer passionate about building accessible interfaces and exploring distributed systems.</p>\n        \n        <div class=\"stats-container\">\n            <span class=\"stat-chip\">★ 4.9</span>\n            <span class=\"stat-chip\">12 Projects</span>\n            <span class=\"stat-chip\">Active</span>\n        </div>\n\n        <button class=\"btn-primary\" id=\"action-btn\">View Portfolio</button>\n    </div>\n\n    <script>\n        const btn = document.getElementById('action-btn');\n        btn.addEventListener('click', () => {\n            console.log('Action button clicked');\n            alert('Redirecting to portfolio...');\n        });\n    <\/script>\n\n</body>\n</html>\n","results":{"scripts-valid:":{"pass":true,"why":""},"offline:":{"pass":true,"why":""},"page-made:":{"pass":true,"why":""},"count:button>=1":{"pass":true,"why":""},"layout:":{"pass":false,"why":"1 problem: Text is too faint to read in dark mode: \"View Portfolio\" (button#action-btn) is #ffffff on #818cf8 (3:1; needs 4.5:1).","problems":["Text is too faint to read in dark mode: \"View Portfolio\" (button#action-btn) is #ffffff on #818cf8 (3:1; needs 4.5:1)."],"secs":0.2}}}},{"n":3,"title":"Pricing plan card","prompt":"Build one self-contained HTML file for a pricing plan card that could sit in a SaaS landing page. Show a plan name, a monthly price, a short tagline, a list of five included features with check marks, and a full-width sign-up button. Put all styles in a style tag and keep JavaScript optional, only for a hover or selected state. The file must open locally with no build tools and no extra assets. Make the card feel premium, compact, and easy to drop into another layout.","kind":"page","sample":null},{"n":4,"title":"Weather widget","prompt":"Create a single HTML file that renders a small weather widget for a city. Include the city name, current temperature, a weather condition label, a simple icon made with CSS or SVG, and a four-item hourly forecast row. Use only inline CSS and a little JavaScript so dummy data can swap if needed. The widget should look like a phone home-screen tile and work offline when the file is opened in a browser. Keep everything in one file and ready to reuse.","kind":"page","sample":{"file":"~/Desktop/SEP/28 SEP CODE/weather_widget.html","name":"weather_widget.html","saved":"2026-09-28T21:09:13.698Z","bytes":5618,"html":"<!doctype html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"utf-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Weather Widget</title>\n    <style>\n        :root {\n            --bg-color: #f0f0f0;\n            --tile-bg: #ffffff;\n            --text-primary: #1c1c1e;\n            --text-secondary: #8e8e93;\n            --accent-color: #007aff;\n            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n        }\n\n        @media (prefers-color-scheme: dark) {\n            :root {\n                --bg-color: #000000;\n                --tile-bg: #1c1c1e;\n                --text-primary: #ffffff;\n                --text-secondary: #8e8e93;\n                --accent-color: #0a84ff;\n                --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);\n            }\n        }\n\n        body {\n            margin: 0;\n            padding: 0;\n            display: flex;\n            justify-content: center;\n            align-items: center;\n            min-height: 100vh;\n            background-color: var(--bg-color);\n            font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;\n        }\n\n        .widget-tile {\n            background-color: var(--tile-bg);\n            padding: 20px;\n            border-radius: 24px;\n            box-shadow: var(--shadow);\n            width: 280px;\n            text-align: center;\n        }\n\n        .city-name {\n            font-size: 1.2rem;\n            font-weight: 600;\n            margin: 0;\n            color: var(--text-primary);\n        }\n\n        .weather-condition {\n            font-size: 0.9rem;\n            color: var(--text-secondary);\n            margin-bottom: 10px;\n        }\n\n        .temp-container {\n            margin: 10px 0;\n        }\n\n        .main-temp {\n            font-size: 3.5rem;\n            font-weight: 700;\n            margin: 0;\n            color: var(--text-primary);\n        }\n\n        .icon-container {\n            margin: 10px 0;\n            height: 60px;\n            display: flex;\n            justify-content: center;\n            align-items: center;\n        }\n\n        .weather-icon {\n            width: 60px;\n            height: 60px;\n            fill: var(--accent-color);\n        }\n\n        .hourly-forecast {\n            display: flex;\n            justify-content: space-between;\n            border-top: 1px solid var(--bg-color);\n            padding-top: 15px;\n            margin-top: 15px;\n        }\n\n        .forecast-item {\n            display: flex;\n            flex-direction: column;\n            align-items: center;\n            flex: 1;\n        }\n\n        .forecast-time {\n            font-size: 0.7rem;\n            color: var(--text-secondary);\n            margin-bottom: 4px;\n        }\n\n        .forecast-temp {\n            font-size: 0.85rem;\n            font-weight: 600;\n            color: var(--text-primary);\n        }\n\n        .forecast-icon {\n            width: 20px;\n            height: 20px;\n            margin-bottom: 2px;\n            fill: var(--accent-color);\n        }\n    </style>\n</head>\n<body>\n\n    <div class=\"widget-tile\" id=\"widget\">\n        <h2 class=\"city-name\" id=\"city\">--</h2>\n        <div class=\"weather-condition\" id=\"condition\">--</div>\n        \n        <div class=\"temp-container\">\n            <p class=\"main-temp\" id=\"current-temp\">--°</p>\n        </div>\n\n        <div class=\"icon-container\">\n            <svg class=\"weather-icon\" viewBox=\"0 0 24 24\">\n                <path d=\"M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c1.1 0 2-.9 2-2s-.9-2-2-2H2c-1.1 0-2 .9-2 2s.9 2 2 2zm18 0h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2s.9 2 2 2zM11 2v2c0 2.76 2.24 5 5 5s5-2.24 5-5V2c0-2.76-2.24-5-5-5s-5 2.24-5 5z\"/>\n            </svg>\n        </div>\n\n        <div class=\"hourly-forecast\" id=\"hourly-forecast\">\n            <\!-- Forecast items will be injected here -->\n        </div>\n    </div>\n\n    <script>\n        // Dummy data - can be replaced with fetch() logic\n        const weatherData = {\n            city: \"San Francisco\",\n            currentTemp: 72,\n            condition: \"Partly Cloudy\",\n            hourly: [\n                { time: \"1P\", temp: 74 },\n                { time: \"2P\", temp: 75 },\n                { time: \"3P\", temp: 76 },\n                { time: \"4P\", temp: 75 }\n            ]\n        };\n\n        function updateWidget() {\n            document.getElementById('city').textContent = weatherData.city;\n            document.getElementById('condition').textContent = weatherData.condition;\n            document.getElementById('current-temp').textContent = `${weatherData.currentTemp}°`;\n\n            const forecastContainer = document.getElementById('hourly-forecast');\n            forecastContainer.innerHTML = '';\n\n            weatherData.hourly.forEach(item => {\n                const div = document.createElement('div');\n                div.className = 'forecast-item';\n                div.innerHTML = `\n                    <span class=\"forecast-time\">${item.time}</span>\n                    <svg class=\"forecast-icon\" viewBox=\"0 0 24 24\">\n                        <path d=\"M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c1.1 0 2-.9 2-2s-.9-2-2-2H2c-1.1 0-2 .9-2 2s.9 2 2 2zM18 13h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2c-1.1 0-2 .9-2 2s.9 2 2 2zM11 2v2c0 2.76 2.24 5 5 5s5-2.24 5-5V2c0-2.76-2.24-5-5-5s-5 2.24-5 5z\"/>\n                    </svg>\n                    <span class=\"forecast-temp\">${item.temp}°</span>\n                `;\n                forecastContainer.appendChild(div);\n            });\n        }\n\n        // Initialize\n        updateWidget();\n    <\/script>\n</body>\n</html>\n","results":{"scripts-valid:":{"pass":true,"why":""},"offline:":{"pass":true,"why":""},"page-made:":{"pass":true,"why":""},"layout:":{"pass":false,"why":"3 problems: Text is too faint to read at 1440×900: \"Partly Cloudy\" (div#condition) is #8e8e93 on #ffffff (3.3:1; needs 4.5:1), one of 5 such pieces.","problems":["Text is too faint to read at 1440×900: \"Partly Cloudy\" (div#condition) is #8e8e93 on #ffffff (3.3:1; needs 4.5:1), one of 5 such pieces.","Text is too faint to read at 1440×900: \"1P\" (span.forecast-time) is #8e8e93 on #ffffff (3.3:1; needs 4.5:1), one of 5 such pieces.","Text is too faint to read at 1440×900: \"2P\" (span.forecast-time) is #8e8e93 on #ffffff (3.3:1; needs 4.5:1), one of 5 such pieces."],"secs":0.2}}}},{"n":5,"title":"Notification card","prompt":"Write a self-contained HTML file for an in-app notification card. Show an app icon or colored badge, a title, two lines of body text, a timestamp, and two small actions such as Dismiss and View. Style it with CSS in the same file and add light JavaScript only if a close button needs to hide the card. It should look like a modern product toast or inbox item and stay readable on a phone. No external libraries or extra files.","kind":"page","sample":{"file":"~/Desktop/notification-card.html","name":"notification-card.html","saved":"2026-09-30T02:29:45.707Z","bytes":5243,"html":"<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Notification</title>\n<style>\n:root{\n  --bg:#f7f6f2;\n  --card:#ffffff;\n  --text:#1c1b18;\n  --muted:#6b675e;\n  --line:#e3dfd5;\n  --accent:#2a78d6;\n  --success:#2b8a3e;\n  --warning:#d48806;\n  --danger:#c53030;\n  color-scheme: light dark\n}\n@media (prefers-color-scheme: dark){\n  :root{\n    --bg:#15161a;\n    --card:#1d1f24;\n    --text:#ecebe6;\n    --muted:#a4a19a;\n    --line:#34363e;\n    --accent:#60a5fa;\n    --success:#3fb950;\n    --warning:#f59e0b;\n    --danger:#ef4444\n  }\n}\n*{box-sizing:border-box;margin:0;padding:0}\nbody{\n  margin:0;\n  min-height:100dvh;\n  display:grid;\n  place-items:center;\n  background:var(--bg);\n  color:var(--text);\n  font:15px/1.5 -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif\n}\n.w{\n  width:min(340px, 100% - 24px);\n  background:var(--card);\n  border:1px solid var(--line);\n  border-radius:14px;\n  padding:16px;\n  box-shadow:0 1px 3px rgba(0,0,0,.08);\n  display:flex;\n  flex-direction:column;\n  gap:10px\n}\n.header{\n  display:flex;\n  align-items:center;\n  gap:10px;\n}\n.icon{\n  width:36px;\n  height:36px;\n  border-radius:8px;\n  display:grid;\n  place-items:center;\n  flex-shrink:0;\n}\n.icon.blue{background:#e8f1ff;color:var(--accent)}\n.icon.green{background:#e6f5e9;color:var(--success)}\n.icon.yellow{background:#fef7e0;color:var(--warning)}\n.icon.red{background:#ffe6e6;color:var(--danger)}\n.icon svg{width:20px;height:20px}\n.badge{\n  font-size:11px;\n  font-weight:600;\n  padding:2px 8px;\n  border-radius:10px;\n  background:var(--accent);\n  color:#e8f1ff;\n  flex-shrink:0;\n}\n.title{\n  font-size:15px;\n  font-weight:600;\n  line-height:1.35;\n  color:var(--text)\n}\n.body{\n  font-size:14px;\n  color:var(--muted);\n  line-height:1.5\n}\n.body p{\n  margin-bottom:4px\n}\n.body p:last-child{\n  margin-bottom:0\n}\n.meta{\n  font-size:12px;\n  color:var(--muted);\n  display:flex;\n  align-items:center;\n  gap:6px;\n  flex-wrap:wrap\n}\n.meta svg{\n  width:14px;\n  height:14px;\n  flex-shrink:0;\n}\n.actions{\n  display:flex;\n  gap:8px;\n  margin-top:4px;\n}\n.btn{\n  flex:1;\n  padding:8px 12px;\n  border:1px solid var(--line);\n  border-radius:8px;\n  background:transparent;\n  color:var(--text);\n  font-size:13px;\n  font-weight:500;\n  cursor:pointer;\n  text-align:center;\n  transition:background .15s, border-color .15s\n}\n.btn:hover{\n  background:#f5f4f1\n}\n@media (prefers-color-scheme: dark){\n  .btn:hover{\n    background:#2a2d33\n  }\n}\n.btn.primary{\n  background:var(--accent);\n  border-color:var(--accent);\n  color:#e8f1ff\n}\n.btn.primary:hover{\n  background:#1e6bb8;\n  border-color:#1e6bb8\n}\n.btn:disabled{\n  opacity:.6;\n  cursor:not-allowed\n}\n</style>\n</head>\n<body>\n<div class=\"w\" role=\"alert\" aria-label=\"Notification\">\n  <div class=\"header\">\n    <div class=\"icon blue\" aria-hidden=\"true\">\n      <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n        <path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"></path>\n        <path d=\"M13.73 21a2 2 0 0 1-3.46 0\"></path>\n      </svg>\n    </div>\n    <span class=\"badge\">New</span>\n    <div class=\"title\">Your order has shipped</div>\n  </div>\n  <div class=\"body\">\n    <p>Your package is on its way and will arrive by Friday, October 2.</p>\n    <p>Track your shipment and view delivery options below.</p>\n  </div>\n  <div class=\"meta\">\n    <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n      <circle cx=\"12\" cy=\"12\" r=\"10\"></circle>\n      <polyline points=\"12 6 12 12 16 14\"></polyline>\n    </svg>\n    <span id=\"time\">Just now</span>\n  </div>\n  <div class=\"actions\">\n    <button class=\"btn primary\" id=\"viewBtn\">View</button>\n    <button class=\"btn\" id=\"dismissBtn\">Dismiss</button>\n  </div>\n</div>\n<script>\nfunction updateTime(){\n  const now = new Date();\n  const timeStr = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});\n  const dateStr = now.toLocaleDateString([], {month:'short', day:'numeric'});\n  const timeEl = document.getElementById('time');\n  if (timeEl){\n    const today = new Date();\n    const nowDate = new Date(now);\n    if (nowDate.toDateString() === today.toDateString()){\n      timeEl.textContent = 'Today, ' + timeStr;\n    } else {\n      timeEl.textContent = dateStr + ' at ' + timeStr;\n    }\n  }\n}\nupdateTime();\nsetInterval(updateTime, 60000);\n\nconst dismissBtn = document.getElementById('dismissBtn');\nconst viewBtn = document.getElementById('viewBtn');\nconst card = dismissBtn?.closest('.w');\n\nif (dismissBtn && card){\n  dismissBtn.addEventListener('click', () => {\n    card.style.animation = 'fadeOut .25s ease forwards';\n    setTimeout(() => {\n      card.style.display = 'none';\n    }, 250);\n  });\n}\n\nif (viewBtn){\n  viewBtn.addEventListener('click', () => {\n    viewBtn.textContent = 'Opening...';\n    setTimeout(() => {\n      viewBtn.textContent = 'View';\n      alert('View action triggered');\n    }, 500);\n  });\n}\n\nconst style = document.createElement('style');\nstyle.textContent = `\n@keyframes fadeOut{\n  from{opacity:1;transform:translateY(0)}\n  to{opacity:0;transform:translateY(-8px)}\n}`;\ndocument.head.appendChild(style);\n<\/script>\n</body>\n</html>\n","results":{"scripts-valid:":{"pass":true,"why":""},"offline:":{"pass":true,"why":""},"page-made:":{"pass":true,"why":""},"count:button>=2":{"pass":true,"why":""},"layout:":{"pass":false,"why":"2 problems: Text is too faint to read at 1440×900: \"New\" (span.badge) is #e8f1ff on #2a78d6 (3.9:1; needs 4.5:1).","problems":["Text is too faint to read at 1440×900: \"New\" (span.badge) is #e8f1ff on #2a78d6 (3.9:1; needs 4.5:1).","Text is too faint to read at 1440×900: \"View\" (button#viewBtn) is #e8f1ff on #2a78d6 (3.9:1; needs 4.5:1)."],"secs":0.2}}}},{"n":6,"title":"Task or ticket card","prompt":"Make one HTML file that displays a project task card. Include a status pill, a title, a short description, an assignee avatar and name, a due date, and a small tag row. Keep CSS and any tiny interaction script inside the file so it opens by itself. The card should feel like a Kanban board item: tidy, scannable, and slightly elevated. Design it so someone could copy the file into a dashboard without changing paths.","kind":"page","sample":null},{"n":7,"title":"Mini music or media player","prompt":"Create a self-contained HTML file for a compact media player card. Show album art as a colored block or CSS shape, track title, artist name, a progress bar, and play, skip, and like buttons. Use only HTML, CSS, and a small amount of JavaScript to toggle play state and move the progress bar. The file must work when opened locally with no audio file required. Keep the look clean and app-like so it could live in a sidebar or mobile sheet.","kind":"page","sample":null}]};
+// The Test builder's reading of a prompt (a preview of what would ship in models/evals/battle/):
+//   parsePrompts(text)   a pasted list ("Prompt 1 — Data metric card", then its words) → [{ n, title, prompt }]
+//   kindOf(prompt)       page | code | question | writing
+//   suggestChecks(p)     the checks that fit the prompt's own words, each with the level it starts ticked at
+//   evalCheck(html, c)   one check on one page's text (the ones that need no browser)
+// No imports: the same text runs in Node (the build) and in the page.
+
+const LEVELS = { easy: { name: 'Easy', points: 1, minutes: 5 }, medium: { name: 'Medium', points: 2, minutes: 10 }, hard: { name: 'Hard', points: 3, minutes: 20 } };
+const RANK = { easy: 0, medium: 1, hard: 2 };
+
+const HEAD = /^\s*(?:prompt|test|task)\s*#?\s*(\d+)\s*[—–:.)-]+\s*(.+?)\s*$/i;
+
+function parsePrompts(text) {
+  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = HEAD.exec(line);
+    if (m) { cur = { n: Number(m[1]), title: m[2], body: [] }; out.push(cur); continue; }
+    if (cur) cur.body.push(line);
+  }
+  if (out.length) return out.map((t) => ({ n: t.n, title: t.title, prompt: t.body.join('\n').trim() })).filter((t) => t.prompt);
+  // No "Prompt N — Title" lines: every block between blank lines is one test, named by its first words.
+  return String(text ?? '').replace(/\r\n?/g, '\n').split(/\n\s*\n+/).map((b) => b.trim()).filter(Boolean)
+    .map((b, i) => ({ n: i + 1, title: b.split(/\s+/).slice(0, 5).join(' ').replace(/[.,;:]+$/, ''), prompt: b }));
+}
+
+function kindOf(prompt) {
+  const p = String(prompt ?? '');
+  if (/\bhtml\b|\.html?\b|\bweb ?page\b|\bwidget\b|\blanding page\b/i.test(p)) return 'page';
+  if (/\?\s*$/.test(p.trim()) || /^\s*(what|why|how|where|which|does|is|are|explain)\b/i.test(p)) return 'question';
+  if (/\b(readme|summary|write-?up|notes?|changelog|résumé|resume)\b/i.test(p) && !/\b(fix|bug|test|function)\b/i.test(p)) return 'writing';
+  return 'code';
+}
+
+const sentences = (p) => String(p).replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/);
+const NUM = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const numOf = (w) => (/^\d+$/.test(w) ? Number(w) : NUM[String(w).toLowerCase()] ?? null);
+
+// The parts a prompt lists ("should show a title, one large number, … and a thin sparkline").
+function partsOf(prompt) {
+  const s = sentences(prompt).find((x) => /\b(?:shows?|includes?|displays?)\b\s+\S+/i.test(x) && x.includes(','));
+  if (!s) return [];
+  let list = s.replace(/^.*?\b(?:shows?|includes?|displays?)\b\s+/i, '').replace(/[.!?]\s*$/, '');
+  // "play, skip, and like buttons" is one part (three buttons), not three.
+  const held = [];
+  list = list.replace(/((?:[a-z-]+,\s*)+(?:and\s+)?[a-z-]+)\s+(buttons|actions|chips|tags)\b/i, (all) => { held.push(all); return `\u0000${held.length - 1}`; });
+  return list.split(/,\s*(?:and\s+)?/).map((x) => x.replace(/^and\s+/i, '').replace(/\u0000(\d+)/, (_, i) => held[Number(i)]).trim()).filter(Boolean);
+}
+
+// The check a part can have without a person looking, or null (then it is judged by eye).
+function partCheck(part) {
+  const t = part.toLowerCase();
+  const named = /^((?:[a-z-]+,\s*)+(?:and\s+)?[a-z-]+)\s+(buttons|actions)\b/.exec(t);
+  if (named) { const n = named[1].split(/,\s*(?:and\s+)?|\s+and\s+/).filter(Boolean).length; return { type: 'count', value: `button>=${n}`, label: `The page has at least ${n} buttons` }; }
+  const counted = /\b(\d+|two|three|four|five|six|seven|eight|nine|ten)\b[^,]*?\b(buttons|actions|features|list items)\b/.exec(t);
+  if (counted) { const n = numOf(counted[1]); const li = /features|list items/.test(counted[2]); return { type: 'count', value: `${li ? 'li' : 'button'}>=${n}`, label: `The page has at least ${n} ${li ? 'list items' : 'buttons'}` }; }
+  if (/\bbutton\b/.test(t)) return { type: 'count', value: 'button>=1', label: 'The page has a button' };
+  if (/\bpercent(age)?\b/.test(t)) return { type: 'page-has', value: '%', label: 'The page has: %' };
+  if (/\bsparkline\b|\bprogress bar\b|\bchart\b/.test(t)) return { type: 'drawn', value: '', label: 'It draws the bar or line' };
+  return null;
+}
+
+// Every check that fits the prompt. from: the level a new test starts with it ticked (easy = every
+// level); null: listed but not ticked, with the reason. eye: parts only a person can judge.
+function suggestChecks(prompt, kind = kindOf(prompt)) {
+  const p = String(prompt ?? '');
+  const out = { checks: [], eye: [] };
+  const add = (c) => { if (!out.checks.some((x) => x.type === c.type && x.value === c.value)) out.checks.push({ value: '', ...c, key: `${c.type}:${c.value ?? ''}` }); };
+  if (kind === 'page') {
+    add({ type: 'page-made', label: 'A page was made', from: 'easy', why: 'every page test starts with it' });
+    const js = sentences(p).filter((x) => /javascript|\bscript\b/i.test(x));
+    const optional = js.some((x) => /\boptional\b/i.test(x) || /(javascript|script)\s+(only\s+)?if\b/i.test(x) || /\bany\b[^.]{0,30}\bscript\b/i.test(x));
+    if (js.length && !optional) add({ type: 'scripts-valid', label: 'Its scripts are valid', from: 'easy', why: 'the prompt asks for JavaScript' });
+    else add({ type: 'scripts-valid', label: 'Its scripts are valid', from: null, why: js.length ? 'not ticked: the prompt makes JavaScript optional, and this check fails a page with no script' : 'not ticked: the prompt does not ask for a script' });
+    const alone = /\bno (?:external|extra|other) (?:libraries|assets|files)\b|\bno frameworks\b|\boffline\b|\blocally\b|\bno build\b|\bno audio file\b|\bby itself\b|\bself-contained\b/i.test(p);
+    const cdn = /\bCDNs?\b/i.test(p);
+    if (alone && !cdn) add({ type: 'offline', label: 'Nothing from the internet', from: 'easy', why: 'the prompt says it must work on its own' });
+    else add({ type: 'offline', label: 'Nothing from the internet', from: null, why: cdn ? 'not ticked: the prompt allows fonts from a CDN' : 'not ticked: the prompt does not say so' });
+    add({ type: 'layout', label: 'The layout is clean', from: 'medium', why: /\bphone\b|\bmobile\b/i.test(p) ? 'the prompt names a phone: no sideways scroll, no overlap, readable text, desktop and phone' : 'no sideways scroll, no overlap, readable text, on a desktop and a phone' });
+    for (const part of partsOf(p)) { const c = partCheck(part); if (c) add({ ...c, from: 'hard', why: `the prompt names “${part}”` }); else out.eye.push(part); }
+  } else if (kind === 'code') {
+    add({ type: 'tests', label: 'The tests pass', from: 'easy', why: 'a code change is judged by the project’s tests' });
+    add({ type: 'only-named', label: 'Nothing else changed', from: 'medium', why: 'only the files the prompt names may change' });
+  } else if (kind === 'question') {
+    add({ type: 'no-change', label: 'No file was changed', from: 'easy', why: 'a question changes nothing' });
+    add({ type: 'answer-has', label: 'The answer mentions', from: null, why: 'not ticked: type the words a right answer must have' });
+  } else {
+    add({ type: 'saved', label: 'The file is saved', from: null, why: 'not ticked: type where it should be saved' });
+  }
+  return out;
+}
+
+// A check on a page's text: { pass, why }. The layout check needs a browser, so it is not here.
+function evalCheck(html, c) {
+  const h = String(html ?? '');
+  if (c.type === 'page-made') return { pass: h.trim().length > 0, why: h.trim() ? '' : 'it made no page' };
+  if (c.type === 'scripts-valid') {
+    let n = 0;
+    for (const m of h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+      if (/\bsrc\s*=/.test(m[1]) || !m[2].trim()) continue;
+      if (/type\s*=\s*["']?(module|application\/json|text\/template)/i.test(m[1])) { n += 1; continue; }
+      try { new Function(m[2]); n += 1; } catch (e) { return { pass: false, why: `a script does not parse: ${e.message}` }; }
+    }
+    return n ? { pass: true, why: '' } : { pass: false, why: 'the page has no script of its own' };
+  }
+  if (c.type === 'offline') {
+    const bad = /<(script|link|img|iframe)\b[^>]+(src|href)\s*=\s*["']?(https?:)?\/\//i.test(h) || /@import\s+url\(\s*["']?(https?:)?\/\//i.test(h);
+    return { pass: !bad, why: bad ? 'it loads something from the internet' : '' };
+  }
+  if (c.type === 'page-has') { const v = String(c.value ?? ''); const ok = Boolean(v) && h.toLowerCase().includes(v.toLowerCase()); return { pass: ok, why: ok ? '' : `no page has "${v}"` }; }
+  if (c.type === 'count') {
+    const m = /^(button|li)>=(\d+)$/.exec(c.value ?? '');
+    if (!m) return { pass: false, why: 'unknown count' };
+    const re = m[1] === 'li' ? /<li\b/gi : /<button\b|role\s*=\s*["']button["']|<input[^>]+type\s*=\s*["'](?:button|submit)["']/gi;
+    const n = (h.match(re) ?? []).length;
+    return { pass: n >= Number(m[2]), why: n >= Number(m[2]) ? '' : `it has ${n}` };
+  }
+  if (c.type === 'drawn') {
+    const ok = /<svg\b|<canvas\b|<progress\b/i.test(h) || /(?:class|id)\s*=\s*["'][^"']*(?:spark|progress|bar|chart)[^"']*["']/i.test(h);
+    return { pass: ok, why: ok ? '' : 'no svg, canvas, progress or bar element' };
+  }
+  return null;
+}
+
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const ORDER = ['easy', 'medium', 'hard'];
+  const KINDS = { page: 'Page', code: 'Code change', question: 'Question', writing: 'Writing' };
+  const EXAMPLE = { 1: 'medium', 2: 'easy', 3: 'easy', 4: 'medium', 5: 'easy', 6: 'easy', 7: 'hard' };
+  const S = { design: 1, moment: 'edit', tests: [], sel: null, paste: null, tried: {}, trash: [], seq: 0 };
+  const sampleFor = (prompt) => DATA.tests.find((x) => x.prompt.trim() === String(prompt).trim())?.sample ?? null;
+  const draft = (p, extra = {}) => ({ id: `t${++S.seq}`, title: p.title, prompt: p.prompt, kind: kindOf(p.prompt), level: null, design: true, limit: null, ticks: {}, ask: '', saved: false, page: sampleFor(p.prompt), ...extra });
+  const cur = () => S.tests.find((t) => t.id === S.sel) ?? null;
+  const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+  // A test's checks: the ones its prompt suggests; ticked from its level unless you ticked by hand.
+  const checksOf = (t) => suggestChecks(t.prompt, t.kind);
+  const ticked = (t, c) => (c.key in t.ticks ? t.ticks[c.key] : Boolean(c.from) && RANK[t.level ?? 'easy'] >= RANK[c.from]);
+  const tickCount = (t) => checksOf(t).checks.filter((c) => ticked(t, c)).length;
+  const limitOf = (t) => t.limit ?? LEVELS[t.level ?? 'easy'].minutes;
+  const resultOf = (t, c) => {
+    if (!S.tried[t.id] || !t.page) return null;
+    if (c.type === 'layout') return t.page.results?.['layout:'] ?? { pass: null, why: 'measured in the app’s browser when the test runs' };
+    return t.page.results?.[c.key] ?? evalCheck(t.page.html, c);
+  };
+  const cantSave = (t) => (!t.prompt.trim() ? 'Type the prompt first' : !t.level ? 'Pick a level first' : !tickCount(t) ? 'Tick at least one check, so a run can pass or fail' : '');
+  const points = (ts) => ts.reduce((s, t) => s + (t.level ? LEVELS[t.level].points : 0), 0);
+
+  function setMoment(m) {
+    S.moment = m; S.tried = {}; S.trash = []; S.paste = null;
+    if (m === 'paste') { S.tests = []; S.sel = null; S.paste = DATA.text; }
+    else { S.tests = DATA.tests.map((p, i) => draft(p, m === 'sort' ? {} : { level: EXAMPLE[p.n ?? i + 1] ?? 'easy', saved: true })); S.sel = S.tests[0].id; }
+    if (m === 'try') S.tried[S.sel] = true;
+    render();
+  }
+
+  // ---------- the editor's parts ----------
+  const seg = (name, opts, val) => `<span class="seg">${opts.map(([v, label, small]) => `<button data-act="${name}" data-v="${v}" aria-pressed="${v === val}">${label}${small ? `<small>${small}</small>` : ''}</button>`).join('')}</span>`;
+  function checksHtml(t, compact = S.design === 2) {
+    const s = checksOf(t);
+    const on = s.checks.filter((c) => ticked(t, c));
+    const rows = s.checks.map((c) => {
+      const r = resultOf(t, c); const is = ticked(t, c);
+      const note = r ? (r.pass === true ? '<span class="cw ok">✓ holds</span>' : r.pass === false ? `<span class="cw bad" title="${esc(r.why)}"><b>✗</b> ${esc(String(r.why).replace(/^[^:]+\.html: /, ''))}</span>` : `<span class="cw" title="${esc(r.why)}">${esc(r.why)}</span>`) : `<span class="cw" title="${esc(c.why)}">${esc(c.why)}</span>`;
+      return `<div class="ck${is ? ' on' : ''}" data-act="tick" data-key="${esc(c.key)}" role="checkbox" aria-checked="${is}" tabindex="0"><span class="tg">✓</span><span class="cl">${esc(c.label)}</span>${note}</div>`;
+    }).join('');
+    let eye = s.eye.length ? `<div class="eye" title="${esc(s.eye.join(' · '))}"><b>By eye</b>${esc(s.eye.join(' · '))} <span>(named in the prompt, no automatic check)</span></div>` : '';
+    let tried = '';
+    if (S.tried[t.id]) {
+      if (!t.page) tried = `<div class="tried"><b>No page to try on yet.</b> <button class="link" data-act="choosepage">Choose a page</button> a model made for this, or run the test once: its page is kept for this.</div>`;
+      else {
+        const res = on.map((c) => [c, resultOf(t, c)]); const ok = res.filter(([, r]) => r?.pass === true).length; const fails = res.filter(([, r]) => r?.pass === false);
+        // The list design has room for every reason in full; the board's strip says it in one line.
+        const why = compact ? '' : `<ul>${fails.map(([c, r]) => `<li><b>${esc(c.label)}:</b> ${esc(r.problems?.length ? r.problems.join(' ') : String(r.why).replace(/^[^:]+\.html: /, ''))}</li>`).join('')}</ul>`;
+        tried = `<div class="tried">Tried on <b>${esc(t.page.name)}</b>${t.page.saved ? ` (saved ${new Date(t.page.saved).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : ''}, no model: <b>${ok} of ${on.length}</b> ticked checks hold, so this page would <span class="${fails.length ? 'bad' : 'ok'}">${fails.length ? 'FAIL' : 'PASS'}</span>. <button class="link" data-act="openpage">Open the page ↗</button>${fails.length ? why : ''}</div>`;
+      }
+    }
+    if (compact && tried) eye = '';
+    return `<div class="ck-h"><b>Checks</b><span class="q">suggested from the prompt · ${on.length} ticked${t.level ? ` for ${LEVELS[t.level].name}` : ''}</span></div>${rows}${eye}${tried}`;
+  }
+  function setsHtml(t, withLevel) {
+    const lv = t.level ? LEVELS[t.level] : null; const lim = limitOf(t);
+    return `${withLevel ? '' : `<div class="set"><span class="l">Level</span><span class="v">${lv ? lv.name : 'Not set'}</span><span class="n">${lv ? 'move its card to change' : 'put its card in a column'}</span></div>`}
+      <div class="set"><span class="l">Time limit</span><span class="v"><button data-act="limit" data-d="-5" ${lim <= 5 ? 'disabled' : ''} aria-label="Less time">◀</button>${lim} min<button data-act="limit" data-d="5" ${lim >= 30 ? 'disabled' : ''} aria-label="More time">▶</button></span><span class="n">${t.limit == null ? (lv ? `from ${lv.name}` : 'set by the level') : 'yours'}</span></div>
+      <div class="set"><span class="l" title="On: the design cards and the layout fix go along, as in the app. Off: neither, as the three sets of 28 run.">Design folder</span>${seg('design', [['on', 'On'], ['off', 'Off']], t.design ? 'on' : 'off')}<span class="n">${t.design ? 'as in the app: cards + layout fix' : 'as the three sets of 28 run'}</span></div>
+      <div class="set"><span class="l">Points</span><span class="v">${lv ? lv.points : '—'}</span><span class="n">${lv ? `from ${lv.name}` : 'set by the level'}</span></div>`;
+  }
+  function actsHtml(t) {
+    const why = cantSave(t); const off = why ? ` disabled title="${esc(why)}"` : '';
+    return `<button class="ghost" data-act="try">Try the checks</button><button class="ghost" data-act="dup">Duplicate</button><button class="ghost" data-act="del">Delete</button><span class="fill"></span><span class="${t.saved ? 'st-saved' : 'st-draft'}">${t.saved ? 'saved' : why || 'not saved yet'}</span><button class="ghost" data-act="save"${off}>Save</button><button class="go" data-act="saverun"${off}>Save and run ▶</button>`;
+  }
+  const levelSeg = (t) => seg('level', ORDER.map((k) => [k, LEVELS[k].name, `${LEVELS[k].points} pt · ${LEVELS[k].minutes} min`]), t.level);
+  const kindSeg = (t) => seg('kind', Object.entries(KINDS).map(([k, n]) => [k, n]), t.kind);
+  const starter = (t) => (t.kind === 'page' || t.kind === 'writing' ? 'none needed: it starts from an empty folder' : 'none yet: drop the project’s files here');
+
+  function pasteHtml(cls) {
+    const found = parsePrompts(S.paste);
+    const rows = found.map((p) => { const s = suggestChecks(p.prompt); return `<div class="pa-row"><span class="n">${p.n}</span><span class="t" title="${esc(p.prompt)}">${esc(p.title)}</span><span class="m">${KINDS[kindOf(p.prompt)]} · ${pl(s.checks.length, 'check')} fit${s.eye.length ? ` · ${s.eye.length} by eye` : ''}</span></div>`; }).join('');
+    return `<section class="box paste ${cls}"><div class="pa-l"><label class="l" for="pa-text">Paste your list</label><span class="hint" title="A line like “Prompt 1 — Data metric card”, then its words. Or blocks with a blank line between them.">A line like “Prompt 1 — Data metric card”, then its words. Or blocks with a blank line between them.</span><textarea class="in" id="pa-text" spellcheck="false">${esc(S.paste)}</textarea></div>
+      <div class="pa-r"><div id="slot-found" style="display:contents">${foundHtml(found, rows)}</div></div></section>`;
+  }
+  const foundHtml = (found, rows) => `<div class="ck-h"><b>${pl(found.length, 'prompt')} found</b><span class="q">each becomes a draft; you set its level next</span></div><div class="pa-list">${rows || '<div class="none">Nothing read yet: paste a list on the left.</div>'}</div><div class="acts"><button class="ghost" data-act="pastecancel">Cancel</button><button class="go" data-act="pasteadd" ${found.length ? '' : 'disabled title="Paste a list first"'}>Add ${pl(found.length, 'draft')}</button></div>`;
+
+  // ---------- design 1 ----------
+  function listHtml() {
+    const group = (k, name, meta) => {
+      const ts = S.tests.filter((t) => (t.level ?? 'none') === k);
+      if (k === 'none' && !ts.length) return '';
+      const run = k !== 'none' ? `<button class="mini" data-act="run" data-v="${k}" ${ts.length ? '' : 'disabled title="No tests at this level yet"'}>▶ Run${ts.length ? ` ${ts.length}` : ''}</button>` : '';
+      return `<div class="gh"><span class="gn">${name}</span><span class="gm">${meta}</span>${run}</div>${ts.map((t) => `<div class="row" role="button" tabindex="0" data-act="pick" data-id="${t.id}" aria-selected="${t.id === S.sel && S.paste == null}"><span class="rt">${esc(t.title || 'Untitled')}</span>${t.level ? `<span class="rm">${pl(tickCount(t), 'check')}</span><span class="${t.saved ? 'st-saved' : 'st-draft'}">${t.saved ? 'saved' : 'draft'}</span>` : `<span class="mv">${ORDER.map((k) => `<button data-act="move" data-id="${t.id}" data-v="${k}" title="Put it in ${LEVELS[k].name}">${LEVELS[k].name[0]}</button>`).join('')}</span>`}</div>`).join('') || '<div class="none">none yet</div>'}`;
+    };
+    return `<div class="lst-h"><b>My tests</b><span class="q">${pl(S.tests.length, 'test')} · ${pl(points(S.tests), 'point')}</span></div>
+      <div class="lst-b">${S.tests.length ? '' : '<div class="none">No tests yet. Paste a list, or + New test.</div>'}${group('none', 'Not sorted', 'press E, M or H on each')}${ORDER.map((k) => group(k, LEVELS[k].name, `${pl(LEVELS[k].points, 'point')} · ${LEVELS[k].minutes} min each`)).join('')}</div>
+      <div class="lst-f"><button class="ghost" data-act="new">+ New test</button><button class="ghost" data-act="paste">Paste a list</button><button class="ghost" data-act="export" ${S.tests.length ? '' : 'disabled'}>Export</button><button class="ghost" data-act="trash" ${S.trash.length ? '' : 'disabled title="Nothing in the trash"'}>Trash · ${S.trash.length}</button></div>`;
+  }
+  function d1() {
+    const t = cur();
+    const right = S.paste != null ? pasteHtml('ed-paste') : !t ? '<section class="box"><div class="none">Pick a test on the left, paste a list, or + New test.</div></section>' : `<section class="box ed">
+      <div class="ed-l">
+        <div class="f-row"><label class="l" for="f-title">Title</label><input class="in" id="f-title" value="${esc(t.title)}"></div>
+        <div class="f-row"><span class="l">Level</span>${levelSeg(t)}</div>
+        <div class="f-row"><span class="l">Kind</span>${kindSeg(t)}</div>
+        <div class="f-col grow"><label class="l" for="f-prompt">Prompt <span class="q">what the model is asked, word for word</span></label><textarea class="in" id="f-prompt" spellcheck="false">${esc(t.prompt)}</textarea></div>
+        <div class="f-row"><span class="l">Starter files</span><span class="hint">${starter(t)}</span></div>
+        <div class="f-row"><label class="l" for="f-ask">If it asks</label><input class="in" id="f-ask" value="${esc(t.ask)}" placeholder="your reply when the model asks a question (optional)"></div>
+      </div>
+      <div class="ed-r"><div id="slot-checks">${checksHtml(t)}</div><div class="sets" id="slot-sets">${setsHtml(t, true)}</div></div>
+      <div class="ed-f" id="slot-acts">${actsHtml(t)}</div></section>`;
+    return `<div class="d1"><section class="box lst" id="slot-list">${listHtml()}</section>${right}</div>`;
+  }
+
+  // ---------- design 2 ----------
+  function boardHtml() {
+    const loose = S.tests.filter((t) => !t.level);
+    const chips = loose.map((t) => `<span class="chip" draggable="true" data-act="pick" data-id="${t.id}" aria-selected="${t.id === S.sel && S.paste == null}"><span class="ct">${esc(t.title || 'Untitled')}</span><span class="mv">${ORDER.map((k) => `<button data-act="move" data-id="${t.id}" data-v="${k}" title="Put it in ${LEVELS[k].name}">${LEVELS[k].name[0]}</button>`).join('')}</span></span>`).join('');
+    const col = (k) => {
+      const ts = S.tests.filter((t) => t.level === k); const i = ORDER.indexOf(k);
+      return `<section class="box col" data-col="${k}"><div class="col-h"><b>${LEVELS[k].name}</b><span class="q">${pl(LEVELS[k].points, 'point')} · ${LEVELS[k].minutes} min each · ${pl(ts.length, 'test')}</span><span class="fill"></span><button class="mini" data-act="run" data-v="${k}" ${ts.length ? '' : 'disabled title="No tests at this level yet"'}>▶ Run${ts.length ? ` ${ts.length}` : ''}</button></div>
+        <div class="col-b">${ts.map((t) => `<div class="card" draggable="true" data-act="pick" data-id="${t.id}" aria-selected="${t.id === S.sel && S.paste == null}" tabindex="0"><span class="ct">${esc(t.title || 'Untitled')}</span><span class="mv"><button data-act="move" data-id="${t.id}" data-v="${ORDER[i - 1] ?? ''}" ${i ? '' : 'disabled'} title="Easier" aria-label="Easier">◀</button><button data-act="move" data-id="${t.id}" data-v="${ORDER[i + 1] ?? ''}" ${i < 2 ? '' : 'disabled'} title="Harder" aria-label="Harder">▶</button></span><span class="cp">${esc(t.prompt)}</span><span class="cm">${pl(tickCount(t), 'check')} · design folder ${t.design ? 'on' : 'off'} · ${limitOf(t)} min · <span class="${t.saved ? 'st-saved' : 'st-draft'}">${t.saved ? 'saved' : 'draft'}</span></span></div>`).join('') || '<div class="none">Drop a test here, or press its letter.</div>'}</div></section>`;
+    };
+    return `<section class="box tray"><span class="tl">${loose.length ? `Not sorted · ${loose.length}` : 'My tests'}</span>${chips || `<span class="q">${S.tests.length ? `${pl(S.tests.length, 'test')} · ${pl(points(S.tests), 'point')} · all sorted` : 'No tests yet. Paste a list, or + New test.'}</span>`}<span class="tools"><button class="ghost" data-act="new">+ New test</button><button class="ghost" data-act="paste">Paste a list</button><button class="ghost" data-act="export" ${S.tests.length ? '' : 'disabled'}>Export</button><button class="ghost" data-act="trash" ${S.trash.length ? '' : 'disabled title="Nothing in the trash"'}>Trash · ${S.trash.length}</button></span></section>
+      <div class="cols">${ORDER.map(col).join('')}</div>`;
+  }
+  function d2() {
+    const t = cur();
+    const drawer = S.paste != null ? pasteHtml('drawer') : !t ? '<section class="box drawer" style="display:block"><div class="none">Pick a card, paste a list, or + New test.</div></section>' : `<section class="box drawer">
+      <div class="dr-l"><div class="f-row"><label class="l" for="f-title">Title</label><input class="in" id="f-title" value="${esc(t.title)}"></div>
+        <div class="f-row"><span class="l">Kind</span>${kindSeg(t)}</div>
+        <div class="f-col grow"><label class="l" for="f-prompt">Prompt <span class="q">what the model is asked, word for word</span></label><textarea class="in" id="f-prompt" spellcheck="false" style="min-height:60px">${esc(t.prompt)}</textarea></div></div>
+      <div id="slot-checks">${checksHtml(t)}</div>
+      <div class="dr-r"><div id="slot-sets">${setsHtml(t, false)}</div><div class="acts" id="slot-acts">${actsHtml(t)}</div></div></section>`;
+    return `<div class="d2${S.paste != null ? ' pasting' : ''}"><div id="slot-list" style="display:contents">${boardHtml()}</div>${drawer}</div>`;
+  }
+
+  function render() {
+    for (const b of document.querySelectorAll('#pv-design button')) b.setAttribute('aria-pressed', String(Number(b.dataset.design) === S.design));
+    for (const b of document.querySelectorAll('#pv-moment button')) b.setAttribute('aria-pressed', String(b.dataset.moment === S.moment));
+    $('#stage').innerHTML = S.design === 1 ? d1() : d2();
+    try { history.replaceState(null, '', `#d${S.design}/${S.moment}`); } catch { /* a file opened without a history */ }
+  }
+  // After typing: only the parts that depend on the words, so the box you type in keeps its place.
+  function refresh(parts) {
+    const t = cur();
+    if (parts.includes('list') && $('#slot-list')) $('#slot-list').innerHTML = S.design === 1 ? listHtml() : boardHtml();
+    if (t && parts.includes('checks') && $('#slot-checks')) $('#slot-checks').innerHTML = checksHtml(t);
+    if (t && parts.includes('acts') && $('#slot-acts')) $('#slot-acts').innerHTML = actsHtml(t);
+  }
+  let toastT = null;
+  function toast(text) { const el = $('#toast'); el.textContent = text; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 4200); }
+  const touch = (t) => { t.saved = false; };
+
+  document.addEventListener('click', (e) => {
+    const d = e.target.closest('#pv-design button'); if (d) { S.design = Number(d.dataset.design); return render(); }
+    const m = e.target.closest('#pv-moment button'); if (m) return setMoment(m.dataset.moment);
+    const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+    const act = el.dataset.act; const t = cur();
+    if (act === 'move') { const x = S.tests.find((y) => y.id === el.dataset.id); if (x && el.dataset.v) { x.level = el.dataset.v; touch(x); S.sel = x.id; S.paste = null; } return render(); }
+    if (act === 'pick') { S.sel = el.dataset.id; S.paste = null; return render(); }
+    if (act === 'new') { const x = draft({ title: '', prompt: '' }); x.kind = 'page'; S.tests.push(x); S.sel = x.id; S.paste = null; render(); return $('#f-title')?.focus(); }
+    if (act === 'paste') { S.paste = S.tests.length ? '' : DATA.text; render(); return $('#pa-text')?.focus(); }
+    if (act === 'pastecancel') { S.paste = null; return render(); }
+    if (act === 'pasteadd') { const found = parsePrompts(S.paste); const added = found.map((p) => draft(p)); S.tests.push(...added); S.sel = added[0]?.id ?? S.sel; S.paste = null; render(); return toast(`${pl(added.length, 'draft')} added. Set each one’s level${S.design === 2 ? ': press E, M or H on it, or drag it into a column.' : ', then Save.'}`); }
+    if (act === 'export') { const blob = new Blob([JSON.stringify(S.tests.map((x) => ({ title: x.title, level: x.level, kind: x.kind, prompt: x.prompt, minutes: limitOf(x), design: x.design, checks: checksOf(x).checks.filter((c) => ticked(x, c)).map((c) => ({ type: c.type, value: c.value })) })), null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'my-tests.json'; a.click(); return toast('Exported my-tests.json: one file with every test, to keep or bring back in with Import.'); }
+    if (act === 'trash') { const x = S.trash.pop(); if (x) { S.tests.push(x); S.sel = x.id; } render(); return toast(x ? `“${x.title || 'Untitled'}” is back. In the app the trash lists everything you deleted.` : ''); }
+    if (act === 'run') { const ts = S.tests.filter((x) => x.level === el.dataset.v); const L = LEVELS[el.dataset.v]; return toast(`In the app this opens ▶ Run tests with “My tests · ${L.name}” picked: ${pl(ts.length, 'test')}, up to ${ts.reduce((s, x) => s + limitOf(x), 0)} min, worth ${pl(points(ts), 'point')}.`); }
+    if (!t) return;
+    if (act === 'tick') { const c = checksOf(t).checks.find((x) => x.key === el.dataset.key); if (c) { t.ticks[c.key] = !ticked(t, c); touch(t); } return refresh(['checks', 'list', 'acts']); }
+    if (act === 'level') { t.level = el.dataset.v; touch(t); return render(); }
+    if (act === 'kind') { t.kind = el.dataset.v; t.ticks = {}; touch(t); return render(); }
+    if (act === 'design') { t.design = el.dataset.v === 'on'; touch(t); return render(); }
+    if (act === 'limit') { t.limit = Math.max(5, Math.min(30, limitOf(t) + Number(el.dataset.d))); touch(t); return render(); }
+    if (act === 'try') { S.tried[t.id] = true; return render(); }
+    if (act === 'choosepage') return $('#pagefile').click();
+    if (act === 'openpage') { if (t.page?.html) window.open(URL.createObjectURL(new Blob([t.page.html], { type: 'text/html' })), '_blank', 'noopener'); return; }
+    if (act === 'dup') { const x = { ...t, id: `t${++S.seq}`, title: `${t.title} (copy)`, ticks: { ...t.ticks }, saved: false }; S.tests.splice(S.tests.indexOf(t) + 1, 0, x); S.sel = x.id; return render(); }
+    if (act === 'del') { S.tests = S.tests.filter((x) => x !== t); S.trash.push(t); S.sel = S.tests[0]?.id ?? null; render(); return toast(`“${t.title || 'Untitled'}” moved to the trash: nothing is removed for good. Trash brings it back.`); }
+    if (act === 'save' || act === 'saverun') { t.saved = true; render(); return toast(act === 'save' ? `Saved “${t.title}” as ${LEVELS[t.level].name}: ${pl(tickCount(t), 'check')}, ${limitOf(t)} min, ${pl(LEVELS[t.level].points, 'point')}. (A preview: kept until you reload.)` : 'In the app: saved, then it runs on the model picked in ▶ Run tests, and its line lands in the test record.'); }
+  });
+  document.addEventListener('input', (e) => {
+    const t = cur();
+    if (e.target.id === 'pa-text') { S.paste = e.target.value; const found = parsePrompts(S.paste); $('#slot-found').innerHTML = foundHtml(found, found.map((p) => { const s = suggestChecks(p.prompt); return `<div class="pa-row"><span class="n">${p.n}</span><span class="t" title="${esc(p.prompt)}">${esc(p.title)}</span><span class="m">${KINDS[kindOf(p.prompt)]} · ${pl(s.checks.length, 'check')} fit${s.eye.length ? ` · ${s.eye.length} by eye` : ''}</span></div>`; }).join('')); return; }
+    if (!t) return;
+    if (e.target.id === 'f-title') { t.title = e.target.value; touch(t); return refresh(['list', 'acts']); }
+    if (e.target.id === 'f-prompt') { t.prompt = e.target.value; t.page = sampleFor(t.prompt); touch(t); return refresh(['list', 'checks', 'acts']); }
+    if (e.target.id === 'f-ask') { t.ask = e.target.value; touch(t); return refresh(['acts', 'list']); }
+  });
+  document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.ck, .card, .row')) { e.preventDefault(); e.target.click(); } });
+  // Design 2: drag a chip or a card into a column.
+  let dragId = null;
+  document.addEventListener('dragstart', (e) => { const c = e.target.closest?.('[draggable][data-id]'); if (c) { dragId = c.dataset.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch { /* Safari needs some data; a failure here is harmless */ } } });
+  document.addEventListener('dragover', (e) => { const col = e.target.closest?.('.col'); if (col && dragId) { e.preventDefault(); col.classList.add('over'); } });
+  document.addEventListener('dragleave', (e) => { e.target.closest?.('.col')?.classList.remove('over'); });
+  document.addEventListener('drop', (e) => { const col = e.target.closest?.('.col'); if (!col || !dragId) return; e.preventDefault(); const x = S.tests.find((y) => y.id === dragId); dragId = null; if (x) { x.level = col.dataset.col; touch(x); S.sel = x.id; S.paste = null; render(); } });
+  $('#pagefile').addEventListener('change', async (e) => { const f = e.target.files[0]; const t = cur(); if (!f || !t) return; t.page = { name: f.name, saved: new Date(f.lastModified).toISOString(), html: await f.text(), results: {} }; S.tried[t.id] = true; e.target.value = ''; render(); });
+
+  const h = /^#d([12])\/(paste|sort|edit|try)$/.exec(location.hash);
+  if (h) S.design = Number(h[1]);
+  setMoment(h ? h[2] : 'edit');
+})();
+</script>
+</body>
+</html>
