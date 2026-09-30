@@ -1,5 +1,5 @@
 // Plays the practice tasks against the real model and checks each result.
-//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--set 28 | --only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank] [--prompt old|new] [--no-record]
+//   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--set 28 | --only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank] [--prompt old|new] [--thinking old|new] [--no-record]
 // --set 28: the 28 practice tasks that grade a model (29, the notes page, is an extra); its line in
 // the test record is a full run of the 28. --only picks tasks by number (a part of the set).
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
@@ -20,6 +20,10 @@
 // no Work habits, notes unlabelled, 6,000 characters of notes) or today's; the
 // record line and summary.json name it. --no-record: no line in the test record
 // (Prompt old vs new, models/evals/tools/prompt-ab.mjs, records one line for both).
+// --thinking old|new: how thinking is spent at High. old (AGENTIC_THINK=old): every try thinks and
+// nothing steps down, as before 30 Sep 2026; new: think when it pays (terminal/src/flows/llm.mjs)
+// and the step-down past half the task's time (agent.mjs; each task's time is its limit, --timeout).
+// Thinking old vs new (models/evals/tools/think-ab.mjs) records one line for both.
 import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -69,6 +73,11 @@ if (promptArg && !['old', 'new'].includes(promptArg)) { console.error(`--prompt 
 if (promptArg === 'old') process.env.AGENTIC_PROMPT = 'old';
 else if (promptArg === 'new') delete process.env.AGENTIC_PROMPT;
 const promptUsed = process.env.AGENTIC_PROMPT === 'old' ? 'old' : 'new';
+const thinkingArg = opt('thinking', null);
+if (thinkingArg && !['old', 'new'].includes(thinkingArg)) { console.error(`--thinking old or new, not "${thinkingArg}"`); process.exit(1); }
+if (thinkingArg === 'old') process.env.AGENTIC_THINK = 'old';
+else if (thinkingArg === 'new') delete process.env.AGENTIC_THINK;
+const thinkingUsed = process.env.AGENTIC_THINK === 'old' ? 'old' : 'new';
 const noRecord = args.includes('--no-record');
 // --claude (with --memory): Claude's notes are looked in as well, where they are.
 const withClaude = withMemory && args.includes('--claude');
@@ -93,7 +102,7 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 const started = await server.start({ ctx });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
-console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}`);
+console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}; thinking: ${thinkingUsed}`);
 const results = [];
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const tdir = opt('out', join(modelFolder(base), 'results', 'runs', stamp));
@@ -124,7 +133,7 @@ try {
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000,
           memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : ev.given ? '+' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); if (type === 'context' && ev.title === 'Helpers') process.stdout.write(`    + helpers brought ${ev.items.filter((x) => !x.skipped).length} (${ev.tokens} tokens: ${byCode(ev.items)})${ev.items.some((x) => x.skipped) ? `; left out: ${ev.items.filter((x) => x.skipped).map((x) => `${x.text} (${x.skipped})`).join('; ')}` : ''}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
@@ -142,7 +151,9 @@ try {
       const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
       const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, replies: run.replies ?? null, reads: run.reads ?? null, readFirst: run.readFirst ?? null, thinkTokens: run.thinkTokens ?? null, stuckAsks: run.stuckAsks ?? null, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300),
         // The model's own work (a helper's step is not one) and what the helpers brought.
-        flows: flowsOn, helpers: run.helpers ?? [...helpers], ownSteps: run.ownSteps ?? null, modelCalls: run.modelCalls ?? null, helperItems: run.helperItems ?? 0, helperTokens: run.helperTokens ?? 0, indexed: run.indexed ?? null };
+        flows: flowsOn, helpers: run.helpers ?? [...helpers], ownSteps: run.ownSteps ?? null, modelCalls: run.modelCalls ?? null, helperItems: run.helperItems ?? 0, helperTokens: run.helperTokens ?? 0, indexed: run.indexed ?? null,
+        // Past half its time it thought only briefly (the step-down, agent.mjs).
+        steppedDown: Boolean(run.steppedDown) };
       // The memory's save comes after the check: its own files are not the task's.
       if (withMemory && run.save) { const s = await run.save(); if (s) { row.saved = s.added.map((f) => `${f.kind}: ${f.text}`); row.refused = s.refused.map((r) => r.why); row.saveSecs = Math.round(s.secs); saves.push(s); } }
       results.push(row);
@@ -156,12 +167,12 @@ try {
 }
 const file = join(tdir, 'summary.json');
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
-writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, prompt: promptUsed, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
+writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, prompt: promptUsed, thinkingWay: thinkingUsed, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
+  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);

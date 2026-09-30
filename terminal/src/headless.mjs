@@ -19,7 +19,7 @@ import { llmCalls } from './flows/llm.mjs';
 // AGENTIC_HELPERS says (unset: all). embedder: the small model for the code
 // search when the memory is off. prewarm: the code search is built before the
 // prompt (not timed), as the app has it built by the time you ask.
-export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design }) {
+export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -32,6 +32,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   const system = systemPrompt({ cwd, notes: projectNotes(cwd, notesRoom(), { memory: Boolean(mem), home: mem?.home }).text, git: gitSummary(cwd) });
   const agent = new Agent({
     url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots, memory: mem, ranker,
+    // Its time for thinking (agent.mjs): the practice runs give their time limit; else as the app.
+    ...(thinkBudgetSecs != null ? { thinkBudgetSecs } : {}),
     // What you saved with /permissions (coding -p passes it; the practice bench does not, so its runs measure the same every time).
     permissions,
     // The design examples and the layout check (agent/design.mjs): as saved
@@ -120,5 +122,7 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
     toolErrors: log.filter((e) => e.type === 'tool' && e.error).length,
     outTokens: agent.stats.outTokens, tps: agent.stats.tps, ctxUsed: agent.ctxUsed,
     replies: counts.steps ?? 0, reads: counts.reads ?? 0, readFirst: counts.readFirst ?? 0, thinkTokens: counts.thinkTokens ?? 0, stuckAsks: counts.stuckAsks ?? 0,
+    // Past half its time for thinking, it thought only briefly (agent.mjs steppedDown).
+    steppedDown: agent.steppedAt != null,
   };
 }

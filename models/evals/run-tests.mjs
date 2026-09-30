@@ -9,7 +9,9 @@
 //   total   how many items a full run has (PASS/FAIL lines counted by `count`); null: no count
 //   think   it can run with thinking on (the tab's Thinking switch, key T): at High, the one level
 //           Gemma and Qwen have besides Low; off (Low) is the default, the way a battle runs.
-//           A model test without it never thinks (the sorting check: a sort writes nothing)
+//           A model test without it never thinks (the sorting check: a sort writes nothing; the
+//           two-at-once speed check writes with thinking off), or sets its own (Thinking old vs
+//           new always runs at High)
 //   pick    One practice task: which of the Practice 28 (a number, or a copy of yours like 18b).
 //           One of my tests (pick.own): which test of your own, by its number
 //   own     My tests: its total is how many tests of your own there are (made in the hub's Test
@@ -75,9 +77,15 @@ export const RUN_TESTS = [
   { id: 'sorting', name: 'Sorting check', what: 'how the model sorts 85 requests into a kind (question, fix, change, rename, other): right answers and seconds a sort, with a results page', model: true, think: false, total: 82, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/sort-check.mjs', args: (m) => ['--model', m],
     stop: 'SIGTERM', record: { kind: 'other', name: '^Sorting check$', part: false } },
+  { id: 'twoatonce', name: 'Two at once', what: 'whether two tries at once, one on each of the server’s two slots, write more a second than one after the other; it passes at ×1.25, with a results page', model: true, think: false, total: 3, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/two-at-once.mjs', args: (m) => ['--model', m],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^Two at once$', part: false } },
   { id: 'prompt', name: 'Prompt old vs new', what: 'the Practice 28 twice: with the prompt from before 30 Sep (no Work habits) and with today’s; it holds when the new one passes as many and takes at most 10% longer, with a results page', model: true, think: true, total: 56, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/prompt-ab.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'tasks', name: '^Prompt old vs new$', part: false } },
+  { id: 'thinking', name: 'Thinking old vs new', what: 'the Practice 28 twice at High: every try thinking (before 30 Sep), then think when it pays with the step-down past half a task’s time; it holds when the new way passes as many and takes at least 15% less time, with a results page', model: true, think: false, total: 56, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/think-ab.mjs', args: (m) => ['--model', m],
+    stop: 'SIGTERM', record: { kind: 'tasks', name: '^Thinking old vs new$', part: false } },
   { id: 'components', name: 'UI component battle', what: 'your UI component requests in three parts: which design cards each one gets (no model), the pages built with the design folder on, and again with it off; run it on both models for the battle, with a results page and a blind vote', model: true, think: true, total: null, lines: componentLines, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/design/components.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'other', name: '^UI component battle$', part: false } },

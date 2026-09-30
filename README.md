@@ -193,6 +193,18 @@ once you know enough, pick one way, report failures plainly, Read and Search ove
 names each notes file's kind and says which notes win. `AGENTIC_PROMPT=old` gives the prompt from
 before, and the Arena's **Prompt old vs new** check (`/test prompt`) runs the Practice 28 with both.
 
+Also since 30 Sep 2026, **High thinks where it pays**, the local way of Fable's adaptive thinking.
+The first round of tests and drafts (the work before the tries) is written without thinking; a
+try after a miss thinks, with the miss in front of it; the tries that fix or change the code think
+from the first. Past half a request's time for thinking (15 minutes, `AGENTIC_THINK_BUDGET` in
+seconds, 0 for never) it thinks only briefly, so it finishes: the chat keeps its thinking switch
+but is capped at 64 tokens a reply (Gemma's switch sits at the top of its prompt, so turning it
+off would read the whole conversation again), and the focused paths stop thinking. Low is
+unchanged. `AGENTIC_THINK=old` gives the way before, and the Arena's **Thinking old vs new** check
+(`/test thinking`) runs the Practice 28 at High both ways. Two tries at once, one on each of the
+server's two slots, was measured and left out: ×1.02 on Qwen and ×1.07 on Gemma with the speed
+helper on (**Two at once**, `/test twoatonce`).
+
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).

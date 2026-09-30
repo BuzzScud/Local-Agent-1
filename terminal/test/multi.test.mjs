@@ -105,14 +105,24 @@ test('multi-file change: one test, edit blocks over three files, your OK per fil
   expect([c.status, c.stdout + c.stderr]).toEqual([0, '']);
 }, 30_000);
 
-test('multi-file change with thinking on: the tests and the drafts are written with the smaller thinking cap', async () => {
-  const cwd = copyTask('19-multifile-symbol');
+test('multi-file change with thinking on: the first tests and drafts go without thinking, a draft after a miss thinks with the smaller cap; AGENTIC_THINK=old: all four think with it', async () => {
   const task = readFileSync(join(TASKS, '19-multifile-symbol', 'task.txt'), 'utf8').trim();
+  const capped = (fake) => fake.requests.filter((r) => r.thinking_budget_tokens !== undefined).map((r) => r.thinking_budget_tokens);
   const replies = [{ text: SYMBOL_TEST }, { text: SYMBOL_TEST }, { text: BLOCKS }, { text: BLOCKS }, { text: 'Adds a symbol option used by the formatter and the report.' }];
-  const { reason, fake } = await run(cwd, task, replies, { thinking: true });
-  expect(reason).toBe('done');
-  expect(fake.requests.filter((r) => r.thinking_budget_tokens !== undefined).map((r) => r.thinking_budget_tokens)).toEqual([SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP]);
-}, 30_000);
+  const plain = await run(copyTask('19-multifile-symbol'), task, replies, { thinking: true });
+  expect(plain.reason).toBe('done');
+  expect(capped(plain.fake)).toEqual([]);
+  // A draft whose blocks do not match is a miss: the one after it thinks.
+  const bad = '### config.mjs\n<<<<<<< OLD\nthis line is not in the file\n=======\nx\n>>>>>>> NEW';
+  const missed = await run(copyTask('19-multifile-symbol'), task, [{ text: SYMBOL_TEST }, { text: SYMBOL_TEST }, { text: bad }, { text: BLOCKS }, ...replies.slice(3)], { thinking: true });
+  expect(missed.events.find((e) => e.type === 'tries-done' && e.label === 'Drafting changes').marks).toEqual(['✗', '✓']);
+  expect(capped(missed.fake)).toEqual([SETUP_THINK_CAP]);
+  process.env.AGENTIC_THINK = 'old';
+  let old;
+  try { old = await run(copyTask('19-multifile-symbol'), task, replies, { thinking: true }); } finally { delete process.env.AGENTIC_THINK; }
+  expect(old.reason).toBe('done');
+  expect(capped(old.fake)).toEqual([SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP]);
+}, 60_000);
 
 test('multi-file change: a draft whose blocks do not match is dropped; saying no to the test stops everything', async () => {
   const cwd = copyTask('19-multifile-symbol');

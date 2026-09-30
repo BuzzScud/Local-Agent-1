@@ -73,7 +73,8 @@ test('each test the tab can run: its script is there, its command names the mode
   const u = runCommand('unit', { think: true, models });
   expect([u.think, u.argv.includes('--think')]).toEqual([false, false]);
   for (const t of RUN_TESTS) if (!t.model) expect(Boolean(t.think)).toBe(false);
-  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting']); // a sort writes nothing, so it never thinks
+  // A sort writes nothing and the speed check writes with thinking off, so they never think; Thinking old vs new sets its own (High).
+  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting', 'twoatonce', 'thinking']);
   const so = runCommand('sorting', { model: 'gemma', think: true, models });
   expect([so.think, so.argv]).toEqual([false, ['models/evals/tools/sort-check.mjs', '--model', 'gemma']]);
   expect(findRunTest('sorting')?.id).toBe('sorting');
@@ -238,6 +239,14 @@ test('run.mjs --only 10 on the stand-in: the task runs and is checked, and its l
   expect(r.out).toMatch(/^(PASS|FAIL)  think=off  10-fix-off-by-one/m);
   expect(r.out).toContain('recorded in the test record: The 1 picked practice tasks, helpers off —');
   expect(readRecord(join(home, 'record.jsonl'))[0]).toMatchObject({ kind: 'tasks', model: 'gemma', total: 1, part: true });
+  // Today's way of thinking unless --thinking old (Thinking old vs new); each task says whether it stepped down.
+  expect(r.out).toMatch(/; thinking: new$/m);
+  const sum = JSON.parse(readFileSync(join(home, 'out', 'summary.json'), 'utf8'));
+  expect([sum.thinkingWay, sum.results[0].steppedDown]).toEqual(['new', false]);
+  const old = await collect(practice(home, ['--only', '10', '--timeout', '60', '--thinking', 'old', '--no-record']));
+  expect(old.out).toMatch(/; thinking: old$/m);
+  expect(JSON.parse(readFileSync(join(home, 'out', 'summary.json'), 'utf8')).thinkingWay).toBe('old');
+  expect((await collect(practice(home, ['--only', '10', '--thinking', 'some']))).code).toBe(1);
 }, 90_000);
 
 test('run.mjs --set 28 on the stand-in, stopped during its first task: that task is left out, nothing is recorded, the model is stopped', async () => {

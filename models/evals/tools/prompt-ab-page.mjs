@@ -4,7 +4,9 @@
 // in the hub's Tests tab. Tabs that fit the window: Result · Task by task ·
 // What changed · How it was measured. The look is the sorting check's page.
 //
-//   buildPromptPage({ title, dateline, verdict, chips, rows, changed, method, raw }) → html
+//   buildPromptPage({ title, dateline, verdict, chips, rows, changed, method, raw, names }) → html
+//     names    what the two sides are called (default the prompts'); Thinking old vs new
+//              (think-ab.mjs) draws its page with this builder too
 //     rows     [{ task, old, new }]: old and new are a run's row ({ pass, secs, steps,
 //              ownSteps, modelCalls, toolErrors, thinkTokens, why }) or null (not run)
 //     chips    [{ text, ok }]: the rule, one chip per part (ok: true, false or null)
@@ -28,7 +30,9 @@ export function flips(rows) {
   return { fixed: both.filter((r) => !r.old.pass && r.new.pass).map((r) => r.task), broke: both.filter((r) => r.old.pass && !r.new.pass).map((r) => r.task) };
 }
 
-export function buildPromptPage({ title, dateline = '', verdict = '', chips = [], rows = [], changed = [], method = [], raw = [] }) {
+export const PROMPT_NAMES = { old: 'Old prompt', new: 'New prompt', oldSub: 'before 30 Sep', newSub: 'Work habits and the rest', thing: 'prompt' };
+
+export function buildPromptPage({ title, dateline = '', verdict = '', chips = [], rows = [], changed = [], method = [], raw = [], names = PROMPT_NAMES }) {
   const data = JSON.stringify({ rows, old: sideTotals(rows, 'old'), new: sideTotals(rows, 'new'), flips: flips(rows) }).replace(/</g, '\\u003c');
   const chipHtml = chips.map((c) => `<span class="chip ${c.ok === true ? 'ok' : c.ok === false ? 'no' : ''}">${c.ok === true ? '✓' : c.ok === false ? '✗' : '·'} ${esc(c.text)}</span>`).join('');
   return `<!doctype html>
@@ -79,6 +83,7 @@ pre{margin:4px 0 0;white-space:pre-wrap;background:var(--soft);border-radius:8px
 const D = JSON.parse(document.getElementById('data').textContent);
 const VERDICT = ${JSON.stringify(verdict)}, CHIPS = ${JSON.stringify(chipHtml)};
 const CHANGED = ${JSON.stringify(changed)}, METHOD = ${JSON.stringify(method)}, RAW = ${JSON.stringify(raw.map(esc))};
+const N = ${JSON.stringify(Object.fromEntries(Object.entries({ ...PROMPT_NAMES, ...names }).map(([k, v]) => [k, esc(v)]))).replace(/</g, '\\u003c')};
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const TABS = [['result', 'Result'], ['tasks', 'Task by task'], ['changed', 'What changed'], ['how', 'How it was measured']];
 let tab = Math.max(0, TABS.findIndex(([id]) => '#' + id === location.hash)), page = 0;
@@ -94,11 +99,11 @@ function draw() {
   document.getElementById('tabs').innerHTML = TABS.map(([id, name], i) => '<button type="button" role="tab" aria-selected="' + (i === tab) + '" data-i="' + i + '">' + (i + 1) + ' · ' + name + '</button>').join('');
   const p = document.getElementById('panel'), id = TABS[tab][0], o = D.old, n = D.new, f = D.flips;
   if (id === 'result') {
-    const cards = '<div class="card"><div class="k">Old prompt · passed · higher is better</div><div class="v">' + o.passed + ' of ' + o.tasks + '</div><div class="s">' + num(o.secs) + ' s in all</div></div>'
-      + '<div class="card"><div class="k">New prompt · passed · higher is better</div><div class="v">' + n.passed + ' of ' + n.tasks + '</div><div class="s">' + num(n.secs) + ' s in all</div></div>'
+    const cards = '<div class="card"><div class="k">' + N.old + ' · passed · higher is better</div><div class="v">' + o.passed + ' of ' + o.tasks + '</div><div class="s">' + num(o.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">' + N.new + ' · passed · higher is better</div><div class="v">' + n.passed + ' of ' + n.tasks + '</div><div class="s">' + num(n.secs) + ' s in all</div></div>'
       + '<div class="card"><div class="k">Time in all · lower is better</div><div class="v">' + (pct(o.secs, n.secs) || '—') + '</div><div class="s">new against old</div></div>'
       + '<div class="card"><div class="k">Tasks that moved</div><div class="v">' + f.fixed.length + ' fixed · ' + f.broke.length + ' broke</div><div class="s">' + (f.fixed.length + f.broke.length ? esc([...f.fixed.map((t) => '+' + t), ...f.broke.map((t) => '−' + t)].join(', ')) : 'none') + '</div></div>';
-    p.innerHTML = '<p class="verdict">' + VERDICT + '</p><div class="chips">' + CHIPS + '</div><div class="cards">' + cards + '</div><div class="table-wrap"><table><thead><tr><th>Measure</th><th class="num">Old prompt<small>before 30 Sep</small></th><th class="num">New prompt<small>Work habits and the rest</small></th><th class="num">Change</th></tr></thead><tbody>'
+    p.innerHTML = '<p class="verdict">' + VERDICT + '</p><div class="chips">' + CHIPS + '</div><div class="cards">' + cards + '</div><div class="table-wrap"><table><thead><tr><th>Measure</th><th class="num">' + N.old + '<small>' + N.oldSub + '</small></th><th class="num">' + N.new + '<small>' + N.newSub + '</small></th><th class="num">Change</th></tr></thead><tbody>'
       + row('Tasks passed', 'each task’s own check · higher is better', o.passed, n.passed, 'high')
       + row('Seconds in all', 'the tasks both ran · lower is better', o.secs, n.secs, 'low')
       + row('Seconds a task', 'the median · lower is better', o.median, n.median, 'low')
@@ -108,7 +113,7 @@ function draw() {
       + row('Thinking', 'tokens, about · lower is better when the passes hold', o.thinkTokens, n.thinkTokens, 'low')
       + '</tbody></table></div>';
   } else if (id === 'tasks') {
-    p.innerHTML = '<p class="verdict">Each practice task with the old prompt and the new one: its check, its seconds and the model’s own steps. A task that moved is named in the last column.</p><div class="fill" id="fill"><div class="table-wrap"><table><thead><tr><th>Task</th><th>Old prompt</th><th>New prompt</th><th>Moved</th></tr></thead><tbody></tbody></table></div></div><div class="pager"><button type="button" id="prev">‹ Back</button><button type="button" id="next">Next ›</button><span id="at"></span></div>';
+    p.innerHTML = '<p class="verdict">Each practice task with the old ' + N.thing + ' and the new one: its check, its seconds and the model’s own steps. A task that moved is named in the last column.</p><div class="fill" id="fill"><div class="table-wrap"><table><thead><tr><th>Task</th><th>' + N.old + '</th><th>' + N.new + '</th><th>Moved</th></tr></thead><tbody></tbody></table></div></div><div class="pager"><button type="button" id="prev">‹ Back</button><button type="button" id="next">Next ›</button><span id="at"></span></div>';
     const fill = document.getElementById('fill'), body = p.querySelector('tbody'), list = D.rows;
     const moved = (r) => !r.old || !r.new ? '' : !r.old.pass && r.new.pass ? '<span class="ok">fixed</span>' : r.old.pass && !r.new.pass ? '<span class="no">broke</span>' : '<span class="dim">same</span>';
     const rowHtml = (r) => '<tr><td class="task">' + esc(r.task) + '</td><td>' + cell(r.old) + '</td><td>' + cell(r.new) + '</td><td>' + moved(r) + '</td></tr>';

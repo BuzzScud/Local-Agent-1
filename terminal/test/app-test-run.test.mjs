@@ -47,7 +47,7 @@ test('/test opens the Arena with this model as who runs it; a name or a task num
   expect(text).toMatch(/&model=gemma&test=practice28 · Practice 28 is picked on Gemma 4 12B QAT/);
   expect(text).toMatch(/&model=gemma&test=task&n=12 · One practice task 12 is picked on Gemma 4 12B QAT/);
   expect(text).toMatch(/&model=none&test=unit · Unit tests is picked, then press Run/);
-  expect(text).toContain('No test called "nonsense". Try one of: practice 28, one practice task, real requests, long task, work 28, new 28, my tests, my tests · easy, my tests · medium, my tests · hard, one of my tests, sorting check, prompt old vs new, ui component battle, unit tests, repo check');
+  expect(text).toContain('No test called "nonsense". Try one of: practice 28, one practice task, real requests, long task, work 28, new 28, my tests, my tests · easy, my tests · medium, my tests · hard, one of my tests, sorting check, two at once, prompt old vs new, thinking old vs new, ui component battle, unit tests, repo check');
   expect(hub).toContain('runAsk'); // the hub hands the model and the test on to the Arena
   expect(page).not.toContain('id="runpane"'); // the record page has no Run tab: the Arena runs the tests
 }, T);

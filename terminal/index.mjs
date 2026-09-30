@@ -11,13 +11,14 @@
 //   - the design examples and the layout check, for the before/after test
 //     (models/evals/bench/design/).
 export { runHeadless } from './src/headless.mjs';
-export { Agent, claimsAlreadyThere } from './src/agent/agent.mjs';
+// THINK_BUDGET_SECS and STEP_DOWN_CAP: the step-down the Thinking old vs new test (models/evals/tools/think-ab.mjs) names.
+export { Agent, claimsAlreadyThere, THINK_BUDGET_SECS, STEP_DOWN_CAP } from './src/agent/agent.mjs';
 // WORK_HABITS and NOTES_RANK: what the old/new prompt test (models/evals/tools/prompt-ab.mjs) shows it compared.
 export { systemPrompt, projectNotes, gitSummary, SESSION_MARK, WORK_HABITS, NOTES_RANK } from './src/agent/prompt.mjs';
 export { toolSchemas } from './src/agent/tools.mjs';
 export { outsidePath } from './src/agent/permissions.mjs';
 export { streamChat } from './src/agent/client.mjs';
-export { complete, decide } from './src/flows/llm.mjs';
+export { complete, decide, SETUP_THINK_CAP } from './src/flows/llm.mjs';
 // The request sorter and the lines of its test, for the sorting check (models/evals/tools/sort-check.mjs).
 export { modelSort, routeByRules, sortQuestion, KINDS as SORT_KINDS } from './src/flows/index.mjs';
 export { LINES as SORT_LINES } from './test/sort-lines.mjs';

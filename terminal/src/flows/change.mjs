@@ -115,7 +115,7 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     // Candidate tests: each must fail on today's code for the right reason.
     const tw = testWriter({ ctx, scratch, tp, task, lang, sources: [{ rel: target, label: shownLabel, text: shownSource }], dataBlock, base, slot: slotA });
     const { candidates } = tw;
-    const writeTests = (want, max, label, extra) => tw.writeTests(want, max, label, extra, (fileText, code) => mergeTest(fileText, code, lang));
+    const writeTests = (want, max, label, extra, opts) => tw.writeTests(want, max, label, extra, (fileText, code) => mergeTest(fileText, code, lang), opts);
 
     // Versions of the code written from the task alone (no test shown); a
     // test that none of them passes probably asks for more than the task.
@@ -125,8 +125,8 @@ export async function changeFlow(ctx, task, { hint } = {}) {
       return unit.isNew ? `${original.replace(/\n*$/, '\n')}\n${code.replace(/\n*$/, '\n')}` : splice(original, unit, code);
     };
     const versions = [];
-    const draftVersions = (n, slot) => tryUntilPass(ctx, {
-      label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, thinkCap: SETUP_THINK_CAP,
+    const draftVersions = (n, slot, thinkFirst = true) => tryUntilPass(ctx, {
+      label: 'Drafting versions', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, thinkCap: SETUP_THINK_CAP, thinkFirst,
       prompt: `${fence(shownLabel, shownSource)}${focus}${dataBlock}\n\nTask: ${task}${known}\n\nReply with ${want}.${SOURCE_ONLY}`,
       // A draft that removes functions the task keeps is no draft (practice task 14).
       apply: (code) => { const text = build(code); const g = guardChange(target, original, text, task); if (g) return { error: g }; return { files: [{ abs: join(scratch.dir, target), text }], text, code, undo: () => {} }; },
@@ -135,9 +135,12 @@ export async function changeFlow(ctx, task, { hint } = {}) {
     // Round one: two tests and two drafts. Writing is the slow part (about 10
     // tokens a second), so more are written only when these disagree. With a
     // second side slot the tests and the drafts are written at the same time.
-    const testTry = parallel ? (await Promise.all([writeTests(2, 3), draftVersions(2, slotB)]))[0] : await writeTests(2, 3);
+    // Think when it pays (llm.mjs): round one is written without thinking; a miss, or the round
+    // after a disagreement, thinks.
+    const first = { thinkFirst: false };
+    const testTry = parallel ? (await Promise.all([writeTests(2, 3, undefined, undefined, first), draftVersions(2, slotB, false)]))[0] : await writeTests(2, 3, undefined, undefined, first);
     if (!candidates.length) return { handled: false, why: `could not write a good test for this task (${testTry.best?.why ?? 'no usable test'})` };
-    if (!parallel) await draftVersions(2, slotA);
+    if (!parallel) await draftVersions(2, slotA, false);
     // Score each test: how many drafts pass it (together with the old tests).
     const runAll = async () => {
       const runs = [await scratch.run(tp.cmd, { signal: ctx.signal })];

@@ -19,6 +19,14 @@ export const llmCalls = { n: 0, now: 0 };
 // the run used its 30 minutes before its first try (low-vs-high-2026-09-29).
 export const SETUP_THINK_CAP = 2048;
 
+// Think when it pays (30 Sep 2026): at High, the first round of tests and drafts
+// is written without thinking, and a try after a miss thinks, with the miss in
+// front of it (tries.mjs). In the 24 practice tasks of 30 Sep, thinking at High,
+// writing tests and drafts took 55-65% of the time and over half of what was
+// written was thinking. AGENTIC_THINK=old: every try thinks and nothing steps
+// down, as before (the Thinking old vs new test, models/evals/tools/think-ab.mjs).
+export const oldThinking = () => ((process.env.AGENTIC_THINK ?? process.env.BONSAI_THINK) === 'old');
+
 // thinkCap: a smaller thinking cap for this one call (the server's
 // --reasoning-budget stays the model's thinkingBudget).
 export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap }) {

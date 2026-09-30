@@ -27,7 +27,7 @@ import { lostNames } from '../flows/blocks.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
-import { complete, tallies, llmCalls } from '../flows/llm.mjs';
+import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
 import { isMemoryRequest, memoryFile, readMemory, applyMemory, digest, memoryPrompt, MEMORY_SCHEMA } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
@@ -39,6 +39,15 @@ import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeind
 import { choose, howChosen } from './search.mjs';
 
 const MAX_STEPS = 40;
+// A request's time for thinking (30 Sep 2026): past half of it, it thinks only briefly, so it
+// finishes instead of running out of time (practice task 28 at High ran out of its 30 minutes on
+// 29 Sep, while Low passed it in under 3). The chat keeps the template's thinking switch and is
+// capped at STEP_DOWN_CAP tokens a reply: Gemma's template puts the switch at the very top of the
+// prompt, so turning it off would read the whole conversation again. The focused paths' own calls
+// stop thinking. AGENTIC_THINK_BUDGET: seconds (0: never); the practice runs pass their limit.
+export const THINK_BUDGET_SECS = 900;
+export const STEP_DOWN_CAP = 64;
+const budgetFromEnv = () => { const v = Number(process.env.AGENTIC_THINK_BUDGET ?? process.env.BONSAI_THINK_BUDGET); return Number.isFinite(v) && v >= 0 ? v : THINK_BUDGET_SECS; };
 const TRIM_AT = 0.78; // share of the context that starts a trim
 const TRIM_TO = 0.45; // …and where it stops
 const FULL = 0.85; // past this share (with the reply room counted) trimming was not enough: summarize
@@ -239,9 +248,9 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv() }) {
     super();
-    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions });
+    Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions, thinkBudgetSecs });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
     // or one given on its own (the practice bench runs without the memory).
     this.ranker = ranker;
@@ -434,8 +443,21 @@ export class Agent extends EventEmitter {
 
   get maxResultChars() { return Math.max(4000, Math.floor(this.ctx * 0.15 * 3.6)); }
 
+  // Past half this request's time for thinking (THINK_BUDGET_SECS): true, and the first time a
+  // note says so. Never with thinking off, a budget of 0, or AGENTIC_THINK=old.
+  steppedDown() {
+    if (!this.thinking || !(this.thinkBudgetSecs > 0) || !this.requestStarted || oldThinking()) return false;
+    if (Date.now() - this.requestStarted < this.thinkBudgetSecs * 500) return false;
+    if (this.steppedAt == null) {
+      this.steppedAt = Date.now();
+      this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request are gone, so it thinks only briefly from here and finishes in time.`, tone: 'dim' });
+    }
+    return true;
+  }
+
   // What the focused paths (src/flows) need from the agent.
   flowContext(signal) {
+    const agent = this;
     let seq = 0;
     const tool = (label, arg, view, error) => {
       if (!error && (label === 'Update' || label === 'Write' || label === 'Create') && arg) this.happened?.files.add(String(arg));
@@ -451,8 +473,10 @@ export class Agent extends EventEmitter {
       // The helpers on (helpers.mjs), for the paths that use one.
       helpers: this.helpers,
       url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
-      // Code and tests are written at the chat's thinking level (Off by default).
-      thinking: this.thinking, effort: this.effort,
+      // Code and tests are written at the chat's thinking level (Off by default), read at each
+      // call: past half the request's time it is off (steppedDown).
+      get thinking() { return agent.thinking && !agent.steppedDown(); },
+      effort: this.effort,
       // The memory's small model, which also ranks files by meaning (rank.mjs).
       embedder: this.ranker ?? this.memory?.embedder ?? null,
       emit: (name, ev) => {
@@ -508,6 +532,8 @@ export class Agent extends EventEmitter {
     this.turn = null;
     const happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [] };
     this.happened = happened;
+    this.requestStarted = Date.now(); // its time for thinking starts now (steppedDown)
+    this.steppedAt = null;
     const warn = (ev) => { if (ev?.tone === 'warn' || ev?.tone === 'error') this.happened?.warnings.push(String(ev.text).slice(0, 200)); };
     this.on('note', warn);
     // The folder as it is before this message, for /rewind.
@@ -1405,7 +1431,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, slot: this.slots?.main, signal: local.signal });
+      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap: this.steppedDown() ? STEP_DOWN_CAP : undefined, slot: this.slots?.main, signal: local.signal });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {

@@ -49,8 +49,9 @@ export function testWriter({ ctx, scratch, tp, task, lang, sources, dataBlock = 
     return { ok: fails && !crashed && moreTests && oldStillPass, why: !fails ? 'the test already passes on today\'s code, so it does not check the new behaviour' : crashed ? `the test fails for the wrong reason (${firstError})` : !moreTests ? 'no new test was added' : 'it broke existing tests', out: run.out };
   };
   let written = 0;
-  const writeTests = (want, max, label = 'Writing tests', extra = '', merge) => tryUntilPass(ctx, {
-    label, max, want, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200, slot, from: written + 1, thinkCap: SETUP_THINK_CAP,
+  // thinkFirst: false for the first round (think when it pays, llm.mjs).
+  const writeTests = (want, max, label = 'Writing tests', extra = '', merge, { thinkFirst = true } = {}) => tryUntilPass(ctx, {
+    label, max, want, system: CODE_SYSTEM, temperature: 0.7, maxTokens: 1200, slot, from: written + 1, thinkCap: SETUP_THINK_CAP, thinkFirst,
     // Two tests that cannot even load the code: this is not a job for a test.
     stopEarly: () => brokenTests >= 2 && !candidates.length,
     prompt: ({ best }) => `${testAsk}${coverage}${extra}${best?.why ? `\n\nAn earlier try was no good: ${best.why}` : ''}`,

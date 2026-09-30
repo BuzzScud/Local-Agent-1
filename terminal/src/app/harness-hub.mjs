@@ -236,7 +236,8 @@ export function harnessPage(d) {
   const either = M.length > 1 ? 'with either model' : '';
   const OPUS = [
     ['1 · Gets a task', 'You type a request.', 'has', 'has it'],
-    ['2 · Thinking at the top setting', `High turns thinking on, up to ${num(S.thinkingCap)} tokens a reply.`, 'done', 'built 28 Sep'],
+    // Adaptive thinking, the local way (30 Sep): think when it pays, and the step-down (flows/llm.mjs, agent.mjs).
+    ['2 · Thinking at the top setting', `High turns thinking on, up to ${num(S.thinkingCap)} tokens a reply. Like Fable’s adaptive thinking, it thinks where it pays: first tries at tests and drafts go straight to writing, a try after a miss thinks, and past half a request’s time it thinks only briefly.`, 'done', 'built 30 Sep'],
     ['2 · Room for up to 1 million tokens', `${at} is your setting.${longest.length === 1 ? ` Every model here can go to ${k(longest[0])}.` : ''}`, 'done', 'built 28 Sep'],
     ['2 · A sealed box, safety checks on', 'The fence, blocked words, your OK and your saved /permissions rules.', 'has', 'has it'],
     ['3 · Think, use one tool, read, repeat', `The same loop, up to ${S.steps} steps, plus a shortcut Opus doesn’t have.`, 'has', 'has it'],

@@ -15,14 +15,15 @@ import { excerpts } from '../src/flows/excerpts.mjs';
 import { spawnSync } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 import { SETUP_THINK_CAP } from '../src/flows/llm.mjs';
+import { STEP_DOWN_CAP, THINK_BUDGET_SECS } from '../src/agent/agent.mjs';
 
 const model = MODELS[DEFAULT_MODEL];
 const copy = (name) => { const d = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project'); cpSync(join(import.meta.dir, name), d, { recursive: true }); return d; };
 
-async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots, testTimeoutMs, thinking = false } = {}) {
+async function run(cwd, prompt, replies, { answer = 'yes', mode = 'ask', slots, testTimeoutMs, thinking = false, more = {} } = {}) {
   const fake = await startFakeServer(replies);
   const events = [];
-  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking, mode, maxTries: 4, slots, testTimeoutMs,
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking, mode, maxTries: 4, slots, testTimeoutMs, ...more,
     ask: async (req) => { events.push({ type: 'ask', name: req.name, req }); return { choice: typeof answer === 'function' ? answer(req) : answer }; } });
   for (const t of ['assistant', 'tool', 'note', 'tries-done', 'route']) agent.on(t, (e) => events.push({ type: t, ...e }));
   const reason = await agent.send(prompt);
@@ -407,15 +408,28 @@ test('a fix described only by what it looks like asks where first; one that poin
     expect([t, wantsWhere(t)]).toEqual([t, false]);
 });
 
-test('thinking on: writing tests and drafting think at most SETUP_THINK_CAP; the tries keep the whole cap', async () => {
+test('thinking on: tests and drafts think only after a miss (at most SETUP_THINK_CAP), every one of them with AGENTIC_THINK=old; the tries think from the first, with the whole cap', async () => {
   expect(SETUP_THINK_CAP).toBeLessThan(model.thinkingBudget);
-  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project');
-  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  const demo = () => { const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'project'); cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true }); return cwd; };
   const good = '```js\n' + exportWith("  if (argv.includes('--json')) return JSON.stringify(rows);\n") + '```';
-  const change = await run(cwd, 'add a --json flag to export.mjs that prints the rows as JSON', [{ text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }, { text: 'never used' }], { thinking: true });
+  const ask = 'add a --json flag to export.mjs that prints the rows as JSON';
+  const setup = (fake) => fake.requests.filter((r) => !r.tools && r.max_tokens >= 1200); // the tests and drafts (not the one-line summary)
+  // Think when it pays: two good tests and two drafts, none thinks.
+  const plain = await run(demo(), ask, [{ text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }], { thinking: true });
+  expect(plain.reason).toBe('done');
+  expect(setup(plain.fake).map((r) => [r.chat_template_kwargs.enable_thinking, r.thinking_budget_tokens])).toEqual([[false, undefined], [false, undefined], [false, undefined], [false, undefined]]);
+  // A first test that already passes is a miss: the tests after it think, with the smaller cap.
+  const passes = "```js\ntest('the rows export', () => {\n  assert.ok(true);\n});\n```";
+  const missed = await run(demo(), ask, [{ text: passes }, { text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }], { thinking: true });
+  expect(missed.reason).toBe('done');
+  expect(missed.events.find((e) => e.type === 'tries-done')?.marks).toEqual(['✗', '✓', '✓']);
+  expect(setup(missed.fake).map((r) => r.thinking_budget_tokens ?? null)).toEqual([null, SETUP_THINK_CAP, SETUP_THINK_CAP, null, null]);
+  // AGENTIC_THINK=old: two tests and two drafts, each thinking with the smaller cap and room for it.
+  process.env.AGENTIC_THINK = 'old';
+  let change;
+  try { change = await run(demo(), ask, [{ text: jsonTest }, { text: jsonTest }, { text: good }, { text: good }, { text: 'Adds a --json flag.' }, { text: 'never used' }, { text: 'never used' }], { thinking: true }); } finally { delete process.env.AGENTIC_THINK; }
   expect(change.reason).toBe('done');
   const capped = change.fake.requests.filter((r) => r.thinking_budget_tokens !== undefined);
-  // Two tests and two drafts, each with the smaller cap and room for it.
   expect(capped.map((r) => r.thinking_budget_tokens)).toEqual([SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP, SETUP_THINK_CAP]);
   expect(capped.every((r) => r.chat_template_kwargs.enable_thinking && r.max_tokens < 1200 + model.thinkingBudget)).toBe(true);
 
@@ -424,4 +438,36 @@ test('thinking on: writing tests and drafting think at most SETUP_THINK_CAP; the
   const tries = fix.fake.requests.filter((r) => r.chat_template_kwargs?.enable_thinking && !r.tools);
   expect(tries.length).toBe(6);
   expect(tries.every((r) => r.thinking_budget_tokens === undefined)).toBe(true);
+}, 60_000);
+
+test('the step-down: past half a request\'s time for thinking the chat thinks at most STEP_DOWN_CAP with its switch on, the paths stop thinking, and a note says so once; never with AGENTIC_THINK=old, a budget of 0 or thinking off', async () => {
+  expect(THINK_BUDGET_SECS).toBe(900);
+  const soon = { thinkBudgetSecs: 0.001 }; // half of it is gone by the first call
+  const chat = (fake) => fake.requests.filter((r) => r.tools);
+  const halfNotes = (events) => events.filter((e) => e.type === 'note' && /for this request are gone/.test(e.text));
+  // Step by step (no paths): every reply of the chat keeps the switch on, capped.
+  const talk = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ tool: { name: 'Read', args: { path: 'stats.mjs' } } }, { text: 'It works out averages.' }], { thinking: true, more: { flows: false, ...soon } });
+  expect(chat(talk.fake).length).toBe(2);
+  expect(chat(talk.fake).map((r) => [r.chat_template_kwargs.enable_thinking, r.thinking_budget_tokens])).toEqual([[true, STEP_DOWN_CAP], [true, STEP_DOWN_CAP]]);
+  expect(halfNotes(talk.events).length).toBe(1);
+  expect(talk.agent.steppedAt).toBeGreaterThan(0); // what a practice run reads (headless.mjs)
+  // A fix: its tries stop thinking (they thought from the first before).
+  const fix = await run(bigCopy(), 'The tests fail. Find the bug and fix it.', [{ text: '{"function": "median"}' }, { text: medianRight }, { text: 'Fixed.' }], { thinking: true, more: soon });
+  expect(fix.reason).toBe('done');
+  const tries = fix.fake.requests.filter((r) => !r.tools && r.max_tokens >= 2000);
+  expect(tries.length).toBe(1);
+  expect(tries[0].chat_template_kwargs.enable_thinking).toBe(false);
+  // Not past half: the chat thinks with the model's own cap.
+  const fresh = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ text: 'It works out averages.' }], { thinking: true, more: { flows: false } });
+  expect(chat(fresh.fake).map((r) => [r.chat_template_kwargs.enable_thinking, r.thinking_budget_tokens])).toEqual([[true, undefined]]);
+  expect(halfNotes(fresh.events).length).toBe(0);
+  // Never: AGENTIC_THINK=old, a budget of 0, thinking off.
+  process.env.AGENTIC_THINK = 'old';
+  let old;
+  try { old = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ text: 'It works out averages.' }], { thinking: true, more: { flows: false, ...soon } }); } finally { delete process.env.AGENTIC_THINK; }
+  expect(chat(old.fake)[0].thinking_budget_tokens).toBeUndefined();
+  const none = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ text: 'It works out averages.' }], { thinking: true, more: { flows: false, thinkBudgetSecs: 0 } });
+  expect(chat(none.fake)[0].thinking_budget_tokens).toBeUndefined();
+  const off = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ text: 'It works out averages.' }], { thinking: false, more: { flows: false, ...soon } });
+  expect([chat(off.fake)[0].chat_template_kwargs.enable_thinking, chat(off.fake)[0].thinking_budget_tokens, halfNotes(off.events).length]).toEqual([false, undefined, 0]);
 });

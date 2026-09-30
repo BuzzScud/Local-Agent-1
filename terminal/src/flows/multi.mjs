@@ -70,7 +70,7 @@ export async function multiFlow(ctx, task, targets) {
     const dataBlock = data ? `\n\nData files they use:\n${data}` : '';
     const tw = testWriter({ ctx, scratch, tp, task, lang, sources, dataBlock, base, slot: slotA });
     const { candidates, testOriginal } = tw;
-    const writeTests = (want, max, label, extra) => tw.writeTests(want, max, label, extra, (fileText, code) => mergeTest(fileText, code, lang));
+    const writeTests = (want, max, label, extra, opts) => tw.writeTests(want, max, label, extra, (fileText, code) => mergeTest(fileText, code, lang), opts);
 
     // Drafts from the task alone: edit blocks over the files, applied to
     // their texts (nothing written until a draft is checked).
@@ -101,16 +101,19 @@ export async function multiFlow(ctx, task, targets) {
     };
     const writeTexts = (texts) => { for (const [rel, text] of texts) scratch.write(rel, text); };
     const restoreTexts = (texts) => { for (const rel of texts.keys()) scratch.restore(rel); };
-    const draftVersions = (n, slot) => tryUntilPass(ctx, {
-      label: 'Drafting changes', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, maxTokens: 3000, raw: true, thinkCap: SETUP_THINK_CAP,
+    const draftVersions = (n, slot, thinkFirst = true) => tryUntilPass(ctx, {
+      label: 'Drafting changes', max: n, want: n, system: CODE_SYSTEM, temperature: 0.7, slot, from: versions.length + 1, maxTokens: 3000, raw: true, thinkCap: SETUP_THINK_CAP, thinkFirst,
       prompt: `${shownAll}${dataBlock}\n\nTask: ${task}${known}\n\n${BLOCKS_FORMAT}${SOURCE_ONLY}`,
       apply: fromBlocks,
       check: async (applied) => { versions.push(applied); return { ok: true, summary: 'drafted' }; },
     });
     // Round one: two tests and two drafts; more only when they disagree.
-    const testTry = parallel ? (await Promise.all([writeTests(2, 3), draftVersions(2, slotB)]))[0] : await writeTests(2, 3);
+    // Think when it pays (llm.mjs): round one is written without thinking; a miss, or the round
+    // after a disagreement, thinks.
+    const first = { thinkFirst: false };
+    const testTry = parallel ? (await Promise.all([writeTests(2, 3, undefined, undefined, first), draftVersions(2, slotB, false)]))[0] : await writeTests(2, 3, undefined, undefined, first);
     if (!candidates.length) return { handled: false, why: `could not write a good test for this task (${testTry.best?.why ?? 'no usable test'})` };
-    if (!parallel) await draftVersions(2, slotA);
+    if (!parallel) await draftVersions(2, slotA, false);
 
     const runAll = async () => {
       const runs = [await scratch.run(tp.cmd, { signal: ctx.signal })];
