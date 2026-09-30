@@ -13,7 +13,7 @@ import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
-import { isDesignRequest, pickCards, designNotes, designSettings } from './design.mjs';
+import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
 import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
@@ -696,12 +696,14 @@ export class Agent extends EventEmitter {
     this.designForce = false;
     if ((forced || (design.auto && !['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text))) && request?.role === 'user' && typeof request.content === 'string') {
       try {
-        const notes = designNotes(pickCards(text, { sets: design.sets }));
+        // mix: opus and fable take turns, one page request each.
+        const style = design.style === 'mix' ? mixTurn() : design.style;
+        const notes = designNotes(pickCards(text, { sets: design.sets, style }));
         if (notes) {
           this.turn.design = { request, notes: notes.text, cards: notes.cards.map((c) => c.file) };
           this.ctxUsed += tokensOf(notes.text);
           // `design` names the cards for the screen (it folds them into the line under your message).
-          this.emit('note', { text: `Design examples: ${notes.cards.map((c) => c.file.replace(/\.md$/i, '')).join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.cards.map((c) => c.file.replace(/\.md$/i, '')) });
+          this.emit('note', { text: `Design examples${design.style === 'mix' ? ` (mix: ${style}'s turn)` : design.style !== 'auto' ? ` (${style})` : ''}: ${notes.cards.map((c) => c.file.replace(/\.md$/i, '')).join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.cards.map((c) => c.file.replace(/\.md$/i, '')) });
         } else if (forced) this.emit('note', { text: 'No design examples found (the "design examples" folder is missing or has no cards in the sets that are on).', tone: 'warn' });
       } catch {}
     }

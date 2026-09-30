@@ -20,12 +20,23 @@
 //                 (≈1,400 tokens, 7–12 s of reading on this Mac); the other
 //                 cards that fit are named by path, and the model may Read them
 //                 or a full page under DESIGN/ (read-only, like MATH/)
-//   switches      settings.json "design": { auto, check, sets }; AGENTIC_DESIGN
-//                 (on|off), AGENTIC_DESIGN_SETS (all | set,set) and AGENTIC_LAYOUT
-//                 (on|off, the browser check in flows/layoutcheck.mjs) win over it
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+//   looks         a card marked "- Look: yes" (look-calm, look-dense, look-bold,
+//                 look-dark in each set) restyles any kind: a request with its
+//                 Words ("minimal", "compact", "playful", "dark") gets the
+//                 example with its own "## Look" swapped for the look's; with
+//                 none of them, the example's own look, as before
+//   style         which set's cards win: auto (your picks, then opus, then
+//                 fable: the order below), opus, fable, or mix (opus and fable
+//                 take turns, one page request each; design-turn.json holds
+//                 whose turn it is)
+//   switches      settings.json "design": { auto, check, sets, style }; AGENTIC_DESIGN
+//                 (on|off), AGENTIC_DESIGN_SETS (all | set,set), AGENTIC_DESIGN_STYLE
+//                 and AGENTIC_LAYOUT (on|off, the browser check in
+//                 flows/layoutcheck.mjs) win over it
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, sep, relative, isAbsolute } from 'node:path';
 import { findDocsDir } from '../app/docs-dir.mjs';
+import { instructionHome } from './instructions.mjs';
 
 export const FOLDER = 'design examples';
 export const CARD_CHARS = 3200; // of one card
@@ -33,6 +44,11 @@ export const NOTE_CHARS = 5600; // everything that goes along, all cards togethe
 export const MORE = 3; // other fitting cards named by path
 // The sets in the order they win a tie: the user's own first.
 export const SET_ORDER = ['your rules', 'your picks', 'opus', 'fable', 'public systems'];
+// Which set's cards win (see "style" above). mix: opus and fable take turns.
+export const STYLES = ['auto', 'opus', 'fable', 'mix'];
+export const styleWords = (style) => ({ auto: 'your picks, then Opus, then Fable', opus: 'Opus first', fable: 'Fable first', mix: 'Opus and Fable take turns' }[style] ?? style);
+// A look swaps the example's own look section, so it adds only its Do and Don't lines: this much more room.
+export const LOOK_CHARS = 700;
 
 export function designDir() {
   const named = process.env.AGENTIC_DESIGN_DIR;
@@ -46,7 +62,7 @@ const onOff = (v) => (v === undefined || v === '' ? undefined : !/^(off|0|false|
 
 // What is switched on: the saved settings, with the environment on top.
 export function designSettings(saved = {}) {
-  const s = { auto: true, check: true, sets: 'all', ...(saved && typeof saved === 'object' ? saved : {}) };
+  const s = { auto: true, check: true, sets: 'all', style: 'auto', ...(saved && typeof saved === 'object' ? saved : {}) };
   const auto = onOff(process.env.AGENTIC_DESIGN);
   const check = onOff(process.env.AGENTIC_LAYOUT);
   if (auto !== undefined) s.auto = auto;
@@ -54,6 +70,9 @@ export function designSettings(saved = {}) {
   const sets = process.env.AGENTIC_DESIGN_SETS?.trim();
   if (sets) s.sets = /^all$/i.test(sets) ? 'all' : sets.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (s.sets !== 'all' && !Array.isArray(s.sets)) s.sets = 'all';
+  const style = process.env.AGENTIC_DESIGN_STYLE?.trim().toLowerCase();
+  if (style) s.style = style;
+  if (!STYLES.includes(s.style)) s.style = 'auto';
   return s;
 }
 
@@ -82,6 +101,7 @@ export function parseCard(text, file = '') {
     page: fields.page || null,
     always: yes(fields.always),
     default: yes(fields.default),
+    look: yes(fields.look),
     body,
   };
 }
@@ -122,11 +142,11 @@ const MAKE = /\b(?:create|make|build|design|redesign|restyle|style|write|generat
 const THING = /\b(?:web ?pages?|pages?|web ?sites?|sites?|web ?app|dashboards?|html|widgets?|ui|user interface|interface|screens?|forms?|landing|layouts?|themes?|dark mode|light mode|css|stylesheets?|styles?|styling|looks?|design|wizard|portfolio|home ?page|gallery|slides?|mock-?up|front-?end|navbar|nav bar|sidebar|hero|pop-?up|modal|report page|results page)\b/i;
 // Things that are only a page when one is being made: "a todo app", "a countdown
 // timer", "a table of my repos" (not "build the app", "the users table").
-const MADE_THING = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:app|application|timer|countdown|clock|stopwatch|calculator|converter|counter|game|quiz|calendar|kanban|board|chart|graph|gallery|tracker|planner|table|list|visuali[sz]ation|infographic|poster|flyer|resume|cv|invitation|menu)\b|\btables? (?:of|with|that|showing)\b|\b(?:sortable|data|html) tables?\b/i;
+const MADE_THING = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:app|application|timer|countdown|clock|stopwatch|calculator|converter|counter|game|quiz|calendar|kanban|board|chart|graph|gallery|tracker|planner|table|list|visuali[sz]ation|infographic|poster|flyer|resume|cv|invitation|menu|shop|webshop|storefront|blog(?!\s+posts?\b)|invoice|receipt|survey|questionnaire)\b|\btables? (?:of|with|that|showing)\b|\b(?:sortable|data|html) tables?\b/i;
 // More things that are a page when one is made, but only with the word that says so: a map of
 // places (not a map from ids to names), a music player (not a player class), a chat window (not a
 // chat bot), a profile card (not a card field).
-const MADE_MORE = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:timeline|carousel|slideshow|lightbox|scoreboard|playlist)\b|\b(?:interactive|world|store|location|street|city|travel|leaflet) maps?\b|\bmaps? (?:of|showing) (?:my|our|the|all) (?:[\w-]+ ){0,2}(?:stores|shops|locations|offices|places|cities|countries|trips|travels|customers|branches|visits|sales)\b|\b(?:music|audio|video|media|mp3|podcast|radio) players?\b|\bchat ?(?:window|box|view|bubbles?)\b|\b(?:support|live|group|team) chat\b|\b(?:store|shop|branch) (?:locator|finder)\b|\b(?:profile|stat|stats|data|info|user|product|contact|business|weather|summary|pricing|team|recipe|flash|kpi|metric) cards?\b/i;
+const MADE_MORE = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:timeline|carousel|slideshow|lightbox|scoreboard|playlist)\b|\b(?:interactive|world|store|location|street|city|travel|leaflet) maps?\b|\bmaps? (?:of|showing) (?:my|our|the|all) (?:[\w-]+ ){0,2}(?:stores|shops|locations|offices|places|cities|countries|trips|travels|customers|branches|visits|sales)\b|\b(?:music|audio|video|media|mp3|podcast|radio) players?\b|\bchat ?(?:window|box|view|bubbles?)\b|\b(?:support|live|group|team) chat\b|\b(?:store|shop|branch) (?:locator|finder)\b|\b(?:profile|stat|stats|data|info|user|product|contact|business|weather|summary|pricing|team|recipe|flash|kpi|metric) cards?\b|\b(?:online|web) (?:shop|store)s?\b|\bempty[- ]states?\b|\bpricing (?:tables?|plans?|tiers?)\b|\bproduct (?:grid|listing|details?)\b/i;
 // "show my sales as a bar chart", "plot the runs over time in a graph": a chart asked for with no
 // make-word.
 const CHART_ASK = /\b(?:show|draw|plot|display|put|turn|visuali[sz]e)\b[^.?!]{0,60}?\b(?:as|into|in|on) (?:a |an )?(?:[\w-]+ ){0,2}(?:charts?|graphs?|plots?|dashboards?|maps?|timelines?)\b|^\s*(?:please )?(?:chart|graph|plot|visuali[sz]e) (?:my|our|the|all)\b/i;
@@ -171,25 +191,85 @@ export function scoreCard(card, text) {
 
 const onSet = (sets) => (c) => sets === 'all' || !sets || sets.includes(c.set);
 
+// "Add a dark mode" asks for a switch, not a dark look, and "clean up the page" asks for a tidy, not
+// a calm look: the phrases are taken out before the looks are matched.
+const MODE_ASK = /\b(?:dark|light)[- ](?:mode|theme) (?:toggle|switch|button|option|setting)s?\b|\b(?:dark|light)[- ]mode\b|\bdark and light\b|\blight and dark\b|\bclean(?:ed|ing)?[- ]?up\b/gi;
+
+// The look a request asks for by its Words, or null. Only a look card's Words
+// count (its name's "look" is in every restyle request). A tie goes to the
+// look named first in the request.
+export function pickLook(text, cards) {
+  const t = String(text ?? '').replace(MODE_ASK, ' ');
+  const at = (c) => Math.min(...c.words.map((w) => clean(t).indexOf(` ${clean(w).trim()} `)).filter((i) => i >= 0), Infinity);
+  const scored = cards.filter((c) => c.look).map((c) => ({ c, score: scoreCard({ ...c, name: '' }, t) })).filter((x) => x.score > 0);
+  scored.sort((a, b) => b.score - a.score || at(a.c) - at(b.c));
+  return scored[0]?.c ?? null;
+}
+
+// Whose turn it is under the "mix" style: opus, then fable, then opus… peek:
+// the hub's "Try a request" looks without taking the turn.
+export function mixTurn({ peek = false, home = instructionHome() } = {}) {
+  const file = join(home, 'design-turn.json');
+  let last = null;
+  try { last = JSON.parse(readFileSync(file, 'utf8')).last; } catch {}
+  const next = last === 'opus' ? 'fable' : 'opus';
+  if (!peek) try { mkdirSync(home, { recursive: true }); writeFileSync(file, `${JSON.stringify({ last: next, at: new Date().toISOString() })}\n`); } catch { /* the turn only alternates the sets */ }
+  return next;
+}
+
 // The cards that go along with a request: every "Always" card in the sets that
-// are on, the one best example (a "Default" card when no Words match), and
-// the paths of up to MORE other cards that also fit.
-export function pickCards(text, { dir = designDir(), sets = 'all', cards } = {}) {
+// are on, the one best example (a "Default" card when no Words match), the
+// look the request asks for, and the paths of up to MORE other cards that
+// also fit. style opus or fable (mix is resolved to one of them by mixTurn):
+// that set's best fitting card wins over the others; with none that fits,
+// the usual order.
+export function pickCards(text, { dir = designDir(), sets = 'all', cards, style = 'auto' } = {}) {
   const all = (cards ?? readCards(dir).cards).filter(onSet(sets));
   const always = all.filter((c) => c.always);
-  const scored = all.filter((c) => !c.always).map((c) => ({ c, score: scoreCard(c, text) }))
+  const kinds = all.filter((c) => !c.always && !c.look);
+  const scored = kinds.map((c) => ({ c, score: scoreCard(c, text) }))
     .sort((a, b) => b.score - a.score || setRank(a.c.set) - setRank(b.c.set) || a.c.file.localeCompare(b.c.file));
-  let best = scored.find((x) => x.score > 0)?.c ?? null;
+  const fits = scored.filter((x) => x.score > 0);
+  let best = (style === 'opus' || style === 'fable' ? fits.find((x) => x.c.set === style)?.c : null) ?? fits[0]?.c ?? null;
   if (!best) best = scored.map((x) => x.c).filter((c) => c.default).sort((a, b) => setRank(a.set) - setRank(b.set))[0] ?? null;
-  const more = scored.filter((x) => x.score > 0 && x.c !== best).slice(0, MORE).map((x) => x.c);
-  return { always, examples: best ? [best] : [], more };
+  const more = fits.filter((x) => x.c !== best).slice(0, MORE).map((x) => x.c);
+  // The look comes from the example's own set; for a card of your picks or a public system, from the chosen style's set, else opus's.
+  const looks = all.filter((c) => c.look);
+  const want = pickLook(text, looks);
+  const from = [best?.set, style === 'fable' ? 'fable' : 'opus', 'opus', 'fable'];
+  const base = (c) => c.file.split('/').pop();
+  const look = want ? from.map((set) => looks.find((c) => c.set === set && base(c) === base(want))).find(Boolean) ?? want : null;
+  return { always, examples: best ? [best] : [], more, look };
+}
+
+// A card's "## Name" section (up to the next one), or ''.
+export function cardSection(text, name) {
+  const m = new RegExp(`(^|\\n)## ${name}(?![\\w'’])[^\\n]*\\n[\\s\\S]*?(?=\\n## |$)`).exec(text);
+  return m ? m[0].replace(/^\n/, '').trim() : '';
+}
+
+// The example in a look: its own "## Look" section swapped for the look
+// card's, and the look's Do and Don't lines after the example's own.
+export function inLook(text, lookText, lookName) {
+  const own = cardSection(text, 'Look');
+  const theirs = cardSection(lookText, 'Look');
+  if (!theirs) return text;
+  const mine = theirs.replace(/^## Look[^\n]*/, () => `## Look (${lookName})`);
+  const swapped = own ? text.replace(own, () => mine) : `${text}\n\n${mine}`;
+  const extra = ['Do', "Don't"].map((n) => cardSection(lookText, n).replace(/^## [^\n]*/, () => `## ${n} (${lookName})`)).filter(Boolean);
+  return [swapped, ...extra].join('\n\n');
 }
 
 // A card as the model reads it, cut at a section (then a line) to fit.
-function cardText(dir, card, room) {
+function cardText(dir, card, room, look) {
   let text = '';
   try { text = readFileSync(join(dir, card.file), 'utf8').trim(); } catch { text = `# ${card.name}\n${card.body}`; }
-  const max = Math.min(CARD_CHARS, room);
+  if (look) {
+    let lookText = '';
+    try { lookText = readFileSync(join(dir, look.file), 'utf8').trim(); } catch { lookText = `# ${look.name}\n${look.body}`; }
+    text = inLook(text, lookText, look.name);
+  }
+  const max = Math.min(CARD_CHARS + (look ? LOOK_CHARS : 0), room);
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const at = Math.max(cut.lastIndexOf('\n## '), cut.lastIndexOf('\n'));
@@ -206,12 +286,15 @@ export function designNotes(pick, dir = designDir()) {
   if (!dir || (!pick.always.length && !pick.examples.length)) return null;
   const parts = [HEAD];
   const used = [];
-  let room = NOTE_CHARS - HEAD.length;
+  const look = pick.look && pick.examples.length ? pick.look : null;
+  let room = NOTE_CHARS + (look ? LOOK_CHARS : 0) - HEAD.length;
   for (const [label, c] of [...pick.always.map((c) => ['Rules', c]), ...pick.examples.map((c) => ['Example', c])]) {
     if (room < 400) break;
-    const t = `[${label} · DESIGN/${c.file}]\n${cardText(dir, c, room - 60)}`;
+    const inIt = label === 'Example' ? look : null;
+    const t = `[${label} · DESIGN/${c.file}${inIt ? ` · in the ${inIt.name} from DESIGN/${inIt.file}` : ''}]\n${cardText(dir, c, room - 60 - (inIt ? inIt.file.length + inIt.name.length + 20 : 0), inIt)}`;
     parts.push(t);
     used.push(c);
+    if (inIt) used.push(inIt);
     room -= t.length + 2;
   }
   const page = pick.examples.find((c) => c.page && used.includes(c))?.page;
@@ -244,7 +327,9 @@ export function designSummary(settings = designSettings(), dir = designDir()) {
   if (!dir) return { dir: null, rows: [] };
   const rows = sets.map((s) => {
     const on = settings.sets === 'all' || settings.sets.includes(s.name);
-    return [`${on ? '●' : '○'} ${s.name || '(top)'}`, `${s.cards.length} card${s.cards.length === 1 ? '' : 's'}: ${s.cards.map((c) => c.file.split('/').pop().replace(/\.md$/i, '')).join(', ')}`];
+    const looks = s.cards.filter((c) => c.look);
+    const kinds = s.cards.filter((c) => !c.look);
+    return [`${on ? '●' : '○'} ${s.name || '(top)'}${settings.style === s.name ? ' ★' : ''}`, `${kinds.length} card${kinds.length === 1 ? '' : 's'}: ${kinds.map((c) => c.file.split('/').pop().replace(/\.md$/i, '')).join(', ')}${looks.length ? ` · looks: ${looks.map((c) => c.file.split('/').pop().replace(/^look-|\.md$/gi, '')).join(', ')}` : ''}`];
   });
-  return { dir, rows };
+  return { dir, rows, style: settings.style };
 }

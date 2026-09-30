@@ -50,12 +50,17 @@ const PAGES = ['make a dashboard for my xmr miner fleet', 'create a self contain
   // the kinds the first cards had nothing for (29 Sep): each is a page when asked for this way
   'make a chat window like messages', 'make a map of my stores', 'make a music player', 'show my sales as a bar chart', 'make a profile card',
   'build a timeline of the project', 'make a small game in the browser', 'build a photo gallery', 'create a kanban board for my tasks', 'make a calendar for this month',
-  'build a support chat', 'build a store locator'];
+  'build a support chat', 'build a store locator',
+  // the ten kinds added 30 Sep (landing, pricing, shop, blog, portfolio, docs, invoice, timeline, survey, empty states)
+  'build an online shop for my candles', 'make a storefront for my prints', 'make a blog for my recipes', 'create an invoice for 3 hours of work',
+  'make a survey about lunch', 'add an empty state to the notes list', 'make a pricing table with 3 plans', 'make a 404 page', 'build a docs site for my library',
+  'make a receipt for the order', 'make a playful landing page'];
 const NOT = ['fix the bug in export.py', 'what does the dashboard do?', 'add a --json flag to export.mjs', 'rename total to sum', 'add unit tests for the parser',
   'make the chart function faster', 'build the app', 'add a column to the users table', 'why is the page blank?', 'update the api route for /users', 'write a python script that renames my photos',
   'explain how the reranker works', 'run the tests',
   'add a map from user ids to names', 'build a chat bot that answers in slack', 'add a card field to the payment endpoint', 'add a player class to the engine',
-  'show the logs in the terminal', 'what does the calendar do?', 'plot the loss curve in a graph with matplotlib', 'make a chart of the results in a jupyter notebook'];
+  'show the logs in the terminal', 'what does the calendar do?', 'plot the loss curve in a graph with matplotlib', 'make a chart of the results in a jupyter notebook',
+  'write a blog post about rust', 'add a poll interval to the fetcher', 'build an in-memory store for sessions', 'write a changelog for v2'];
 test('a request to make or restyle a page is a design request; questions, fixes and code-only work are not', () => {
   expect(PAGES.filter((t) => !D.isDesignRequest(t))).toEqual([]);
   expect(NOT.filter((t) => D.isDesignRequest(t))).toEqual([]);
@@ -101,6 +106,77 @@ test('the notes fit their budget, cut a long card at a line and close its code f
   expect(D.designNotes({ always: [], examples: [], more: [] }, FIX)).toBeNull();
 });
 
+// The looks (30 Sep): a card marked "- Look: yes" restyles any kind, picked by its Words.
+function withLooks(fn) {
+  const look = (name, words, colour) => card(name, { For: 'any kind of page', Words: words, Look: 'yes' }, `## Look\n- Colours: \`--bg:${colour}\` ($5 of paint)\n\n## Do\n- Keep it ${name}.\n\n## Don't\n- No stripes.`);
+  writeFileSync(join(FIX, 'opus', 'look-bold.md'), look('Bold look', 'bold, playful, fun', '#ff0'));
+  writeFileSync(join(FIX, 'fable', 'look-bold.md'), look('Loud look', 'bold, playful, fun', '#f0f'));
+  writeFileSync(join(FIX, 'opus', 'look-dark.md'), look('Dark look', 'dark, night, moody', '#000'));
+  writeFileSync(join(FIX, 'opus', 'look-calm.md'), look('Calm look', 'calm, minimal, clean', '#eee'));
+  try { fn(); } finally { for (const f of ['opus/look-bold.md', 'fable/look-bold.md', 'opus/look-dark.md', 'opus/look-calm.md']) rmSync(join(FIX, f)); }
+}
+
+test('a look is picked by its words and comes from the example\'s own set; a look card is never the example; "dark mode" asks for a switch, not the dark look', () => withLooks(() => {
+  const p = D.pickCards('make a playful dashboard for my miner', { dir: FIX });
+  expect(p.examples.map((c) => c.file)).toEqual(['opus/dashboard.md']);
+  expect(p.look.file).toBe('opus/look-bold.md');
+  expect(p.more.some((c) => c.look)).toBe(false);
+  // the fable dashboard gets the fable set's bold look (a different name, the same file)
+  expect(D.pickCards('make a playful dashboard', { dir: FIX, style: 'fable' }).look.file).toBe('fable/look-bold.md');
+  // no look word: the example's own look, as before
+  expect(D.pickCards('make a dashboard', { dir: FIX }).look).toBeNull();
+  expect(D.pickCards('add a dark mode toggle to the dashboard', { dir: FIX }).look).toBeNull();
+  expect(D.pickCards('clean up the dashboard layout', { dir: FIX }).look).toBeNull(); // a tidy, not the calm look
+  expect(D.pickCards('make a clean dashboard', { dir: FIX }).look.file).toBe('opus/look-calm.md');
+  expect(D.pickCards('make a dark dashboard for night trading', { dir: FIX }).look.file).toBe('opus/look-dark.md');
+  // two looks named: the one with more words, then the one named first
+  expect(D.pickLook('a calm, minimal page that is a bit fun', D.readCards(FIX).cards).file).toBe('opus/look-calm.md');
+  expect(D.pickLook('a moody but playful page', D.readCards(FIX).cards).file).toBe('opus/look-dark.md');
+  // a request only for a look still gets the Default card as its example, in that look
+  const d = D.pickCards('make a bold page about my cat', { dir: FIX });
+  expect(d.examples[0].file).toBe('your picks/report.md');
+  expect(d.look.file).toBe('opus/look-bold.md');
+}));
+
+test('in a look, the example keeps its skeleton and its Do lines, with its Look section swapped for the look\'s and the look\'s Do and Don\'t after', () => withLooks(() => {
+  const n = D.designNotes(D.pickCards('make a playful dashboard for my miner', { dir: FIX }), FIX);
+  expect(n.text).toContain('[Example · DESIGN/opus/dashboard.md · in the Bold look from DESIGN/opus/look-bold.md]');
+  expect(n.text).toContain('## Look (Bold look)\n- Colours: `--bg:#ff0` ($5 of paint)');
+  expect(n.text).not.toContain('`--bg:#fff`'); // the example's own colours are gone
+  expect(n.text).toContain('## Do\n- One thing.'); // the example's own Do stays
+  expect(n.text).toContain('## Do (Bold look)\n- Keep it Bold look.');
+  expect(n.text).toContain("## Don't (Bold look)\n- No stripes.");
+  expect(n.cards.map((c) => c.file)).toEqual(['your rules/rules.md', 'opus/dashboard.md', 'opus/look-bold.md']);
+  expect(n.chars).toBeLessThanOrEqual(D.NOTE_CHARS + D.LOOK_CHARS);
+  expect(D.cardSection("## Do\n- a\n\n## Don't\n- b", "Don't")).toBe("## Don't\n- b");
+  expect(D.cardSection("## Don't\n- b\n\n## Do\n- a", 'Do')).toBe('## Do\n- a');
+}));
+
+test('the style: opus or fable wins with its own best fitting card, even over a closer one; mix takes turns and the hub only peeks', () => {
+  expect(D.pickCards('make a dashboard', { dir: FIX }).examples[0].file).toBe('opus/dashboard.md'); // auto: the set order
+  expect(D.pickCards('make a dashboard', { dir: FIX, style: 'fable' }).examples[0].file).toBe('fable/dashboard.md');
+  expect(D.pickCards('make a dashboard for my miner', { dir: FIX, style: 'fable' }).examples[0].file).toBe('fable/dashboard.md');
+  expect(D.pickCards('make a dashboard for my miner', { dir: FIX, style: 'fable' }).more.map((c) => c.file)).toEqual(['opus/dashboard.md']);
+  // the chosen set has nothing that fits: the usual order
+  expect(D.pickCards('make a timer widget', { dir: FIX, style: 'fable' }).examples[0].file).toBe('opus/widget.md');
+  const home = join(tmpdir(), `agentic-design-turn-${process.pid}`);
+  try {
+    expect(D.mixTurn({ home, peek: true })).toBe('opus');
+    expect(D.mixTurn({ home })).toBe('opus');
+    expect(D.mixTurn({ home, peek: true })).toBe('fable');
+    expect(D.mixTurn({ home })).toBe('fable');
+    expect(D.mixTurn({ home })).toBe('opus');
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+test('/design lists the looks apart from the kinds, and stars the chosen style', () => withLooks(() => {
+  const s = D.designSummary({ ...D.designSettings({}), style: 'fable' }, FIX);
+  const row = (name) => s.rows.find((r) => r[0].includes(name));
+  expect(row('opus')[1]).toMatch(/^2 cards: dashboard, widget · looks: bold, calm, dark$/);
+  expect(row('fable')[0]).toBe('● fable ★');
+  expect(s.style).toBe('fable');
+}));
+
 test('DESIGN/ paths reach the folder read-only, as MATH/ does; climbing out does not work', async () => {
   const cwd = join(tmpdir(), `agentic-design-proj-${process.pid}`); mkdirSync(cwd, { recursive: true });
   const p = resolvePath(cwd, 'DESIGN/opus/dashboard.md');
@@ -117,15 +193,18 @@ test('DESIGN/ paths reach the folder read-only, as MATH/ does; climbing out does
 });
 
 test('the switches: saved settings, with AGENTIC_DESIGN, AGENTIC_LAYOUT and AGENTIC_DESIGN_SETS on top', () => {
-  const keep = { d: process.env.AGENTIC_DESIGN, l: process.env.AGENTIC_LAYOUT, s: process.env.AGENTIC_DESIGN_SETS };
+  const keep = { d: process.env.AGENTIC_DESIGN, l: process.env.AGENTIC_LAYOUT, s: process.env.AGENTIC_DESIGN_SETS, st: process.env.AGENTIC_DESIGN_STYLE };
   try {
     delete process.env.AGENTIC_DESIGN; delete process.env.AGENTIC_LAYOUT; delete process.env.AGENTIC_DESIGN_SETS;
-    expect(D.designSettings(undefined)).toEqual({ auto: true, check: true, sets: 'all' });
-    expect(D.designSettings({ auto: false, sets: ['opus'] })).toEqual({ auto: false, check: true, sets: ['opus'] });
-    process.env.AGENTIC_DESIGN = 'on'; process.env.AGENTIC_LAYOUT = 'off'; process.env.AGENTIC_DESIGN_SETS = 'Fable, opus';
-    expect(D.designSettings({ auto: false })).toEqual({ auto: true, check: false, sets: ['fable', 'opus'] });
+    delete process.env.AGENTIC_DESIGN_STYLE;
+    expect(D.designSettings(undefined)).toEqual({ auto: true, check: true, sets: 'all', style: 'auto' });
+    expect(D.designSettings({ auto: false, sets: ['opus'] })).toEqual({ auto: false, check: true, sets: ['opus'], style: 'auto' });
+    expect(D.designSettings({ style: 'fable' }).style).toBe('fable');
+    expect(D.designSettings({ style: 'purple' }).style).toBe('auto'); // not a style: the usual order
+    process.env.AGENTIC_DESIGN = 'on'; process.env.AGENTIC_LAYOUT = 'off'; process.env.AGENTIC_DESIGN_SETS = 'Fable, opus'; process.env.AGENTIC_DESIGN_STYLE = 'Mix';
+    expect(D.designSettings({ auto: false, style: 'opus' })).toEqual({ auto: true, check: false, sets: ['fable', 'opus'], style: 'mix' });
   } finally {
-    for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_LAYOUT', keep.l], ['AGENTIC_DESIGN_SETS', keep.s]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_LAYOUT', keep.l], ['AGENTIC_DESIGN_SETS', keep.s], ['AGENTIC_DESIGN_STYLE', keep.st]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
 

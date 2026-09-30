@@ -11,7 +11,7 @@ import { Screen, permissionOptions, primeRows, btwLayout } from './screen.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK } from '../agent/prompt.mjs';
+import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath, toolSchemas } from '../agent/tools.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEdited, editedModel, modelById, readRecord, Embedder, embedderReady, HOME, macMemory } from '../../../models/index.mjs';
@@ -30,7 +30,7 @@ import { notesCount, notesDir, claudeOn } from '../agent/claude-notes.mjs';
 import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
-import { designSettings, designSummary, designDir, readCards } from '../agent/design.mjs';
+import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_STYLES, styleWords } from '../agent/design.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
@@ -262,7 +262,7 @@ export function App({ opts, win, onRestart }) {
     // the first request that needs it.
     const remembers = memoryOn(settings);
     if (remembers) { try { openMemory(cwd, { rules: claudeOn(settings) ? CLAUDE_RULES : null }); } catch {} }
-    const notes = projectNotes(cwd, 6000, { memory: remembers });
+    const notes = projectNotes(cwd, notesRoom(), { memory: remembers });
     // The context helpers (agent/helpers.mjs): all on unless /helpers (in
     // settings.json) or AGENTIC_HELPERS says otherwise. The small model that
     // compares meanings serves both the memory and the code search.
@@ -363,7 +363,9 @@ export function App({ opts, win, onRestart }) {
         push({ type: 'note', text: `Saved ${model.name} · edited — ${n} edit${n === 1 ? '' : 's'}. Pick it in /model to run on it. The original file is untouched.`, tone: 'dim' });
       } else { setEditedSaved(null); push({ type: 'note', text: 'The edited copy was removed. The original was never touched.', tone: 'dim' }); }
     };
-    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits, cwd }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
+    // The design style picked on the Instructions page: this window uses it from the next page request, as /design style does.
+    const onDesign = (next) => { settings.design = next; if (agentRef.current) agentRef.current.designSaved = next; };
+    try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits, onDesign, cwd }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
     const more = Object.entries(extra).filter(([, v]) => v != null && v !== '').map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('');
     const url = `${weightsRef.current.url}?tab=${tab}${more}`;
     if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
@@ -1202,7 +1204,8 @@ export function App({ opts, win, onRestart }) {
       case 'design': {
         // Alone: the folder, set by set, and what is on. on|off: the cards with
         // page requests; check on|off: the browser check; sets all|a,b: which
-        // sets. Anything else is a request sent with the cards.
+        // sets; style auto|opus|fable|mix: which set's cards win. Anything
+        // else is a request sent with the cards.
         const saved = { ...(settings.design ?? {}) };
         const keep = (patch) => {
           const next = { ...saved, ...patch };
@@ -1210,19 +1213,26 @@ export function App({ opts, win, onRestart }) {
           if (agent) agent.designSaved = next;
           saveSettings({ design: next });
           const now = designSettings(next);
-          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_DESIGN_SETS ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
+          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
         };
         const a = arg.trim();
         if (!a) {
           const now = designSettings(saved);
           const sum = designSummary(now);
           if (!sum.dir) { push({ type: 'note', text: 'No design examples folder (make "design examples" in the cli docs folder, one subfolder per set of .md cards).', tone: 'warn' }); break; }
-          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
+          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
           break;
         }
         if (/^(on|off)$/i.test(a)) { keep({ auto: /^on$/i.test(a) }); break; }
         const chk = /^check\s+(on|off)$/i.exec(a);
         if (chk) { keep({ check: /^on$/i.test(chk[1]) }); break; }
+        const sty = /^style(?:\s+(\S+))?$/i.exec(a);
+        if (sty) {
+          const want = sty[1]?.toLowerCase();
+          if (!want || !DESIGN_STYLES.includes(want)) { push({ type: 'note', text: `The styles: ${DESIGN_STYLES.map((x) => `${x} (${styleWords(x)})`).join(' · ')}. Now: ${styleWords(designSettings(saved).style)}.`, tone: want ? 'warn' : 'dim' }); break; }
+          keep({ style: want });
+          break;
+        }
         const sets = /^sets?\s+(.+)$/i.exec(a);
         if (sets) {
           const known = readCards(designDir()).sets.map((x) => x.name);
