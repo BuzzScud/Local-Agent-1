@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Much It Reads</title>
+<style>
+:root{color-scheme:light dark;--bg:#f7f6f2;--card:#fff;--text:#1c1b18;--text-2:#6b675e;--line:#e3dfd5;--accent:#2a78d6;--accent-ink:#1f5fae;--accent-soft:#e6eefa;--ok:#1f7a4d;--ok-soft:#e1f2e9;--bad:#b3261e;--bad-soft:#fbe6e4;--warn:#8a5a00;--warn-soft:#fbf0d9;--mute:#efede6}
+@media (prefers-color-scheme:dark){:root{--bg:#15161a;--card:#1d1f24;--text:#ecebe6;--text-2:#a4a19a;--line:#34363e;--accent:#6aa5f0;--accent-ink:#9cc4f7;--accent-soft:#22324a;--ok:#6fcf9a;--ok-soft:#1f3a2c;--bad:#f2928b;--bad-soft:#47231f;--warn:#e9c172;--warn-soft:#3d3118;--mute:#26282e}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em}
+.app{height:100vh;display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:14px;padding:18px 24px;max-width:1800px;margin:0 auto}
+h1{font-size:22px;margin:0;font-weight:650}
+.sub{color:var(--text-2);margin:4px 0 0;font-size:15px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{font:inherit;font-weight:600;padding:9px 18px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--text-2);cursor:pointer}
+.tab[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab:focus-visible,.pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.keys{margin-left:auto;color:var(--text-2);font-size:13.5px;align-self:center}
+kbd{font:12px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--card)}
+main{min-height:0;display:grid}
+.page{display:none;min-height:0}
+.page.on{display:grid;gap:16px;min-height:0;grid-template-rows:minmax(0,1fr)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-height:0;overflow:hidden}
+.card h2{margin:0 0 4px;font-size:18px}
+.hint{color:var(--text-2);font-size:14px;margin:0 0 10px}
+.verdict{font-size:22px;line-height:1.3;margin:0 0 14px;font-weight:650}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.find{border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;background:var(--bg)}
+.find b{font-size:16px}
+.find .big{font-size:30px;font-weight:650;line-height:1.1}
+.tag{font-size:12px;font-weight:700;letter-spacing:.04em;padding:3px 10px;border-radius:99px;align-self:flex-start}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}.tag.warn{background:var(--warn-soft);color:var(--warn)}.tag.ok{background:var(--ok-soft);color:var(--ok)}.tag.acc{background:var(--accent-soft);color:var(--accent-ink)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{color:var(--text-2);font-weight:650;font-size:13px}
+td.n,th.n{text-align:right;white-space:nowrap}
+.files td:nth-child(3),.files td:nth-child(2){white-space:nowrap}
+tr.today td{background:var(--accent-soft)}
+.cut{color:var(--bad);font-weight:650}.whole{color:var(--ok);font-weight:650}
+.bar{position:relative;height:30px;background:var(--mute);border-radius:8px;overflow:hidden;min-width:160px}
+.seg{position:absolute;top:0;bottom:0;display:flex;align-items:center;padding:0 8px;font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden}
+.seg.a{background:var(--accent);color:#fff}.seg.b{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent)}
+.seg.x{background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad)}
+.capline{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--text)}
+.picks{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.pick{font:inherit;font-weight:600;padding:7px 14px;border-radius:9px;border:1px solid var(--line);background:var(--card);color:var(--text-2);cursor:pointer}
+.pick[aria-pressed=true]{background:var(--text);border-color:var(--text);color:var(--bg)}
+.row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;align-items:baseline;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);margin:0 0 8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}
+.row .v{color:var(--accent-ink);font-weight:700}
+.row .note{color:var(--text-2);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;display:block;margin-top:2px}
+.two{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;min-height:0}
+.list{margin:0;padding-left:20px;display:grid;gap:5px}
+.plain{font-size:17px;margin:0 0 10px}
+@media (max-width:980px){html,body{height:auto}.app{height:auto;padding:14px 16px}.three,.two{grid-template-columns:minmax(0,1fr)}.keys{display:none}.row{grid-template-columns:minmax(0,1fr)}}
+@media (min-width:981px) and (max-height:830px){.app{padding:12px 24px;gap:10px}th,td{padding:4px 8px}.plain{font-size:15px}.card{padding:14px 18px}}
+@media (min-width:981px) and (max-width:1560px){.verdict{font-size:19px}.find .big{font-size:26px}th,td{padding:6px 8px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>How much Agentic Coder reads</h1>
+    <p class="sub">A before and after, from real files and real questions on this Mac. Nothing is built yet.</p>
+  </header>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="t0" aria-selected="true">1 · What I found</button>
+    <button class="tab" role="tab" id="t1" aria-selected="false">2 · Rules</button>
+    <button class="tab" role="tab" id="t2" aria-selected="false">3 · Files</button>
+    <button class="tab" role="tab" id="t3" aria-selected="false">4 · The /effort rows</button>
+    <span class="keys"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> tab</span>
+  </div>
+  <main>
+    <section class="page on" id="p0"><div class="card" id="c0"></div></section>
+    <section class="page" id="p1"><div class="card" id="c1"></div></section>
+    <section class="page" id="p2"><div class="card" id="c2"></div></section>
+    <section class="page" id="p3"><div class="card" id="c3"></div></section>
+  </main>
+</div>
+<noscript><p style="padding:16px">This page needs JavaScript. In short: the rules cap (9,000 characters) already cuts part of your home rules in this repo; the files cap (45,000) only matters when a question names several big files.</p></noscript>
+<script>
+const $=id=>document.getElementById(id);
+const n=x=>x.toLocaleString('en-US');
+const READ=130, CPT=4; // Gemma reads about 130 tokens a second (measured 28 Sep); about 4 characters a token
+const secs=c=>Math.round(c/CPT/READ);
+const mins=s=>s<90?`${s} s`:`${(s/60).toFixed(1)} min`;
+
+// REAL: the app's own projectNotes() on ~/Desktop/agentic-coder and ~/ (30 Sep). Repo AGENTS.md 7,892 chars, home AGENTS.md 1,438.
+const RULES=[
+ {cap:6000,sent:5651,repo:'part',home:'left',note:'Your home rules are left out whole, and the repo’s are cut short.'},
+ {cap:9000,sent:8479,repo:'whole',home:'part',note:'Today. The repo’s rules fit. Your home rules lose the section “Other sessions may be working here too”.',today:true},
+ {cap:12000,sent:9476,repo:'whole',home:'whole',note:'Everything fits.'},
+ {cap:18000,sent:9476,repo:'whole',home:'whole',note:'Everything fits; there is nothing more to add.'}
+];
+// REAL: the app's own prefetch() on three questions that name files; the two doubled settings were run on patched copies (30 Sep).
+const FILES=[
+ {ask:'Name one file',q:'what does terminal/src/agent/tools.mjs do?',runs:[
+   {v:'Today',tot:37472,per:[['tools.mjs',37430,37472,1]]},{v:'Chars doubled',tot:37472,per:[['tools.mjs',37430,37472,1]]},{v:'Both doubled',tot:37472,per:[['tools.mjs',37430,37472,1]]}]},
+ {ask:'Name three files',q:'compare tools.mjs, limits.mjs and prompt.mjs (65,000 characters together)',runs:[
+   {v:'Today',tot:43551,per:[['tools.mjs',37430,37472,1],['limits.mjs',15103,2833,0],['prompt.mjs',13426,3246,0]]},
+   {v:'Chars doubled',tot:66085,per:[['tools.mjs',37430,37472,1],['limits.mjs',15103,15144,1],['prompt.mjs',13426,13469,1]]},
+   {v:'Both doubled',tot:66085,per:[['tools.mjs',37430,37472,1],['limits.mjs',15103,15144,1],['prompt.mjs',13426,13469,1]]}]},
+ {ask:'Name the biggest file',q:'explain agent.mjs (129,653 characters, 1,967 lines)',runs:[
+   {v:'Today',tot:4195,per:[['agent.mjs',129653,4195,0]]},{v:'Chars doubled',tot:4195,per:[['agent.mjs',129653,4195,0]]},{v:'Both doubled',tot:4195,per:[['agent.mjs',129653,4195,0]]}]}
+];
+const SETTINGS=[['Today','45,000 chars · 1,000 lines'],['Chars doubled','90,000 chars · 1,000 lines'],['Both doubled','90,000 chars · 2,000 lines']];
+
+function c0(){ $('c0').innerHTML=`<p class="verdict">Two of the four numbers are worth changing. One of them is already cutting your rules.</p>
+<div class="three">
+ <div class="find"><span class="tag bad">CUTTING NOW</span><b>Rules · 9,000 characters</b><span class="big">9,330 needed</span>
+  <span>Your repo’s rules (7,892) and your home rules (1,438) are 9,330 characters together. In this repo the cap cuts your home section “Other sessions may be working here too”, so the model never sees it.</span>
+  <span><b>Fix:</b> 12,000 fits both. It costs about 2 seconds more, once, at start.</span></div>
+ <div class="find"><span class="tag warn">RARELY MATTERS</span><b>Files · 45,000 characters</b><span class="big">9,664 most</span>
+  <span>In 25 real questions about this repo, the most it read up front was 9,664 characters, about a fifth of the cap. It bites only when a question names several big files.</span>
+  <span><b>Example:</b> naming three big files cuts two of them to about 3,000 characters each. Doubling the cap reads all three: 43 seconds more.</span></div>
+ <div class="find"><span class="tag acc">YOUR PICK</span><b>Grow with Context</b><span class="big">16k → 128k</span>
+  <span>Both amounts become rows in /effort. Their defaults are a share of the Context window, so a bigger Context reads more, by itself.</span>
+  <span><b>Watch out:</b> at 16k, 45,000 characters is about 70% of the whole window. A share would bring it down to about 22,000. Tab 4 shows it.</span></div>
+</div>
+<p class="hint" style="margin:14px 0 0">Seconds are estimates: Gemma reads about 130 tokens a second (measured 28 Sep) and a token is about 4 characters. The 25 questions are the ones in your code-search test, each with the function that answers it.</p>`}
+
+let cap=1;
+function c1(){
+ const r=RULES[cap],ALL=9476,MAXW=Math.max(r.cap,ALL),pc=x=>(x/MAXW*100).toFixed(2)+'%',cutc=Math.max(0,ALL-r.sent);
+ $('c1').innerHTML=`<h2>Rules: what reaches the model at each cap</h2><p class="hint">The real function, run on your repo’s <code>AGENTS.md</code> (7,892 characters) and your home <code>AGENTS.md</code> (1,438). Pick a cap.</p>
+ <div class="picks" id="picks1">${RULES.map((x,i)=>`<button class="pick" data-i="${i}" aria-pressed="${i===cap}">${n(x.cap)}${x.today?' · today':''}</button>`).join('')}</div>
+ <div class="bar" style="margin:6px 0 4px"><div class="seg a" style="left:0;width:${pc(r.sent)}">sent · ${n(r.sent)}</div>${cutc?`<div class="seg x" style="left:${pc(r.sent)};width:${pc(cutc)}">left out · ${n(cutc)}</div>`:''}<div class="capline" style="left:calc(${pc(r.cap)} - 3px)"></div></div>
+ <p class="hint">The black line is the cap (${n(r.cap)}). With nothing cut, your two files come to ${n(ALL)} characters.</p>
+ <table><tr><th>Cap</th><th class="n">Sent to the model</th><th class="n">Reading time, once</th><th>What is left out</th></tr>
+ ${RULES.map((x,i)=>`<tr class="${x.today?'today':''}" ${i===cap?'style="font-weight:650"':''}><td>${n(x.cap)}${x.today?' · today':''}</td><td class="n">${n(x.sent)} chars</td><td class="n">${secs(x.sent)} s</td><td>${x.note}</td></tr>`).join('')}</table>
+ <p class="hint" style="margin:10px 0 0">“Once” because the rules are saved with the model’s warm-up: you wait for them at start, not on every request.</p>`;
+ $('picks1').querySelectorAll('.pick').forEach(b=>b.onclick=()=>{cap=+b.dataset.i;c1()});
+}
+
+function c2(){
+ $('c2').innerHTML=`<h2>Files: what a question reads before the model starts</h2><p class="hint">The real code, three questions that name files, at three settings. “Both doubled” adds the 1,000-line limit.</p>
+ <table class="files"><tr><th>Question</th><th>Setting</th><th>What it read</th><th class="n">Total</th><th class="n">Reading time</th></tr>
+ ${FILES.map(f=>f.runs.map((r,i)=>`<tr class="${i===0?'today':''}">${i===0?`<td rowspan="3" style="vertical-align:top;background:var(--card);width:32%"><b>${f.ask}</b><br><span class="hint" style="margin:0">${f.q}</span></td>`:''}<td>${r.v}${i===0?'':''}</td><td>${r.per.map(p=>`<span class="mono">${p[0]}</span> <span class="${p[3]?'whole':'cut'}">${p[3]?'whole':'cut to '+n(p[2])}</span>`).join(' · ')}</td><td class="n">${n(r.tot)}</td><td class="n">${mins(secs(r.tot))}</td></tr>`).join('')).join('')}</table>
+ <p class="plain" style="margin:12px 0 4px"><b>25 real questions</b> about this repo: up front it read <b>1,499</b> characters on average and <b>9,664</b> at most. Allowing 6 pieces instead of 3 found the right function in 7 questions instead of 6. The 45,000 cap was never near.</p>
+ <p class="hint" style="margin:0">Those questions describe code in words, so the name match reads nothing for 11 of 25; the code search by meaning does that work and is not part of these numbers. A file over the cap is never read whole: you get its outline and the lines that match.</p>`}
+
+let ctx=1;
+function c3(){
+ const CTX=[16384,32768,65536,131072],LAB=['16k','32k','64k','128k'];
+ const rules=c=>Math.max(9000,Math.round(c*CPT*0.0687/500)*500), files=c=>Math.round(c*CPT*0.343/1000)*1000;
+ const c=CTX[ctx];
+ $('c3').innerHTML=`<h2>The two new rows in /effort</h2><p class="hint">Preview of how they would look, shaped like the Context row. Pick a Context and watch both move.</p>
+ <div class="picks" id="picks3"><span class="hint" style="margin:0 6px 0 0;align-self:center">Context</span>${LAB.map((l,i)=>`<button class="pick" data-i="${i}" aria-pressed="${i===ctx}">${l}</button>`).join('')}</div>
+ <div class="two"><div>
+  <div class="row"><span>Rules room</span><span><span class="v">◀ ${n(rules(c))} chars ▶</span><span class="note">${n(Math.round(rules(c)/CPT))} tokens · about ${secs(rules(c))} s at start, once · default ${Math.round(rules(c)/(c*CPT)*1000)/10}% of Context, never under 9,000</span></span></div>
+  <div class="row"><span>Up-front reading</span><span><span class="v">◀ ${n(files(c))} chars ▶</span><span class="note">${n(Math.round(files(c)/CPT))} tokens · up to ${mins(secs(files(c)))} on a question that names that much · default ${Math.round(files(c)/(c*CPT)*1000)/10}% of Context</span></span></div>
+  <p class="hint">Each row moves one step at a time, is saved only when you move it, and says its cost in seconds, like the rows already there.</p></div>
+ <div><table><tr><th>Context</th><th class="n">Rules room</th><th class="n">Up-front reading</th></tr>
+ ${CTX.map((x,i)=>`<tr class="${i===ctx?'today':''}"><td>${LAB[i]}</td><td class="n">${n(rules(x))}</td><td class="n">${n(files(x))}</td></tr>`).join('')}</table>
+ <p class="hint" style="margin:10px 0 0">Today both are fixed: 9,000 and 45,000 at every Context. At 32k the new defaults are the same numbers. At 16k, rules stay 9,000 and up-front reading drops to ${n(files(16384))}: 45,000 characters is about 70% of a 16k window, which leaves the model little room of its own.</p></div></div>`;
+ $('picks3').querySelectorAll('.pick').forEach(b=>b.onclick=()=>{ctx=+b.dataset.i;c3()});
+}
+const R=[c0,c1,c2,c3];let tab=0;
+function render(){[0,1,2,3].forEach(i=>{$('t'+i).setAttribute('aria-selected',i===tab);$('p'+i).classList.toggle('on',i===tab)});R[tab]();history.replaceState(null,'','#'+(tab+1))}
+[0,1,2,3].forEach(i=>$('t'+i).onclick=()=>{tab=i;render()});
+addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey)return;if('1234'.includes(e.key)&&e.key){tab=+e.key-1;render()}});
+tab=Math.max(0,Math.min(3,(parseInt(location.hash.slice(1))||1)-1));render();
+</script>
+</body>
+</html>
