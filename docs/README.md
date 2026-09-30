@@ -9,6 +9,7 @@ with nothing loaded from outside; download one and open it in a browser to see i
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
 | [design rounds/agentic-coder-test-builder-2-designs-2026-09-30.html](design%20rounds/agentic-coder-test-builder-2-designs-2026-09-30.html) | page | Test builder designs | 82 KB | 2026-09-30 |
+| [design rounds/agentic-coder-arena-4-designs-2026-09-30.html](design%20rounds/agentic-coder-arena-4-designs-2026-09-30.html) | page | Arena · 4 designs | 221 KB | 2026-09-30 |
 | [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-09-30 |
 | [design rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html](design%20rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html) | page | Start page designs | 917 KB | 2026-09-30 |
 | [design rounds/agentic-coder-start-page-live-preview-2026-09-29.html](design%20rounds/agentic-coder-start-page-live-preview-2026-09-29.html) | page | Start page preview | 374 KB | 2026-09-30 |
