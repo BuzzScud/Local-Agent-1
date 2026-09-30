@@ -136,6 +136,8 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
     const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), model: row.model ?? null, effort: row.effort ?? null, ctx: row.ctx ?? null,
       passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: rawPlace(row.raw), page: row.page ?? '',
       ...(row.bar ? { bar: String(row.bar) } : {}), ...(Array.isArray(row.failed) && row.failed.length ? { failed: row.failed.map(String).slice(0, 50) } : {}),
+      // A run of your own tests: its level (Easy, Medium, Hard) and the points it got of those it could.
+      ...(row.level ? { level: String(row.level) } : {}), ...(row.points && Number.isFinite(row.points.got) && Number.isFinite(row.points.of) ? { points: { got: row.points.got, of: row.points.of } } : {}),
       ...(() => { const s = row.settings ?? panelSettings(); return s ? { settings: s } : {}; })() };
     mkdirSync(dirname(file), { recursive: true });
     appendFileSync(file, `${JSON.stringify(line)}\n`);

@@ -1,6 +1,6 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Tests · Battle · Memory · All docs · Help
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure · Flow · Tests · Test builder · Battle · Memory · Instructions · All docs · Help
 //   /weights          the weights viewer (weights.html, built in)
 //   /model.json       the model file's name and size; /model with a Range header, its bytes
 //   /docs.json        the pages in the DOCS folder by group (its subfolders), newest first, with the pinned structure page (and a harness page kept there, under All docs)
@@ -12,6 +12,9 @@
 //   /tests/run.json, POST /tests/run, /tests/stop, /tests/unqueue, /tests/stopall   the Tests tab's Run tab:
 //     each ▶ is one run (it waits in the runner's line while another runs), with the control panel's settings,
 //     run by the Battle arena's runner (it keeps going when this window closes)
+//   /builder, /builder.json, /builder/…   the Test builder tab: making tests of your own, in full, by level
+//     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
+//     no model (builder-hub.mjs). The tests are the arena's "My tests", on this Mac only
 //   /battle           the Battle tab: the arena's own page (Gemma vs Qwen), started when it is not up (models/evals/battle/)
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
 // The DOCS folder is `cli docs/` at the top of the repo on this Mac (older
@@ -25,6 +28,8 @@ import testsHtml from './tests.html' with { type: 'text' };
 import memoryHtml from './memory.html' with { type: 'text' };
 import flowHtml from './flow.html' with { type: 'text' };
 import instructionsHtml from './instructions.html' with { type: 'text' };
+import builderHtml from './builder.html' with { type: 'text' };
+import { builderRoute } from './builder-hub.mjs';
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
@@ -167,6 +172,8 @@ export function startWeightsServer({ path, docsDir = findDocsDir(), port = HUB_P
       if (url.pathname === '/flow') return page(flowHtml);
       if (url.pathname === '/harness' || url.pathname === '/harness.json') return harnessRoute(url, cwd);
       if (url.pathname === '/tests') return page(testsHtml);
+      if (url.pathname === '/builder') return page(builderHtml);
+      if (url.pathname === '/builder.json' || url.pathname.startsWith('/builder/')) return builderRoute(req, url);
       // The arena runs on its own (it keeps going when this window closes): started here when it is
       // not up, then shown at its own address.
       if (url.pathname === '/battle') {

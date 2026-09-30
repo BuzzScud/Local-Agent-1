@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { MODELS, modelPath, scanServers, stopIdleServers, recordTest, codeLabel, availableBytes, needBytes, HOME } from '../../index.mjs';
 import { battleHome, paths, BATTLE_PORT, LIMIT_SECS, readJson, writeJson, seedSuites, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
 import { runTestById, runCommand, countLines } from '../run-tests.mjs';
+import { labelOf } from './checks.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -346,7 +347,7 @@ function view() {
     running: current ? { battle: current.battle, test: current.test, side: current.side, startedAt: current.startedAt } : busy && waiting && !jobLive() ? { waiting: true } : null,
     testRun: jobLive() ? { name: job.name, model: job.modelName, status: job.status } : null,
     score,
-    tests: tests.map((t) => { const b = latest[t.id]; return { id: t.id, n: t.n ?? null, variant: t.variant ?? null, copyOf: t.copyOf ?? null, suite: t.suite, title: t.title, kind: t.kind, prompt: t.prompt, checks: t.checks ?? [], hasScript: t.hasScript, noScript: Boolean(t.noScript), edited: t.edited ?? null, rules: t.rules ?? null, ask: t.answers?.[0]?.reply ?? '', files: t.files, latest: b ? { id: b.id, at: b.at, status: b.status, vote: b.vote, order: reveal(b), runs: { A: brief(b.runs.A), B: brief(b.runs.B) } } : null }; }),
+    tests: tests.map((t) => { const b = latest[t.id]; return { id: t.id, n: t.n ?? null, variant: t.variant ?? null, copyOf: t.copyOf ?? null, suite: t.suite, title: t.title, kind: t.kind, level: t.level ?? null, prompt: t.prompt, checks: (t.checks ?? []).map((c) => ({ ...c, label: labelOf(c) })), hasScript: t.hasScript, noScript: Boolean(t.noScript), edited: t.edited ?? null, rules: t.rules ?? null, ask: t.answers?.[0]?.reply ?? '', files: t.files, latest: b ? { id: b.id, at: b.at, status: b.status, vote: b.vote, order: reveal(b), runs: { A: brief(b.runs.A), B: brief(b.runs.B) } } : null }; }),
   };
 }
 function battleView(id) {

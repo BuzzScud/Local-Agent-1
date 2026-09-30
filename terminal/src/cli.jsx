@@ -122,7 +122,7 @@ if (process.argv[2] === 'memory-review') {
 }
 // coding hub [tab]: the hub in the browser, on one of its tabs (weights when
 // none is named). The old one-word forms (coding docs, coding tests…) still work.
-const HUB_TABS = { weights: 'weights', docs: 'harness', harness: 'harness', structure: 'structure', flow: 'flow', tests: 'tests', battle: 'battle', memory: 'memory', instructions: 'instructions', help: 'help' };
+const HUB_TABS = { weights: 'weights', docs: 'harness', harness: 'harness', structure: 'structure', flow: 'flow', tests: 'tests', builder: 'builder', battle: 'battle', memory: 'memory', instructions: 'instructions', help: 'help' };
 const OLD_HUB = ['weights', 'docs', 'tests', 'battle', 'memory', 'instructions'];
 if (process.argv[2] === 'hub' || OLD_HUB.includes(process.argv[2])) {
   const name = process.argv[2] === 'hub' ? (process.argv[3] ?? 'weights').toLowerCase() : process.argv[2];

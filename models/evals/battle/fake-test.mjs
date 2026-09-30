@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { pickTasks } from '../bench/pick-tasks.mjs';
 import { practiceChoice } from '../run-tests.mjs';
-import { listMetas, practiceList } from './store.mjs';
+import { listMetas, practiceList, LEVELS } from './store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -53,11 +53,14 @@ if (test === 'practice28') {
   say(`${model} · practice run: no model · ${thinking}`); say('loading the model…'); await wait(); say('loaded in 0 s · getting ready…');
   for (const f of ['src/cli.jsx', 'src/agent/agent.mjs', 'src/agent/prompt.mjs', 'src/app/App.jsx']) { if (stopped) break; await wait(); say(`  0:0${f.length % 9} Read ${f}`); }
   say(`${stopped ? 'stopped' : 'done'} after 0:02 · 4 steps · a practice run`); say('not recorded in the test record: a practice run (no model ran)');
-} else if (test === 'work28' || test === 'new28' || test === 'task' || test === 'mine') {
-  // As run-set.mjs prints them: One practice task is one Practice 28 test (a copy of yours too), My tests yours.
-  const name = { work28: 'Work 28', new28: 'New 28', task: 'Practice 28', mine: 'My tests' }[test];
+} else if (test === 'work28' || test === 'new28' || test === 'task' || test === 'mine' || test === 'mytest' || /^mine-(easy|medium|hard)$/.test(test)) {
+  // As run-set.mjs prints them: One practice task is one Practice 28 test (a copy of yours too), My tests yours
+  // (My tests · Easy: the ones of that level; One of my tests: the one with that number).
+  const level = /^mine-(easy|medium|hard)$/.exec(test)?.[1] ?? null;
+  const name = level ? `My tests · ${LEVELS[level].name}` : { work28: 'Work 28', new28: 'New 28', task: 'Practice 28', mine: 'My tests', mytest: 'My tests' }[test];
   const only = practiceChoice(n)?.only ?? `p${n}`; // its folder, as the real one names it: p12-feature-currency
-  const list = test === 'task' ? [[...listMetas(), ...practiceList()].map((t) => t.id).find((id) => id.startsWith(`${only}-`)) ?? only] : test === 'mine' ? listMetas().filter((t) => t.suite === 'mine').map((t) => t.id).sort() : folders(join(HERE, test));
+  const own = listMetas().filter((t) => t.suite === 'mine' && (!level || t.level === level) && (test !== 'mytest' || String(t.n) === String(n)));
+  const list = test === 'task' ? [[...listMetas(), ...practiceList()].map((t) => t.id).find((id) => id.startsWith(`${only}-`)) ?? only] : test.startsWith('mine') || test === 'mytest' ? own.map((t) => t.id).sort() : folders(join(HERE, test));
   await items(list, (t, p) => `${p ? 'PASS' : 'FAIL'}  ${t.padEnd(26)} ${String(4 + (t.length % 7)).padStart(4)}s   5 steps${p ? '' : '  — a practice fail'}`,
     `${model} · ${name} · ${thinking} · ${list.length} test${list.length === 1 ? '' : 's'}, one at a time · practice run: no model`,
     (ok, d) => `${name}: ${ok} of ${d} passed${stopped ? ' · stopped' : ''}\nnot recorded in the test record: a practice run (no model ran)`);

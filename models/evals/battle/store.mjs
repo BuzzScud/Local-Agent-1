@@ -4,6 +4,7 @@
 //   battles/<id>/      one battle of one test: battle.json, A/ and B/ (each model's run: result.json,
 //                      events.jsonl, files/ with the pages it made)
 //   trash/             a deleted test, kept (nothing is removed for good)
+//   pages/<id>/        the last page each model made for a test (the Test builder tries a test's checks on it)
 //   state.json         the line of tests waiting to run, and whether it is paused
 //   running.json       the hold: a battle or a test run wants or uses the memory (the app waits while it is there)
 //   runs/<id>/         one test run from the hub's Tests tab (▶ Run a test): job.json, run.log (what it printed)
@@ -15,6 +16,12 @@
 //   practice    the Practice 28 (p01…): the practice tasks that grade a model (models/evals/bench/tasks/),
 //               with a title, kind and rules from practice28.json. Those task folders are never changed:
 //               an edit of a Practice 28 test is saved as a copy with the next letter (p18 → p18b).
+// A test of your own (suite 'mine', made in the hub's Test builder tab or the arena's New test window)
+// may also have, in its meta.json:
+//   level    easy | medium | hard (LEVELS): its points, and its time limit in a one-model run
+//   minutes  its own time limit, in place of its level's
+//   design   true: it runs with the design folder and the layout fix on, as the app does
+//   n        its number among your tests (▶ Run tests picks one by it; never used twice)
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, cpSync, rmSync, statSync } from 'node:fs';
 import { join, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +31,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const battleHome = () => join(HOME, 'battle');
 export const BATTLE_PORT = Number((process.env.AGENTIC_BATTLE_PORT ?? '') || 8758);
 export const LIMIT_SECS = 600; // each model's run stops at 10 minutes
+// The levels of a test of your own: what a pass is worth, and how long a one-model run of it may take.
+export const LEVELS = { easy: { name: 'Easy', points: 1, minutes: 5 }, medium: { name: 'Medium', points: 2, minutes: 10 }, hard: { name: 'Hard', points: 3, minutes: 20 } };
+export const MAX_MINUTES = 60;
+// A test's time limit in a one-model run (▶ Run tests), in seconds: its own, else its level's, else
+// the arena's 10 minutes. A battle stops every test at 10 minutes, whatever its level.
+export function limitSecsOf(meta) {
+  const m = Number(meta?.minutes);
+  if (Number.isFinite(m) && m >= 1 && m <= MAX_MINUTES) return Math.round(m * 60);
+  return LEVELS[meta?.level] ? LEVELS[meta.level].minutes * 60 : LIMIT_SECS;
+}
+export const pointsOf = (meta) => LEVELS[meta?.level]?.points ?? 0;
 export const NEW28_DIR = join(HERE, 'new28');
 export const WORK28_DIR = join(HERE, 'work28');
 export const PRACTICE_DIR = join(HERE, '..', 'bench', 'tasks');
@@ -37,7 +55,7 @@ const rank = (suite) => (RANK.includes(suite) ? RANK.indexOf(suite) : RANK.lengt
 export const paths = (home = battleHome()) => ({
   home, tests: join(home, 'tests'), battles: join(home, 'battles'), trash: join(home, 'trash'),
   state: join(home, 'state.json'), hold: join(home, 'running.json'), pid: join(home, 'runner.pid'), log: join(home, 'runner.log'), seeded: join(home, 'seeded.json'),
-  runs: join(home, 'runs'), token: join(home, 'runner.token'),
+  runs: join(home, 'runs'), token: join(home, 'runner.token'), pages: join(home, 'pages'),
 });
 
 export const readJson = (f, d = null) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return d; } };
@@ -96,7 +114,7 @@ export function seedSuites(home = battleHome()) {
   return n;
 }
 
-// Every test: the sets that come with the repo (by number, a copy after its original), then yours (oldest first).
+// Every test: the sets that come with the repo (by number, a copy after its original), then yours (by their number, oldest first).
 export function listTests(home = battleHome()) {
   const P = paths(home);
   if (!existsSync(P.tests)) return [];
@@ -109,7 +127,7 @@ export function listTests(home = battleHome()) {
     out.push({ ...meta, id, prompt, files: listFiles(join(P.tests, id, 'project')), hasScript: existsSync(join(P.tests, id, 'check.sh')) });
   }
   return out.sort((a, b) => rank(a.suite) - rank(b.suite) || (rank(a.suite) === RANK.length - 1
-    ? String(a.created).localeCompare(String(b.created))
+    ? (a.n ?? 1e9) - (b.n ?? 1e9) || String(a.created).localeCompare(String(b.created))
     : (a.n ?? 0) - (b.n ?? 0) || String(a.variant ?? '').localeCompare(String(b.variant ?? ''))));
 }
 
@@ -152,14 +170,28 @@ export function listFiles(dir, max = 200) {
   return out;
 }
 
+// The next number for a test of your own: one more than the highest ever given (a deleted test keeps its own).
+function nextOwnNumber(home = battleHome()) {
+  const P = paths(home);
+  let top = 0;
+  for (const d of [P.tests, P.trash]) { let names = []; try { names = readdirSync(d); } catch {} for (const f of names) { const m = readJson(join(d, f, 'meta.json')); if (m?.suite === 'mine' && Number.isInteger(m.n)) top = Math.max(top, m.n); } }
+  return top + 1;
+}
+
 // A new test from the page (or an edit of one). files: [{ path, b64 }], added to project/.
 // removePaths: starter files to take out (paths from project/). useScript: false turns off a New 28 test's own
 // check (check.sh stays, unused), for a test whose prompt you changed so its check no longer fits.
-export function saveTest({ id = null, title, kind, prompt, checks = [], ask = '', files = [], removeFiles = false, removePaths = [], useScript = null, suite = 'mine' }, home = battleHome()) {
+// level, minutes, design (the Test builder's): left out, each stays as the test has it;
+// level null = not sorted yet, minutes null = its level's.
+export function saveTest({ id = null, title, kind, prompt, checks = [], ask = '', files = [], removeFiles = false, removePaths = [], useScript = null, suite = 'mine', level, minutes, design }, home = battleHome()) {
   const P = paths(home);
   if (!String(prompt ?? '').trim()) throw new Error('the test needs a prompt');
   if (!KINDS[kind]) throw new Error(`no kind ${kind}`);
+  if (level != null && !LEVELS[level]) throw new Error(`no level ${level} (easy, medium or hard)`);
+  if (minutes != null && !(Number.isFinite(Number(minutes)) && Number(minutes) >= 1 && Number(minutes) <= MAX_MINUTES)) throw new Error(`the time limit is 1 to ${MAX_MINUTES} minutes`);
   let tid = id ?? `m-${slug(title || prompt)}-${Date.now().toString(36).slice(-4)}`;
+  // Two new tests made in the same moment under one name (a pasted list): each gets its own folder.
+  for (let i = 2; !id && existsSync(join(P.tests, tid)); i++) tid = `m-${slug(title || prompt)}-${Date.now().toString(36).slice(-4)}${i}`;
   let dir = join(P.tests, tid);
   if (id && !existsSync(join(dir, 'meta.json'))) throw new Error('no such test');
   let old = readJson(join(dir, 'meta.json'), {});
@@ -192,6 +224,10 @@ export function saveTest({ id = null, title, kind, prompt, checks = [], ask = ''
     home: kind === 'page' || kind === 'writing' ? true : Boolean(old.home), created: old.created ?? new Date().toISOString(), edited: id ? new Date().toISOString() : undefined,
     noScript: useScript == null ? Boolean(old.noScript) : !useScript,
   };
+  if (meta.suite === 'mine' && !Number.isInteger(meta.n)) meta.n = nextOwnNumber(home);
+  if (level !== undefined) meta.level = level ?? null;
+  if (minutes !== undefined) { if (minutes == null) delete meta.minutes; else meta.minutes = Math.round(Number(minutes)); }
+  if (design !== undefined) meta.design = Boolean(design);
   writeJson(join(dir, 'meta.json'), meta);
   return meta;
 }

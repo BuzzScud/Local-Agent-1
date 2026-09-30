@@ -517,7 +517,7 @@ body.compact .tch { padding: 5px 14px; }
   }
   const verdictBrief = (r) => (!r ? { mk: 'todo', text: 'not run' } : r.skipped ? { mk: 'todo', text: 'not run' } : r.error ? { mk: 'bad', text: 'did not finish' } : r.stopped ? { mk: 'warn', text: 'stopped' } : r.overLimit ? { mk: 'warn', text: 'out of time' } : r.pass == null ? { mk: 'done', text: 'finished (no checks)' } : r.pass ? { mk: 'ok', text: 'pass' } : { mk: 'bad', text: 'fail' });
 
-  const rulesOf = (t) => [...(t.hasScript && !t.noScript ? t.rules ?? [] : []), ...(t.checks ?? []).map((c) => `${CHECKS[c.type]?.label ?? c.type}${c.value ? `: ${c.value}` : ''}`)];
+  const rulesOf = (t) => [...(t.hasScript && !t.noScript ? t.rules ?? [] : []), ...(t.checks ?? []).map((c) => c.label ?? `${CHECKS[c.type]?.label ?? c.type}${c.value ? `: ${c.value}` : ''}`)];
   // ---------- The title row ----------
   function titleRow(t) {
     const st = S.st; const qi = st.queue.indexOf(t.id);
@@ -693,6 +693,8 @@ body.compact .tch { padding: 5px 14px; }
     ['Make a page', 'Make one self-contained HTML page called timer.html with a 25-minute countdown, Start, Pause and Reset buttons, and my system\'s light or dark mode. Save it to my Desktop.'],
     ['Add a feature', 'Add a --json flag to the CLI in cli.mjs that prints the result as JSON instead of text, and add a test for it.'],
   ];
+  // The checks the Test builder tab adds (a test made there keeps them when it is edited here).
+  const MORE_CHECKS = { 'page-made': 'A page was made', count: 'The page has at least', drawn: 'It draws the bar or line', layout: 'The layout is clean' };
   const CHECKS = { tests: { label: 'The tests pass' }, 'only-named': { label: 'Nothing else changed' }, 'file-has': { label: 'A file says' }, 'answer-has': { label: 'The answer mentions' }, 'no-change': { label: 'No file was changed' }, saved: { label: 'The file is saved' }, 'scripts-valid': { label: 'Its scripts are valid' }, offline: { label: 'Nothing from the internet' }, 'page-has': { label: 'The page has' } };
   const ROWS = {
     code: [['tests', 'The tests pass', "runs the project's tests (npm test, node --test, pytest)", true, ''], ['only-named', 'Nothing else changed', 'only files named in the prompt, test files and new files may change', true, ''], ['file-has', 'A file says…', 'a word or line that must be in a changed file', false, 'e.g. export function slugify']],
@@ -777,9 +779,16 @@ body.compact .tch { padding: 5px 14px; }
     if (!t) return;
     Object.assign(F, { id: t.id, prompt: t.prompt, name: t.title, nameTouched: true, kind: t.kind, oldFiles: t.files ?? [], ask: t.ask ?? '', hasScript: t.hasScript, useScript: !t.noScript, rules: t.rules ?? [], suite: t.suite, n: t.n, variant: t.variant, copyOf: t.copyOf, edited: t.edited });
     rowsNow();
-    const have = new Map((t.checks ?? []).map((c) => [c.type, c.value]));
-    for (const r of F.rows) { r.on = have.has(r.type); r.val = have.get(r.type) ?? r.val; }
-    for (const [type, value] of have) if (!F.rows.some((r) => r.type === type)) F.rows.push({ type, t: CHECKS[type]?.label ?? type, d: 'kept from this test', on: true, ph: value ? ' ' : '', val: value });
+    // Each of its checks takes the form's row of its kind; one the form has no row for (a Test builder
+    // check, or a second one of a kind) gets a row of its own, so an edit here never drops a check.
+    for (const r of F.rows) r.on = false;
+    const taken = new Set();
+    for (const c of t.checks ?? []) {
+      const r = F.rows.find((x) => x.type === c.type && !taken.has(x));
+      if (r) { r.on = true; r.val = c.value ?? r.val; taken.add(r); continue; }
+      const row = { type: c.type, t: c.label ?? CHECKS[c.type]?.label ?? MORE_CHECKS[c.type] ?? c.type, d: 'kept from this test (made in the Test builder tab)', on: true, ph: c.value ? ' ' : '', val: c.value ?? '' };
+      F.rows.push(row); taken.add(row);
+    }
     F.base = snapshotF();
   }
   // S.modal: 'new' (New test), 'edit' (Edit tests) or false.

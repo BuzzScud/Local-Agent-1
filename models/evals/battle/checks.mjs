@@ -10,6 +10,13 @@
 //   scripts-valid every script in the page parses (checked without a browser)
 //   offline       the page loads nothing from the internet
 //   page-has      the page has this text (words on it, or a button's label)
+//   page-made     a page was made (a new or changed .html file)
+//   count         the page has at least so many buttons or list items (value: button>=3, li>=5)
+//   drawn         the page draws its bar or line: an svg, a canvas, a progress element, or an
+//                 element named as one (spark, progress, bar, chart)
+//   layout        the layout is clean: the app's own layout check finds nothing (no sideways
+//                 scroll, no overlap, no faint or tiny text, at a desktop size, on a phone and in
+//                 dark mode). It needs a browser, so it is measured by runChecksWith
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -25,7 +32,21 @@ export const CHECKS = {
   'scripts-valid': { label: 'Its scripts are valid', value: null },
   offline: { label: 'Nothing from the internet', value: null },
   'page-has': { label: 'The page has', value: 'the text' },
+  'page-made': { label: 'A page was made', value: null },
+  count: { label: 'The page has at least', value: 'how many of what, e.g. button>=3 or li>=5' },
+  drawn: { label: 'It draws the bar or line', value: null },
+  layout: { label: 'The layout is clean', value: null },
 };
+// What a count check counts: button>=3, li>=5. null: not one of those.
+const COUNT = /^(button|li)>=(\d+)$/;
+const THINGS = { button: ['a button', 'buttons'], li: ['a list item', 'list items'] };
+export function countOf(value) { const m = COUNT.exec(String(value ?? '').trim()); return m ? { what: m[1], n: Number(m[2]) } : null; }
+// A check in words: "The page has at least 3 buttons", "A file says: TODO".
+export function labelOf(c) {
+  const v = String(c?.value ?? '').trim();
+  if (c?.type === 'count') { const k = countOf(v); if (k) return k.n === 1 ? `The page has ${THINGS[k.what][0]}` : `The page has at least ${k.n} ${THINGS[k.what][1]}`; }
+  return `${CHECKS[c?.type]?.label ?? c?.type}${v ? `: ${v}` : ''}`;
+}
 const SKIP = new Set(['node_modules', '.git', '.DS_Store', '.agentic', '.bonsai', '.agentic-check', '__pycache__', '.pytest_cache']);
 
 // Every file under a folder with a hash of its bytes: { 'src/a.mjs': 'sha…' }.
@@ -84,16 +105,21 @@ export function scriptsParse(html) {
 }
 const external = (html) => /<(script|link|img|iframe)\b[^>]+(src|href)\s*=\s*["']?(https?:)?\/\//i.test(html) || /@import\s+url\(\s*["']?(https?:)?\/\//i.test(html);
 
+const BUTTON = /<button\b|role\s*=\s*["']button["']|<input[^>]+type\s*=\s*["'](?:button|submit)["']/gi;
+const DRAWN = (html) => /<svg\b|<canvas\b|<progress\b/i.test(html) || /(?:class|id)\s*=\s*["'][^"']*(?:spark|progress|bar|chart)[^"']*["']/i.test(html);
+
 // Runs the checks. work: the model's folder after its run; before: its snapshot at the start.
-export function runChecks({ checks = [], script = null, work, before, answer = '', prompt = '', env = process.env, timeoutMs = 120_000 }) {
+// layout: what the layout check found on the pages it made ([{ file, problems } or { file, skipped }]),
+// measured beforehand by runChecksWith; without it a layout check fails as not measured.
+export function runChecks({ checks = [], script = null, work, before, answer = '', prompt = '', env = process.env, timeoutMs = 120_000, layout = null }) {
   const after = snapshot(work);
   const ch = changes(before, after);
   const all = [...ch.added, ...ch.changed];
   const out = [];
   for (const c of checks) {
     const v = String(c.value ?? '').trim();
-    const label = `${CHECKS[c.type]?.label ?? c.type}${v ? `: ${v}` : ''}`;
-    let pass = false; let why = '';
+    const label = labelOf(c);
+    let pass = false; let why = ''; let problems = null;
     switch (c.type) {
       case 'tests': {
         const cmd = v || testCommand(work);
@@ -150,13 +176,53 @@ export function runChecks({ checks = [], script = null, work, before, answer = '
         why = pass ? '' : !pages.length ? 'it made no page' : v ? `no page has "${v}"` : 'no text given to look for';
         break;
       }
+      case 'page-made': {
+        pass = htmlFiles(work, ch).length > 0; why = pass ? '' : 'it made no page';
+        break;
+      }
+      case 'count': {
+        const pages = htmlFiles(work, ch); const k = countOf(v);
+        if (!k) { why = 'no count given (button>=3, li>=5)'; break; }
+        if (!pages.length) { why = 'it made no page'; break; }
+        const most = Math.max(...pages.map((f) => (read(join(work, f)).match(k.what === 'li' ? /<li\b/gi : BUTTON) ?? []).length));
+        pass = most >= k.n; why = pass ? '' : `it has ${most}`;
+        break;
+      }
+      case 'drawn': {
+        const pages = htmlFiles(work, ch);
+        if (!pages.length) { why = 'it made no page'; break; }
+        pass = pages.some((f) => DRAWN(read(join(work, f)))); why = pass ? '' : 'no svg, canvas, progress or bar element';
+        break;
+      }
+      case 'layout': {
+        if (!htmlFiles(work, ch).length) { why = 'it made no page'; break; }
+        if (!layout?.length) { why = 'not measured: the layout check needs a browser'; break; }
+        const skipped = layout.find((x) => x.skipped);
+        if (skipped) { why = `not measured: ${skipped.skipped}`; break; }
+        problems = layout.flatMap((x) => x.problems ?? []);
+        pass = !problems.length; why = pass ? '' : `${problems.length} problem${problems.length === 1 ? '' : 's'}: ${problems[0]}`;
+        break;
+      }
       default: why = `unknown check ${c.type}`;
     }
-    out.push({ label, pass, why });
+    out.push({ label, pass, why, ...(problems?.length ? { problems } : {}) });
   }
   if (script && existsSync(script)) {
     const r = spawnSync('/bin/zsh', [script], { cwd: work, encoding: 'utf8', timeout: timeoutMs, env });
     out.push({ label: 'The test\'s own check', pass: r.status === 0, why: r.status === 0 ? '' : whyOf(r) });
   }
   return { checks: out, pass: out.length ? out.every((c) => c.pass) : null, files: ch };
+}
+
+// The same, for a test with a layout check: the pages it made are measured first. The layout check
+// is the app's own (terminal/index.mjs layoutCheck): whoever calls hands it over, so this file
+// needs nothing from the terminal part. At most three pages are measured.
+export async function runChecksWith(opts, { layoutCheck = null } = {}) {
+  let layout = null;
+  if ((opts.checks ?? []).some((c) => c.type === 'layout') && layoutCheck) {
+    const pages = htmlFiles(opts.work, changes(opts.before, snapshot(opts.work))).slice(0, 3);
+    layout = [];
+    for (const f of pages) { try { layout.push({ file: f, ...(await layoutCheck(join(opts.work, f))) }); } catch (e) { layout.push({ file: f, skipped: e.message }); } }
+  }
+  return runChecks({ ...opts, layout });
 }

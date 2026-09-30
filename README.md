@@ -78,6 +78,11 @@ Tests tab: `/settings` → Tests (or `/tests`) in Agentic Coder, or `coding hub 
 off or on (the T key flips it), press Run, and watch it live; it keeps going if you close Agentic Coder, and Stop
 is there while it runs.
 
+The hub's **Test builder** tab (`coding hub builder`, or + New test on the Tests tab) is where tests of your own are
+made: paste a list of prompts or write one, give each a level (Easy, Medium, Hard: its points and its time limit),
+confirm the checks suggested from the prompt's words, try them on a page with no model, then run them by level from
+the Tests tab. They are kept on the Mac only, in `~/.agentic-coder/battle/tests/`.
+
 Every diagram, preview, report and test page lives in [`docs/`](docs/README.md), newest first.
 
 Setup on a new Mac: `bun install`, `bun run install-cli`, then `coding setup` builds the model server (llama.cpp

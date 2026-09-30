@@ -5,6 +5,9 @@
 // (thinking off), the context helpers as the app has them, on a throwaway copy of the
 // test's files; a test that is about the home folder (a page saved "to my Desktop") runs
 // with its copy as the home folder, so your real Desktop is never touched.
+// A test of your own with the design folder switched on (the Test builder's switch) runs with the
+// design cards and the layout fix, as the app does; every other test runs with both off, as before.
+// Its time limit is its own (its level's), unless --timeout says otherwise.
 // While it works it writes each step to <out>/events.jsonl (the page shows them live); at
 // the end <out>/result.json, and the pages it made under <out>/files/. Stopped (SIGTERM),
 // it still writes what it has, as stopped.
@@ -12,24 +15,28 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync, appendFileSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { MODELS, ModelServer, Embedder, embedderReady } from '../../index.mjs';
-import { runHeadless, helpersOn, testSettings, modelWithLimits } from '../../../terminal/index.mjs';
+import { runHeadless, helpersOn, testSettings, modelWithLimits, layoutCheck } from '../../../terminal/index.mjs';
 // A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
 const panel = testSettings();
-import { runChecks, snapshot } from './checks.mjs';
-import { LIMIT_SECS, readJson } from './store.mjs';
+import { runChecksWith, snapshot } from './checks.mjs';
+import { readJson, limitSecsOf, pointsOf } from './store.mjs';
+import { keepPage } from './builder.mjs';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
 const model = MODELS[opt('model')] && modelWithLimits(MODELS[opt('model')], panel ?? {});
 const test = opt('test');
 const out = opt('out');
-const limitMs = Number(opt('timeout', LIMIT_SECS)) * 1000;
 const ctx = Number(opt('ctx', panel?.context ?? 32768));
 const thinking = opt('think', 'off') === 'on';
 if (!model || !test || !out) { console.error('usage: run-one.mjs --model <id> --test <dir> --out <dir>'); process.exit(2); }
 mkdirSync(join(out, 'files'), { recursive: true });
 
 const meta = readJson(join(test, 'meta.json'), {});
+const limitMs = Number(opt('timeout', limitSecsOf(meta))) * 1000;
+// The design folder: the test's own switch decides, not what the shell happens to have set.
+const design = meta.design === true ? { auto: true, check: true, sets: 'all' } : undefined;
+if (design) for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS']) delete process.env[k];
 const prompt = readFileSync(join(test, 'task.txt'), 'utf8').trim();
 const KIND = { Read: 'read', Search: 'read', Plan: 'plan', Update: 'edit', Write: 'edit', Test: 'edit', Bash: 'bash', Ask: 'ask' };
 const events = join(out, 'events.jsonl');
@@ -64,7 +71,7 @@ try {
   timer = setTimeout(() => { why = 'time'; ac.abort(); }, limitMs);
   if (meta.home) process.env.HOME = work;
   const answers = (q) => { const hit = (meta.answers ?? []).find((r) => new RegExp(r.match, 'i').test(q)); emit({ type: 'asked', text: q, reply: hit?.reply ?? null }); return hit ? hit.reply : 'I do not know. If the files do not tell you, decide for yourself and say what you chose.'; };
-  run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort: thinking ? 'high' : undefined, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: true, flows: true, helpers, embedder, prewarm: true,
+  run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort: thinking ? 'high' : undefined, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: true, flows: true, helpers, embedder, prewarm: true, design,
     onEvent: (type, ev) => {
       if (type === 'tool') emit({ type: 'step', label: ev.label, arg: String(ev.arg ?? '').replace(/\s+/g, ' ').slice(0, 120), kind: ev.error ? 'error' : (KIND[ev.label] ?? 'read'), err: ev.error ? String(ev.error).slice(0, 160) : '' });
       if (type === 'note') emit({ type: 'note', text: ev.text });
@@ -88,12 +95,14 @@ const answer = run.finalText ?? '';
 writeFileSync(join(dir, 'answer.txt'), answer);
 // The questions it asked you, where the Practice 28 checks look for them ("fix the bug" must ask first).
 writeFileSync(join(dir, 'asked.txt'), (run.asked ?? []).map((a) => a.question).join('\n'));
-const checked = runChecks({ checks: meta.checks ?? [], script: !meta.noScript && existsSync(join(test, 'check.sh')) ? join(test, 'check.sh') : null, work, before, answer, prompt });
+const checked = await runChecksWith({ checks: meta.checks ?? [], script: !meta.noScript && existsSync(join(test, 'check.sh')) ? join(test, 'check.sh') : null, work, before, answer, prompt }, { layoutCheck });
 // The pages it made or changed, kept for the page (its own copy, so it opens offline).
 const pages = [...checked.files.added, ...checked.files.changed].filter((f) => /\.html?$/i.test(f)).slice(0, 6);
 for (const f of pages) { const to = join(out, 'files', f); mkdirSync(dirname(to), { recursive: true }); cpSync(join(work, f), to); }
+// A test of your own keeps the last page each model made for it: the Test builder tries its checks on it.
+if (meta.suite === 'mine' && meta.id && pages.length) keepPage(meta.id, model.id, join(work, pages[0]));
 const result = {
-  model: model.id, thinking, pass: checked.pass, checks: checked.checks, reason: run.reason, stopped: why === 'stopped', overLimit: why === 'time',
+  model: model.id, thinking, design: Boolean(design), level: meta.level ?? null, points: pointsOf(meta), limitSecs: Math.round(limitMs / 1000), pass: checked.pass, checks: checked.checks, reason: run.reason, stopped: why === 'stopped', overLimit: why === 'time',
   secs: Math.round((run.secs ?? 0) * 10) / 10, steps, stepCount: run.steps ?? steps.length, errors: run.toolErrors ?? steps.filter((s) => s.kind === 'error').length,
   tps: run.tps ? Math.round(run.tps * 10) / 10 : null, outTokens: run.outTokens ?? null, answer, diffs, pages, asked: (run.asked ?? []).map((a) => a.question),
   changed: checked.files,

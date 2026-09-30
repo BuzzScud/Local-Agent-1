@@ -3,8 +3,11 @@
 // the context helpers, a throwaway copy of the test's files, its own checks, 10 minutes at most
 // once the model is loaded). The hub's ▶ Run a test starts it (One practice task is
 // --set practice --only p12, or p18b for a copy of yours); it runs from Terminal too:
-//   node models/evals/battle/run-set.mjs --model gemma --set work28|new28|practice|mine [--only w01,w05] [--out dir] [--think on]
-// --think on: thinking on, at High (a battle runs Low); each test still stops at 10 minutes.
+//   node models/evals/battle/run-set.mjs --model gemma --set work28|new28|practice|mine [--only w01,w05] [--level easy|medium|hard] [--out dir] [--think on]
+// --think on: thinking on, at High (a battle runs Low); each test still stops at its limit.
+// --level (your own tests): only the tests of that level (the Test builder sets it). A test of your
+// own stops at its level's time (Easy 5, Medium 10, Hard 20 minutes, or its own) and is worth its
+// level's points (1, 2, 3): the run ends with the points it got.
 // It plays your copies in the arena (~/.agentic-coder/battle/tests/), so an edit made there is what
 // runs. One line per test as it ends, then a line in the test record (Battle sets). Raw results:
 // models/<model>/results/sets/<set>-<time>/<test>/ (result.json, events.jsonl, run.log, files/).
@@ -17,7 +20,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MODELS, modelFolder } from '../../registry.mjs';
 import { recordTest, codeLabel } from '../record.mjs';
-import { paths, seedSuites, listTests, readJson, LIMIT_SECS, SUITES } from './store.mjs';
+import { paths, seedSuites, listTests, readJson, SUITES, LEVELS, limitSecsOf, pointsOf } from './store.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -27,14 +30,15 @@ const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i
 const SETS = ['work28', 'new28', 'practice', 'mine'];
 const model = MODELS[opt('model')];
 const set = opt('set');
-if (!model || !SETS.includes(set)) { console.error(`usage: run-set.mjs --model <${Object.keys(MODELS).join('|')}> --set <${SETS.join('|')}> [--only w01,w05]`); process.exit(2); }
+const level = opt('level', null);
+if (!model || !SETS.includes(set) || (level && (!LEVELS[level] || set !== 'mine'))) { console.error(`usage: run-set.mjs --model <${Object.keys(MODELS).join('|')}> --set <${SETS.join('|')}> [--only w01,w05] [--level easy|medium|hard, with --set mine]`); process.exit(2); }
 const only = opt('only', null)?.split(',').map((s) => s.trim()).filter(Boolean);
 const thinking = opt('think', 'off') === 'on';
 
 seedSuites();
 const P = paths();
-const tests = listTests().filter((t) => t.suite === set && (!only || only.some((o) => t.id === o || t.id.startsWith(`${o}-`))));
-if (!tests.length) { console.error(`no ${SUITES[set]} tests${only ? ` named ${only.join(', ')}` : ''} in ${P.tests}`); process.exit(1); }
+const tests = listTests().filter((t) => t.suite === set && (!level || t.level === level) && (!only || only.some((o) => t.id === o || t.id.startsWith(`${o}-`))));
+if (!tests.length) { console.error(`no ${SUITES[set]} tests${level ? ` at ${LEVELS[level].name}` : ''}${only ? ` named ${only.join(', ')}` : ''} in ${P.tests}`); process.exit(1); }
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const outDir = resolve(opt('out', join(modelFolder(model), 'results', 'sets', `${set}-${stamp}`)));
 mkdirSync(outDir, { recursive: true });
@@ -60,10 +64,11 @@ function playOne(t) {
     mkdirSync(out, { recursive: true });
     const fd = openSync(join(out, 'run.log'), 'w');
     const env = { ...process.env }; delete env.FORCE_COLOR;
-    child = spawn(process.execPath, [join(HERE, FAKE ? 'fake-one.mjs' : 'run-one.mjs'), '--model', model.id, '--test', join(P.tests, t.id), '--out', out, '--timeout', String(LIMIT_SECS), ...(thinking ? ['--think', 'on'] : [])], { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
+    const limit = limitSecsOf(t);
+    child = spawn(process.execPath, [join(HERE, FAKE ? 'fake-one.mjs' : 'run-one.mjs'), '--model', model.id, '--test', join(P.tests, t.id), '--out', out, '--timeout', String(limit), ...(thinking ? ['--think', 'on'] : [])], { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
     closeSync(fd);
-    // Loading is not counted in its 10 minutes: past that and a margin, it is stopped hard.
-    const guard = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, (LIMIT_SECS + 150) * 1000);
+    // Loading is not counted in its time: past that and a margin, it is stopped hard.
+    const guard = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, (limit + 150) * 1000);
     child.on('exit', (code, sig) => {
       clearTimeout(guard);
       child = null;
@@ -76,21 +81,26 @@ function playOne(t) {
   });
 }
 
-const whyOf = (r) => {
+const mins = (t) => Math.round(limitSecsOf(t) / 60);
+const whyOf = (r, t) => {
   if (r.error) return r.error;
-  if (r.overLimit) return 'went past 10 minutes';
+  if (r.overLimit) return `went past ${mins(t)} minutes`;
   if (r.stopped) return 'stopped';
   const bad = (r.checks ?? []).find((c) => !c.pass);
   return bad ? `${bad.label}${bad.why ? `: ${bad.why}` : ''}` : '';
 };
 const clock = (s) => `${Math.floor(s / 60)} min ${String(Math.round(s % 60)).padStart(2, '0')} s`;
-const name = SUITES[set];
+const name = level ? `${SUITES[set]} · ${LEVELS[level].name}` : SUITES[set];
 // Its line in the test record: one practice test by its number and title ("Practice test 18b: …"),
-// your own tests as My tests, a whole set as "The Work 28".
+// one of your own by its number ("My test 3: …"), your own tests as My tests (or "My tests · Easy"),
+// a whole set as "The Work 28".
 const one = set === 'practice' && tests.length === 1 ? tests[0] : null;
+const mineOne = set === 'mine' && only && tests.length === 1 ? tests[0] : null;
 const recName = (ran) => (one ? `Practice test ${one.n}${one.variant ?? ''}: ${one.title}, one model`
+  : mineOne ? `My test ${mineOne.n ?? mineOne.id}: ${mineOne.title}, one model`
   : `${set === 'mine' ? name : `The ${name}`}${only ? ` (${ran} picked)` : ''}, one model`);
-console.log(`${model.name} · ${name} · thinking ${thinking ? 'on (High)' : 'off (Low)'} · ${tests.length} test${tests.length === 1 ? '' : 's'}, one at a time, each stops at 10 minutes${FAKE ? ' · practice run: no model' : ''}`);
+const limits = [...new Set(tests.map(mins))].sort((a, b) => a - b);
+console.log(`${model.name} · ${name} · thinking ${thinking ? 'on (High)' : 'off (Low)'} · ${tests.length} test${tests.length === 1 ? '' : 's'}, one at a time, each stops at ${limits.length === 1 ? `${limits[0]} minutes` : `its own limit (${limits.join(', ')} minutes)`}${FAKE ? ' · practice run: no model' : ''}`);
 const rows = [];
 const t0 = Date.now();
 for (const t of tests) {
@@ -100,17 +110,19 @@ for (const t of tests) {
   if (stopping && r.stopped) break;
   const pass = r.pass === true && !r.overLimit && !r.stopped && !r.error;
   const mark = r.pass == null && !r.error && !r.overLimit ? 'NONE' : pass ? 'PASS' : 'FAIL';
-  const why = mark === 'NONE' ? 'no check: read its answer in the results' : pass ? '' : whyOf(r);
-  rows.push({ id: t.id, title: t.title, kind: t.kind, pass, mark, secs: Math.round(r.secs ?? 0), steps: r.stepCount ?? 0, errors: r.errors ?? 0, why });
+  const why = mark === 'NONE' ? 'no check: read its answer in the results' : pass ? '' : whyOf(r, t);
+  rows.push({ id: t.id, title: t.title, kind: t.kind, level: t.level ?? null, points: pointsOf(t), pass, mark, secs: Math.round(r.secs ?? 0), steps: r.stepCount ?? 0, errors: r.errors ?? 0, why });
   console.log(`${mark}  ${t.id.padEnd(26)} ${String(Math.round(r.secs ?? 0)).padStart(4)}s  ${String(r.stepCount ?? 0).padStart(2)} steps${why ? `  — ${why}` : ''}`);
 }
 const passed = rows.filter((r) => r.pass).length;
 const secs = rows.reduce((s, r) => s + r.secs, 0);
-writeFileSync(join(outDir, 'summary.json'), JSON.stringify({ model: model.id, set, thinking, only: only ?? null, fake: FAKE, stopped: stopping, at: new Date(t0).toISOString(), passed, total: rows.length, secs, rows }, null, 1));
-console.log(`${name} on ${model.name.split(' ')[0]}: ${passed} of ${rows.length} passed${stopping ? ' · stopped' : ''} · ${clock(secs)} of test time, ${clock((Date.now() - t0) / 1000)} in all`);
+// The points: each passed test of your own is worth its level's (Easy 1, Medium 2, Hard 3).
+const points = rows.some((r) => r.points) ? { got: rows.filter((r) => r.pass).reduce((s, r) => s + r.points, 0), of: rows.reduce((s, r) => s + r.points, 0) } : null;
+writeFileSync(join(outDir, 'summary.json'), JSON.stringify({ model: model.id, set, level: level ?? null, thinking, only: only ?? null, fake: FAKE, stopped: stopping, at: new Date(t0).toISOString(), passed, total: rows.length, points, secs, rows }, null, 1));
+console.log(`${name} on ${model.name.split(' ')[0]}: ${passed} of ${rows.length} passed${points ? ` · ${points.got} of ${points.of} points` : ''}${stopping ? ' · stopped' : ''} · ${clock(secs)} of test time, ${clock((Date.now() - t0) / 1000)} in all`);
 const failed = rows.filter((r) => !r.pass).map((r) => r.id);
 if (rows.length) recordTest({ kind: 'sets', model: model.id, name: recName(rows.length), code: codeLabel(REPO), effort: thinking ? 'high' : 'low', ctx: 32768,
-  passed, total: rows.length, secs, part: Boolean(only) || stopping, result: stopping ? 'stopped' : undefined,
-  note: [FAKE ? 'practice run: no model ran' : '', failed.length ? `failed: ${failed.join(', ')}` : ''].filter(Boolean).join(' · '), raw: outDir });
+  passed, total: rows.length, secs, part: Boolean(only) || stopping, result: stopping ? 'stopped' : undefined, level: level ?? mineOne?.level ?? null, points,
+  note: [FAKE ? 'practice run: no model ran' : '', points ? `${points.got} of ${points.of} points` : '', failed.length ? `failed: ${failed.join(', ')}` : ''].filter(Boolean).join(' · '), raw: outDir });
 console.log(`saved ${outDir}/summary.json`);
 process.exit(0);

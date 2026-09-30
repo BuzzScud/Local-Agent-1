@@ -241,7 +241,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   const mark = (r) => (r.result === 'stopped' ? ['stop', '■'] : measured(r) ? ['meas', ''] : r.result === 'pass' ? ['ok', '✓'] : ['bad', '✗']);
   const words = (r) => (r.total != null ? `${r.passed} of ${r.total}${r.result === 'stopped' ? ' · stopped' : ''}` : r.result === 'stopped' ? 'stopped' : measured(r) ? 'measured' : r.result === 'pass' ? 'passed' : 'failed');
   const result = (r) => { const [c, m] = mark(r); return `<span class="${c}"${measured(r) ? ' title="Measured: a number, not a pass or fail"' : r.bar ? ` title="Its bar: ${esc(r.bar)}"` : ''}>${m ? `${m} ` : ''}${esc(words(r))}</span>`; };
-  const barWords = (r) => (measured(r) ? `Measured: a number, not a pass or fail${r.total != null ? ' · higher is better' : ''}` : r.bar ? `Its bar: ${r.bar}` : '');
+  const barWords = (r) => (measured(r) ? `Measured: a number, not a pass or fail${r.total != null ? ' · higher is better' : ''}` : r.bar ? `Its bar: ${r.bar}` : r.points ? `${r.points.got} of ${r.points.of} points · a pass is worth its level’s (Easy 1, Medium 2, Hard 3) · higher is better` : '');
 
   // The run before this one of the same test: its name, model, thinking (effort) and whether it was the
   // whole set; a stopped run is left out. A part of a set (one task of 28) has none: each is another task.
@@ -598,7 +598,12 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     const q = new URL(location.href).searchParams;
     if (q.get('test')) { ui.mode = 'pick'; ui.focus = q.get('test'); if (!ui.picked.includes(ui.focus)) ui.picked.push(ui.focus); }
     if (q.get('model') && q.get('model') !== 'none') ui.model = q.get('model');
-    if (q.get('n')) ui.n = String(q.get('n'));
+    // ui.ns: the task picked, per test that picks one (One practice task, One of my tests); ui.n is the old single one.
+    ui.ns = { task: ui.n, ...(ui.ns ?? {}) };
+    if (q.get('n')) { ui.ns[q.get('test') || 'task'] = String(q.get('n')); if ((q.get('test') || 'task') === 'task') ui.n = String(q.get('n')); }
+    // ▶ Run in the Test builder tab: straight to the run list, where the test has its own ▶.
+    // Only that test is in the list, so "run all" there can never start something else you had ticked.
+    if (q.get('list') && q.get('test')) { ui.mode = 'list'; ui.picked = [q.get('test')]; ui.since = Date.now(); ui.sel = null; }
     if (q.get('think')) ui.effort = q.get('think') === 'on' ? 'high' : 'low';
 
     const isLive = (j) => Boolean(j && (j.status === 'waiting' || j.status === 'running'));
@@ -628,7 +633,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     const effortWord = (think) => (think ? 'High' : 'Low');
 
     // One test as the panel would run it now: the runner gets these, and `key` names it in the run list.
-    const taskKey = (t) => (t.choices?.some((c) => c.key === ui.n) ? ui.n : t.choices?.find((c) => c.key === t.pick?.default)?.key ?? t.choices?.[0]?.key ?? ui.n);
+    const taskKey = (t) => { const n = ui.ns?.[t.id] ?? (t.id === 'task' ? ui.n : null); return t.choices?.some((c) => c.key === n) ? n : t.choices?.find((c) => c.key === t.pick?.default)?.key ?? t.choices?.[0]?.key ?? n; };
     function itemOf(t) {
       const model = t.model ? mid() : null, think = Boolean(t.model && t.think && effort() !== 'low');
       const n = t.pick ? taskKey(t) : null, settings = t.model ? setNow() : null;
@@ -640,7 +645,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     function lastAt(it, { anySet = false, before = Infinity } = {}) {
       const t = it.t, re = new RegExp(t.record.name);
       return all.find((r) => r.kind === t.record.kind && re.test(r.name) && Boolean(r.part) === t.record.part && r.result !== 'stopped'
-        && (!t.pick || r.name.startsWith(`Practice test ${it.n}:`)) && new Date(r.at).getTime() < before
+        && (!t.pick || r.name.startsWith(`${t.pick.prefix ?? 'Practice test '}${it.n}:`)) && new Date(r.at).getTime() < before
         && (t.model ? r.model === it.model && effortOfRow(r) === (it.think ? 'high' : 'low') && (anySet || canon(r.settings) === canon(it.settings)) : !r.model)) ?? null;
     }
     function est(it) {
@@ -698,13 +703,13 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const rows = tests.map((t) => {
         const it = itemOf(t), on = ui.picked.includes(t.id) && usable(t), r = usable(t) ? lastAt(it) : null, e = usable(t) ? est(it) : null;
         const lastCell = !usable(t) ? '<span class="rt-never">none made yet</span>' : r ? lastWords(r) : `<span class="rt-never">${it.settings ? 'never at these settings' : 'never run'}</span>`;
-        return `<tr data-t="${t.id}" aria-selected="${ui.focus === t.id}"${usable(t) ? '' : ' class="off"'}><td><button type="button" class="rt-tg${on ? ' on' : ''}" data-tg="${t.id}" aria-pressed="${on}" aria-label="Run ${esc(t.name)}"${usable(t) ? '' : ' disabled'}>✓</button></td><td class="t" title="${esc(t.what)}">${esc(t.name)}${t.pick ? ` ${esc(it.n)}` : ''}${!t.model ? '<span class="q">no model</span>' : !t.think ? '<span class="q">no thinking</span>' : ''}</td><td>${lastCell}</td><td class="rt-tm">${e != null ? `≈ ${dur(e)}` : '<span class="rt-never">?</span>'}</td></tr>`;
+        return `<tr data-t="${t.id}" aria-selected="${ui.focus === t.id}"${usable(t) ? '' : ' class="off"'}><td><button type="button" class="rt-tg${on ? ' on' : ''}" data-tg="${t.id}" aria-pressed="${on}" aria-label="Run ${esc(t.name)}"${usable(t) ? '' : ' disabled'}>✓</button></td><td class="t" title="${esc(t.what)}">${esc(t.name)}${t.pick && it.n != null ? ` ${esc(it.n)}` : ''}${!t.model ? '<span class="q">no model</span>' : !t.think ? '<span class="q">no thinking</span>' : ''}</td><td>${lastCell}</td><td class="rt-tm">${e != null ? `≈ ${dur(e)}` : '<span class="rt-never">?</span>'}</td></tr>`;
       }).join('');
       const list = `<div class="rt-box rt-list" data-scroll="list"><table><colgroup><col class="c-tick"><col><col class="c-last"><col class="c-tm rt-tm"></colgroup><thead><tr><th>Run</th><th>Test</th><th>${ch.length ? 'Last at these settings' : `Last on ${esc(shortName(modelName(mid())))} · ${esc(levels().find((l) => l.id === effort()).show)}`}</th><th class="rt-tm">Time</th></tr></thead><tbody>${rows}</tbody></table></div>`;
       // The test picked: what it is and what it runs, the practice task, or + New test.
       const f = testOf(ui.focus) ?? tests[0], fi = itemOf(f);
-      const task = f.pick ? `<label class="rt-task"><span>Task</span><select id="rt-n" aria-label="Which practice task">${f.choices.map((x) => `<option value="${esc(x.key)}"${x.key === fi.n ? ' selected' : ''}>${esc(x.key)} · ${esc(cut(x.title, 44))}${x.copy ? ' (your copy)' : ''}</option>`).join('')}</select></label>` : '';
-      const about = `<div class="rt-box rt-about"><div class="rt-ah"><b>${esc(f.name)}</b><span class="q">${f.model ? (f.think ? 'uses the whole panel' : 'uses the panel, never thinks') : 'takes no model: the panel does not apply'}</span>${f.own ? '<button type="button" class="rt-new" id="rt-new" title="Make a test of your own: opens the Battle tab’s New test window. It needs at least one check.">+ New test</button>' : ''}</div><p>${esc(f.what)}${f.own && !f.total ? ' You have none yet: + New test makes one.' : ''}</p>${task}<p><code>${esc(cmdOf(fi))}</code></p></div>`;
+      const task = f.pick && f.choices.length ? `<label class="rt-task"><span>${f.pick.own ? 'Test' : 'Task'}</span><select id="rt-n" data-t="${esc(f.id)}" aria-label="${f.pick.own ? 'Which test of yours' : 'Which practice task'}">${f.choices.map((x) => `<option value="${esc(x.key)}"${x.key === fi.n ? ' selected' : ''}>${esc(x.key)} · ${esc(cut(x.title, 44))}${x.copy ? ' (your copy)' : ''}</option>`).join('')}</select></label>` : '';
+      const about = `<div class="rt-box rt-about"><div class="rt-ah"><b>${esc(f.name)}</b><span class="q">${f.model ? (f.think ? 'uses the whole panel' : 'uses the panel, never thinks') : 'takes no model: the panel does not apply'}</span>${f.own ? '<button type="button" class="rt-new" id="rt-new" title="Make a test of your own: opens the Test builder tab on a new test. It needs a level and at least one check.">+ New test</button>' : ''}</div><p>${esc(f.what)}${f.own && !f.total ? (f.level ? ' You have none at this level yet: the Test builder tab sets a test’s level.' : ' You have none yet: + New test makes one.') : ''}</p>${task}<p><code>${esc(cmdOf(fi))}</code></p></div>`;
       const right = `<div class="rt-box rt-panel"><div class="rt-ph"><b>This run</b><span>↑ ↓ picks a row · ← → changes it · kept for next time</span></div><div class="rt-rows" data-scroll="rows">${panelHtml()}</div>${fullNote()}<div class="rt-pf"><span>${ch.length ? `${ch.length} ${ch.length === 1 ? 'row' : 'rows'} changed: a result is kept with its settings and compared with runs made the same way` : 'All at the tests’ defaults: results compare with every earlier run at the defaults'}</span><button type="button" class="rt-ghost" data-act="reset" style="margin-left:auto"${ch.length ? '' : ' disabled'}>Reset all</button></div></div>`;
       const anyModel = picked.some((it) => it.model);
       const running = isLive(st.job) ? ` · <span class="rt-warn">running now: ${esc(st.job.name)}</span> <button type="button" class="rt-link" data-act="list">the run list ›</button>` : st.line.length ? ` · <span class="rt-warn">${st.line.length} waiting to run</span> <button type="button" class="rt-link" data-act="list">the run list ›</button>` : '';
@@ -902,10 +907,10 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
         for (const it of listItems().filter((x) => stateOf(x).s === 'new')) if (!(await send('/tests/run', runBody(it)))) break;
         return;
       }
-      // + New test: the Battle tab's New test window (the hub switches to it; this page alone opens the hub there).
+      // + New test: the Test builder tab on a new test (the hub switches to it; this page alone opens the hub there).
       if (el('#rt-new')) {
         if (window.parent !== window) { try { parent.postMessage({ agentic: 'new-test' }, location.origin); return; } catch { /* not the hub's frame */ } }
-        location.href = '/?tab=battle&new=1';
+        location.href = '/?tab=builder&new=1';
         return;
       }
       // A row shows its test below the list; a click in its first cell (around the tick) ticks it too.
@@ -918,7 +923,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
       const lr = el('tr[data-key]');
       if (lr) { ui.sel = lr.dataset.key; save(); render(); }
     });
-    box.addEventListener('change', (e) => { if (e.target.id === 'rt-n') { ui.n = e.target.value; save(); render(); } });
+    box.addEventListener('change', (e) => { if (e.target.id === 'rt-n') { const id = e.target.dataset.t || 'task'; (ui.ns ??= {})[id] = e.target.value; if (id === 'task') ui.n = e.target.value; save(); render(); } });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && !box.hidden) poll(); });
     // The keys, while picking: ↑ ↓ picks a panel row, ← → changes it (the page's own keys otherwise).
     function key(e) {
@@ -966,7 +971,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 <li>A check is ✓ or ✗; where it passes with fewer than all right, its bar shows beside it ("at most 4 wrong"). A measurement (16 of 50 found, a speed) is a grey number with no mark: it counts something, it does not pass or fail. A unit-test run that fails keeps the names of the tests that failed, and each is marked by the run after it: flaky (it passed the next run on the same code), passed the next run (the code had changed), or failed again.</li>
 <li>${live ? 'This tab reads the file each time it opens, so it is always current. A saved copy of this page is kept in the DOCS folder under tests.' : `This is the saved copy, written ${day(data.made)} at ${clock(data.made)}. In Agentic Coder, <code>/docs</code> and then the Tests tab shows the record as it is now.`}</li>
 <li>Raw results stay on this Mac under <code>models/&lt;model&gt;/results/</code>; a results page, where one was made, is in the DOCS folder.</li>
-<li>${live ? '▶ Run tests: tick the tests to run on the left and set the run on the right, in the control panel: the model, the effort (Low, thinking off, the way a battle runs, or High, thinking on) and every row of /effort (the Search rows, the context, the thinking cap and the other limits). Each row starts at the tests\' default, which is the app\'s own except the context (the tests run at 32k); a row you change is marked, and the panel is kept for next time. ▶ Run opens the run list, where each test has its own ▶: nothing starts by itself. Only one model fits, so one test runs at a time: a ▶ pressed while one runs makes it next (✕ Not next takes it out again), ■ Stop ends it and the next one starts, and a test that fails never stops the rest. The Battle arena\'s runner runs them and keeps the line of tests waiting, so they keep going if you close Agentic Coder; it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile. A run\'s line lands here when it ends, with the rows it changed (its settings), and the last-result column compares only runs made the same way. <code>/test</code> in Agentic Coder opens it. One practice task runs the one you pick by name, as the Battle tab keeps it (an edit, or a copy of yours like 18b, counts); My tests runs every test you made there, and + New test opens its New test window (a test of yours needs at least one check).' : 'In the hub this page also has ▶ Run tests, to run tests from the page.'}</li></ul>
+<li>${live ? '▶ Run tests: tick the tests to run on the left and set the run on the right, in the control panel: the model, the effort (Low, thinking off, the way a battle runs, or High, thinking on) and every row of /effort (the Search rows, the context, the thinking cap and the other limits). Each row starts at the tests\' default, which is the app\'s own except the context (the tests run at 32k); a row you change is marked, and the panel is kept for next time. ▶ Run opens the run list, where each test has its own ▶: nothing starts by itself. Only one model fits, so one test runs at a time: a ▶ pressed while one runs makes it next (✕ Not next takes it out again), ■ Stop ends it and the next one starts, and a test that fails never stops the rest. The Battle arena\'s runner runs them and keeps the line of tests waiting, so they keep going if you close Agentic Coder; it holds the memory the way a battle does, so an open Agentic Coder window lets go of its model meanwhile. A run\'s line lands here when it ends, with the rows it changed (its settings), and the last-result column compares only runs made the same way. <code>/test</code> in Agentic Coder opens it. One practice task runs the one you pick by name, as the Battle tab keeps it (an edit, or a copy of yours like 18b, counts). My tests runs every test of your own, My tests · Easy, Medium and Hard the tests of one level, and One of my tests the one you pick; a test of yours stops at its level’s time (5, 10 or 20 minutes) and a pass is worth its level’s points (1, 2 or 3). + New test opens the Test builder tab, where they are made (a test of yours needs a level and at least one check).' : 'In the hub this page also has ▶ Run tests, to run tests from the page.'}</li></ul>
 <p>Nothing on this page loads from the internet.</p>`;
   draw();
 })();

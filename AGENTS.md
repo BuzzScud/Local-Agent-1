@@ -44,7 +44,7 @@
   a test's working copy of another project goes outside the repo, not into `results/`.
 - **Every test run goes in the test record**, which the hub shows on its Tests tab
   (`/settings` → Tests in Agentic Coder, `coding hub tests`; its ▶ Run tests tab, `/test`, runs the tests in
-  `models/evals/run-tests.mjs`, each with its own ▶, with the settings of its control panel kept in the record). The record is one file on the Mac,
+  `models/evals/run-tests.mjs`, each with its own ▶, with the settings of its control panel kept in the record; the owner's own tests are made in the hub's Test builder tab, `models/evals/battle/builder.mjs`, and stay on the Mac in `~/.agentic-coder/battle/tests/`, never in git). The record is one file on the Mac,
   `~/.agentic-coder/tests/record.jsonl`, one line per run. `bun run test`, `bun run eval`
   and `bun run eval:words` add their own line when they finish, so run the tests through
   those (a bare `bun test` is not recorded). Any other measured run (a real-bug try, a

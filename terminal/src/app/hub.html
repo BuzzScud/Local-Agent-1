@@ -23,7 +23,8 @@ header button { font: inherit; color: var(--ink2); background: none; border: non
 header button:hover { color: var(--ink); background: var(--panel); }
 header button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 8px 8px 0 0; }
 header .spacer { flex: 1; }
-header .now { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+header .now { color: var(--ink3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; min-width: 0; }
+header button, header h1, header a { flex: none; }
 header a { color: var(--accent); font-size: 12px; text-decoration: none; white-space: nowrap; padding: 6px 8px; border-radius: 8px; }
 header a:hover { background: var(--panel); }
 main { flex: 1; min-height: 0; position: relative; }
@@ -50,6 +51,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   <button data-tab="structure">Structure</button>
   <button data-tab="flow">Flow</button>
   <button data-tab="tests">Tests</button>
+  <button data-tab="builder">Test builder</button>
   <button data-tab="battle">Battle</button>
   <button data-tab="memory">Memory</button>
   <button data-tab="instructions">Instructions</button>
@@ -72,13 +74,19 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   // those picked. Taken once, then dropped from the address (the Tests button opens the record as usual).
   let runAsk = (() => {
     const q = new URL(location.href); if (!q.searchParams.has('run')) return null;
-    const a = new URLSearchParams(); for (const k of ['model', 'test', 'n', 'think']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
+    const a = new URLSearchParams(); for (const k of ['model', 'test', 'n', 'think', 'list']) { const v = q.searchParams.get(k); if (v) a.set(k, v); q.searchParams.delete(k); }
     q.searchParams.delete('run'); history.replaceState(null, '', q); return a;
   })();
-  // ?tab=battle&new=1, or + New test on the Tests tab (a message from its frame): the Battle tab with
-  // its New test window open. Taken once, like runAsk.
+  // ?tab=builder&new=1, or + New test on the Tests tab (a message from its frame): the Test builder
+  // tab on a new, empty test (?tab=battle&new=1: the Battle tab's own New test window). Taken once, like runAsk.
   let newAsk = (() => { const q = new URL(location.href); if (!q.searchParams.has('new')) return false; q.searchParams.delete('new'); history.replaceState(null, '', q); return true; })();
-  window.addEventListener('message', (e) => { if (e.origin === location.origin && e.data?.agentic === 'new-test') { newAsk = true; open('battle'); } });
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin) return;
+    if (e.data?.agentic === 'new-test') { newAsk = true; open('builder'); }
+    // ▶ Run in the Test builder: the Tests tab's Run tests with that test picked, on its run list
+    // (each test there has its own ▶: nothing starts by itself).
+    if (e.data?.agentic === 'run-test' && typeof e.data.test === 'string') { runAsk = new URLSearchParams({ test: e.data.test, list: '1', ...(e.data.n != null ? { n: String(e.data.n) } : {}), at: String(Date.now()) }); open('tests'); }
+  });
   const kb = (b) => b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
 
   function setTab(tab) { for (const b of document.querySelectorAll('header button')) b.classList.toggle('on', b.dataset.tab === tab); const q = new URL(location.href); q.searchParams.set('tab', tab); history.replaceState(null, '', q); }
@@ -106,6 +114,11 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
       frame.contentWindow.instructionsLeaving = true;
       frame.src = 'about:blank';
     }
+    if ((frame.getAttribute('src') ?? '').startsWith('/builder') && tab !== 'builder' && frame.contentWindow?.builderDirty?.()) {
+      if (!confirm('Leave the Test builder without saving? What you changed in the test is lost.')) return;
+      frame.contentWindow.builderLeaving = true;
+      frame.src = 'about:blank';
+    }
     setTab(tab);
     if (tab === 'weights') return show('/weights', 'the model\'s weights');
     if (tab === 'help') return show('/help', 'every command, key and setting');
@@ -114,6 +127,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
     if (tab === 'flow') return show('/flow', 'how Agentic Coder works, as a flow diagram');
     if (tab === 'tests' && !page && runAsk) { const a = runAsk.toString(); runAsk = null; return show(`/tests${a ? `?${a}` : ''}#run`, 'run a test on one model'); }
     if (tab === 'tests' && !page) return show('/tests', 'every test run and its result');
+    if (tab === 'builder' && !page) { const n = newAsk; newAsk = false; return show(n ? '/builder?new=1' : '/builder', 'make your own tests: easy, medium, hard'); }
     if (tab === 'battle') { const n = newAsk; newAsk = false; return show(n ? '/battle?new=1' : '/battle', 'Gemma vs Qwen, one model at a time'); }
     if (tab === 'memory' && !page) return show('/memory', 'what Agentic Coder remembers');
     if (tab === 'docs' && !page) return showList();
@@ -126,7 +140,7 @@ iframe { width: 100%; height: 100%; border: none; background: var(--surface); di
   list.onclick = (e) => { const r = e.target.closest('.row'); if (r) open('docs', r.dataset.file); };
 
   const q = new URL(location.href); const tab = q.searchParams.get('tab') || 'weights'; const page = q.searchParams.get('page');
-  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || t === 'tests' || t === 'battle' || t === 'memory' || t === 'instructions';
+  const builtIn = (t) => t === 'weights' || t === 'help' || t === 'harness' || t === 'flow' || t === 'tests' || t === 'builder' || t === 'battle' || t === 'memory' || t === 'instructions';
   if (builtIn(tab) && !page) open(tab); else { setTab(page ? 'docs' : tab); list.classList.add('on'); frame.classList.add('off'); list.innerHTML = '<p class="note">Reading the DOCS folder…</p>'; }
   fetch('/docs.json').then((r) => r.json()).then((d) => { docs = d; if (!builtIn(tab) || page) open(page ? 'docs' : tab, page); }).catch(() => { docs = { missing: true, pinned: {}, pages: [] }; if (!builtIn(tab)) open(tab); });
 })();

@@ -21,7 +21,7 @@ rebuild() {
   else
     changed="$(find "$REPO/terminal/src" "$REPO/terminal/rules" "$REPO/models" "$REPO/package.json" \
       -newer "$APP" -type f \( -name '*.mjs' -o -name '*.js' -o -name '*.jsx' -o -name '*.json' -o -name '*.md' -o -name '*.html' \) \
-      -not -path '*/node_modules/*' -not -path '*/results/*' \( -not -path '*/evals/*' -o -path '*/models/evals/record.mjs' -o -path '*/models/evals/run-tests.mjs' \) -not -path '*/test/*' \
+      -not -path '*/node_modules/*' -not -path '*/results/*' \( -not -path '*/evals/*' -o -path '*/models/evals/record.mjs' -o -path '*/models/evals/run-tests.mjs' -o \( -path '*/models/evals/battle/*.mjs' -not -path '*/models/evals/battle/*/*' \) \) -not -path '*/test/*' \
       -not -name 'README.md' -print -quit 2>/dev/null)"
   fi
   [ -n "$changed" ] || return 0

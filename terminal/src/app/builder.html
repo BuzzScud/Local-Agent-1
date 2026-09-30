@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder test builder</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e;--warn:#8a5a00;--acc:#2a78d6}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#77746d;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--acc:#5b9cf0}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#77746d;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80;--warn:#f0c060;--acc:#5b9cf0}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100vh}
+button,input,textarea,select{font:inherit;color:inherit}
+/* One container that fits the window: your tests by level on the left, the picked one on the right. A small window (a phone) scrolls instead. */
+@media (min-width:900px) and (min-height:560px){html,body{height:100%;overflow:hidden}body{height:100vh;min-height:0}}
+main{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 16px 12px;max-width:1500px;width:100%;margin:0 auto}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;min-width:0;min-height:0}
+.q{color:var(--mute);font-size:12.5px;font-weight:400}
+.fill{flex:1}
+/* Buttons: the one that acts (blue), the quiet ones, the small ones in a header. A button that cannot act is solid grey. */
+.go{font-weight:650;border:0;border-radius:10px;padding:7px 16px;background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap}
+.go:hover:not(:disabled){filter:brightness(1.07)}
+.ghost{padding:6px 12px;border:1px solid var(--line);border-radius:9px;background:var(--card);cursor:pointer;white-space:nowrap}
+.ghost:hover:not(:disabled){border-color:var(--mute)}
+.go:disabled,.ghost:disabled,.mini:disabled{background:var(--soft);color:var(--mute);border-color:var(--line);cursor:default}
+.mini{font-size:12.5px;font-weight:600;padding:2px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--acc);cursor:pointer;white-space:nowrap}
+.mini:hover:not(:disabled){border-color:var(--acc)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.st-saved{color:var(--up);font-size:12px;white-space:nowrap}.st-draft{color:var(--warn);font-size:12px;white-space:nowrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card);justify-self:start;max-width:100%}
+.seg button{border:0;background:none;padding:4px 11px;color:var(--mute);cursor:pointer;white-space:nowrap;border-left:1px solid var(--line)}
+.seg button:first-child{border-left:0}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--card);font-weight:600}
+.seg button small{font-size:11.5px;font-weight:400;opacity:.8;margin-left:5px}
+label.l,.l{display:block;font-size:12.5px;font-weight:600;color:var(--mute);white-space:nowrap}
+.f-row{display:grid;grid-template-columns:92px minmax(0,1fr);align-items:center;gap:10px;min-height:32px}
+.f-col{display:flex;flex-direction:column;gap:4px;min-height:0}
+.f-col.grow{flex:1}
+input.in,select.in{width:100%;padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:var(--card);min-width:0}
+textarea.in{flex:1;min-height:90px;width:100%;resize:none;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);line-height:1.5}
+.hint{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.files{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden}
+.files .f{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:7px;padding:1px 3px 1px 7px;font:12px ui-monospace,Menlo,monospace;white-space:nowrap;max-width:190px}
+.files .f span{overflow:hidden;text-overflow:ellipsis}.files .f.new{border-color:var(--acc)}
+.files .f button{border:0;background:none;color:var(--mute);cursor:pointer;padding:0 4px;border-radius:5px}.files .f button:hover{color:var(--down)}
+.ck-h{display:flex;align-items:baseline;gap:8px;min-width:0;margin-bottom:4px;flex:none}.ck-h b{font-size:15px;white-space:nowrap}.ck-h .q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ck-list{flex:0 1 auto;min-height:0;overflow:auto;scrollbar-width:none;margin:0 -6px;padding:0 6px}.ck-list::-webkit-scrollbar{display:none}
+.ck{display:grid;grid-template-columns:20px minmax(0,max-content) minmax(64px,1fr);align-items:center;gap:8px;padding:3px 6px;margin:0 -6px;border-radius:8px;cursor:pointer;min-height:28px}
+.ck:hover{background:var(--soft)}
+.tg{display:inline-grid;place-items:center;width:18px;height:18px;border:1.5px solid var(--faint);border-radius:5px;font-size:12px;line-height:1;color:transparent}
+.ck.on .tg{background:var(--acc);border-color:var(--acc);color:#fff}
+.ck .cl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.ck:not(.on) .cl{color:var(--mute)}
+.ck .cw{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:right}
+.ck .cw.ok{color:var(--up);font-weight:600}.ck .cw.bad{color:var(--down)}.ck .cw.bad b{font-weight:700}
+.addck{flex:none;display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) auto;gap:6px;margin-top:6px}
+.addck .in{padding:3px 7px;font-size:13px}.addck .ghost{padding:3px 10px;font-size:13px}
+.eye{flex:none;margin-top:6px;padding:6px 10px;border-radius:9px;background:var(--soft);font-size:12.5px;color:var(--mute);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.eye b{color:var(--ink);font-weight:600;margin-right:6px}
+.tried{flex:0 1 auto;min-height:40px;overflow:auto;scrollbar-width:none;margin-top:8px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;font-size:12.5px;color:var(--mute)}.tried::-webkit-scrollbar{display:none}
+.tried b{color:var(--ink)}.tried .ok{color:var(--up);font-weight:700}.tried .bad{color:var(--down);font-weight:700}
+.tried ul{margin:5px 0 0;padding:0 0 0 16px}.tried li{margin:2px 0;overflow-wrap:anywhere}.tried li b{font-weight:600}
+.link{color:var(--acc);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-size:inherit}
+.set{display:grid;grid-template-columns:92px auto minmax(0,1fr);align-items:center;gap:10px;min-height:30px;font-size:13.5px}
+.set .v{display:inline-flex;align-items:center;gap:4px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.set .v button{border:0;background:none;color:var(--mute);cursor:pointer;padding:1px 6px;border-radius:6px;font-size:12px}.set .v button:hover:not(:disabled){background:var(--soft);color:var(--ink)}.set .v button:disabled{opacity:.3;cursor:default}
+.set .n{color:var(--mute);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.none{color:var(--mute);font-size:13px;padding:8px 12px}
+.err{color:var(--down);font-size:13px}
+/* Your tests, by level. */
+.split{flex:1;min-height:0;display:grid;grid-template-columns:350px minmax(0,1fr);gap:12px}
+.lst{display:flex;flex-direction:column}
+.lst-h{flex:none;display:flex;align-items:baseline;gap:8px;padding:10px 14px 6px}.lst-h b{font-size:15px}
+.lst-b{flex:1;min-height:0;overflow:auto;scrollbar-width:none;padding:0 6px}.lst-b::-webkit-scrollbar{display:none}
+.gh{display:flex;align-items:center;gap:8px;padding:8px 8px 3px}
+.gh .gn{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.gh .gm{color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:5px 8px;border-radius:8px;cursor:pointer;min-height:30px}
+.row:hover{background:var(--soft)}.row[aria-selected="true"]{background:var(--soft)}.row[aria-selected="true"] .rt{font-weight:650}
+.row .rt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row .rm{color:var(--mute);font-size:12px;white-space:nowrap}
+.row .mv{display:inline-flex;gap:2px;grid-column:2 / -1}.row .mv button{border:0;background:var(--line);color:var(--mute);border-radius:6px;font-size:11.5px;font-weight:700;padding:2px 7px;cursor:pointer}.row .mv button:hover{color:var(--ink)}
+.lst-f{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 10px;border-top:1px solid var(--line)}
+.lst-f .ghost{padding:5px 8px;font-size:13px;text-align:center}
+/* The picked test: what it asks on the left, how it passes on the right, the buttons under both. */
+.ed{display:grid;grid-template-columns:minmax(0,1fr) 430px;grid-template-rows:minmax(0,1fr) auto}
+.ed-l{display:flex;flex-direction:column;gap:6px;padding:14px 16px;min-height:0;min-width:0}
+.ed-r{display:flex;flex-direction:column;padding:14px 16px;border-left:1px solid var(--line);min-height:0;min-width:0;overflow:hidden}
+.ed-r .sets{flex:none;margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
+.ed-f{grid-column:1 / -1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 16px;border-top:1px solid var(--line)}
+/* Pasting a list: the text on the left, what was read from it on the right. The trash uses the same box. */
+.paste{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:0}
+.paste .pa-l{display:flex;flex-direction:column;gap:4px;padding:14px 16px;min-height:0;min-width:0}
+.paste .pa-r{display:flex;flex-direction:column;padding:14px 16px;border-left:1px solid var(--line);min-height:0;min-width:0}
+.pa-list{flex:1;min-height:0;overflow:auto;scrollbar-width:none}.pa-list::-webkit-scrollbar{display:none}
+.pa-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line);min-height:32px}
+.pa-row .n{color:var(--mute);font-variant-numeric:tabular-nums}.pa-row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.pa-row .m{color:var(--mute);font-size:12.5px;white-space:nowrap}
+.acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.paste .acts{flex:none;padding-top:10px;justify-content:flex-end}
+.trash{display:flex;flex-direction:column;padding:14px 16px}
+.trash .pa-row{grid-template-columns:minmax(0,1fr) auto auto}
+@media (min-width:900px) and (max-height:800px){.ck{min-height:25px;padding-top:1px;padding-bottom:1px}.f-row{min-height:30px}.set{min-height:27px}.row{min-height:27px;padding-top:3px;padding-bottom:3px}}
+@media (max-width:1400px) and (min-width:900px){.split{grid-template-columns:300px minmax(0,1fr)}.ed{grid-template-columns:minmax(0,1fr) 390px}}
+@media (max-width:899px),(max-height:559px){
+  .split{display:block}.lst{margin-bottom:12px}.lst-b{overflow:visible}.ed{display:block}.ed-r{border-left:0;border-top:1px solid var(--line)}.ed-r .sets{margin-top:12px}
+  .paste{display:block}.paste .pa-r{border-left:0;border-top:1px solid var(--line)}textarea.in{min-height:200px}.ck-list,.tried{overflow:visible}
+  .seg{display:flex;flex-wrap:wrap}.seg button{flex:1 1 auto;border-left:0;border-top:1px solid var(--line);margin-top:-1px}label.l,.l{white-space:normal}.f-row{grid-template-columns:1fr;gap:4px;margin-bottom:6px}
+  .ck{grid-template-columns:20px minmax(0,1fr)}.ck .cl{white-space:normal}.ck .cw{grid-column:2;text-align:left;white-space:normal}
+  .hint{white-space:normal}.set{grid-template-columns:92px auto}.set .n{grid-column:1 / -1;white-space:normal}.files{flex-wrap:wrap}.addck{grid-template-columns:1fr}
+}
+/* What just happened, in the bar under the editor: it never covers a button. */
+.msg{flex:1 1 120px;min-width:0;font-size:13px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.msg.bad{color:var(--down)}
+@media (max-width:899px),(max-height:559px){.msg{flex-basis:100%;white-space:normal}}
+</style>
+</head>
+<body>
+<main id="stage"><div class="box"><div class="none">Reading your tests…</div></div></main>
+<input type="file" id="pagefile" accept=".html,.htm,text/html" hidden>
+<input type="file" id="starter" multiple hidden>
+<input type="file" id="listfile" accept=".txt,.md,.json,text/plain,application/json" hidden>
+<script>
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pl = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const ORDER = ['easy', 'medium', 'hard'];
+  const RANK = { easy: 0, medium: 1, hard: 2 };
+  let D = null;           // what the hub holds: { tests, trash, levels, kinds, checks, … }
+  // What is open: a test (its id, or 'new'), the paste box, or the trash. F is the editor's working copy.
+  const S = { sel: null, mode: 'edit', paste: '', found: [], tried: null, busy: '', msg: null };
+  const KIND_ORDER = ['page', 'code', 'question', 'writing'];
+  let F = null;
+  const L = (k) => D.levels[k];
+  const keyOf = (c) => `${c.type}:${c.value ?? ''}`;
+  const testOf = (id) => D?.tests.find((t) => t.id === id) ?? null;
+
+  // ---------- the editor's working copy ----------
+  // on: the checks ticked; extra: checks the prompt does not suggest (kept from the test, or added by
+  // hand); follow: the ticks are the level's starting checks, and move with the level until you tick by hand.
+  function formOf(t) {
+    const sug = t.suggest ?? { checks: [], eye: [] };
+    const has = new Set(sug.checks.map((c) => c.key));
+    return { id: t.id, n: t.n, title: t.title, level: t.level, kind: t.kind, prompt: t.prompt, ask: t.ask ?? '', design: Boolean(t.design), minutes: t.minutes ?? null,
+      sug, on: new Set(t.checks.map(keyOf)), extra: t.checks.filter((c) => !has.has(keyOf(c))).map((c) => ({ ...c, key: keyOf(c) })), follow: Boolean(t.auto),
+      files: [...(t.files ?? [])], add: [], remove: [], page: t.page ?? null, dirty: false };
+  }
+  const blank = () => ({ id: null, n: null, title: '', level: null, kind: 'page', prompt: '', ask: '', design: true, minutes: null, sug: { checks: [], eye: [] }, on: new Set(), extra: [], follow: true, files: [], add: [], remove: [], page: null, dirty: true });
+  const rowsOf = (f) => [...f.sug.checks, ...f.extra.filter((x) => !f.sug.checks.some((c) => c.key === x.key))];
+  const labelOf = (c) => c.label ?? `${D.checks[c.type]?.label ?? c.type}${c.value ? `: ${c.value}` : ''}`;
+  function applyLevel(f) {
+    if (!f.follow) return;
+    const at = RANK[f.level] ?? 0;
+    f.on = new Set([...f.sug.checks.filter((c) => c.from && RANK[c.from] <= at).map((c) => c.key), ...f.extra.map((x) => x.key)]);
+  }
+  const limitOf = (f) => f.minutes ?? (f.level ? L(f.level).minutes : D.battleMinutes);
+  const tickedOf = (f) => rowsOf(f).filter((c) => f.on.has(c.key));
+  const cantSave = (f) => (!f.prompt.trim() ? 'Type the prompt first' : !f.level ? 'Pick a level first' : !tickedOf(f).length ? 'Tick at least one check, so a run can pass or fail' : '');
+  const points = (ts) => ts.reduce((s, t) => s + (t.points ?? 0), 0);
+
+  // ---------- talking to the hub ----------
+  async function call(path, body) {
+    const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error ?? `the hub said ${r.status}`);
+    if (d.data) D = d.data;
+    return d;
+  }
+  async function act(name, fn) {
+    if (S.busy) return null;
+    S.busy = name; draw();
+    try { return await fn(); } catch (e) { toast(`${e.message[0].toUpperCase()}${e.message.slice(1)}.`, true); return null; } finally { S.busy = ''; draw(); }
+  }
+  // What just happened: one line in the bar under the editor (kept until the next thing you do).
+  let toastT = null;
+  const msgHtml = () => `<span class="msg${S.msg?.bad ? ' bad' : ''}" role="status" title="${esc(S.msg?.text ?? '')}">${esc(S.msg?.text ?? '')}</span>`;
+  function toast(text, bad = false) {
+    S.msg = text ? { text, bad } : null;
+    for (const el of document.querySelectorAll('.msg')) { el.textContent = text ?? ''; el.title = text ?? ''; el.classList.toggle('bad', bad); }
+    clearTimeout(toastT); if (text) toastT = setTimeout(() => toast(''), bad ? 12000 : 8000);
+  }
+  // ▶ Run hands over to the Tests tab's Run tests, with the test picked: nothing starts by itself there.
+  function runIn(test, n) {
+    const ask = { agentic: 'run-test', test, ...(n != null ? { n: String(n) } : {}) };
+    if (window.parent !== window) { try { parent.postMessage(ask, location.origin); return; } catch { /* not the hub's frame */ } }
+    location.href = `/?tab=tests&run=1&list=1&test=${encodeURIComponent(test)}${n != null ? `&n=${encodeURIComponent(n)}` : ''}`;
+  }
+
+  function pick(id, { keep = false } = {}) {
+    S.mode = 'edit'; S.tried = null;
+    if (id === 'new') { S.sel = 'new'; F = blank(); return; }
+    const t = testOf(id) ?? D.tests[0] ?? null;
+    S.sel = t?.id ?? null;
+    if (!keep || !F || F.id !== t?.id) F = t ? formOf(t) : null;
+  }
+  const leaveOk = () => !F?.dirty || !(F.prompt.trim() || F.title.trim()) || confirm(`Leave “${F.title || 'this new test'}” without saving? What you changed is lost.`);
+
+  // ---------- drawing ----------
+  const seg = (name, opts, val) => `<span class="seg">${opts.map(([v, label, small]) => `<button type="button" data-act="${name}" data-v="${v}" aria-pressed="${v === val}">${label}${small ? `<small>${small}</small>` : ''}</button>`).join('')}</span>`;
+  function checksHtml(f) {
+    const rows = rowsOf(f), on = tickedOf(f);
+    const res = (c) => S.tried?.results?.find((x) => x.key === c.key) ?? null;
+    const list = rows.map((c) => {
+      const r = f.on.has(c.key) ? res(c) : null; const why = c.why ?? 'added by you';
+      const note = r ? (r.pass === true ? '<span class="cw ok">✓ holds</span>' : r.pass === false ? `<span class="cw bad" title="${esc(r.why)}"><b>✗</b> ${esc(r.why)}</span>` : `<span class="cw" title="${esc(r.why)}">${esc(r.why)}</span>`) : `<span class="cw" title="${esc(why)}">${esc(why)}</span>`;
+      return `<div class="ck${f.on.has(c.key) ? ' on' : ''}" data-act="tick" data-key="${esc(c.key)}" role="checkbox" aria-checked="${f.on.has(c.key)}" tabindex="0"><span class="tg">✓</span><span class="cl">${esc(labelOf(c))}</span>${note}</div>`;
+    }).join('');
+    const eye = f.sug.eye?.length ? `<div class="eye" title="${esc(f.sug.eye.join(' · '))}"><b>By eye</b>${esc(f.sug.eye.join(' · '))} <span>(named in the prompt, no automatic check)</span></div>` : '';
+    let tried = '';
+    if (S.tried) {
+      if (!S.tried.page) tried = `<div class="tried"><b>No page to try on yet.</b> <button type="button" class="link" data-act="choosepage">Choose a page</button> a model made for this, or run the test once: its page is kept for this.</div>`;
+      else {
+        const real = S.tried.results.filter((r) => r.pass !== null), ok = real.filter((r) => r.pass).length, fails = real.filter((r) => !r.pass), skipped = S.tried.results.length - real.length;
+        const from = S.tried.page.given ? 'the page you chose' : `its last run${S.tried.page.model ? ` on ${esc(S.tried.page.model)}` : ''}`;
+        tried = `<div class="tried">Tried on <b>${esc(S.tried.page.name)}</b> (${from}), no model: <b>${ok} of ${real.length}</b> page checks hold, so this page would <span class="${fails.length ? 'bad' : 'ok'}">${fails.length ? 'FAIL' : 'PASS'}</span>${skipped ? ` · ${pl(skipped, 'check')} need${skipped === 1 ? 's' : ''} a real run` : ''}. <button type="button" class="link" data-act="choosepage">Try another page</button>${fails.length ? `<ul>${fails.map((r) => `<li><b>${esc(r.label)}:</b> ${esc(r.problems?.length ? r.problems.join(' ') : r.why)}</li>`).join('')}</ul>` : ''}</div>`;
+      }
+    }
+    const kinds = Object.entries(D.checks).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
+    const add = `<div class="addck"><select class="in" id="ck-type" aria-label="A check to add"><option value="">+ Add a check</option>${kinds}</select><input class="in" id="ck-value" placeholder="its text, where it needs one" aria-label="The check's text"><button type="button" class="ghost" data-act="addck">Add</button></div>`;
+    return `<div class="ck-h"><b>Checks</b><span class="q">${f.sug.checks.length ? 'suggested from the prompt' : 'type the prompt to get suggestions'} · ${on.length} ticked${f.level && f.follow ? ` for ${L(f.level).name}` : ''}</span></div><div class="ck-list">${list || '<div class="none">No checks yet.</div>'}</div>${add}${eye}${tried}`;
+  }
+  function setsHtml(f) {
+    const lv = f.level ? L(f.level) : null, lim = limitOf(f);
+    const design = f.kind === 'page' ? `<div class="set"><span class="l" title="On: the design cards and the layout fix go along, as in the app. Off: neither, as the three sets of 28 run.">Design folder</span>${seg('design', [['on', 'On'], ['off', 'Off']], f.design ? 'on' : 'off')}<span class="n">${f.design ? 'as in the app: cards + layout fix' : 'as the three sets of 28 run'}</span></div>` : '';
+    return `<div class="set"><span class="l" title="How long one run of it may take in ▶ Run tests. A battle stops every test at ${D.battleMinutes} minutes.">Time limit</span><span class="v"><button type="button" data-act="limit" data-d="-5" ${lim <= 5 ? 'disabled' : ''} aria-label="Less time">◀</button>${lim} min<button type="button" data-act="limit" data-d="5" ${lim >= D.maxMinutes ? 'disabled' : ''} aria-label="More time">▶</button></span><span class="n" title="In ▶ Run tests. A battle stops every test at ${D.battleMinutes} minutes.">${f.minutes == null ? (lv ? `from ${lv.name}` : 'set by the level') : 'yours'} · ${D.battleMinutes} in a battle</span></div>
+      ${design}<div class="set"><span class="l">Points</span><span class="v">${lv ? lv.points : '—'}</span><span class="n">${lv ? `from ${lv.name}: what a pass is worth` : 'set by the level'}</span></div>`;
+  }
+  function actsHtml(f) {
+    const why = cantSave(f), off = why || S.busy ? ` disabled${why ? ` title="${esc(why)}"` : ''}` : '', has = f.id ? '' : ' disabled title="Save it first"';
+    const state = S.busy === 'save' ? 'saving' : !f.dirty ? 'saved' : why || 'not saved yet';
+    return `<button type="button" class="ghost" data-act="try"${f.kind === 'page' ? '' : ' disabled title="Only a page test can be tried with no model"'}>${S.busy === 'try' ? 'Trying the checks' : 'Try the checks'}</button><button type="button" class="ghost" data-act="dup"${has}>Duplicate</button><button type="button" class="ghost" data-act="del"${has}>Delete</button>${msgHtml()}<span class="${f.dirty ? 'st-draft' : 'st-saved'}">${state}</span><button type="button" class="ghost" data-act="save"${off}>Save</button><button type="button" class="go" data-act="saverun"${off}>Save and run ▶</button>`;
+  }
+  function filesHtml(f) {
+    const kept = f.files.filter((p) => !f.remove.includes(p));
+    if (!kept.length && !f.add.length) return `<span class="hint">${f.kind === 'page' || f.kind === 'writing' ? 'none needed: it starts from an empty folder' : 'none yet: the project it works on'}</span><button type="button" class="mini" data-act="addfiles">Add files</button>`;
+    return `${kept.map((p) => `<span class="f" title="${esc(p)}"><span>${esc(p)}</span><button type="button" data-act="rmfile" data-p="${esc(p)}" aria-label="Remove ${esc(p)}">✕</button></span>`).join('')}${f.add.map((x, i) => `<span class="f new" title="${esc(x.path)} (added, not saved yet)"><span>${esc(x.path)}</span><button type="button" data-act="rmadd" data-i="${i}" aria-label="Remove ${esc(x.path)}">✕</button></span>`).join('')}<button type="button" class="mini" data-act="addfiles">Add files</button>`;
+  }
+  function listHtml() {
+    const group = (k, name, meta) => {
+      const ts = D.tests.filter((t) => (t.level ?? 'none') === k);
+      if (k === 'none' && !ts.length) return '';
+      const run = k !== 'none' ? `<button type="button" class="mini" data-act="run" data-v="${k}" ${ts.length ? '' : 'disabled title="No tests at this level yet"'}>▶ Run${ts.length ? ` ${ts.length}` : ''}</button>` : '';
+      return `<div class="gh"><span class="gn">${name}</span><span class="gm">${meta}</span>${run}</div>${ts.map((t) => { const mineNow = S.mode === 'edit' && t.id === S.sel; const dirty = mineNow && F?.dirty; return `<div class="row" role="button" tabindex="0" data-act="pick" data-id="${esc(t.id)}" aria-selected="${mineNow}"><span class="rt">${esc((mineNow && F ? F.title : t.title) || 'Untitled')}</span>${t.level ? `<span class="rm">${pl(t.checks.length, 'check')}</span><span class="${dirty ? 'st-draft' : 'st-saved'}">${dirty ? 'edited' : 'saved'}</span>` : `<span class="mv">${ORDER.map((lv) => `<button type="button" data-act="move" data-id="${esc(t.id)}" data-v="${lv}" title="Put it in ${L(lv).name}">${L(lv).name[0]}</button>`).join('')}</span>`}</div>`; }).join('') || '<div class="none">none yet</div>'}`;
+    };
+    const fresh = S.sel === 'new' && S.mode === 'edit' ? `<div class="gh"><span class="gn">New</span><span class="gm">not saved yet</span></div><div class="row" aria-selected="true"><span class="rt">${esc(F?.title || 'Untitled')}</span><span class="rm"></span><span class="st-draft">new</span></div>` : '';
+    return `<div class="lst-h"><b>My tests</b><span class="q">${pl(D.tests.length, 'test')} · ${pl(points(D.tests), 'point')}</span></div>
+      <div class="lst-b">${D.tests.length || fresh ? '' : '<div class="none">No tests yet. Paste a list, or + New test.</div>'}${fresh}${group('none', 'Not sorted', 'press E, M or H on each')}${ORDER.map((k) => group(k, L(k).name, `${pl(L(k).points, 'point')} · ${L(k).minutes} min each`)).join('')}</div>
+      <div class="lst-f"><button type="button" class="ghost" data-act="new">+ New test</button><button type="button" class="ghost" data-act="paste">Paste a list</button><button type="button" class="ghost" data-act="export" ${D.tests.length ? '' : 'disabled title="No tests to export yet"'}>Export</button><button type="button" class="ghost" data-act="trash" ${D.trash.length ? '' : 'disabled title="Nothing in the trash"'}>Trash · ${D.trash.length}</button></div>`;
+  }
+  const foundRows = () => S.found.map((p) => `<div class="pa-row"><span class="n">${p.n}</span><span class="t" title="${esc(p.prompt)}">${esc(p.title)}</span><span class="m">${esc(D.kinds[p.kind] ?? p.kind)} · ${pl(p.fit, 'check')} fit${p.eye ? ` · ${p.eye} by eye` : ''}</span></div>`).join('');
+  const foundHtml = () => `<div class="ck-h"><b>${pl(S.found.length, 'prompt')} found</b><span class="q">each becomes a test; you set its level next</span></div><div class="pa-list">${foundRows() || '<div class="none">Nothing read yet: paste a list on the left.</div>'}</div><div class="acts"><button type="button" class="ghost" data-act="listfile" title="A text file of prompts, or a my-tests.json this tab exported">Choose a file</button>${msgHtml()}<button type="button" class="ghost" data-act="cancel">Cancel</button><button type="button" class="go" data-act="pasteadd" ${S.found.length && !S.busy ? '' : 'disabled'}>Add ${pl(S.found.length, 'test')}</button></div>`;
+  function rightHtml() {
+    if (S.mode === 'paste') return `<section class="box paste"><div class="pa-l"><label class="l" for="pa-text">Paste your list</label><span class="hint" title="A line like “Prompt 1 — Data metric card”, then its words. Or blocks with a blank line between them.">A line like “Prompt 1 — Data metric card”, then its words. Or blocks with a blank line between them.</span><textarea class="in" id="pa-text" spellcheck="false">${esc(S.paste)}</textarea></div><div class="pa-r"><div id="slot-found" style="display:contents">${foundHtml()}</div></div></section>`;
+    if (S.mode === 'trash') return `<section class="box trash"><div class="ck-h"><b>Trash</b><span class="q">${pl(D.trash.length, 'test')} of yours · nothing is removed for good</span></div><div class="pa-list">${D.trash.map((t) => `<div class="pa-row"><span class="t">${esc(t.title)}</span><span class="m">${t.level ? L(t.level).name : 'not sorted'}${t.at ? ` · deleted ${new Date(t.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</span><button type="button" class="mini" data-act="restore" data-name="${esc(t.name)}">Bring back</button></div>`).join('') || '<div class="none">Nothing in the trash.</div>'}</div><div class="acts" style="padding-top:10px">${msgHtml()}<button type="button" class="ghost" data-act="cancel">Close</button></div></section>`;
+    const f = F;
+    if (!f) return `<section class="box"><div class="none">No tests yet. Paste a list of prompts, or make one with + New test.</div><div class="none">${msgHtml()}</div></section>`;
+    return `<section class="box ed">
+      <div class="ed-l">
+        <div class="f-row"><label class="l" for="f-title">Title</label><input class="in" id="f-title" value="${esc(f.title)}" placeholder="a short name for it"></div>
+        <div class="f-row"><span class="l">Level</span>${seg('level', ORDER.map((k) => [k, L(k).name, `${L(k).points} pt · ${L(k).minutes} min`]), f.level)}</div>
+        <div class="f-row"><span class="l">Kind</span>${seg('kind', KIND_ORDER.filter((k) => D.kinds[k]).map((k) => [k, D.kinds[k]]), f.kind)}</div>
+        <div class="f-col grow"><label class="l" for="f-prompt">Prompt <span class="q">what the model is asked, word for word</span></label><textarea class="in" id="f-prompt" spellcheck="false" placeholder="What should the model do?">${esc(f.prompt)}</textarea></div>
+        <div class="f-row"><span class="l">Starter files</span><span class="files" id="slot-files">${filesHtml(f)}</span></div>
+        <div class="f-row"><label class="l" for="f-ask">If it asks</label><input class="in" id="f-ask" value="${esc(f.ask)}" placeholder="your reply when the model asks a question (optional)"></div>
+      </div>
+      <div class="ed-r"><div id="slot-checks" style="display:flex;flex-direction:column;min-height:0;flex:0 1 auto">${checksHtml(f)}</div><div class="sets" id="slot-sets">${setsHtml(f)}</div></div>
+      <div class="ed-f" id="slot-acts">${actsHtml(f)}</div></section>`;
+  }
+  function draw() {
+    if (!D) return;
+    $('#stage').innerHTML = `<div class="split"><section class="box lst" id="slot-list">${listHtml()}</section>${rightHtml()}</div>`;
+  }
+  // After typing: only the parts that depend on the words, so the box you type in keeps its place.
+  function refresh(parts) {
+    if (parts.includes('list') && $('#slot-list')) $('#slot-list').innerHTML = listHtml();
+    if (F && parts.includes('checks') && $('#slot-checks')) $('#slot-checks').innerHTML = checksHtml(F);
+    if (F && parts.includes('sets') && $('#slot-sets')) $('#slot-sets').innerHTML = setsHtml(F);
+    if (F && parts.includes('files') && $('#slot-files')) $('#slot-files').innerHTML = filesHtml(F);
+    if (F && parts.includes('acts') && $('#slot-acts')) $('#slot-acts').innerHTML = actsHtml(F);
+  }
+  const touch = () => { F.dirty = true; S.tried = null; };
+
+  // The checks that fit the prompt as it is typed (asked a moment after the last key).
+  let sugT = null, sugN = 0;
+  function suggestSoon() {
+    clearTimeout(sugT);
+    const f = F, n = ++sugN;
+    sugT = setTimeout(async () => {
+      try {
+        const r = await fetch('/builder/suggest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prompt: f.prompt, kind: f.kind }) });
+        if (!r.ok || n !== sugN || f !== F) return;
+        f.sug = await r.json(); applyLevel(f); refresh(['checks', 'acts']);
+      } catch { /* the hub went away: the checks stay as they are */ }
+    }, 180);
+  }
+  let readT = null, readN = 0;
+  function readSoon() {
+    clearTimeout(readT);
+    const n = ++readN;
+    readT = setTimeout(async () => {
+      try {
+        const r = await fetch('/builder/read', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: S.paste }) });
+        if (!r.ok || n !== readN) return;
+        S.found = (await r.json()).found ?? [];
+        if ($('#slot-found')) $('#slot-found').innerHTML = foundHtml();
+      } catch { /* the hub went away */ }
+    }, 160);
+  }
+
+  const payload = (f) => ({ id: f.id, title: f.title, level: f.level, kind: f.kind, prompt: f.prompt, ask: f.ask, design: f.design, minutes: f.minutes, checks: tickedOf(f).map((c) => ({ type: c.type, value: c.value ?? '' })), files: f.add.map((x) => ({ path: x.path, b64: x.b64 })), removePaths: f.remove });
+  async function save() {
+    const f = F;
+    const r = await act('save', () => call('/builder/save', payload(f)));
+    if (!r) return null;
+    pick(r.id); draw();
+    return r;
+  }
+  async function tryNow(page) {
+    const f = F;
+    const r = await act('try', () => call('/builder/try', { id: f.id, prompt: f.prompt, checks: tickedOf(f).map((c) => ({ type: c.type, value: c.value ?? '' })), ...(page ? { page } : {}) }));
+    if (r && f === F) { S.tried = r; refresh(['checks']); }
+  }
+  const b64 = (buf) => { let s = ''; const b = new Uint8Array(buf); for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
+
+  document.addEventListener('click', async (e) => {
+    const el = e.target.closest('[data-act]'); if (!el || el.disabled || !D) return;
+    const a = el.dataset.act, f = F;
+    if (S.msg) toast('');
+    if (a === 'move') {
+      e.stopPropagation();
+      const id = el.dataset.id;
+      // The test open in the editor with changes not saved yet: the level goes in the editor.
+      if (id === S.sel && F?.dirty) { F.level = el.dataset.v; applyLevel(F); touch(); return draw(); }
+      const r = await act('level', () => call('/builder/level', { id, level: el.dataset.v }));
+      if (r) { if (S.sel === id || S.mode !== 'edit') pick(id); else if (F && !F.dirty) pick(S.sel); draw(); }
+      return;
+    }
+    if (a === 'pick') { if (el.dataset.id !== S.sel || S.mode !== 'edit') { if (S.mode === 'edit' && !leaveOk()) return; pick(el.dataset.id); draw(); } return; }
+    if (a === 'new') { if (S.mode === 'edit' && !leaveOk()) return; pick('new'); draw(); return $('#f-title')?.focus(); }
+    if (a === 'paste') { if (S.mode === 'edit' && !leaveOk()) return; S.mode = 'paste'; S.paste = ''; S.found = []; draw(); return $('#pa-text')?.focus(); }
+    if (a === 'trash') { if (S.mode === 'edit' && !leaveOk()) return; S.mode = 'trash'; return draw(); }
+    if (a === 'cancel') { pick(S.sel === 'new' ? D.tests[0]?.id : S.sel); return draw(); }
+    if (a === 'listfile') return $('#listfile').click();
+    if (a === 'pasteadd') {
+      const r = await act('paste', () => call('/builder/paste', { text: S.paste }));
+      if (r) { pick(r.added[0] ?? D.tests[0]?.id); draw(); toast(`${pl(r.added.length, 'test')} added${r.skipped ? `, ${r.skipped} already here` : ''}. ${r.added.length ? 'Set each one’s level: press E, M or H on it.' : ''}`); }
+      return;
+    }
+    if (a === 'restore') { const r = await act('restore', () => call('/builder/restore', { name: el.dataset.name })); if (r) { pick(r.id); draw(); toast('It is back, as it was.'); } return; }
+    if (a === 'export') { const link = document.createElement('a'); link.href = '/builder/export'; link.download = 'my-tests.json'; document.body.append(link); link.click(); link.remove(); return toast('Exported my-tests.json: every test of yours in one file. Paste a list → Choose a file brings it back in.'); }
+    if (a === 'run') { if (F?.dirty && S.mode === 'edit' && !leaveOk()) return; return runIn(`mine-${el.dataset.v}`); }
+    if (!f || S.mode !== 'edit') return;
+    if (a === 'tick') { const k = el.dataset.key; if (f.on.has(k)) f.on.delete(k); else f.on.add(k); f.follow = false; touch(); return refresh(['checks', 'list', 'acts']); }
+    if (a === 'addck') {
+      const type = $('#ck-type').value, value = $('#ck-value').value.trim();
+      if (!type) return toast('Pick which check to add first.', true);
+      if (D.checks[type].value && !value && type !== 'tests') return toast(`That check needs its text: ${D.checks[type].value}.`, true);
+      const c = { type, value: D.checks[type].value ? value : '' }; c.key = keyOf(c);
+      if (!rowsOf(f).some((x) => x.key === c.key)) f.extra.push(c);
+      f.on.add(c.key); f.follow = false; touch(); return refresh(['checks', 'list', 'acts']);
+    }
+    if (a === 'level') { f.level = el.dataset.v; applyLevel(f); touch(); return draw(); }
+    if (a === 'kind') { f.kind = el.dataset.v; if (f.kind !== 'page') f.design = false; else if (!f.id) f.design = true; f.follow = true; f.extra = []; touch(); draw(); return suggestSoon(); }
+    if (a === 'design') { f.design = el.dataset.v === 'on'; touch(); return refresh(['sets', 'list', 'acts']); }
+    if (a === 'limit') { const next = Math.max(5, Math.min(D.maxMinutes, limitOf(f) + Number(el.dataset.d))); f.minutes = f.level && next === L(f.level).minutes ? null : next; touch(); return refresh(['sets', 'list', 'acts']); }
+    if (a === 'addfiles') return $('#starter').click();
+    if (a === 'rmfile') { f.remove.push(el.dataset.p); touch(); return refresh(['files', 'list', 'acts']); }
+    if (a === 'rmadd') { f.add.splice(Number(el.dataset.i), 1); touch(); return refresh(['files', 'list', 'acts']); }
+    if (a === 'try') return tryNow();
+    if (a === 'choosepage') return $('#pagefile').click();
+    if (a === 'dup') { if (!leaveOk()) return; const r = await act('dup', () => call('/builder/duplicate', { id: f.id })); if (r) { pick(r.id); draw(); toast('A copy, with its files. Change it and Save.'); } return; }
+    if (a === 'del') { const r = await act('del', () => call('/builder/delete', { id: f.id })); if (r) { pick(D.tests[0]?.id); draw(); toast(`“${f.title || 'Untitled'}” moved to the trash: nothing is removed for good. Trash brings it back.`); } return; }
+    if (a === 'save') { const r = await save(); if (r) toast(`Saved “${F.title}” as ${L(F.level).name}: ${pl(F.on.size, 'check')}, ${limitOf(F)} min, ${pl(L(F.level).points, 'point')}.`); return; }
+    if (a === 'saverun') { const r = await save(); if (r) runIn('mytest', r.n); return; }
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'pa-text') { S.paste = e.target.value; return readSoon(); }
+    if (!F || S.mode !== 'edit') return;
+    if (e.target.id === 'f-title') { F.title = e.target.value; touch(); return refresh(['list', 'acts']); }
+    if (e.target.id === 'f-prompt') { F.prompt = e.target.value; touch(); refresh(['list', 'acts']); return suggestSoon(); }
+    if (e.target.id === 'f-ask') { F.ask = e.target.value; touch(); return refresh(['list', 'acts']); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.ck, .row')) { e.preventDefault(); e.target.click(); return; }
+    if (e.key === 'Enter' && e.target.id === 'ck-value') { e.preventDefault(); $('[data-act="addck"]')?.click(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && S.mode === 'edit' && F) { e.preventDefault(); $('[data-act="save"]')?.click(); return; }
+    if (e.key === 'Escape' && S.mode !== 'edit') { e.preventDefault(); $('[data-act="cancel"]')?.click(); }
+  });
+  $('#pagefile').addEventListener('change', async (e) => { const file = e.target.files[0]; e.target.value = ''; if (file && F) tryNow({ name: file.name, html: await file.text(), at: new Date(file.lastModified).toISOString() }); });
+  $('#starter').addEventListener('change', async (e) => {
+    const files = [...e.target.files]; e.target.value = '';
+    if (!F || !files.length) return;
+    for (const file of files) {
+      if (file.size > 2e6) { toast(`${file.name} is over 2 MB: starter files are small projects.`, true); continue; }
+      const path = file.webkitRelativePath || file.name;
+      F.add = F.add.filter((x) => x.path !== path); F.add.push({ path, b64: b64(await file.arrayBuffer()) });
+    }
+    touch(); refresh(['files', 'list', 'acts']);
+  });
+  $('#listfile').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    const text = await file.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch { /* a list of prompts, not an export */ }
+    if (data?.what === 'my-tests') {
+      const r = await act('import', () => call('/builder/import', { data }));
+      if (r) { pick(r.added[0] ?? D.tests[0]?.id); draw(); toast(`${pl(r.added.length, 'test')} brought in${r.skipped ? `, ${r.skipped} already here` : ''}.`); }
+      return;
+    }
+    S.paste = text; if ($('#pa-text')) $('#pa-text').value = text; readSoon();
+  });
+  // The hub asks before it leaves this tab with changes not saved.
+  window.builderDirty = () => Boolean(S.mode === 'edit' && F?.dirty && (F.prompt.trim() || F.title.trim()));
+  window.addEventListener('beforeunload', (e) => { if (window.builderDirty() && !window.builderLeaving) e.preventDefault(); });
+  // A test changed elsewhere (the Battle tab, a run that kept a page): read again when this tab is looked at.
+  document.addEventListener('visibilitychange', async () => { if (document.hidden || !D || S.busy || window.builderDirty()) return; try { D = await call('/builder.json'); if (S.mode === 'edit' && S.sel !== 'new') pick(S.sel); draw(); } catch { /* the hub went away */ } });
+
+  (async () => {
+    try { D = await call('/builder.json'); } catch (e) { $('#stage').innerHTML = `<div class="box"><div class="none err">The hub is not answering (${esc(e.message)}). Is Agentic Coder still open?</div></div>`; return; }
+    const q = new URL(location.href).searchParams;
+    pick(q.has('new') ? 'new' : q.get('test') ?? D.tests[0]?.id);
+    draw();
+    if (q.has('new')) $('#f-title')?.focus();
+  })();
+})();
+</script>
+</body>
+</html>

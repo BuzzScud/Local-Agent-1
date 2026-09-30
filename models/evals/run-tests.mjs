@@ -10,8 +10,10 @@
 //   think   it can run with thinking on (the tab's Thinking switch, key T): at High, the one level
 //           Gemma and Qwen have besides Low; off (Low) is the default, the way a battle runs.
 //           A model test without it never thinks (the sorting check: a sort writes nothing)
-//   pick    One practice task: which of the Practice 28 (a number, or a copy of yours like 18b)
-//   own     My tests: its total is how many tests of your own the Battle tab has
+//   pick    One practice task: which of the Practice 28 (a number, or a copy of yours like 18b).
+//           One of my tests (pick.own): which test of your own, by its number
+//   own     My tests: its total is how many tests of your own there are (made in the hub's Test
+//           builder tab); 'easy' | 'medium' | 'hard': only the tests of that level
 //   lines   UI component battle: its total is three lines a request in its list (a list you add to)
 //   stop    the signal the Stop button sends first: each runner then saves what it has
 //   record  its line in the test record: kind, a name pattern, and whether it is a full run (its
@@ -19,7 +21,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { listMetas, practiceList } from './battle/store.mjs';
+import { listMetas, practiceList, LEVELS } from './battle/store.mjs';
 
 // The UI component battle's requests (bench/design/components.json): each prints three lines, a
 // card pick, a page with the design folder on and one with it off. null: the list is not here.
@@ -33,7 +35,7 @@ export function componentLines() {
   return null;
 }
 // How many items a run of `t` has: counted now where the list can change.
-const totalOf = (t) => (t.own ? ownCount() : t.lines ? t.lines() : t.total);
+const totalOf = (t) => (t.own ? ownCount(undefined, t.own === true ? null : t.own) : t.pick?.own ? Math.min(1, ownCount()) : t.lines ? t.lines() : t.total);
 
 // run.mjs's words for thinking: on at High (Gemma and Qwen have no Medium), or off.
 const thinkRun = (think) => (think ? ['--think', 'on', '--effort', 'high'] : ['--think', 'off']);
@@ -42,7 +44,7 @@ export const RUN_TESTS = [
   { id: 'practice28', name: 'Practice 28', what: 'the 28 practice tasks, each with its own check', model: true, think: true, total: 28, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/run.mjs', args: (m, n, think) => ['--model', m, ...thinkRun(think), '--set', '28'],
     stop: 'SIGTERM', record: { kind: 'tasks', name: '^The 28 practice tasks', part: false } },
-  { id: 'task', name: 'One practice task', what: 'one of the Practice 28 as the Battle tab keeps it (an edit or a copy of yours made there counts), 10 minutes at most: pick it by name', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: '10' },
+  { id: 'task', name: 'One practice task', what: 'one of the Practice 28 as the Battle tab keeps it (an edit or a copy of yours made there counts), 10 minutes at most: pick it by name', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: '10', prefix: 'Practice test ' },
     script: 'models/evals/battle/run-set.mjs', args: (m, only, think) => ['--model', m, '--set', 'practice', '--only', only, ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^Practice test ', part: true } },
   { id: 'requests', name: 'Real requests', what: '28 everyday requests in throwaway folders: where each goes, and that blocked commands stay blocked', model: true, think: true, total: 28, count: '^(OK|FAIL)\\s+#\\d+',
@@ -57,9 +59,15 @@ export const RUN_TESTS = [
   { id: 'new28', name: 'New 28', what: 'the Battle’s New 28 set, on this model alone', model: true, think: true, total: 28, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'new28', ...(think ? ['--think', 'on'] : [])],
     stop: 'SIGTERM', record: { kind: 'sets', name: '^The New 28', part: false } },
-  { id: 'mine', name: 'My tests', what: 'every test you made in the Battle tab (+ New test), one after another, each the way a battle runs it: 10 minutes at most', model: true, think: true, total: null, own: true, count: '^(PASS|FAIL|NONE)\\s',
+  { id: 'mine', name: 'My tests', what: 'every test of your own (made in the Test builder tab), one after another: each stops at its level’s time (Easy 5, Medium 10, Hard 20 minutes; 10 with no level) and is worth its level’s points (1, 2, 3)', model: true, think: true, total: null, own: true, count: '^(PASS|FAIL|NONE)\\s',
     script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'mine', ...(think ? ['--think', 'on'] : [])],
-    stop: 'SIGTERM', record: { kind: 'sets', name: '^My tests', part: false } },
+    stop: 'SIGTERM', record: { kind: 'sets', name: '^My tests(,| \\()', part: false } },
+  ...Object.entries(LEVELS).map(([level, L]) => ({ id: `mine-${level}`, name: `My tests · ${L.name}`, what: `your ${L.name} tests (the Test builder tab sets a test’s level): ${L.points} point${L.points === 1 ? '' : 's'} each, each stopped at ${L.minutes} minutes unless it has its own limit`, model: true, think: true, total: null, own: level, count: '^(PASS|FAIL|NONE)\\s',
+    script: 'models/evals/battle/run-set.mjs', args: (m, n, think) => ['--model', m, '--set', 'mine', '--level', level, ...(think ? ['--think', 'on'] : [])],
+    stop: 'SIGTERM', record: { kind: 'sets', name: `^My tests · ${L.name}`, part: false } })),
+  { id: 'mytest', name: 'One of my tests', what: 'one test of your own, by its number (the Test builder’s Save and run picks it for you): it stops at its level’s time', model: true, think: true, total: 1, count: '^(PASS|FAIL|NONE)\\s', pick: { default: null, own: true, prefix: 'My test ' },
+    script: 'models/evals/battle/run-set.mjs', args: (m, only, think) => ['--model', m, '--set', 'mine', '--only', only, ...(think ? ['--think', 'on'] : [])],
+    stop: 'SIGTERM', record: { kind: 'sets', name: '^My test \\d', part: true } },
   { id: 'sorting', name: 'Sorting check', what: 'how the model sorts 85 requests into a kind (question, fix, change, rename, other): right answers and seconds a sort, with a results page', model: true, think: false, total: 82, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/sort-check.mjs', args: (m) => ['--model', m],
     stop: 'SIGTERM', record: { kind: 'other', name: '^Sorting check$', part: false } },
@@ -97,8 +105,21 @@ export function practiceChoices(home) {
   return ts.sort((a, b) => a.n - b.n || String(a.variant ?? '').localeCompare(String(b.variant ?? '')))
     .map((t) => ({ key: `${t.n}${t.variant ?? ''}`, only: /^(p\d+[b-z]?)-/.exec(t.id)?.[1] ?? t.id, title: t.title, copy: Boolean(t.copyOf) }));
 }
-// How many tests of your own there are (the Battle tab's My tests).
-export const ownCount = (home) => listMetas(home).filter((t) => t.suite === 'mine').length;
+// How many tests of your own there are (the Test builder's, the Battle tab's My tests); level: only that level's.
+export const ownCount = (home, level = null) => listMetas(home).filter((t) => t.suite === 'mine' && (!level || t.level === level)).length;
+// Your own tests as "One of my tests" picks them: by number, oldest first.
+//   key: '3' (what you pick), only: its folder (run-set.mjs's --only), title (with its level)
+export function ownChoices(home) {
+  return listMetas(home).filter((t) => t.suite === 'mine').sort((a, b) => (a.n ?? 1e9) - (b.n ?? 1e9) || String(a.created).localeCompare(String(b.created)))
+    .map((t) => ({ key: String(t.n ?? t.id), only: t.id, title: `${t.title}${LEVELS[t.level] ? ` · ${LEVELS[t.level].name}` : ''}`, copy: false }));
+}
+// The test of yours `n` names: its number (3, '3'), or its whole folder name. null: no such one.
+export function ownChoice(n, home) {
+  const all = ownChoices(home);
+  if (n == null || n === '') return all[0] ?? null;
+  const key = String(n).trim();
+  return all.find((c) => c.key === key || c.only === key) ?? null;
+}
 // The practice test `n` names: 12, '12', '18b', 'p18b' or its whole folder name. null: no such one.
 export function practiceChoice(n, home) {
   const key = String(n ?? '').trim().toLowerCase().split('-')[0].replace(/^p/, '').replace(/^0+(?=\d)/, '');
@@ -128,13 +149,17 @@ export function runCommand(id, { model = null, n = null, think = false, models =
   if (t.model && !models.includes(model)) throw new Error(`pick a model to run ${t.name} on (${models.join(' or ')})`);
   let pickArg = null;
   let key = null;
-  if (t.pick) {
+  if (t.pick?.own) {
+    const c = ownChoice(n);
+    if (!c) throw new Error(ownCount() ? `${t.name}: no test of yours numbered "${n}"` : 'you have no tests of your own yet: the Test builder tab makes one');
+    key = c.key; pickArg = c.only;
+  } else if (t.pick) {
     const c = practiceChoice(n == null || n === '' ? t.pick.default : n);
     if (!c) throw new Error(`${t.name}: no practice test "${n}" (1 to 28, or a copy of yours like 18b)`);
     key = c.key; pickArg = c.only;
   }
   const total = totalOf(t);
-  if (t.own && !total) throw new Error('you have no tests of your own yet: + New test (in the Battle tab) makes one');
+  if (t.own && !total) throw new Error(t.own === true ? 'you have no tests of your own yet: the Test builder tab makes one' : `you have no ${LEVELS[t.own].name} tests yet: the Test builder tab sets a test’s level`);
   const on = Boolean(t.think && think);
   // The control panel's changed rows reach the run as AGENTIC_TEST_SETTINGS (a test with no model takes none).
   const set = t.model ? cleanSettings(settings) : null;
@@ -145,12 +170,12 @@ export function runCommand(id, { model = null, n = null, think = false, models =
 // thinking off (`command`) and on (`commandThink`, for a test that can take it). One practice task
 // brings the tests it can pick (`choices`); My tests, how many there are now (`total`).
 export function runCatalog(models = []) {
-  const choices = practiceChoices();
-  const first = practiceChoice(RUN_TESTS.find((t) => t.pick)?.pick.default)?.only ?? choices[0]?.only;
-  const text = (t, think) => Object.fromEntries((t.model ? models : [null]).map((m) => [m ?? 'none', ['node', t.script, ...t.args(m, t.pick ? first : null, think)].join(' ')]));
+  const choices = practiceChoices(), own = ownChoices();
+  const first = (t) => (t.pick.own ? own[0]?.only ?? 'm-your-test' : practiceChoice(t.pick.default)?.only ?? choices[0]?.only);
+  const text = (t, think) => Object.fromEntries((t.model ? models : [null]).map((m) => [m ?? 'none', ['node', t.script, ...t.args(m, t.pick ? first(t) : null, think)].join(' ')]));
   return RUN_TESTS.map((t) => ({
     id: t.id, name: t.name, what: t.what, model: t.model, think: Boolean(t.think), total: totalOf(t), count: t.count ?? null, minutes: t.minutes ?? null, pick: t.pick ?? null, record: t.record,
-    ...(t.pick ? { choices } : {}), ...(t.own ? { own: true } : {}),
+    ...(t.pick ? { choices: t.pick.own ? own : choices } : {}), ...(t.own || t.pick?.own ? { own: true } : {}), ...(typeof t.own === 'string' ? { level: t.own } : {}),
     command: text(t, false), ...(t.think ? { commandThink: text(t, true) } : {}),
   }));
 }

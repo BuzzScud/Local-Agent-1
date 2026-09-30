@@ -38,7 +38,7 @@ test('each test the tab can run: its script is there, its command names the mode
   const models = ['gemma', 'qwen'];
   for (const t of RUN_TESTS) {
     expect(existsSync(join(REPO, t.script))).toBe(true);
-    if (t.own) continue; // My tests, with none yet: below
+    if (t.own || t.pick?.own) continue; // My tests (all, a level, or one of them), with none yet: below
     const c = runCommand(t.id, { model: 'qwen', models });
     expect(c.argv[0]).toBe(t.script);
     if (t.model) expect(c.argv.slice(1, 3)).toEqual(['--model', 'qwen']);
@@ -52,7 +52,12 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(() => runCommand('task', { model: 'gemma', n: 29, models })).toThrow('no practice test "29" (1 to 28, or a copy of yours like 18b)');
   expect(() => runCommand('task', { model: 'gemma', n: '18b', models })).toThrow('no practice test "18b"');
   // My tests: none yet, so nothing to run.
-  expect(() => runCommand('mine', { model: 'gemma', models })).toThrow('you have no tests of your own yet');
+  expect(() => runCommand('mine', { model: 'gemma', models })).toThrow('you have no tests of your own yet: the Test builder tab makes one');
+  // A level of them (the Test builder sets a test's level), and one of them by its number: the same.
+  expect(() => runCommand('mine-hard', { model: 'gemma', models })).toThrow('you have no Hard tests yet');
+  expect(() => runCommand('mytest', { model: 'gemma', n: 1, models })).toThrow('you have no tests of your own yet');
+  expect(RUN_TESTS.filter((t) => t.own).map((t) => [t.id, t.own, t.args('gemma', null, false).slice(-2)])).toEqual([['mine', true, ['--set', 'mine']], ['mine-easy', 'easy', ['--level', 'easy']], ['mine-medium', 'medium', ['--level', 'medium']], ['mine-hard', 'hard', ['--level', 'hard']]]);
+  expect(findRunTest('my tests easy')?.id).toBe('mine-easy');
   expect(() => runCommand('practice28', { model: 'bonsai', models })).toThrow('pick a model');
   expect(() => runCommand('nope', { model: 'gemma', models })).toThrow('no test "nope"');
   expect(runCommand('unit', { models }).argv).toEqual(['models/evals/tools/run-suite.mjs']);
@@ -90,6 +95,9 @@ test('each test the tab can run: its script is there, its command names the mode
   expect(cat.find((t) => t.id === 'task').command.gemma).toBe('node models/evals/battle/run-set.mjs --model gemma --set practice --only p10');
   expect(cat.find((t) => t.id === 'task').choices).toHaveLength(28);
   expect(cat.find((t) => t.id === 'mine')).toMatchObject({ own: true, total: 0 });
+  expect(cat.find((t) => t.id === 'mine-medium')).toMatchObject({ own: true, level: 'medium', total: 0, name: 'My tests · Medium' });
+  expect(cat.find((t) => t.id === 'mytest')).toMatchObject({ own: true, total: 0, choices: [], pick: { own: true, prefix: 'My test ' } });
+  expect(cat.find((t) => t.id === 'task').pick.prefix).toBe('Practice test ');
   // Progress from what it printed so far.
   expect(countLines(runTestById('practice28'), ['server up', '    · Plan()', 'PASS  think=off  1-json-flag', 'FAIL  think=off  10-fix', 'thinking off: 1/2 passed'])).toEqual({ done: 2, passed: 1, total: 28 });
   expect(countLines(runTestById('requests'), ['OK   #1 [code] "hello"', 'FAIL #2 [code] "x"'])).toEqual({ done: 2, passed: 1, total: 28 });
@@ -159,7 +167,28 @@ test('One practice task and My tests on one model: run-set plays the pick (or ev
   expect(line).toMatchObject({ name: 'My tests, one model', total: 1, part: false });
   expect(new RegExp(runTestById('mine').record.name).test(line.name)).toBe(true);
   expect(countLines(runTestById('mine'), ['PASS  m-port-x   4s', 'x'], 3)).toEqual({ done: 1, passed: 1, total: 3 });
-}, 60_000);
+  // A level of yours, and one of yours by its number: each names its own line, with the level and the points.
+  const hard = saveTest({ title: 'A player', kind: 'page', prompt: 'Create one HTML file for a media player.', checks: [{ type: 'page-made', value: '' }], level: 'hard' });
+  expect([runCommand('mine-hard', { model: 'gemma', models: ['gemma'] }).total, runCatalog(['gemma']).find((t) => t.id === 'mine-easy').total]).toEqual([1, 0]);
+  const pick = runCommand('mytest', { model: 'gemma', n: hard.n, models: ['gemma'] });
+  expect([pick.n, pick.argv.slice(-2)]).toEqual([String(hard.n), ['--only', hard.id]]);
+  expect(() => runCommand('mytest', { model: 'gemma', n: 99, models: ['gemma'] })).toThrow('no test of yours numbered "99"');
+  expect(runCatalog(['gemma']).find((t) => t.id === 'mytest')).toMatchObject({ total: 1, choices: [{ key: '1', title: 'Port' }, { key: String(hard.n), only: hard.id, title: 'A player · Hard' }] });
+  const h = await collect(runSet(['--set', 'mine', '--level', 'hard', '--out', join(HOME, 'sets-h')]));
+  expect(h.code).toBe(0);
+  expect(h.out).toContain('· My tests · Hard · thinking off (Low) · 1 test, one at a time, each stops at 20 minutes');
+  expect(h.out).toMatch(/My tests · Hard on Gemma: \d of 1 passed · \d of 3 points/);
+  line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.name.startsWith('My tests · Hard'));
+  expect(line).toMatchObject({ name: 'My tests · Hard, one model', total: 1, part: false, level: 'hard', points: { of: 3 } });
+  expect([new RegExp(runTestById('mine-hard').record.name).test(line.name), new RegExp(runTestById('mine').record.name).test(line.name), new RegExp(runTestById('mine').record.name).test('My tests, one model'), new RegExp(runTestById('mine').record.name).test('My tests (2 picked), one model')]).toEqual([true, false, true, true]);
+  const o = await collect(runSet(['--set', 'mine', '--only', hard.id, '--out', join(HOME, 'sets-o')]));
+  expect(o.code).toBe(0);
+  line = readRecord(join(HOME, 'record.jsonl')).find((x) => x.name.startsWith('My test '));
+  expect(line).toMatchObject({ name: `My test ${hard.n}: A player, one model`, total: 1, part: true, level: 'hard' });
+  expect(new RegExp(runTestById('mytest').record.name).test(line.name)).toBe(true);
+  // A level is only for your own tests.
+  expect((await collect(runSet(['--set', 'work28', '--level', 'easy']))).code).toBe(2);
+}, 90_000);
 
 test('a Battle set with thinking on: each test is asked for it, and the record says High', async () => {
   const out = join(HOME, 'sets-think');

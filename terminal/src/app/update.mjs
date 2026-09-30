@@ -20,9 +20,10 @@ export const FETCH_FIRST_MS = 30_000;
 // The files a rebuild picks up: the same list the launcher checks
 // (terminal/app/agentic-coder-launcher.sh), so the badge and the rebuild agree.
 export function isAppCode(path) {
-  // package.json, and the two files under evals/ that are part of the app: the test record, and
-  // the list of tests the hub's Run tests tab shows (a new test is there only once the app is rebuilt)
-  if (path === 'package.json' || path === 'models/evals/record.mjs' || path === 'models/evals/run-tests.mjs') return true;
+  // package.json, and the files under evals/ that are part of the app: the test record, the list
+  // of tests the hub's Run tests tab shows (a new test is there only once the app is rebuilt), and
+  // the arena's own files the hub's Test builder tab runs (models/evals/battle/*.mjs, not its sets)
+  if (path === 'package.json' || path === 'models/evals/record.mjs' || path === 'models/evals/run-tests.mjs' || /^models\/evals\/battle\/[^/]+\.mjs$/.test(path)) return true;
   if (!/^(terminal\/src|terminal\/rules|models)\//.test(path)) return false;
   if (/(^|\/)(node_modules|results|evals|test)\//.test(path)) return false;
   if (/(^|\/)README\.md$/.test(path)) return false;

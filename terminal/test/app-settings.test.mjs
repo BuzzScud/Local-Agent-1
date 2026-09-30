@@ -111,13 +111,14 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(help).toContain('coding hub [tab]');
   for (const w of ['weights', 'docs', 'tests', 'instructions', 'battle', 'memory']) expect(help).not.toMatch(new RegExp(`^  coding ${w}\\s`, 'm'));
   expect(await hubLine(['hub', 'tests'], env)).toBe('tests');
+  expect(await hubLine(['hub', 'builder'], env)).toBe('builder');
   expect(await hubLine(['hub', 'docs'], env)).toBe('harness');
   expect(await hubLine(['hub', 'Battle'], env)).toBe('battle');
   expect(await hubLine(['tests'], env)).toBe('tests'); // the old word
   expect(await hubLine(['memory'], env)).toBe('memory');
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, tests, battle, memory, instructions, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, tests, builder, battle, memory, instructions, help.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');
