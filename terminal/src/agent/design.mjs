@@ -123,6 +123,13 @@ const THING = /\b(?:web ?pages?|pages?|web ?sites?|sites?|web ?app|dashboards?|h
 // Things that are only a page when one is being made: "a todo app", "a countdown
 // timer", "a table of my repos" (not "build the app", "the users table").
 const MADE_THING = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:app|application|timer|countdown|clock|stopwatch|calculator|converter|counter|game|quiz|calendar|kanban|board|chart|graph|gallery|tracker|planner|table|list|visuali[sz]ation|infographic|poster|flyer|resume|cv|invitation|menu)\b|\btables? (?:of|with|that|showing)\b|\b(?:sortable|data|html) tables?\b/i;
+// More things that are a page when one is made, but only with the word that says so: a map of
+// places (not a map from ids to names), a music player (not a player class), a chat window (not a
+// chat bot), a profile card (not a card field).
+const MADE_MORE = /\b(?:a|an)\s+(?:[\w-]+\s+){0,3}?(?:timeline|carousel|slideshow|lightbox|scoreboard|playlist)\b|\b(?:interactive|world|store|location|street|city|travel|leaflet) maps?\b|\bmaps? (?:of|showing) (?:my|our|the|all) (?:[\w-]+ ){0,2}(?:stores|shops|locations|offices|places|cities|countries|trips|travels|customers|branches|visits|sales)\b|\b(?:music|audio|video|media|mp3|podcast|radio) players?\b|\bchat ?(?:window|box|view|bubbles?)\b|\b(?:support|live|group|team) chat\b|\b(?:store|shop|branch) (?:locator|finder)\b|\b(?:profile|stat|stats|data|info|user|product|contact|business|weather|summary|pricing|team|recipe|flash|kpi|metric) cards?\b/i;
+// "show my sales as a bar chart", "plot the runs over time in a graph": a chart asked for with no
+// make-word.
+const CHART_ASK = /\b(?:show|draw|plot|display|put|turn|visuali[sz]e)\b[^.?!]{0,60}?\b(?:as|into|in|on) (?:a |an )?(?:[\w-]+ ){0,2}(?:charts?|graphs?|plots?|dashboards?|maps?|timelines?)\b|^\s*(?:please )?(?:chart|graph|plot|visuali[sz]e) (?:my|our|the|all)\b/i;
 const LOOKS = /\b(?:look(?:s|ing)? (?:better|nicer|good|great|cleaner|modern|professional|prettier|ugly|bad|off|dated|plain|boring)|prettier|nicer looking|better looking|more modern|redesign|restyle|the design|visual(?:ly)?)\b/i;
 const NOT_UI_FILE = /\b[\w-]+\.(py|rb|go|rs|java|kt|swift|c|cc|cpp|h|sh|sql|ya?ml|toml|json|csv|txt|md)\b/i;
 const CODE_ONLY = /\b(function|method|class|helper|endpoint|parser|stdout|stderr|exception|unit tests?|test suite|api route|database|schema|migration|regex|cli|command line|script)\b/i;
@@ -135,10 +142,14 @@ export function isDesignRequest(text) {
   if (QUESTION.test(t) && !/\b(?:can|could|would) you\b/i.test(t.split(/[.?!]/)[0]) && !looks) return false;
   if (NOT_UI_FILE.test(t) && !/\.(html?|css|jsx|tsx|vue|svelte)\b/i.test(t)) return false;
   if (CODE_ONLY.test(t) && !looks) return false;
-  return looks || (MAKE.test(t) && (THING.test(t) || MADE_THING.test(t)));
+  return looks || (MAKE.test(t) && (THING.test(t) || MADE_THING.test(t) || MADE_MORE.test(t))) || CHART_ASK.test(t);
 }
 
 const clean = (s) => ` ${String(s).toLowerCase().replace(/[‘’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `;
+
+// Words that say nothing about the kind of page ("a small game", "a chat window"): a card's single
+// Words and the words of its name do not count them. A phrase with one ("simple page") still does.
+export const NOISE = new Set(['small', 'little', 'tiny', 'simple', 'basic', 'plain', 'quick', 'nice', 'window', 'page', 'pages', 'screen', 'screens', 'single', 'new', 'full', 'one']);
 
 // How well a card fits a request: its Words found in the request (a phrase
 // counts twice) and the words of its name.
@@ -147,12 +158,12 @@ export function scoreCard(card, text) {
   let score = 0;
   for (const w of card.words) {
     const c = clean(w).trim();
-    if (!c) continue;
+    if (!c || NOISE.has(c)) continue;
     // "explain" also finds "explains" and "explained"; a phrase counts twice.
     const re = new RegExp(` ${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:s|es|d|ed|ing)? `);
     if (re.test(t)) score += c.includes(' ') ? 2 : 1;
   }
-  for (const w of clean(card.name).trim().split(' ')) if (w.length > 3 && t.includes(` ${w} `)) score += 1;
+  for (const w of clean(card.name).trim().split(' ')) if (w.length > 3 && !NOISE.has(w) && t.includes(` ${w} `)) score += 1;
   return score;
 }
 

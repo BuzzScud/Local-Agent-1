@@ -46,10 +46,16 @@ test('a card is its name, its header lines and the rest; a README is not a card;
 const PAGES = ['make a dashboard for my xmr miner fleet', 'create a self contained html file with a weather widget', 'build a notes app page where I can add and delete notes',
   'make a page that shows the test results before and after', 'restyle index.html so it looks more modern', 'make my portfolio site look better', 'build a todo list app',
   'make a countdown timer', 'make a table of my github repos with sort and filter', 'create a login form', 'design a pricing page', 'add a dark mode to the page',
-  'can you make a landing page for my trading app?', 'the settings screen looks dated, redesign it'];
+  'can you make a landing page for my trading app?', 'the settings screen looks dated, redesign it',
+  // the kinds the first cards had nothing for (29 Sep): each is a page when asked for this way
+  'make a chat window like messages', 'make a map of my stores', 'make a music player', 'show my sales as a bar chart', 'make a profile card',
+  'build a timeline of the project', 'make a small game in the browser', 'build a photo gallery', 'create a kanban board for my tasks', 'make a calendar for this month',
+  'build a support chat', 'build a store locator'];
 const NOT = ['fix the bug in export.py', 'what does the dashboard do?', 'add a --json flag to export.mjs', 'rename total to sum', 'add unit tests for the parser',
   'make the chart function faster', 'build the app', 'add a column to the users table', 'why is the page blank?', 'update the api route for /users', 'write a python script that renames my photos',
-  'explain how the reranker works', 'run the tests'];
+  'explain how the reranker works', 'run the tests',
+  'add a map from user ids to names', 'build a chat bot that answers in slack', 'add a card field to the payment endpoint', 'add a player class to the engine',
+  'show the logs in the terminal', 'what does the calendar do?'];
 test('a request to make or restyle a page is a design request; questions, fixes and code-only work are not', () => {
   expect(PAGES.filter((t) => !D.isDesignRequest(t))).toEqual([]);
   expect(NOT.filter((t) => D.isDesignRequest(t))).toEqual([]);
@@ -69,6 +75,18 @@ test('the rules always come, then the ONE best example; the others that fit are 
   const f = D.pickCards('make a dashboard for my miner', { dir: FIX, sets: ['fable'] });
   expect(f.always).toEqual([]);
   expect(f.examples.map((c) => c.file)).toEqual(['fable/dashboard.md']);
+});
+
+test('a word that says nothing about the kind of page (window, small) does not pick a card', () => {
+  mkdirSync(join(FIX, 'your picks'), { recursive: true });
+  writeFileSync(join(FIX, 'your picks', 'wizard.md'), card('Step wizard in a window', { For: 'a runbook', Words: 'wizard, steps, small' }));
+  writeFileSync(join(FIX, 'opus', 'chat.md'), card('Chat', { For: 'a conversation', Words: 'chat, messages' }));
+  try {
+    expect(D.scoreCard(D.readCards(FIX).cards.find((c) => c.file === 'your picks/wizard.md'), 'make a small chat window')).toBe(0);
+    // before, "window" (its name) tied with "chat", and the user's own set won the tie
+    expect(D.pickCards('make a chat window', { dir: FIX }).examples[0].file).toBe('opus/chat.md');
+    expect(D.pickCards('make a step by step wizard in a small window', { dir: FIX }).examples[0].file).toBe('your picks/wizard.md');
+  } finally { rmSync(join(FIX, 'your picks', 'wizard.md')); rmSync(join(FIX, 'opus', 'chat.md')); }
 });
 
 test('the notes fit their budget, cut a long card at a line and close its code fence, and point at the full page', () => {
