@@ -36,7 +36,7 @@ test('/settings → Arena opens the hub on the Arena tab and says a run there un
   let hub = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
-    ...Array.from({ length: 10 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
+    ...Array.from({ length: 11 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'The Arena opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; hub = await (await fetch(`${url}?tab=arena`)).text(); } },
     { type: '/battle' }, { key: 'enter' }, { sleep: 600 }, { snapshot: 'old' },

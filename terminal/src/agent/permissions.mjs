@@ -294,6 +294,9 @@ export function checkRule(kind, text, { protect = [] } = {}) {
     if (!/[^*?/]/.test(t)) return { error: 'That would match every file. Name the file: .env.local, config/prod.*' };
     return { rule: t };
   }
+  // A web rule: WebSearch, or WebFetch(site).
+  const web = WEB_RULE.exec(t);
+  if (web) return { rule: web[2] ? `WebFetch(${web[2].toLowerCase()})` : 'WebSearch' };
   const bare = t.replace(STAR, '');
   if (/[;&|<>\x60$()]/.test(bare)) return { error: 'A rule is one command, without ; & | > or $( ). Save each part as its own rule.' };
   const why = blockedReason(bare);
@@ -311,6 +314,16 @@ export function checkRule(kind, text, { protect = [] } = {}) {
   return { rule: t };
 }
 
+// The web tools' rules, as /permissions keeps them: "WebSearch", and "WebFetch(site)"
+// for one site (its host, without www.). siteOf answers null for what is not a web address.
+export const siteOf = (url) => {
+  const t = String(url ?? '').trim();
+  const scheme = /^[a-z][a-z\d+.-]*:\/\//i.test(t) || /^(mailto|data|javascript|about|tel|file):/i.test(t);
+  try { const u = new URL(scheme ? t : `https://${t}`); return /^https?:$/.test(u.protocol) && u.hostname ? u.hostname.replace(/^www\./, '').toLowerCase() : null; } catch { return null; }
+};
+export const webRule = (name, args) => (name === 'WebSearch' ? 'WebSearch' : siteOf(args?.url) ? `WebFetch(${siteOf(args.url)})` : null);
+const WEB_RULE = /^(WebSearch|WebFetch\((?:www\.)?([a-z0-9.-]+\.[a-z0-9-]+)\))$/i;
+
 // The decision for one tool call, with the reason (the /permissions test
 // panel prints it). decide() below is the same without the reason.
 //   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
@@ -321,6 +334,17 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   if (name === 'Map' || name === 'CodeSearch') return { decision: 'allow', why: 'it only reads' };
   if (name === 'Remember') return { decision: 'allow', why: 'it writes to the memory, not to the project' };
   if (name === 'Rename' || name === 'TestFirst') return mode === 'plan' ? { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' } : { decision: 'allow', why: 'each change it makes asks as your mode says' };
+  // The web: a search sends its words to the search service, a page is read from a site. Each asks
+  // first, in every mode (it changes nothing here, so plan mode asks too), until a rule allows it:
+  // "don't ask again" for this session, or one saved with /permissions.
+  if (name === 'WebSearch' || name === 'WebFetch') {
+    const rule = webRule(name, args);
+    if (!rule) return { decision: 'deny', reason: 'that is not a web address (http or https)' };
+    if ((rules?.never ?? []).includes(rule)) return { decision: 'deny', reason: `blocked by your rule "${rule}" (/permissions)` };
+    const saved = (rules?.allow ?? []).includes(rule);
+    if (saved || [...(allowedPrefixes ?? [])].includes(rule)) return { decision: 'allow', why: `"${rule}" is allowed (${saved ? 'saved' : 'this session'})` };
+    return { decision: 'ask', rule, why: name === 'WebSearch' ? 'a search sends its words to the search service' : `no rule allows reading ${siteOf(args.url)} yet` };
+  }
   if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow', why: 'reading inside the project never asks' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
   if (name === 'Edit' || name === 'Write') {
     if (!inside) return { decision: 'deny', reason: 'that file is outside the project folder' };

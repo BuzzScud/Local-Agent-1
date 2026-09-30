@@ -111,7 +111,7 @@ export const PLACES = [
   ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
   ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the mouse, the model'],
   ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
-  ['Keychain · agentic-coder-remote', 'the API key of the model /remote uses (settings.json keeps only its last 4 characters)'],
+  ['Keychain · agentic-coder-remote', 'the API key of the model /remote uses, and the web search service’s key /web uses (settings.json keeps only their last 4 characters)'],
   ['~/.agentic-coder/serve.key', 'the API key coding serve asks other machines for (readable by you only)'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
@@ -133,6 +133,7 @@ export const SAFETY = [
   '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, or reach services already running.',
   'Everything runs on this Mac. Nothing you type is sent anywhere, unless you turn on /remote: then your prompts, your code and the files it reads go to the machine you named, and it says so when it switches.',
+  'The web: a search sends its words to the search service you picked in /web, and a page is read from its site. Each asks first (a site once, if you say so); a redirect to another site is not followed. What comes back is marked as data, never instructions.',
 ];
 
 export const TIPS = [

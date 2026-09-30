@@ -100,6 +100,24 @@ misread small text), and only the latest three go with each request. It all uses
 (a small Swift helper built on first use with Apple's command line tools); nothing else is
 installed. The Vision check and Picture tokens in the Arena test it with the real model.
 
+### The web
+
+The model can read a web page and, with a search service, search the web. Type `/web` (or pick
+Web in `/settings`) and fill in one form: **Search** (Off, Brave Search or Tavily), its **API key**
+(from api-dashboard.search.brave.com or app.tavily.com; kept in the Keychain), **Read pages** (On
+or Off), and what Claude may do when `/remote` is on the Claude API. **Test** runs one search with
+the key before anything is saved.
+
+Every search asks first, and so does the first page from each site; "don't ask again" holds for
+the rest of the session, and "always allow" saves the rule (`WebSearch`, `WebFetch(docs.python.org)`)
+in `/permissions` for the folder. A page comes back as its text: headings, lists, tables, code and
+links, without scripts, styling or menus; a PDF as its text, a picture as a picture. A redirect to
+another site is not followed: the model is told where it goes and asks for it. What a page or a
+search brings back is marked as data from the web, not instructions. On the Claude API, Claude uses
+Anthropic's own web search and fetch instead: they run on Anthropic's side, billed to that key,
+without asking here (the Claude API row turns them off). `coding -p` uses the same settings; with
+`--yes` it does not ask.
+
 ### A model on another machine
 
 The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, a

@@ -2,6 +2,8 @@
 // back, run the tool it asks for (asking you first when needed), feed the
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
+import { endpointOf } from '../../../models/index.mjs';
+import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight } from './tools.mjs';
@@ -254,6 +256,9 @@ export function safeArgs(args) {
 export const CHECK_INS = { steps: 6, secs: 300 };
 const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash']);
 
+// The web addresses (http or https) a request names, each once.
+export const webAddresses = (text) => [...new Set(String(text ?? '').match(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi) ?? [])].map((u) => u.replace(/[.,;:!?]+$/, ''));
+
 // One line saying what an edit will do, for the plan question.
 export function planLine(name, args, prepared) {
   const cut = (x) => { const l = String(x ?? '').trim().split('\n'); const f = l[0].trim().slice(0, 100); return l.length > 1 || l[0].length > 100 ? `${f}…` : f; };
@@ -270,12 +275,14 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
     this.way = wayOf(way);
     this.hooks = hooksOn(hooks ?? []);
+    // /web: { search: 'off' | 'brave' | 'tavily', fetch, claude } (null: no web tools, as in a practice run).
+    this.web = web;
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions, thinkBudgetSecs });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
     // or one given on its own (the practice bench runs without the memory).
@@ -324,7 +331,15 @@ export class Agent extends EventEmitter {
   // The prompt of this way: the model's own tool lines when it decides (way.mjs wayPrompt).
   setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
-  tools() { return toolSchemas(this.way); }
+  tools() { return toolSchemas(this.way, this.webTools()); }
+  // The web tools on offer (/web): WebSearch with a search service, WebFetch with reading pages.
+  // On the Claude API both are Anthropic's own (claude.mjs), unless /web's Claude row is off.
+  webTools() {
+    const w = this.web;
+    if (!w) return null;
+    if (endpointOf(this.url)?.kind === 'claude') return w.claude === false ? null : { search: 'claude', fetch: true };
+    return { search: w.search && w.search !== 'off' ? w.search : null, fetch: w.fetch !== false };
+  }
   // Whether one of the app's checks runs (way.mjs HOOKS): always on App, when switched on on Model.
   hook(id) { return this.way !== 'model' || this.hooks.has(id); }
   // /effort's Who decides row: the next message goes the new way. The prompt and the tools
@@ -481,7 +496,7 @@ export class Agent extends EventEmitter {
   // the design examples with a request to make or restyle a page.
   withTurnNotes(messages) {
     const t = this.turn;
-    const extras = [t?.bug, t?.math, t?.design, t?.carried].filter(Boolean);
+    const extras = [t?.bug, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
     if (!extras.length) return messages;
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
@@ -776,6 +791,13 @@ export class Agent extends EventEmitter {
       this.turn.carried = { request, notes: this.carried.note };
       this.turn.check = this.carried.check;
       this.carried = null;
+    }
+    // A web address in the request, with WebFetch on: a line saying it is a page to read, not a
+    // file here. Qwen looked for "http://…/notes" in the project with Search, List and Read, and ran
+    // curl, twice in seven (the Web check, 30 Sep 2026).
+    const urls = webAddresses(text);
+    if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.web = { request, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
     }
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
@@ -1548,6 +1570,9 @@ export class Agent extends EventEmitter {
           c.args += ev.args;
           this.emit('tool-writing', { name: c.name, args: c.args, tokens: tokensOf(c.args) });
           if (isLooping(c.args)) { turn.looping = true; local.abort(); break; }
+        } else if (ev.type === 'server') {
+          // A web search or page done on the server's side (the Claude API): shown as a finished step.
+          this.emit('tool', { id: ev.id, name: ev.name, ...display(ev.name, ev.args), view: ev.view, error: ev.error });
         } else if (ev.type === 'done') {
           turn.finish = ev.finish;
           if (ev.usage) this.ctxUsed = (ev.usage.prompt_tokens ?? 0) + (ev.usage.completion_tokens ?? 0);
@@ -1639,6 +1664,8 @@ export class Agent extends EventEmitter {
     }
     const args = parsed.args;
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
+    // Read of a web address, with WebFetch on: read as the page it is (asked about as WebFetch is).
+    if (call.name === 'Read' && typeof args.path === 'string' && /^https?:\/\//i.test(args.path.trim()) && this.webTools()?.fetch) return this.runTool({ id, name: 'WebFetch', args: JSON.stringify({ url: args.path.trim(), ...(args.find ? { find: args.find } : {}), ...(args.offset ? { offset: args.offset } : {}) }) }, signal);
     // The model's own tools when it decides (Map, CodeSearch, Rename, TestFirst, Remember),
     // and a Read of several files, one Read each, in one result.
     if (MODEL_TOOLS.has(call.name)) return this.runModelTool(call.name, args, shown, id, signal);
@@ -1656,7 +1683,7 @@ export class Agent extends EventEmitter {
     // as when you attach one. Without it, Read says to ask you to attach it.
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, canSee: Boolean(this.canSee), request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, canSee: Boolean(this.canSee), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -1690,7 +1717,7 @@ export class Agent extends EventEmitter {
     }
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
-      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}), ...(d.protectedBy ? { protectedBy: d.protectedBy } : {}) });
+      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}), ...(d.protectedBy ? { protectedBy: d.protectedBy } : {}), ...(d.rule ? { rule: d.rule } : {}), ...(call.name === 'WebSearch' ? { service: PROVIDER_NAMES[this.web?.search] } : {}) });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
       if (answer.choice === 'no') {
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
@@ -1700,6 +1727,8 @@ export class Agent extends EventEmitter {
         // A commit asks every time (d.once): a "yes" to it is never remembered.
         // What is remembered is the rule for the first part of the command nothing covers yet.
         if (call.name === 'Bash') { const o = d.once ? null : offerFor(args.command, { saved: rules?.allow, session: this.allowedPrefixes, protect: rules?.protect }); if (o) this.allowedPrefixes.add(o.rule); }
+        // The web: that site (or searches) without asking, for the rest of this session.
+        else if (d.rule) this.allowedPrefixes.add(d.rule);
         else if (!d.once) this.setMode('edits');
       }
       // You saw this change and said yes: that was the plan question.

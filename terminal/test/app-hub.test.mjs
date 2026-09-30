@@ -21,7 +21,7 @@ test('/settings → Weights starts the viewer inside the window: the note names 
   let served = null;
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_NO_OPEN: '1' }, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' },
-    ...Array.from({ length: 8 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
+    ...Array.from({ length: 9 }, () => [{ key: 'down' }, { sleep: 60 }]).flat(), { sleep: 200 }, { snapshot: 'menu' }, { key: 'enter' },
     { wait: 'opened in the browser at http://127.0.0.1:' },
     { fn: async ({ text }) => { const url = /http:\/\/127\.0\.0\.1:\d+\//.exec(text)[0]; served = { facts: await (await fetch(url + 'model.json')).json(), page: await (await fetch(url + 'weights')).text(), hub: await (await fetch(url)).text(), bytes: await (await fetch(url + 'model', { headers: { Range: 'bytes=0-4' } })).text() }; } },
     ...quit,
@@ -115,7 +115,7 @@ test('/help: a box in the middle says the Help page opened in the browser; the p
   expect(r.snapshots.pasted).toMatch(/> pasted words/);
   const { COMMANDS } = await import('../src/app/commands.mjs');
   expect(served.data.commands.map((c) => c.name)).toEqual(COMMANDS.map((c) => c.name)); // every command, from the same list
-  expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'remote', 'meters', 'mouse']);
+  expect(served.data.commands.filter((c) => c.menu).map((c) => c.name)).toEqual(['effort', 'mode', 'remote', 'web', 'meters', 'mouse']);
   expect(served.data.keys.flatMap((g) => g.rows.map(([k]) => k))).toContain('shift + ← →');
   expect(served.data.modes.map((m) => m.id)).toEqual(['ask', 'edits', 'plan']);
   expect(served.data.effort.map((l) => l.id)).toEqual(['low', 'high']); // the default model: no Medium

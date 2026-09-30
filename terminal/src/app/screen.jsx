@@ -14,6 +14,7 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { REMOTE_ROWS, showValue, rowNote, formWarning, kindWord } from './remote-form.mjs';
+import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
 import { StartPage, READING_TIP } from './start.jsx';
@@ -27,6 +28,8 @@ const fitPath = (p, max) => (p.length <= max ? p : `…${p.slice(p.length - max 
 // The footer's live memory dot: Activity Monitor's green / yellow / red.
 const PRESSURE_COLOR = { fine: C.ok, tight: C.warn, critical: C.bad };
 
+const webSize = (b) => (b == null ? '' : b < 1024 ? `${b} B` : b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
+
 function ToolView({ it, width }) {
   const v = it.view ?? {};
   const bullet = it.error ? C.bad : C.ok;
@@ -36,6 +39,8 @@ function ToolView({ it, width }) {
     case 'read': body = v.outline ? <Text>Outline: <Text bold>{v.parts}</Text> parts of {v.total} lines <Text color={C.dim}>(ctrl+o to expand)</Text></Text> : <Text>Read <Text bold>{v.lines}</Text> {v.lines === 1 ? 'line' : 'lines'}{v.total > v.lines ? ` of ${v.total}` : ''} <Text color={C.dim}>(ctrl+o to expand)</Text></Text>; break;
     case 'list': body = <Text>Listed <Text bold>{v.count}</Text> {v.count === 1 ? 'path' : 'paths'} <Text color={C.dim}>(ctrl+o to expand)</Text></Text>; break;
     case 'search': body = <Text>Found <Text bold>{v.count}</Text> {v.count === 1 ? 'match' : 'matches'} <Text color={C.dim}>(ctrl+o to expand)</Text></Text>; break;
+    case 'websearch': body = <Text>Found <Text bold>{v.count}</Text> {v.count === 1 ? 'result' : 'results'}{v.service ? ` · ${v.service}` : ''}{v.content ? <Text color={C.dim}> (ctrl+o to expand)</Text> : null}</Text>; break;
+    case 'fetched': body = v.moved ? <Text color={C.warn}>Moves to another site: {v.moved} (not followed)</Text> : <Text>Received <Text bold>{webSize(v.bytes)}</Text>{v.status ? ` (${v.status})` : ''}{v.lines ? `, ${v.lines} of ${v.total} lines` : ''}{v.content ? <Text color={C.dim}> (ctrl+o to expand)</Text> : null}</Text>; break;
     case 'diff': {
       const parts = [v.additions && plural(v.additions, 'addition'), v.removals && plural(v.removals, 'removal')].filter(Boolean).join(' and ') || 'no changes';
       const hunk = v.hunk.length > 40 ? [...v.hunk.slice(0, 40)] : v.hunk;
@@ -452,7 +457,7 @@ function LiveRail({ app, maxLines }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page' };
 
 // prefix: the rule "don't ask again" would remember (null: none can, the
 // command's words cannot be trusted); saveRule: what "always allow" would save
@@ -464,6 +469,11 @@ export function permissionOptions(req, prefix, saveRule = null) {
   // A git commit asks every time (permissions.mjs), so it has no "don't ask again".
   if (req.name === 'Bash') return req.once || !prefix ? [yes, no] : [yes, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, ...(saveRule ? [{ label: `Yes, and always allow ${saveRule} in this folder`, choice: 'save' }] : []), no];
   if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Agentic Coder what the test should check (esc)', choice: 'no' }];
+  // The web: "don't ask again" for this site (or for searches) this session; "always" saves the rule for this folder.
+  if (req.name === 'WebSearch' || req.name === 'WebFetch') {
+    const what = req.name === 'WebSearch' ? 'web searches' : String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1');
+    return req.rule ? [yes, { label: `Yes, and don't ask again for ${what} this session`, choice: 'always' }, { label: `Yes, and always allow ${what} in this folder`, choice: 'save' }, no] : [yes, no];
+  }
   // A protected file asks every time (permissions.mjs), so it has no "allow all edits".
   if (req.once) return [yes, no];
   if (req.name === 'Rename') return [yes, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
@@ -497,6 +507,11 @@ function PermissionPrompt({ app }) {
           <Text>{cmdLines.length > room - 3 ? `${cmdLines.slice(0, room - 4).join('\n')}\n… +${cmdLines.length - (room - 4)} lines` : req.args.command}</Text>
           <Text color={C.dim} wrap="truncate-end">{req.args.description ? `${req.args.description} · ` : ''}in {fitPath(app.cwdShort, Math.max(20, width - 12 - (req.args.description ? req.args.description.length + 3 : 0)))}</Text>
         </Box>
+      ) : req.name === 'WebSearch' || req.name === 'WebFetch' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text wrap="truncate-end">{req.name === 'WebSearch' ? `“${req.args.query}”` : req.args.url}</Text>
+          <Text color={C.dim} wrap="truncate-end">{req.name === 'WebSearch' ? `goes to ${req.service ?? 'the search service'}` : 'read as text; nothing is sent but the address'}</Text>
+        </Box>
       ) : req.name === 'Rename' ? (
         <Box flexDirection="column">
           {files.slice(0, nFiles).map((f) => (
@@ -517,6 +532,8 @@ function PermissionPrompt({ app }) {
       {req.protectedBy ? <Text color={C.warn}>Protected: {req.protectedBy} always asks before a change, even in Auto-edit.</Text> : null}
       {req.name === 'Ask' ? null
         : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
+        : req.name === 'WebSearch' ? <Text>Search the web for this?</Text>
+        : req.name === 'WebFetch' ? <Text>Read this page from <Text bold>{String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1')}</Text>?</Text>
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}
@@ -746,22 +763,25 @@ function SettingsPicker({ app }) {
   const pk = app.picker;
   const lw = Math.max(...pk.rows.map((r) => r.label.length)) + 2;
   const vw = Math.max(...pk.rows.map((r) => r.value.length)) + 3;
-  // 28 lines with the gaps; a short window (24 rows at the least) drops them,
-  // and the line under the title too, and then the key hint, when the status bar or the
-  // memory note takes a line under the menu: the whole menu always shows, top edge to last row.
+  // 29 lines with the gaps; a short window (24 rows at the least) drops them,
+  // and the line under the title too, then the title's own line (it joins the first group's:
+  // "Settings · Setup"), and then the key hint, when the status bar or the memory note takes
+  // a line under the menu: the whole menu always shows, top edge to last row.
   const tight = app.rows < 30;
   const under = app.meters || memoryWarning(app.stats.ctxUsed ?? 0, app.ctx) ? 1 : 0;
-  const noBlurb = tight && pk.rows.length + pk.groups.length + 5 + under + 1 > app.rows;
-  // Still one line short (16 rows with the status bar at 24): the key hint at the bottom goes too.
-  const noFoot = tight && pk.rows.length + pk.groups.length + 4 + under + 1 > app.rows;
+  const need = (lines) => tight && pk.rows.length + pk.groups.length + lines + under + 1 > app.rows;
+  const noBlurb = need(5);
+  const noTitle = need(4);
+  // Still one line short (17 rows with the status bar at 24): the key hint at the bottom goes too.
+  const noFoot = need(3);
   let at = 0;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>{pk.title ?? 'Settings'}</Text>
+      {noTitle ? null : <Text bold>{pk.title ?? 'Settings'}</Text>}
       {noBlurb ? null : <Text color={C.dim}>{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text>}
-      {pk.groups.map((g) => (
+      {pk.groups.map((g, gi) => (
         <Box key={g.group} flexDirection="column" marginTop={tight ? 0 : 1}>
-          <Text bold>{g.group}</Text>
+          <Text bold>{noTitle && gi === 0 ? `${pk.title ?? 'Settings'} · ${g.group}` : g.group}</Text>
           {g.rows.map((r) => {
             const on = at++ === pk.index;
             return (
@@ -854,11 +874,16 @@ function LimitsPicker({ app }) {
 // choice row shows its value between ◀ ▶; a text row its value, or what is
 // being typed with the cursor (the API key as dots); • marks a change not
 // saved yet. The last Test's findings sit on the Test row.
+// /web is the same form with its own rows (web-form.mjs).
 function RemotePicker({ app }) {
   const pk = app.picker;
-  const lw = Math.max(...REMOTE_ROWS.map((r) => r.label.length)) + 2;
+  const web = pk.kind === 'web';
+  const ROWS = web ? WEB_ROWS : REMOTE_ROWS;
+  const showValueOf = web ? showWebValue : showValue;
+  const noteOf = web ? webRowNote : rowNote;
+  const lw = Math.max(...ROWS.map((r) => r.label.length)) + 2;
   const vw = 22;
-  const warn = formWarning(pk);
+  const warn = (web ? webWarning : formWarning)(pk);
   const typing = (e) => {
     const shown = e.id === 'key' ? '•'.repeat(e.value.length) : e.value;
     const room = Math.max(8, app.width - lw - 12);
@@ -869,15 +894,15 @@ function RemotePicker({ app }) {
   const changed = (id) => (id === 'key' ? pk.key !== null : id in pk.values && pk.values[id] !== pk.saved[id]);
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>Remote model</Text>
-      <Text color={C.dim} wrap="truncate-end">Where the model runs. Test checks the rows as they are, before anything is saved. Kept for next time.</Text>
-      {REMOTE_ROWS.map((r, i) => {
+      <Text bold>{web ? 'Web' : 'Remote model'}</Text>
+      <Text color={C.dim} wrap="truncate-end">{web ? 'What the model may do on the web. Test checks the key before anything is saved. Kept for every folder.' : 'Where the model runs. Test checks the rows as they are, before anything is saved. Kept for next time.'}</Text>
+      {ROWS.map((r, i) => {
         const on = i === pk.index;
         const e = pk.editing?.id === r.id ? pk.editing : null;
         const choice = r.type === 'choice' || (r.id === 'model' && pk.test?.models?.length > 1);
         const unsaved = changed(r.id);
-        const v = showValue(pk, r.id);
-        const note = rowNote(pk, r.id);
+        const v = showValueOf(pk, r.id);
+        const note = noteOf(pk, r.id);
         const tone = r.id === 'test' && pk.test && !pk.test.running ? (pk.test.ok ? C.ok : C.bad) : undefined;
         return (
           <React.Fragment key={r.id}>
@@ -901,7 +926,7 @@ function RemotePicker({ app }) {
       })}
       {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="truncate-end">{warn.text}</Text> : null}
       {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
-      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : `↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · ${kindWord(pk.values.kind)}`}</Text>
+      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : `↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · ${web ? 'the web' : kindWord(pk.values.kind)}`}</Text>
     </Box>
   );
 }
@@ -1196,7 +1221,7 @@ export function Screen({ app }) {
         <ChoicePicker app={app} />
       ) : app.picker?.kind === 'limits' ? (
         <LimitsPicker app={app} />
-      ) : app.picker?.kind === 'remote' ? (
+      ) : app.picker?.kind === 'remote' || app.picker?.kind === 'web' ? (
         <RemotePicker app={app} />
       ) : app.picker?.kind === 'settings' ? (
         <SettingsPicker app={app} />

@@ -20,6 +20,7 @@ export const COMMANDS = [
   { name: 'resume', desc: 'Pick up an earlier conversation in this folder' },
   { name: 'model', desc: 'Pick the model and its effort' },
   { name: 'remote', desc: 'Use a model on another machine or the Claude API: address, API key, http/https or an SSH tunnel, the kind of server; Test checks it', arg: '[on|off]', picker: true },
+  { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
   { name: 'mouse', desc: 'Drag to highlight the text you are typing in the prompt box: copied at once, delete removes it', arg: '[on|off]', picker: true },
@@ -48,6 +49,7 @@ export const SETTINGS = [
     { name: 'rules', label: 'Rules', note: 'what the model reads at every start' },
     { name: 'instructions', label: 'Instructions', note: 'general and planning, edited in the browser' },
     { name: 'memory', label: 'Memory', note: 'what it remembers about you and this project' },
+    { name: 'web', label: 'Web', note: 'search the web and read pages' },
   ] },
   { group: 'Pages · the hub in the browser', rows: [
     { name: 'weights', label: 'Weights', note: "each model's weights, alone or side by side" },

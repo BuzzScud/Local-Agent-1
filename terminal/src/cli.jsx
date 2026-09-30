@@ -37,6 +37,7 @@ import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { isTrusted, saveTrust } from './app/trust.mjs';
 import { rulesFor } from './app/perm-store.mjs';
+import { webSettings } from './app/web-form.mjs';
 import { modeWord } from './app/perms.mjs';
 
 import { VERSION, cliHelpText } from './app/help.mjs';
@@ -313,6 +314,8 @@ if (opts.print) {
       helpers: helpersFrom(settings),
       // Who decides (--way, else AGENTIC_WAY, else /effort's row in limits) and the hooks /hooks left on.
       way: opts.way, hooks: hooksFrom(settings),
+      // The web as /web left it: a search service and reading pages (each asks, or --yes allows).
+      web: webSettings(settings.web),
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
       design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.

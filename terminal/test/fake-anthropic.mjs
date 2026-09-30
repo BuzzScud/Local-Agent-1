@@ -2,7 +2,8 @@
 // Claude API remote without a key or a bill: GET /v1/models, and POST
 // /v1/messages streaming the same events the real one does (message_start,
 // content blocks for thinking, text and tool_use, message_delta, message_stop).
-// Each reply: { thinking?, text?, tool?: { name, args }, stop? ('refusal'), error?: { status, type, message } }.
+// Each reply: { thinking?, search?: { query, results: [{ url, title }] }, fetch?: { url, text }, text?, tool?: { name, args },
+// stop? ('refusal', 'pause_turn'), error?: { status, type, message } }. search and fetch: Anthropic's own web tools, done on its side.
 // seen: every request's path, its key, beta and version headers, and its body.
 import { createServer } from 'node:http';
 
@@ -30,6 +31,14 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     const id = `msg_${++n}`;
     const blocks = [];
     if (reply.thinking) blocks.push({ type: 'thinking', thinking: reply.thinking, signature: `sig-${n}` });
+    if (reply.search) {
+      blocks.push({ type: 'server_tool_use', id: `srvtoolu_s${n}`, name: 'web_search', input: { query: reply.search.query } });
+      blocks.push({ type: 'web_search_tool_result', tool_use_id: `srvtoolu_s${n}`, content: reply.search.results.map((r) => ({ type: 'web_search_result', url: r.url, title: r.title, encrypted_content: `enc-${r.url}`, page_age: null })) });
+    }
+    if (reply.fetch) {
+      blocks.push({ type: 'server_tool_use', id: `srvtoolu_f${n}`, name: 'web_fetch', input: { url: reply.fetch.url } });
+      blocks.push({ type: 'web_fetch_tool_result', tool_use_id: `srvtoolu_f${n}`, content: { type: 'web_fetch_result', url: reply.fetch.url, content: { type: 'document', source: { type: 'text', media_type: 'text/plain', data: reply.fetch.text } }, retrieved_at: '2026-09-30T00:00:00Z' } });
+    }
     if (reply.text) blocks.push({ type: 'text', text: reply.text });
     if (reply.tool) blocks.push({ type: 'tool_use', id: `toolu_${n}`, name: reply.tool.name, input: reply.tool.args });
     const stop = reply.stop ?? (reply.tool ? 'tool_use' : 'end_turn');
@@ -46,8 +55,10 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
       } else if (b.type === 'text') {
         send('content_block_start', { index: i, content_block: { type: 'text', text: '' } });
         for (const part of b.text.match(/.{1,8}/gs) ?? []) send('content_block_delta', { index: i, delta: { type: 'text_delta', text: part } });
+      } else if (b.type.endsWith('_tool_result')) {
+        send('content_block_start', { index: i, content_block: b });
       } else {
-        send('content_block_start', { index: i, content_block: { type: 'tool_use', id: b.id, name: b.name, input: {} } });
+        send('content_block_start', { index: i, content_block: { type: b.type, id: b.id, name: b.name, input: {} } });
         const args = JSON.stringify(b.input);
         for (const part of args.match(/.{1,10}/gs) ?? []) send('content_block_delta', { index: i, delta: { type: 'input_json_delta', partial_json: part } });
       }

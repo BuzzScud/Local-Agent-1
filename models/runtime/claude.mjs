@@ -51,6 +51,9 @@ export function claudeCaps(id = '') {
     budget: !adaptive && /claude-(haiku-4-5|sonnet-4-5|opus-4-5|opus-4-1)/.test(m),
     structured: /claude-(fable|mythos|opus-5|opus-4-8|sonnet-5|haiku-4-5)/.test(m),
     fallbacks: /^claude-(opus-5-5|opus-5|fable-5-1|sonnet-5-5)$/.test(m),
+    // Anthropic's web tools: the 2026-02-09 versions (they filter results with code first) where
+    // the model takes them, the earlier ones elsewhere.
+    webTools: five || /claude-(opus|sonnet)-4-[6-9]/.test(m) ? '20260209' : 'basic',
   };
 }
 

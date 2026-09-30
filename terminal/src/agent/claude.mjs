@@ -18,15 +18,25 @@ import { keptImages, imageLabel } from './images.mjs';
 // A picture as Claude takes it (a still-kept one), or a line of text for an older one.
 const imageBlock = (img, kept) => (kept.has(img) ? { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } } : { type: 'text', text: imageLabel(img) });
 
+// Anthropic's own web tools, for WebSearch and WebFetch on the Claude API: they run on
+// Anthropic's side, so they are not asked about here (/web's Claude row turns them off).
+const WEB_SERVER = {
+  '20260209': { WebSearch: { type: 'web_search_20260209', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 } },
+  basic: { WebSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 5 } },
+};
+const SERVER_BLOCK = /^(server_tool_use|web_search_tool_result|web_fetch_tool_result|.*_tool_result)$/;
+
 // Thinking blocks by the reply they came with: its first tool call's id, or its text.
 const THOUGHTS = new Map();
+// A whole reply that used a web tool (its searches and pages are in it): sent back as it came.
+const WHOLE = new Map();
 const MAX_THOUGHTS = 400;
 const replyKey = (toolIds, text) => (toolIds[0] ? `tool:${toolIds[0]}` : `text:${String(text ?? '').trim()}`);
-function remember(key, blocks) {
+function remember(key, blocks, map = THOUGHTS) {
   if (!blocks.length) return;
-  THOUGHTS.delete(key);
-  THOUGHTS.set(key, blocks);
-  if (THOUGHTS.size > MAX_THOUGHTS) THOUGHTS.delete(THOUGHTS.keys().next().value);
+  map.delete(key);
+  map.set(key, blocks);
+  if (map.size > MAX_THOUGHTS) map.delete(map.keys().next().value);
 }
 
 const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.map((p) => (typeof p === 'string' ? p : p?.text ?? '')).join('') : '');
@@ -100,7 +110,11 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     else if (m.role === 'assistant') {
       const calls = (m.tool_calls ?? []).filter((c) => c?.id && c.function?.name);
       const text = textOf(m.content);
-      const blocks = [...(THOUGHTS.get(replyKey(calls.map((c) => c.id), text)) ?? [])];
+      const key = replyKey(calls.map((c) => c.id), text);
+      // A reply with web searches or pages in it goes back whole, as it came, while its text is unchanged.
+      const whole = WHOLE.get(key);
+      if (whole && whole.filter((b) => b.type === 'text').map((b) => b.text).join('') === text) { push('assistant', whole); continue; }
+      const blocks = [...(THOUGHTS.get(key) ?? [])];
       if (text.trim()) blocks.push({ type: 'text', text });
       for (const c of calls) blocks.push({ type: 'tool_use', id: c.id, name: c.function.name, input: argsOf(c.function.arguments) });
       if (blocks.some((b) => b.type === 'text' || b.type === 'tool_use')) push('assistant', blocks);
@@ -116,7 +130,11 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
   };
   if (!drop.has('cache')) params.cache_control = { type: 'ephemeral' };
   if (tools?.length) {
-    params.tools = tools.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(drop.has('eager') ? {} : { eager_input_streaming: true }) }));
+    // WebSearch and WebFetch become Anthropic's own web tools (left out if the model refused them).
+    const server = drop.has('web') ? {} : WEB_SERVER[drop.has('webnew') || caps.webTools !== '20260209' ? 'basic' : '20260209'];
+    const own = tools.filter((t) => t.function.name !== 'WebSearch' && t.function.name !== 'WebFetch');
+    const web = tools.map((t) => server[t.function.name]).filter(Boolean);
+    params.tools = [...own.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(drop.has('eager') ? {} : { eager_input_streaming: true }) })), ...web];
     // Several calls a reply only when the model decides (agent/way.mjs), as with the local models.
     params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: !parallel };
   }
@@ -149,6 +167,7 @@ function refusedField(message, params) {
   if (params.thinking && /thinking|budget_tokens|adaptive/i.test(m)) return 'thinking';
   if (params.output_config?.effort && /effort/i.test(m)) return 'effort';
   if (params.output_config?.format && /format|json_schema|schema/i.test(m)) return 'format';
+  if (params.tools?.some((t) => t.type) && /web_(search|fetch)/i.test(m)) return params.tools.some((t) => /_2026/.test(t.type ?? '')) ? 'webnew' : 'web';
   if (params.tools?.[0]?.eager_input_streaming && /eager_input_streaming/i.test(m)) return 'eager';
   if (params.cache_control && /cache_control/i.test(m)) return 'cache';
   return null;
@@ -165,6 +184,7 @@ function friendly(e, Anthropic) {
   return e;
 }
 
+const PAUSES = 5;
 const FINISH = { end_turn: 'stop', stop_sequence: 'stop', tool_use: 'tool_calls', max_tokens: 'length', pause_turn: 'stop', refusal: 'stop' };
 
 // One reply, streamed as the events client.mjs yields for every kind.
@@ -172,20 +192,41 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
   const Anthropic = await claudeSdk();
   const client = await claudeClient(url, ep.key);
   const refused = REFUSED.get(ep.model) ?? new Set();
+  // A reply paused by the server in the middle of its web searches (pause_turn) is sent
+  // back as it is and goes on, at most PAUSES times; its parts make one reply.
+  const parts = [];
+  let usedTotal = { in: 0, out: 0 };
   for (let tries = 0; ; tries++) {
     const params = claudeParams({ model: ep.model, messages, tools, toolChoice, thinking, effort, maxTokens, extra, drop: refused, parallel });
+    if (parts.length) params.messages = [...params.messages, { role: 'assistant', content: parts.flat() }];
     let started = false;
     try {
       const stream = client.beta.messages.stream(params, { signal });
       const tool = new Map(); // content block index → tool index
+      const server = new Map(); // content block index → { name, input } of a web tool call
       let wrote = false;
       let usageIn = null, usageOut = 0, finish = null;
       for await (const ev of stream) {
         started = true;
         if (ev.type === 'message_start') usageIn = ev.message?.usage ?? null;
         else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
-          tool.set(ev.index, tool.size);
+          tool.set(ev.index, tool.size + parts.flat().filter((b) => b.type === 'tool_use').length);
           yield { type: 'tool', index: tool.get(ev.index), id: ev.content_block.id, name: ev.content_block.name, args: '' };
+        } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'server_tool_use') {
+          server.set(ev.content_block.id, { name: ev.content_block.name, json: '', index: ev.index });
+        } else if (ev.type === 'content_block_start' && /^web_(search|fetch)_tool_result$/.test(ev.content_block?.type ?? '')) {
+          // A web search or page done on Anthropic's side: shown as a finished step.
+          const b = ev.content_block;
+          const call = server.get(b.tool_use_id);
+          let input = {};
+          try { input = JSON.parse(call?.json || '{}'); } catch {}
+          const err = b.content?.type?.endsWith('_error') ? b.content.error_code ?? 'error' : null;
+          yield b.type === 'web_search_tool_result'
+            ? { type: 'server', id: b.tool_use_id, name: 'WebSearch', args: { query: input.query ?? '' }, view: err ? { kind: 'error', message: `the search did not work (${err})` } : { kind: 'websearch', count: Array.isArray(b.content) ? b.content.length : 0, service: 'Anthropic' }, error: Boolean(err) }
+            : { type: 'server', id: b.tool_use_id, name: 'WebFetch', args: { url: input.url ?? b.content?.url ?? '' }, view: err ? { kind: 'error', message: `the page could not be read (${err})` } : { kind: 'fetched', url: b.content?.url ?? input.url ?? '', status: 200 }, error: Boolean(err) };
+        } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'input_json_delta' && [...server.values()].some((c) => c.index === ev.index)) {
+          const c = [...server.values()].find((x) => x.index === ev.index);
+          c.json += ev.delta.partial_json ?? '';
         } else if (ev.type === 'content_block_delta') {
           const d = ev.delta;
           if (d.type === 'text_delta' && d.text) { wrote = true; yield { type: 'text', text: d.text }; }
@@ -197,15 +238,21 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
         }
       }
       const final = await stream.finalMessage();
-      // Its thinking goes back with this reply next time, unchanged.
-      const thoughts = final.content.filter((b) => b.type === 'thinking' || b.type === 'redacted_thinking');
-      const ids = final.content.filter((b) => b.type === 'tool_use').map((b) => b.id);
-      const text = final.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-      remember(replyKey(ids, text), thoughts);
-      if (final.stop_reason === 'refusal' && !wrote) yield { type: 'text', text: `(Claude declined this request${final.stop_details?.category ? `: ${final.stop_details.category}` : ''}. Say it another way, or pick another model in /remote.)` };
       const u = final.usage ?? {};
       const inTok = (u.input_tokens ?? usageIn?.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-      yield { type: 'done', finish: FINISH[final.stop_reason ?? finish] ?? 'stop', usage: { prompt_tokens: inTok, completion_tokens: u.output_tokens ?? usageOut }, timings: null };
+      usedTotal = { in: inTok, out: usedTotal.out + (u.output_tokens ?? usageOut) };
+      parts.push(final.content);
+      // Paused in the middle of its web searches: send it back and let it go on.
+      if (final.stop_reason === 'pause_turn' && parts.length <= PAUSES) { tries = -1; continue; }
+      const content = parts.flat();
+      // Its thinking goes back with this reply next time, unchanged; a reply that used the web goes back whole.
+      const thoughts = content.filter((b) => b.type === 'thinking' || b.type === 'redacted_thinking');
+      const ids = content.filter((b) => b.type === 'tool_use').map((b) => b.id);
+      const text = content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+      remember(replyKey(ids, text), thoughts);
+      if (content.some((b) => SERVER_BLOCK.test(b.type))) remember(replyKey(ids, text), content, WHOLE);
+      if (final.stop_reason === 'refusal' && !wrote) yield { type: 'text', text: `(Claude declined this request${final.stop_details?.category ? `: ${final.stop_details.category}` : ''}. Say it another way, or pick another model in /remote.)` };
+      yield { type: 'done', finish: FINISH[final.stop_reason ?? finish] ?? 'stop', usage: { prompt_tokens: usedTotal.in, completion_tokens: usedTotal.out }, timings: null };
       return;
     } catch (e) {
       if (signal?.aborted) throw e;

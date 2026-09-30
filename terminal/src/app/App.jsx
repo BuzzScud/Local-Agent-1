@@ -20,6 +20,8 @@ import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinki
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { REMOTE_ROWS, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, toProfile, connectionChanged, formWarning, kindWord } from './remote-form.mjs';
+import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarning, webSettings, searchKeyId } from './web-form.mjs';
+import { PROVIDER_NAMES } from '../tools/web.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -329,6 +331,8 @@ export function App({ opts, win, onRestart }) {
       memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false, saveOff: saveModeOf(settings) === 'off' } : null,
       // Who decides (/effort's last row) and the app's checks switched on for when the model does (/hooks).
       way: limitsRef.current.way, hooks: hooksFrom(settings),
+      // The web (/web): a search service and reading pages, each asked about first.
+      web: webSettings(settings.web),
       // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
       helpers, embedder, ranker: embedder, rewind: rewindRef.current,
       // The design examples and the layout check (/design), as saved.
@@ -344,7 +348,7 @@ export function App({ opts, win, onRestart }) {
         // "Don't ask again" and "always allow" remember the first part of the command nothing covers yet.
         const a = agentRef.current;
         const saved = a?.savedRules();
-        const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes, protect: saved?.protect }) : null;
+        const offer = req.name === 'Bash' && !req.once ? offerFor(req.args.command, { saved: saved?.allow, session: a?.allowedPrefixes, protect: saved?.protect }) : req.rule ? { rule: req.rule } : null;
         setPerm({ req, selected: 0, options: permissionOptions(req, offer?.rule ?? null, saved?.broken ? null : offer?.rule ?? null), resolve, offer });
       }),
       // A remote that stopped answering is connected again (a new tunnel, say); if it cannot be, the reply stops and you are asked.
@@ -620,6 +624,28 @@ export function App({ opts, win, onRestart }) {
   };
   remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm };
 
+  // ---- /web: what the model may do on the web (web-form.mjs, tools/web.mjs) ----
+  const openWebPicker = () => setPicker(openWebForm(settings.web, { claude: model.remote?.kind === 'claude' }));
+  const runWebTest = (pk) => {
+    const id = (remoteRef.current.tests = (remoteRef.current.tests ?? 0) + 1);
+    setPicker({ ...pk, test: { running: true, id }, error: null });
+    testWebForm(pk).then((res) => setPicker((p) => (p?.kind !== 'web' || p.test?.id !== id ? p : { ...p, test: { ...res, id } })));
+  };
+  // Save: the search service's key to the Keychain (its own entry), the rest to settings.json.
+  // The tools change with it, so the next reply reads the instructions again.
+  const saveWeb = (pk) => {
+    if (webWarning(pk)?.tone === 'error') { setPicker({ ...pk, error: 'Nothing was saved: fix the line above first.' }); return; }
+    const v = pk.values;
+    if (v.search !== 'off' && pk.key !== null) {
+      try { if (pk.key) saveKey(pk.key, searchKeyId(v.search), 'Agentic Coder web search'); else removeKey(searchKeyId(v.search)); } catch (e) { setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return; }
+    }
+    const w = toWebSettings(pk);
+    setPicker(null);
+    settings.web = saveSettings({ web: w }).web;
+    agent.web = webSettings(settings.web);
+    push({ type: 'note', text: `Web saved: ${w.search === 'off' ? 'no search' : `search with ${PROVIDER_NAMES[w.search]}${w.keys[w.search] ? '' : ' (no key yet)'}`} · ${w.fetch ? 'pages can be read, each site asked about first' : 'no pages read'}${model.remote?.kind === 'claude' ? ` · on the Claude API: ${w.claude ? 'Claude’s own web tools' : 'none'}` : ''}.`, tone: 'dim' });
+  };
+
   // ---- pictures: the model's vision add-on, loaded when a picture is first attached ----
   // true: the message waits (vision turning on, or a question about downloading it);
   // false: it goes now (text only, with a note why).
@@ -669,6 +695,7 @@ export function App({ opts, win, onRestart }) {
       helpers: `${agent.helpers.size} of 4 on`,
       hooks: agent.way === 'app' ? 'all run: App decides' : `${agent.hooks.size} of ${HOOKS.length} on`,
       permissions: settingsValue(agent.cwd),
+      web: (() => { const w = webSettings(settings.web); return `${w.search === 'off' ? 'no search' : PROVIDER_NAMES[w.search]} · pages ${w.fetch ? 'on' : 'off'}`; })(),
       rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
       instructions: ins ? `${steps(ins.sections.general)} general · ${steps(ins.sections.planning)} planning` : 'could not read',
       memory: dirs ? `${facts(dirs.you)} about you · ${facts(dirs.project)} here` : 'off here',
@@ -1585,6 +1612,7 @@ export function App({ opts, win, onRestart }) {
         setPicker({ title: 'Resume a conversation', index: 0, items: list.map((s) => ({ key: s.id, label: s.title, desc: `${new Date(s.updated).toLocaleString()} · ${s.turns} prompt${s.turns === 1 ? '' : 's'}` })) });
         break;
       }
+      case 'web': openWebPicker(); break;
       case 'remote': {
         // /remote alone: the form. on / off: switch without it.
         const w = arg.toLowerCase();
@@ -1771,8 +1799,8 @@ export function App({ opts, win, onRestart }) {
     setPopup(null); // a paste closes the /help box, like any key
     // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
     const rp = S.current.picker;
-    if (rp?.kind === 'remote') {
-      const row = REMOTE_ROWS[rp.index];
+    if (rp?.kind === 'remote' || rp?.kind === 'web') {
+      const row = (rp.kind === 'web' ? WEB_ROWS : REMOTE_ROWS)[rp.index];
       if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
       else if (row.type === 'text' || row.type === 'secret') setPicker({ ...startEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
       return;
@@ -2003,27 +2031,33 @@ export function App({ opts, win, onRestart }) {
     }
     // /remote: ↑↓ a row, ←→ a choice row, enter (or a letter) edits a text row,
     // runs Test, or saves; while a row is being edited, its keys only.
-    if (cur.picker?.kind === 'remote') {
+    // /web: the same form keys, its own rows (web-form.mjs).
+    if (cur.picker?.kind === 'remote' || cur.picker?.kind === 'web') {
       const pk = cur.picker;
+      const web = pk.kind === 'web';
+      const kept = web ? 'Web settings kept as they were.' : 'Remote kept as it was.';
       if (pk.editing) {
         if (key.return) setPicker(commitEdit(pk));
         else if (key.escape) setPicker({ ...pk, editing: null });
-        else if (key.ctrl && ch === 'c') { setPicker(null); push({ type: 'note', text: 'Remote kept as it was.', tone: 'dim' }); }
+        else if (key.ctrl && ch === 'c') { setPicker(null); push({ type: 'note', text: kept, tone: 'dim' }); }
         else setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
         return;
       }
-      const n = REMOTE_ROWS.length;
-      const row = REMOTE_ROWS[pk.index];
+      const rows = web ? WEB_ROWS : REMOTE_ROWS;
+      const n = rows.length;
+      const row = rows[pk.index];
+      // A key row with no search service picked has nothing to take.
+      const text = (row.type === 'text' || row.type === 'secret') && !(web && pk.values.search === 'off');
       const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab && ch >= ' ';
       if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
-      else if (key.leftArrow || key.rightArrow) setPicker(moveRow(pk, row.id, key.rightArrow ? 1 : -1));
-      else if (key.return && (row.type === 'text' || row.type === 'secret')) setPicker(startEdit(pk, row.id));
-      else if (key.return && row.id === 'test') runRemoteTest(pk);
-      else if (key.return) saveRemote(pk);
+      else if (key.leftArrow || key.rightArrow) setPicker((web ? moveWebRow : moveRow)(pk, row.id, key.rightArrow ? 1 : -1));
+      else if (key.return && text) setPicker(startEdit(pk, row.id));
+      else if (key.return && row.id === 'test') (web ? runWebTest : runRemoteTest)(pk);
+      else if (key.return) (web ? saveWeb : saveRemote)(pk);
       // Typing on a text row starts it over with what you type (enter keeps the old text to change it).
-      else if (typed && (row.type === 'text' || row.type === 'secret')) setPicker({ ...startEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
-      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Remote kept as it was.', tone: 'dim' }); }
+      else if (typed && text) setPicker({ ...startEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
+      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: kept, tone: 'dim' }); }
       return;
     }
     // /effort: ↑↓ a row (Effort first, then the limits), ←→ lower / raise it, enter saves all of it (on the last row: everything back to its default), esc keeps them

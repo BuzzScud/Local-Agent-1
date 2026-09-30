@@ -144,7 +144,7 @@ export const keyStore = () => (process.platform === 'darwin' && process.env.AGEN
 export const validKey = (key) => typeof key === 'string' && /^[\x21-\x7e]{1,4096}$/.test(key);
 
 export function readKey(id = 'default') {
-  if (process.env.AGENTIC_REMOTE_KEY) return process.env.AGENTIC_REMOTE_KEY;
+  if (process.env.AGENTIC_REMOTE_KEY && id === 'default') return process.env.AGENTIC_REMOTE_KEY;
   if (keyStore() === 'keychain') {
     const r = spawnSync(SECURITY, ['find-generic-password', '-a', id, '-s', SERVICE, '-w'], { encoding: 'utf8', timeout: 10_000 });
     return r.status === 0 ? r.stdout.replace(/\n$/, '') || null : null;
@@ -152,14 +152,15 @@ export function readKey(id = 'default') {
   try { return JSON.parse(readFileSync(keyFile(), 'utf8'))[id] ?? null; } catch { return null; }
 }
 
-export function saveKey(key, id = 'default') {
+// label: what Keychain Access shows for it (the web search keys have their own).
+export function saveKey(key, id = 'default', label = 'Agentic Coder remote model') {
   if (!validKey(key)) throw new Error('an API key is one line of letters, digits and symbols, with no spaces');
   if (keyStore() === 'keychain') {
     // Through security's own command line (-i), so the key is never in a
     // process's arguments, which any program on the Mac can list.
     const q = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-    spawnSync(SECURITY, ['-i'], { input: `add-generic-password -U -a ${q(id)} -s ${q(SERVICE)} -l ${q('Agentic Coder remote model')} -w ${q(key)}\n`, encoding: 'utf8', timeout: 10_000 });
-    if (readKey(id) !== key && !process.env.AGENTIC_REMOTE_KEY) throw new Error('the Keychain did not keep the key');
+    spawnSync(SECURITY, ['-i'], { input: `add-generic-password -U -a ${q(id)} -s ${q(SERVICE)} -l ${q(label)} -w ${q(key)}\n`, encoding: 'utf8', timeout: 10_000 });
+    if (readKey(id) !== key && !(process.env.AGENTIC_REMOTE_KEY && id === 'default')) throw new Error('the Keychain did not keep the key');
     return 'keychain';
   }
   let all = {};

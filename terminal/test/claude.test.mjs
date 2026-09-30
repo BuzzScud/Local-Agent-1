@@ -35,7 +35,7 @@ test('the address: blank means Anthropic’s, https only; no tunnel; a stand-in 
 });
 
 test('what each model takes: Opus 5.5 always thinks and binds its thinking; Haiku 4.5 thinks by budget and has no effort', () => {
-  expect(claudeCaps('claude-opus-5-5')).toEqual({ adaptive: true, alwaysThinks: true, binding: true, effort: true, budget: false, structured: true, fallbacks: true });
+  expect(claudeCaps('claude-opus-5-5')).toEqual({ adaptive: true, alwaysThinks: true, binding: true, effort: true, budget: false, structured: true, fallbacks: true, webTools: '20260209' });
   expect(claudeCaps('claude-sonnet-5-5')).toMatchObject({ adaptive: true, alwaysThinks: false, binding: true, fallbacks: true });
   expect(claudeCaps('claude-opus-4-8')).toMatchObject({ adaptive: true, binding: false, structured: true, fallbacks: false });
   expect(claudeCaps('claude-opus-4-7')).toMatchObject({ adaptive: true, structured: false });
