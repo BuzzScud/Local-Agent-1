@@ -1,6 +1,6 @@
 // A stand-in for llama-server that replays scripted replies over the same
 // streaming API, so the agent and the terminal app can be tested without the
-// real model. Each reply: { reasoning?, text?, tool?: { name, args } }.
+// real model. Each reply: { reasoning?, text?, tool?: { name, args }, tools?: [{ name, args }, …] }.
 // route(request) may answer a request out of turn (the memory's save, which
 // comes whenever the app finds a pause): its reply is sent and the scripted
 // ones stay in line.
@@ -35,12 +35,14 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null,
     let n = 0;
     for (const p of pieces(reply.reasoning ?? '')) { send({ reasoning_content: p }); n++; await wait(); }
     for (const p of pieces(reply.text ?? '')) { send({ content: p }); n++; await wait(); }
-    if (reply.tool) {
-      const args = JSON.stringify(reply.tool.args);
-      send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: reply.tool.name, arguments: '' } }] });
-      for (const p of pieces(args)) { send({ tool_calls: [{ index: 0, function: { arguments: p } }] }); n++; await wait(); }
+    // tools: several calls in one reply (as a server does with parallel_tool_calls on).
+    const calls = reply.tools ?? (reply.tool ? [reply.tool] : []);
+    for (const [i, tool] of calls.entries()) {
+      const args = JSON.stringify(tool.args);
+      send({ tool_calls: [{ index: i, id: i ? `call_${requests.length}_${i}` : `call_${requests.length}`, type: 'function', function: { name: tool.name, arguments: '' } }] });
+      for (const p of pieces(args)) { send({ tool_calls: [{ index: i, function: { arguments: p } }] }); n++; await wait(); }
     }
-    send({}, reply.finish ?? (reply.tool ? 'tool_calls' : 'stop'));
+    send({}, reply.finish ?? (calls.length ? 'tool_calls' : 'stop'));
     res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900 + requests.length * 150, completion_tokens: n }, timings: { prompt_n: 120, prompt_per_second: 233.4, predicted_n: n, predicted_per_second: 41.9 } })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();

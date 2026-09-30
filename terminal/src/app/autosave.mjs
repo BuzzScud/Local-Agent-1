@@ -43,7 +43,9 @@ export class AutoSave {
     Object.assign(this, { agent, ask, say, waitMs, sessionsDir, timer: null, abort: null, running: null });
   }
 
-  get on() { return Boolean(this.agent.memory) && savingOn(); }
+  // When the model decides (agent/way.mjs), it saves with its Remember tool as it works: the
+  // app's own saves (after a task, the second look at quit, the first-use reading) stay off.
+  get on() { return Boolean(this.agent.memory) && savingOn() && this.agent.way !== 'model'; }
   // Mid-conversation saves need the side slot; without one (a shared or a
   // given server) the save waits for the window to close.
   get canRunNow() { return this.on && this.agent.slots?.side !== undefined && !this.agent.busy && !this.running; }

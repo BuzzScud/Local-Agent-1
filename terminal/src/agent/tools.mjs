@@ -1,4 +1,4 @@
-// The seven tools the model can call: definitions it sees, argument checks,
+// The tools the model can call (eight, and five more when the model decides: MODEL_TOOL_DEFS): definitions it sees, argument checks,
 // what the terminal shows for each, and the code that runs them.
 import { resolve, relative, isAbsolute, dirname, sep, extname, join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
@@ -66,7 +66,47 @@ export const TOOL_DEFS = [
   },
 ];
 
-export const toolSchemas = () => TOOL_DEFS.map((d) => ({ type: 'function', function: d }));
+// The model decides (/effort's Who decides row on Model, agent/way.mjs): what the app did for the
+// model before its first step (sort the request, run a focused path, draw the map, search by
+// meaning, save to memory at the end) becomes tools it may call, as Claude Code's model calls its
+// own. Read also takes several paths: Gemma 4 sends one call a reply and ends its turn (probed
+// 30 Sep 2026: told to send two, it still sent one), so one call reads what Qwen asks for in two.
+export const MODEL_TOOL_DEFS = [
+  {
+    name: 'Map',
+    description: 'A map of the project: every code file with its line count and the names defined in it (functions, classes, exports), names only. Use it to see how a project you do not know is laid out, instead of List and Read one file at a time.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'CodeSearch',
+    description: 'Search the code by meaning: the functions and parts closest to what you describe, from any file, with their lines. For when you do not know the exact word to Search for.',
+    parameters: { type: 'object', properties: { query: str('What the code does, in a few words') }, required: ['query'] },
+  },
+  {
+    name: 'Rename',
+    description: 'Rename one name in the code (a function, variable, class or field) everywhere it is used, in every file at once, then run the tests. Not for renaming files.',
+    parameters: { type: 'object', properties: { from: str('The name as it is now'), to: str('The new name') }, required: ['from', 'to'] },
+  },
+  {
+    name: 'TestFirst',
+    description: "Hand a bug fix or a code change to Agentic Coder's test-first worker: it writes a test that shows the problem (or the new behaviour), tries changes until that test and the project's tests pass, and reports back what it changed. Good for a change to the code of a project with tests. You can also do the work yourself with Read and Edit.",
+    parameters: { type: 'object', properties: { task: str("The whole task: the user's words, and what you found"), kind: { type: 'string', enum: ['fix', 'change'], description: 'fix: something is broken; change: add or change behaviour' } }, required: ['task'] },
+  },
+  {
+    name: 'Remember',
+    description: 'Save one fact to the memory for later conversations: a preference of the user, or how this project works or is run. Only what will still matter next time and what the code or git does not already show. One short sentence.',
+    parameters: { type: 'object', properties: { fact: str('The fact, in one short sentence'), about: { type: 'string', enum: ['you', 'project'], description: 'you: the user, in every project; project: this project only' } }, required: ['fact'] },
+  },
+];
+// Read as the model sees it on Model: a path, or several paths at once.
+const READ_MANY = {
+  ...TOOL_DEFS[0],
+  description: `${TOOL_DEFS[0].description} To read several files at once, pass paths (a list) instead of path.`,
+  parameters: { ...TOOL_DEFS[0].parameters, properties: { ...TOOL_DEFS[0].parameters.properties, paths: { type: 'array', items: { type: 'string' }, description: 'Several file paths, read one after the other in this one call' } }, required: [] },
+};
+// The tools of a way: 'app' (the default, as before) or 'model' (the tools above join them).
+export const toolDefs = (way = 'app') => (way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS);
+export const toolSchemas = (way = 'app') => toolDefs(way).map((d) => ({ type: 'function', function: d }));
 
 // Small models reach for other common argument names; accept them.
 const ALIASES = {
@@ -79,10 +119,21 @@ const ALIASES = {
   todos: ['todos', 'items', 'plan', 'steps'],
   question: ['question', 'prompt', 'text', 'message', 'query'],
   options: ['options', 'choices', 'answers'],
+  paths: ['paths', 'files', 'file_paths', 'filePaths'],
+  query: ['query', 'description', 'text', 'what', 'search'],
+  from: ['from', 'old_name', 'oldName', 'old', 'name'],
+  to: ['to', 'new_name', 'newName', 'new'],
+  task: ['task', 'request', 'description', 'prompt', 'what'],
+  kind: ['kind', 'type'],
+  fact: ['fact', 'text', 'memory', 'note', 'content'],
+  about: ['about', 'scope', 'kind', 'type'],
 };
 
-export function normalizeArgs(name, raw) {
-  const def = TOOL_DEFS.find((d) => d.name === name);
+// A tool's definition, on either way (Read's own takes paths only on Model).
+const defOf = (name, way = 'app') => toolDefs(way).find((d) => d.name === name);
+
+export function normalizeArgs(name, raw, way = 'model') {
+  const def = defOf(name, way);
   if (!def) return raw;
   const out = {};
   for (const key of Object.keys(def.parameters.properties)) {
@@ -122,13 +173,21 @@ export function sentArgs(name, json) {
   } catch { return null; }
 }
 
-export function parseArgs(name, json) {
+// way: which tools there are ('app' as before; 'model' adds MODEL_TOOL_DEFS and Read's paths).
+export function parseArgs(name, json, way = 'app') {
   let raw;
   try { raw = json && json.trim() ? JSON.parse(json) : {}; } catch (e) { return { error: `The arguments were not valid JSON (${e.message}). Write the call again with a valid JSON object. If the content is long, do not resend it whole: Write a short skeleton of the file first, then add one section at a time with Edit.` }; }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { error: 'The arguments must be a JSON object.' };
-  const args = normalizeArgs(name, raw);
-  const def = TOOL_DEFS.find((d) => d.name === name);
-  if (!def) return { error: `There is no tool called "${name}". The tools are: ${TOOL_DEFS.map((d) => d.name).join(', ')}.` };
+  const def = defOf(name, way);
+  if (!def) return { error: `There is no tool called "${name}". The tools are: ${toolDefs(way).map((d) => d.name).join(', ')}.` };
+  const args = normalizeArgs(name, raw, way);
+  // Read on Model: a path or a list of paths (one of them is needed).
+  if (name === 'Read' && way === 'model') {
+    if (typeof args.paths === 'string') args.paths = args.paths.split(/[\s,]+/).filter(Boolean);
+    if (Array.isArray(args.paths)) args.paths = args.paths.map((x) => String(x).trim()).filter(Boolean).slice(0, 8);
+    if (!args.path && args.paths?.length === 1) { args.path = args.paths[0]; delete args.paths; }
+    if (!args.path && !args.paths?.length) return { error: 'Read needs "path" (one file) or "paths" (a list of files). Send the Read call again with one of them set.' };
+  }
   for (const req of def.parameters.required ?? []) {
     if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: needsText(name, req) };
   }
@@ -145,7 +204,7 @@ export function parseArgs(name, json) {
 // What the terminal shows for a call: Read(export.mjs), Update(x), Bash(npm test)…
 export function display(name, args = {}) {
   switch (name) {
-    case 'Read': return { label: 'Read', arg: args.path ?? '' };
+    case 'Read': return { label: 'Read', arg: args.path ?? (Array.isArray(args.paths) ? args.paths.join(', ') : '') };
     case 'List': return { label: 'List', arg: args.pattern ? `${args.pattern}` : args.path ?? '.' };
     case 'Search': return { label: 'Search', arg: `${args.pattern ?? ''}${args.glob ? `, ${args.glob}` : ''}` };
     case 'Edit': return { label: 'Update', arg: args.path ?? '' };
@@ -153,6 +212,11 @@ export function display(name, args = {}) {
     case 'Bash': return { label: 'Bash', arg: args.command ?? '' };
     case 'TodoWrite': return { label: 'Update Todos', arg: '' };
     case 'Ask': return { label: 'Ask', arg: args.question ?? '' };
+    case 'Map': return { label: 'Map', arg: 'the project' };
+    case 'CodeSearch': return { label: 'CodeSearch', arg: args.query ?? '' };
+    case 'Rename': return { label: 'Rename', arg: args.from || args.to ? `${args.from ?? '?'} → ${args.to ?? '?'}` : '' };
+    case 'TestFirst': { const t = String(args.task ?? '').replace(/\s+/g, ' ').trim(); return { label: 'TestFirst', arg: t.length > 70 ? `${t.slice(0, 69)}…` : t }; }
+    case 'Remember': return { label: 'Remember', arg: String(args.fact ?? '').replace(/\s+/g, ' ').trim() };
     default: return { label: name, arg: '' };
   }
 }

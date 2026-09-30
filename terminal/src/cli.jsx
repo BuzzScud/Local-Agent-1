@@ -31,6 +31,7 @@ async function askOnTerminal(question, req) {
 }
 import { loadSettings, listSessions } from './app/store.mjs';
 import { helpersFrom } from './app/helpers.mjs';
+import { hooksFrom } from './agent/way.mjs';
 import { memoryOn } from './app/autosave.mjs';
 import { claudeOn } from './agent/claude-notes.mjs';
 import { openMemory } from './agent/facts.mjs';
@@ -88,6 +89,8 @@ function parse(argv) {
     // side jobs (sorting, the memory's save) get their own and leave the conversation's alone.
     else if (a === '--slots') o.slots = Number(val());
     else if (a === '--no-flows') o.flows = false;
+    // --way app|model: who decides for this run (agent/way.mjs), over /effort's Who decides row.
+    else if (a === '--way') o.way = String(val() ?? '').toLowerCase() === 'model' ? 'model' : 'app';
     // --local: this run uses the model on this Mac even when /remote is on.
     else if (a === '--local') o.local = true;
     else rest.push(a);
@@ -282,6 +285,8 @@ if (opts.print) {
       permissions: (dir) => rulesFor(dir),
       // The context helpers: as /helpers left them (AGENTIC_HELPERS wins).
       helpers: helpersFrom(settings),
+      // Who decides (--way, else AGENTIC_WAY, else /effort's row in limits) and the hooks /hooks left on.
+      way: opts.way, hooks: hooksFrom(settings),
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
       design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.

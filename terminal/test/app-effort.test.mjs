@@ -15,8 +15,8 @@ const D = MODELS[DEFAULT_MODEL];
 const DN = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // its name inside a pattern
 
 const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
-// The three Search rows (Embedder, Retriever, Reranker) sit between Effort and the limits.
-const PAST_SEARCH = [{ key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }];
+// Who decides and the three Search rows (Embedder, Retriever, Reranker) sit between Effort and the limits.
+const PAST_SEARCH = [{ key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }];
 
 test('/effort: Effort and every limit with its cost, ←→ moves one, enter saves it for next time, Reset all puts them back', async () => {
   const { cwd, env, base } = setup();
@@ -36,6 +36,7 @@ test('/effort: Effort and every limit with its cost, ←→ moves one, enter sav
   await fake.close();
   const panel = r.snapshots.panel;
   for (const label of ['Effort and limits', 'Effort', '── Search', 'Embedder', 'Retriever', 'Reranker', '── Limits', 'Context', 'Thinking cap', 'Tries per fix', 'Steps per request', 'Command output', 'Command timeout', 'Trim at', 'Summarize at', 'Reset all']) expect(panel).toContain(label);
+  expect(panel).toMatch(/Who decides\s+◀ App\s+▶\s+default · the app sorts, reads ahead and checks, as before/);
   expect(panel).toMatch(/Retriever\s+◀ Meaning\s+▶\s+default · by meaning alone/);
   expect(panel).toMatch(/Reranker\s+◀ Off\s+▶\s+default · the search’s own order/);
   expect(panel).toMatch(/Context\s+◀ auto\s+▶\s+↻ default · 32k, or 16k when memory is short/);
@@ -251,8 +252,8 @@ test('/effort Search rows: Retriever and Reranker save with one enter, no restar
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Welcome' },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 150 },
-    // Effort → Embedder → Retriever: Hybrid; → Reranker: Qwen3 0.6B
-    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 }, { snapshot: 'moved' },
+    // Effort → Who decides → Embedder → Retriever: Hybrid; → Reranker: Qwen3 0.6B
+    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'right' }, { sleep: 230 }, { snapshot: 'moved' },
     { key: 'enter' }, { wait: 'Saved:' }, { sleep: 200 },
     { type: '/stats' }, { key: 'enter' }, { wait: 'retriever hybrid' },
     ...quit,

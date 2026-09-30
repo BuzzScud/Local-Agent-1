@@ -89,6 +89,9 @@ export const RUN_TESTS = [
   { id: 'thinking', name: 'Thinking old vs new', what: 'the Practice 28 twice at High: every try thinking (before 30 Sep), then think when it pays with the step-down past half a task’s time; it holds when the new way passes as many and takes at least 15% less time, with a results page', model: true, think: false, total: 56, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/think-ab.mjs', args: (m) => ['--model', m],
     stop: 'SIGTERM', record: { kind: 'tasks', name: '^Thinking old vs new$', part: false } },
+  { id: 'way', name: 'Who decides: App vs Model', what: 'the Practice 28 twice: the app deciding (word rules sort, it reads ahead and checks, as before), then the model deciding (no sorting, its own tools, several calls a reply, the checks off), like Claude Code; it holds when the model passes as many and takes at most 25% more time, with a results page', model: true, think: true, total: 56, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/way-ab.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
+    stop: 'SIGTERM', record: { kind: 'tasks', name: '^Who decides: App vs Model$', part: false } },
   { id: 'components', name: 'UI component battle', what: 'your UI component requests in three parts: which design cards each one gets (no model), the pages built with the design folder on, and again with it off; run it on both models for the battle, with a results page and a blind vote', model: true, think: true, total: null, lines: componentLines, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/design/components.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'other', name: '^UI component battle$', part: false } },
@@ -153,7 +156,7 @@ export function practiceChoice(n, home) {
 // (else it is off). `total` is how many tests the run has, where the list can change (My tests).
 // The rows the Tests page's control panel may change for a run (/effort's rows; their ranges are
 // checked again where they are used, terminal/src/app/limits.mjs testLimits). Named choices are ids.
-const PANEL_ROWS = { embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', rulesRoom: 'number', upFront: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number' };
+const PANEL_ROWS = { way: 'choice', embedder: 'choice', retriever: 'choice', reranker: 'choice', context: 'number', thinking: 'number', tries: 'number', steps: 'number', rulesRoom: 'number', upFront: 'number', outputLines: 'number', timeoutSecs: 'number', trimAt: 'number', summarizeAt: 'number' };
 export function cleanSettings(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const out = {};

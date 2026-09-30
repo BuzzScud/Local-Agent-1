@@ -3,7 +3,7 @@
 import { Agent } from './agent/agent.mjs';
 import { applyLimits, applySearch, testLimits } from './app/limits.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from './agent/prompt.mjs';
-import { toolSchemas } from './agent/tools.mjs';
+import { wayEnv, wayOf, hooksOn, hooksEnv } from './agent/way.mjs';
 import { warmUp, Embedder, embedderReady } from '../../models/index.mjs';
 import { openMemory } from './agent/facts.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
@@ -19,7 +19,9 @@ import { llmCalls } from './flows/llm.mjs';
 // AGENTIC_HELPERS says (unset: all). embedder: the small model for the code
 // search when the memory is off. prewarm: the code search is built before the
 // prompt (not timed), as the app has it built by the time you ask.
-export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs }) {
+// way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
+// limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
+export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -41,8 +43,9 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
     // the same every time: off, unless AGENTIC_DESIGN / AGENTIC_LAYOUT say on.
     design: design ?? { auto: false, check: false },
     helpers: on, embedder: mem?.embedder ?? embedder ?? own,
+    way: wayOf(way ?? wayEnv() ?? 'app'), hooks: hooksEnv() !== undefined ? hooksOn(hooksEnv()) : hooksOn(hooks ?? []),
     // Starting over from its notes: the instructions come back from their saved reading.
-    rewarm: warm && slots ? (sig) => warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal: sig }) : undefined,
+    rewarm: warm && slots ? (sig) => warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: agent.tools(), thinking, effort: agent.effort, slot: slots.main, signal: sig }) : undefined,
     // approve(req) → false says no to one request even when auto-approving.
     // answers(question, req) → the reply to one of Agentic Coder's questions (null = no answer);
     // set answers.steers = true to also answer its plans (req.kind 'plan') and check-ins ('checkin').
@@ -68,8 +71,10 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   // A run from the Tests page's control panel brings its settings (AGENTIC_TEST_SETTINGS) when none are passed.
   limits ??= testLimits(model);
   if (limits) { applyLimits(agent, limits); applySearch(agent, limits); }
-  // coding -p started the server itself: restore (or read) the instructions first.
-  if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system, tools: toolSchemas(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
+  // A way given to the run (bench --way, coding -p --way, AGENTIC_WAY) wins over the limits' row.
+  if (way ?? wayEnv()) agent.setWay(way ?? wayEnv());
+  // coding -p started the server itself: restore (or read) the instructions first (the prompt and tools of its way).
+  if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: agent.tools(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
   const log = [];
   let finalText = '';
   for (const type of ['assistant', 'tool', 'note', 'todos', 'compacted', 'tries-done', 'route', 'sorted', 'memory', 'context', 'settled']) {
@@ -99,7 +104,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
     if (!mem || !worthSaving(agent.lessons)) return null;
     try { return await saveLessons({ url, model, slot: slots?.side, cwd, home: mem.home, lessons: agent.lessons, messages: agent.messages, embedder: mem.embedder }); } catch { return null; /* a save that fails never fails the run */ }
   };
-  if (mem?.save === true && !signal?.aborted) { saved = await save(); if (saved) onEvent('saved', saved); }
+  // (When the model decides it saved what it chose with Remember as it worked: no save at the end.)
+  if (mem?.save === true && !signal?.aborted && agent.way !== 'model') { saved = await save(); if (saved) onEvent('saved', saved); }
   if (mem?.embedder && !memory?.embedder && !embedder) await mem.embedder.stop({ keep: true }).catch(() => {});
   await own?.stop({ keep: true }).catch(() => {});
   // An embedder or reranker the Search rows made (applySearch) stays loaded for the next run.
@@ -117,6 +123,8 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
     // (Agentic Coder's own steps: a focused path's, the plan question, "Work in …?", the check it runs at the end.)
     ownSteps: log.filter((e) => e.type === 'tool' && !e.given && !/^(flow|plan|project|check)_/.test(String(e.id ?? ''))).length,
     modelCalls: agent.stats.requests + (llmCalls.n - calls0),
+    // Who decided, and the hooks that were on (they run only while the model decides).
+    way: agent.way, hooks: [...agent.hooks],
     helpers: [...on], helperItems: given.length, helperTokens: given.reduce((s, x) => s + (x.tokens ?? 0), 0), indexed,
     asked: log.filter((e) => e.type === 'tool' && e.label === 'Ask').map((e) => ({ question: String(e.arg), answer: e.view?.text ?? null })),
     toolErrors: log.filter((e) => e.type === 'tool' && e.error).length,

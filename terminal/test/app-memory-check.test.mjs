@@ -99,8 +99,8 @@ test('an /effort restart counts the memory the old server gives back: 64k → 32
   const r = await runInPty({ cwd, env, cols: COLS, args: ['--no-flows'], timeoutMs: 120_000, steps: [
     { wait: '? for shortcuts', ms: 45_000 }, { wait: ' · effort ', ms: 60_000 },
     { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' },
-    // past Embedder, Retriever and Reranker to Context, then 64k → 32k
-    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 80 },
+    // past Who decides, Embedder, Retriever and Reranker to Context, then 64k → 32k
+    { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'down' }, { sleep: 80 }, { key: 'left' }, { sleep: 80 },
     { key: 'enter' }, { wait: `Restarting ${D.name}` },
     { wait: 'restarted: context 32k', ms: 45_000 }, { sleep: 300 },
     { type: '/stats' }, { key: 'enter' }, { wait: 'Context 32k', ms: 15_000 }, { sleep: 200 }, { snapshot: 'stats' },

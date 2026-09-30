@@ -12,9 +12,10 @@ import { startTip } from './start.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
+import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
-import { resolvePath, toolSchemas } from '../agent/tools.mjs';
+import { resolvePath } from '../agent/tools.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE } from '../../../models/index.mjs';
 import { REMOTE_ROWS, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, toProfile, connectionChanged, formWarning, kindWord } from './remote-form.mjs';
 import { footerLabel } from './mac-memory.mjs';
@@ -121,6 +122,8 @@ export function App({ opts, win, onRestart }) {
   // stays the registry's; the agent and the server get it with the thinking cap.
   const limitsRef = useRef(null);
   limitsRef.current ??= readLimits(settings, model);
+  // --way starts this window that way; the /effort panel shows it (and a save there keeps it).
+  if (opts.way && !limitsRef.wayGiven) { limitsRef.wayGiven = true; limitsRef.current = { ...limitsRef.current, way: opts.way }; }
   // What the Weights tab has saved (each model's edited copy, by model): feeds
   // the weights badge in the lower right.
   const [editedSaved, setEditedSaved] = useState(readEditedAll);
@@ -290,7 +293,10 @@ export function App({ opts, win, onRestart }) {
     const embedder = (remembers || helpers.has('rag')) && embedderReady() && limitsRef.current.embedder !== 'off' ? new Embedder() : null;
     agentRef.current = new Agent({
       // "claudeNotes": false in settings.json leaves Claude's notes out; a path names another folder.
-      memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : null,
+      // saveOff: "memorySave": "off" — the model's Remember saves nothing either (agent/way.mjs).
+      memory: remembers ? { embedder, claude: claudeOn(settings) ? settings.claudeNotes ?? true : false, saveOff: saveModeOf(settings) === 'off' } : null,
+      // Who decides (/effort's last row) and the app's checks switched on for when the model does (/hooks).
+      way: limitsRef.current.way, hooks: hooksFrom(settings),
       // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
       helpers, embedder, ranker: embedder, rewind: rewindRef.current,
       // The design examples and the layout check (/design), as saved.
@@ -316,7 +322,7 @@ export function App({ opts, win, onRestart }) {
       rewarm: async (signal) => {
         const a = agentRef.current;
         if (!serverRef.current || !a?.warmed || a.slots?.main === undefined) return;
-        await warmUp({ sessionMark: SESSION_MARK, url: a.url, model: a.model, system: a.messages[0].content, tools: toolSchemas(), thinking: a.thinking, effort: a.effort, slot: a.slots.main, helper: serverRef.current.draft, signal });
+        await warmUp({ sessionMark: SESSION_MARK, url: a.url, model: a.model, system: a.messages[0].content, tools: a.tools(), thinking: a.thinking, effort: a.effort, slot: a.slots.main, helper: serverRef.current.draft, signal });
       },
     });
     agentRef.current.notesRoomUsed = notesChars; // what the system prompt above was built with
@@ -450,7 +456,7 @@ export function App({ opts, win, onRestart }) {
       agent.syncRules(); // rules that follow the Context are read again before the warm-up below
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       setStartPhase('reading');
-      await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase });
+      await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase });
       const n = next.edited?.edits.length ?? 0;
       if (done) push({ type: 'note', text: done(agent.ctx), tone: 'dim' });
       else push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
@@ -502,7 +508,7 @@ export function App({ opts, win, onRestart }) {
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.slots = conn.slots > 1 ? { main: 0, side: 1 } : null;
     setStartPhase('reading');
-    try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: setStartPhase }); } catch {}
+    try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: setStartPhase }); } catch {}
     setStarting(false);
     push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · ${Math.round(conn.ctx / 1024)}k context. Your prompts, your code and the files it reads now go to ${remoteLabel(r)}; /remote switches back.`, tone: 'dim' });
     const risk = remoteRisk(r);
@@ -589,6 +595,7 @@ export function App({ opts, win, onRestart }) {
       meters: S.current.meters ? 'on' : 'off',
       mouse: S.current.mouse ? 'on' : 'off',
       helpers: `${agent.helpers.size} of 4 on`,
+      hooks: agent.way === 'app' ? 'all run: App decides' : `${agent.hooks.size} of ${HOOKS.length} on`,
       permissions: settingsValue(agent.cwd),
       rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
       instructions: ins ? `${steps(ins.sections.general)} general · ${steps(ins.sections.planning)} planning` : 'could not read',
@@ -750,7 +757,9 @@ export function App({ opts, win, onRestart }) {
     if (searchNote) push({ type: 'note', text: searchNote, tone: 'warn' });
     saveSettings({ limits: limitsToSave(next, model) });
     const list = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
-    if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.`, tone: 'dim' }); return; }
+    // Who decides changes the prompt and the tools: the next reply reads the instructions again, once.
+    const way = changes.some((c) => c.id === 'way') ? ` ${next.way === 'model' ? 'The model decides from the next message: no sorting, no reading ahead, the checks only as /hooks switches them' : 'The app decides again from the next message'}; that reply reads the instructions again, once.` : '';
+    if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.${way}`, tone: 'dim' }); return; }
     if (opts.url) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model server was given with --url, so restart it yourself for the context or thinking cap to take effect.`, tone: 'warn' }); return; }
     if (model.remote) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model runs on the remote: its context is set there (coding serve --ctx, or /remote's Context row), and the new cap is asked for with each reply.`, tone: 'dim' }); return; }
     push({ type: 'note', text: `Saved: ${list}. Restarting ${model.name} for it (about a minute); the conversation stays.`, tone: 'dim' });
@@ -1026,7 +1035,7 @@ export function App({ opts, win, onRestart }) {
       // this folder too (instant when nothing changed). Another window's is left alone.
       if (!st.shared || st.idle) try {
         agent.warmed = true; // this window's own reading of the instructions: a restart from notes restores it
-        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: toolSchemas(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (alive) setStartPhase(p); } });
+        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (alive) setStartPhase(p); } });
       } catch {}
       if (!alive) return;
       setStarting(false);
@@ -1110,13 +1119,14 @@ export function App({ opts, win, onRestart }) {
       ...(s.title ? ['--resume', s.id] : []),
       ...(opts.url ? ['--url', opts.url] : []),
       ...(opts.flows === false ? ['--no-flows'] : []),
+      ...(opts.way ? ['--way', opts.way] : []),
       ...(opts.ctx ? ['--ctx', String(opts.ctx)] : []),
       ...(['low', 'medium', 'high'].includes(level) ? ['--effort', level] : []),
     ]);
     setLeaving(true);
     await serverRef.current?.stop({ keep: true });
     exit();
-  }, [effort, exit, model, onRestart, opts.ctx, opts.flows, opts.url, push, saveNow, thinking]);
+  }, [effort, exit, model, onRestart, opts.ctx, opts.flows, opts.url, opts.way, push, saveNow, thinking]);
 
   const interrupt = useCallback(() => {
     abortRef.current?.abort();
@@ -1382,6 +1392,22 @@ export function App({ opts, win, onRestart }) {
         }
         const set = helpersEnv();
         push({ type: 'panel', title: `Helpers · ${agent.helpers.size} of 4 on · what comes along with a request before the first step${set !== undefined ? ` · AGENTIC_HELPERS=${set} decides` : ''}`, pad: 35, rows: helperRows(agent.helpers, agent.lastHelpers ?? [], { ragPaused: limitsRef.current.embedder === 'off' }) });
+        break;
+      }
+      case 'hooks': {
+        // The app's checks as hooks, for when the model decides (agent/way.mjs): numbered, on or
+        // off; "/hooks on 1" switches one. On App they all run, as they always have.
+        const [what = '', ...rest] = arg.trim().split(/\s+/);
+        if (what) {
+          if (busy) { flash('Wait for Agentic Coder to finish first'); break; }
+          const r = changeHooks(agent.hooks, what.toLowerCase(), rest.join(' '));
+          if (r.changed) { agent.hooks = r.on; saveSettings({ hooks: [...r.on] }); }
+          push({ type: 'note', text: `${r.text}${r.changed && agent.way === 'app' ? ' (Who decides is App in /effort, so every check runs now anyway.)' : ''}`, tone: r.tone ?? 'dim' });
+          break;
+        }
+        const set = hooksEnv();
+        const n = agent.way === 'app' ? 'all on: Who decides is App' : `${agent.hooks.size} of ${HOOKS.length} on while the model decides`;
+        push({ type: 'panel', title: `Hooks · ${n} · the app's checks${set !== undefined ? ` · AGENTIC_HOOKS=${set} decides` : ''}`, pad: 32, rows: hookRows(agent.hooks, agent.way) });
         break;
       }
       case 'init':

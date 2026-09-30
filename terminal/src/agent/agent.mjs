@@ -18,7 +18,8 @@ import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { runFlows, isSmallTalk, routeByRules } from '../flows/index.mjs';
+import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
+import { wayOf, hooksOn, wayPrompt } from './way.mjs';
 import { clarify } from '../flows/clarify.mjs';
 import { isFollowUp, sortLine } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
@@ -34,12 +35,17 @@ import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
 import { recall, recallNotes, usedFacts } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
-import { saveLessons, knownAlready, practiceWork } from './lessons.mjs';
+import { saveLessons, knownAlready, practiceWork, applySave, saveLine } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
 
 const MAX_STEPS = 40;
+// When the model decides (way.mjs): the calls of one reply that run, in order.
+export const MAX_CALLS = 8;
+// Its own tools on Model (tools.mjs MODEL_TOOL_DEFS), run by the agent itself.
+const MODEL_TOOLS = new Set(['Map', 'CodeSearch', 'Rename', 'TestFirst', 'Remember']);
+const CODE_SEARCH_CHARS = 6000; // what one CodeSearch brings back, at most (~1,700 tokens)
 // A request's time for thinking (30 Sep 2026): past half of it, it thinks only briefly, so it
 // finishes instead of running out of time (practice task 28 at High ran out of its 30 minutes on
 // 29 Sep, while Low passed it in under 3). The chat keeps the template's thinking switch and is
@@ -249,8 +255,12 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv() }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null }) {
     super();
+    // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
+    // hooks for when the model decides (on App they all run, as they always have).
+    this.way = wayOf(way);
+    this.hooks = hooksOn(hooks ?? []);
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions, thinkBudgetSecs });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
     // or one given on its own (the practice bench runs without the memory).
@@ -286,17 +296,35 @@ export class Agent extends EventEmitter {
     this.slots = slots ?? null;
     // How this project runs its tests; used to check a change before calling it done.
     this.testCmd = verify ? testCommand(cwd) : null;
-    this.messages = [{ role: 'system', content: system }];
+    this.messages = [{ role: 'system', content: wayPrompt(system, this.way) }];
     this.workingInstructions = readInstructions().sections;
     this.allowedPrefixes = new Set();
     this.readFiles = new Set(); // files read (or written) in this conversation
     this.todos = null;
-    this.ctxUsed = tokensOf(system) + 1200; // system + tool definitions, until the server reports
+    this.ctxUsed = tokensOf(this.messages[0].content) + 1200; // system + tool definitions, until the server reports
     this.busy = false;
     this.stats = { tps: null, pps: null, outTokens: 0, requests: 0 };
   }
 
-  setSystem(system) { this.messages[0] = { role: 'system', content: system }; }
+  // The prompt of this way: the model's own tool lines when it decides (way.mjs wayPrompt).
+  setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
+  // The tools the model is offered: the app's eight, and its own five when it decides.
+  tools() { return toolSchemas(this.way); }
+  // Whether one of the app's checks runs (way.mjs HOOKS): always on App, when switched on on Model.
+  hook(id) { return this.way !== 'model' || this.hooks.has(id); }
+  // /effort's Who decides row: the next message goes the new way. The prompt and the tools
+  // change with it, so the next reply reads the instructions again (the app warms them up).
+  setWay(way, hooks) {
+    const next = wayOf(way);
+    if (hooks !== undefined) this.hooks = hooksOn(hooks ?? []);
+    if (next === this.way) return false;
+    const before = tokensOf(this.messages[0].content);
+    this.way = next;
+    this.messages[0] = { role: 'system', content: wayPrompt(this.messages[0].content, next) };
+    this.ctxUsed += tokensOf(this.messages[0].content) - before;
+    this.emit('way', next);
+    return true;
+  }
   // /effort's Rules room and Up-front reading: 0 = auto, a share of the context (room.mjs).
   rulesRoom = 0;
   upFront = 0;
@@ -595,12 +623,15 @@ export class Agent extends EventEmitter {
     this.messages.push({ role: 'user', content: text });
     if (this.happened) this.happened.message = this.messages.at(-1);
     this.emit('turn-start', { started });
-    if (isSmallTalk(text)) { this.happened.small = true; return this.chat(text, started, signal); }
+    // The model decides (way.mjs): no word rules pick a path for it, not even for a greeting or
+    // "update memory" (it answers, or saves with Remember). Only the loop below runs.
+    const decides = this.way === 'model';
+    if (!decides && isSmallTalk(text)) { this.happened.small = true; return this.chat(text, started, signal); }
     // "update memory" / "remember that …": saved straight to the memory file, never a question about where.
-    if (isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
+    if (!decides && isMemoryRequest(text)) { this.happened.small = true; return this.updateMemory(text, started, signal); }
     this.lastRoute = null;
     this.lastHelpers = []; // what the helpers bring to this request (/helpers shows it)
-    this.sortShown = this.mode === 'plan'; // a plan is never sorted: no line
+    this.sortShown = this.mode === 'plan' || decides; // a plan is never sorted, nor a request the model decides: no line
     const stopNow = (reason) => {
       this.busy = false;
       this.emit('flow-step', null);
@@ -616,7 +647,7 @@ export class Agent extends EventEmitter {
     // desktop?", "why") is clear with the conversation in view and means
     // little without it: no question first and no focused path, which both
     // read the line alone. It goes on step by step.
-    const follow = isFollowUp(text, this.messages.slice(0, turnStart).some((m) => m.role === 'assistant'));
+    const follow = !decides && isFollowUp(text, this.messages.slice(0, turnStart).some((m) => m.role === 'assistant'));
     if (follow) this.sorted('follow-up');
     // The saved facts that fit the request come along with it. They are
     // written into the request itself, so the conversation read so far stays
@@ -625,8 +656,9 @@ export class Agent extends EventEmitter {
     this.claudeCame = false;
     try { await this.remember(text, turnStart, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted'); }
     // An unclear request gets one question first (src/flows/clarify.mjs); the
-    // answer joins the conversation and travels with the request.
-    if (!follow && this.flows && this.mode !== 'plan') {
+    // answer joins the conversation and travels with the request. (The model that
+    // decides asks with its own Ask tool, when it wants to.)
+    if (!decides && !follow && this.flows && this.mode !== 'plan') {
       try {
         const c = await clarify(this.flowContext(signal), text);
         if (c?.stop) return stopNow(c.stop);
@@ -642,8 +674,9 @@ export class Agent extends EventEmitter {
       }
     }
     // First the focused paths (rename / fix / change); the loop handles the rest.
+    // (The model that decides calls them itself: Rename and TestFirst.)
     this.carried = null;
-    if (!follow && this.flows && this.mode !== 'plan') {
+    if (!decides && !follow && this.flows && this.mode !== 'plan') {
       // Every focused call's tokens, for the done line (the loop counts its own).
       const counted = { steps: 0, tokens: 0, thinkTokens: 0 };
       const tally = ({ tokens, thought }) => { counted.steps++; counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
@@ -675,7 +708,7 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `The focused path failed (${e.message}); working step by step instead.`, tone: 'warn' });
       }
     }
-    const kind = follow ? undefined : this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    const kind = follow || decides ? undefined : this.lastRoute?.kind ?? routeByRules(text)?.kind;
     this.sorted(kind); // no focused path ran (or none exists here): step by step
     // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
     // go with this turn's requests to the model, not into the conversation.
@@ -748,14 +781,17 @@ export class Agent extends EventEmitter {
     }
     // A question about code: what it is about is read now, in one go, instead
     // of letting the model find, list and read it a piece at a time.
-    this.prefetchMap();
-    if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
-    else if (!follow && kind !== 'rename') await this.prefetchRanked(text, signal);
-    // What the other helpers bring (helpers.mjs): the failing tests and the
-    // changes, the closest parts of long files by meaning, where names are used.
-    try { await this.bringHelpers(text, kind, signal); } catch (e) {
-      if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted');
-      this.emit('note', { text: `The helpers could not bring what they found (${e.message}); starting without it.`, tone: 'dim' });
+    // The model that decides looks for itself (Map, CodeSearch, List, Search, Read).
+    if (!decides) {
+      this.prefetchMap();
+      if (kind === 'question' || (!kind && EXPLAIN.test(text))) await this.prefetch(text);
+      else if (!follow && kind !== 'rename') await this.prefetchRanked(text, signal);
+      // What the other helpers bring (helpers.mjs): the failing tests and the
+      // changes, the closest parts of long files by meaning, where names are used.
+      try { await this.bringHelpers(text, kind, signal); } catch (e) {
+        if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted');
+        this.emit('note', { text: `The helpers could not bring what they found (${e.message}); starting without it.`, tone: 'dim' });
+      }
     }
     let verified = false;
     let lostChecked = false;
@@ -796,8 +832,9 @@ export class Agent extends EventEmitter {
           if (inText) { calls = [{ id: `call_${Date.now()}`, name: inText.name, args: inText.args }]; text = turn.text.trim() ? inText.before : ''; }
         }
         // Only the first call runs, so only the first is kept in the history
-        // (otherwise the model waits for results that never come).
-        calls = calls.slice(0, 1);
+        // (otherwise the model waits for results that never come). When the model
+        // decides, every call of the reply runs, in order (at most MAX_CALLS).
+        calls = calls.slice(0, decides ? MAX_CALLS : 1);
         // A call cut off by the reply limit (finish 'length'): running it can
         // only give "not valid JSON", and the old error told the model to send
         // the same too-big call again. Instead: build the file in parts.
@@ -834,13 +871,13 @@ export class Agent extends EventEmitter {
           // Small models often announce the next step mid-task ("Now I will
           // update main().") and stop. Tell them to go ahead, at most twice per
           // message, and only once work is under way (a tool already ran).
-          if (nudges < 2 && toolsUsed > 0 && announcesNextStep(text)) {
+          if (nudges < 2 && toolsUsed > 0 && this.hook('next-step') && announcesNextStep(text)) {
             nudges++;
             this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
             continue;
           }
           // It created a file this turn, then says the work was already there.
-          if (this.turn.created.length && claimsAlreadyThere(text)) {
+          if (this.turn.created.length && this.hook('already') && claimsAlreadyThere(text)) {
             const files = this.turn.created.join(', ');
             if (!correctedAlready) {
               correctedAlready = true;
@@ -850,12 +887,14 @@ export class Agent extends EventEmitter {
             this.emit('note', { text: `Note: ${files} did not exist before; Agentic Coder created it just now.`, tone: 'warn' });
           }
           // A blank answer (seen once after "hello"): ask for one, once.
-          if (!text.trim() && turn.finish !== 'length' && !blankRetry) {
+          if (!text.trim() && turn.finish !== 'length' && !blankRetry && this.hook('empty')) {
             blankRetry = true;
             this.emit('note', { text: 'The model gave an empty answer; asked it to reply.', tone: 'dim' });
             this.messages.push({ role: 'user', content: auto('Reply to the user now, in one to three sentences.') });
             continue;
           }
+          // With the hook off, the empty answer stands, and the screen says why it is blank.
+          if (!text.trim() && turn.finish !== 'length' && !blankRetry && !this.hook('empty')) this.emit('note', { text: 'The model ended with an empty answer (the Empty reply hook would send it back: /hooks on empty).', tone: 'dim' });
           if (!text.trim() && turn.finish === 'length') {
             // Cut off after a few words: the memory was full, not the thinking too long.
             if (turn.tokens < 200) {
@@ -871,7 +910,7 @@ export class Agent extends EventEmitter {
           // run them (through the normal permission prompt); if they fail, send
           // it back to fix them. At most twice per message.
           const checkCmd = this.turn.check ?? (this.turn.bug?.kind && !this.turn.bug.kind.testsSeeIt ? null : this.testCmd);
-          if (checkCmd && this.turn.changed && !this.turn.testedAfterChange && checks < 2) {
+          if (checkCmd && this.turn.changed && !this.turn.testedAfterChange && checks < 2 && this.hook('tests')) {
             checks++;
             const call = { id: `check_${Date.now()}`, name: 'Bash', args: JSON.stringify({ command: checkCmd, description: this.turn.check ? 'Run the check the request names' : 'Check the change with the project’s tests' }) };
             assistant.tool_calls = [{ id: call.id, type: 'function', function: { name: 'Bash', arguments: call.args } }];
@@ -887,7 +926,7 @@ export class Agent extends EventEmitter {
           // Nothing lost: it changed files and says it is done, but a function
           // the request never names is gone (practice task 14: perimeter()
           // replaced area() instead of going beside it). Once per message.
-          if (this.turn.changed && !lostChecked && !signal?.aborted) {
+          if (this.turn.changed && !lostChecked && !signal?.aborted && this.hook('lost')) {
             lostChecked = true;
             const lost = this.lostSinceStart();
             if (lost) {
@@ -899,7 +938,7 @@ export class Agent extends EventEmitter {
           // A page it made or changed: opened in a browser and measured
           // (flows/layoutcheck.mjs). What is broken goes back once; after the
           // fix it looks again and says what is left.
-          if (this.turn.changed && !layoutDone && !signal?.aborted) {
+          if (this.turn.changed && !layoutDone && !signal?.aborted && this.hook('layout')) {
             const found = await this.checkLayout(layoutSent);
             if (found && !layoutSent) {
               layoutSent = true;
@@ -910,7 +949,7 @@ export class Agent extends EventEmitter {
           }
           // It changed files and says it is done: does the work cover every
           // part of the request? Once per message; a miss sends it back.
-          if (this.turn.changed && this.verify && !verified && !signal?.aborted) {
+          if (this.turn.changed && this.verify && !verified && !signal?.aborted && this.hook('done')) {
             verified = true;
             const miss = await this.verifyDone(text, signal);
             if (miss) {
@@ -921,31 +960,46 @@ export class Agent extends EventEmitter {
           }
           break;
         }
-        // One call at a time (the prompt asks for it; extra calls are ignored).
-        const call = calls[0];
-        toolsUsed++;
-        const out = await this.runTool(call, signal);
-        if (call.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + 1;
-        if (!out.error) cuts = 0; // a step landed: cut-off replies are no longer "in a row"
-        const result = { role: 'tool', tool_call_id: call.id, content: out.text };
-        this.messages.push(result);
-        if (out.readKey) this.turn.reads.set(out.readKey, { msg: result, mtime: out.mtime });
-        if (out.stop) { reason = out.stop; break; }
-        const steer = await this.checkIn(call, signal);
+        // One call at a time on App (the prompt asks for it; extra calls were dropped
+        // above); when the model decides, each call of the reply in order, each with its
+        // own result. A call that ends the turn (you said no, you stopped it) ends the
+        // rest too: they get a result that says so, as the conversation needs one each.
+        let out = null;
+        let stopped = null;
+        let landed = false;
+        for (const c of calls) {
+          if (stopped || signal?.aborted) {
+            this.messages.push({ role: 'tool', tool_call_id: c.id, content: stopped ? 'Not run: a call before it in the same reply ended the turn.' : 'Interrupted.' });
+            continue;
+          }
+          toolsUsed++;
+          out = await this.runTool(c, signal);
+          if (c.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + (out.readKeys?.length || 1);
+          if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
+          const result = { role: 'tool', tool_call_id: c.id, content: out.text };
+          this.messages.push(result);
+          for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime });
+          if (out.stop) stopped = out.stop;
+        }
+        if (stopped) { reason = stopped; break; }
+        if (signal?.aborted) { reason = 'interrupted'; break; }
+        // The check-ins and the "make the change now" note look at the reply's last call.
+        const call = calls.at(-1);
+        const steer = this.hook('checkin') ? await this.checkIn(call, signal) : null;
         const checkedIn = Boolean(steer?.asked);
         if (steer?.stop) { reason = steer.stop; break; }
         if (steer?.text) this.messages.push({ role: 'user', content: steer.text });
         else {
-          const go = this.actNow(call, lines);
+          const go = this.hook('next-step') ? this.actNow(call, lines) : null;
           if (go) {
             this.messages.push({ role: 'user', content: auto(go) });
             this.emit('note', { text: 'It named the cause; asked it to make the change now.', tone: 'dim' });
           }
         }
-        const key = `${call.name}:${call.args}`;
+        const key = calls.map((c) => `${c.name}:${c.args}`).join('\n');
         repeats = key === repeatKey ? repeats + 1 : 0;
         repeatKey = key;
-        errorsInRow = out.error ? errorsInRow + 1 : 0;
+        errorsInRow = landed ? 0 : errorsInRow + 1;
         if (repeats >= 3 || errorsInRow >= 5) {
           reason = 'stuck';
           this.emit('note', { text: repeats >= 3 ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
@@ -955,7 +1009,7 @@ export class Agent extends EventEmitter {
         // asks you for a hint instead of going round again. "Keep going"
         // starts the counts over; with no one to answer (coding -p, the
         // practice bench) it carries on and the old limits above still stop it.
-        if ((repeats === 1 || errorsInRow === 3) && this.checkIns && !checkedIn) {
+        if ((repeats === 1 || errorsInRow === 3) && this.checkIns && !checkedIn && this.hook('stuck')) {
           const s2 = await this.stuckAsk(repeats === 1 ? 'repeat' : 'errors', call, out, signal);
           if (s2?.stop) { reason = s2.stop; break; }
           if (s2?.text) this.messages.push({ role: 'user', content: s2.text });
@@ -1076,7 +1130,7 @@ export class Agent extends EventEmitter {
     const checked = h.flow ? h.flow.done : t?.changed && t.testedAfterChange ? t.checkOk : undefined;
     const outcome = reason === 'interrupted' ? 'stopped' : ['stuck', 'limit', 'error'].includes(reason) ? 'stuck' : checked === false ? 'failed' : checked === true ? 'passed' : reason === 'declined' ? 'declined' : 'done';
     const lesson = {
-      at: h.at, request: h.request.slice(0, 600), kind: this.lastRoute?.kind ?? routeByRules(h.request)?.kind ?? null, reason, outcome,
+      at: h.at, request: h.request.slice(0, 600), kind: this.way === 'model' ? null : this.lastRoute?.kind ?? routeByRules(h.request)?.kind ?? null, reason, outcome,
       files: [...h.files].slice(0, 12), check: h.check ?? null, tries: h.tries.slice(-6), findings: (t?.findings ?? []).slice(-4), asked: (t?.asked ?? []).slice(-3),
       warnings: h.warnings.slice(-4), summary: h.flow?.summary ?? null, recalled: h.recalled,
       used: this.usedThisTurn(h),
@@ -1434,7 +1488,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: toolSchemas(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap: this.steppedDown() ? STEP_DOWN_CAP : undefined, slot: this.slots?.main, signal: local.signal });
+      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap: this.steppedDown() ? STEP_DOWN_CAP : undefined, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -1535,7 +1589,7 @@ export class Agent extends EventEmitter {
   }
 
   async runTool(call, signal) {
-    let parsed = parseArgs(call.name, call.args);
+    let parsed = parseArgs(call.name, call.args, this.way);
     if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
     const shown = display(call.name, parsed.args ?? {});
     const id = call.id;
@@ -1545,6 +1599,10 @@ export class Agent extends EventEmitter {
     }
     const args = parsed.args;
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
+    // The model's own tools when it decides (Map, CodeSearch, Rename, TestFirst, Remember),
+    // and a Read of several files, one Read each, in one result.
+    if (MODEL_TOOLS.has(call.name)) return this.runModelTool(call.name, args, shown, id, signal);
+    if (call.name === 'Read' && Array.isArray(args.paths) && !args.path) return this.readMany(id, args.paths, signal);
     // A question changes nothing. (A practice question once tested an idea by
     // writing a scratch file inside the project, 2026-09-26.) Edit and Write
     // are turned away; a command that is not plain reading runs in a
@@ -1577,7 +1635,7 @@ export class Agent extends EventEmitter {
       return { text: `Not allowed: ${d.reason}. ${this.claudeCame ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
     }
     // Edits on auto-accept: the first one of a message is shown as a plan first.
-    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan) {
+    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan && this.hook('plan')) {
       const plan = planLine(call.name, args, prepared);
       const r = await this.confirm(plan, signal);
       if (r.stop) return { text: 'Interrupted.', stop: r.stop };
@@ -1676,6 +1734,119 @@ export class Agent extends EventEmitter {
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) { this.turn.testedAfterChange = true; this.turn.checkOk = !out.error; if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error }; }
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
+  }
+
+  // Read with several paths (the model decides): each file read as its own Read, on screen
+  // one by one; the model gets them in one result, in the order it named them.
+  async readMany(id, paths, signal) {
+    const parts = [];
+    const readKeys = [];
+    let failed = 0;
+    for (const [k, path] of paths.entries()) {
+      if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+      const out = await this.runTool({ id: `${id}_${k + 1}`, name: 'Read', args: JSON.stringify({ path }) }, signal);
+      if (out.stop) return out;
+      if (out.error) failed++;
+      if (out.readKey) readKeys.push({ readKey: out.readKey, mtime: out.mtime });
+      parts.push(out.text);
+    }
+    return { text: parts.join('\n\n'), error: failed === paths.length, readKeys };
+  }
+
+  // The model's own tools (tools.mjs MODEL_TOOL_DEFS): what the app did for it before its
+  // first step, now when it asks. Rename and TestFirst change files, so plan mode refuses them
+  // (as it refuses Edit); each change they make still asks as your mode says.
+  async runModelTool(name, args, shown, id, signal) {
+    const seen = (view, error = false) => this.emit('tool', { id, name, ...shown, view, error });
+    const d = decide(name, args, { mode: this.mode });
+    if (d.decision === 'deny') { seen({ kind: 'denied', message: d.reason }, true); return { text: `Not allowed: ${d.reason}.`, error: true }; }
+    if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${name} ${args.query ?? args.task ?? args.fact ?? (args.from ? `${args.from} ${args.to}` : '')}`.slice(0, 300));
+    if (name === 'Map') {
+      if (isHomeFolder(this.cwd)) { seen({ kind: 'error', message: 'No map of the home folder' }, true); return { text: 'There is no map of the home folder: it would list whatever code it meets first. List a folder, or work in a project folder.', error: true }; }
+      let map = null;
+      try { map = repoMap(this.cwd, { maxChars: 4500 }); } catch {}
+      if (!map?.entries?.length) { seen({ kind: 'list', count: 0, content: '' }); return { text: 'No code files here. List shows what the folder holds.' }; }
+      this.mapGiven = true;
+      seen({ kind: 'list', count: map.entries.length, content: map.text });
+      return { text: `Code files in the project (lines: top-level names):\n${map.text}` };
+    }
+    if (name === 'CodeSearch') {
+      const off = !this.helpers.has('rag') ? 'the code search helper (Oracle) is off in /helpers' : !this.embedder ? "the small model that compares meanings is off (/effort's Embedder)" : isHomeFolder(this.cwd) ? 'there is no code search of the home folder' : null;
+      if (off) { seen({ kind: 'error', message: 'The code search is off' }, true); return { text: `The code search is off here: ${off}. Use Search with a word or name instead.`, error: true }; }
+      let found = null;
+      try { found = await this.findCode(args.query, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') return { text: 'Interrupted.', stop: 'interrupted' }; }
+      if (found?.waiting) { seen({ kind: 'search', count: 0, content: '' }); return { text: `The code search is still indexing${found.total ? ` (${found.done} of ${found.total} parts)` : ''}. Use Search with a word or name for now.` }; }
+      const picked = (found?.parts ?? []).filter((p) => p.close >= CUT).slice(0, 8);
+      if (!picked.length) { seen({ kind: 'search', count: 0, content: '' }); return { text: 'Nothing close to that in the code. Try other words, or Search for a name.' }; }
+      let room = CODE_SEARCH_CHARS;
+      const pieces = [];
+      for (const p of picked) {
+        let all;
+        try { all = readFileSync(resolvePath(this.cwd, p.rel).abs, 'utf8').replace(/\n$/, '').split('\n'); } catch { continue; }
+        const end = Math.min(p.end, all.length);
+        const body = `${p.rel} (lines ${p.line}-${end} of ${all.length}) · ${p.name}:\n${all.slice(p.line - 1, end).join('\n')}`;
+        if (body.length > room) { if (!pieces.length) pieces.push(`${body.slice(0, room)}\n… (cut; Read the file for the rest)`); break; }
+        room -= body.length;
+        pieces.push(body);
+      }
+      const list = picked.map((p) => `${p.rel}:${p.line} ${p.name}`).join('\n');
+      seen({ kind: 'search', count: pieces.length, content: list });
+      return { text: `The parts closest in meaning to "${args.query}", closest first:\n\n${pieces.join('\n\n')}` };
+    }
+    if (name === 'Remember') return this.rememberFact(args, seen);
+    // Rename and TestFirst: the focused paths, run for the model (flows/index.mjs runKind).
+    if (!isCodeProject(this.cwd)) { seen({ kind: 'error', message: 'Not a code project here' }, true); return { text: `${name} works in a project folder with code; here, do it yourself with Search, Read and Edit.`, error: true }; }
+    seen({ kind: 'started' });
+    const counted = { tokens: 0, thinkTokens: 0 };
+    const tally = ({ tokens, thought }) => { counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
+    tallies.add(tally);
+    const ctx = this.flowContext(signal);
+    let said = '';
+    const note = ctx.note;
+    ctx.note = (text, tone) => { said = String(text); note(text, tone); };
+    const filesBefore = this.happened?.files.size ?? 0;
+    let out = null;
+    this.carried = null;
+    try {
+      const kind = name === 'Rename' ? 'rename' : args.kind === 'fix' || args.kind === 'change' ? args.kind : /\b(fix|bug|broken|fails?|failing|crash(es)?|wrong|error)\b/i.test(args.task ?? '') ? 'fix' : 'change';
+      out = await runKind(ctx, name === 'Rename' ? { kind, from: args.from, to: args.to } : { kind }, name === 'Rename' ? `rename ${args.from} to ${args.to}` : args.task);
+    } catch (e) {
+      if (signal?.aborted || e.name === 'AbortError') return { text: 'Interrupted.', stop: 'interrupted' };
+      said = `it failed (${e.message})`;
+    } finally {
+      tallies.delete(tally);
+      this.emit('flow-step', null);
+      if (this.turn) { this.turn.tokens = (this.turn.tokens ?? 0) + counted.tokens; this.turn.thinkTokens = (this.turn.thinkTokens ?? 0) + counted.thinkTokens; }
+    }
+    if ((this.happened?.files.size ?? 0) > filesBefore && this.turn) { this.turn.changed = true; this.turn.testedAfterChange = Boolean(out?.done); }
+    // A check the fix path made for the change still to come (flows/pagecheck.mjs).
+    const left = this.carried ? `\n${this.carried.note}` : '';
+    if (this.carried?.check && this.turn) this.turn.check = this.carried.check;
+    this.carried = null;
+    if (out?.declined) return { text: out.summary, stop: 'declined' };
+    if (out) {
+      if (this.happened) this.happened.flow = { done: out.done, summary: String(out.summary ?? '').slice(0, 300) };
+      return { text: `${out.summary}${out.done === false ? ' Its check did not pass: look at why before you report.' : ''}${left}` };
+    }
+    const why = said.replace(/;\s*working step by step instead\.?$/, '').replace(/\.$/, '') || 'it could not finish';
+    return { text: `${name === 'Rename' ? 'Rename' : 'The test-first worker'} handed it back: ${why}. Carry on yourself with Read, Edit and the tests.${left}` };
+  }
+
+  // Remember (the model decides): one fact saved at once, and a line says what was saved.
+  // Nothing is saved from the tests' own practice work, nor with saving off.
+  rememberFact(args, seen) {
+    const off = !this.memory ? 'the memory is off here ("memory": false in settings.json)'
+      : this.memory.saveOff || (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) === 'off' ? 'saving to memory is off here'
+      : practiceWork({ request: this.happened?.request ?? '', files: [...(this.happened?.files ?? [])] }, this.cwd) ? 'this is practice work on a test’s own files, which teaches the memory nothing'
+      : null;
+    if (off) { seen({ kind: 'error', message: 'Not saved' }, true); return { text: `Not saved: ${off}. Carry on.` }; }
+    let out;
+    try { out = applySave({ cwd: this.cwd, home: this.memory.home, adds: [{ text: args.fact, kind: args.about === 'you' ? 'you' : 'project', from: 'saved by the model while it worked' }] }, { why: 'remember' }); } catch (e) { seen({ kind: 'error', message: e.message }, true); return { text: `Not saved: ${e.message}.`, error: true }; }
+    if (!out.added.length) { const why = out.refused[0]?.why ?? 'it is already saved'; seen({ kind: 'error', message: `Not saved: ${why}` }, true); return { text: `Not saved: ${why}.` }; }
+    seen({ kind: 'saved' });
+    const line = saveLine(out);
+    if (line) this.emit('note', { text: line, tone: 'dim' });
+    return { text: 'Saved to the memory.' };
   }
 
   // A command in a question turn that may write: it runs in a throwaway copy
@@ -1894,7 +2065,7 @@ export class Agent extends EventEmitter {
     let summary = '';
     try {
       const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: toolSchemas(), toolChoice: 'none', extra: { stop: ['<tool_call>'] }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM, slot: this.slots?.main, signal })) {
+      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: ['<tool_call>'] }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM, slot: this.slots?.main, signal })) {
         if (ev.type === 'text') summary += ev.text;
       }
     } catch (e) {

@@ -6,6 +6,7 @@ import { DEFAULT_INSTRUCTIONS, INSTRUCTION_LIMITS, INSTRUCTION_START, INSTRUCTIO
 import { projectNotes, systemPrompt, gitSummary, isHomeFolder, SESSION_MARK, NOTES_RANK, promptVersion, notesRoom } from '../agent/prompt.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, designDir, readCards, mixTurn, STYLES, styleWords } from '../agent/design.mjs';
 import { toolSchemas } from '../agent/tools.mjs';
+import { wayPrompt } from '../agent/way.mjs';
 import { TOP, recall, recallNotes, looksLikeEvent } from '../agent/recall.mjs';
 import { memoryDirs, readFacts } from '../agent/facts.mjs';
 import { MODELS, DEFAULT_MODEL, thinkingKwargs, Embedder, embedderReady, EMBEDDERS, DEFAULT_EMBEDDER, Reranker, rerankerReady, RERANKERS } from '../../../models/index.mjs';
@@ -15,14 +16,14 @@ import { howChosen } from '../agent/search.mjs';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 // What the model receives besides the system prompt, read from the same code the agent runs.
-function seesData(cwd, prompt, focused) {
+function seesData(cwd, prompt, focused, way = 'app') {
   let facts = [];
   try { const dirs = memoryDirs(cwd); facts = [...readFacts(dirs.you), ...readFacts(dirs.project)].filter((f) => !f.always && !looksLikeEvent(f.text)); } catch { /* a memory that cannot be read is left out */ }
   return {
     folder: { path: cwd, isHome: isHomeFolder(cwd) },
     // Prompt parts the focused calls do not get, found by comparing the two.
     focusedLeftOut: ['Tool use', 'Work habits', 'Fixing a bug', 'Rules', 'This session'].filter((h) => prompt.includes(`\n${h}\n`) && !focused.includes(`\n${h}\n`)),
-    tools: toolSchemas(),
+    tools: toolSchemas(way),
     recall: { top: TOP, example: recallNotes([{ kind: 'you', text: 'a saved fact that fits your request' }]), total: facts.length,
       facts: facts.slice(0, 25).map((f) => ({ kind: f.kind, text: f.text.replace(/\s+/g, ' ').slice(0, 240) })) },
     // Per thinking level: what the template is sent and the reply limit (the agent's replyRoom: 2,048, plus the thinking budget when thinking is on).
@@ -127,17 +128,19 @@ export function instructionsData(cwd, home, { folder } = {}) {
   const folders = knownFolders(cwd);
   const here = folder && folders.some((f) => f.path === folder) ? folder : cwd;
   const notes = projectNotes(here);
-  const prompt = systemPrompt({ cwd: here, notes: notes.text, git: gitSummary(here), instructions: saved.sections });
-  const focused = focusedInstructions(prompt);
   const settings = settingsHooks.load(here);
   const model = MODELS[settings.model] ?? MODELS[DEFAULT_MODEL];
-  const tools = toolSchemas();
+  // The prompt and tools of the way /effort's Who decides row is on (agent/way.mjs).
+  const way = readLimits(settings, model).way ?? 'app';
+  const prompt = wayPrompt(systemPrompt({ cwd: here, notes: notes.text, git: gitSummary(here), instructions: saved.sections }), way);
+  const focused = focusedInstructions(prompt);
+  const tools = toolSchemas(way);
   const parts = [...promptParts(prompt, notes.sources), { id: 'tools', name: `Tools (${tools.length})`, group: 'tools', from: 'Sent with every request, apart from the text', edit: null, side: false, status: null, kept: 'unknown', start: null, chars: JSON.stringify(tools).length, tokens: estimate(JSON.stringify(tools)), text: JSON.stringify(tools) }];
   return { sections: saved.sections, revision: saved.revision, updatedAt: saved.updatedAt, customized: saved.customized,
     undoCount: saved.history.length, defaults: DEFAULT_INSTRUCTIONS, limits: INSTRUCTION_LIMITS,
     file: instructionFile(home), cwd: here, hubFolder: cwd, folders, sources: notes.files, notes: notes.sources, context: notes.text,
     version: promptVersion(), notesRoom: notesRoom(), rank: NOTES_RANK,
-    preview: prompt, focusedPreview: focused, sees: seesData(here, prompt, focused),
+    preview: prompt, focusedPreview: focused, sees: seesData(here, prompt, focused, way), way,
     cost: { parts, context: readLimits(settings, model).context ?? null, model: model?.name ?? '', speed: READ_SPEED, tokenizer: null },
     design: designInfo(here) };
 }

@@ -245,13 +245,25 @@ test('run.mjs --only 10 on the stand-in: the task runs and is checked, and its l
   expect(r.out).toContain('recorded in the test record: The 1 picked practice tasks, helpers off —');
   expect(readRecord(join(home, 'record.jsonl'))[0]).toMatchObject({ kind: 'tasks', model: 'gemma', total: 1, part: true });
   // Today's way of thinking unless --thinking old (Thinking old vs new); each task says whether it stepped down.
-  expect(r.out).toMatch(/; thinking: new$/m);
+  expect(r.out).toMatch(/; thinking: new; who decides: app$/m);
   const sum = JSON.parse(readFileSync(join(home, 'out', 'summary.json'), 'utf8'));
   expect([sum.thinkingWay, sum.results[0].steppedDown]).toEqual(['new', false]);
   const old = await collect(practice(home, ['--only', '10', '--timeout', '60', '--thinking', 'old', '--no-record']));
-  expect(old.out).toMatch(/; thinking: old$/m);
+  expect(old.out).toMatch(/; thinking: old; who decides: app$/m);
   expect(JSON.parse(readFileSync(join(home, 'out', 'summary.json'), 'utf8')).thinkingWay).toBe('old');
   expect((await collect(practice(home, ['--only', '10', '--thinking', 'some']))).code).toBe(1);
+}, 90_000);
+
+test('run.mjs --way model on the stand-in: no path is sorted for the task, the row, summary and record line say the model decided', async () => {
+  const home = await standInHome();
+  const r = await collect(practice(home, ['--only', '10', '--timeout', '60', '--way', 'model']));
+  expect(r.code).toBe(0);
+  expect(r.out).toMatch(/; who decides: model$/m);
+  expect(r.out).not.toContain('Plan()'); // the fix path's plan: it never ran, nothing sorted the task to it
+  const sum = JSON.parse(readFileSync(join(home, 'out', 'summary.json'), 'utf8'));
+  expect([sum.way, sum.results[0].way, sum.results[0].route]).toEqual(['model', 'model', 'model decides']);
+  expect(readRecord(join(home, 'record.jsonl'))[0].name).toMatch(/, model decides$/);
+  expect((await collect(practice(home, ['--only', '10', '--way', 'claude']))).code).toBe(1);
 }, 90_000);
 
 test('run.mjs --set 28 on the stand-in, stopped during its first task: that task is left out, nothing is recorded, the model is stopped', async () => {

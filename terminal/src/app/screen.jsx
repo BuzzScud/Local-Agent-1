@@ -746,12 +746,14 @@ function SettingsPicker({ app }) {
   const pk = app.picker;
   const lw = Math.max(...pk.rows.map((r) => r.label.length)) + 2;
   const vw = Math.max(...pk.rows.map((r) => r.value.length)) + 3;
-  // 27 lines with the gaps; a short window (24 rows at the least) drops them,
-  // and the line under the title too when the status bar or the memory note
-  // takes a line under the menu: the whole menu always shows, top edge to last row.
+  // 28 lines with the gaps; a short window (24 rows at the least) drops them,
+  // and the line under the title too, and then the key hint, when the status bar or the
+  // memory note takes a line under the menu: the whole menu always shows, top edge to last row.
   const tight = app.rows < 30;
   const under = app.meters || memoryWarning(app.stats.ctxUsed ?? 0, app.ctx) ? 1 : 0;
   const noBlurb = tight && pk.rows.length + pk.groups.length + 5 + under + 1 > app.rows;
+  // Still one line short (16 rows with the status bar at 24): the key hint at the bottom goes too.
+  const noFoot = tight && pk.rows.length + pk.groups.length + 4 + under + 1 > app.rows;
   let at = 0;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
@@ -773,7 +775,7 @@ function SettingsPicker({ app }) {
         </Box>
       ))}
       {tight ? null : <Text> </Text>}
-      <Text color={C.dim}>↑↓ to choose · enter to open · esc to go back</Text>
+      {noFoot ? null : <Text color={C.dim}>↑↓ to choose · enter to open · esc to go back</Text>}
     </Box>
   );
 }
@@ -799,8 +801,8 @@ function LimitsPicker({ app }) {
   const effortUnsaved = pk.level !== pk.savedLevel;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
-      <Text bold>Effort and limits</Text>
-      <Text color={C.dim} wrap="truncate-end">←→ moves a row; its cost is on the right. Kept for next time.</Text>
+      {/* The hint sits on the title's line: the panel stays within 22 lines with Who decides in it. */}
+      <Text wrap="truncate-end"><Text bold>Effort and limits</Text><Text color={C.dim}>{'   '}←→ moves a row; its cost is on the right. Kept for next time.</Text></Text>
       {lv ? (
         <>
           <Text wrap="truncate-end">
@@ -815,8 +817,9 @@ function LimitsPicker({ app }) {
       ) : null}
       {LIMITS.map((l, i) => {
         // A heading where a group starts: "Search" over the search's rows, "Limits" over the rest.
+        // Who decides (group 'Effort') sits under the Effort row with no heading of its own.
         const group = l.group ?? 'Limits';
-        const head = i === 0 || (LIMITS[i - 1].group ?? 'Limits') !== group ? heading(group) : null;
+        const head = group !== 'Effort' && (i === 0 || (LIMITS[i - 1].group ?? 'Limits') !== group) ? heading(group) : null;
         const on = off + i === pk.index;
         const v = pk.values[l.id];
         const steps = l.steps(pk.model);

@@ -67,6 +67,8 @@ test('the request: system hoisted, tool calls and results paired (results first)
   expect(p.cache_control).toEqual({ type: 'ephemeral' });
   expect(p.tools[0]).toEqual({ name: 'Read', description: 'Read a file', input_schema: TOOLS[0].function.parameters, eager_input_streaming: true });
   expect(p.tool_choice).toEqual({ type: 'auto', disable_parallel_tool_use: true });
+  // When the model decides (agent/way.mjs), several calls a reply are allowed.
+  expect(claudeParams({ model: 'claude-opus-5-5', messages, tools: TOOLS, parallel: true }).tool_choice).toEqual({ type: 'auto', disable_parallel_tool_use: false });
   expect(p.max_tokens).toBe(4500); // the answer asked for, plus room for the thinking it always does
   const high = claudeParams({ model: 'claude-opus-5-5', messages, tools: TOOLS, toolChoice: 'none', thinking: true, effort: 'high', maxTokens: 500 });
   expect([high.output_config.effort, high.thinking.display, high.tool_choice.type, high.max_tokens]).toEqual(['high', 'summarized', 'none', 16_500]);

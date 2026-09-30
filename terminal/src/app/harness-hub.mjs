@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import shell from './harness.html' with { type: 'text' };
 import { MODELS, DEFAULT_MODEL, MODELS_DIR, needBytes, kvBytesPerToken, hasDraft, sideBySide } from '../../../models/index.mjs';
-import { TOOL_DEFS } from '../agent/tools.mjs';
+import { toolDefs } from '../agent/tools.mjs';
 import { loadSettings } from './store.mjs';
 import { readLimits } from './limits.mjs';
 import { STAGES, STEPS as FLOW_STEPS, stagesInWords } from './steps.mjs';
@@ -29,7 +29,8 @@ export function harnessData(cwd, { models = Object.values(MODELS), settings = lo
   return {
     made: new Date().toISOString(),
     settings: { model: inUse, effort: settings.effort ?? null, context: ctx, auto: !limits.context, thinkingCap: limits.thinking, steps: limits.steps, tries: limits.tries },
-    tools: TOOL_DEFS.map((t) => t.name),
+    // The tools of the way /effort's Who decides row is on (agent/way.mjs).
+    tools: toolDefs(limits.way).map((t) => t.name), way: limits.way ?? 'app',
     run: side.run ? { name: side.run.name, at: side.run.at, effort: side.run.effort, ctx: side.run.ctx, thinking: side.run.thinking, limitMins: side.run.limitMins, reps: side.run.reps ?? 1, tasks: side.run.tasks } : null,
     models: models.map((m) => {
       const onMac = existsSync(join(MODELS_DIR, m.file));

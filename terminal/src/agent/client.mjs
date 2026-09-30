@@ -34,10 +34,11 @@ export function refusedField(status, text, body) {
 
 // toolChoice 'none' keeps the tool list in the prompt (so the saved reading of
 // the instructions still matches) but lets the model only write text.
-export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra }) {
+// parallel: the model may send several calls in one reply (when the model decides, agent/way.mjs).
+export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false }) {
   const ep = endpointOf(url);
   // The Claude API speaks its own Messages API (claude.mjs).
-  if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra }); return; }
+  if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
   let body = {
     model: 'coding',
     messages,
@@ -53,7 +54,7 @@ export async function* streamChat({ url, messages, tools, toolChoice = 'auto', t
   // A smaller thinking cap for this call than the server's --reasoning-budget
   // (llama-server ends the thinking there, as it does at the server's cap).
   if (thinking && thinkCap) body.thinking_budget_tokens = thinkCap;
-  if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; body.parallel_tool_calls = false; }
+  if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; body.parallel_tool_calls = Boolean(parallel); }
   if (extra) Object.assign(body, extra);
   if (ep?.kind === 'openai') body = openaiBody(body, { model: ep.model, effort: body.chat_template_kwargs?.reasoning_effort ?? (thinking ? effort : null), thinking, url });
   let res;

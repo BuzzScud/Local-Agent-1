@@ -77,7 +77,7 @@ function pairTools(msgs) {
 }
 
 // The request (exported for the tests). drop: fields a model refused before, left out.
-export function claudeParams({ model, messages, tools, toolChoice = 'auto', thinking, effort, maxTokens, extra = {}, drop = new Set() }) {
+export function claudeParams({ model, messages, tools, toolChoice = 'auto', thinking, effort, maxTokens, extra = {}, drop = new Set(), parallel = false }) {
   const caps = claudeCaps(model);
   const system = messages.filter((m) => m.role === 'system').map((m) => textOf(m.content)).filter(Boolean).join('\n\n');
   const turns = [];
@@ -111,7 +111,8 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
   if (!drop.has('cache')) params.cache_control = { type: 'ephemeral' };
   if (tools?.length) {
     params.tools = tools.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(drop.has('eager') ? {} : { eager_input_streaming: true }) }));
-    params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: true };
+    // Several calls a reply only when the model decides (agent/way.mjs), as with the local models.
+    params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: !parallel };
   }
   if (!drop.has('thinking')) {
     if (caps.adaptive && (think || caps.alwaysThinks || caps.binding)) {
@@ -161,12 +162,12 @@ function friendly(e, Anthropic) {
 const FINISH = { end_turn: 'stop', stop_sequence: 'stop', tool_use: 'tool_calls', max_tokens: 'length', pause_turn: 'stop', refusal: 'stop' };
 
 // One reply, streamed as the events client.mjs yields for every kind.
-export async function* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra }) {
+export async function* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel = false }) {
   const Anthropic = await claudeSdk();
   const client = await claudeClient(url, ep.key);
   const refused = REFUSED.get(ep.model) ?? new Set();
   for (let tries = 0; ; tries++) {
-    const params = claudeParams({ model: ep.model, messages, tools, toolChoice, thinking, effort, maxTokens, extra, drop: refused });
+    const params = claudeParams({ model: ep.model, messages, tools, toolChoice, thinking, effort, maxTokens, extra, drop: refused, parallel });
     let started = false;
     try {
       const stream = client.beta.messages.stream(params, { signal });

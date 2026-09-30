@@ -4,13 +4,18 @@
 // the test record is a full run of the 28. --only picks tasks by number (a part of the set).
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
 // and records what ran, as stopped.
-//     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off]
+//     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
 // --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
 // or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
 // search on, each task's copy is indexed before its clock starts.
 // --flows off: no focused paths, every task step by step (where the model
 // makes every Read and test run itself).
+// --way model: the model decides, as in Claude Code (terminal/src/agent/way.mjs): no sorting, no
+// reading ahead, its own tools (Map, CodeSearch, Rename, TestFirst, Remember), several calls a
+// reply, and none of the app's checks (the hooks are off; AGENTIC_HOOKS turns some on). --way app
+// (the default): as before. The row and summary.json name it; Who decides old vs new
+// (models/evals/tools/way-ab.mjs) runs both.
 // A task with a home.txt runs with its project as the home folder (HOME points
 // there for the run), so a request about the Desktop works as in the app.
 // --memory: with Agentic Coder's memory on (a throwaway one, empty at the start):
@@ -68,6 +73,10 @@ const codes = (sep) => [...helpers].map((h) => CODENAMES[h]).join(sep) || 'off';
 // What the Helpers line brought, counted by codename: "Scout 1, Medic 2".
 const byCode = (items) => Object.entries(Object.groupBy(items.filter((x) => !x.skipped), (x) => codenameOf(x.from))).map(([c, xs]) => `${c} ${xs.length}`).join(', ');
 const flowsOn = opt('flows', 'on') !== 'off';
+const wayArg = opt('way', null);
+if (wayArg && !['app', 'model'].includes(wayArg)) { console.error(`--way app or model, not "${wayArg}"`); process.exit(1); }
+// A run from the Arena's panel can set Who decides too (its row reaches runHeadless); --way wins.
+const wayUsed = wayArg ?? (panel?.way === 'model' ? 'model' : 'app');
 const promptArg = opt('prompt', null);
 if (promptArg && !['old', 'new'].includes(promptArg)) { console.error(`--prompt old or new, not "${promptArg}"`); process.exit(1); }
 if (promptArg === 'old') process.env.AGENTIC_PROMPT = 'old';
@@ -102,7 +111,7 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 const started = await server.start({ ctx });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
-console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}; thinking: ${thinkingUsed}`);
+console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}; thinking: ${thinkingUsed}; who decides: ${wayUsed}`);
 const results = [];
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const tdir = opt('out', join(modelFolder(base), 'results', 'runs', stamp));
@@ -133,7 +142,7 @@ try {
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
           memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : ev.given ? '+' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); if (type === 'context' && ev.title === 'Helpers') process.stdout.write(`    + helpers brought ${ev.items.filter((x) => !x.skipped).length} (${ev.tokens} tokens: ${byCode(ev.items)})${ev.items.some((x) => x.skipped) ? `; left out: ${ev.items.filter((x) => x.skipped).map((x) => `${x.text} (${x.skipped})`).join('; ')}` : ''}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
@@ -147,11 +156,11 @@ try {
       const check = spawnSync('/bin/zsh', [join(here, 'tasks', task, 'check.sh')], { cwd: work, encoding: 'utf8', timeout: 60_000 });
       if (asHome) process.env.HOME = realHome;
       const pass = check.status === 0;
-      const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? 'step by step';
+      const route = (run.log ?? []).find((e) => e.type === 'route')?.kind ?? (run.way === 'model' ? 'model decides' : 'step by step');
       const tries = (run.log ?? []).filter((e) => e.type === 'tries-done').map((e) => `${e.label}: ${(e.marks ?? []).join('')}`);
       const row = { task, thinking, level: thinking ? (effort ?? 'medium') : 'off', route, tries, asked: run.asked ?? [], rep, pass, why: pass ? '' : (check.stdout + check.stderr).trim().split('\n').pop(), reason: run.reason, secs: Math.round(run.secs), steps: run.steps, toolErrors: run.toolErrors, outTokens: run.outTokens, replies: run.replies ?? null, reads: run.reads ?? null, readFirst: run.readFirst ?? null, thinkTokens: run.thinkTokens ?? null, stuckAsks: run.stuckAsks ?? null, tps: run.tps ? Math.round(run.tps * 10) / 10 : null, answer: (run.finalText ?? '').slice(0, 300),
         // The model's own work (a helper's step is not one) and what the helpers brought.
-        flows: flowsOn, helpers: run.helpers ?? [...helpers], ownSteps: run.ownSteps ?? null, modelCalls: run.modelCalls ?? null, helperItems: run.helperItems ?? 0, helperTokens: run.helperTokens ?? 0, indexed: run.indexed ?? null,
+        flows: flowsOn, way: run.way ?? wayUsed, helpers: run.helpers ?? [...helpers], ownSteps: run.ownSteps ?? null, modelCalls: run.modelCalls ?? null, helperItems: run.helperItems ?? 0, helperTokens: run.helperTokens ?? 0, indexed: run.indexed ?? null,
         // Past half its time it thought only briefly (the step-down, agent.mjs).
         steppedDown: Boolean(run.steppedDown) };
       // The memory's save comes after the check: its own files are not the task's.
@@ -167,12 +176,12 @@ try {
 }
 const file = join(tdir, 'summary.json');
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
-writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, prompt: promptUsed, thinkingWay: thinkingUsed, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
+writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, way: wayUsed, prompt: promptUsed, thinkingWay: thinkingUsed, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
+  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);

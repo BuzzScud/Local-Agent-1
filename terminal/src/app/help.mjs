@@ -91,6 +91,7 @@ export function cliRows(lingerMins = 30) {
       ['--url http://host:port', 'use a llama-server that is already running'],
       ['--local', 'use the model on this Mac even when /remote is on'],
       ['--no-flows', 'always work step by step (skip the focused fix/change/rename paths)'],
+      ['--way model', "the model decides, like Claude Code: no sorting or reading ahead, its own tools, the app's checks only as /hooks switches them (--way app: as before; /effort's Who decides row keeps it)"],
       ['-v, --version', 'print the version'],
       ['-h, --help', 'this help'],
     ],

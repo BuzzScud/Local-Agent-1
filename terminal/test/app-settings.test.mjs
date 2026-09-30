@@ -12,10 +12,10 @@ import { helpData } from '../src/app/help.mjs';
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 60 }]).flat();
 
-test('the / menu holds 16 commands and /settings the other 15; every one is still a command, and the Help page lists both parts', () => {
+test('the / menu holds 16 commands and /settings the other 16; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
   expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'remote', 'test', 'morning', 'settings', 'exit']);
-  expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'helpers', 'rules', 'instructions', 'memory', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
+  expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'helpers', 'hooks', 'rules', 'instructions', 'memory', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {
     expect(COMMANDS.some((c) => c.name === n)).toBe(true); // typed in full it still runs
@@ -36,7 +36,7 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' },
     { type: '/se' }, { wait: 'Everything else in one menu' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 200 }, { snapshot: 'menu' },
-    ...down(11), { sleep: 150 }, { snapshot: 'stats' }, { key: 'enter' }, { wait: 'writing speed' },
+    ...down(12), { sleep: 150 }, { snapshot: 'stats' }, { key: 'enter' }, { wait: 'writing speed' },
     { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 150 }, { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Kept for next time' }, { sleep: 150 }, { snapshot: 'meters' }, { key: 'esc' }, { wait: 'Kept the status bar as off' },
     { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 150 }, { key: 'up' }, { sleep: 100 }, { snapshot: 'wrapped' }, { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
     { type: '/doctor' }, { sleep: 250 }, { snapshot: 'typed' }, { key: 'enter' }, { wait: 'free memory' },
@@ -53,12 +53,13 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   expect(m).toMatch(/Status bar\s+off\s+model, speed and memory under the prompt/);
   expect(m).toMatch(/Mouse\s+off\s+drag to highlight text in the prompt box/);
   expect(m).toMatch(/Helpers\s+\d of 4 on\s/);
+  expect(m).toMatch(/Hooks\s+all run: App decides\s+the app's checks, while the model decides/);
   expect(m).toMatch(/Test record\s+no runs yet\s/); // a fresh home has no test record
   expect(m).toMatch(/Arena\s+\d+ tests? · \d+ runs?\s/);
   expect(m).toMatch(/Update\s+\d+\.\d+\.\d+ · nothing new\s/);
   // every row has something in its value column: no blank cell
   const rows = m.split('\n').filter((l) => /^│ [❯ ] \S/.test(l));
-  expect(rows).toHaveLength(15);
+  expect(rows).toHaveLength(16);
   for (const l of rows) expect(l).toMatch(/^│ [❯ ] \S[\w ]*?\s{2,}\S.*\s{3,}\S/);
   expect(r.snapshots.stats).toMatch(/❯ Stats\s/);
   expect(r.snapshots.meters).toMatch(/2\. Off.*✔ in use/);
@@ -73,10 +74,11 @@ test('/settings in the smallest window (80 × 24): the gaps drop and the whole m
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, cols: 80, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 300 }, { snapshot: 'menu' }, { key: 'esc' }, { sleep: 300 },
-    // with the status bar on there is one line less: the line under the title goes, the menu's top edge stays
+    // 16 rows at this height: the line under the title goes too (the menu's footer is always drawn)
+    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: '↑↓ to choose · enter to open' }, { sleep: 300 }, { snapshot: 'menu' }, { key: 'esc' }, { sleep: 300 },
+    // with the status bar on there is one line less: the key hint goes too, the menu's top edge stays
     { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' },
-    { type: '/settings' }, { key: 'enter' }, { wait: '↑↓ to choose · enter to open' }, { sleep: 300 }, { snapshot: 'bar' }, { key: 'esc' }, { sleep: 300 },
+    { type: '/settings' }, { key: 'enter' }, { wait: 'Test record' }, { sleep: 300 }, { snapshot: 'bar' }, { key: 'esc' }, { sleep: 300 },
     ...quit,
   ] });
   await fake.close();

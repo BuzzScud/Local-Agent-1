@@ -174,6 +174,13 @@ export async function runFlows(ctx, text) {
   if (!isCodeProject(ctx.cwd)) return null;
   const r = await route(ctx, text);
   ctx.emit('route', r);
+  return runKind(ctx, r, text);
+}
+
+// The path for a kind already known ({ kind, from, to }): the sorting's pick, or the model's own
+// when it calls Rename or TestFirst (the model decides, agent/way.mjs). null: no path finished it,
+// the step-by-step way goes on (a note says why).
+export async function runKind(ctx, r, text) {
   if (r.kind === 'rename') {
     const out = await renameFlow(ctx, r.from, r.to);
     if (out.handled) return out;

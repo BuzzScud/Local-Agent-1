@@ -83,6 +83,7 @@ coding                     # start here
 coding "fix the tests"     # start with a first prompt
 coding -c                  # continue the last conversation in this folder
 coding -p "what does x do" # answer once and exit
+coding --way model         # the model decides, like Claude Code (/effort shows it as Who decides)
 ```
 
 ### A model on another machine
@@ -252,6 +253,21 @@ unchanged. `AGENTIC_THINK=old` gives the way before, and the Arena's **Thinking 
 (`/test thinking`) runs the Practice 28 at High both ways. Two tries at once, one on each of the
 server's two slots, was measured and left out: ×1.02 on Qwen and ×1.07 on Gemma with the speed
 helper on (**Two at once**, `/test twoatonce`).
+
+Also since 30 Sep 2026, **Who decides** (the row under Effort in `/effort`; `--way` for one
+window, or for one `coding -p` run): **App**, the default, works as before: word rules sort the request, a focused path runs for a
+fix, a change or a rename, the files it is about are read before the model's first word, a question
+cannot change files, and the app's checks send work back. **Model** works the way Claude Code does:
+the model reads your message and decides. Nothing is sorted and nothing is read ahead; what the app
+did becomes tools it may call (`Map` the project map, `CodeSearch` by meaning, `Rename`, `TestFirst`
+the fix and change paths, `Remember` a fact for later), it can send several calls in one reply (Read
+takes several paths too, for Gemma, which sends one call a reply), your permission mode is the safety
+net (plan mode is the lock), the app's checks are **hooks** you switch on with `/hooks` (off unless you
+do), and the memory is saved by the model with `Remember`, a line saying what (the app's own saves after
+a task and at quit are off then). The replies that repeat, calls cut off at the reply limit and the step
+limit are handled on both. The Arena's **Who decides: App vs Model** check (`/test way`) runs the
+Practice 28 both ways, with its rule written before the first run: Model holds when it passes as many
+tasks and takes at most 25% more time.
 
 ## License
 

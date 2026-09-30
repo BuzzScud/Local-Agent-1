@@ -316,6 +316,11 @@ export function checkRule(kind, text, { protect = [] } = {}) {
 //   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
 export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel } = {}) {
   if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
+  // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
+  // and two run a focused path, whose every change asks as your mode says (so plan mode refuses them).
+  if (name === 'Map' || name === 'CodeSearch') return { decision: 'allow', why: 'it only reads' };
+  if (name === 'Remember') return { decision: 'allow', why: 'it writes to the memory, not to the project' };
+  if (name === 'Rename' || name === 'TestFirst') return mode === 'plan' ? { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' } : { decision: 'allow', why: 'each change it makes asks as your mode says' };
   if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow', why: 'reading inside the project never asks' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
   if (name === 'Edit' || name === 'Write') {
     if (!inside) return { decision: 'deny', reason: 'that file is outside the project folder' };

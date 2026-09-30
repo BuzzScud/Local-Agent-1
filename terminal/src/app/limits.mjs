@@ -1,5 +1,5 @@
-// /effort (one panel): the effort, then the search's three rows (Embedder,
-// Retriever, Reranker: agent/search.mjs), then the limits you can move up and
+// /effort (one panel): the effort and Who decides (agent/way.mjs), then the search's three rows
+// (Embedder, Retriever, Reranker: agent/search.mjs), then the limits you can move up and
 // down, in one place. Each row has the steps it moves through (numbers, or
 // named choices for the search's rows), its default, how it reads, and what a
 // value costs (said next to it in the panel). Saved as "limits" in
@@ -19,6 +19,15 @@ const WRITE_TPS = 13;
 const mb = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`);
 
 export const LIMITS = [
+  // Who decides (agent/way.mjs, 30 Sep 2026): the app, as before, or the model, as in Claude
+  // Code. Right under the Effort row, with no heading of its own (group 'Effort').
+  {
+    id: 'way', label: 'Who decides', group: 'Effort', choice: true,
+    steps: () => ['app', 'model'],
+    def: () => 'app',
+    show: (v) => (v === 'model' ? 'Model' : 'App'),
+    note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · checks: /hooks' : 'the app sorts, reads ahead and checks, as before'),
+  },
   // The search (group 'Search', shown first): which models find what goes
   // along with a request. Measured 29 Sep (models/qwen3-reranker-0.6b/README.md).
   {
@@ -323,4 +332,6 @@ export function applyLimits(agent, values) {
   agent.rulesRoom = values.rulesRoom;
   agent.upFront = values.upFront;
   agent.syncRules?.(); // a new Rules room reads the rules again once
+  // Who decides: from the next message (the prompt and the tools change with it).
+  if (values.way) agent.setWay?.(values.way);
 }
