@@ -8,13 +8,14 @@ with nothing loaded from outside; download one and open it in a browser to see i
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 287 KB | 2026-09-30 |
+| [tests/agentic-coder-weights-reader-check-2026-09-30-1506.html](tests/agentic-coder-weights-reader-check-2026-09-30-1506.html) | page | Weights reader check | 10 KB | 2026-09-30 |
 | [tests/agentic-coder-thinking-old-vs-new-gemma-2026-09-30-1432.html](tests/agentic-coder-thinking-old-vs-new-gemma-2026-09-30-1432.html) | page | Thinking old vs new · Gemma 4 12B QAT | 14 KB | 2026-09-30 |
 | [diagrams/agentic-coder-question-walkthrough-2026-09-30.html](diagrams/agentic-coder-question-walkthrough-2026-09-30.html) | page | Question Walkthrough | 43 KB | 2026-09-30 |
 | [tests/agentic-coder-thinking-old-vs-new-qwen-2026-09-30-1427.html](tests/agentic-coder-thinking-old-vs-new-qwen-2026-09-30-1427.html) | page | Thinking old vs new · Qwen3.5 9B | 14 KB | 2026-09-30 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 272 KB | 2026-09-30 |
 | [tests/agentic-coder-two-at-once-gemma-2026-09-30-1355.html](tests/agentic-coder-two-at-once-gemma-2026-09-30-1355.html) | page | Two at once · Gemma 4 12B QAT | 7 KB | 2026-09-30 |
 | [tests/agentic-coder-two-at-once-qwen-2026-09-30-1349.html](tests/agentic-coder-two-at-once-qwen-2026-09-30-1349.html) | page | Two at once · Qwen3.5 9B | 7 KB | 2026-09-30 |
-| [tests/agentic-coder-weights-reader-check-2026-09-30-1303.html](tests/agentic-coder-weights-reader-check-2026-09-30-1303.html) | page | Weights reader check | 10 KB | 2026-09-30 |
+| [older versions/agentic-coder-weights-reader-check-2026-09-30-1303.html](older%20versions/agentic-coder-weights-reader-check-2026-09-30-1303.html) | page | Weights reader check | 10 KB | 2026-09-30 |
 | [diagrams/agentic-coder-flow-diagram-2026-09-30.html](diagrams/agentic-coder-flow-diagram-2026-09-30.html) | page | Agentic Coder flow diagram | 85 KB | 2026-09-30 |
 | [design rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html](design%20rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html) | page | Flow tab for both models: 2 designs | 250 KB | 2026-09-30 |
 | [design rounds/agentic-coder-test-builder-2-designs-2026-09-30.html](design%20rounds/agentic-coder-test-builder-2-designs-2026-09-30.html) | page | Test builder designs | 82 KB | 2026-09-30 |
