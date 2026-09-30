@@ -5,7 +5,7 @@ import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel } from '../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath } from '../../models/index.mjs';
 import { readLimits, modelWithLimits } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -248,6 +248,14 @@ if (opts.print) {
   // The remote /remote saved, when it is on (--local runs on this Mac instead).
   let remote = null;
   let runModel = model;
+  // Pictures named in the prompt (a dragged path, or @shot.png): the model starts with its vision add-on.
+  const { droppedFiles } = await import('./agent/images.mjs');
+  const media = await import('./tools/media.mjs');
+  const { existsSync } = await import('node:fs');
+  const { resolve: resolvePath } = await import('node:path');
+  const picPaths = [...new Set([...droppedFiles(opts.prompt, opts.cwd).filter((d) => d.kind === 'image').map((d) => d.path), ...[...opts.prompt.matchAll(/(^|\s)@(\S+)/g)].map((m) => resolvePath(opts.cwd, m[2])).filter((p) => media.isImage(p) && existsSync(p))])];
+  const images = picPaths.map((p) => media.preparedImage(p));
+  let canSee = false;
   if (!url && !opts.local && settings.remote?.use) {
     try { remote = await connectRemote(settings.remote); } catch (e) { process.stderr.write(`coding: the remote model at ${remoteLabel(settings.remote)} did not answer: ${e.message}. coding -p --local runs on this Mac.\n`); process.exit(1); }
     const risk = remoteRisk(settings.remote);
@@ -255,8 +263,11 @@ if (opts.print) {
     url = remote.url;
     ctx = opts.ctx ?? remote.ctx;
     runModel = modelWithLimits(remote.model, limits);
+    canSee = Boolean(remote.vision);
     if (remote.slots > 1) slots = { main: 0, side: 1 };
   }
+  // A llama.cpp server given with --url says whether it can look at pictures.
+  if (url && !remote && images.length) { try { canSee = Boolean((await (await fetch(`${url.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) })).json())?.modalities?.vision); } catch { canSee = false; } }
   if (!url) {
     const thinkOn = opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true;
     const c = chooseContext(model, { effort: thinkOn ? opts.effort ?? settings.effort : undefined });
@@ -270,15 +281,30 @@ if (opts.print) {
       const chk = contextCheck(model, ctx, { draft: hasDraft(model) });
       if (!chk.fits) process.stderr.write(`· ${chk.note}\n`);
     }
-    server = new ModelServer(model);
+    const seeing = images.length && model.vision && existsSync(visionPath(model));
+    if (images.length && !seeing) process.stderr.write(`· ${model.vision ? `${model.name}'s vision add-on is not here (coding setup gets it)` : `${model.name} cannot look at pictures`}: the prompt goes without them\n`);
+    server = new ModelServer(seeing ? withVision(model) : model);
     const st = await server.start({ ctx, helper: ctx === c.ctx ? c.helper : undefined });
+    canSee = Boolean(server.vision);
     if (st.slots > 1) slots = { main: 0, side: 1 };
     url = server.url;
   }
   const stop = () => { remote?.stop(); return server?.stop(); };
   process.on('SIGINT', async () => { await stop(); process.exit(130); });
   try {
+    // A picture (or a scanned PDF) the model reads by itself: the model reloads with its add-on, once.
+    const visionOn = server && !server.vision && model.vision && existsSync(visionPath(model)) ? async (agent) => {
+      process.stderr.write(`· turning on ${model.name}'s vision for a picture it reads\n`);
+      await server.stop();
+      server = new ModelServer(withVision(model));
+      const st = await server.start({ ctx });
+      agent.url = server.url;
+      agent.canSee = Boolean(server.vision);
+      if (st.slots > 1) agent.slots = { main: 0, side: 1 };
+      return agent.canSee;
+    } : null;
     const r = await runHeadless({
+      images, canSee, visionOn,
       prompt: opts.prompt, cwd: opts.cwd, url, model: runModel, ctx: ctx ?? 32768,
       thinking: opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true, effort: opts.effort ?? settings.effort, autoApprove: !!opts.yes, flows: opts.flows, slots, warm: !!slots, limits,
       // What you saved with /permissions: commands that run without asking, and the ones that never run.

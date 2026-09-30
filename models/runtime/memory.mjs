@@ -59,7 +59,9 @@ export const draftBytes = (m) => (m.draft ? filePart(m, m.draft.bytes) + m.draft
 // in use), the cache, each slot's running state and checkpoints (the cache is
 // shared), the helper, the working space. The helper is counted whenever the
 // model has one (coding setup fetches it) unless it is switched off with AGENTIC_HELPER=off.
-export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + OVERHEAD;
+export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + visionBytes(m) + OVERHEAD;
+// The vision add-on, when the model is loaded with it (withVision): its file, whole, and its working space.
+export const visionBytes = (m) => (m?.visionOn && m.vision ? m.vision.bytes + (m.vision.computeBytes ?? 0) : 0);
 
 // Free memory for a start that first stops a running model server (an
 // /effort restart, a copy kept loaded at another size): what is free now plus

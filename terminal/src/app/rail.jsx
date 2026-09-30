@@ -45,7 +45,7 @@ export function UserStrip({ text, attached, width }) {
     <Box flexDirection="column" width={width}>
       {row(' '.repeat(width), 'top')}
       {lines.map((l, i) => row(<>{' '}<Text color={C.accent}>{i === 0 ? '›' : ' '}</Text>{' '}<Text color="ansi256(255)">{l.padEnd(inner)}</Text>{' '}</>, i))}
-      {attached?.length ? row(<>{'   '}<Text color={C.dim}>{`Attached ${attached.map((a) => `${a.path} (${plural(a.lines, 'line')})`).join(', ')}`.slice(0, inner).padEnd(inner)}</Text>{' '}</>, 'att') : null}
+      {attached?.length ? row(<>{'   '}<Text color={C.dim}>{`Attached ${attached.map((a) => `${a.path} (${a.label ?? plural(a.lines, 'line')})`).join(', ')}`.slice(0, inner).padEnd(inner)}</Text>{' '}</>, 'att') : null}
       {row(' '.repeat(width), 'bottom')}
     </Box>
   );

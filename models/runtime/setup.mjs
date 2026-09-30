@@ -4,7 +4,7 @@
 // matcher — and checks the files' SHA-256. Safe to run again: finished parts are skipped.
 import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, MODELS_DIR, engineOf, serverBinOf, modelPath, draftPath } from '../registry.mjs';
+import { HOME, ENGINE, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, MODELS_DIR, visionPath, engineOf, serverBinOf, modelPath, draftPath } from '../registry.mjs';
 import { buildEngine } from './engine/build.mjs';
 
 export const RUNTIME = ENGINE;
@@ -46,6 +46,15 @@ async function fetchChecked({ name, url, file, bytes, sha }, say) {
   if (sum !== sha) throw new Error(`${name} is damaged (SHA-256 ${sum.slice(0, 12)}…); delete ${file} and run coding setup again`);
 }
 
+// The model's vision add-on (what lets it look at a picture), downloaded and
+// checked like the model; nothing when the model has none.
+export async function getVision(m, say = (t) => process.stdout.write(`${t}\n`)) {
+  if (!m?.vision) return false;
+  mkdirSync(MODELS_DIR, { recursive: true });
+  await fetchChecked({ name: `${m.name}'s vision add-on`, url: m.vision.url, file: visionPath(m), bytes: m.vision.bytes, sha: m.vision.sha256 }, say);
+  return true;
+}
+
 export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => process.stdout.write(sameLine ? `\r${s}   ` : `${s}\n`) } = {}) {
   mkdirSync(MODELS_DIR, { recursive: true });
   const m = MODELS[modelId];
@@ -62,6 +71,8 @@ export async function setup({ modelId = DEFAULT_MODEL, say = (s, sameLine) => pr
   await fetchChecked({ name: m.name, url: m.url, file: modelPath(m), bytes: m.bytes, sha: m.sha256 }, say);
   // A helper inside the model file (draft.inFile) came with it.
   if (m.draft && !m.draft.inFile) await fetchChecked({ name: `${m.name}'s guessing helper`, url: m.draft.url, file: draftPath(m), bytes: m.draft.bytes, sha: m.draft.sha256 }, say);
+  // Its vision add-on: kept on disk, loaded only once a picture is attached.
+  await getVision(m, say);
   // The memory's matcher. Without it the memory still works, by words.
   const e = EMBEDDERS[DEFAULT_EMBEDDER];
   if (e) await fetchChecked({ name: `${e.name}, the memory's matcher`, url: e.url, file: modelPath(e), bytes: e.bytes, sha: e.sha256 }, say);

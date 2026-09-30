@@ -5,6 +5,7 @@
 // the Claude API goes through Anthropic's own Messages API (claude.mjs).
 import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
 import { streamClaude } from './claude.mjs';
+import { openAIMessages } from './images.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
 // thinking switch and cap, its extra sampling. Not sent to another kind.
@@ -41,7 +42,8 @@ export async function* streamChat({ url, messages, tools, toolChoice = 'auto', t
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
   let body = {
     model: 'coding',
-    messages,
+    // Pictures beside the text go in as the server takes them (images.mjs).
+    messages: openAIMessages(messages),
     stream: true,
     max_tokens: maxTokens,
     ...sampling,

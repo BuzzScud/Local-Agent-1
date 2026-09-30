@@ -38,6 +38,16 @@ export default {
   // 0.55 = the most seen plus a margin; the working parts stay as estimated
   // (0.2-0.3 GB above what was measured).
   fileInUse: 0.55,
+  // Its vision add-on (the multimodal projector, Unsloth's F16): loaded with the
+  // model only once a picture is attached (--mmproj), so memory stays as it was
+  // until then. computeBytes: the working space it takes beside its file.
+  vision: {
+    file: 'mmproj-gemma-4-12b-it-F16.gguf',
+    url: 'https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf',
+    sha256: 'ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3',
+    bytes: 175_115_840,
+    computeBytes: 0.15e9,
+  },
   // Speed helpers (speculative decoding), measured on this Mac 28 Sep 2026
   // (models/gemma-4-12b/results/speed-probe-2026-09-28). Checking 2 words at
   // once costs Gemma 1.19× one word (4 words: 2.4×), so guesses stay short.

@@ -21,7 +21,7 @@ createServer(async (req, res) => {
   if (req.url === '/health') { const ok = Date.now() - t0 > Number(process.env.FAKE_LLAMA_LOAD_MS ?? 1500); res.statusCode = ok ? 200 : 503; res.end(ok ? '{"status":"ok"}' : '{"status":"loading"}'); return; }
   if (key && req.headers.authorization !== `Bearer ${key}`) { res.statusCode = 401; res.setHeader('content-type', 'application/json'); res.end('{"error":{"message":"Invalid API Key","type":"authentication_error"}}'); return; }
   // What it runs, as /remote asks a server (its file, context and slots, from how it was started).
-  if (req.url === '/props') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ model_path: arg('-m'), total_slots: Number(arg('-np') ?? 1), default_generation_settings: { n_ctx: Number(arg('-c') ?? 4096) } })); return; }
+  if (req.url === '/props') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ model_path: arg('-m'), total_slots: Number(arg('-np') ?? 1), default_generation_settings: { n_ctx: Number(arg('-c') ?? 4096) }, modalities: { vision: process.argv.includes('--mmproj') } })); return; }
   let body = ''; for await (const c of req) body += c;
   const j = body ? JSON.parse(body) : {};
   res.setHeader('content-type', 'application/json');
@@ -37,7 +37,16 @@ createServer(async (req, res) => {
   if (!j.stream) { res.end(JSON.stringify({ choices: [{ message: { content: '' } }] })); return; }
   res.setHeader('content-type', 'text/event-stream');
   await wait(Number(process.env.FAKE_LLAMA_REPLY_MS ?? 0)); // a test holds the reply open with this
-  const text = 'Hello from the stand-in model.';
+  // FAKE_LLAMA_READ: the model first Reads that file, then says how many pictures it was sent.
+  const pics = (j.messages ?? []).flatMap((x) => (Array.isArray(x.content) ? x.content.filter((c) => c.type === 'image_url') : [])).length;
+  if (process.env.FAKE_LLAMA_READ && !(j.messages ?? []).some((x) => x.role === 'tool' && x.tool_call_id === 'call_read_1')) {
+    const call = { index: 0, id: 'call_read_1', type: 'function', function: { name: 'Read', arguments: JSON.stringify({ path: process.env.FAKE_LLAMA_READ }) } };
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [call] }, finish_reason: null }] })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }] })}\n\ndata: [DONE]\n\n`);
+    res.end();
+    return;
+  }
+  const text = process.env.FAKE_LLAMA_READ ? `The stand-in saw ${pics} picture${pics === 1 ? '' : 's'}.` : 'Hello from the stand-in model.';
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`);
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
   res.end();

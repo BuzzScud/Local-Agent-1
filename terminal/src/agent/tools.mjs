@@ -5,6 +5,7 @@ import { tmpdir, homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync, rmSync, realpathSync } from 'node:fs';
 import { readFile } from '../tools/read.mjs';
+import { isImage, isPdf, preparedImage, pdfText, pdfPageImage } from '../tools/media.mjs';
 import { outlineText } from '../tools/outline.mjs';
 import { diffLines } from '../tools/edit.mjs';
 import { runCommand } from '../tools/run.mjs';
@@ -22,8 +23,8 @@ const PART_MAX = 400;
 export const TOOL_DEFS = [
   {
     name: 'Read',
-    description: 'Read a text file. Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass find (a word or name) to see the lines around it, or offset (first line, from 1) and limit (number of lines) to read the part you need.',
-    parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), find: str('A word or name: shows the lines of the file around each place it appears'), offset: { type: 'integer' }, limit: { type: 'integer' } }, required: ['path'] },
+    description: 'Read a text file, a picture (png, jpg…: you see it) or a PDF (its text, page by page). Returns its exact text, ready to copy into Edit. A long file first comes back as a list of its parts with line numbers; then pass find (a word or name) to see the lines around it, or offset (first line, from 1) and limit (number of lines) to read the part you need.',
+    parameters: { type: 'object', properties: { path: str('File path, relative to the project folder'), find: str('A word or name: shows the lines of the file around each place it appears'), offset: { type: 'integer' }, limit: { type: 'integer' }, page: { type: 'integer', description: 'For a PDF: that page as a picture (a scan or a figure)' } }, required: ['path'] },
   },
   {
     name: 'List',
@@ -548,6 +549,77 @@ export function matchLines(lines, want, { regex = false } = {}) {
   return first.length ? first : regex ? asText() : asPattern();
 }
 
+// Read of a picture: attached for the model to look at, when this conversation
+// can see (the model's vision add-on is loaded, or a remote that takes pictures).
+function readPicture(p, note, env) {
+  let img;
+  try { img = preparedImage(p.abs); } catch (e) { return { text: `${note}${p.rel} is a picture macOS could not open (${e.message}).`, error: true, view: { kind: 'error', message: 'Not a picture it can open' } }; }
+  const size = `${img.srcW}×${img.srcH}${img.w !== img.srcW ? `, shown at ${img.w}×${img.h}` : ''}`;
+  if (!env.canSee) {
+    return { text: `${note}${p.rel} is a picture (${size}). This model is not looking at pictures in this conversation: ask the user to attach it (drag it into the window, or paste it with ctrl+v), which lets it see.`, view: { kind: 'read', lines: 1, total: 1, content: `a picture, ${size} (not shown to the model)` } };
+  }
+  return { text: `${note}The picture ${p.rel} (${size}) is attached for you to look at.`, images: [{ ...img, path: p.rel }], view: { kind: 'read', lines: 1, total: 1, content: `a picture, ${size}, shown to the model` } };
+}
+
+// Whether a Read needs the model to see: a picture, a PDF page asked for as
+// one, or a PDF with a page that has no text (a scan). With vision off the
+// agent turns it on first, where it can (agent.mjs, visionOn).
+export function needsSight(cwd, args = {}) {
+  if (typeof args.path !== 'string' || !args.path) return false;
+  const abs = resolve(cwd, args.path);
+  try { if (!existsSync(abs) || !statSync(abs).isFile()) return false; } catch { return false; }
+  if (isImage(abs)) return true;
+  if (!isPdf(abs)) return false;
+  if (Number.isInteger(args.page)) return true;
+  try { return pdfText(abs).some((t) => !t.trim()); } catch { return false; }
+}
+
+// Read of a PDF: its text with a marker before each page, read like a long
+// file (offset, limit, find); page: that page as a picture, for a scan or a figure.
+// A page with no text (a scan) comes along as a picture when the model can see,
+// the first SCAN_PAGES of them: Qwen, told to Read with page, answered from the
+// empty text instead (the Vision check, 30 Sep 2026).
+const PDF_WHOLE = 400;
+const PDF_PART = 300;
+const SCAN_PAGES = 3;
+function readPdf(p, args, note, env, max) {
+  let pages;
+  try { pages = pdfText(p.abs); } catch (e) { return { text: `${note}${p.rel}: ${e.message}.`, error: true, view: { kind: 'error', message: e.message } }; }
+  const empty = pages.map((t, i) => (t.trim() ? null : i + 1)).filter(Boolean);
+  if (Number.isInteger(args.page)) {
+    if (args.page < 1 || args.page > pages.length) return { text: `${p.rel} has ${pages.length} page${pages.length === 1 ? '' : 's'}; there is no page ${args.page}.`, error: true, view: { kind: 'error', message: `No page ${args.page}` } };
+    if (!env.canSee) return { text: `${note}Page ${args.page} of ${p.rel} as text (this model is not looking at pictures in this conversation):
+${pages[args.page - 1] || '(no text on this page: a scan or a picture)'}`, view: { kind: 'read', lines: 1, total: 1, content: `page ${args.page} of ${pages.length}` } };
+    let img;
+    try { img = pdfPageImage(p.abs, args.page); } catch (e) { return { text: `${note}${p.rel}: ${e.message}.`, error: true, view: { kind: 'error', message: e.message } }; }
+    return { text: `${note}Page ${args.page} of ${p.rel} (${pages.length} pages) is attached as a picture for you to look at.`, images: [{ ...img, path: `${p.rel}, page ${args.page}` }], view: { kind: 'read', lines: 1, total: 1, content: `page ${args.page} of ${pages.length}, shown as a picture` } };
+  }
+  const lines = pages.flatMap((t, i) => [`--- page ${i + 1} of ${pages.length} ---`, ...(t.trim() ? t.replace(/\s+$/, '').split('\n') : ['(no text on this page: a scan or a picture)'])]);
+  const total = lines.length;
+  // The pages with no text, as pictures (a scan), when the model can see.
+  const scans = [];
+  if (env.canSee) for (const n of empty.slice(0, SCAN_PAGES)) { try { scans.push({ ...pdfPageImage(p.abs, n), path: `${p.rel}, page ${n}` }); } catch { break; } }
+  const shownScans = !scans.length ? '' : empty.length === 1 ? ' It is attached as a picture for you to look at.' : scans.length === empty.length ? ' They are attached as pictures for you to look at.' : ` Pages ${empty.slice(0, scans.length).join(', ')} are attached as pictures for you to look at; Read with page to look at the others.`;
+  const head = `${p.rel} is a PDF: ${pages.length} page${pages.length === 1 ? '' : 's'}, ${total} lines of text.${empty.length ? ` Page${empty.length === 1 ? '' : 's'} ${empty.slice(0, 12).join(', ')} ${empty.length === 1 ? 'has' : 'have'} no text (a scan or a picture)${env.canSee && !scans.length ? ': Read with page to look at one' : ''}.${shownScans}` : ''}`;
+  const withScans = (r) => (scans.length ? { ...r, images: scans } : r);
+  const want = typeof args.find === 'string' ? args.find.trim().toLowerCase() : '';
+  if (want && args.offset === undefined) {
+    const hits = lines.map((l, i) => (l.toLowerCase().includes(want) ? i : -1)).filter((i) => i >= 0);
+    if (hits.length) {
+      const shown = [...new Set(hits.slice(0, 12).flatMap((h) => Array.from({ length: 13 }, (_, k) => h - 6 + k).filter((k) => k >= 0 && k < total)))].sort((a, b) => a - b);
+      const body = shown.map((k) => `${k + 1}\t${lines[k]}`).join('\n');
+      return withScans({ text: `${note}${head} "${args.find}" is on ${hits.length} line${hits.length === 1 ? '' : 's'}:\n${cut(body, max)}`, view: { kind: 'read', lines: shown.length, total, content: body } });
+    }
+    note += `"${args.find}" does not appear in ${p.rel}. `;
+  }
+  const from = Math.max(1, args.offset ?? 1);
+  const count = total <= PDF_WHOLE && args.offset === undefined && args.limit === undefined ? total : Math.min(args.limit ?? PDF_PART, PDF_WHOLE);
+  const part = lines.slice(from - 1, from - 1 + count);
+  const body = part.map((l, k) => `${from + k}\t${l}`).join('\n');
+  const more = from - 1 + part.length < total ? `\n(lines ${from}-${from - 1 + part.length} of ${total}; pass offset ${from + part.length} for more)` : '';
+  return withScans({ text: `${note}${head}\n${cut(body, max)}${more}`, view: { kind: 'read', lines: part.length, total, content: body } });
+}
+
 export async function execute(name, args, prepared, env) {
   const max = env.maxResultChars ?? 12000;
   switch (name) {
@@ -562,6 +634,9 @@ export async function execute(name, args, prepared, env) {
         args.path = alt[0];
       }
       if (statSync(p.abs).isDirectory()) return { text: `${args.path} is a folder. Use List to see what is in it.`, error: true, view: { kind: 'error', message: 'That is a folder' } };
+      // A picture is shown to the model (when it can see: env.canSee); a PDF comes back as its text.
+      if (isImage(p.abs)) return readPicture(p, note, env);
+      if (isPdf(p.abs)) return readPdf(p, args, note, env, max);
       // A small file comes back whole: small models otherwise read it 5 lines
       // at a time. A long one first comes back as an outline (its parts with
       // line ranges), then the model reads only the part it needs: reading is

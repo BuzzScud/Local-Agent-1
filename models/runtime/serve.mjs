@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { networkInterfaces, hostname } from 'node:os';
 import { join } from 'node:path';
-import { HOME, MODELS, DEFAULT_MODEL } from '../registry.mjs';
+import { HOME, MODELS, DEFAULT_MODEL, withVision, visionPath } from '../registry.mjs';
 import { ModelServer, hasDraft } from './server.mjs';
 import { chooseContext } from './memory.mjs';
 import { SERVE_PORT } from './remote.mjs';
@@ -55,8 +55,11 @@ export function serveArgs({ local = false, keyFile = SERVE_KEY_FILE, cert = null
 // Starts it and prints the form's values. say(text) prints a line. Answers
 // { server, key, port, stop() }; the caller keeps the process alive.
 export async function serve({ modelId = DEFAULT_MODEL, port = SERVE_PORT, local = false, ctx = null, cert = null, certKey = null, newKey = false, say = (t) => process.stdout.write(`${t}\n`) } = {}) {
-  const model = MODELS[modelId];
-  if (!model) throw new Error(`no model called ${modelId}; there are ${Object.keys(MODELS).join(', ')}`);
+  const base = MODELS[modelId];
+  if (!base) throw new Error(`no model called ${modelId}; there are ${Object.keys(MODELS).join(', ')}`);
+  // Another machine's /remote may attach a picture at any time, so a served model
+  // loads its vision add-on whenever that file is here (coding setup gets it).
+  const model = base.vision && existsSync(visionPath(base)) ? withVision(base) : base;
   if (cert && !(existsSync(cert) && certKey && existsSync(certKey))) throw new Error('--https needs a certificate file and its key file that exist (coding serve --https cert.pem key.pem)');
   const { key, made } = serveKey({ fresh: newKey });
   const c = ctx ? { ctx, reason: null } : chooseContext(model);
@@ -68,7 +71,7 @@ export async function serve({ modelId = DEFAULT_MODEL, port = SERVE_PORT, local 
   const scheme = cert ? 'https' : 'http';
   const pad = (s) => s.padEnd(10);
   say('');
-  say(`Serving ${model.name} for /remote on another machine · ${st.slots} slot${st.slots === 1 ? '' : 's'} · ${Math.round(c.ctx / 1024)}k context`);
+  say(`Serving ${model.name} for /remote on another machine · ${st.slots} slot${st.slots === 1 ? '' : 's'} · ${Math.round(c.ctx / 1024)}k context · ${model.visionOn ? 'it can look at pictures' : 'no pictures (coding setup gets its vision add-on)'}`);
   say('');
   say('Type this into /remote over there:');
   if (local) {

@@ -10,7 +10,8 @@
 import { createServer } from 'node:http';
 
 export const FAKE_PROPS = { default_generation_settings: { n_ctx: 32768 }, total_slots: 2, model_path: '/models/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf' };
-export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null, key = null, props = false } = {}) {
+// vision: its /props says it can look at pictures (as llama-server with --mmproj does).
+export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null, key = null, props = false, vision = false } = {}) {
   const queue = [...replies];
   const requests = [];
   const seen = [];
@@ -20,8 +21,10 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null,
     if (down) { req.socket.destroy(); return; }
     if (req.url === '/health') { res.end('{"status":"ok"}'); return; }
     if (key && req.headers.authorization !== `Bearer ${key}`) { res.writeHead(401, { 'content-type': 'application/json' }); res.end('{"error":{"message":"Invalid API Key","type":"authentication_error"}}'); return; }
-    if (props && req.method === 'GET' && req.url === '/props') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(FAKE_PROPS)); return; }
+    if ((props || vision) && req.method === 'GET' && req.url === '/props') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ...FAKE_PROPS, modalities: { vision } })); return; }
     if (props && req.method === 'GET' && req.url === '/v1/models') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ object: 'list', data: [{ id: 'fake-model', context_length: 65536 }] })); return; }
+    // Any other GET (a /props this server does not have, as on an OpenAI server): not a request to the model.
+    if (req.method === 'GET') { res.writeHead(404, { 'content-type': 'application/json' }); res.end('{"error":{"message":"Not found"}}'); return; }
     let body = '';
     for await (const c of req) body += c;
     const json = body ? JSON.parse(body) : {};

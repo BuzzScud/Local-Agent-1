@@ -19,9 +19,10 @@ import { llmCalls } from './flows/llm.mjs';
 // AGENTIC_HELPERS says (unset: all). embedder: the small model for the code
 // search when the memory is off. prewarm: the code search is built before the
 // prompt (not timed), as the app has it built by the time you ask.
+// images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -96,7 +97,10 @@ export async function runHeadless({ prompt, cwd, url, model, thinking, effort, c
   }
   const calls0 = llmCalls.n;
   const t0 = Date.now();
-  const reason = await agent.send(prompt, { signal });
+  agent.canSee = canSee;
+  // A picture the model reads by itself: its vision turned on then (coding -p reloads the model).
+  if (visionOn) agent.visionOn = () => visionOn(agent);
+  const reason = await agent.send(canSee || !images.length ? prompt : `${prompt}\n\n(Pictures were named, but this model is not looking at pictures.)`, { signal, images: canSee && images.length ? images : undefined });
   const secs = (Date.now() - t0) / 1000;
   // What the run taught goes into the memory before it ends.
   let saved = null;

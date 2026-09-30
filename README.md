@@ -86,6 +86,20 @@ coding -p "what does x do" # answer once and exit
 coding --way model         # the model decides, like Claude Code (/effort shows it as Who decides)
 ```
 
+### Pictures and PDFs
+
+Drag a screenshot or a PDF into the window, name it with `@shot.png`, or copy a screenshot
+(ctrl+shift+cmd+4) and press **ctrl+v**: it goes with your message. The model looks at a picture
+once its vision add-on is loaded: the first picture you attach loads it (the model reloads once,
+about 20 s; it is downloaded then if `coding setup` has not got it yet: Qwen's is 0.92 GB, Gemma's
+0.18 GB). The model can also look at a picture it finds by itself with Read: its vision is
+turned on then, the same way. A PDF goes as its text, page by page; a page with no text (a scan)
+goes as a picture, and the model can look at any page as one (a figure). Pictures are made
+smaller before they are sent (1280 px at most), Qwen's are given at least 1024 tokens (at fewer it
+misread small text), and only the latest three go with each request. It all uses what macOS has
+(a small Swift helper built on first use with Apple's command line tools); nothing else is
+installed. The Vision check and Picture tokens in the Arena test it with the real model.
+
 ### A model on another machine
 
 The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, a

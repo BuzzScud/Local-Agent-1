@@ -87,6 +87,12 @@ export function thinkingKwargs(model, thinking, effort) {
 export const modelPath = (m) => join(MODELS_DIR, m.file);
 // The model's guessing helper (speculative decoding), when it has one.
 export const draftPath = (m) => (m?.draft ? join(MODELS_DIR, m.draft.file) : null);
+// Its vision add-on (the multimodal projector), when it has one; loaded only with visionOn.
+export const visionPath = (m) => (m?.vision ? join(MODELS_DIR, m.vision.file) : null);
+// The same model, loaded with its vision add-on: the server adds --mmproj, the
+// memory estimate counts the add-on, and a server kept loaded is shared only
+// when it has vision too.
+export const withVision = (m) => (m?.vision ? { ...m, visionOn: true } : m);
 
 // This model's folder in the repo: its README, reports/ and results/.
 export const modelFolder = (m) => new URL(`./${m.folder}/`, import.meta.url).pathname;

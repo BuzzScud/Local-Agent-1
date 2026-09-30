@@ -13,6 +13,10 @@
 //   - A model that declines a request is retried on Anthropic's fallback
 //     model where that is offered (fallbacks: 'default').
 import { claudeSdk, claudeClient, claudeCaps } from '../../../models/index.mjs';
+import { keptImages, imageLabel } from './images.mjs';
+
+// A picture as Claude takes it (a still-kept one), or a line of text for an older one.
+const imageBlock = (img, kept) => (kept.has(img) ? { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } } : { type: 'text', text: imageLabel(img) });
 
 // Thinking blocks by the reply they came with: its first tool call's id, or its text.
 const THOUGHTS = new Map();
@@ -81,6 +85,7 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
   const caps = claudeCaps(model);
   const system = messages.filter((m) => m.role === 'system').map((m) => textOf(m.content)).filter(Boolean).join('\n\n');
   const turns = [];
+  const kept = keptImages(messages);
   const push = (role, blocks) => {
     if (!blocks.length) return;
     const last = turns.at(-1);
@@ -89,8 +94,9 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     else turns.push({ role, content: blocks });
   };
   for (const m of messages) {
-    if (m.role === 'user') { const t = textOf(m.content); if (t.trim()) push('user', [{ type: 'text', text: t }]); }
-    else if (m.role === 'tool') push('user', [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: textOf(m.content) || '(no output)' }]);
+    if (m.role === 'user') { const t = textOf(m.content); push('user', [...(t.trim() ? [{ type: 'text', text: t }] : []), ...(m.images ?? []).map((i) => imageBlock(i, kept))]); }
+    // A tool result's pictures go inside it (Claude takes pictures in a tool_result).
+    else if (m.role === 'tool') push('user', [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: m.images?.length ? [{ type: 'text', text: textOf(m.content) || '(no output)' }, ...m.images.map((i) => imageBlock(i, kept))] : textOf(m.content) || '(no output)' }]);
     else if (m.role === 'assistant') {
       const calls = (m.tool_calls ?? []).filter((c) => c?.id && c.function?.name);
       const text = textOf(m.content);

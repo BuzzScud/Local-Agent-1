@@ -5,7 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, statSync, readFileSync, statfsSync, writeSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdBudget } from './screen.jsx';
 import { startTip } from './start.jsx';
@@ -16,7 +16,9 @@ import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, withVision, visionPath, getVision } from '../../../models/index.mjs';
+import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
+import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { REMOTE_ROWS, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, toProfile, connectionChanged, formWarning, kindWord } from './remote-form.mjs';
 import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
@@ -73,18 +75,45 @@ async function exited(pid, ms = 15000) {
 }
 
 // "@path" in a prompt attaches that file for the model.
-function expandMentions(value, cwd, maxChars) {
+// @picture.png and @doc.pdf too: a picture is attached as a picture (images), a
+// PDF as its text. A file dragged into the window (its path) and a pasted
+// picture ([Image #n], `pasted`) count the same way.
+function expandMentions(value, cwd, maxChars, pasted = new Map()) {
   const attached = [];
+  const images = [];
   let extra = '';
+  const addPdf = (abs, shown) => {
+    try {
+      const pages = pdfText(abs);
+      const body = pages.map((t, i) => `--- page ${i + 1} of ${pages.length} ---\n${t.trim() || '(no text on this page: a scan or a picture)'}`).join('\n');
+      attached.push({ path: shown, label: `PDF, ${pages.length} page${pages.length === 1 ? '' : 's'}` });
+      extra += `\n\n<file path="${shown}">\n${body.slice(0, maxChars)}\n</file>`;
+    } catch (e) { attached.push({ path: shown, label: `not read: ${e.message}` }); }
+  };
+  const addImage = (abs, shown) => {
+    try { const img = preparedImage(abs); images.push({ ...img, path: shown }); attached.push({ path: shown, label: `picture, ${img.srcW}×${img.srcH}` }); } catch (e) { attached.push({ path: shown, label: `not a picture it can open: ${e.message}` }); }
+  };
+  for (const m of value.matchAll(IMAGE_TOKEN)) {
+    const file = pasted.get(Number(m[1]));
+    if (file && existsSync(file)) addImage(file, m[0]);
+  }
+  for (const d of droppedFiles(value, cwd)) {
+    const shown = d.path.startsWith(homedir()) ? `~${d.path.slice(homedir().length)}` : d.path;
+    if (d.kind === 'image') addImage(d.path, shown); else addPdf(d.path, shown);
+  }
   for (const m of value.matchAll(/(^|\s)@([^\s]+)/g)) {
-    const p = resolvePath(cwd, m[2]);
+    // "@invoice.pdf?" names invoice.pdf: punctuation after a name that is not part of the file.
+    let p = resolvePath(cwd, m[2]);
+    if (!existsSync(p.abs) && /[?!.,;:)\]'"]+$/.test(m[2])) p = resolvePath(cwd, m[2].replace(/[?!.,;:)\]'"]+$/, ''));
     if (!p.inside || !existsSync(p.abs) || statSync(p.abs).isDirectory()) continue;
+    if (isImage(p.abs)) { addImage(p.abs, p.rel); continue; }
+    if (isPdf(p.abs)) { addPdf(p.abs, p.rel); continue; }
     const r = readFile(p.abs, { limit: 400 });
     if (r.text.includes('\u0000')) continue;
     attached.push({ path: p.rel, lines: r.lineCount });
     extra += `\n\n<file path="${p.rel}">\n${r.numbered.slice(0, maxChars)}\n</file>`;
   }
-  return { text: value + extra, attached };
+  return { text: value + extra, attached, images };
 }
 
 export function App({ opts, win, onRestart }) {
@@ -252,6 +281,9 @@ export function App({ opts, win, onRestart }) {
   const remoteRef = useRef({ conn: null, why: null, on: remoteAtStart });
   const localModelRef = useRef(null);
   const remoteFnRef = useRef({});
+  // Pictures pasted with ctrl+v ([Image #n] → its file), and a message waiting while vision turns on.
+  const pastedRef = useRef({ n: 0, files: new Map() });
+  const visionWaitRef = useRef(null);
   const abortRef = useRef(null);
   const historyRef = useRef(loadHistory(cwd));
   const histIdx = useRef(null);
@@ -377,6 +409,13 @@ export function App({ opts, win, onRestart }) {
       return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else ask first' }] };
     }
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
+    if (id === 'vision-get') {
+      const gb = ((model.vision?.bytes ?? 0) / 1e9).toFixed(2);
+      return { title: `Look at the picture? ${model.name} needs its vision add-on`, blurb: `A one-time download of ${gb} GB (then kept with the model). It loads only in windows where you attach a picture.`, what: 'the picture', current: null, options: [
+        { id: 'get', label: `Download it (${gb} GB) and look`, note: 'then the model reloads once with it (about 20 s)' },
+        { id: 'skip', label: 'Send without the picture', note: 'the message goes now, with a line saying a picture was attached' },
+      ] };
+    }
     if (id === 'remote-down') {
       const local = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
       const why = remoteRef.current.why ?? 'it did not answer';
@@ -415,8 +454,9 @@ export function App({ opts, win, onRestart }) {
   // the window, the conversation and the history all stay. About 40 s: the
   // new weights never reuse a saved warm-up, so the instructions are re-read.
   // /effort uses it too, to restart on a new context or thinking cap (`done` is its note).
-  const switchModel = async (next, done) => {
-    if (S.current.live !== IDLE) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+  // midTurn: the model asked for it in the middle of its reply (vision for a picture it read).
+  const switchModel = async (next, done, { midTurn = false } = {}) => {
+    if (S.current.live !== IDLE && !midTurn) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
     const cur = serverRef.current;
     // Only one 27B fits in memory, so nobody else may be on the old server.
     const others = cur?.port ? liveUsers(cur.port).filter((p) => p !== process.pid) : [];
@@ -451,6 +491,7 @@ export function App({ opts, win, onRestart }) {
       });
       const st = await srv.start({ ctx: c.ctx, lingerSecs: LINGER_SECS, helper: c.helper });
       agent.url = srv.url;
+      agent.canSee = Boolean(srv.vision);
       agent.model = modelWithLimits(next, limitsRef.current);
       agent.ctx = st.ctx ?? c.ctx; setCtx(agent.ctx);
       agent.syncRules(); // rules that follow the Context are read again before the warm-up below
@@ -504,6 +545,7 @@ export function App({ opts, win, onRestart }) {
     const m = conn.model;
     setModel(m);
     agent.url = conn.url;
+    agent.canSee = Boolean(conn.vision);
     agent.model = modelWithLimits(m, limitsRef.current);
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.slots = conn.slots > 1 ? { main: 0, side: 1 } : null;
@@ -577,6 +619,36 @@ export function App({ opts, win, onRestart }) {
     push({ type: 'note', text: `Remote saved${r.address ? ` (${remoteLabel(r)} · ${kindWord(r.kind)}${r.key ? ' · with a key' : ''})` : ''}. ${r.use ? 'In use now.' : 'This window stays on this Mac; Use: Remote switches.'}`, tone: 'dim' });
   };
   remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm };
+
+  // ---- pictures: the model's vision add-on, loaded when a picture is first attached ----
+  // true: the message waits (vision turning on, or a question about downloading it);
+  // false: it goes now (text only, with a note why).
+  const needVision = (value, shown) => {
+    if (model.remote) { push({ type: 'note', text: `The remote model (${remoteLabel(settings.remote)}) cannot look at pictures${model.remote.kind === 'llama' ? ': its coding serve has no vision add-on (coding setup there gets it)' : ''}. The message goes with a line saying so.`, tone: 'warn' }); return false; }
+    if (opts.url) { push({ type: 'note', text: 'The model server given with --url is not looking at pictures (start it with its --mmproj file). The message goes with a line saying so.', tone: 'warn' }); return false; }
+    if (!model.vision) { push({ type: 'note', text: `${model.name} cannot look at pictures. The message goes with a line saying so.`, tone: 'warn' }); return false; }
+    visionWaitRef.current = { value, shown };
+    if (!existsSync(visionPath(model))) { openChoice('vision-get'); return true; }
+    turnVisionOn();
+    return true;
+  };
+  const turnVisionOn = async () => {
+    const wait = visionWaitRef.current;
+    push({ type: 'note', text: `Turning on ${model.name}'s vision: a reload of about 20 s (the conversation stays). Your message goes as soon as it can see.`, tone: 'dim' });
+    await switchModel(withVision(model), () => `${model.name} can look at pictures now: it stays on for this window.`);
+    visionWaitRef.current = null;
+    if (wait) setTimeout(() => remoteFnRef.current.send?.(wait.value, wait.shown, { visionAsked: true }), 50);
+  };
+  remoteFnRef.current.needVision = needVision;
+  // The model read a picture (or a scanned page) by itself while not looking at pictures:
+  // the same reload, in the middle of its reply, when the add-on is here (else Read says
+  // to ask you to attach it, which offers the download).
+  agent.visionOn = async () => {
+    if (model.remote || opts.url || !model.vision || !existsSync(visionPath(model))) return false;
+    push({ type: 'note', text: `${model.name} wants to look at a picture: turning on its vision (a reload of about 20 s, the conversation stays).`, tone: 'dim' });
+    await switchModel(withVision(model), () => `${model.name} can look at pictures now: it stays on for this window.`, { midTurn: true });
+    return Boolean(agentRef.current?.canSee);
+  };
   // /settings: the commands kept out of the / menu, each row with what it
   // holds right now (none reads blank); enter runs the row's command.
   const openSettings = () => {
@@ -704,6 +776,15 @@ export function App({ opts, win, onRestart }) {
   });
   const applyChoice = (id, value) => {
     if (id === 'memory-save') { const p = pendingSaveRef.current; pendingSaveRef.current = null; p?.resolve(value === 'save'); return; }
+    if (id === 'vision-get') {
+      const wait = visionWaitRef.current;
+      if (value === 'skip') { visionWaitRef.current = null; if (wait) setTimeout(() => remoteFnRef.current.send?.(wait.value, wait.shown, { visionAsked: true }), 50); return; }
+      push({ type: 'note', text: `Downloading ${model.name}'s vision add-on…`, tone: 'dim' });
+      getVision(model, (t) => flash(String(t).trim(), 4000))
+        .then(() => turnVisionOn())
+        .catch((e) => { visionWaitRef.current = null; push({ type: 'note', text: `The vision add-on did not download: ${e.message}. The message goes without the picture.`, tone: 'error' }); if (wait) setTimeout(() => remoteFnRef.current.send?.(wait.value, wait.shown, { visionAsked: true }), 50); });
+      return;
+    }
     if (id === 'remote-down') {
       if (value === 'retry') useRemote(settings.remote);
       else if (value === 'local') useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.' });
@@ -803,16 +884,21 @@ export function App({ opts, win, onRestart }) {
     const s = sessionRef.current;
     if (!s.title) return;
     // lessons: what happened in each turn, for the memory's review at night.
-    try { saveSession(cwd, s.id, { title: s.title, messages: agent.messages, items: s.items.slice(-300), mode: agent.mode, lessons: agent.lessons }); } catch {}
+    const slimImages = (m) => (m.images ? { ...m, images: m.images.map(({ data, ...rest }) => rest) } : m);
+    try { saveSession(cwd, s.id, { title: s.title, messages: agent.messages.map(slimImages), items: s.items.slice(-300), mode: agent.mode, lessons: agent.lessons }); } catch {}
   }, [agent, cwd]);
 
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
 
-  const sendPrompt = useCallback((value, shown = value) => {
-    const { text, attached } = expandMentions(value, cwd, agent.maxResultChars);
+  const sendPrompt = useCallback((value, shown = value, { visionAsked = false } = {}) => {
+    const { text, attached, images } = expandMentions(value, cwd, agent.maxResultChars, pastedRef.current.files);
+    // A picture, and a model not looking at pictures yet: its vision is turned on first (the
+    // message waits for it), or, where it cannot be, the message goes with a line saying so.
+    if (images.length && !agent.canSee && !visionAsked && remoteFnRef.current.needVision?.(value, shown)) return;
+    const blind = images.length && !agent.canSee;
     push({ type: 'user', text: shown, attached });
-    let content = text;
+    let content = blind ? `${text}\n\n(The user attached ${images.length === 1 ? 'a picture' : `${images.length} pictures`} (${images.map((i) => i.path).join(', ')}), but this model is not looking at pictures now.)` : text;
     if (pendingContext.current.length) { content = `${pendingContext.current.join('\n\n')}\n\n${content}`; pendingContext.current = []; }
     if (agent.mode === 'plan') content += '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]';
     if (!sessionRef.current.title) sessionRef.current.title = shown.slice(0, 80);
@@ -820,7 +906,7 @@ export function App({ opts, win, onRestart }) {
     abortRef.current = ac;
     setPlaceholder(pick(PLACEHOLDERS));
     autoRef.current.cancel(); // a save in the background steps aside
-    agent.send(content, { signal: ac.signal, shown });
+    agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images });
   }, [agent, cwd, push]);
 
   // /rewind's first copy of this folder, and the clean-up of copies no
@@ -830,6 +916,8 @@ export function App({ opts, win, onRestart }) {
     if (!rw) return;
     rw.warm(cwd).catch(() => {});
     pruneRewind(HOME).catch(() => {});
+    // Pictures pasted with ctrl+v are kept a week, then let go.
+    try { const dir = join(HOME, 'attachments'); for (const f of readdirSync(dir)) { const p = join(dir, f); if (Date.now() - statSync(p).mtimeMs > 7 * 86_400_000) rmSync(p, { force: true }); } } catch { /* none yet */ }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Agent events → screen.
@@ -955,6 +1043,8 @@ export function App({ opts, win, onRestart }) {
     (async () => {
       if (opts.url) {
         setStarting(false);
+        // A llama.cpp server given by hand says whether it has its vision add-on.
+        try { const p = await (await fetch(`${opts.url.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) })).json(); agent.canSee = Boolean(p?.modalities?.vision); } catch { agent.canSee = false; }
         // A server given by hand: what the last window's second look would
         // save is still asked about (no model needed); the first-use reading waits for a start of its own.
         setTimeout(() => { if (alive) autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();
@@ -1026,6 +1116,7 @@ export function App({ opts, win, onRestart }) {
         return;
       }
       agent.url = srv.url;
+      agent.canSee = Boolean(srv.vision);
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       // Read the instructions and tools before the first message (restored from
       // disk after the first time), so the first reply starts fast. A server
@@ -1199,6 +1290,7 @@ export function App({ opts, win, onRestart }) {
         [`${ok(ver.status === 0)} model server`, ver.status === 0 ? `${engineOf(model).id} ${(ver.stderr + ver.stdout).match(/build \d+/)?.[0] ?? 'ok'} · ${short(bin)}` : `missing at ${short(bin)}`],
         [`${ok(size === model.bytes)} model file`, size ? `${(size / 1e9).toFixed(2)} GB · ${short(file)}` : `missing: download ${model.url}`],
         [`${ok(!!agent.url && !starting)} server running`, serverRef.current?.port ? `port ${serverRef.current.port}, context ${Math.round(agent.ctx / 1024)}k` : opts.url ? opts.url : 'not running'],
+        [`${ok(true)} vision`, !model.vision ? `${model.name} cannot look at pictures` : agent.canSee ? 'on: it can look at pictures in this window' : existsSync(visionPath(model)) ? 'off: turns on when you attach a picture' : `not downloaded: attaching a picture offers it (${(model.vision.bytes / 1e9).toFixed(2)} GB), or coding setup`],
         [`${ok(avail > needBytes(model, 16384))} free memory`, `${(avail / 1e9).toFixed(1)} GB (32k needs ${(needBytes(model, 32768) / 1e9).toFixed(1)} GB, 16k ${(needBytes(model, 16384) / 1e9).toFixed(1)} GB)`],
         [`${ok(disk === null || disk > 2)} disk space`, disk === null ? 'unknown' : `${disk.toFixed(1)} GB free`],
         [`${ok(true)} terminal`, `${process.env.TERM_PROGRAM ?? 'unknown'} · ${process.env.COLORTERM === 'truecolor' ? 'true colour' : '256 colours'} · ${columns}×${rows}`],
@@ -1533,6 +1625,7 @@ export function App({ opts, win, onRestart }) {
           ['reading speed', stats.pps ? `${Math.round(stats.pps)} tokens/s (last long read)` : '—'],
           ['written so far', `${(stats.outTokens ?? 0).toLocaleString()} tokens in ${stats.requests ?? 0} replies`],
           ['memory', `${ramGb ? `${ramGb.toFixed(1)} GB` : '—'}${memoryNote.current ? ` · ${memoryNote.current}` : ''}`],
+          ['pictures', agent.canSee ? 'on: it can look at pictures' : model.vision ? 'off: turns on when you attach one (ctrl+v, a dragged file, @file.png)' : 'this model cannot look at pictures'],
           ['search', `embedder ${showLimit('embedder', limitsRef.current.embedder)} · retriever ${showLimit('retriever', limitsRef.current.retriever).toLowerCase()} · reranker ${showLimit('reranker', limitsRef.current.reranker)}${agent.reranker?.last ? ` (last ${(agent.reranker.last.ms / 1000).toFixed(1)} s for ${agent.reranker.last.pieces})` : ''} · /effort moves them`],
           ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /effort moves them`],
           ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
@@ -2010,6 +2103,22 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     // Keys that work everywhere
+    // ctrl+v: the clipboard's picture (a screenshot copied with ctrl+shift+cmd+4, say) attached as [Image #n].
+    if (key.ctrl && ch === 'v') {
+      try {
+        const dir = join(HOME, 'attachments');
+        mkdirSync(dir, { recursive: true });
+        const n = pastedRef.current.n + 1;
+        const file = join(dir, `${sessionRef.current.id}-${n}.png`);
+        const info = clipboardImage(file);
+        if (!info) { flash('No picture on the clipboard (text pastes with cmd+v)', 2500); return; }
+        pastedRef.current.n = n;
+        pastedRef.current.files.set(n, file);
+        setInput((st) => withUndo(st, insertText(st, `[Image #${n}] `)));
+        flash(`Picture ${info.w}×${info.h} attached as [Image #${n}]`, 2500);
+      } catch (e) { flash(`Could not paste the picture: ${e.message}`, 3000); }
+      return;
+    }
     if (key.ctrl && ch === 'c') {
       if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
       if (cur.input.value) { setInput((s) => withUndo(s, { value: '', cursor: 0 })); return; } // ctrl+z brings it back

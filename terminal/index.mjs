@@ -43,3 +43,7 @@ export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TE
 // pickCards, designNotes and scoreCard: which cards go along with a request, for the UI component battle's card pick (models/evals/bench/design/components.mjs).
 export { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard } from './src/agent/design.mjs';
 export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/layoutcheck.mjs';
+// Pictures and PDFs drawn for the Vision check (models/evals/tools/vision-check.mjs), and the
+// real app in a pseudo-terminal for its window check (loaded only when a check calls it).
+export { textImage, textPdf, pdfText, mediaTool } from './src/tools/media.mjs';
+export const runInPty = async (o) => (await import('./test/pty.mjs')).runInPty(o);

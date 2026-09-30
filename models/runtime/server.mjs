@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath } from '../registry.mjs';
+import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath, visionPath } from '../registry.mjs';
 import { setEndpoint } from './remote.mjs';
 
 // One small file per running server: which process owns it, on which port.
@@ -126,6 +126,8 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
     // once. Measured 2026-09-25 on a rewrite of export.mjs: 8.2 → 10–11
     // tokens/s written, same output; ngram-mod gave 9.2.
     : model.spec ? ['--spec-type', model.spec.type, '--spec-ngram-simple-size-n', String(model.spec.n), '--spec-ngram-simple-size-m', String(model.spec.m)] : []),
+    // Its vision add-on, once a picture is attached (withVision in registry.mjs).
+    ...(model.visionOn && model.vision && existsSync(visionPath(model)) ? ['--mmproj', visionPath(model), ...(model.vision.minTokens ? ['--image-min-tokens', String(model.vision.minTokens)] : [])] : []),
     // Cap the saved states (see checkpoints in models.mjs).
     '--ctx-checkpoints', String(model.checkpoints ?? 3),
     '--cache-ram', '0',
@@ -160,12 +162,13 @@ export class ModelServer extends EventEmitter {
     if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: coding setup`);
     const live = scanServers();
     // One `coding serve` runs over https is not shared (its certificate names another host).
-    const same = share && !listen && live.find((e) => e.model === this.model.file && !e.serve?.https);
+    // A picture needs the vision add-on: a server kept loaded without it is not shared.
+    const same = share && !listen && live.find((e) => e.model === this.model.file && !e.serve?.https && (!this.model.visionOn || e.vision));
     if (same) {
       try {
         const r = await fetch(`http://127.0.0.1:${same.port}/health`);
         if (r.ok) {
-          Object.assign(this, { port: same.port, ctx: same.ctx, shared: same, child: null, draft: Boolean(same.draft) });
+          Object.assign(this, { port: same.port, ctx: same.ctx, shared: same, child: null, draft: Boolean(same.draft), vision: Boolean(same.vision) });
           // `coding serve` running here: this window uses it too, with its key.
           if (same.serve?.keyFile) { try { setEndpoint(this.url, { kind: 'llama', key: readFileSync(same.serve.keyFile, 'utf8').split('\n')[0].trim(), label: 'coding serve' }); } catch {} }
           // idle: kept loaded from an earlier start, no other window on it now.
@@ -189,6 +192,7 @@ export class ModelServer extends EventEmitter {
     appendFileSync(logPath, `\n=== ${new Date().toISOString()} start ${this.model.file} ctx=${ctx} port=${port}${lingerSecs ? ` stays ${lingerSecs}s after the last window` : ''}\n`);
     const draft = helper === false ? false : hasDraft(this.model);
     this.draft = draft;
+    this.vision = Boolean(this.model.visionOn && this.model.vision && existsSync(visionPath(this.model)));
     // The log is the server's own output file (not a pipe through this
     // process), so a server that stays loaded keeps writing after we exit.
     const logFd = openSync(logPath, 'a');
@@ -196,7 +200,7 @@ export class ModelServer extends EventEmitter {
     const child = spawn(bin, args, { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
     closeSync(logFd);
     this.child = child;
-    writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString(), ...(lingerSecs ? { linger: lingerSecs } : {}), ...(listen ? { serve: { host: listen.host, keyFile: listen.keyFile ?? null, https: this.https } } : {}) }));
+    writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString(), ...(this.vision ? { vision: true } : {}), ...(lingerSecs ? { linger: lingerSecs } : {}), ...(listen ? { serve: { host: listen.host, keyFile: listen.keyFile ?? null, https: this.https } } : {}) }));
     if (lingerSecs) { addUser(port); watch(child.pid, port, lingerSecs); }
     child.on('exit', (code, signal) => {
       appendFileSync(logPath, `=== exit code=${code} signal=${signal}\n`);

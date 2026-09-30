@@ -42,6 +42,20 @@ export default {
   // n-grams already in the prompt speed up edits, as on the other models; the
   // fallback when the helper is off (AGENTIC_HELPER=off).
   spec: { type: 'ngram-simple', n: 12, m: 48 },
+  // Its vision add-on (the multimodal projector, Unsloth's F16): loaded with the
+  // model only once a picture is attached (--mmproj). computeBytes: its working space.
+  vision: {
+    file: 'mmproj-qwen3.5-9b-F16.gguf',
+    url: 'https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/mmproj-F16.gguf',
+    sha256: '5a40d1f771686432172a4981018a0d30d03a5aaf5793a5badd5416573362a232',
+    bytes: 918_165_984,
+    computeBytes: 0.3e9,
+    // At least this many tokens a picture (--image-min-tokens). At the engine's own
+    // size a 640×240 picture was about 190 tokens and Qwen read "HELLO 42" as
+    // "HELLO" and "ORBIT 815" as "B8"; at 1024 it read both (probed 30 Sep 2026,
+    // the Picture tokens test), as the engine's warning for Qwen's vision advises.
+    minTokens: 1024,
+  },
   // Qwen's own MTP layer, inside the model file (inFile: nothing extra to
   // download or load). It guesses the next word from Qwen's own state; Qwen
   // checks it and keeps only what it agrees with, so the output is Qwen's.

@@ -257,7 +257,7 @@ const ctxOf = (m) => m?.context_length ?? m?.max_model_len ?? m?.max_context_len
 // whole way works (a hosted model may charge a fraction of a cent for it).
 export async function probe({ url, kind = 'llama', key = null, model = '', reply = false, signal, timeoutMs = 8000 }) {
   const steps = [];
-  const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null };
+  const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, vision: kind !== 'llama' };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
   if (kind === 'claude') return claudeProbe({ url, key, model, reply, signal, timeoutMs, why });
   const t0 = Date.now();
@@ -275,6 +275,7 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
       out.file = p.body.model_path ?? null;
       out.ctx = p.body.default_generation_settings?.n_ctx ?? null;
       out.slots = p.body.total_slots ?? 1;
+      out.vision = Boolean(p.body.modalities?.vision);
       out.model = model || (out.file ? basename(out.file) : null);
       steps.push({ ok: true, text: `runs ${out.file ? basename(out.file) : 'a model'}${out.ctx ? ` · ${Math.round(out.ctx / 1024)}k context` : ''}${out.slots > 1 ? ` · ${out.slots} slots` : ''}` });
     } else {
@@ -373,7 +374,8 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
     const ctx = r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
     setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r) });
     return {
-      url, ctx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel,
+      // vision: it can take a picture (a llama.cpp server says so; OpenAI-compatible and Claude: yes)
+      url, ctx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,
       stop: () => { dropEndpoint(url); tunnel?.stop(); },
     };
   } catch (e) {

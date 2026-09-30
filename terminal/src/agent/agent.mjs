@@ -4,7 +4,7 @@
 import { EventEmitter } from 'node:events';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight } from './tools.mjs';
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -39,6 +39,7 @@ import { saveLessons, knownAlready, practiceWork, applySave, saveLine } from './
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
+import { IMAGE_TOKENS } from './images.mjs';
 
 const MAX_STEPS = 40;
 // When the model decides (way.mjs): the calls of one reply that run, in order.
@@ -588,7 +589,8 @@ export class Agent extends EventEmitter {
   // the facts the last turn used, and when the turn ends what happened is
   // written down, for the facts' trust and for the next save.
   // shown: the message as you typed it (what /rewind lists and puts back).
-  async send(text, { signal, shown } = {}) {
+  // images: pictures you attached ([{ path, mime, data, w, h }]), carried beside the text (images.mjs).
+  async send(text, { signal, shown, images } = {}) {
     this.corrected(text);
     this.turn = null;
     const happened = { at: new Date().toISOString(), request: String(text), recalled: [], notes: '', files: new Set(), tries: [], warnings: [], did: [] };
@@ -604,7 +606,7 @@ export class Agent extends EventEmitter {
       try { point = await this.rewind.begin({ cwd: this.cwd, text: shown ?? String(text), at: happened.at }); } catch { point = null; } finally { clearTimeout(slow); }
     }
     let reason;
-    try { reason = await this.work(text, { signal }); } finally {
+    try { reason = await this.work(text, { signal, images }); } finally {
       this.off('note', warn);
       if (point) { try { await this.rewind.finish(point, { files: happened.files, message: happened.message }); } catch { /* this message cannot be rewound */ } }
     }
@@ -626,7 +628,7 @@ export class Agent extends EventEmitter {
     return true;
   }
 
-  async work(text, { signal } = {}) {
+  async work(text, { signal, images } = {}) {
     // A hub save applies between tasks; in-flight requests keep their snapshot.
     const instructions = readInstructions();
     this.workingInstructions = instructions.sections;
@@ -640,7 +642,8 @@ export class Agent extends EventEmitter {
     this.busy = true;
     const started = Date.now();
     const turnStart = this.messages.length;
-    this.messages.push({ role: 'user', content: text });
+    this.messages.push({ role: 'user', content: text, ...(images?.length ? { images } : {}) });
+    if (images?.length) this.ctxUsed += images.length * IMAGE_TOKENS;
     if (this.happened) this.happened.message = this.messages.at(-1);
     this.emit('turn-start', { started });
     // The model decides (way.mjs): no word rules pick a path for it, not even for a greeting or
@@ -678,7 +681,7 @@ export class Agent extends EventEmitter {
     // An unclear request gets one question first (src/flows/clarify.mjs); the
     // answer joins the conversation and travels with the request. (The model that
     // decides asks with its own Ask tool, when it wants to.)
-    if (!decides && !follow && this.flows && this.mode !== 'plan') {
+    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length) {
       try {
         const c = await clarify(this.flowContext(signal), text);
         if (c?.stop) return stopNow(c.stop);
@@ -696,7 +699,7 @@ export class Agent extends EventEmitter {
     // First the focused paths (rename / fix / change); the loop handles the rest.
     // (The model that decides calls them itself: Rename and TestFirst.)
     this.carried = null;
-    if (!decides && !follow && this.flows && this.mode !== 'plan') {
+    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length) {
       // Every focused call's tokens, for the done line (the loop counts its own).
       const counted = { steps: 0, tokens: 0, thinkTokens: 0 };
       const tally = ({ tokens, thought }) => { counted.steps++; counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
@@ -951,7 +954,7 @@ export class Agent extends EventEmitter {
             assistant.tool_calls = [{ id: call.id, type: 'function', function: { name: 'Bash', arguments: call.args } }];
             this.emit('note', { text: `Checking the change: ${checkCmd}`, tone: 'dim' });
             const out = await this.runTool(call, signal);
-            this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text });
+            this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) });
             if (out.stop) { reason = out.stop; break; }
             if (out.error) {
               this.messages.push({ role: 'user', content: auto(`${this.turn.check ? 'The named check fails' : 'The tests fail'} (output above). Find what is wrong in your change, fix it with Edit, then run ${this.turn.check ? 'the check' : 'the tests'} again.`) });
@@ -1011,8 +1014,9 @@ export class Agent extends EventEmitter {
           out = await this.runTool(c, signal);
           if (c.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + (out.readKeys?.length || 1);
           if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
-          const result = { role: 'tool', tool_call_id: c.id, content: out.text };
+          const result = { role: 'tool', tool_call_id: c.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
           this.messages.push(result);
+          if (out.images?.length) this.ctxUsed += out.images.length * IMAGE_TOKENS;
           for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime });
           if (out.stop) stopped = out.stop;
         }
@@ -1647,8 +1651,12 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'A question changes no files' }, error: true });
       return { text: 'This is a question, so no file is changed. Answer it from what you have read. If a change is needed, say which one, and the user can ask for it.', error: true };
     }
+    // A picture, or a scanned PDF, the model reads by itself while it is not looking at pictures:
+    // its vision is turned on first where it can be (visionOn: the window's reload, or coding -p's),
+    // as when you attach one. Without it, Read says to ask you to attach it.
+    if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, canSee: Boolean(this.canSee), request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -1780,6 +1788,7 @@ export class Agent extends EventEmitter {
   async readMany(id, paths, signal) {
     const parts = [];
     const readKeys = [];
+    const images = [];
     let failed = 0;
     for (const [k, path] of paths.entries()) {
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
@@ -1788,8 +1797,9 @@ export class Agent extends EventEmitter {
       if (out.error) failed++;
       if (out.readKey) readKeys.push({ readKey: out.readKey, mtime: out.mtime });
       parts.push(out.text);
+      images.push(...(out.images ?? []));
     }
-    return { text: parts.join('\n\n'), error: failed === paths.length, readKeys };
+    return { text: parts.join('\n\n'), error: failed === paths.length, readKeys, ...(images.length ? { images } : {}) };
   }
 
   // The model's own tools (tools.mjs MODEL_TOOL_DEFS): what the app did for it before its

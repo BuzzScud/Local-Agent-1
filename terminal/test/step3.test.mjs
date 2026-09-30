@@ -152,7 +152,7 @@ test('Read with find shows the lines around a word or name in a long file, ready
   // The tool's own description says so, in a few words (the instructions are read at every start).
   const read = toolSchemas().find((t) => t.function.name === 'Read').function;
   expect(read.description).toContain('pass find (a word or name) to see the lines around it');
-  expect(Object.keys(read.parameters.properties)).toEqual(['path', 'find', 'offset', 'limit']);
+  expect(Object.keys(read.parameters.properties)).toEqual(['path', 'find', 'offset', 'limit', 'page']);
 });
 
 test('a long page or stylesheet is not listed in blocks of 60 lines; code still shows its parts', async () => {
