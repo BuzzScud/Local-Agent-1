@@ -181,6 +181,8 @@ test('a model added after the run: Results shows the run the others share, names
   // The totals keep every column; the best is marked among the ones that ran.
   expect(page).toMatch(/Tasks passed[\s\S]*?not run yet/);
   expect(page).toContain('on each of Alpha and Beta');
+  // Three columns in the narrow totals card: the shortest names (as the Arena writes them), so none breaks mid-word.
+  expect(page).toContain('<table class="grid cmp"><thead><tr><th></th><th data-model="alpha">Alpha</th><th data-model="beta">Beta</th><th data-model="gamma">Gamma</th>');
   // Low · Medium · High is not the same for every model any more: a row of its own, out of "The same for…".
   expect(page).toContain('Effort levels');
   expect(page).toContain('Low · Medium · High');
