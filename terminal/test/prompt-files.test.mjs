@@ -22,9 +22,16 @@ const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL, HOME } = await import('../../models/index.mjs');
 
 const SOURCE = new URL('../rules/', import.meta.url).pathname;
-// The Tool use lines as shipped: the ones from before, and since 30 Sep evening one about running only the test file.
-const ONE_FILE = "- To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.";
-const SHIPPED = TOOL_USE_OLD.replace('\n- Call one tool at a time', `\n${ONE_FILE}\n- Call one tool at a time`);
+// The Tool use lines as shipped: the ones from before, and since 30 Sep evening four more (run only the test
+// file, search before reading, prove done with a tool, open a fitting skill), the one-at-a-time line still last.
+const [FIND, EDIT, ONE_AT] = TOOL_USE_OLD.split('\n');
+const SHIPPED = [FIND,
+  '- Search for a name before you Read: then Read only the files the search points to, and in a long file pass find with the name to get the lines around it.',
+  EDIT,
+  "- To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.",
+  '- Say a change is done only after a tool shows it works: a test you ran, the program\'s output, or the changed lines read back.',
+  '- When a skill in the Skills list fits the task and its steps did not come with the request, Read SKILLS/<name> before you start.',
+  ONE_AT].join('\n');
 const SKILLS = `# Skills
 
 Intro text. A \`## Name\` inside a line is not a skill.
@@ -65,7 +72,7 @@ afterEach(() => {
   for (const [k, v] of [['AGENTIC_RULES_DIR', saved.rules], ['AGENTIC_HOME', saved.home]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
 
-test('as shipped: the Tool use lines as before plus "run only the test file", and no skill on (the example is switched off)', () => {
+test('as shipped: the Tool use lines as before plus four (test file, search first, prove done, open a skill), the one-at-a-time line last, and no skill on (the example is switched off)', () => {
   expect(parseSkills(BUILT_IN.skills)).toEqual([]);
   expect(BUILT_IN.skills).toContain('<!--\n## Write a test');
   expect(parseSkills(BUILT_IN.skills.replace('<!--\n## Write', '## Write').replace(/\n-->\n$/, '\n')).map((s) => s.name)).toEqual(['Write a test']);

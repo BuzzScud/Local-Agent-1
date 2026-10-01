@@ -109,8 +109,9 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   at each use: TOOLS.md's `## Tool use` lines are the Tool use part of the prompt, and SKILLS.md's skills
   (`## Name`, `- Words:`, `- About:`, steps) are listed in the prompt as `SKILLS/<name>` and brought with a
   request whose words they use. The hub's Instructions tabs 06–08 save them and a folder's AGENTS.md
-  (`terminal/src/app/prompt-files-hub.mjs`). As shipped: the Tool use lines from before plus one (check a change with only the test file
-  that covers it, from the Skills check of 30 Sep), and the one skill is an example switched off. A test that reads the prompt sets `AGENTIC_RULES_DIR` to a
+  (`terminal/src/app/prompt-files-hub.mjs`). As shipped: the Tool use lines from before plus four (search before reading, only the test
+  file that covers a change, done only once a tool shows it, a fitting skill opened from the list;
+  30 Sep), and the one skill is an example switched off. A test that reads the prompt sets `AGENTIC_RULES_DIR` to a
   folder of its own, so the shipped files never decide what it sees (`terminal/test/prompt-files.test.mjs`).
   The Arena's Skills check measures a skill on the real model.
 

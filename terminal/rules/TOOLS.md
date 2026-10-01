@@ -12,6 +12,9 @@ Agentic Coder follows this file. It is the only copy: change it here, or in the 
 ## Tool use
 
 - Use List, Search and Read to find the code; try a shorter search if needed.
+- Search for a name before you Read: then Read only the files the search points to, and in a long file pass find with the name to get the lines around it.
 - To change an existing file, use Edit with old_text copied exactly from Read, without line numbers. Include enough context to match once. Use Write for new files.
 - To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.
+- Say a change is done only after a tool shows it works: a test you ran, the program's output, or the changed lines read back.
+- When a skill in the Skills list fits the task and its steps did not come with the request, Read SKILLS/<name> before you start.
 - Call one tool at a time and wait for its result.
