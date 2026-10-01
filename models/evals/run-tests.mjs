@@ -6,6 +6,9 @@
 // when the window closes. A test that needs no model (the unit tests, the repo check) runs the same
 // way, without the hold.
 //   model   true: it runs on the model picked (gemma, qwen); false: it takes none
+//   memory  a check with no model of /model that still loads a big one of its own (the ConstantKV
+//           check): the bytes it needs free. The runner holds the memory for it the way it does
+//           for a model, so an Agentic Coder window lets go of its model first
 //   total   how many items a full run has (PASS/FAIL lines counted by `count`); null: no count
 //   think   it can run with thinking on (the tab's Thinking switch, key T): at High, the one level
 //           Gemma and Qwen have besides Low; off (Low) is the default, the way a battle runs.
@@ -141,6 +144,9 @@ export const RUN_TESTS = [
   { id: 'studio', name: 'Design studio check', what: 'every piece in your design studio (docs/private/design studio) built the way the app builds it and opened in headless Chrome: on a desktop, a phone and in dark mode, every button clicked, theme colours only, under its size, found by its own name; no model, with a results page and a live gallery of the pieces beside them', model: false, total: null, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/design/studio-check.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'other', name: '^Design studio check$', part: false } },
+  { id: 'constantkv', name: 'ConstantKV check', what: 'Bonsai 2 27B ConstantKV, a copy of Bonsai whose attention memory stays the same size at any length (its own MLX runtime, not in /model): it loads and answers, reads 40+ tokens a second up to 16k, holds 64k tokens at 12.5 GB or less, and gives the app’s real tool calls on 2 of 3 tries. It needs about 12.5 GB free, so an Agentic Coder window lets go of its model first; 20–40 minutes, with a results page', model: false, memory: 12.5e9, total: 4, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/tools/constantkv-check.mjs', args: () => [],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^ConstantKV check$', part: false } },
 ];
 
 export const runTestById = (id) => RUN_TESTS.find((t) => t.id === id) ?? null;

@@ -118,9 +118,24 @@ test('a check: it holds the memory as its own process, prints live and counts; o
   expect(unit).toMatchObject({ kind: 'check', test: 'unit', who: null, think: false, settings: null, status: 'done' });
   const jobs = (await get('/api/jobs?test=sorting')).jobs;
   expect(jobs.map((j) => j.model)).toEqual(['qwen', 'gemma']);
-  expect(st.checks.map((c) => c.id)).toEqual(['requests', 'long', 'sorting', 'done', 'twoatonce', 'remote', 'vision', 'picturetokens', 'web', 'subagent', 'rulesfile', 'skills', 'lookfirst', 'habits', 'prompt', 'thinking', 'way', 'components', 'edited', 'modelcheck', 'unit', 'check', 'reader', 'studio']); // the sets are not checks here
+  expect(st.checks.map((c) => c.id)).toEqual(['requests', 'long', 'sorting', 'done', 'twoatonce', 'remote', 'vision', 'picturetokens', 'web', 'subagent', 'rulesfile', 'skills', 'lookfirst', 'habits', 'prompt', 'thinking', 'way', 'components', 'edited', 'modelcheck', 'unit', 'check', 'reader', 'studio', 'constantkv']); // the sets are not checks here
   expect(st.checks.find((c) => c.id === 'unit')).toMatchObject({ model: false, last: { none: null } });
 }, 90_000);
+
+test('a check with a big model of its own (ConstantKV) holds the memory like a model check, though it takes none of /model', async () => {
+  await idle();
+  const r = await line([{ kind: 'check', id: 'constantkv', who: 'qwen', think: true, settings: { tries: 4 } }]);
+  expect(r.body.added).toBe(1);
+  const live = await until(async () => { const j = (await get('/api/jobs?test=constantkv')).live; return j?.status === 'running' ? j : null; });
+  expect(live).toMatchObject({ test: 'constantkv', model: null, think: false, settings: null });
+  const hold = JSON.parse(readFileSync(join(HOME, 'battle', 'running.json'), 'utf8'));
+  expect(hold).toMatchObject({ kind: 'test', state: 'running', title: 'ConstantKV check', pid: live.pid });
+  await idle();
+  const done = (await get('/api/jobs?test=constantkv')).jobs[0];
+  expect(done).toMatchObject({ status: 'done', model: null });
+  expect(done.result).toMatchObject({ done: 4, total: 4 });
+  expect(existsSync(join(HOME, 'battle', 'running.json'))).toBe(false);
+}, 60_000);
 
 test('a set goes in as its tests; Stop pauses the line and Resume goes on; ✕ takes one out; Clear the line; a page test keeps its page; clear all results', async () => {
   const r = await line([{ kind: 'set', id: 'new28', who: 'both' }]);

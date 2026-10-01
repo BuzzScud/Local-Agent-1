@@ -72,5 +72,11 @@ if (test === 'practice28') {
   // The checks with no lines of their own above: a few PASS and FAIL lines, the way each counts them.
   await items(Array.from({ length: 8 }, (_, i) => `#${i + 1}`), (x, p) => `${p ? 'PASS' : 'FAIL'} ${x} · a practice line${p ? '' : ' — a practice fail'}`,
     `${model} · ${test} · ${thinking} · practice run: no model`, (ok, d) => `${ok} of ${d} passed${stopped ? ' · stopped' : ''}\nnot recorded in the test record: a practice run (no model ran)`);
+} else if (test === 'constantkv') {
+  // Its four items, decided one by one, the way the real check prints them, after a load that takes a moment.
+  say('Loading the model (a practice run: no model)…');
+  await new Promise((r) => setTimeout(r, ms * 10));
+  await items(['(a) it loads and answers', '(b) it reads 40+ tokens a second up to 16k', '(c) it holds 64k tokens at 12.5 GB or less', '(d) the app’s tool calls on 2 of 3 tries'], (x, p) => `${p ? 'PASS' : 'FAIL'}  ${x} · a practice line`,
+    'ConstantKV check · practice run: no model', (ok, d) => `ConstantKV check: ${ok} of ${d}${stopped ? ' · stopped' : ''}\nnot recorded in the test record: a practice run (no model ran)`);
 } else { console.error(`no test "${test}"`); process.exit(2); }
 process.exit(0);

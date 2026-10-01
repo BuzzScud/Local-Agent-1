@@ -153,9 +153,10 @@ function holders() {
   }
   return out;
 }
-// modelId: the model about to load. A model just stopped hands its memory back to the Mac over up to
-// a minute, so once nothing holds a model the runner also waits (at most 90 s) until there is room.
-async function waitForMemory(title, run, of, modelId, kind = 'battle') {
+// modelId: the model about to load (need: the bytes a check with a big model of its own needs, its
+// `memory`). A model just stopped hands its memory back to the Mac over up to a minute, so once
+// nothing holds a model the runner also waits (at most 90 s) until there is room.
+async function waitForMemory(title, run, of, modelId, kind = 'battle', need = null) {
   writeHold({ pid: process.pid, state: 'want', kind, title, run, of, startedAt: Date.now() });
   let freeSince = null;
   for (;;) {
@@ -164,7 +165,7 @@ async function waitForMemory(title, run, of, modelId, kind = 'battle') {
     if (!h.length) {
       freeSince ??= Date.now();
       let room = true;
-      if (!FAKE) { try { room = availableBytes() >= needBytes(MODELS[modelId], 32768, { draft: false }); } catch {} }
+      if (!FAKE) { try { room = availableBytes() >= (need ?? needBytes(MODELS[modelId], 32768, { draft: false })); } catch {} }
       if (room || Date.now() - freeSince > 90_000) { waiting = null; return true; }
       waiting = 'Waiting for memory: the last model is still giving its memory back to the Mac.';
       await new Promise((r) => setTimeout(r, 2000));
@@ -303,7 +304,9 @@ async function runCheck(item) {
   const title = jobTitle(job);
   mkdirSync(job.dir, { recursive: true });
   saveJob();
-  if (t.model && !(await waitForMemory(title, 1, 1, job.model, 'test'))) { job.stopAsked = true; finishJob(null); return { job: job.id, status: job.status }; }
+  // A check with a big model of its own (its `memory`) holds the memory too, though it takes none of /model.
+  const holds = Boolean(t.model || t.memory);
+  if (holds && !(await waitForMemory(title, 1, 1, job.model, 'test', t.model ? null : t.memory))) { job.stopAsked = true; finishJob(null); return { job: job.id, status: job.status }; }
   const fd = openSync(join(job.dir, 'run.log'), 'w');
   const env = { ...process.env, ...cmd.env }; delete env.FORCE_COLOR;
   if (!cmd.settings) delete env.AGENTIC_TEST_SETTINGS;
@@ -313,7 +316,7 @@ async function runCheck(item) {
   jobChild = child;
   job.pid = child.pid; job.status = 'running'; job.runStartedAt = Date.now();
   // The hold names the check's own process: it lasts as long as the run, even past this runner.
-  if (t.model) writeHold({ pid: child.pid, state: 'running', kind: 'test', test: t.id, title, startedAt: job.runStartedAt });
+  if (holds) writeHold({ pid: child.pid, state: 'running', kind: 'test', test: t.id, title, startedAt: job.runStartedAt });
   if (!FAKE) { try { spawn('caffeinate', ['-i', '-w', String(child.pid)], { detached: true, stdio: 'ignore' }).unref(); } catch {} }
   saveJob();
   log(`check ${job.id} started (pid ${child.pid}): ${argv.map((a) => a.replace(`${REPO}/`, '')).join(' ')}`);
@@ -338,7 +341,7 @@ if (jobLive()) {
   if (job.status === 'running' && alive(job.pid)) {
     busy = true;
     now = { key: job.key, kind: 'check', test: job.test, title: job.name, who: job.model, think: job.think, settings: job.settings, startedAt: job.runStartedAt };
-    if (job.model) writeHold({ pid: job.pid, state: 'running', kind: 'test', test: job.test, title: jobTitle(job), startedAt: job.runStartedAt });
+    if (job.model || runTestById(job.test)?.memory) writeHold({ pid: job.pid, state: 'running', kind: 'test', test: job.test, title: jobTitle(job), startedAt: job.runStartedAt });
     log(`check ${job.id} still going (pid ${job.pid}): following it`);
     const follow = setInterval(() => {
       if (alive(job.pid)) return;
