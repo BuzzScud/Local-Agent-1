@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-design-studio-check-2026-09-30-2122.html](tests/agentic-coder-design-studio-check-2026-09-30-2122.html) | page | Design studio check | 19 KB | 2026-10-01 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 333 KB | 2026-10-01 |
 | [tests/agentic-coder-skills-check-qwen-2026-09-30-1959.html](tests/agentic-coder-skills-check-qwen-2026-09-30-1959.html) | page | Skills check · Qwen3.5 9B | 11 KB | 2026-10-01 |
 | [design rounds/agentic-coder-agents-md-before-after-2026-09-30.html](design%20rounds/agentic-coder-agents-md-before-after-2026-09-30.html) | page | AGENTS.md Before After | 51 KB | 2026-09-30 |
