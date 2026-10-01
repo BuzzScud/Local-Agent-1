@@ -159,7 +159,7 @@ export const TIPS = [
   'A fact earns trust when the task passed its check after it was used, and loses it when the task failed or you corrected Agentic Coder. One that keeps failing is taken out of use.',
   '/compact frees memory in a long conversation; /clear starts fresh.',
   'Your math notes in ~/Desktop/MATH are used only when you ask with /math.',
-  'Ask for a page, a screen or a restyle and the closest design card comes with it (the "design examples" folder), then a browser check looks for a page that scrolls sideways, text that overlaps or is too faint, and script errors, and sends what it finds back once. /design lists the cards; /design off, /design check off and /design sets opus,fable change what comes; /design style opus, fable or mix picks whose cards win (mix: Opus and Fable take turns); words such as "minimal", "compact", "playful" or "dark" in a request bring that look; /design <request> brings the cards to any request.',
+  'Ask for a page, a screen or a restyle and the closest design card comes with it (the "design examples" folder), and once the page is saved it opens and asks you first: Looks good, or Check it for me, where a browser check looks for a page that scrolls sideways, text that overlaps or is too faint, and script errors, and is fixed only when you say so (/design ask off: it checks and sends back by itself). /design lists the cards; /design off, /design check off and /design sets opus,fable change what comes; /design style opus, fable or mix picks whose cards win (mix: Opus and Fable take turns); words such as "minimal", "compact", "playful" or "dark" in a request bring that look; /design <request> brings the cards to any request.',
 ];
 
 // Everything the Help page shows, for /help.json.

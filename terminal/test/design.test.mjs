@@ -192,19 +192,20 @@ test('DESIGN/ paths reach the folder read-only, as MATH/ does; climbing out does
   expect(found.text).toContain('DESIGN/opus/dashboard.md');
 });
 
-test('the switches: saved settings, with AGENTIC_DESIGN, AGENTIC_LAYOUT and AGENTIC_DESIGN_SETS on top', () => {
-  const keep = { d: process.env.AGENTIC_DESIGN, l: process.env.AGENTIC_LAYOUT, s: process.env.AGENTIC_DESIGN_SETS, st: process.env.AGENTIC_DESIGN_STYLE, so: process.env.AGENTIC_STUDIO };
+test('the switches: saved settings, with AGENTIC_DESIGN, AGENTIC_LAYOUT, AGENTIC_LAYOUT_ASK and AGENTIC_DESIGN_SETS on top', () => {
+  const keep = { d: process.env.AGENTIC_DESIGN, l: process.env.AGENTIC_LAYOUT, a: process.env.AGENTIC_LAYOUT_ASK, s: process.env.AGENTIC_DESIGN_SETS, st: process.env.AGENTIC_DESIGN_STYLE, so: process.env.AGENTIC_STUDIO };
   try {
-    delete process.env.AGENTIC_DESIGN; delete process.env.AGENTIC_LAYOUT; delete process.env.AGENTIC_DESIGN_SETS;
+    delete process.env.AGENTIC_DESIGN; delete process.env.AGENTIC_LAYOUT; delete process.env.AGENTIC_LAYOUT_ASK; delete process.env.AGENTIC_DESIGN_SETS;
     delete process.env.AGENTIC_DESIGN_STYLE; delete process.env.AGENTIC_STUDIO;
-    expect(D.designSettings(undefined)).toEqual({ auto: true, check: true, sets: 'all', style: 'auto', studio: true });
-    expect(D.designSettings({ auto: false, sets: ['opus'] })).toEqual({ auto: false, check: true, sets: ['opus'], style: 'auto', studio: true });
+    expect(D.designSettings(undefined)).toEqual({ auto: true, check: true, ask: true, sets: 'all', style: 'auto', studio: true });
+    expect(D.designSettings({ auto: false, sets: ['opus'] })).toEqual({ auto: false, check: true, ask: true, sets: ['opus'], style: 'auto', studio: true });
+    expect(D.designSettings({ ask: false }).ask).toBe(false); // /design ask off: it checks by itself
     expect(D.designSettings({ style: 'fable' }).style).toBe('fable');
     expect(D.designSettings({ style: 'purple' }).style).toBe('auto'); // not a style: the usual order
-    process.env.AGENTIC_DESIGN = 'on'; process.env.AGENTIC_LAYOUT = 'off'; process.env.AGENTIC_DESIGN_SETS = 'Fable, opus'; process.env.AGENTIC_DESIGN_STYLE = 'Mix';
-    expect(D.designSettings({ auto: false, style: 'opus' })).toEqual({ auto: true, check: false, sets: ['fable', 'opus'], style: 'mix', studio: true });
+    process.env.AGENTIC_DESIGN = 'on'; process.env.AGENTIC_LAYOUT = 'off'; process.env.AGENTIC_LAYOUT_ASK = 'off'; process.env.AGENTIC_DESIGN_SETS = 'Fable, opus'; process.env.AGENTIC_DESIGN_STYLE = 'Mix';
+    expect(D.designSettings({ auto: false, style: 'opus' })).toEqual({ auto: true, check: false, ask: false, sets: ['fable', 'opus'], style: 'mix', studio: true });
   } finally {
-    for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_LAYOUT', keep.l], ['AGENTIC_DESIGN_SETS', keep.s], ['AGENTIC_DESIGN_STYLE', keep.st], ['AGENTIC_STUDIO', keep.so]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_LAYOUT', keep.l], ['AGENTIC_LAYOUT_ASK', keep.a], ['AGENTIC_DESIGN_SETS', keep.s], ['AGENTIC_DESIGN_STYLE', keep.st], ['AGENTIC_STUDIO', keep.so]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
 

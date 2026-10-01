@@ -63,12 +63,16 @@ const onOff = (v) => (v === undefined || v === '' ? undefined : !/^(off|0|false|
 
 // What is switched on: the saved settings, with the environment on top.
 export function designSettings(saved = {}) {
-  const s = { auto: true, check: true, sets: 'all', style: 'auto', studio: true, ...(saved && typeof saved === 'object' ? saved : {}) };
+  // ask: a page saved for a request stops the turn and asks you first (agent.mjs askPage).
+  const s = { auto: true, check: true, ask: true, sets: 'all', style: 'auto', studio: true, ...(saved && typeof saved === 'object' ? saved : {}) };
   const auto = onOff(process.env.AGENTIC_DESIGN);
   const check = onOff(process.env.AGENTIC_LAYOUT);
+  const ask = onOff(process.env.AGENTIC_LAYOUT_ASK);
   const studio = onOff(process.env.AGENTIC_STUDIO);
   if (auto !== undefined) s.auto = auto;
   if (check !== undefined) s.check = check;
+  if (ask !== undefined) s.ask = ask;
+  s.ask = s.ask !== false;
   if (studio !== undefined) s.studio = studio;
   s.studio = s.studio !== false;
   const sets = process.env.AGENTIC_DESIGN_SETS?.trim();

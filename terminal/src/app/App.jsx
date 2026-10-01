@@ -411,6 +411,8 @@ export function App({ opts, win, onRestart }) {
       // saved elsewhere is offered to be copied there (agent.mjs deliverDesktop): the app does
       // it, as the model cannot start apps. AGENTIC_OPEN=off (the tests) leaves both out.
       openPage: process.env.AGENTIC_OPEN === 'off' ? null : (page) => { spawnSync(process.platform === 'darwin' ? 'open' : 'xdg-open', [page], { stdio: 'ignore', timeout: 10_000 }); },
+      // You are here to look: a page saved for a request stops the turn and asks first (/design ask).
+      pageAsk: true,
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),
@@ -1896,7 +1898,8 @@ export function App({ opts, win, onRestart }) {
       }
       case 'design': {
         // Alone: the folder, set by set, and what is on. on|off: the cards with
-        // page requests; check on|off: the browser check; sets all|a,b: which
+        // page requests; check on|off: the browser check; ask on|off: a saved
+        // page asks you before it is checked (or not); sets all|a,b: which
         // sets; style auto|opus|fable|mix: which set's cards win; studio
         // [on|off]: the design studio's pieces. Anything else is a request
         // sent with the cards.
@@ -1907,19 +1910,22 @@ export function App({ opts, win, onRestart }) {
           if (agent) agent.designSaved = next;
           saveSettings({ design: next });
           const now = designSettings(next);
-          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · studio ${now.studio ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
+          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} · studio ${now.studio ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_LAYOUT_ASK || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
         };
         const a = arg.trim();
         if (!a) {
           const now = designSettings(saved);
           const sum = designSummary(now);
           if (!sum.dir) { push({ type: 'note', text: 'No design examples folder (make "design examples" in docs/private/, one subfolder per set of .md cards).', tone: 'warn' }); break; }
-          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · studio ${now.studio ? 'on' : 'off'} (/design studio) · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
+          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · ${now.ask ? 'asks you first' : 'checks by itself'} (/design ask) · studio ${now.studio ? 'on' : 'off'} (/design studio) · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
           break;
         }
         if (/^(on|off)$/i.test(a)) { keep({ auto: /^on$/i.test(a) }); break; }
         const chk = /^check\s+(on|off)$/i.exec(a);
         if (chk) { keep({ check: /^on$/i.test(chk[1]) }); break; }
+        // ask on: a saved page stops the turn and asks you before any check; off: it checks by itself.
+        const ask = /^ask\s+(on|off)$/i.exec(a);
+        if (ask) { keep({ ask: /^on$/i.test(ask[1]) }); break; }
         const sty = /^style(?:\s+(\S+))?$/i.exec(a);
         if (sty) {
           const want = sty[1]?.toLowerCase();

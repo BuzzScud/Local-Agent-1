@@ -192,6 +192,26 @@ export function asksForWork(text) {
   if (/^\W*(why|what|how|where|when|which|who|explain|is|are|does|do)\b/i.test(text ?? '')) return false;
   return /\b(add|fix|change|make|implement|create|build|rename|remove|delete|update|refactor|write|save|put|move|replace|edit|restyle|redesign|improve|convert|generate)\b/i.test(text ?? '');
 }
+// Your answer to "is it right?" after a page is saved (askPage): it looks good (the turn stops),
+// check it, or anything else, which goes to the model ("looks good but make the total bold").
+export const CHECK_IT = 'Check it for me: buttons, phone, dark mode';
+export const looksGood = (text) => /^\W*(looks? (good|great|fine|right|perfect)|good|great|perfect|fine|ok|okay|yes|yep|y|done|thanks?|thank you|all good|nice|love it|it'?s (good|right|fine|perfect))\b/i.test(text ?? '')
+  && !/\b(but|except|change|make|add|fix|move|remove|bigger|smaller)\b/i.test(text ?? '');
+export const wantsCheck = (text) => /^\W*(check( it)?|test( it)?|please check|run the check)\b/i.test(text ?? '');
+// The files a page links by a relative path, its scripts and style sheets, that are not there
+// yet: the page is not finished while one is missing (savedPage).
+export function missingParts(html, dir) {
+  const out = [];
+  for (const [tag] of String(html ?? '').matchAll(/<(?:script|link)\b[^>]*>/gi)) {
+    const link = /^<link/i.test(tag);
+    if (link && !/\brel\s*=\s*["']?stylesheet\b/i.test(tag)) continue;
+    const p = new RegExp(`\\b${link ? 'href' : 'src'}\\s*=\\s*["']([^"'#?]+)`, 'i').exec(tag)?.[1]?.trim();
+    if (!p || /^(?:[a-z][\w+.-]*:|\/)/i.test(p)) continue; // a web address, data:, or from the site's root
+    if (!existsSync(join(dir, p))) out.push(p);
+  }
+  return out;
+}
+
 // A request that wants its file on the Desktop: "download it to my desktop",
 // "on the Desktop", "save to desktop", "in ~/Desktop". Not the screen size
 // ("broken on desktop", "the desktop view", "on desktop and mobile") or "a
@@ -384,7 +404,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -426,6 +446,9 @@ export class Agent extends EventEmitter {
     // (deliverDesktop).
     this.home = home;
     this.openPage = openPage;
+    // Someone is at the screen to look at a saved page (askPage): the app says so; coding -p,
+    // the benches and the tests check pages by themselves, as before.
+    this.pageAsk = pageAsk;
     // The design examples and the layout check (design.mjs): settings.json's
     // "design" as saved; AGENTIC_DESIGN, AGENTIC_DESIGN_SETS and AGENTIC_LAYOUT win over it.
     this.designSaved = design ?? {};
@@ -630,6 +653,7 @@ export class Agent extends EventEmitter {
     }
     const notes = [];
     const left = [];
+    let ran = 0;
     for (const rel of pages) {
       const abs = resolvePath(this.cwd, rel).abs;
       let html = '';
@@ -638,6 +662,7 @@ export class Agent extends EventEmitter {
       if (server) { this.emit('note', { text: `Layout check skipped for ${rel}: ${server}.`, tone: 'dim' }); continue; }
       const r = await layoutCheck(abs, { chrome });
       if (r.skipped) { this.emit('note', { text: `Layout check skipped for ${rel}: ${r.skipped}.`, tone: 'dim' }); continue; }
+      ran++;
       const n = r.problems.length;
       // `check` is the same result for the screen, which draws it as a step with each problem named.
       const check = { page: rel, problems: r.problems, secs: r.secs, again, sent: send };
@@ -649,8 +674,108 @@ export class Agent extends EventEmitter {
     // After its fix: what is still broken, and how many edits the turn had then.
     if (this.turn && again) { this.turn.layoutLeft = left.length ? left : null; this.turn.editsAtLook = this.turn.edits ?? 0; }
     if (quiet) return null;
-    if (this.turn) this.turn.layout = { pages, problems: notes.length, again };
+    // ran: the pages really opened (not skipped); found: each problem, for the question after it (askPage).
+    if (this.turn) this.turn.layout = { pages, problems: notes.length, again, ran, found: left.flatMap((p) => p.problems) };
     return notes.length ? notes.join('\n\n') : null;
+  }
+
+  // Look first, check after (the user's pick, 1 Oct 2026): a page saved for a request opens in
+  // the browser and you are asked before anything checks it. On Bonsai at 16k the invoice page
+  // was saved 6 minutes in and the checks after it took the next 14 (its own commands, then the
+  // layout check sending it back). "Check it for me" runs the layout check (under a second, no
+  // model) and asks again before anything goes back to be fixed; what you type goes to the model.
+  // /design ask off (or AGENTIC_LAYOUT_ASK=off): the checks run by themselves, as before.
+  askFirst() {
+    return Boolean(this.pageAsk && this.turn && designSettings(this.designSaved).ask && asksForWork(this.turn.request));
+  }
+
+  // The page a Write of this reply saved, ready to look at: an .html file whose own files (a
+  // script or style sheet it links by a relative path) are there too. One that still waits
+  // for its app.js is not finished, so the turn goes on.
+  savedPage(calls) {
+    for (const c of [...calls].reverse()) {
+      const path = parseArgs('Write', c.args).args?.path;
+      if (!path || !/\.html?$/i.test(path)) continue;
+      const { abs, rel, inside } = resolvePath(this.cwd, path);
+      if (!inside) continue;
+      let html = '';
+      try { html = readFileSync(abs, 'utf8'); } catch { continue; }
+      if (missingParts(html, dirname(abs)).length) continue;
+      return rel;
+    }
+    return null;
+  }
+
+  // → { end: reason } the turn stops here · { send, fix } go on with that message · {} nothing to ask.
+  //   saved: asked right after the Write, before the model's reply (the app says the last line).
+  //   again: a look after a fix you asked for.
+  async askPage(pages, signal, { saved = false, again = false } = {}) {
+    const t = this.turn;
+    const names = pages.map((p) => basename(p)).join(' and ');
+    const it = pages.length === 1 ? 'it' : 'them';
+    const mtimes = () => pages.map((p) => { try { return statSync(resolvePath(this.cwd, p).abs).mtimeMs; } catch { return 0; } }).join();
+    const end = (line) => { if (saved) this.finishLine(line); return { end: 'done' }; };
+    if (!t.checkWanted) {
+      // Asked already, and the page has not changed since: nothing new to look at.
+      if (t.askedAt === mtimes()) return {};
+      t.pageAsked = (t.pageAsked ?? 0) + 1;
+      t.askedAt = mtimes();
+      const opened = await this.openPages(pages);
+      const canCheck = designSettings(this.designSaved).check && Boolean(findChrome());
+      const question = `${names} ${pages.length === 1 ? 'is' : 'are'} saved${opened ? ' and open in your browser' : ''}. Have a look: is ${it} right?`;
+      const id = `page_${Date.now()}`;
+      this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+      const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: ['Looks good', ...(canCheck ? [CHECK_IT] : [])] }, prepared: {}, label: 'Ask', arg: question });
+      if (signal?.aborted) return { end: 'interrupted' };
+      const text = (answer.text ?? answer.feedback ?? '').trim();
+      if (answer.choice === 'no' && !text) return { end: 'declined' }; // "Stop here"
+      this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'Looks good' } });
+      if (!text || looksGood(text)) return end(`Saved ${pages.join(' and ')}. You looked at ${it} and said ${it} looks good, so nothing more was checked.`);
+      if (!wantsCheck(text) || !canCheck) return { send: `[Page] You stopped after saving ${names} so the user could look at ${it}. The user answered: ${text}\nFollow that.` };
+      t.checkWanted = true;
+    }
+    const found = await this.checkLayout(again, { send: false });
+    if (signal?.aborted) return { end: 'interrupted' };
+    if (!found) return end(`Saved ${pages.join(' and ')}. ${t.layout?.ran ? 'The page check found nothing broken.' : 'The page check could not run (the line above says why).'}`);
+    const n = t.layout?.found?.length || 1;
+    const question = `The page check found ${n === 1 ? 'a problem' : `${n} problems`}${again ? ' left after the fix' : ''} (above). Fix ${n === 1 ? 'it' : 'them'}?`;
+    const id = `pagefix_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'page', args: { question, options: [n === 1 ? 'Fix it' : 'Fix them', 'Leave it'] }, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted) return { end: 'interrupted' };
+    const text = (answer.text ?? answer.feedback ?? '').trim();
+    if (answer.choice === 'no' && !text) return { end: 'declined' };
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
+    if (/^(fix|yes|y|ok|okay|go|sure|do it)\b/i.test(text)) return { send: auto(found), fix: true };
+    if (/^(leave|no|n|skip)\b/i.test(text)) return end(`Saved ${pages.join(' and ')}. You chose to leave what the page check found.`);
+    return { send: `[Page check] The page check found this:\n\n${found}\n\nThe user answered: ${text}\nFollow that.`, fix: true };
+  }
+
+  // The pages, opened in your browser by the app (openPage): true when any is open. A page is
+  // opened again only once it changed, and deliverDesktop does not open it a second time.
+  async openPages(pages) {
+    if (!this.openPage) return false;
+    const t = this.turn;
+    t.opened ??= new Map();
+    let any = false;
+    for (const rel of pages) {
+      const abs = resolvePath(this.cwd, rel).abs;
+      let mtime = 0;
+      try { mtime = statSync(abs).mtimeMs; } catch { continue; }
+      if (t.opened.get(abs) === mtime) { any = true; continue; }
+      try { await this.openPage(abs); } catch (e) { this.emit('note', { text: `Could not open ${this.tilde(abs)}: ${e.message}.`, tone: 'warn' }); continue; }
+      t.opened.set(abs, mtime);
+      any = true;
+      this.emit('note', { text: `Opened ${this.tilde(abs)} in your browser.`, tone: 'dim' });
+    }
+    return any;
+  }
+
+  // The turn's last reply, said by the app when it ends at a question of its own (askPage
+  // right after a Write): the conversation gets its answer, and the screen shows it.
+  finishLine(text) {
+    this.messages.push({ role: 'assistant', content: text });
+    this.emit('assistant', { text, reasoning: '', secs: 0, thinkSecs: 0, tokens: 0, final: true });
   }
 
   // This turn's request with what goes along with it (see send()): the steps
@@ -1254,7 +1379,8 @@ export class Agent extends EventEmitter {
           // (flows/layoutcheck.mjs). What is broken goes back; after the fix
           // it looks again, and what is left goes back once more
           // (LAYOUT_ROUNDS); after that the turn ends with "Still broken".
-          if (this.turn.changed && !layoutDone && !signal?.aborted && this.hook('layout')) {
+          // Asking first (askPage), it looks only when you said "Check it", further down.
+          if (this.turn.changed && !layoutDone && !signal?.aborted && this.hook('layout') && (!this.askFirst() || layoutSends >= LAYOUT_ROUNDS)) {
             const found = await this.checkLayout(layoutSends > 0, { send: layoutSends < LAYOUT_ROUNDS });
             if (found && layoutSends < LAYOUT_ROUNDS) {
               layoutSends++;
@@ -1280,9 +1406,21 @@ export class Agent extends EventEmitter {
               continue;
             }
           }
+          // A page this message changed, and asking first: it is yours to look at before any check
+          // (askPage), now that the model says it is done and the page is where it was asked for.
+          if (this.turn.changed && !layoutDone && !signal?.aborted && this.askFirst() && layoutSends < LAYOUT_ROUNDS) {
+            const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? [])]);
+            if (pages.length) {
+              const a = await this.askPage(pages, signal, { again: layoutSends > 0 });
+              if (a.end) { reason = a.end; break; }
+              if (a.send) { if (a.fix) layoutSends++; this.messages.push({ role: 'user', content: a.send }); continue; }
+              layoutDone = true;
+            }
+          }
           // It changed files and says it is done: does the work cover every
-          // part of the request? Once per message; a miss sends it back.
-          if (this.turn.changed && this.verify && !verified && !signal?.aborted && this.hook('done')) {
+          // part of the request? Once per message; a miss sends it back. Not
+          // after you were asked to look at the page yourself (askPage).
+          if (this.turn.changed && this.verify && !verified && !signal?.aborted && this.hook('done') && !this.turn.pageAsked) {
             verified = true;
             const miss = await this.verifyDone(text, signal);
             if (miss) {
@@ -1300,6 +1438,7 @@ export class Agent extends EventEmitter {
         let out = null;
         let stopped = null;
         let landed = false;
+        const wrote = []; // the Writes of this reply that saved (a page among them: askPage)
         // Several helpers in one reply on the Claude API run side by side (each has its own
         // conversation there); on this Mac one after the other, on the server's side slot.
         const together = calls.length > 1 && calls.every((c) => c.name === 'Agent') && endpointOf(this.url)?.kind === 'claude' ? Promise.all(calls.map((c) => this.runTool(c, signal))) : null;
@@ -1312,6 +1451,7 @@ export class Agent extends EventEmitter {
           out = together ? (await together)[ci] : await this.runTool(c, signal);
           if (c.name === 'Read' && !out.error) this.turn.readsRun = (this.turn.readsRun ?? 0) + (out.readKeys?.length || 1);
           if (!out.error) { cuts = 0; landed = true; } // a step landed: cut-off replies are no longer "in a row"
+          if (!out.error && c.name === 'Write') wrote.push(c);
           const result = { role: 'tool', tool_call_id: c.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
           this.messages.push(result);
           if (out.images?.length) this.ctxUsed += out.images.length * IMAGE_TOKENS;
@@ -1320,6 +1460,14 @@ export class Agent extends EventEmitter {
         }
         if (stopped) { reason = stopped; break; }
         if (signal?.aborted) { reason = 'interrupted'; break; }
+        // A page saved for this request: the turn stops here, the page opens, and you are asked
+        // before anything checks it (askPage). Once a message; after that the end of it asks.
+        const page = wrote.length && !this.turn.pageAsked && this.askFirst() ? this.savedPage(wrote) : null;
+        if (page) {
+          const a = await this.askPage([page], signal, { saved: true });
+          if (a.end) { reason = a.end; break; }
+          if (a.send) { if (a.fix) layoutSends++; this.messages.push({ role: 'user', content: a.send }); continue; }
+        }
         // The check-ins and the "make the change now" note look at the reply's last call.
         const call = calls.at(-1);
         const steer = this.hook('checkin') ? await this.checkIn(call, signal) : null;
@@ -2355,6 +2503,8 @@ export class Agent extends EventEmitter {
       pages.push(target);
     }
     for (const page of pages.slice(0, 2)) {
+      // Open already as it is now (askPage opened it for you to look at): not a second time.
+      try { if (t.opened?.get(page) === statSync(page).mtimeMs) continue; } catch {}
       try { await this.openPage(page); this.emit('note', { text: `Opened ${this.tilde(page)} in your browser.`, tone: 'dim' }); } catch (e) { this.emit('note', { text: `Could not open ${this.tilde(page)}: ${e.message}.`, tone: 'warn' }); }
     }
   }

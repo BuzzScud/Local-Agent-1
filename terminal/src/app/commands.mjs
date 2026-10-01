@@ -9,7 +9,7 @@ export const COMMANDS = [
   { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
   { name: 'permissions', desc: 'What runs without asking, what never runs, which files always ask, and the start-up mode', arg: '[allow|never|protect|remove|mode|forget|test]' },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
-  { name: 'design', desc: 'Ask with the design examples; alone: the folder and what is on · on|off, check on|off, sets all|<set,set>, style auto|opus|fable|mix, studio [on|off] (the UI pieces)', arg: '[request|on|off|check|sets|style|studio]' },
+  { name: 'design', desc: 'Ask with the design examples; alone: the folder and what is on · on|off, check on|off, ask on|off (look before it checks), sets all|<set,set>, style auto|opus|fable|mix, studio [on|off] (the UI pieces)', arg: '[request|on|off|check|ask|sets|style|studio]' },
   { name: 'init', desc: 'Write an AGENTS.md with notes about this project' },
   { name: 'memory', desc: 'What Agentic Coder remembers about you and this project; undo takes the last save back', arg: '[undo|open]' },
   { name: 'instructions', desc: 'Edit the instructions and prompt files (AGENTS, TOOLS, SKILLS.md) in the hub' },
