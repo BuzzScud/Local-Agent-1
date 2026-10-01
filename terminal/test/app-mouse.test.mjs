@@ -170,7 +170,7 @@ test('the mouse while Agentic Coder answers: a drag still lands on its letters w
       t.write(`\x1b[<0;${to.col};${to.row}m`);
     } },
     { wait: `copied ${picked.length} chars to clipboard` },
-    { fn: ({ text }) => { seen.clip = readFileSync(clip, 'utf8'); seen.working = text.split('\n').slice(-8).join('\n').includes('esc to interrupt'); } },
+    { fn: ({ text }) => { seen.clip = readFileSync(clip, 'utf8'); seen.working = text.split('\n').slice(-9).join('\n').includes('esc to interrupt'); } },
     // esc drops the highlight, ctrl+c stops the answer; then "exit" typed over the text and sent, the mouse still taken
     { key: 'esc' }, { sleep: 300 }, { key: 'ctrlC' }, { sleep: 600 },
     { key: '\x01' }, { sleep: 120 }, { key: '\x01' }, { sleep: 300 }, { type: 'exit' }, { sleep: 300 },

@@ -652,6 +652,9 @@ function Footer({ app }) {
   ].filter(Boolean);
   return (
     <Box flexDirection="column">
+      {/* One blank row above the footer: Ink keeps the last row of the window for the cursor, so the
+          footer always has one empty row under it; the same row above keeps it from hugging the box. */}
+      <Box height={1} />
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
         {/* A long left side (a tip) is cut to what is left; the right side stays whole, two spaces clear of it. */}
         <Box flexShrink={1} marginRight={2}><Text color={notice ? C.warn : C.dim} wrap="truncate-end">{p.left}</Text></Box>
@@ -1201,8 +1204,8 @@ const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
 // window beside it the page is let go (printed as it is) and the Starting line takes over.
 export const heldRows = (items, ctx) => items.slice(1).reduce((n, it) => n + (itemHeights.get(rowsKey(it, ctx)) ?? Infinity), 0);
 // Rows the held page leaves under it: the window less the page (18 until it is measured), the
-// prompt box, the footer and the cursor's line.
-export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 5;
+// prompt box, the blank row above the footer, the footer and the cursor's line.
+export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 6;
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.
