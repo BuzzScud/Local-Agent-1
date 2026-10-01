@@ -2247,9 +2247,9 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     const boxRows = cursorCell(s, o).rows.length;
-    // The footer's row is the one under the box's bottom edge: a press on the model's label switches it.
+    // The footer's row is two under the box's bottom edge (a blank row between): a press on the model's label switches it.
     const f = footerRef.current;
-    if (row === boxRows + 1 && f?.labelAt && ev.col >= f.labelAt.from && ev.col <= f.labelAt.to) { m.down = false; toggleFnRef.current('click'); return; }
+    if (row === boxRows + 2 && f?.labelAt && ev.col >= f.labelAt.from && ev.col <= f.labelAt.to) { m.down = false; toggleFnRef.current('click'); return; }
     // a press counts only on one of the box's own rows
     if (row < 0 || row >= boxRows) { m.down = false; return; }
     const to = posAt(s, row, x, o);
