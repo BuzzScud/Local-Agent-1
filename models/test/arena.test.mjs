@@ -2,7 +2,7 @@
 // line for everything you start. A test on both models is a battle (the names hidden until the vote);
 // on one model it is a run of it alone (named, no vote); a check is one of run-tests.mjs's, and on
 // both models it is two runs. A set goes in as its tests. Stop pauses the line. Only the Arena page
-// itself may change anything. The page: terminal/test/arena-page.test.mjs; the hub: weights.test.mjs.
+// itself may change anything. The page: terminal/test/hub-arena.test.mjs and arena-checks.test.mjs.
 import { test, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -49,7 +49,7 @@ test('a battle: both models run one after the other, the names stay hidden until
   expect(t.toVote).toBe(t.latest.id);
   expect(t.last).toEqual({});
   const s0 = await get('/api/state');
-  expect([Object.values(s0.score.passes), Object.values(s0.score.votes)]).toEqual([[0, 0], [0, 0]]);
+  expect([s0.score.passes, s0.score.votes]).toEqual([{ gemma: 0, qwen: 0, k2: 0, bonsai: 0 }, { gemma: 0, qwen: 0, k2: 0, bonsai: 0 }]); // every model in /model
   expect((await get(`/api/runs?test=${encodeURIComponent(id)}`)).runs).toEqual([]);
   const b = await get(`/api/match?id=${encodeURIComponent(t.latest.id)}`);
   expect(b.order).toBeNull();
@@ -167,7 +167,7 @@ test('a set goes in as its tests; Stop pauses the line and Resume goes on; ✕ t
   const cleared = await post('/api/clearresults');
   expect(cleared.body.moved).toBeGreaterThan(0);
   const after = await get('/api/state');
-  expect([after.tests.filter((t) => t.latest).length, Object.values(after.score.votes), after.score.battles]).toEqual([0, [0, 0], 0]);
+  expect([after.tests.filter((t) => t.latest).length, Object.values(after.score.votes), after.score.battles]).toEqual([0, [0, 0, 0, 0], 0]);
   expect(readdirSync(join(HOME, 'battle', 'trash')).some((f) => f.startsWith('battles-'))).toBe(true);
   // Put back a New 28 test; a Practice 28 edit is saved as your copy, a test of its own beside the 28.
   await post('/api/tests', { id: 'n02-csv-quoted-comma', title: 'CSV', kind: 'code', prompt: 'Changed', checks: [] });
@@ -196,8 +196,8 @@ test('only the Arena page itself may change anything, and what cannot run is ref
   await no({ kind: 'set', id: 'nope', who: 'both' }, 'no such set');
   await no({ kind: 'check', id: 'nope', who: 'gemma' }, 'no such check');
   await no({ kind: 'check', id: 'practice28', who: 'gemma' }, 'no such check'); // a set, run test by test
-  await no({ kind: 'test', id: 'p02-fix-bug' }, 'pick who runs it: gemma, qwen or both');
-  await no({ kind: 'test', id: 'p02-fix-bug', who: 'bonsai' }, 'pick who runs it: gemma, qwen or both');
+  await no({ kind: 'test', id: 'p02-fix-bug' }, 'pick who runs it: gemma, qwen, k2, bonsai or both');
+  await no({ kind: 'test', id: 'p02-fix-bug', who: 'llama' }, 'pick who runs it: gemma, qwen, k2, bonsai or both'); // no such model in /model
   await no({ kind: 'page', id: 'x' }, 'an item is a test, a set or a check');
   expect((await line([])).body.error).toBe('nothing picked to run');
   expect((await get('/api/state')).line).toEqual([]); // one bad item: none of the press goes in
@@ -205,7 +205,7 @@ test('only the Arena page itself may change anything, and what cannot run is ref
   expect((await get('/api/job?id=..%2F..%2Fstate')).error).toBe('no such run');
   // The panel: each model's rows with the tests' defaults, for the page to draw.
   const panel = (await get('/api/state')).panel;
-  expect(Object.keys(panel.models)).toEqual(['gemma', 'qwen']);
+  expect(Object.keys(panel.models)).toEqual(['gemma', 'qwen', 'k2', 'bonsai']); // every model in /model (practice mode: all count as here)
   expect(panel.models.gemma.defs.context).toBe(32768);
   expect(panel.models.qwen.rows.map((r) => r.id)).toEqual(expect.arrayContaining(['embedder', 'reranker', 'context', 'thinking', 'tries', 'steps']));
 });
@@ -250,3 +250,31 @@ test('a test of your own with a level: its level is a set, it stops at its level
   await idle();
   expect((await get(`/api/match?id=${encodeURIComponent(both.latest.id)}`))).toMatchObject({ mode: 'battle', limit: 600 });
 });
+
+test('every model in /model: any one runs a test alone, any two battle (vs), a pair that is not two of them is the default pair', async () => {
+  const s = await get('/api/state');
+  expect(s.models.map((m) => [m.id, m.here])).toEqual([['gemma', true], ['qwen', true], ['k2', true], ['bonsai', true]]); // practice mode: every file counts as here
+  expect(s.pair).toEqual(['gemma', 'qwen']);
+  const made = await post('/api/tests', { title: 'Rate question', kind: 'question', prompt: 'Which rate does addTax use?', checks: [{ type: 'answer-has', value: 'rate' }] });
+  const id = made.body.id;
+  // K2 against Bonsai: those two run, in either order, and the vote names them.
+  expect((await line([{ kind: 'test', id, who: 'both', vs: ['k2', 'bonsai'] }])).body).toMatchObject({ ok: true, added: 1 });
+  const live = await until(async () => { const x = await get('/api/state'); return x.running ? x.running : null; });
+  expect(live).toMatchObject({ who: 'both', vs: ['k2', 'bonsai'] });
+  const t = await until(async () => (await get('/api/state')).tests.find((x) => x.id === id && x.latest?.status === 'done'));
+  await idle();
+  const v = await post('/api/vote', { id: t.latest.id, v: 'B' });
+  expect(Object.values(v.body.order).sort()).toEqual(['bonsai', 'k2']);
+  expect((await get('/api/state')).score.votes[v.body.order.B]).toBe(1);
+  // Bonsai alone.
+  expect((await line([{ kind: 'test', id, who: 'bonsai' }])).status).toBe(200);
+  await until(async () => (await get(`/api/runs?test=${encodeURIComponent(id)}`)).runs.filter((r) => r.model === 'bonsai').length === 2);
+  await idle();
+  // A pair that is not two different models in /model: the default pair runs.
+  for (const vs of [['k2', 'k2'], ['k2', 'nope'], ['k2']]) {
+    expect((await line([{ kind: 'test', id, who: 'both', vs }])).status).toBe(200);
+    const r = await until(async () => { const x = await get('/api/state'); return x.running ? x.running : null; });
+    expect(r.vs).toEqual(['gemma', 'qwen']);
+    await until(async () => { const x = await get('/api/state'); return !x.running && !x.line.length; });
+  }
+}, 90_000);

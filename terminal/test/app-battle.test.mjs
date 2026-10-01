@@ -44,7 +44,7 @@ test('/settings → Arena opens the hub on the Arena tab and says a run there un
   ] });
   await fake.close();
   expect(r.snapshots.menu).toMatch(/❯ Arena\s+\d+ tests? · \d+ runs?\s+run a test on one model, or battle two/);
-  expect(r.text.replace(/\s+/g, ' ')).toContain('?tab=arena · run a test on one model, or battle Gemma and Qwen with it, one model at a time, each run stopped at 10 min');
+  expect(r.text.replace(/\s+/g, ' ')).toContain('?tab=arena · run a test on one model, or battle two with it, one model at a time, each run stopped at 10 min');
   expect(hub).toContain('<button data-tab="arena">Arena</button>');
   expect((r.text.match(/The Arena opened in the browser at/g) ?? []).length).toBe(2); // /battle opened it too
   expect(r.text).not.toContain('Unknown command /battle');

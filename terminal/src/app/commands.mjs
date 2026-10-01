@@ -31,7 +31,7 @@ export const COMMANDS = [
   { name: 'doctor', desc: 'Check the model, the server and this Mac' },
   { name: 'weights', desc: "See the models' weights in the browser (the hub)" },
   { name: 'docs', desc: 'Open the hub on the harness and structure diagrams and every Agentic Coder page' },
-  { name: 'arena', desc: 'Open the hub on the Arena: run a test on one model, or battle Gemma and Qwen with it (the New 28, Work 28, Practice 28, tests you make, the checks), one model at a time' },
+  { name: 'arena', desc: 'Open the hub on the Arena: run a test on one model, or battle two with it (the New 28, Work 28, Practice 28, tests you make, the checks), one model at a time' },
   { name: 'test', desc: 'Pick a test in the Arena for this model: press Run there, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
   { name: 'tests', desc: 'Open the Arena on the test record: every test run and its result' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },

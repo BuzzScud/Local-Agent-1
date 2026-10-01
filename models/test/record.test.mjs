@@ -119,6 +119,9 @@ test('a run is filed under its model: the one it names, else its results folder,
   expect(modelOf({ kind: 'bug', at, name: 'x', raw: 'models/bonsai-2-27b/results/step3' })).toBe('bonsai');
   expect(modelOf({ kind: 'other', at, name: 'Gemma speed probe', note: '' })).toBe('gemma');
   expect(modelOf({ kind: 'other', at, name: 'Bonsai 27B probe' })).toBe('bonsai');
+  // a battle is of two models, whichever two: "K2 vs Bonsai" names Bonsai, but the line is of no one model
+  expect(modelOf({ kind: 'other', at, name: 'Battle · Fix a date that shows one day early (K2 vs Bonsai, 1 run each)' })).toBeNull();
+  expect(modelOf({ kind: 'other', at, name: 'Battle · Fix a date that shows one day early (Gemma vs Qwen, 1 run each)' })).toBeNull();
   // both models named (a comparison), or an "other" check that names none, is of no one model
   expect(modelOf({ kind: 'other', at, name: 'Gemma vs Qwen', note: '' })).toBeNull();
   expect(modelOf({ kind: 'other', at, name: 'Repo check (fast)' })).toBeNull();
