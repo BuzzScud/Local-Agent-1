@@ -294,6 +294,8 @@ each saved as a real file and read again before your next message:
   the prompt, word for word. As shipped they are the lines from before plus four: search for a name before
   reading, check a change with only the test file that covers it (the Skills check's finding),
   say done only after a tool shows it works, and open a skill from the list when one fits.
+  ▶ Run a test → **Tool habits check** runs one task for each of the four, with the lines from before
+  and with TOOLS.md now (the shortcuts off, so the lines are what guide it).
 - **08 SKILLS.md** (`terminal/rules/SKILLS.md`): steps for kinds of task. Each `## Name` has a
   `- Words:` line and an `- About:` line, then its steps. When a request uses a skill's Words
   (the one with most wins, a phrase counting twice), its steps go with that request and the work
@@ -357,7 +359,9 @@ to look further, with what it has looked at so far: at most 3 times, and never o
 passed (60 s at most). **auto** (the
 default) follows Effort: none on Low, 15 s on Medium, 30 s on High; **off**, or 15 to 60 s whatever the
 Effort. Follow-ups, the home folder and helpers never wait; the focused fix and change paths gather
-with their own search and are not changed.
+with their own search and are not changed. ▶ Run a test → **Look first check** measures it on the real
+model: four questions whose answers need more than one file, each with Look first off and on, at Effort
+High; it holds when at least as many are right and it takes at most 60 s more a question.
 
 ## License
 

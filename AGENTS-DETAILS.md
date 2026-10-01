@@ -120,6 +120,11 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the app tests that move with the arrow keys; the panel keeps 22 lines because the keys' hint sits on
   the Reset all line.
 
+- **The A/B checks** of Look first and the tool lines (`models/evals/tools/look-check.mjs`, `habits-check.mjs`)
+  share `ab-kit.mjs`: a throwaway home, the small shop project, `coding -p`. `coding -p` ends the lines of
+  what the app read for the model before its first step with " [app]", so a check counts only the model's
+  own steps. Each runs end to end on a stand-in with `--url` (`terminal/test/arena-checks.test.mjs`).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
