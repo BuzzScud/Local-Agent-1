@@ -33,6 +33,10 @@ export function median(xs = []) {
 // model has no start on record yet. sinceLoad / sinceWarm: seconds since each part began.
 export function startLeft(times, { phase, cold = true, sinceLoad = 0, sinceWarm = 0 }) {
   if (!times || phase === 'waiting' || phase === 'connecting') return null;
+  // The screen's clock ticks every 100 ms, so just after a part begins it can be behind its start:
+  // a time below 0 is 0 (1 Oct 2026: -0.05 s made done -0.25, and the bar's repeat(-5) ended the app).
+  sinceLoad = Math.max(0, Number(sinceLoad) || 0);
+  sinceWarm = Math.max(0, Number(sinceWarm) || 0);
   const load = cold ? median(times.load) : 0;
   const warmKind = phase === 'restoring' ? 'restore' : phase === 'reading' ? 'read' : (times.last ?? 'read');
   const warm = median(times[warmKind]);

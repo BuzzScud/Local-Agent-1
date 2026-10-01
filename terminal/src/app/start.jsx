@@ -271,7 +271,8 @@ function timeLine(s, loading, room) {
     if (!est) return <Text color={C.dim} wrap="truncate-end">{room >= 31 ? 'timing this start for next time' : 'timing this start'}</Text>;
     const words = est.over ? ' longer than usual' : ` about ${Math.max(1, Math.round(est.left))} s left`;
     const n = Math.max(4, room - words.length);
-    const lit = est.over ? n : Math.round(est.done * n);
+    // Between 0 and n whatever done says: a bar of negative length ends the app (String.repeat).
+    const lit = est.over ? n : Math.min(n, Math.max(0, Math.round((est.done || 0) * n)));
     return <Text wrap="truncate-end"><Text color={est.over ? C.accentDim : C.accent}>{'━'.repeat(lit)}</Text><Text color={C.faint}>{'─'.repeat(n - lit)}</Text><Text color={C.dim}>{words}</Text></Text>;
   }
   if (s.off) return s.typical ? <Text color={C.dim}>{`/start takes about ${Math.max(1, Math.round(s.typical))} s`}</Text> : <Text> </Text>;

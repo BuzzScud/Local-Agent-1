@@ -45,3 +45,14 @@ test('what the running start has left, from its phase and how long each part has
   expect(typicalStart(t)).toBe(13.5);
   expect(typicalStart({ load: [5] })).toBe(null);
 });
+
+// 1 Oct 2026: the screen's clock, up to 100 ms behind a part's start, gave a negative time; done
+// came out -0.25 and the bar's '━'.repeat(-5) ended the app as the model started.
+test('a clock a moment behind the start never makes the bar go below empty', () => {
+  const bonsai = { load: [1.8, 7.8, 2.5, 1.3, 7.1], read: [67, 67.8, 66.5], restore: [0.2, 0.2, 0.1], last: 'restore' };
+  for (const a of [{ phase: 'restoring', cold: false, sinceWarm: -0.05 }, { phase: 'loading', sinceLoad: -0.08 }, { phase: 'reading', sinceWarm: -3 }, { phase: 'loading', sinceLoad: NaN }]) {
+    const r = startLeft(bonsai, a);
+    expect([a, r.done >= 0 && r.done <= 1]).toEqual([a, true]);
+  }
+  expect(startLeft(bonsai, { phase: 'restoring', cold: false, sinceWarm: -0.05 }).done).toBe(0);
+});
