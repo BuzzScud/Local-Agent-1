@@ -191,7 +191,11 @@ took for 22. **Gemma 4 12B QAT** (Google, 6.7 GB) is still one pick away in `/mo
 default, so run it with Gemma picked to get Gemma's file). The previous
 brain, **Bonsai 2 27B** (Prism ML's ternary Qwen3.8 27B, 7.2 GB), is back in `/model` since
 1 Oct 2026 ([`models/bonsai-2-27b/`](models/bonsai-2-27b/README.md); `coding setup --model bonsai`
-downloads it).
+downloads it). **Bonsai 2 27B ConstantKV** sits beside it from the same day: the same weights on
+Apple's MLX with a memory that stays 1.27 GB at any length, so it starts at 64k
+([`models/bonsai-2-27b-constantkv/`](models/bonsai-2-27b-constantkv/model.mjs)). Its runtime is
+closed and research-licensed (no commercial use): `coding setup --model constantkv` shows the
+license and asks before it downloads 8.7 GB and makes its Python.
 
 The terminal talks to the models part through one file, `models/index.mjs`. The
 test bench goes the other way: it runs the terminal's agent with a model and grades
@@ -208,7 +212,7 @@ agentic-coder/
 ├─ models/              part 2 · the models we use and test
 │  ├─ index.mjs         the one entry the terminal imports
 │  ├─ registry.mjs      the list of models and where their files live
-│  ├─ runtime/          llama-server, memory, warm-up, coding setup; engine/ = how llama.cpp is built (Prism's, or the official)
+│  ├─ runtime/          llama-server, memory, warm-up, coding setup; engine/ = how llama.cpp is built (Prism's, or the official); mlx/ = the MLX engine's server
 │  ├─ qwen3.5-9b/       the default model: settings (results/ stays local)
 │  ├─ gemma-4-12b/      the other model in /model: settings (results/ stays local)
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search

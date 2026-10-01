@@ -17,7 +17,7 @@ import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices } from './remote-form.mjs';
@@ -873,7 +873,7 @@ export function App({ opts, win, onRestart }) {
       rules: dirs ? n(rulesList(dirs).always.length, 'rule') : 'memory off here',
       instructions: ins ? `${steps(ins.sections.general)} general · ${steps(ins.sections.planning)} planning` : 'could not read',
       memory: dirs ? `${facts(dirs.you)} about you · ${facts(dirs.project)} here` : 'off here',
-      weights: (() => { const here = Object.values(MODELS).filter((m) => existsSync(modelPath(m))); return here.length > 1 ? here.map((m) => m.name).join(' · ') : here.length ? `${here[0].name} · ${(statSync(modelPath(here[0])).size / 1e9).toFixed(2)} GB` : 'no model file here yet'; })(),
+      weights: (() => { const here = Object.values(MODELS).filter((m) => m.format !== 'mlx' && existsSync(modelPath(m))); return here.length > 1 ? here.map((m) => m.name).join(' · ') : here.length ? `${here[0].name} · ${(statSync(modelPath(here[0])).size / 1e9).toFixed(2)} GB` : 'no model file here yet'; })(),
       docs: docs.missing ? 'DOCS folder not found' : n(docs.pages.length, 'page'),
       tests: last ? `${n(runs.length, 'run')} · last ${last.total != null ? `${last.passed}/${last.total}` : last.result}` : 'no runs yet',
       arena: battleHold() ? 'something is running there' : `${n(bc.tests, 'test')} · ${n(bc.battles, 'run')}`,
@@ -1656,7 +1656,7 @@ export function App({ opts, win, onRestart }) {
     const bin = serverBinOf(model);
     const ver = spawnSync(bin, ['--version'], { encoding: 'utf8' });
     const file = modelPath(model);
-    const size = existsSync(file) ? statSync(file).size : 0;
+    const size = onDiskBytes(model);
     const avail = availableBytes();
     let disk = null;
     try { const f = statfsSync(home); disk = (f.bavail * f.bsize) / 1e9; } catch {}
@@ -2092,7 +2092,7 @@ export function App({ opts, win, onRestart }) {
         // inside this window. /weights opens it on the models' weights (every model in
         // /model, one alone or side by side), /docs on the harness diagram with
         // structure and every page one tab away.
-        const here = Object.values(MODELS).filter((m) => existsSync(modelPath(m)));
+        const here = Object.values(MODELS).filter((m) => m.format !== 'mlx' && existsSync(modelPath(m)));
         if (cmd === 'weights' && !here.length) { push({ type: 'note', text: `No model file is here yet (${modelPath(MODELS[DEFAULT_MODEL])}). Run coding setup first.`, tone: 'warn' }); break; }
         const hub = openHub(cmd === 'docs' ? 'harness' : 'weights'); if (!hub) break;
         const w = hub.server; const url = hub.url;
@@ -2430,7 +2430,7 @@ export function App({ opts, win, onRestart }) {
         const changed = picked.id !== model.id || (picked.edited && model.edited && picked.edited.saved !== model.edited.saved);
         switchBackRef.current = null; // your pick wins over a model coming back after a picture
         // A model whose file (or its own model server) is not here yet: say how to get it, keep the one in use.
-        const missing = changed && !picked.edited ? [!existsSync(modelPath(picked)) && `downloads it (${(picked.bytes / 1e9).toFixed(1)} GB)`, picked.engine && !existsSync(serverBinOf(picked)) && 'builds its model server (about 3 minutes)'].filter(Boolean) : [];
+        const missing = changed && !picked.edited ? [!existsSync(modelPath(picked)) && `downloads it (${(picked.bytes / 1e9).toFixed(1)} GB)`, picked.engine && !existsSync(serverBinOf(picked)) && (engineOf(picked).python ? 'sets up its Python (a few minutes)' : 'builds its model server (about 3 minutes)')].filter(Boolean) : [];
         if (missing.length) { push({ type: 'note', text: `${picked.name} is not ready on this Mac yet: coding setup --model ${picked.id} ${missing.join(' and ')}. Then pick it again.`, tone: 'warn' }); return; }
         if (changed) { saveSettings({ model: picked.id }); switchModel(picked); }
         else push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });

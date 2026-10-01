@@ -18,7 +18,7 @@ import { join, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, availableBytes, footprintOf, engineOf, recordTest, codeLabel, thinkingKwargs } from '../../index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, availableBytes, footprintOf, engineOf, recordTest, codeLabel, thinkingKwargs, SERVER_PROCESS } from '../../index.mjs';
 import { streamChat, toolSchemas, systemPrompt, toolCallInText } from '../../../terminal/index.mjs';
 import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
 import { buildModelCheckPage } from './model-check-page.mjs';
@@ -87,6 +87,8 @@ const readsPackage = (c) => c?.name === 'Read' && /package\.json/.test(c.args ??
 const short = (s, n = 90) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const CALL_ASK = 'Use the Read tool to read package.json in this project, then tell me its name field. Do not answer before you have read it.';
 
+// The engine as the lines say it: llama.cpp (whose build), or MLX for a model on the MLX engine.
+const engineName = engineOf(model).python ? 'MLX (mlx-server.py)' : `${engineOf(model).id}'s llama.cpp`;
 const rows = [];
 function row(id, name, pass, detail, extra = {}) {
   rows.push({ id, name, pass, detail, ...extra });
@@ -98,14 +100,14 @@ const t0 = Date.now();
 let ctx = Number(opt('ctx', 0)) || null;
 let memory = null;
 if (!url) {
-  const running = spawnSync('ps', ['-axwwo', 'command'], { encoding: 'utf8' }).stdout.split('\n').filter((l) => /^\/\S*llama-server\s/.test(l));
+  const running = spawnSync('ps', ['-axwwo', 'command'], { encoding: 'utf8' }).stdout.split('\n').filter((l) => SERVER_PROCESS.test(l));
   const big = Object.values(MODELS).filter((m) => running.some((l) => l.includes(`/${m.file} `)));
   if (big.length) { console.error(`refused: ${big.map((m) => m.name).join(', ')} is loaded (one big model at a time). Quit Agentic Coder, run coding stop, then try again.`); process.exit(3); }
   // Memory a model just let go comes back over a minute or so: wait up to 2 minutes for it.
   const fitsAt = (c) => contextCheck(model, c).fits;
   if (!ctx && !fitsAt(16_384)) console.log('waiting for memory to free up (up to 2 minutes)…');
   for (let i = 0; i < 24 && !fitsAt(ctx ?? 16_384); i++) await new Promise((r) => setTimeout(r, 5000));
-  ctx ??= fitsAt(32_768) ? 32_768 : 16_384;
+  ctx ??= model.ctxWant ?? (fitsAt(32_768) ? 32_768 : 16_384);
   const fit = contextCheck(model, ctx);
   if (!fit.fits) { console.error(`refused: ${fit.note}`); process.exit(4); }
   try { spawn('caffeinate', ['-i', '-w', String(process.pid)], { detached: true, stdio: 'ignore' }).unref(); } catch {}
@@ -122,7 +124,7 @@ if (!url) {
     url = srv.url;
     const pid = srv.child?.pid;
     memory = { takenGB: +((freeBefore - availableBytes()) / 1e9).toFixed(2), footprintGB: pid ? +(footprintOf(pid) / 1e9).toFixed(2) : null };
-    row('load', 'It loads', true, `on ${engineOf(model).id}'s llama.cpp in ${Math.round((Date.now() - t0) / 1000)} s; free memory went down ${memory.takenGB} GB${memory.footprintGB ? `, the server's own footprint ${memory.footprintGB} GB` : ''}`, { secs: (Date.now() - t0) / 1000, memory });
+    row('load', 'It loads', true, `on ${engineName} in ${Math.round((Date.now() - t0) / 1000)} s; free memory went down ${memory.takenGB} GB${memory.footprintGB ? `, the server's own footprint ${memory.footprintGB} GB` : ''}`, { secs: (Date.now() - t0) / 1000, memory });
   }
 } else {
   ctx ??= 32_768;
@@ -215,7 +217,7 @@ else console.log(`no results page: the DOCS folder is not here (${DOCS_DIR})`);
 if (!look) recordTest({
   kind: 'other', name: 'New model check', model: model.id, ctx, passed, total: judged.length, secs, part: !full,
   result: !full ? 'stopped' : pass ? 'pass' : 'fail',
-  note: `${passed} of ${judged.length} checks on ${model.name} (${engineOf(model).id}'s llama.cpp)${speed ? `; reads ${speed.read ?? '?'} tokens/s, writes ${speed.write ?? '?'}` : ''}${memory ? `; took ${memory.takenGB} GB` : ''}. Failed: ${judged.filter((r) => !r.pass).map((r) => r.name).join('; ') || 'none'}.`,
+  note: `${passed} of ${judged.length} checks on ${model.name} (${engineName})${speed ? `; reads ${speed.read ?? '?'} tokens/s, writes ${speed.write ?? '?'}` : ''}${memory ? `; took ${memory.takenGB} GB` : ''}. Failed: ${judged.filter((r) => !r.pass).map((r) => r.name).join('; ') || 'none'}.`,
   raw: relative(root, out), page: summary.page,
 });
 console.log(`New model check on ${model.name}: ${passed} of ${judged.length} · ${pass ? 'PASSED' : full ? 'FAILED' : 'STOPPED'}`);

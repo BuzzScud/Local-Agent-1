@@ -29,7 +29,7 @@ test('each model runs on its engine: Bonsai on Prism, the others on the default;
   expect(ENGINES.official).toMatchObject({ patch: false, repo: 'https://github.com/ggml-org/llama.cpp.git' });
   expect(ENGINES.prism).toMatchObject({ patch: true, repo: 'https://github.com/PrismML-Eng/llama.cpp.git' });
   expect(ENGINES.official.tag).not.toBe(ENGINES.prism.tag);
-  for (const e of Object.values(ENGINES)) expect(e.commit).toMatch(/^[0-9a-f]{40}$/);
+  for (const e of Object.values(ENGINES).filter((x) => !x.python)) expect(e.commit).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test('a context you picked is checked: it fits, or the note says by how much and names what uses the memory', () => {

@@ -5,8 +5,9 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, openSync, closeSync, appendFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { EventEmitter } from 'node:events';
-import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, modelPath, draftPath, visionPath } from '../registry.mjs';
+import { serverBinOf, engineOf, LOG_DIR, SLOT_DIR, HOME, DEFAULT_PORT, DEFAULT_MODEL, modelPath, draftPath, visionPath } from '../registry.mjs';
 import { setEndpoint } from './remote.mjs';
 
 // One small file per running server: which process owns it, on which port.
@@ -74,6 +75,18 @@ export function scanServers() {
   return live;
 }
 
+// A model server's process, whichever engine: llama-server, or the MLX one (mlx-server.py in its Python).
+export const SERVER_PROCESS = /(^|\/)(llama-server|mlx-server\.py)(\s|$)/;
+// What the server says when it ends the thinking at the budget, and the model has to act.
+export const BUDGET_MESSAGE = ' I have thought enough. Now I act on it.';
+// The MLX engine's server script: beside this file, or, inside the built app (whose own files are not on
+// disk), in the repo the launcher names (AGENTIC_REPO).
+export function mlxServerScript() {
+  const here = (() => { try { return fileURLToPath(new URL('./mlx/mlx-server.py', import.meta.url)); } catch { return null; } })();
+  const repo = process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO;
+  return [here, repo ? join(repo, 'models', 'runtime', 'mlx', 'mlx-server.py') : null].find((p) => p && existsSync(p)) ?? here;
+}
+
 // Whether the model's guessing helper is used: it is on this Mac (coding setup
 // downloads it) and not switched off with AGENTIC_HELPER=off.
 export const hasDraft = (model) => Boolean(model?.draft && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' && existsSync(draftPath(model)));
@@ -94,6 +107,12 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
     return ['-m', modelPath(model), '--host', '127.0.0.1', '--port', String(port), '--rerank',
       '-c', c, '-ub', c, '-b', c, '-ngl', '99', '-np', '1', '--no-webui'];
   }
+  // A model on the MLX engine: its own server, which answers the same API (mlx/mlx-server.py). It keeps
+  // the conversation's state and checkpoint itself, so none of the cache, slot and helper flags apply.
+  if (engineOf(model).python) {
+    return [mlxServerScript(), '--pack', modelPath(model), '--host', host, '--port', String(port), '-c', String(ctx),
+      '--reasoning-budget', String(model.thinkingBudget ?? 2048), '--reasoning-budget-message', BUDGET_MESSAGE];
+  }
   return [
     '-m', modelPath(model),
     '--host', host, '--port', String(port),
@@ -106,7 +125,7 @@ export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1'
     // Low-bit models can think forever; after this many tokens the server ends
     // the thinking and the model has to act.
     '--reasoning-budget', String(model.thinkingBudget ?? 2048),
-    '--reasoning-budget-message', ' I have thought enough. Now I act on it.',
+    '--reasoning-budget-message', BUDGET_MESSAGE,
     // Speculative decoding. With the helper (model.draft): it guesses the next
     // words and the model checks them all in one pass (see draft in model.mjs).
     // Its working space is sized by the micro-batch, so -ub is set with it.
@@ -158,8 +177,9 @@ export class ModelServer extends EventEmitter {
   async start({ ctx, share = true, lingerSecs = this.lingerSecs ?? 0, helper, listen = null } = {}) {
     this.lingerSecs = lingerSecs;
     const bin = serverBinOf(this.model);
-    if (!existsSync(bin)) throw new Error(`The model server (${engineOf(this.model).tag}) is missing at ${bin}. Run: coding setup`);
-    if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: coding setup`);
+    const run = `coding setup${this.model.id && this.model.id !== DEFAULT_MODEL ? ` --model ${this.model.id}` : ''}`;
+    if (!existsSync(bin)) throw new Error(`The model server (${engineOf(this.model).tag}) is missing at ${bin}. Run: ${run}`);
+    if (!existsSync(modelPath(this.model))) throw new Error(`The model file is missing at ${modelPath(this.model)}. Run: ${run}`);
     const live = scanServers();
     // One `coding serve` runs over https is not shared (its certificate names another host).
     // A picture needs the vision add-on: a server kept loaded without it is not shared.
@@ -315,7 +335,7 @@ export function otherCopies(model, { psText = null, live = null } = {}) {
   // By the file's whole path: a copy in another home (a test's) is not this one.
   const file = modelPath(model);
   return rows
-    .filter((r) => /(^|\/)llama-server\s/.test(r.cmd) && r.cmd.includes(file) && !shared.has(r.pid))
+    .filter((r) => SERVER_PROCESS.test(r.cmd) && r.cmd.includes(file) && !shared.has(r.pid))
     .map((r) => ({ pid: r.pid, port: Number(/--port\s+(\d+)/.exec(r.cmd)?.[1]) || null, who: whoStarted(r, byPid), bytes: r.bytes }));
 }
 
@@ -323,7 +343,7 @@ export function otherCopies(model, { psText = null, live = null } = {}) {
 export function serverProcesses({ psText = null } = {}) {
   const ps = psText ?? spawnSyncText('/bin/ps', ['-Ao', 'pid=,rss=,command=']);
   return ps.split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l))
-    .filter((m) => m && /(^|\/)llama-server(\s|$)/.test(m[3]))
+    .filter((m) => m && SERVER_PROCESS.test(m[3]))
     .map((m) => ({ pid: Number(m[1]), bytes: Number(m[2]) * 1024 }));
 }
 

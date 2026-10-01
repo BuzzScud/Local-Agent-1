@@ -95,7 +95,8 @@ export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 87
 // onDesign: called when the Instructions page saves a design style (the app's
 // window uses it from its next page request).
 // cwd: the folder whose memory the Memory tab shows.
-export function startWeightsServer({ path, models = Object.values(MODELS), docsDir = findDocsDir(), port = HUB_PORT, onEdits, onDesign, cwd = process.cwd(), instructionsHome }) {
+// The Weights tab reads GGUF files: an MLX model's pack (format 'mlx', Bonsai 2 27B ConstantKV) is not one, so it is left out.
+export function startWeightsServer({ path, models = Object.values(MODELS).filter((m) => m.format !== 'mlx'), docsDir = findDocsDir(), port = HUB_PORT, onEdits, onDesign, cwd = process.cwd(), instructionsHome }) {
   // Help and docs work before the model is downloaded; only Weights needs it.
   const missing = !path || !existsSync(path);
   const size = missing ? 0 : statSync(path).size;

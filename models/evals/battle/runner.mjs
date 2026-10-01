@@ -23,7 +23,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync, existsSync, mkdirSync, openSync, closeSync, appendFileSync, writeFileSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve, extname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MODELS, MODELS_DIR, DEFAULT_MODEL, modelPath, scanServers, stopIdleServers, serverProcesses, recordTest, readRecord, codeLabel, availableBytes, needBytes, freeAfterQuit, HOME } from '../../index.mjs';
+import { MODELS, MODELS_DIR, DEFAULT_MODEL, modelPath, scanServers, stopIdleServers, serverProcesses, recordTest, readRecord, codeLabel, availableBytes, needBytes, freeAfterQuit, SERVER_PROCESS, HOME } from '../../index.mjs';
 import { panelData } from '../../../terminal/index.mjs';
 import { paths, BATTLE_PORT, LIMIT_SECS, SUITES, LEVELS, limitSecsOf, pointsOf, readJson, writeJson, seedSuites, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
 import { RUN_TESTS, runTestById, runCommand, countLines, cleanSettings, runCatalog } from '../run-tests.mjs';
@@ -146,7 +146,7 @@ function holders() {
   const windows = new Map(scanServers().map((e) => [e.pid, e]));
   const out = [];
   for (const line of ps) {
-    const m = /^\s*(\d+)\s+(.*)$/.exec(line); if (!m || !/(^|\/)llama-server\s/.test(m[2])) continue;
+    const m = /^\s*(\d+)\s+(.*)$/.exec(line); if (!m || !SERVER_PROCESS.test(m[2])) continue;
     if (!files.some((f) => m[2].includes(f))) continue; // another home's (a test's) or a small helper model
     const e = windows.get(Number(m[1]));
     out.push({ pid: Number(m[1]), who: e ? 'an Agentic Coder window (it lets go of its model when its reply ends)' : 'another program (a run from Terminal, a speed test or coding -p)' });
@@ -409,7 +409,7 @@ function loadedNow() {
   const ps = spawnSync('/bin/ps', ['-Ao', 'pid=,ppid=,command='], { encoding: 'utf8' }).stdout.split('\n');
   const out = [];
   for (const line of ps) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line); if (!m || !/(^|\/)llama-server\s/.test(m[3])) continue;
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line); if (!m || !SERVER_PROCESS.test(m[3])) continue;
     const model = Object.values(MODELS).find((x) => m[3].includes(modelPath(x)));
     if (!model) continue;
     const e = reg.get(Number(m[1]));

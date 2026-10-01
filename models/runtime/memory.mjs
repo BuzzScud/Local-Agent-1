@@ -36,8 +36,10 @@ export function macMemory() {
 // Activity Monitor's gigabytes (2^30 bytes), which is what "16 GB" means on a Mac.
 export const gib = (b) => b / 2 ** 30;
 
-// 8-bit KV cache (34 bytes per 32 values), only in the layers that keep one.
-export const kvBytesPerToken = (m) => m.attnLayers * m.kvHeads * m.headDim * 2 * (34 / 32);
+// 8-bit KV cache (34 bytes per 32 values), only in the layers that keep one. A model whose memory does
+// not grow with the context (constantState: Bonsai 2 27B ConstantKV) keeps nothing a token: its fixed
+// state is its stateBytes.
+export const kvBytesPerToken = (m) => (m.constantState ? 0 : m.attnLayers * m.kvHeads * m.headDim * 2 * (34 / 32));
 // Working space the server takes on top of the model file, the cache, the
 // running state and its checkpoints. Measured 2026-09-24 (27B, 13 prompts):
 // footprint 2.08 GB at 32k = 1.14 cache + 0.16 running state + 0.63 for 4
@@ -57,9 +59,9 @@ export const draftBytes = (m) => (m.draft ? filePart(m, m.draft.bytes) + m.draft
 
 // What starting the model takes out of the free memory: its files (the share
 // in use), the cache, each slot's running state and checkpoints (the cache is
-// shared), the helper, the working space. The helper is counted whenever the
+// shared), a server's own fixed state (stateBytes, once), the helper, the working space. The helper is counted whenever the
 // model has one (coding setup fetches it) unless it is switched off with AGENTIC_HELPER=off.
-export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (draft ? draftBytes(m) : 0) + visionBytes(m) + OVERHEAD;
+export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (m.stateBytes ?? 0) + (draft ? draftBytes(m) : 0) + visionBytes(m) + OVERHEAD;
 // The vision add-on, when the model is loaded with it (withVision): its file, whole, and its working space.
 export const visionBytes = (m) => (m?.visionOn && m.vision ? m.vision.bytes + (m.vision.computeBytes ?? 0) : 0);
 
@@ -138,7 +140,9 @@ export function contextCheck(m, ctx, { draft, available = availableBytes(), user
   return { fits: false, need, available, note: `${size} needs ${needs} and ${gb(available)} GB is free: the Mac may slow down.${top ? ` Using the most: ${top}.` : ''} Close some, or lower it in /effort.` };
 }
 
-export function chooseContext(m, { want = 32_768, floor = 16_384, available = availableBytes(), effort } = {}) {
+// A model's own sizes win (ctxWant, ctxFloor): one whose memory does not grow starts at its want, and a
+// smaller context would save nothing, so its floor is the same.
+export function chooseContext(m, { want = m?.ctxWant ?? 32_768, floor = m?.ctxFloor ?? 16_384, available = availableBytes(), effort } = {}) {
   const gb = (b) => (b / 1e9).toFixed(1);
   const kb = (c) => `${Math.round(c / 1024)}k`;
   if (available >= needBytes(m, want)) return { ctx: want, available, reason: null };
@@ -152,7 +156,7 @@ export function chooseContext(m, { want = 32_768, floor = 16_384, available = av
     ctx: floor,
     available,
     reason: available < needBytes(m, floor)
-      ? `${gb(available)} GB free, so using 16k (needs ${gb(needBytes(m, floor))} GB); close other apps, such as the desk servers, to keep it fast`
-      : `${gb(available)} GB free, so using 16k (${gb(needBytes(m, floor))} GB) instead of 32k (${gb(needBytes(m, want))} GB)`,
+      ? `${gb(available)} GB free, so using ${kb(floor)} (needs ${gb(needBytes(m, floor))} GB); close other apps, such as the desk servers, to keep it fast`
+      : `${gb(available)} GB free, so using ${kb(floor)} (${gb(needBytes(m, floor))} GB) instead of ${kb(want)} (${gb(needBytes(m, want))} GB)`,
   };
 }

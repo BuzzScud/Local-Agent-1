@@ -110,7 +110,7 @@ test('K2 runs on IFM\'s engine, even when AGENTIC_ENGINE points the others elsew
     if (was === undefined) delete process.env.AGENTIC_ENGINE; else process.env.AGENTIC_ENGINE = was;
   }
   // The third model in /model; no vision add-on; the layout from its file.
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2', 'bonsai']);
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2', 'bonsai', 'constantkv']);
   expect(k2.vision).toBeUndefined();
   expect(k2).toMatchObject({ attnLayers: 36, kvHeads: 8, headDim: 128, bytes: 6_466_075_008 });
 });

@@ -1,7 +1,7 @@
 // The models Agentic Coder can run (one folder each), and where their files
 // live on this Mac (~/.agentic-coder).
 import { homedir } from 'node:os';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The state folder: ~/.agentic-coder once it exists; until the migration
@@ -18,19 +18,26 @@ export const HOME = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? (ex
 //             words in one pass): the only one that runs Bonsai 2 27B's ternary file.
 //   ifm:      MBZUAI IFM's llama.cpp (branch model/K2Horizon, on llama.cpp of
 //             28 Aug 2026): the only one that runs K2 Horizon so far.
+//   mlx:      not llama.cpp: Apple's MLX in a Python of its own (python: true; a venv in
+//             its folder, mlx 0.32.0 and the model's runtime, crystal_runtime 2.0.0), with
+//             models/runtime/mlx/mlx-server.py in llama-server's place. Bonsai 2 27B
+//             ConstantKV runs only there. `coding setup --model constantkv` makes it.
 // AGENTIC_ENGINE=official|prism runs everything on one (a comparison, or a way
 // back), except a model only one engine runs (engineOnly in its model.mjs).
 export const ENGINES = {
   official: { id: 'official', tag: 'llama-v0.5.0-7fe450e', repo: 'https://github.com/ggml-org/llama.cpp.git', commit: '7fe450e19305b828c199d602c23a8337aaa1f03b', patch: false },
   prism: { id: 'prism', tag: 'prism-adfffbe-pq2mc1', repo: 'https://github.com/PrismML-Eng/llama.cpp.git', commit: 'adfffbe41b2cabcd51fff326ab045662265062bb', patch: true },
   ifm: { id: 'ifm', tag: 'ifm-k2horizon-42adf01', repo: 'https://github.com/ifm-ai/llama.cpp.git', commit: '42adf019f76013dac873b5b43950d54d5ab27216', patch: false },
+  mlx: { id: 'mlx', tag: 'mlx-crystal-2.0.0', python: true, runtime: 'crystal_runtime==2.0.0' },
 };
 // Prism's, measured 28 Sep 2026 with the app's flags: the same speed plain, and
 // with Gemma's two speed helpers ~5% faster than the official v0.5.0 (16.7 vs
 // 15.9 words/s; models/gemma-4-12b/results/engine-compare-2026-09-28).
 export const DEFAULT_ENGINE = 'prism';
 export const engineOf = (m) => (m?.engineOnly && ENGINES[m.engine]) || (ENGINES[process.env.AGENTIC_ENGINE] ?? ENGINES[m?.engine] ?? ENGINES[DEFAULT_ENGINE]);
-export const serverBinOf = (m) => join(HOME, 'engine', engineOf(m).tag, 'llama-server');
+// The program a model's server is started with: llama-server, or for an MLX model its engine's Python
+// (which runs models/runtime/mlx/mlx-server.py).
+export const serverBinOf = (m) => (engineOf(m).python ? join(HOME, 'engine', engineOf(m).tag, 'venv', 'bin', 'python') : join(HOME, 'engine', engineOf(m).tag, 'llama-server'));
 export const MODELS_DIR = join(HOME, 'models');
 export const LOG_DIR = join(HOME, 'logs');
 export const SLOT_DIR = join(HOME, 'slots'); // saved warm-ups (models/runtime/warmup.mjs)
@@ -44,8 +51,10 @@ import gemma4_12b from './gemma-4-12b/model.mjs';
 import qwen35_9b from './qwen3.5-9b/model.mjs';
 import k2Horizon7b from './k2-horizon-7b/model.mjs';
 import bonsai2_27b from './bonsai-2-27b/model.mjs';
+// Bonsai 2 27B ConstantKV joined on 1 Oct 2026, beside Bonsai: the same weights on MLX, a memory that does not grow.
+import bonsai2_27bConstantKV from './bonsai-2-27b-constantkv/model.mjs';
 
-const ALL = [gemma4_12b, qwen35_9b, k2Horizon7b, bonsai2_27b];
+const ALL = [gemma4_12b, qwen35_9b, k2Horizon7b, bonsai2_27b, bonsai2_27bConstantKV];
 export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
 // Qwen3.5 9B since 30 Sep 2026: with thinking on it passed 24 of 24 practice
@@ -93,6 +102,12 @@ export function thinkingKwargs(model, thinking, effort) {
 }
 
 export const modelPath = (m) => join(MODELS_DIR, m.file);
+// How much of a model is on this Mac, in bytes: its file, or every listed file of an MLX model's folder
+// (model.files); the same as model.bytes once it is all here. 0 when none of it is.
+export const onDiskBytes = (m) => {
+  const size = (p) => { try { return statSync(p).size; } catch { return 0; } };
+  return m?.files ? m.files.reduce((n, f) => n + size(join(modelPath(m), f.path)), 0) : size(modelPath(m));
+};
 // The model's guessing helper (speculative decoding), when it has one.
 export const draftPath = (m) => (m?.draft ? join(MODELS_DIR, m.draft.file) : null);
 // Its vision add-on (the multimodal projector), when it has one; loaded only with visionOn.

@@ -10,8 +10,8 @@
 //     and `coding serve`, which opens this Mac's model to another one;
 //   - the Arena: starting its runner, and whether a run there holds the memory;
 //   - the Test builder: making tests of your own (the hub's Test builder, over the Arena).
-export { HOME, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, thinkingLevel, thinkingKwargs, modelPath, draftPath, visionPath, withVision, modelFolder } from './registry.mjs';
-export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
+export { HOME, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, thinkingLevel, thinkingKwargs, modelPath, onDiskBytes, draftPath, visionPath, withVision, modelFolder } from './registry.mjs';
+export { ModelServer, scanServers, serverArgs, mlxServerScript, SERVER_PROCESS, BUDGET_MESSAGE, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
 export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, visionBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { REMOTE_KINDS, REMOTE_SOURCES, sourceOf, keyIdOf, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, GENERIC_REMOTE, remoteModel, connectRemote } from './runtime/remote.mjs';

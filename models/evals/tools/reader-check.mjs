@@ -34,7 +34,8 @@ let stopping = false; process.on('SIGTERM', () => { stopping = true; }); process
 // A "file" the way the reader wants one, over a path on disk.
 const fileOf = (p) => { const size = statSync(p).size; return { name: basename(p), size, slice: (a, b) => ({ arrayBuffer: async () => { const fd = openSync(p, 'r'); try { const n = Math.min(b, size) - a; const buf = Buffer.alloc(n); readSync(fd, buf, 0, n, a); return buf.buffer.slice(buf.byteOffset, buf.byteOffset + n); } finally { closeSync(fd); } } }) }; };
 
-const ids = opt('models', Object.keys(MODELS).join(',')).split(',').filter((id) => MODELS[id]);
+// GGUF files only: an MLX model's pack (format 'mlx') has no GGUF reader to check.
+const ids = opt('models', Object.keys(MODELS).filter((id) => MODELS[id].format !== 'mlx').join(',')).split(',').filter((id) => MODELS[id]);
 const models = ids.map((id) => ({ id, name: MODELS[id].name, path: modelPath(MODELS[id]) })).filter((m) => existsSync(m.path));
 console.log(`Weights reader check · ${models.length ? models.map((m) => m.name).join(' and ') : 'no model file on this Mac'} · against llama.cpp's own reader`);
 

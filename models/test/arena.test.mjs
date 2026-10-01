@@ -49,7 +49,7 @@ test('a battle: both models run one after the other, the names stay hidden until
   expect(t.toVote).toBe(t.latest.id);
   expect(t.last).toEqual({});
   const s0 = await get('/api/state');
-  expect([s0.score.passes, s0.score.votes]).toEqual([{ gemma: 0, qwen: 0, k2: 0, bonsai: 0 }, { gemma: 0, qwen: 0, k2: 0, bonsai: 0 }]); // every model in /model
+  expect([s0.score.passes, s0.score.votes]).toEqual([{ gemma: 0, qwen: 0, k2: 0, bonsai: 0, constantkv: 0 }, { gemma: 0, qwen: 0, k2: 0, bonsai: 0, constantkv: 0 }]); // every model in /model
   expect((await get(`/api/runs?test=${encodeURIComponent(id)}`)).runs).toEqual([]);
   const b = await get(`/api/match?id=${encodeURIComponent(t.latest.id)}`);
   expect(b.order).toBeNull();
@@ -182,7 +182,7 @@ test('a set goes in as its tests; Stop pauses the line and Resume goes on; ✕ t
   const cleared = await post('/api/clearresults');
   expect(cleared.body.moved).toBeGreaterThan(0);
   const after = await get('/api/state');
-  expect([after.tests.filter((t) => t.latest).length, Object.values(after.score.votes), after.score.battles]).toEqual([0, [0, 0, 0, 0], 0]);
+  expect([after.tests.filter((t) => t.latest).length, Object.values(after.score.votes), after.score.battles]).toEqual([0, [0, 0, 0, 0, 0], 0]);
   expect(readdirSync(join(HOME, 'battle', 'trash')).some((f) => f.startsWith('battles-'))).toBe(true);
   // Put back a New 28 test; a Practice 28 edit is saved as your copy, a test of its own beside the 28.
   await post('/api/tests', { id: 'n02-csv-quoted-comma', title: 'CSV', kind: 'code', prompt: 'Changed', checks: [] });
@@ -211,8 +211,8 @@ test('only the Arena page itself may change anything, and what cannot run is ref
   await no({ kind: 'set', id: 'nope', who: 'both' }, 'no such set');
   await no({ kind: 'check', id: 'nope', who: 'gemma' }, 'no such check');
   await no({ kind: 'check', id: 'practice28', who: 'gemma' }, 'no such check'); // a set, run test by test
-  await no({ kind: 'test', id: 'p02-fix-bug' }, 'pick who runs it: gemma, qwen, k2, bonsai or both');
-  await no({ kind: 'test', id: 'p02-fix-bug', who: 'llama' }, 'pick who runs it: gemma, qwen, k2, bonsai or both'); // no such model in /model
+  await no({ kind: 'test', id: 'p02-fix-bug' }, 'pick who runs it: gemma, qwen, k2, bonsai, constantkv or both');
+  await no({ kind: 'test', id: 'p02-fix-bug', who: 'llama' }, 'pick who runs it: gemma, qwen, k2, bonsai, constantkv or both'); // no such model in /model
   await no({ kind: 'page', id: 'x' }, 'an item is a test, a set or a check');
   expect((await line([])).body.error).toBe('nothing picked to run');
   expect((await get('/api/state')).line).toEqual([]); // one bad item: none of the press goes in
@@ -220,7 +220,7 @@ test('only the Arena page itself may change anything, and what cannot run is ref
   expect((await get('/api/job?id=..%2F..%2Fstate')).error).toBe('no such run');
   // The panel: each model's rows with the tests' defaults, for the page to draw.
   const panel = (await get('/api/state')).panel;
-  expect(Object.keys(panel.models)).toEqual(['gemma', 'qwen', 'k2', 'bonsai']); // every model in /model (practice mode: all count as here)
+  expect(Object.keys(panel.models)).toEqual(['gemma', 'qwen', 'k2', 'bonsai', 'constantkv']); // every model in /model (practice mode: all count as here)
   expect(panel.models.gemma.defs.context).toBe(32768);
   expect(panel.models.qwen.rows.map((r) => r.id)).toEqual(expect.arrayContaining(['embedder', 'reranker', 'context', 'thinking', 'tries', 'steps']));
 });
@@ -268,7 +268,7 @@ test('a test of your own with a level: its level is a set, it stops at its level
 
 test('every model in /model: any one runs a test alone, any two battle (vs), a pair that is not two of them is the default pair', async () => {
   const s = await get('/api/state');
-  expect(s.models.map((m) => [m.id, m.here])).toEqual([['gemma', true], ['qwen', true], ['k2', true], ['bonsai', true]]); // practice mode: every file counts as here
+  expect(s.models.map((m) => [m.id, m.here])).toEqual([['gemma', true], ['qwen', true], ['k2', true], ['bonsai', true], ['constantkv', true]]); // practice mode: every file counts as here
   expect(s.pair).toEqual(['gemma', 'qwen']);
   const made = await post('/api/tests', { title: 'Rate question', kind: 'question', prompt: 'Which rate does addTax use?', checks: [{ type: 'answer-has', value: 'rate' }] });
   const id = made.body.id;

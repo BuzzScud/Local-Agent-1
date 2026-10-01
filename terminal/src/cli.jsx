@@ -139,7 +139,7 @@ if (process.argv[2] === 'hub' || OLD_HUB.includes(process.argv[2])) {
   const { existsSync } = await import('node:fs');
   const path = modelPath(MODELS[DEFAULT_MODEL]);
   // The Weights tab shows every model in /model whose file is on this Mac.
-  const here = Object.values(MODELS).filter((m) => existsSync(modelPath(m)));
+  const here = Object.values(MODELS).filter((m) => m.format !== 'mlx' && existsSync(modelPath(m)));
   if (name === 'weights' && !here.length) { process.stderr.write(`coding hub: no model file is here yet (${path}). Run coding setup first, or open another tab (coding hub docs).\n`); process.exit(1); }
   const { startWeightsServer } = await import('./app/weights.mjs');
   const s = startWeightsServer({ path, cwd: process.cwd() });
@@ -232,7 +232,8 @@ if (process.argv[2] === 'setup') {
   const at = a.indexOf('--model');
   const want = at >= 0 ? a[at + 1] : undefined;
   if (at >= 0 && !MODELS[want]) { process.stderr.write(`coding setup: no model "${want ?? ''}". The models: ${Object.keys(MODELS).join(', ')}\n`); process.exit(1); }
-  try { await setup(want ? { modelId: want } : undefined); process.exit(0); } catch (e) { process.stderr.write(`\ncoding setup: ${e.message}\n`); process.exit(1); }
+  // --accept-license: a model whose runtime has a license of its own (Bonsai 2 27B ConstantKV) is set up without asking.
+  try { await setup({ ...(want ? { modelId: want } : {}), accept: a.includes('--accept-license') }); process.exit(0); } catch (e) { process.stderr.write(`\ncoding setup: ${e.message}\n`); process.exit(1); }
 }
 
 const opts = parse(process.argv.slice(2));
