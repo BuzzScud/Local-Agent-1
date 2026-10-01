@@ -36,6 +36,19 @@ cd ~/your-project
 coding
 ```
 
+**Terminal only (no model download).** If the model runs somewhere else (another machine of
+yours, Ollama, LM Studio, or an API), the installer asks "Where will the model run?": answer
+**2**. It skips the 8.2 GB download and the model-server build, then asks for the address (and
+the API key, if there is one), checks them, and saves them. To skip the question:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BuzzScud/Local-Agent-1/main/install.sh | sh -s -- --terminal-only
+```
+
+Later, `coding connect` does the same step again, and `/remote` in the app changes it. A
+plain `http://` address on the internet sends your code (and key) unencrypted; use https or an
+SSH tunnel for that.
+
 You can run the installer again at any time. It updates the code and skips the parts that
 are already done. Options: `AGENTIC_DIR=~/somewhere` picks the folder, and `AGENTIC_YES=1`
 answers yes to every question (`curl … | AGENTIC_YES=1 sh`).

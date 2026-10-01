@@ -226,6 +226,11 @@ if (process.argv[2] === 'serve') {
   } catch (e) { process.stderr.write(`coding serve: ${e.message}\n`); await s?.stop().catch(() => {}); process.exit(1); }
   await new Promise(() => {});
 }
+// coding connect [address]: use a model on another machine, with no model downloaded here (terminal/src/app/connect-cli.mjs).
+if (process.argv[2] === 'connect') {
+  const { connectCli } = await import('./app/connect-cli.mjs');
+  process.exit(await connectCli(process.argv.slice(3), { settings: loadSettings(process.cwd()) }));
+}
 // coding setup [--model <id>]: the default model, or the one named (its file and its engine).
 if (process.argv[2] === 'setup') {
   const a = process.argv.slice(3);

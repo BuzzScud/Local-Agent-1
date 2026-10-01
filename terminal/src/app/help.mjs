@@ -83,6 +83,7 @@ export function cliRows(lingerMins = 30, models = []) {
       ['coding "fix the tests"', 'start and send a first prompt'],
       ['coding -p "question"', 'answer once and exit (changes are refused unless --yes; commands you allowed in /permissions run)'],
       ['coding -c', 'continue the last conversation in this folder'],
+      ['coding connect [address]', 'terminal only: use a model on another machine or an API (asks for the address and key, checks them, saves them); nothing is downloaded'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
       [`coding setup --model ${others[0]?.id ?? '<id>'}`, `the same for another model in /model${others.length ? ` (${others.map((m) => `${m.id}: ${m.name}`).join(', ')})` : ''}`],
       ['coding stop', `free the memory of a model no window uses (one left by a window that crashed stays loaded up to ${lingerMins} min)`],
