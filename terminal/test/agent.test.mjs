@@ -551,6 +551,53 @@ test('a layout-kind fix with no named check never auto-runs the test suite', asy
   expect(events.filter((e) => e.name === 'Bash').length).toBe(0); // a browser check is the model's job; the suite would only mislead
 });
 
+// ————— A cut-off Write that already holds a good part of the file (countdown card, 1 Oct) —————
+test('keptPart: the whole lines a cut-off Write had sent, from 20 lines on; an escaped backslash is not a line break', async () => {
+  const { keptPart, keptWriteNote, KEEP_FROM } = await import('../src/agent/agent.mjs');
+  const lines = Array.from({ length: 25 }, (_, i) => `<p>line ${i + 1} "q" \\ end</p>`);
+  const args = JSON.stringify({ path: 'card.html', content: `${lines.join('\n')}\n<div class="hal` }).slice(0, -2);
+  const k = keptPart(args);
+  expect(k.lines).toBe(25);
+  expect(k.content).toBe(lines.join('\n'));
+  expect(keptPart(JSON.stringify({ path: 'a.html', content: 'one\ntwo\nthree' }))).toBeNull(); // under KEEP_FROM lines
+  expect(KEEP_FROM).toBe(20);
+  // A literal backslash-n in the file (JSON "\\\\n") is not where a line ends.
+  const tricky = `{"path":"a.js","content":"${Array.from({ length: 21 }, () => 'x').join('\\n')}\\nconst s = 'a\\\\nb`;
+  expect(keptPart(tricky).content.endsWith("x")).toBe(true);
+  expect(keptPart('{"path":"a.html"')).toBeNull();
+  const note = keptWriteNote('card.html', k);
+  expect(note).toContain('its first 25 lines');
+  expect(note).toContain('Carry on from line 26');
+  expect(note).toContain(lines.slice(-3).join('\n'));
+});
+
+test('a Write cut off at the reply limit with 30 whole lines saves them, and the model carries on with Edit', async () => {
+  const lines = Array.from({ length: 30 }, (_, i) => `<p>part one, line ${i + 1}</p>`);
+  const cut = { tool: { name: 'Write', args: { path: 'card.html', content: `${lines.join('\n')}\n<p>part one, li` } }, finish: 'length' };
+  const replies = [cut,
+    { tool: { name: 'Edit', args: { path: 'card.html', old_text: lines.slice(-2).join('\n'), new_text: `${lines.slice(-2).join('\n')}\n<p>part two</p>` } } },
+    { text: 'The card is finished.' }, { text: '{"done": true, "missing": ""}' }];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const events = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  for (const t of ['tool', 'note', 'reply-dropped']) agent.on(t, (e) => events.push({ type: t, ...(e ?? {}) }));
+  const reason = await agent.send('make card.html, a countdown card');
+  await fake.close();
+  expect(reason).toBe('done');
+  // The cut reply's row goes first, then the note says what happens.
+  const dropped = events.findIndex((e) => e.type === 'reply-dropped');
+  const said = events.findIndex((e) => e.type === 'note' && /^File too long for one reply \(cut at .+\): saving its first 30 lines, then carrying on from there$/.test(e.text));
+  expect(dropped).toBeGreaterThanOrEqual(0);
+  expect(said).toBeGreaterThan(dropped);
+  const writes = events.filter((e) => e.type === 'tool' && e.name === 'Write');
+  expect(writes.length).toBe(1);
+  expect(writes[0].error).toBeFalsy();
+  const told = agent.messages.find((m) => m.role === 'user' && m.content.includes('Carry on from line 31'));
+  expect(told.content).toStartWith(AUTO);
+  expect(readFileSync(join(cwd, 'card.html'), 'utf8')).toBe(`${lines.join('\n')}\n<p>part two</p>`);
+});
+
 // ————— A Write too big for one reply (the finance-dashboard bug, 26 Sep) —————
 test('a Write cut off at the reply limit never runs; the model is told to build the file in parts', async () => {
   const cut = { tool: { name: 'Write', args: { path: 'dashboard.html', content: '<html><head><style>body{margin:0' } }, finish: 'length' };
@@ -563,7 +610,7 @@ test('a Write cut off at the reply limit never runs; the model is told to build 
   const reason = await agent.send('make dashboard.html, a finance dashboard');
   await fake.close();
   expect(reason).toBe('done');
-  expect(events.some((e) => e.type === 'note' && /ran out of room mid-way/.test(e.text))).toBe(true);
+  expect(events.some((e) => e.type === 'note' && /^File too long for one reply \(cut at .+\): asked it to build dashboard\.html in parts$/.test(e.text))).toBe(true);
   const note = agent.messages.find((m) => m.role === 'user' && m.content.includes('skeleton'));
   expect(note.content).toStartWith(AUTO);
   expect(note.content).toContain('dashboard.html');

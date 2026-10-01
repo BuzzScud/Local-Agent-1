@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Run Preview</title>
+<style>
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --ink: #1d1d1b; --dim: #6b6b66; --line: #deded8; --accent: #3f8f3f; --warn: #b8670f;
+  --term: #1c1c1c; --term-ink: #d0d0d0; --chip: #ececE6;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121212; --panel: #1a1a1a; --ink: #e8e8e4; --dim: #9a9a94; --line: #2c2c2a; --accent: #87d787; --warn: #ffaf5f; --chip: #242422;
+} }
+:root[data-theme="dark"] { --bg: #121212; --panel: #1a1a1a; --ink: #e8e8e4; --dim: #9a9a94; --line: #2c2c2a; --accent: #87d787; --warn: #ffaf5f; --chip: #242422; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+header { padding: 10px 16px 0; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+h1 { font-size: 17px; margin: 0; font-weight: 650; }
+.facts { color: var(--dim); font-size: 12.5px; }
+nav { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
+nav button { flex: 1; max-width: 300px; border: 1px solid var(--line); border-bottom: none; background: var(--chip); color: var(--dim); padding: 7px 12px; border-radius: 8px 8px 0 0; font: inherit; cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--panel); color: var(--ink); font-weight: 600; }
+main { flex: 1; min-height: 0; background: var(--panel); }
+section { display: none; height: 100%; padding: 10px 16px 12px; flex-direction: column; gap: 8px; }
+section.on { display: flex; }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bar button, .bar select { font: inherit; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.bar button.play { min-width: 84px; font-weight: 600; }
+.bar .clock { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.chapters { display: flex; gap: 6px; flex-wrap: wrap; }
+.chapters button { font-size: 12.5px; padding: 3px 9px; }
+.chapters button.here { border-color: var(--accent); color: var(--accent); }
+input[type=range] { flex: 1; min-width: 200px; accent-color: var(--accent); }
+.panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pane { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.pane .label { font-size: 12.5px; color: var(--dim); }
+.pane .label b { color: var(--ink); }
+pre.term { margin: 0; background: var(--term); color: var(--term-ink); border-radius: 8px; padding: 8px 6px; overflow: hidden;
+  font-family: Menlo, ui-monospace, monospace; line-height: 1.2; white-space: pre;
+  font-size: calc((50vw - 60px) / 104 / 0.602); }
+.caption { font-size: 12.5px; color: var(--dim); min-height: 1.45em; }
+.caption b { color: var(--warn); font-weight: 600; }
+/* tab 2 */
+.planned { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 16px; }
+.steps { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+.steps button { text-align: left; font: inherit; border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 8px; padding: 9px 11px; cursor: pointer; }
+.steps button[aria-selected="true"] { border-color: var(--accent); background: var(--panel); }
+.steps button b { display: block; margin-bottom: 2px; }
+.steps button span { color: var(--dim); font-size: 12.5px; }
+.planned pre.term { font-size: calc((66vw - 80px) / 104 / 0.602); max-height: 100%; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--warn); color: var(--warn); margin-left: 6px; }
+/* tab 3 */
+.changes { overflow: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--dim); font-weight: 600; font-size: 12px; }
+td code { font-family: Menlo, ui-monospace, monospace; font-size: 12px; }
+.data { color: var(--dim); font-size: 12.5px; margin-top: 10px; }
+@media (max-width: 760px) {
+  body { overflow: auto; }
+  .panes, .planned { grid-template-columns: 1fr; }
+  pre.term, .planned pre.term { font-size: calc((100vw - 46px) / 104 / 0.602); }
+  section { height: auto; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Live run preview: the screen when a reply is cut off and memory fills</h1>
+  <span class="facts">Your countdown-card request · Thu 1 Oct 2026, 11:28:52 → 12:02:03 · Bonsai 2 27B · memory 16k · thinking cap 4,096</span>
+</header>
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-tab="run">1 · Same run: Now vs New</button>
+  <button role="tab" aria-selected="false" data-tab="fix">2 · With the fixes (planned)</button>
+  <button role="tab" aria-selected="false" data-tab="what">3 · What changes</button>
+</nav>
+<main>
+<noscript><p style="padding:16px">This page plays the run with JavaScript. Turn it on to see the screens.</p></noscript>
+<section id="run" class="on">
+  <div class="bar">
+    <button class="play" id="play">▶ Play</button>
+    <select id="speed" aria-label="Speed"><option value="10">×10</option><option value="30" selected>×30</option><option value="100">×100</option></select>
+    <input type="range" id="scrub" min="0" max="2000" step="0.5" aria-label="Time in the run">
+    <span class="clock" id="clock"></span>
+  </div>
+  <div class="bar chapters" id="chapters"></div>
+  <div class="caption" id="cap"></div>
+  <div class="panes">
+    <div class="pane"><div class="label"><b>Now</b> · the app today (main __NOWHEAD__)</div><pre class="term" id="now"></pre></div>
+    <div class="pane"><div class="label"><b>New</b> · the same moment, redrawn by the new code</div><pre class="term" id="new"></pre></div>
+  </div>
+</section>
+<section id="fix">
+  <div class="caption">Same request, the screens the build would add. Drawn by the new code. The behaviour behind them is built and tested with a stand-in model, <b>not yet measured on Bonsai</b>.</div>
+  <div class="planned"><div class="steps" id="steps"></div><pre class="term" id="pterm"></pre></div>
+</section>
+<section id="what">
+  <div class="changes">
+  <table>
+    <tr><th>Part</th><th>Now</th><th>New</th><th>Where</th></tr>
+    <tr><td>After a cut-off</td><td>The cut Write's row stays up ("Writing · 188 lines so far"), and the spinner says "writing countdown-card.html" while the app is really writing notes. This is the moment in your screenshot.</td><td>The row is cleared. The spinner says what the app is doing: "saving notes", "summarizing on the side".</td><td><code>agent.mjs</code> · <code>App.jsx</code></td></tr>
+    <tr><td>Writing a file</td><td>File name and line count.</td><td>Also a reply-room meter (thinking counts too), orange from 85% with "near the limit", tok/s, and the last 2 lines being written, numbered.</td><td><code>rail.jsx</code> WritingNode</td></tr>
+    <tr><td>Thinking, live</td><td>The last 2 lines, squashed into one paragraph.</td><td>A meter against the thinking cap (orange from 85%), and the last 3 lines with the model's own line breaks kept.</td><td><code>rail.jsx</code> ThinkingLive</td></tr>
+    <tr><td>Thinking, done</td><td>"thought 8s · 84 tokens".</td><td>"thought 8s · <i>its first real sentence</i>". Filler like "Let me check the details." is skipped.</td><td><code>rail.jsx</code> ThoughtNode, gist()</td></tr>
+    <tr><td>Spinner line</td><td>Whole-request time, total tokens, and "writing x" again.</td><td>Whole-request time, <i>this step's</i> time, then reading / tok/s / what the app is doing.</td><td><code>screen.jsx</code> Spinner</td></tr>
+    <tr><td>Recovery notes</td><td>Orange "ran out of room mid-way", the same "Memory is filling up…" each time.</td><td>Your pick: each step on its own line, plain words, dim, numbered (Memory full (2)). Says when the notes came out empty. Orange only when it gives up.</td><td><code>agent.mjs</code> notes</td></tr>
+    <tr><td>Memory line</td><td>"Memory 81% full" in orange. When the notes step came at 58% used, there was no line at all.</td><td>Counts the room kept for the next reply: "Memory 58% used + 38% kept free for the next reply". Dim until 85%.</td><td><code>screen.jsx</code> memoryWarning</td></tr>
+    <tr><td>16k loop <span class="tag">behaviour</span></td><td>"Memory is filling up" after every step (its start, 7.1k, is past the 6.6k line). 18 minutes, 0 changes.</td><td>Says once that notes would free nothing, carries on without them, shrinks the thinking to fit, caps the notes step's thinking. <i>Done by another session: 42ade27.</i></td><td><code>agent.mjs</code> fitContext</td></tr>
+    <tr><td>Cut-off Write <span class="tag">behaviour</span></td><td>Nothing saved. Asks for "parts", which the model ignored.</td><td>Saves the whole lines that arrived (through the usual Write, so it asks as ever) and the next reply carries on from the next line with Edit. From 20 lines; fewer: the old "in parts" note.</td><td><code>agent.mjs</code></td></tr>
+    <tr><td>Leaked tool-call text <span class="tag">behaviour</span></td><td>Saved into the file (lines 189–195 of countdown-card.html).</td><td>The Write is turned back at the first tool-call line; the model sends it again without it. <i>Done by another session: 42ade27.</i></td><td><code>agent.mjs</code> leakedCall</td></tr>
+  </table>
+  <p class="data"><b>About the data.</b> Times come from the model server's log. The words, steps, thinking and file come from the saved session and the saved file. Try 1's own text was never saved, so its Write replays the saved file's 188 clean lines (the real try reached 211). The split of its 6,144 tokens between thinking and the Write is estimated (about 3.9k + 2k); the log only gives the total. "Memory %" is worked out from those counts. Speeds come from the log's token counts and times.</p>
+  </div>
+</section>
+</main>
+<script>
+const PACKED = "__DATA__";
+const COLORS = (() => {
+  const base = ['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
+  const out = base.slice();
+  const lv = [0, 95, 135, 175, 215, 255];
+  for (let r = 0; r < 6; r++) for (let g = 0; g < 6; g++) for (let b = 0; b < 6; b++) out.push(`rgb(${lv[r]},${lv[g]},${lv[b]})`);
+  for (let i = 0; i < 24; i++) { const v = 8 + i * 10; out.push(`rgb(${v},${v},${v})`); }
+  return out;
+})();
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function ansiToHtml(text) {
+  let st = { fg: null, bg: null, b: false, i: false, u: false, s: false, inv: false };
+  let html = '';
+  const open = () => {
+    let fg = st.fg, bg = st.bg;
+    if (st.inv) { [fg, bg] = [bg ?? '#1c1c1c', fg ?? '#d0d0d0']; }
+    const css = [fg && `color:${fg}`, bg && `background:${bg}`, st.b && 'font-weight:700', st.i && 'font-style:italic', (st.u || st.s) && `text-decoration:${[st.u && 'underline', st.s && 'line-through'].filter(Boolean).join(' ')}`].filter(Boolean).join(';');
+    return css ? `<span style="${css}">` : '<span>';
+  };
+  const parts = text.split(/\x1b\[([0-9;]*)m/);
+  for (let k = 0; k < parts.length; k++) {
+    if (k % 2 === 0) { if (parts[k]) html += open() + esc(parts[k]) + '</span>'; continue; }
+    const c = parts[k] === '' ? [0] : parts[k].split(';').map(Number);
+    for (let j = 0; j < c.length; j++) {
+      const n = c[j];
+      if (n === 0) st = { fg: null, bg: null, b: false, i: false, u: false, s: false, inv: false };
+      else if (n === 1) st.b = true; else if (n === 22 || n === 2) st.b = false;
+      else if (n === 3) st.i = true; else if (n === 23) st.i = false;
+      else if (n === 4) st.u = true; else if (n === 24) st.u = false;
+      else if (n === 7) st.inv = true; else if (n === 27) st.inv = false;
+      else if (n === 9) st.s = true; else if (n === 29) st.s = false;
+      else if (n === 39) st.fg = null; else if (n === 49) st.bg = null;
+      else if (n === 38 && c[j + 1] === 5) { st.fg = COLORS[c[j + 2]]; j += 2; }
+      else if (n === 48 && c[j + 1] === 5) { st.bg = COLORS[c[j + 2]]; j += 2; }
+      else if (n >= 30 && n <= 37) st.fg = COLORS[n - 30]; else if (n >= 90 && n <= 97) st.fg = COLORS[n - 82];
+      else if (n >= 40 && n <= 47) st.bg = COLORS[n - 40]; else if (n >= 100 && n <= 107) st.bg = COLORS[n - 92];
+    }
+  }
+  return html;
+}
+const $ = (id) => document.getElementById(id);
+const fmt = (s) => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`; };
+(async () => {
+  const bytes = Uint8Array.from(atob(PACKED), (c) => c.charCodeAt(0));
+  const D = JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
+  const cache = new Map();
+  const view = (i) => { if (!cache.has(i)) cache.set(i, ansiToHtml(D.pool[i])); return cache.get(i); };
+  const scrub = $('scrub'); scrub.max = D.end + 4;
+  let t = D.shot, playing = false, last = null, shownIdx = -1;
+  const frameAt = (x) => { let lo = 0, hi = D.frames.length - 1; while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (D.frames[mid][0] <= x) lo = mid; else hi = mid - 1; } return lo; };
+  const chapterBtns = D.chapters.map((c) => { const b = document.createElement('button'); b.textContent = c.label; b.onclick = () => { t = c.at; draw(); }; $('chapters').appendChild(b); return b; });
+  function caption(x) {
+    if (Math.abs(x - D.shot) < 3) return '<b>This is your screenshot (11m 20s in).</b> Now: the Write row and "writing countdown-card.html" are left over from the cut-off reply; the app is really writing notes. New: it says "saving notes", and the memory line counts the room kept for the next reply.';
+    if (x >= 581 && x < 687) return 'After the cut-off: the app is writing its notes (289 tokens, 1m 46s). Nothing streams to the screen while it does.';
+    if (x >= 55 && x < 405) return 'Try 1 thinks: about 3.9k of the 4.1k cap. New shows the cap meter filling.';
+    if (x >= 405 && x < 581) return 'Try 1 writes the file with the ~2k tokens left of its 6.1k reply room. New turns the meter orange at 85%, about a minute before the cut.';
+    if (x >= 745 && x < 914) return 'Try 2 writes the whole file in one go (1,940 tokens) and it fits. Watch its last lines: the model writes its next tool call into the file (lines 189–195).';
+    if (x >= 914 && x < END_()) return 'The loop: notes come out empty (700 of 700 tokens), then a summary on the side, then it re-reads its 7.3k-token start (about 2¼ min). 18 minutes, nothing changed.';
+    if (x >= END_()) return 'You pressed Esc at 33m 11s.';
+    return '';
+  }
+  const END_ = () => D.end;
+  function draw() {
+    const i = frameAt(t);
+    if (i !== shownIdx) { const f = D.frames[i]; $('now').innerHTML = view(f[1]); $('new').innerHTML = view(f[2]); shownIdx = i; }
+    scrub.value = t;
+    const clock = new Date(D.t0 + t * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    $('clock').textContent = `${clock} · ${fmt(t)} in`;
+    $('cap').innerHTML = caption(t);
+    let cur = 0; D.chapters.forEach((c, k) => { if (t >= c.at - 0.01) cur = k; });
+    chapterBtns.forEach((b, k) => b.classList.toggle('here', k === cur));
+  }
+  function tick(ts) {
+    if (!playing) { last = null; return; }
+    if (last !== null) t = Math.min(D.end + 4, t + ((ts - last) / 1000) * Number($('speed').value));
+    last = ts; draw();
+    if (t >= D.end + 4) { playing = false; $('play').textContent = '▶ Play'; return; }
+    requestAnimationFrame(tick);
+  }
+  $('play').onclick = () => { playing = !playing; $('play').textContent = playing ? '❚❚ Pause' : '▶ Play'; if (playing) { if (t >= D.end + 4) t = 0; requestAnimationFrame(tick); } };
+  scrub.oninput = () => { t = Number(scrub.value); draw(); };
+  draw();
+  // Tab 2: the planned screens.
+  const pb = D.planned.map((p, k) => { const b = document.createElement('button'); b.innerHTML = `<b>${k + 1} · ${esc(p.title)}</b><span>${esc(p.text)}</span>`; b.onclick = () => pick(k); $('steps').appendChild(b); return b; });
+  function pick(k) { pb.forEach((b, j) => b.setAttribute('aria-selected', String(j === k))); $('pterm').innerHTML = ansiToHtml(D.planned[k].screen); }
+  pick(0);
+})();
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+  document.querySelectorAll('section').forEach((s) => s.classList.toggle('on', s.id === b.dataset.tab));
+});
+</script>
+</body>
+</html>

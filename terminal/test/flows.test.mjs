@@ -444,7 +444,7 @@ test('the step-down: past half a request\'s time for thinking the chat thinks at
   expect(THINK_BUDGET_SECS).toBe(900);
   const soon = { thinkBudgetSecs: 0.001 }; // half of it is gone by the first call
   const chat = (fake) => fake.requests.filter((r) => r.tools);
-  const halfNotes = (events) => events.filter((e) => e.type === 'note' && /for this request are gone/.test(e.text));
+  const halfNotes = (events) => events.filter((e) => e.type === 'note' && /for this request used: thinking briefly/.test(e.text));
   // Step by step (no paths): every reply of the chat keeps the switch on, capped.
   const talk = await run(copy('fixture-fix'), 'What does stats.mjs do?', [{ tool: { name: 'Read', args: { path: 'stats.mjs' } } }, { text: 'It works out averages.' }], { thinking: true, more: { flows: false, ...soon } });
   expect(chat(talk.fake).length).toBe(2);

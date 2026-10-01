@@ -1171,7 +1171,12 @@ export function App({ opts, win, onRestart }) {
     const addPre = (patch) => { pre.current = { ...(pre.current ?? {}), ...patch }; setLive((l) => ({ ...l, pre: pre.current })); };
     const offs = [
       on('turn-start', () => { railOn.current = true; pre.current = null; lastCheck.current = null; const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
-      on('waiting', () => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0 }))),
+      // A new reply: its step clock starts, and its room and thinking cap feed the meters.
+      on('waiting', ({ room, thinkCap } = {}) => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, task: null }))),
+      // A reply that will not run as it was (cut off, repeating itself): its live lines go.
+      on('reply-dropped', () => setLive((l) => ({ ...l, thinking: null, text: null, writing: null }))),
+      // The app working between replies (notes, a summary): the working line says so.
+      on('busy', ({ task }) => setLive((l) => ({ ...l, thinking: null, text: null, writing: null, waiting: false, liveTps: null, stepStart: Date.now(), task }))),
       on('reasoning', ({ all }) => setLive((l) => stream(l, { thinking: { text: all, startedAt: l.thinking?.startedAt ?? Date.now(), tokens: (l.thinking?.tokens ?? 0) + 1 } }))),
       on('text', ({ all }) => setLive((l) => stream(l, { text: all }))),
       on('tool-writing', ({ name, args, tokens }) => setLive((l) => stream(l, { writing: { name, args, tokens } }))),
@@ -1212,7 +1217,7 @@ export function App({ opts, win, onRestart }) {
       on('stats', (st) => setStats(st)),
       on('mode', (m) => setModeState(m)),
       on('settled', () => autoRef.current.schedule()),
-      on('compacted', ({ summary }) => { push({ type: 'note', text: 'Conversation summarized to free memory.', tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
+      on('compacted', ({ summary, inPlace, n }) => { push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
       on('turn-end', ({ reason, secs, steps, reads, thinkTokens }) => {
         const past = S.current.live?.past ?? 'Worked';
         setLive(IDLE);

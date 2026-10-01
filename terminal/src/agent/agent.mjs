@@ -229,6 +229,37 @@ export const namesAFix = (line) => FIX.test(line) || /^so the (?:problem|issue|b
 // arguments end mid-string, so running the call can only fail. Usually it is
 // a Write with a whole file in it (a finance dashboard cost two 6-8 minute
 // tries at the same too-big Write on 26 Sep).
+// Tokens as the screen says them: 812, 6.1k.
+const kTok = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+
+// What a Write cut off at the reply limit had sent of its content: the whole lines, as
+// text, when there are enough of them to be worth keeping (else null). The arguments
+// stop mid-string, so they are read up to the last line break that arrived.
+export const KEEP_FROM = 20;
+export function keptPart(args) {
+  const raw = String(args ?? '');
+  const m = /"content"\s*:\s*"/.exec(raw);
+  if (!m) return null;
+  const rest = raw.slice(m.index + m[0].length);
+  // The last \n that is an escape of its own (an even run of backslashes before it).
+  let at = -1;
+  for (let i = rest.lastIndexOf('\\n'); i >= 0; i = rest.lastIndexOf('\\n', i - 1)) {
+    let b = 0;
+    for (let j = i - 1; j >= 0 && rest[j] === '\\'; j--) b++;
+    if (b % 2 === 0) { at = i; break; }
+  }
+  if (at < 0) return null;
+  let content;
+  try { content = JSON.parse(`"${rest.slice(0, at)}"`); } catch { return null; }
+  const lines = content.split('\n').length;
+  return lines >= KEEP_FROM ? { content, lines } : null;
+}
+// What the model is told once the cut-off Write's whole lines are saved.
+export function keptWriteNote(path, kept) {
+  const tail = kept.content.split('\n').slice(-3).join('\n');
+  return `Your Write of ${path} ran out of room before the end. Agentic Coder saved what had arrived: its first ${kept.lines} lines, which end with:\n${tail}\nThe file is unfinished on purpose. Carry on from line ${kept.lines + 1}: add the rest with Edit, old_text = those last lines exactly as above and new_text = the same lines followed by the next part. Keep each part well under 100 lines, and do not write the file again from the start.`;
+}
+
 export function cutCallNote(name, path) {
   const file = path || 'the file';
   if (name === 'Write' || name === 'Edit') {
@@ -658,7 +689,7 @@ export class Agent extends EventEmitter {
     if (Date.now() - this.requestStarted < this.thinkBudgetSecs * 500) return false;
     if (this.steppedAt == null) {
       this.steppedAt = Date.now();
-      this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request are gone, so it thinks only briefly from here and finishes in time.`, tone: 'dim' });
+      this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking briefly from here, to finish in time`, tone: 'dim' });
     }
     return true;
   }
@@ -1052,6 +1083,7 @@ export class Agent extends EventEmitter {
         if (turn.looping) {
           this.messages.push({ role: 'assistant', content: turn.text.slice(0, 200) });
           this.messages.push({ role: 'user', content: auto('Your last reply started repeating itself. Try again, briefly.') });
+          this.emit('reply-dropped');
           this.emit('note', { text: 'The model started repeating itself; asked it to try again.', tone: 'warn' });
           continue;
         }
@@ -1078,10 +1110,29 @@ export class Agent extends EventEmitter {
             break;
           }
           const p = /"path"\s*:\s*"([^"]+)"|<parameter=path>\s*\n?([^\n<]+)|<ifm\|arg_key>path<\/ifm\|arg_key>\s*(?:<ifm\|arg_type>[^<]*<\/ifm\|arg_type>\s*)?<ifm\|arg_value>([^\n<]+)/.exec(cutCall.args ?? '');
+          const path = p?.[1] ?? (p?.[2] ?? p?.[3])?.trim();
           const thought = beforeCall(turn.reasoning).trim();
+          // Its row on the screen ("Writing … lines") goes: the reply will not be run as it is.
+          this.emit('reply-dropped');
+          const size = `cut at ${kTok(turn.tokens)} of ${kTok(this.lastRoom ?? turn.tokens)} tokens`;
+          // A Write cut off with a good part of the file in it: that part is saved through
+          // the usual Write (it asks and checks as ever) and the model carries on from its
+          // last line. On 1 Oct Bonsai lost a 211-line try this way, then wrote it all again.
+          const kept = cutCall.name === 'Write' && path ? keptPart(cutCall.args) : null;
+          if (kept) {
+            const id = cutCall.id ?? `call_${Date.now()}`;
+            const args = JSON.stringify({ path, content: kept.content });
+            this.messages.push({ role: 'assistant', content: beforeCall(text), ...(thought ? { reasoning_content: thought } : {}), tool_calls: [{ id, type: 'function', function: { name: 'Write', arguments: args } }] });
+            this.emit('note', { text: `File too long for one reply (${size}): saving its first ${kept.lines} lines, then carrying on from there`, tone: 'dim' });
+            const out = await this.runTool({ id, name: 'Write', args }, signal);
+            this.messages.push({ role: 'tool', tool_call_id: id, content: out.text });
+            this.messages.push({ role: 'user', content: auto(out.error ? cutCallNote('Write', path) : keptWriteNote(path, kept)) });
+            if (!out.error) cuts = 0; // a step landed: cut-off replies are no longer "in a row"
+            continue;
+          }
           this.messages.push({ role: 'assistant', content: beforeCall(text), ...(thought ? { reasoning_content: thought } : {}) });
-          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, p?.[1] ?? (p?.[2] ?? p?.[3])?.trim())) });
-          this.emit('note', { text: `The ${cutCall.name} call ran out of room mid-way; asked it to build the file in parts.`, tone: 'warn' });
+          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, path)) });
+          this.emit('note', { text: `${cutCall.name === 'Write' || cutCall.name === 'Edit' ? 'File too long' : 'Call too long'} for one reply (${size}): asked it to ${cutCall.name === 'Write' || cutCall.name === 'Edit' ? `build ${path ?? 'the file'} in parts` : 'do it in smaller pieces'}`, tone: 'dim' });
           continue;
         }
         // A reply that puts a question to you ends the turn, even with a tool
@@ -1750,6 +1801,7 @@ export class Agent extends EventEmitter {
   async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
     const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
     const maxTokens = cap ?? replyRoom(this.thinking, this.model?.thinkingBudget);
+    this.lastRoom = maxTokens;
     // fitContext keeps the answer's 2,048 and this much thinking free: in a tight
     // memory the thinking shrinks (thinkRoom), not the answer.
     const think = this.thinkRoom();
@@ -1767,7 +1819,8 @@ export class Agent extends EventEmitter {
     // Stopped already (during the warm-up, say): the listener above never fires then, so the
     // request would go out and run to its end. It is not sent.
     if (signal?.aborted) local.abort();
-    this.emit('waiting');
+    // The screen's meters: the most this reply may write, and its thinking cap.
+    this.emit('waiting', { room: maxTokens, thinkCap: !this.thinking ? 0 : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048 });
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
@@ -1830,7 +1883,7 @@ export class Agent extends EventEmitter {
     this.stats.requests++;
     turn.secs = (Date.now() - t0) / 1000;
     turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
-    this.emit('stats', { ...this.stats, ctxUsed: this.ctxUsed, ctx: this.ctx });
+    this.emit('stats', { ...this.stats, ctxUsed: this.ctxUsed, ctx: this.ctx, replyRoom: replyRoom(this.thinking, this.thinkRoom()) });
     return turn;
   }
 
@@ -2515,7 +2568,10 @@ export class Agent extends EventEmitter {
   // over from the request and the notes. False when no usable notes came.
   async notesInPlace(signal) {
     if (this.messages.length <= 3) return false;
-    this.emit('note', { text: 'Memory is filling up: writing down where I am, then carrying on from my notes…', tone: 'dim' });
+    // Numbered within the request, so a fourth time reads as a fourth time.
+    const n = this.turn ? (this.turn.fulls = (this.turn.fulls ?? 0) + 1) : 1;
+    this.emit('note', { text: `Memory full (${n}): saving notes, then carrying on`, tone: 'dim' });
+    this.emit('busy', { task: 'saving notes' });
     const t0 = Date.now();
     const ask = auto(`Your memory is nearly full. Write your notes now, in plain words and under 200 words, with no tool call: what you have done so far, the files and line numbers that matter, any cause you have already worked out (word for word), and the single next step.`);
     // The newest tool output came after the model's last reply: it has not
@@ -2537,12 +2593,15 @@ export class Agent extends EventEmitter {
       return false;
     }
     summary = beforeCall(summary).trim();
-    if (summary.length < 40) return false;
+    if (summary.length < 40) {
+      this.emit('note', { text: `Notes came out empty: freeing memory another way`, tone: 'dim' });
+      return false;
+    }
     const before = this.ctxUsed;
     if (!this.restartFrom(summary, held)) return false;
     // The instructions are read from their saved state, not again from the start.
     try { await this.rewarm?.(signal); } catch (e) { if (signal?.aborted) throw e; }
-    this.emit('compacted', { summary, inPlace: true, secs: (Date.now() - t0) / 1000, freed: Math.max(0, before - this.ctxUsed) });
+    this.emit('compacted', { summary, inPlace: true, n: this.turn?.fulls ?? 1, secs: (Date.now() - t0) / 1000, freed: Math.max(0, before - this.ctxUsed) });
     return true;
   }
 
@@ -2614,6 +2673,7 @@ export class Agent extends EventEmitter {
   async compact(signal, { instructions } = {}) {
     if (this.messages.length <= 3) return;
     this.emit('note', { text: 'Summarizing the conversation to free memory…', tone: 'dim' });
+    this.emit('busy', { task: 'summarizing' });
     const history = this.messages.slice(1).map((m) => {
       if (m.role === 'tool') return `TOOL RESULT: ${String(m.content).slice(0, 600)}`;
       if (m.role === 'assistant') return `YOU: ${m.reasoning_content ? `(thought: ${keyLines(m.reasoning_content, 2).join(' ').slice(0, 400)}) ` : ''}${m.content}${m.tool_calls ? ` [called ${m.tool_calls.map((c) => `${c.function.name} ${c.function.arguments.slice(0, 200)}`).join('; ')}]` : ''}`;
@@ -2627,6 +2687,6 @@ export class Agent extends EventEmitter {
     for await (const ev of streamChat({ url: this.url, messages: ask, thinking: false, sampling: this.model.sampling, maxTokens: 600, slot: this.slots?.side, signal })) {
       if (ev.type === 'text') summary += ev.text;
     }
-    if (this.restartFrom(summary)) this.emit('compacted', { summary: summary.trim() });
+    if (this.restartFrom(summary)) this.emit('compacted', { summary: summary.trim(), n: this.turn ? (this.turn.summaries = (this.turn.summaries ?? 0) + 1) : 1 });
   }
 }

@@ -232,8 +232,8 @@ test('when memory fills it writes its notes in the conversation it already holds
   // What it looked at comes from Agentic Coder's own record, whatever the notes forgot.
   expect(agent.messages[2].content).toContain("From Agentic Coder's record of this message:\n- Files I have read: export.mjs (from the top), export.test.mjs (from the top).\n- Searches I ran: \"toCsv\".");
   expect(agent.messages[3].content).toContain('Do not start the investigation over');
-  expect(events.filter((e) => e.type === 'note').map((e) => e.text)).toEqual(['Memory is filling up: writing down where I am, then carrying on from my notes…']);
-  expect(events.find((e) => e.type === 'compacted')).toMatchObject({ summary: NOTES, inPlace: true });
+  expect(events.filter((e) => e.type === 'note').map((e) => e.text)).toEqual(['Memory full (1): saving notes, then carrying on']);
+  expect(events.find((e) => e.type === 'compacted')).toMatchObject({ summary: NOTES, inPlace: true, n: 1 });
   expect(agent.ctxUsed).toBeLessThan(agent.ctx * 0.3);
 });
 
@@ -269,7 +269,7 @@ test('no usable notes (an empty reply): old tool output is emptied instead, as b
   expect(agent.messages.length).toBeGreaterThan(4);
   expect(agent.messages[1].content).toBe('fix the bug: the total is wrong when the list is empty');
   expect(events.some((e) => e.type === 'compacted')).toBe(false);
-  expect(events.filter((e) => e.type === 'note').map((e) => e.text.replace(/about [\d,]+ tokens/, 'about N tokens'))).toEqual(['Memory is filling up: writing down where I am, then carrying on from my notes…', 'Trimmed old tool output to save memory (about N tokens).']);
+  expect(events.filter((e) => e.type === 'note').map((e) => e.text.replace(/about [\d,]+ tokens/, 'about N tokens'))).toEqual(['Memory full (1): saving notes, then carrying on', 'Notes came out empty: freeing memory another way', 'Trimmed old tool output to save memory (about N tokens).']);
   expect(agent.messages.some((m) => m.role === 'tool' && m.content.startsWith('[older output removed'))).toBe(true);
 });
 

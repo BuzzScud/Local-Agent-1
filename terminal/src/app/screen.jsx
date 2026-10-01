@@ -314,15 +314,21 @@ function speedOf(app) {
 // Like Claude Code, the memory is invisible until it matters: from 70% full a
 // dim line says what happens next (old output trimmed at 78%, the talk
 // summarized near 85%); /stats has the numbers; /meters brings the old bar back.
-export function memoryWarning(used, ctx) {
+// room: what is kept free for the next reply (thinking and all). It counts towards "full":
+// at 16k with a 4,096 thinking cap the notes step came at 58% used, with no line to say why.
+export function memoryWarning(used, ctx, room = 0) {
   const pct = ctx ? Math.round((used / ctx) * 100) : 0;
-  if (pct < 70) return null;
+  const kept = ctx ? Math.round((room / ctx) * 100) : 0;
+  if (pct + kept < 70) return null;
+  if (kept) return `Memory ${pct}% used + ${kept}% kept for the next reply: ${pct + kept >= 85 ? 'notes or a summary at the next step' : 'old tool output is trimmed soon'}`;
   return pct >= 85 ? `Memory ${pct}% full: the conversation is summarized at the next step` : `Memory ${pct}% full: old tool output is trimmed soon, the conversation summarized when full`;
 }
 function MemoryWarning({ app }) {
-  const text = memoryWarning(app.stats.ctxUsed ?? 0, app.ctx);
+  const used = app.stats.ctxUsed ?? 0;
+  const room = app.stats.replyRoom ?? 0;
+  const text = memoryWarning(used, app.ctx, room);
   if (!text) return null;
-  return <Box paddingX={2} width={app.width}><Text color={C.warn} wrap="truncate-end">{text}</Text></Box>;
+  return <Box paddingX={2} width={app.width}><Text color={used + room >= app.ctx * 0.85 ? C.warn : C.dim} wrap="truncate-end">{text}</Text></Box>;
 }
 
 // The status line under the footer (/meters on): model, speed, memory, effort.
@@ -348,14 +354,18 @@ function StartIcon({ app }) {
 export function Spinner({ app }) {
   const { live, now } = app;
   const secs = Math.max(0, (now - live.turnStart) / 1000);
-  const doing = live.rail ? doingWords(live) : '';
-  const note = `${doing ? ` · ${doing}` : ''}${live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : ''}`;
+  // On the rail the step above already says what it does (writing a file, thinking): the
+  // line says this step's time and speed instead; between replies, what the app does itself.
+  const step = live.rail && live.stepStart ? Math.max(0, (now - live.stepStart) / 1000) : null;
+  const pace = !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
+  const doing = live.rail ? '' : doingWords(live);
+  const note = `${step !== null ? ` · this step ${fmtSecs(step)}` : ` · ↓ ${fmtTok(live.tokens)} tokens`}${pace}${doing ? ` · ${doing}` : ''}${live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : ''}`;
   const icon = spinFrame(app.spinner, secs, { tokens: live.tokens, sinceToken: live.lastTokenAt ? (now - live.lastTokenAt) / 1000 : Infinity });
   return (
     <Box marginBottom={1} width={app.width}>
       <Text wrap="truncate-end">
         {live.rail ? <Text color={RAIL}>{'  ╰─ '}</Text> : null}<Text color={icon.color}>{icon.glyph}</Text><Text color={C.accent}> {live.verb}…</Text>
-        <Text color={C.dim}> ({fmtSecs(secs)} · ↓ {fmtTok(live.tokens)} tokens{note} · esc to interrupt)</Text>
+        <Text color={C.dim}> ({fmtSecs(secs)}{note} · esc to interrupt)</Text>
       </Text>
     </Box>
   );
@@ -432,7 +442,7 @@ function LiveRail({ app, maxLines }) {
   const { live, width } = app;
   const blocks = [];
   if (live.pre) blocks.push(<MachineLine key="pre" it={live.pre} />);
-  if (live.thinking && !live.text && !live.writing) blocks.push(<Box key="think" flexDirection="column"><Pipe /><ThinkingLive thinking={live.thinking} now={app.now} width={width} /></Box>);
+  if (live.thinking && !live.text && !live.writing) blocks.push(<Box key="think" flexDirection="column"><Pipe /><ThinkingLive thinking={live.thinking} now={app.now} width={width} cap={live.thinkCap} /></Box>);
   if (live.text) {
     const shown = tailToFit(live.text, maxLines, width - 6);
     blocks.push(
@@ -443,7 +453,7 @@ function LiveRail({ app, maxLines }) {
       </Box>,
     );
   }
-  if (live.writing) blocks.push(<Box key="writing" flexDirection="column"><Pipe /><WritingNode writing={live.writing} /></Box>);
+  if (live.writing) blocks.push(<Box key="writing" flexDirection="column"><Pipe /><WritingNode writing={live.writing} room={live.room} used={live.streamTokens} tps={live.liveTps} /></Box>);
   if (live.tries) {
     const t = live.tries;
     blocks.push(
@@ -809,7 +819,7 @@ function SettingsPicker({ app }) {
   // "Settings · Setup"), and then the key hint, when the status bar or the memory note takes
   // a line under the menu: the whole menu always shows, top edge to last row.
   const tight = app.rows < 30;
-  const under = app.meters || memoryWarning(app.stats.ctxUsed ?? 0, app.ctx) ? 1 : 0;
+  const under = app.meters || memoryWarning(app.stats.ctxUsed ?? 0, app.ctx, app.stats.replyRoom ?? 0) ? 1 : 0;
   const need = (lines) => tight && pk.rows.length + pk.groups.length + lines + under + 1 > app.rows;
   const noBlurb = need(5);
   const noTitle = need(4);

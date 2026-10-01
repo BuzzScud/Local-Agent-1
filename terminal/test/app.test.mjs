@@ -61,8 +61,9 @@ test('working: the live thinking line above the spinner, which shows time, token
     { wait: '? for shortcuts' }, { type: 'hello' }, { key: 'enter' }, { wait: '◇ thinking' }, { sleep: 1200 }, { snapshot: 'thinking' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.thinking).toMatch(/◇ thinking · \d+s · \d+ tokens?/);
-  expect(r.snapshots.thinking).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · thinking · esc to interrupt\)/);
+  // A meter against the thinking cap (or the count, with no cap), and the step's time and speed below.
+  expect(r.snapshots.thinking).toMatch(/◇ thinking · \d+s · ([▰▱]{8} [\d.]+k? of [\d.]+k?|\d+ tokens?)/);
+  expect(r.snapshots.thinking).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · this step \d+s · (↓ [\d.]+ tok\/s|reading) · esc to interrupt\)/);
   expect(r.snapshots.thinking).not.toMatch(/┃/); // no streaming window: one layout, like Claude Code
   expect(r.text).toContain('◇ thought'); // what it had thought so far is kept, folded
   expect(r.text).toMatch(/╰─ ■ Interrupted · What should Agentic Coder do instead\?/); // the end line closes the rail

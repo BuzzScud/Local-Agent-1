@@ -67,18 +67,42 @@ export const MachineLine = ({ it }) => (
   <Node g="┊" c={RAIL}><Text color={C.dim}>{machineWords(it)}{(it.contexts ?? []).length ? <Text color={C.faint}>  (ctrl+o)</Text> : null}</Text></Node>
 );
 
-export const ThoughtNode = ({ it }) => (
-  <Node g="◇" c={C.think}><Text color={C.think} italic>thought {fmtSecs(Math.max(1, it.secs))}{it.tokens ? <Text color={C.faint}> · {plural(it.tokens, 'token')}</Text> : null}<Text color={C.faint}>  (ctrl+o to read it)</Text></Text></Node>
-);
-// While it thinks: the latest two lines of it, as they come.
-export function ThinkingLive({ thinking, now, width }) {
+// A meter of `cells` blocks; `frac` 0–1.
+export const meter = (frac, cells = 8) => {
+  const n = Math.min(cells, Math.max(frac > 0 ? 1 : 0, Math.round(frac * cells)));
+  return '▰'.repeat(n) + '▱'.repeat(cells - n);
+};
+export const kTok = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+// At this share of a limit a meter turns orange: the cut is near.
+export const NEAR = 0.85;
+
+// The gist of a thought, for its line once done: its first sentence that says something
+// (small models open with "Let me check the details." and the step-down closes with
+// "I have thought enough. Now I act on it.").
+const FILLER = /^(i need to look into this|let me (check|look|think)( at)? (the|this|it)|i have thought enough|now i act on it|okay|ok|hmm+|alright|so|wait)\b/i;
+export function gist(text, max = 90) {
+  const s = String(text ?? '').split(/\n+|(?<=[.!?])\s+/).map((x) => x.replace(/\s+/g, ' ').trim()).find((x) => x.length >= 12 && !FILLER.test(x));
+  if (!s) return '';
+  const t = s.replace(/[.!?]$/, '');
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+export const ThoughtNode = ({ it }) => {
+  const g = gist(it.text);
+  return <Node g="◇" c={C.think}><Text color={C.think} italic wrap="truncate-end">thought {fmtSecs(Math.max(1, it.secs))}{g ? <Text color={C.dim} italic={false}> · {g}</Text> : it.tokens ? <Text color={C.faint}> · {plural(it.tokens, 'token')}</Text> : null}<Text color={C.faint} italic={false}>  (ctrl+o)</Text></Text></Node>;
+};
+// While it thinks: a meter against the thinking cap, then its latest three lines, with the
+// model's own line breaks kept.
+export function ThinkingLive({ thinking, now, width, cap }) {
   const secs = Math.max(0, (now - (thinking.startedAt ?? now)) / 1000);
-  const flat = String(thinking.text ?? '').replace(/\s+/g, ' ').trim().slice(-600);
-  const lines = flat ? wrap(flat, Math.max(20, width - 6)).slice(-2) : [];
+  const tokens = thinking.tokens ?? 0;
+  const paras = String(thinking.text ?? '').slice(-1500).split(/\n+/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const all = paras.flatMap((p) => wrap(p, Math.max(20, width - 8)));
+  const lines = all.slice(-3);
+  const frac = cap ? tokens / cap : 0;
   return (
     <Box flexDirection="column">
-      <Node g="◇" c={C.think}><Text color={C.think} italic>thinking <Text color={C.faint}>· {fmtSecs(secs)} · {plural(thinking.tokens ?? 0, 'token')}</Text></Text></Node>
-      {lines.map((l, i) => <Pipe key={i}><Text color={C.think} italic wrap="truncate-end">{i === 0 ? '…' : ' '}{l}</Text></Pipe>)}
+      <Node g="◇" c={C.think}><Text color={C.think} italic>thinking <Text color={C.faint} italic={false}>· {fmtSecs(secs)} · </Text>{cap ? <Text italic={false}><Text color={frac >= NEAR ? C.warn : C.think}>{meter(frac)}</Text><Text color={C.faint}> {kTok(tokens)} of {kTok(cap)}</Text></Text> : <Text color={C.faint} italic={false}>{plural(tokens, 'token')}</Text>}</Text></Node>
+      {lines.map((l, i) => <Pipe key={i}><Text color={C.think} italic wrap="truncate-end">{i === 0 && all.length > 3 ? '…' : ' '}{l}</Text></Pipe>)}
     </Box>
   );
 }
@@ -191,11 +215,30 @@ export function writingWhat(w) {
   const lines = (args.match(/\\n/g) ?? []).length + (/"(?:content|new_string|new)"\s*:\s*"/.test(args) ? 1 : 0);
   return { name: w.name, file, lines };
 }
-export function WritingNode({ writing }) {
+// The content a Write or Edit has sent so far, as text: the end of its JSON string, unescaped.
+export function writtenSoFar(args) {
+  const m = /"(?:content|new_string|new)"\s*:\s*"/.exec(String(args ?? ''));
+  if (!m) return '';
+  const raw = String(args).slice(m.index + m[0].length).replace(/"\s*}?\s*$/, '');
+  return raw.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, c) => (c === 'n' ? '\n' : c === 't' ? '  ' : c === 'r' ? '' : c[0] === 'u' && c.length === 5 ? String.fromCharCode(parseInt(c.slice(1), 16)) : c));
+}
+// room: the most this reply may write (thinking and all); used: how much it has written.
+export function WritingNode({ writing, room, used, tps }) {
   const w = writingWhat(writing);
   if (!w) return null;
   if (w.file && /^(Write|Edit|Update|MultiEdit|Create)/i.test(w.name)) {
-    return <Node g="✎" c={C.dim}><Text color={C.dim}><Text bold>Writing</Text>  {w.file}{w.lines ? ` · ${plural(w.lines, 'line')} so far` : ''}</Text></Node>;
+    const frac = room ? Math.min(1, (used ?? 0) / room) : 0;
+    const near = frac >= NEAR;
+    const tail = writtenSoFar(writing.args).split('\n');
+    const shown = tail.slice(-2);
+    const first = tail.length - shown.length + 1;
+    return (
+      <Box flexDirection="column">
+        <Node g="✎" c={C.edits}><Text><Text color={C.edits} bold>Writing</Text><Text color={PATH}>  {w.file}</Text><Text color={C.dim}> · {plural(w.lines, 'line')}</Text></Text></Node>
+        {room ? <Pipe><Text><Text color={near ? C.warn : C.accentDim}>{'    '}{meter(frac, 10)}</Text><Text color={near ? C.warn : C.dim}> {kTok(used ?? 0)} of {kTok(room)} reply room{near ? ' · near the limit' : ''}</Text>{tps ? <Text color={C.faint}> · {tps.toFixed(1)} tok/s</Text> : null}</Text></Pipe> : null}
+        {w.lines ? shown.map((l, i) => <Pipe key={i}><Text wrap="truncate-end"><Text color={C.faint}>{String(first + i).padStart(6)}  </Text><Text color={C.dim}>{l || ' '}</Text></Text></Pipe>) : null}
+      </Box>
+    );
   }
   return <Node g="▸" c={C.dim}><Text color={C.dim}>Preparing <Text bold>{w.name}</Text>…</Text></Node>;
 }

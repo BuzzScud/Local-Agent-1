@@ -138,4 +138,8 @@ test('memoryWarning: silent under 70%, then says what happens next', async () =>
   expect(memoryWarning(10_000, 32_768)).toBeNull();
   expect(memoryWarning(23_500, 32_768)).toMatch(/^Memory 72% full: old tool output is trimmed soon/);
   expect(memoryWarning(28_500, 32_768)).toMatch(/^Memory 87% full: the conversation is summarized/);
+  // With the room kept for the next reply counted: at 16k with a 4,096 cap, notes came at 58% used.
+  expect(memoryWarning(9_500, 16_384, 6_144)).toBe('Memory 58% used + 38% kept for the next reply: notes or a summary at the next step');
+  expect(memoryWarning(6_000, 16_384, 6_144)).toBe('Memory 37% used + 38% kept for the next reply: old tool output is trimmed soon');
+  expect(memoryWarning(3_000, 16_384, 6_144)).toBeNull();
 });

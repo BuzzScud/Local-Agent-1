@@ -4,7 +4,7 @@
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
-import { machineWords, writingWhat, doingWords, EndLine, CheckNode, ToolNode, UserStrip } from '../src/app/rail.jsx';
+import { machineWords, writingWhat, doingWords, EndLine, CheckNode, ToolNode, UserStrip, WritingNode, ThinkingLive, ThoughtNode, gist, writtenSoFar } from '../src/app/rail.jsx';
 import { ItemFrame, gapUnder } from '../src/app/screen.jsx';
 import { runInPty } from './pty.mjs';
 import { setup, quit } from './app-setup.mjs';
@@ -88,7 +88,56 @@ test('while it writes a file, the rail says which and how many lines so far', as
     { wait: '✎ Writing  page.html' }, { sleep: 600 }, { snapshot: 'writing' }, { key: 'esc' }, { wait: 'Interrupted' }, ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.writing).toMatch(/✎ Writing {2}page\.html · \d+ lines? so far/);
-  expect(r.snapshots.writing).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · ↓ \d+ tokens · writing page\.html · esc to interrupt\)/);
+  expect(r.snapshots.writing).toMatch(/✎ Writing {2}page\.html · \d+ lines?/);
+  expect(r.snapshots.writing).toMatch(/[▰▱]{10} [\d.]+k? of [\d.]+k? reply room/);
+  expect(r.snapshots.writing).toMatch(/╰─ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] [A-Z][a-z]+… \(\d+s · this step \d+s · (↓ [\d.]+ tok\/s · )?esc to interrupt\)/);
+  expect(r.snapshots.writing).not.toContain('writing page.html'); // the row above says it
   expect(r.text).toMatch(/╰─ ■ Interrupted/);
+}, 60_000);
+
+// ————— The new live rows (countdown card, 1 Oct): meters against the limits, the lines arriving —————
+const plain = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+test('the writing row: lines, a meter against the reply room (orange from 85%), tok/s, the last two lines numbered', () => {
+  const content = Array.from({ length: 167 }, (_, i) => `line ${i + 1}`).join('\n');
+  const writing = { name: 'Write', args: `{"path":"Desktop/countdown-card.html","content":"${JSON.stringify(content).slice(1, -1)}` };
+  const out = plain(draw(h(WritingNode, { writing, room: 6144, used: 5700, tps: 11.4 })));
+  expect(out).toContain('✎ Writing  countdown-card.html · 167 lines');
+  expect(out).toContain('▰▰▰▰▰▰▰▰▰▱ 5.7k of 6.1k reply room · near the limit · 11.4 tok/s');
+  expect(out).toMatch(/166 {2}line 166\n.*167 {2}line 167/);
+  const calm = plain(draw(h(WritingNode, { writing, room: 6144, used: 3000 })));
+  expect(calm).not.toContain('near the limit');
+  expect(writtenSoFar('{"path":"a","content":"a \\"q\\"\\n\\tb')).toBe('a "q"\n  b');
+});
+
+test('thinking, live: a meter against its cap and the last three lines with its own breaks; done: the gist of it', () => {
+  const thinking = { text: 'I need to look into this further.\n\nThe notes say the file exists.\nI should check it is complete.\nThen write the rest.', startedAt: 0, tokens: 3600 };
+  const out = plain(draw(h(ThinkingLive, { thinking, now: 38_000, width: 100, cap: 4096 })));
+  expect(out).toContain('◇ thinking · 38s · ▰▰▰▰▰▰▰▱ 3.6k of 4.1k');
+  expect(out).toContain('The notes say the file exists.');
+  expect(out).toContain('Then write the rest.');
+  expect(out).not.toContain('I need to look into this further'); // only the last three lines
+  expect(gist('I need to look into this further. Let me check the details.\n\nMy notes claim that Desktop/countdown-card.html has already been created. But wait')).toBe('My notes claim that Desktop/countdown-card.html has already been created');
+  expect(gist('I have thought enough. Now I act on it.')).toBe('');
+  expect(plain(draw(h(ThoughtNode, { it: { text: 'countdown-card.html already exists in the Desktop. Let me check it.', secs: 4.2 } })))).toContain('◇ thought 4s · countdown-card.html already exists in the Desktop  (ctrl+o)');
+});
+
+// The screenshot of 1 Oct: a Write cut off at the reply limit left its "Writing … lines so far" row
+// up (and "writing <file>" on the working line) while the app went on to something else.
+test('a Write cut off at the reply limit leaves no Writing row behind; its whole lines are saved', async () => {
+  const { cwd, env } = setup();
+  const lines = Array.from({ length: 30 }, (_, i) => `<p>line ${i + 1} of the card</p>`);
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'card.html', content: `${lines.join('\n')}\n<p>line 31 of the ca` } }, finish: 'length' },
+    { text: 'Saved the first part.' }, { text: '{"done": true, "missing": ""}' },
+  ], { delayMs: 4 });
+  // The saved part goes through the usual Write, so it asks as ever.
+  const r = await runInPty({ cwd, env, cols: 120, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { type: 'make card.html' }, { key: 'enter' },
+    { wait: 'saving its first 30 lines' }, { wait: 'Create file' }, { key: 'enter' }, { wait: 'Saved the first part.' }, { sleep: 400 }, { snapshot: 'after' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.after).toMatch(/· File too long for one reply \(cut at [\d.]+k? of [\d.]+k? tokens\): saving its first 30 lines, then carrying on from there/);
+  expect(r.snapshots.after).not.toContain('✎ Writing');
+  expect(r.snapshots.after).toMatch(/✎ Created {2}card\.html · 30 lines/);
 }, 60_000);
