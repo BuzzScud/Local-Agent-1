@@ -115,6 +115,11 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   folder of its own, so the shipped files never decide what it sees (`terminal/test/prompt-files.test.mjs`).
   The Arena's Skills check measures a skill on the real model.
 
+- **Look first** (`terminal/src/agent/look.mjs`, the last /effort row, since 30 Sep 2026): auto follows
+  Effort (Low none, Medium 15 s, High 30 s). It is the last row so the rows above keep their places for
+  the app tests that move with the arrow keys; the panel keeps 22 lines because the keys' hint sits on
+  the Reset all line.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

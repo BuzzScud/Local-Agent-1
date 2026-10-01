@@ -805,7 +805,8 @@ function SettingsPicker({ app }) {
 // Retriever, Reranker) and every limit that can move, each under its heading,
 // each value between ◀ ▶ with what it costs. ↻ marks the two that restart
 // the model; • a value not saved yet. Thinking cap is dimmed while Effort is Low.
-// Ten limits and no blank line above Reset all keep the panel within 22 lines: it fits a 24-row window (app-effort.test.mjs).
+// Eleven limits (Look first last) keep the panel within 22 lines because the keys' hint sits on the
+// Reset all line, not a line of its own: it fits a 24-row window (app-effort.test.mjs).
 function LimitsPicker({ app }) {
   const pk = app.picker;
   const levels = pk.model.thinkingLevels ?? [];
@@ -816,7 +817,7 @@ function LimitsPicker({ app }) {
   // Wide enough for every name a search row can show, so the notes do not move.
   const vw = Math.max(...LIMITS.flatMap((l) => (l.choice ? l.steps(pk.model).map((s) => showLimit(l.id, s).length) : [showLimit(l.id, pk.values[l.id]).length])), ...levels.map((l) => l.label.length)) + 1;
   const heading = (name) => <Text key={`h-${name}`} color={C.faint}>{`── ${name} `}{'─'.repeat(Math.max(0, app.width - 8 - name.length))}</Text>;
-  const env = { ...pk.env, values: pk.values, effortOn };
+  const env = { ...pk.env, values: pk.values, effortOn, effortLevel: lv?.effort ?? null };
   const reset = pk.index === off + LIMITS.length;
   const onEffort = off && pk.index === 0;
   const effortUnsaved = pk.level !== pk.savedLevel;
@@ -864,9 +865,8 @@ function LimitsPicker({ app }) {
       })}
       <Text wrap="truncate-end">
         <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {'Reset all'.padEnd(lw)}</Text>
-        <Text color={C.dim}>enter here: every row back to its default</Text>
+        <Text color={C.dim}>{'  '}↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model</Text>
       </Text>
-      <Text color={C.dim} wrap="truncate-end">↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model</Text>
     </Box>
   );
 }

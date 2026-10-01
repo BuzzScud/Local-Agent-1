@@ -8,6 +8,7 @@
 import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
 import { SEARCH } from '../agent/search.mjs';
 import { rulesRoomFor, upFrontFor, CHARS_PER_TOKEN } from '../agent/room.mjs';
+import { LOOK_STEPS, LOOK_BACKS, lookSecs, showLook } from '../agent/look.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
 const mins = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`);
@@ -161,6 +162,20 @@ export const LIMITS = [
     def: () => 0.85,
     show: pct,
     note: () => 'of the context, with the next reply: the chat is summarized',
+  },
+  {
+    // Look first (agent/look.mjs): a minimum of searching and reading before the answer. Last, so
+    // the rows above keep their places; auto follows Effort (Low none, Medium 15 s, High 30 s).
+    id: 'look', label: 'Look first', choice: true,
+    steps: () => LOOK_STEPS,
+    def: () => 'auto',
+    show: showLook,
+    note: (v, e) => {
+      const secs = lookSecs(v, { thinking: e.effortOn !== false, effort: e.effortLevel ?? null });
+      const auto = v === 'auto' ? `follows Effort: ${secs ? `${secs} s` : 'none on Low'} · ` : '';
+      if (!secs) return `${auto}answers as soon as it is ready`;
+      return `${auto}searches and reads at least ${secs} s before it answers; sent back up to ${LOOK_BACKS}×`;
+    },
   },
 ];
 const byId = Object.fromEntries(LIMITS.map((l) => [l.id, l]));
@@ -331,6 +346,7 @@ export function applyLimits(agent, values) {
   agent.testTimeoutMs = values.timeoutSecs * 1000; // the flows' test runs
   agent.rulesRoom = values.rulesRoom;
   agent.upFront = values.upFront;
+  agent.look = values.look; // Look first: from the next message
   agent.syncRules?.(); // a new Rules room reads the rules again once
   // Who decides: from the next message (the prompt and the tools change with it).
   if (values.way) agent.setWay?.(values.way);

@@ -301,3 +301,9 @@ test('real.mjs on the stand-in, stopped during its first request: it says so, sa
   expect(JSON.parse(readFileSync(out, 'utf8'))).toMatchObject({ stopped: true, total: 0 });
   expect(existsSync(join(home, 'record.jsonl'))).toBe(false);
 }, 90_000);
+
+test('a run from the Tests page may be given Look first (/effort’s last row), as a named choice', async () => {
+  const { cleanSettings } = await import('../evals/run-tests.mjs');
+  expect(cleanSettings({ look: '30' })).toEqual({ look: '30' });
+  expect(cleanSettings({ look: 30 })).toBeNull(); // a number is not one of its steps
+});

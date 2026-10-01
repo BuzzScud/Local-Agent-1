@@ -35,7 +35,9 @@ test('/effort: Effort and every limit with its cost, ←→ moves one, enter sav
   ] });
   await fake.close();
   const panel = r.snapshots.panel;
-  for (const label of ['Effort and limits', 'Effort', '── Search', 'Embedder', 'Retriever', 'Reranker', '── Limits', 'Context', 'Thinking cap', 'Tries per fix', 'Steps per request', 'Command output', 'Command timeout', 'Trim at', 'Summarize at', 'Reset all']) expect(panel).toContain(label);
+  for (const label of ['Effort and limits', 'Effort', '── Search', 'Embedder', 'Retriever', 'Reranker', '── Limits', 'Context', 'Thinking cap', 'Tries per fix', 'Steps per request', 'Command output', 'Command timeout', 'Trim at', 'Summarize at', 'Look first', 'Reset all']) expect(panel).toContain(label);
+  expect(panel).toMatch(/Look first\s+◀ auto\s+▶\s+default · follows Effort: none on Low · answers as soon as it is ready/); // Effort is Low
+  expect(panel).toMatch(/Reset all\s+↑↓ choose · ←→ change/); // the keys' hint sits on the Reset all line
   expect(panel).toMatch(/Who decides\s+◀ App\s+▶\s+default · the app sorts, reads ahead and checks, as before/);
   expect(panel).toMatch(/Retriever\s+◀ Meaning\s+▶\s+default · by meaning alone/);
   expect(panel).toMatch(/Reranker\s+◀ Off\s+▶\s+default · the search’s own order/);

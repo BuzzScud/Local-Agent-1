@@ -14,6 +14,7 @@ import { rankFiles } from './rank.mjs';
 import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
+import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
 import { pickSkill, skillNote, readSkills, skillsList, toolUseText } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
@@ -373,6 +374,10 @@ export class Agent extends EventEmitter {
     return true;
   }
   // /effort's Rules room and Up-front reading: 0 = auto, a share of the context (room.mjs).
+  // /effort's Look first (look.mjs): 'auto' follows Effort, 'off', or a number of seconds. The app
+  // and coding -p set it from /effort (auto by default); a bare Agent (tests, the practice runs) does not look first.
+  look = 'off';
+  get lookSecsNow() { return lookSecs(this.look, { thinking: this.thinking, effort: this.effort }); }
   rulesRoom = 0;
   upFront = 0;
   get notesRoomNow() { return this.rulesRoom || notesRoom(this.ctx); }
@@ -527,7 +532,7 @@ export class Agent extends EventEmitter {
   // the design examples with a request to make or restyle a page.
   withTurnNotes(messages) {
     const t = this.turn;
-    const extras = [t?.bug, t?.skill, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
     if (!extras.length) return messages;
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
@@ -820,6 +825,15 @@ export class Agent extends EventEmitter {
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
       fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
+    // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
+    // by step here; not a follow-up (it continues a turn that already looked), not in the home
+    // folder (a general question there needs no files), not for a helper (it is part of the looking).
+    const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) ? this.lookSecsNow : 0;
+    let lookBacks = 0;
+    if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.look = { request, notes: LOOK_NOTE };
+      this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim' });
+    }
     if (bug && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.bug = { request, steps: kindText(bug), kind: bug };
       // A check the request names scores the change instead of the whole suite
@@ -966,6 +980,15 @@ export class Agent extends EventEmitter {
           if (nudges < 2 && toolsUsed > 0 && this.hook('next-step') && announcesNextStep(text)) {
             nudges++;
             this.messages.push({ role: 'user', content: auto('You said what you will do next but did not do it. If you meant to, do it now with the tools; if you are waiting for the user, stop.') });
+            continue;
+          }
+          // Look first: an answer before the minimum, with nothing changed yet, goes back to look
+          // further, with what it has looked at so far (at most LOOK_BACKS times a message).
+          const lookedFor = (Date.now() - started) / 1000;
+          if (lookFloor && lookedFor < lookFloor && lookBacks < LOOK_BACKS && !this.turn.changed && turn.finish !== 'length') {
+            lookBacks++;
+            this.emit('note', { text: `Answered after ${Math.round(lookedFor)} s of the ${lookFloor} s minimum (/effort Look first); asked it to look further first.`, tone: 'dim' });
+            this.messages.push({ role: 'user', content: auto(lookBackNote(this.lookedSince(turnStart))) });
             continue;
           }
           // It says the work is done, but nothing changed in this message: no
@@ -1901,7 +1924,7 @@ export class Agent extends EventEmitter {
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
     });
-    Object.assign(helper, { isHelper: true, toolFilter: kind === 'explore' ? EXPLORE_TOOLS : null, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    Object.assign(helper, { isHelper: true, look: 'off', toolFilter: kind === 'explore' ? EXPLORE_TOOLS : null, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
     if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn) };
     const steps = [];
@@ -2080,6 +2103,20 @@ export class Agent extends EventEmitter {
       if (r.json.done || !r.json.missing?.trim()) return null;
       return r.json.missing.trim().slice(0, 200);
     } catch { return null; }
+  }
+
+  // What it looked at in this message (Read, Search, List, Map, CodeSearch), as the screen names them.
+  lookedSince(at) {
+    const out = [];
+    for (const m of this.messages.slice(at)) {
+      for (const c of m.tool_calls ?? []) {
+        const name = c.function?.name;
+        if (!['Read', 'Search', 'List', 'Map', 'CodeSearch'].includes(name)) continue;
+        const shown = display(name, parseArgs(name, c.function?.arguments ?? '').args ?? {});
+        out.push(`${shown.label}(${String(shown.arg ?? '').slice(0, 60)})`);
+      }
+    }
+    return out;
   }
 
   // Fixing a bug, it named the cause or the fix, then went on looking: a note
@@ -2313,7 +2350,7 @@ export class Agent extends EventEmitter {
     const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
     // The notes that go with the request (the steps for its kind of bug, a
     // check the fix path made) follow the request into the new conversation.
-    for (const x of [this.turn?.bug, this.turn?.skill, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
+    for (const x of [this.turn?.bug, this.turn?.skill, this.turn?.look, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
       const i = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).indexOf(x.request);
       if (i >= 0) x.request = opening[i];
     }

@@ -348,6 +348,17 @@ limit are handled on both. The Arena's **Who decides: App vs Model** check (`/te
 Practice 28 both ways, with its rule written before the first run: Model holds when it passes as many
 tasks and takes at most 25% more time.
 
+**Look first** (the last row of `/effort`, since 30 Sep 2026) is a minimum of looking before the model
+answers, so it gathers what it needs instead of answering from the first file: thinking only reasons
+over what is already in front of the model, reading is what finds more. When it is on, a task that goes
+step by step starts with a note to search for the names it involves and read where they are defined,
+used and tested, and an answer that comes before the minimum (with nothing changed yet) is sent back
+to look further, with what it has looked at so far: at most 3 times, and never once the minimum has
+passed (60 s at most). **auto** (the
+default) follows Effort: none on Low, 15 s on Medium, 30 s on High; **off**, or 15 to 60 s whatever the
+Effort. Follow-ups, the home folder and helpers never wait; the focused fix and change paths gather
+with their own search and are not changed.
+
 ## License
 
 GPL-3.0, see [LICENSE](LICENSE).
