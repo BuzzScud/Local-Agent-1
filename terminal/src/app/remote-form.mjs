@@ -215,8 +215,7 @@ export function toProfile(form, source = form.source) {
 
 // The warning under the form: a key that cannot be sent (on Anthropic's own
 // address, a Claude key's ID pasted for the key stops Connect; another kind of
-// key is worth a word); after a Connect, the problem that stopped it; else
-// plain http to the internet, worth knowing.
+// key is worth a word); after a Connect, the problem that stopped it.
 export function formWarning(form) {
   if (form.source === 'here') return null;
   const k = form.keys[form.source];
@@ -348,9 +347,10 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000 }
   } finally { tunnel?.stop(); }
 }
 
-// A check's findings on the form; an OpenAI-compatible server with one model, and none named: that one.
+// A check's findings on the form; an OpenAI-compatible server with none named: the one it picked.
 export function withTest(form, res, id) {
   const v = cur(form);
-  const one = v && !v.model && v.kind === 'openai' && res.models?.length === 1;
-  return { ...(one ? withValues(form, { model: res.models[0] }) : form), test: { ...res, id } };
+  const name = res.model || (res.models?.length === 1 ? res.models[0] : '');
+  const fill = v && !v.model && v.kind === 'openai' && name;
+  return { ...(fill ? withValues(form, { model: name }) : form), test: { ...res, id } };
 }

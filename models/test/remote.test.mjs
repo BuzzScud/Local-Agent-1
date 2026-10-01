@@ -12,7 +12,7 @@ import { createServer } from 'node:http';
 // A throwaway home before the models part is loaded (it reads AGENTIC_HOME once): nothing here reaches the real ~/.agentic-coder.
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { parseAddress, isPrivateHost, directUrl, remoteLabel, remoteProblem, remoteRisk, sshArgs, openTunnel, probe, connectRemote, endpointOf, authHeaders, remoteModel, GENERIC_REMOTE, validSshDest, validKey, keyEnd, warmUp, serveArgs, lanAddresses, serverArgs, MODELS, HOME } = await import('../index.mjs');
+const { parseAddress, isPrivateHost, directUrl, remoteLabel, remoteProblem, remoteRisk, sshArgs, openTunnel, probe, pickRemoteModel, connectRemote, endpointOf, authHeaders, remoteModel, GENERIC_REMOTE, validSshDest, validKey, keyEnd, warmUp, serveArgs, lanAddresses, serverArgs, MODELS, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // A stand-in remote: /health open, the rest behind `key` (as llama-server
@@ -61,10 +61,11 @@ test('where the calls go: llama.cpp on 8080 unless a port is given; https from t
   expect(remoteLabel(R({ address: 'studio', connect: 'ssh' }))).toBe('studio (ssh)');
 });
 
-test('private addresses (home, Tailscale, .local, a bare name) are told from the internet; plain http to the internet is a risk worth saying', () => {
+test('private addresses (home, Tailscale, .local, a bare name) are told from the internet; open http is allowed and not warned', () => {
   for (const h of ['localhost', '127.0.0.1', '10.0.0.5', '172.20.1.1', '192.168.1.40', '100.101.12.7', 'studio.local', 'box.tail1234.ts.net', 'gpu-box', '::1', 'fd12:3456::1']) expect([h, isPrivateHost(h)]).toEqual([h, true]);
   for (const h of ['8.8.8.8', '172.32.0.1', '100.128.0.1', 'api.example.com', '2001:db8::1']) expect([h, isPrivateHost(h)]).toEqual([h, false]);
-  expect(remoteRisk(R({ address: '203.0.113.9', key: true }))).toMatch(/plain http to 203\.0\.113\.9.*the API key travel unencrypted/);
+  expect(remoteRisk(R({ address: '203.0.113.9' }))).toBe(null);
+  expect(remoteRisk(R({ address: '203.0.113.9', key: true }))).toBe(null);
   expect(remoteRisk(R({ address: '192.168.1.40' }))).toBe(null);
   expect(remoteRisk(R({ address: '203.0.113.9', connect: 'https' }))).toBe(null);
   expect(remoteRisk(R({ address: 'https://203.0.113.9' }))).toBe(null);
@@ -180,6 +181,14 @@ test('the check on llama.cpp: reached, the key refused or taken, what it runs (c
   await fake.close();
 });
 
+test('when several models are listed and none named: a coder over vision and embeddings, a :latest tag over a quant; Connect uses that one', () => {
+  expect(pickRemoteModel([])).toBe(null);
+  expect(pickRemoteModel(['only'])).toBe('only');
+  expect(pickRemoteModel(['llava:latest', 'laguna-xs-2.1:bf16', 'laguna-xs-2.1:latest', 'nomic-embed-text'])).toBe('laguna-xs-2.1:latest');
+  expect(pickRemoteModel(['alpha:latest', 'coder:30b', 'tiny:3b'])).toBe('coder:30b');
+  expect(pickRemoteModel(['llava:latest', 'bakllava'])).toBe('llava:latest');
+});
+
 test('the check on an OpenAI-compatible server: its model list, the one it has picked, its context; a wrong address says so', async () => {
   const fake = await startFakeServer([], { key: 'test-right-0123456789', props: true });
   const r = await probe({ url: fake.url, kind: 'openai', key: 'test-right-0123456789', reply: true });
@@ -188,6 +197,25 @@ test('the check on an OpenAI-compatible server: its model list, the one it has p
   const keyless = await probe({ url: fake.url, kind: 'openai' });
   expect(keyless.error).toMatch(/but it needs an API key$/);
   await fake.close();
+  // Several models, none named: picks a coder and asks it (Connect no longer stops for the Model row).
+  const many = createServer(async (req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/v1/models') { res.end(JSON.stringify({ data: ['llava:latest', 'coder:7b', 'tiny:3b'].map((id) => ({ id })) })); return; }
+    for await (const _ of req) { /* body unused */ }
+    res.end(JSON.stringify({ choices: [{ message: { content: 'ready' } }] }));
+  });
+  await new Promise((r) => many.listen(0, '127.0.0.1', r));
+  try {
+    const picked = await probe({ url: `http://127.0.0.1:${many.address().port}`, kind: 'openai', reply: true });
+    expect(picked.ok).toBe(true);
+    expect(picked.model).toBe('coder:7b');
+    expect(picked.steps.map((s) => s.text)).toEqual([
+      expect.stringMatching(/^reached in \d+ ms$/),
+      'using coder:7b of 3',
+      'model coder:7b',
+      expect.stringMatching(/^answered "ready"/),
+    ]);
+  } finally { await new Promise((r) => many.close(r)); }
   // A port nothing listens on (taken and let go at once).
   const free = createServer();
   await new Promise((r) => free.listen(0, '127.0.0.1', r));

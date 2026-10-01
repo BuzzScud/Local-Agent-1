@@ -160,6 +160,9 @@ test('each service keeps its own rows: flipping Run on loses nothing typed; the 
   let o = moveRow(f, 'source', 1);
   o = withTest(o, { ok: true, steps: [], models: ['only-one'] }, 2);
   expect(showValue(o, 'model')).toBe('only-one');
+  // several models, Connect picked one: the Model row takes that name
+  o = withTest(moveRow(f, 'source', 1), { ok: true, steps: [], models: ['llava:latest', 'coder:7b'], model: 'coder:7b' }, 2);
+  expect(showValue(o, 'model')).toBe('coder:7b');
 });
 
 test('editing a row: typed and pasted text at the cursor; a key loses its spaces and breaks, a port keeps its digits; a whole https address sets Reach by', () => {
@@ -248,10 +251,11 @@ test('a Claude key: its ID (apikey_…) pasted for the key stops Connect and say
   expect(formWarning(claude(null))).toBe(null); // no key typed: nothing to say before Connect
 });
 
-test('the warning under the form: plain http to the internet, a key with a space; Claude needs no address', () => {
+test('the warning under the form: a key with a space; Claude needs no address; open http is not warned', () => {
   const on = (r) => openForm({ remote: { use: true, ...r } }, { on: true });
   expect(formWarning({ ...on({ kind: 'claude', key: true }), tried: true })).toBe(null);
-  expect(formWarning(on({ address: '203.0.113.9' })).text).toMatch(/^⚠ plain http to 203\.0\.113\.9/);
+  expect(formWarning(on({ address: '203.0.113.9' }))).toBe(null);
+  expect(formWarning(on({ address: '203.0.113.9', key: true }))).toBe(null);
   expect(formWarning(on({ address: '192.168.1.40' }))).toBe(null);
   expect(formWarning({ ...on({ address: '10.0.0.5' }), keys: { claude: null, machine: 'has space', openai: null } }).tone).toBe('error');
 });

@@ -111,14 +111,10 @@ export function remoteProblem(r) {
   return null;
 }
 
-// A warning worth saying when the remote is used: your code travels in the
-// clear to an address on the internet. null when it does not.
-export function remoteRisk(r) {
-  if (!r || (r.connect === 'ssh' && r.kind !== 'claude')) return null;
-  const a = parseAddress(addressOf(r));
-  if (!a) return null;
-  const scheme = a.scheme ?? (r.connect === 'https' || r.kind === 'claude' ? 'https' : 'http');
-  if (scheme === 'http' && !isPrivateHost(a.host)) return `plain http to ${a.host}, an address on the internet: your code${r.key ? ' and the API key' : ''} travel unencrypted. Use https or an SSH tunnel`;
+// Kept so the form, Connect and Doctor still call one place. Open http to an
+// address on the internet is allowed (a keyed server of yours); the form does
+// not warn.
+export function remoteRisk(_r) {
   return null;
 }
 
@@ -263,6 +259,30 @@ const why = (e) => {
 // /props, else a model list's own field (OpenRouter, vLLM, LM Studio, llama.cpp's meta).
 const ctxOf = (m) => m?.context_length ?? m?.max_model_len ?? m?.max_context_length ?? m?.meta?.n_ctx ?? m?.meta?.n_ctx_train ?? null;
 
+// The model an OpenAI-compatible server should be asked for when none was
+// named: skip embeddings and vision if it has a text model, prefer a coder
+// name and a :latest tag. One name, or null when the list is empty.
+export function pickRemoteModel(ids) {
+  const list = (ids ?? []).filter(Boolean);
+  if (!list.length) return null;
+  if (list.length === 1) return list[0];
+  const skip = /embed|embedding|rerank|\bbge[-_]|e5-|minilm|nomic-embed|mxbai|gte-|arctic-embed/i;
+  const vision = /llava|bakllava|moondream|minicpm-v|\bclip\b|:vision\b/i;
+  const good = /coder|codeqwen|qwen|llama|gemma|mistral|phi|deepseek|starcoder|codestral|command-r|glm|kimi|hermes|dolphin|mixtral|granite|smollm|olmo|wizard|magicoder|openchat|nous|orca|falcon|vicuna|yi-|internlm|solar/i;
+  const usable = list.filter((id) => !skip.test(id));
+  const text = usable.filter((id) => !vision.test(id));
+  const pool = text.length ? text : usable.length ? usable : list;
+  let best = pool[0], bestS = -1;
+  for (const id of pool) {
+    let s = 0;
+    if (good.test(id)) s += 10;
+    if (/:latest$/.test(id) || !id.includes(':')) s += 2;
+    if (/instruct|chat|-it\b/i.test(id)) s += 1;
+    if (s > bestS) { bestS = s; best = id; }
+  }
+  return best;
+}
+
 // Whether the remote answers, with its key, and what it runs. Answers
 // { ok, steps: [{ ok, text }], ctx, slots, models, model, file, ms, error }.
 // reply: also ask for a two-word answer (the form's Connect), which proves the
@@ -297,10 +317,12 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
       if (!r.ok || !Array.isArray(r.body?.data)) return fail(`the address answered ${r.status} to /v1/models: is it an OpenAI-compatible server? (with a path like /api/v1 when it has one)`);
       steps.push({ ok: true, text: `reached in ${out.ms} ms${key ? ' · the key was accepted' : ''}` });
       out.models = r.body.data.map((m) => m.id).filter(Boolean);
-      const picked = model ? r.body.data.find((m) => m.id === model) : r.body.data.length === 1 ? r.body.data[0] : null;
-      if (model && !picked && out.models.length) steps.push({ ok: true, text: `"${model}" is not in its list of ${out.models.length}; it is asked for anyway` });
-      out.model = model || picked?.id || null;
-      if (!out.model) return fail(`name a model in the Model row: it has ${out.models.length} (${out.models.slice(0, 3).join(', ')}${out.models.length > 3 ? '…' : ''})`);
+      const named = String(model ?? '').trim();
+      if (named && !out.models.includes(named) && out.models.length) steps.push({ ok: true, text: `"${named}" is not in its list of ${out.models.length}; it is asked for anyway` });
+      out.model = named || pickRemoteModel(out.models);
+      if (!out.model) return fail('it listed no models');
+      if (!named && out.models.length > 1) steps.push({ ok: true, text: `using ${out.model} of ${out.models.length}` });
+      const picked = r.body.data.find((m) => m.id === out.model);
       out.ctx = ctxOf(picked);
       steps.push({ ok: true, text: `model ${out.model}${out.ctx ? ` · ${Math.round(out.ctx / 1024)}k context` : ''}` });
     }

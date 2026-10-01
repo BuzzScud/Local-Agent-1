@@ -92,7 +92,7 @@ test('no terminal and no address: a plain message, nothing saved', async () => {
   expect(text).toContain('give the address');
 });
 
-test('plain http to an address on the internet is allowed, with one warning', async () => {
+test('plain http to an address on the internet is allowed; a key means no warning', async () => {
   // The check is stubbed: no real address is reached from a test.
   const lines = [];
   const code = await connectCli(['http://203.0.113.7:60009', '--key', KEY], {
@@ -101,7 +101,7 @@ test('plain http to an address on the internet is allowed, with one warning', as
   });
   const text = lines.join('');
   expect(code).toBe(0);
-  expect(text).toContain('unencrypted');
+  expect(text).not.toContain('unencrypted');
   expect(text).toContain('Saved');
   expect(loadSettings().remote).toMatchObject({ use: true, address: 'http://203.0.113.7:60009' });
 });
@@ -116,25 +116,19 @@ const ollama = () => new Promise((ok) => {
   srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
 });
 
-test('an Ollama-like server (no llama.cpp /health, several models): found by itself, asks which model in a terminal', async () => {
+test('an Ollama-like server (no llama.cpp /health, several models): found by itself, picks a coder when none is named', async () => {
   const srv = await ollama();
   try {
-    const { code, text } = await run([srv.url, '--no-key'], { ask: typed('2') });
-    expect(text).toContain('3 models');
-    expect(text).toContain('coder:30b');
+    const { code, text } = await run([srv.url, '--no-key']);
+    expect(text).toContain('using coder:30b of 3');
     expect(code).toBe(0);
     expect(loadSettings().remote).toMatchObject({ use: true, kind: 'openai', model: 'coder:30b', key: false });
   } finally { await srv.close(); }
 });
 
-test('the same with no terminal: it names the models and says --model, saving nothing', async () => {
+test('the same with --model: that name is kept, even when it is not the pick', async () => {
   const srv = await ollama();
-  const before = JSON.stringify(loadSettings().remote);
   try {
-    const { code, text } = await run([srv.url, '--no-key']);
-    expect(code).toBe(1);
-    expect(text).toContain('--model NAME');
-    expect(JSON.stringify(loadSettings().remote)).toBe(before);
     const ok = await run([srv.url, '--no-key', '--model', 'tiny:3b']);
     expect(ok.code).toBe(0);
     expect(loadSettings().remote).toMatchObject({ kind: 'openai', model: 'tiny:3b' });

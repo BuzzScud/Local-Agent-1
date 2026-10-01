@@ -45,9 +45,7 @@ the API key, if there is one), checks them, and saves them. To skip the question
 curl -fsSL https://raw.githubusercontent.com/BuzzScud/Local-Agent-1/main/install.sh | sh -s -- --terminal-only
 ```
 
-Later, `coding connect` does the same step again, and `/remote` in the app changes it. A
-plain `http://` address on the internet sends your code (and key) unencrypted; use https or an
-SSH tunnel for that.
+Later, `coding connect` does the same step again, and `/remote` in the app changes it.
 
 You can run the installer again at any time. It updates the code and skips the parts that
 are already done. Options: `AGENTIC_DIR=~/somewhere` picks the folder, and `AGENTIC_YES=1`
@@ -185,9 +183,7 @@ coding serve --https cert.pem key.pem   # https with your certificate (tailscale
 ```
 
 With a remote in use, your prompts, your code and the files Agentic Coder reads go to that
-machine. Plain http to an address on the internet sends them unencrypted, so the form warns
-about it; use https or the SSH tunnel there. The memory's small search models still run on
-this Mac.
+machine. The memory's small search models still run on this Mac.
 
 ## Two parts
 
