@@ -165,7 +165,7 @@ test('edited weights, one copy per model: the picker lists each after the models
     { wait: 'Recent activity' }, { sleep: 400 }, { snapshot: 'badge' },
     { type: '/model' }, { sleep: 300 }, { key: 'enter' }, { sleep: 500 }, { snapshot: 'picker' },
     // the copies come after every model, in the models' order: the last row is the second model's
-    ...[1, 2, 3, 4, 5].flatMap(() => [{ key: 'down' }, { sleep: 150 }]), { key: 'enter' },
+    ...[1, 2, 3, 4, 5, 6].flatMap(() => [{ key: 'down' }, { sleep: 150 }]), { key: 'enter' },
     { wait: 'Could not switch' }, { sleep: 300 }, { snapshot: 'after' },
     ...quit,
   ] });
@@ -173,7 +173,7 @@ test('edited weights, one copy per model: the picker lists each after the models
   expect(r.snapshots.badge).toContain('✱ edited weights ready · /model to switch');
   // each row: the name, then (after a gap, whatever the name's length) its size and what it is
   const rows = r.snapshots.picker.split('\n').filter((l) => /GB · /.test(l)).map((l) => l.replace(/[❯│]/g, '').trim().split(/\s{2,}/).slice(0, 2).map((x) => x.replace(/saved .*/, 'saved')));
-  expect(rows).toEqual([['Gemma 4 12B QAT', '6.7 GB · on this Mac'], ['Qwen3.5 9B', '6.9 GB · on this Mac'], ['K2 Horizon 7B', '6.5 GB · on this Mac'], ['Gemma 4 12B QAT · edited', '0.0 GB · 1 edit · saved'], ['Qwen3.5 9B · edited', '0.0 GB · 2 edits · saved']]);
+  expect(rows).toEqual([['Gemma 4 12B QAT', '6.7 GB · on this Mac'], ['Qwen3.5 9B', '6.9 GB · on this Mac'], ['K2 Horizon 7B', '6.5 GB · on this Mac'], ['Bonsai 2 27B', '7.2 GB · on this Mac'], ['Gemma 4 12B QAT · edited', '0.0 GB · 1 edit · saved'], ['Qwen3.5 9B · edited', '0.0 GB · 2 edits · saved']]);
   expect(r.snapshots.picker).toContain('1 edit · saved'); expect(r.snapshots.picker).toContain('2 edits · saved');
   expect(r.text).toContain('Could not switch:');
   expect(r.snapshots.after).toContain('✱ on edited weights (2 edits)'); // Qwen's copy, with Qwen's two edits

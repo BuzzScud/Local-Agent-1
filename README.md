@@ -189,8 +189,9 @@ The model today is **Qwen3.5 9B** (Alibaba, 6.9 GB, its speed-up layer inside th
 took for 22. **Gemma 4 12B QAT** (Google, 6.7 GB) is still one pick away in `/model`
 ([`models/gemma-4-12b/`](models/gemma-4-12b/model.mjs); `coding setup` downloads only the
 default, so run it with Gemma picked to get Gemma's file). The previous
-brain, **Bonsai 2 27B**, is kept as a recipe in [`models/bonsai-2-27b/`](models/bonsai-2-27b/README.md)
-(settings, checksum, what was measured); its file was removed to free the disk.
+brain, **Bonsai 2 27B** (Prism ML's ternary Qwen3.8 27B, 7.2 GB), is back in `/model` since
+1 Oct 2026 ([`models/bonsai-2-27b/`](models/bonsai-2-27b/README.md); `coding setup --model bonsai`
+downloads it).
 
 The terminal talks to the models part through one file, `models/index.mjs`. The
 test bench goes the other way: it runs the terminal's agent with a model and grades
@@ -212,7 +213,7 @@ agentic-coder/
 │  ├─ gemma-4-12b/      the other model in /model: settings (results/ stays local)
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
 │  ├─ qwen3-reranker-0.6b/ the reranker /effort's Reranker row turns on (off by default)
-│  ├─ bonsai-2-27b/     the previous model, kept as a recipe (file removed)
+│  ├─ bonsai-2-27b/     the previous model, back in /model: settings (results/ stays local)
 │  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Arena: its runner, page and tests), reports, tools, dev
 │  └─ test/             unit tests of the models part
 └─ docs/                every diagram, preview, report and test page, the one home, by group (gemma-docs/ is one); private/ = the owner's own, on the Mac only; tools/ = the index and its check

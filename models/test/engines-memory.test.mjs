@@ -9,7 +9,7 @@ import bonsai from '../bonsai-2-27b/model.mjs';
 
 const gemma = MODELS[DEFAULT_MODEL];
 
-test('each model runs on its engine: Bonsai on Prism, the others on the default; AGENTIC_ENGINE picks one for all', () => {
+test('each model runs on its engine: Bonsai on Prism, the others on the default; AGENTIC_ENGINE picks one for all but Bonsai', () => {
   expect(engineOf(bonsai).id).toBe('prism');
   expect(engineOf(gemma).id).toBe(gemma.engine ?? DEFAULT_ENGINE);
   expect(serverBinOf(bonsai)).toBe(join(HOME, 'engine', ENGINES.prism.tag, 'llama-server'));
@@ -18,9 +18,10 @@ test('each model runs on its engine: Bonsai on Prism, the others on the default;
   const was = process.env.AGENTIC_ENGINE;
   try {
     process.env.AGENTIC_ENGINE = 'official';
-    expect(engineOf(bonsai).id).toBe('official');
+    expect(engineOf(gemma).id).toBe('official');
+    expect(engineOf(bonsai).id).toBe('prism'); // its ternary file runs on Prism's only (engineOnly)
     process.env.AGENTIC_ENGINE = 'nonsense'; // an unknown name is ignored
-    expect(engineOf(bonsai).id).toBe('prism');
+    expect(engineOf(gemma).id).toBe(gemma.engine ?? DEFAULT_ENGINE);
   } finally {
     if (was === undefined) delete process.env.AGENTIC_ENGINE; else process.env.AGENTIC_ENGINE = was;
   }

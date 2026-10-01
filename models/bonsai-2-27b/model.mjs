@@ -1,14 +1,26 @@
-// Bonsai 2 27B (Prism ML, ternary PQ2_0): the model Bonsai Code runs today.
+// Bonsai 2 27B (Prism ML, ternary PQ2_0): Qwen3.8 27B with every weight cut
+// to -1, 0 or +1, keeping 98.2% of the full model's scores on Prism's 14 tests.
+// It was the model Bonsai Code ran until 28 Sep 2026, then left /model to free
+// the disk; back on 1 Oct 2026 as the fourth choice (Qwen stays the default).
 // Everything about this model lives in this folder: its settings (below), what
 // was measured (README.md), the report pages (reports/) and the raw test runs
 // (results/, not in git). The terminal never reads this file directly; it asks
 // models/index.mjs for a model by id.
 export default {
   folder: 'bonsai-2-27b',
-  // Its ternary file (PQ2_0) runs only on Prism's llama.cpp with our patch.
+  // Its ternary file (PQ2_0) runs only on Prism's llama.cpp with our patch, so
+  // it keeps that engine even when AGENTIC_ENGINE points the others at one.
   engine: 'prism',
-  id: '27b',
+  engineOnly: true,
+  // 'bonsai': the id its runs already carry in the test record (models/evals/record.mjs).
+  id: 'bonsai',
   name: 'Bonsai 2 27B',
+  by: 'Prism ML, from Alibaba’s Qwen3.8 27B',
+  // Tokens a second on this Mac, from the server log across the 28 practice
+  // tasks of 25 Sep 2026 with the helper below (results/runs/2026-09-25-fast):
+  // reading 52.3, writing 13.7.
+  measured: { read: 52, write: 13.7 },
+  watch: [],
   file: 'Ternary-Bonsai-2-27B-PQ2_0.gguf',
   url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-PQ2_0.gguf',
   sha256: '3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1',
@@ -20,6 +32,7 @@ export default {
   // fixed-size running state.
   attnLayers: 16, kvHeads: 4, headDim: 256, maxCtx: 262_144,
   fixedStateBytes: 0.16e9,
+  // fileInUse is not measured for this model, so a start counts its whole file.
   // To pick a conversation up again, the server saves checkpoints of that
   // running state (150 MiB each). Its defaults (32 checkpoints plus an 8 GB
   // store of old prompts) grew to 9 GB in 13 prompts; 4 checkpoints and no
@@ -51,6 +64,17 @@ export default {
     nMax: 1,
     ubatch: 128,
     computeBytes: 0.7e9,
+  },
+  // Its vision add-on (Prism's Q8_0 projector): loaded with the model only once
+  // a picture is attached (--mmproj). Not tried on this Mac yet; computeBytes
+  // and minTokens are Qwen3.5 9B's, the same family's vision.
+  vision: {
+    file: 'Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf',
+    url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf',
+    sha256: '6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903',
+    bytes: 629_246_976,
+    computeBytes: 0.3e9,
+    minTokens: 1024,
   },
   // Measured 2026-09-24 on the M4: 10.4 tokens/s writing, 61 reading.
   // Thinking starts off; /think on turns on PrismML's "medium" effort (about

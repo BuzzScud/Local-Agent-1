@@ -1,16 +1,16 @@
-// The models part on its own: the registry (Gemma 4 12B QAT, the model in use;
-// Bonsai 2 27B kept as a recipe), the thinking switch, the memory math and the
-// server's flags. The 27B's own tests still run against its recipe file.
+// The models part on its own: the registry (Qwen3.5 9B the default, Gemma 4 12B
+// QAT, K2 Horizon 7B and Bonsai 2 27B in /model), the thinking switch, the memory
+// math and the server's flags. The 27B's own tests run against its model file.
 import { test, expect } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
 import bonsai27b from '../bonsai-2-27b/model.mjs';
 
-const m = bonsai27b; // the 27B's recipe: its settings are still exact
+const m = bonsai27b; // the 27B: its settings as tested on this Mac (25-28 Sep 2026)
 const g = MODELS.gemma;
 
-test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second model, K2 Horizon 7B the third; the 27B stays as a recipe', () => {
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2']);
+test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second model, K2 Horizon 7B the third, Bonsai 2 27B the fourth (back since 1 Oct 2026)', () => {
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2', 'bonsai']);
   expect(DEFAULT_MODEL).toBe('qwen');
   expect(g.file).toBe('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf');
   expect(g.bytes).toBe(6_716_356_800);
@@ -18,7 +18,10 @@ test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second 
   expect(g.thinkingDefault).toBe(false);
   expect(g.draft.file).toBe('mtp-gemma-4-12b-it.gguf'); // Google's MTP helper (speed probe, 28 Sep)
   expect(modelFolder(g)).toMatch(/models\/gemma-4-12b\/$/);
-  // the retired 27B: still a complete recipe to bring back
+  // the 27B: listed under the id its old runs carry, on Prism's engine only, able to see
+  expect(MODELS.bonsai).toBe(m);
+  expect([m.engine, m.engineOnly]).toEqual(['prism', true]);
+  expect(m.vision.file).toBe('Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf');
   expect(m.file).toBe('Ternary-Bonsai-2-27B-PQ2_0.gguf');
   expect(m.bytes).toBe(7_206_168_928);
   expect(m.folder).toBe('bonsai-2-27b');
@@ -180,5 +183,5 @@ test('the memory\'s matcher: BGE-M3, in the engine\'s embedding mode, beside the
   // none of the chat model's flags
   for (const f of ['--jinja', '--reasoning-budget', '-md', '--slot-save-path', '--spec-type']) expect(a).not.toContain(f);
   // and it is not one of the models /model offers
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2']);
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2', 'bonsai']);
 });

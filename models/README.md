@@ -13,7 +13,7 @@ the agent with each one.
 | `k2-horizon-7b/` | The third model in `/model`, on its own engine (IFM's llama.cpp): `model.mjs` (its settings, its tool-call format and its thinking tags), `results/` (raw runs, on this Mac only). |
 | `bge-m3/` | The small model that compares meanings, for the memory: it finds the saved facts that fit a request. `runtime/embed.mjs` runs it in the engine's embedding mode, beside the model in use. |
 | `qwen3-reranker-0.6b/` | The reranker behind /effort's Reranker row (off by default): it reads a request together with each of the search's best pieces and orders them. `runtime/rerank.mjs` runs it in the engine's reranking mode (`--rerank`). `README.md` has the 29 Sep bake-off that picked it. |
-| `bonsai-2-27b/` | The previous model, kept as a recipe: `model.mjs` (its settings), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
+| `bonsai-2-27b/` | The fourth model in `/model` (the previous default, back since 1 Oct 2026), on Prism's engine only: `model.mjs` (its settings, its helper and its vision add-on), `README.md` (what was measured, with links to its report pages in `docs/`), `results/` (raw runs, kept on this Mac, not in git). |
 | `evals/` | The test bench (below). |
 | `test/` | Unit tests of this part: the registry, memory math, server flags, warm-up, sharing a server. |
 

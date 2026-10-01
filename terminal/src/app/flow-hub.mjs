@@ -375,7 +375,6 @@ export function flowPage(d, { dated = '' } = {}) {
 │  ├─ index.mjs          the one door
 │  ├─ runtime/           llama-server, memory fit, warm-up, setup
 ${M.map((m) => `│  ├─ ${esc(`${d.folders[m.id]}/`.padEnd(19))}<em>${esc(m.name)}</em>${m.tags.length ? ` · ${m.tags.join(' · ')}` : ''}`).join('\n')}
-│  ├─ bonsai-2-27b/      retired, kept as a recipe
 │  ├─ bge-m3/            finds memory facts by meaning
 │  └─ evals/             the test bench
 ├─ <b>docs/</b>                every diagram, report and test page · private/ stays on this Mac

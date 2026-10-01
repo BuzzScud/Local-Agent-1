@@ -15,7 +15,7 @@ export const HOME = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? (ex
 // (`engine` in its model.mjs); one that names none runs on DEFAULT_ENGINE.
 //   official: llama.cpp's own release, as Google's guide for Gemma 4 asks.
 //   prism:    Prism ML's llama.cpp with our Metal patch (it checks 2-8 guessed
-//             words in one pass): the Bonsai 27B's ternary file needs it.
+//             words in one pass): the only one that runs Bonsai 2 27B's ternary file.
 //   ifm:      MBZUAI IFM's llama.cpp (branch model/K2Horizon, on llama.cpp of
 //             28 Aug 2026): the only one that runs K2 Horizon so far.
 // AGENTIC_ENGINE=official|prism runs everything on one (a comparison, or a way
@@ -38,14 +38,14 @@ export const DEFAULT_PORT = 17600;
 
 // One entry per model folder. To add a model: make models/<name>/model.mjs
 // (copy this model's as a start), import it here, and add it to the list.
-// models/bonsai-2-27b/ is kept as a recipe (settings, checksum, results) but
-// is no longer listed: its file was removed on 28 Sep 2026 to free the disk.
-// To bring it back: import it here, add it to ALL, run `coding setup`.
+// Bonsai 2 27B left the list on 28 Sep 2026 (its file removed to free the
+// disk) and came back on 1 Oct 2026; `coding setup --model bonsai` fetches it.
 import gemma4_12b from './gemma-4-12b/model.mjs';
 import qwen35_9b from './qwen3.5-9b/model.mjs';
 import k2Horizon7b from './k2-horizon-7b/model.mjs';
+import bonsai2_27b from './bonsai-2-27b/model.mjs';
 
-const ALL = [gemma4_12b, qwen35_9b, k2Horizon7b];
+const ALL = [gemma4_12b, qwen35_9b, k2Horizon7b, bonsai2_27b];
 export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
 // Qwen3.5 9B since 30 Sep 2026: with thinking on it passed 24 of 24 practice

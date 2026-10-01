@@ -280,14 +280,15 @@ test('every model: /models.json lists each with its tags, /model/<id> gives that
   const r = require('node:child_process').spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 30000 });
   const out = JSON.parse(r.stdout.trim().split('\n').pop() || (() => { throw new Error(r.stderr); })());
   const G = 'gemma-4-12B-it-qat-UD-Q4_K_XL', Q = 'Qwen3.5-9B-MTP-UD-Q5_K_XL';
-  // no file yet: all are listed (K2 Horizon, the third, since 30 Sep 2026), all "not on this Mac", and the default is the one in use
+  // no file yet: all are listed (K2 Horizon, the third, since 30 Sep 2026; Bonsai 2 27B, the fourth, since 1 Oct), all "not on this Mac", and the default is the one in use
   const K = ['k2', 'K2 Horizon 7B', true, 0, ['not on this Mac']];
+  const B = ['bonsai', 'Bonsai 2 27B', true, 0, ['not on this Mac']];
   expect(out.none.inUse).toBe('qwen');
-  expect(out.none.models.map((m) => [m.id, m.name, m.missing, m.size, m.tags])).toEqual([['gemma', 'Gemma 4 12B QAT', true, 0, ['not on this Mac']], ['qwen', 'Qwen3.5 9B', true, 0, ['default', 'in use now', 'not on this Mac']], K]);
+  expect(out.none.models.map((m) => [m.id, m.name, m.missing, m.size, m.tags])).toEqual([['gemma', 'Gemma 4 12B QAT', true, 0, ['not on this Mac']], ['qwen', 'Qwen3.5 9B', true, 0, ['default', 'in use now', 'not on this Mac']], K, B]);
   // the model /model saved last is the one in use, its edited copy counted as the model itself
   expect(out.one.inUse).toBe('gemma');
-  expect(out.one.models.map((m) => [m.id, m.missing, m.tags])).toEqual([['gemma', false, ['in use now']], ['qwen', true, ['default', 'not on this Mac']], ['k2', true, ['not on this Mac']]]);
-  expect(out.both.models.map((m) => [m.id, m.missing, m.size > 0, m.by.length > 0, m.file])).toEqual([['gemma', false, true, true, `${G}.gguf`], ['qwen', false, true, true, `${Q}.gguf`], ['k2', true, false, true, 'K2-Horizon-7B-Q5_K_M.gguf']]);
+  expect(out.one.models.map((m) => [m.id, m.missing, m.tags])).toEqual([['gemma', false, ['in use now']], ['qwen', true, ['default', 'not on this Mac']], ['k2', true, ['not on this Mac']], ['bonsai', true, ['not on this Mac']]]);
+  expect(out.both.models.map((m) => [m.id, m.missing, m.size > 0, m.by.length > 0, m.file])).toEqual([['gemma', false, true, true, `${G}.gguf`], ['qwen', false, true, true, `${Q}.gguf`], ['k2', true, false, true, 'K2-Horizon-7B-Q5_K_M.gguf'], ['bonsai', true, false, true, 'Ternary-Bonsai-2-27B-PQ2_0.gguf']]);
   expect(out.bytes).toEqual([[206, 'GGUF'], [206, 'GGUF'], [416, ''], [404, '']]);
   // each model's copy is its own file with its own manifest, built from that model's original
   expect([out.saveQ.status, out.saveQ.body.saved.base, out.saveQ.body.saved.file, out.saveQ.body.rowsChanged]).toEqual([200, 'qwen', `${Q}-edited.gguf`, 1]);
@@ -299,7 +300,7 @@ test('every model: /models.json lists each with its tags, /model/<id> gives that
   expect(out.listed).toEqual([['gemma-edited', 'Gemma 4 12B QAT · edited', 'gemma', 2], ['qwen-edited', 'Qwen3.5 9B · edited', 'qwen', 1]]);
   expect(out.byId).toEqual([`${Q}-edited.gguf`, `${G}-edited.gguf`, null]);
   expect(out.json.saved.base).toBe('qwen'); expect(Object.keys(out.json.all)).toEqual(['gemma', 'qwen']); // saved: the default model's copy
-  expect(out.tagged).toEqual([['gemma', 2], ['qwen', 1], ['k2', 0]]);
+  expect(out.tagged).toEqual([['gemma', 2], ['qwen', 1], ['k2', 0], ['bonsai', 0]]);
   // removing one model's copy leaves the other's
   expect(out.revert).toBe(200);
   expect(out.after).toEqual({ all: ['gemma'], files: [`${Q}.gguf`, 'edited-gemma.json', `${G}-edited.gguf`, `${G}.gguf`].sort(), gemmaCopyIntact: true });
