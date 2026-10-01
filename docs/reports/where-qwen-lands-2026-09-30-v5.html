@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Where Qwen Lands</title>
+<script>document.documentElement.classList.add('js')</script>
+<style>
+:root{--bg:#fcfcfb;--card:#ffffff;--ink:#1d1d1b;--ink2:#5c5b57;--mut:#8a8984;--line:#e4e3de;--rule:#cfcec9;
+--best:#a9d2fb;--bestb:#3d8be0;--other:#e3e4e6;--qwen:#c4521f;--qwen-t:#eb68341a;--qwen-s:#eb683438;--hatch:#d9d8d3;--ok:#e8f3e8;--bar:#2a78d6;--qbar:#eb6834;--bad:#f6dcd3;--badink:#7a2a0e}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#1a1a19;--card:#222220;--ink:#ecebe7;--ink2:#b3b2ad;--mut:#8f8e89;--line:#34342f;--rule:#46463f;
+--best:#1f4670;--bestb:#5aa2f0;--other:#36383c;--qwen:#f08452;--qwen-t:#d9592621;--qwen-s:#d9592648;--hatch:#3a3a35;--ok:#1f3322;--bar:#3987e5;--qbar:#d95926;--bad:#4a2417;--badink:#f3b9a3}}
+:root[data-theme=dark]{--bg:#1a1a19;--card:#222220;--ink:#ecebe7;--ink2:#b3b2ad;--mut:#8f8e89;--line:#34342f;--rule:#46463f;
+--best:#1f4670;--bestb:#5aa2f0;--other:#36383c;--qwen:#f08452;--qwen-t:#d9592621;--qwen-s:#d9592648;--hatch:#3a3a35;--ok:#1f3322;--bar:#3987e5;--qbar:#d95926;--bad:#4a2417;--badink:#f3b9a3}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1400px;margin:0 auto;padding:14px 20px 12px}
+header.top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header.top h1{font-size:21px;margin:0}
+header.top .date{color:var(--mut);font-size:13px}
+.verdict{margin:4px 0 10px;color:var(--ink2);font-size:14.5px;max-width:1180px}
+.verdict b{color:var(--ink)}
+.tabbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.tabbar button{appearance:none;font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--ink2);padding:5px 14px;border-radius:999px;cursor:pointer}
+.tabbar button:hover{color:var(--ink)}
+.tabbar button[aria-selected=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tabbar button:focus-visible{outline:2px solid var(--bestb);outline-offset:2px}
+.js .tabpanel{display:none}.js .tabpanel.on{display:block}
+.tabpanel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 18px 12px}
+html:not(.js) .tabpanel{margin-bottom:14px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--ink2);margin:0 0 8px;align-items:center}
+.legend i{display:inline-block;width:14px;height:12px;border-radius:2px;vertical-align:-1px;margin-right:6px}
+.legend .lb{background:var(--best);box-shadow:inset 0 0 0 1px var(--bestb)}.legend .lo{background:var(--other)}
+.legend .lr{background:var(--qwen-s)}.legend .lg{box-shadow:inset 0 0 0 1px var(--qwen)}
+.legend .lc{background:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px var(--rule)}
+.legend .dir{margin-left:auto;color:var(--ink)}
+.scroll{overflow-x:auto}
+table.g{border-collapse:separate;border-spacing:0;width:100%;min-width:1080px;font-variant-numeric:tabular-nums}
+.g th,.g td{padding:0 10px;height:30px;border-bottom:1px solid var(--line);vertical-align:middle}
+.g thead th{height:auto;padding:4px 10px 6px;font-weight:500;font-size:14px;line-height:1.2;border-bottom:1px solid var(--rule);vertical-align:bottom}
+.g thead th.bh{text-align:left}
+.g thead th.mh{text-align:center;width:118px}
+.g thead th.gem{border:2px solid var(--bestb);border-bottom-color:var(--rule);border-radius:4px 4px 0 0}
+.g thead th.qh{color:var(--qwen);text-align:center;width:150px}
+.g thead th small{display:block;color:var(--mut);font-weight:400;font-size:12px}
+.g tr.gend>*{border-bottom:1px solid var(--rule)}
+.g th.cat{font-weight:400;font-size:12.5px;color:var(--ink2);text-align:left;vertical-align:top;padding-top:7px;width:118px;border-bottom:1px solid var(--rule)}
+.g th.b{text-align:left;font-weight:500;font-size:14.5px;white-space:nowrap}
+.g td.ql{font-size:12px;color:var(--ink2);text-align:right;line-height:1.15;white-space:nowrap}
+.g tr.sub td.ql{border-left:0}
+.g td.m{text-align:center;font-size:15.5px;font-weight:500}
+.g td.gem{border-left:2px solid var(--bestb);border-right:2px solid var(--bestb)}
+.g tbody tr:last-child td.gem{border-bottom:2px solid var(--bestb)}
+.g td.top-g{background:var(--best);font-weight:700}
+.g td.top-o{background:var(--other);font-weight:700}
+.g .dash{color:var(--mut)}
+.g td.gap,.g th.gap{width:14px;padding:0;border-bottom:0}
+.g td.q{text-align:center;white-space:nowrap}
+.g td.q b{font-size:15.5px}
+.g td.q small{font-size:11.5px;color:var(--ink2);margin-left:6px}
+.g td.q1{border-left:1px solid var(--rule)}
+.g td.q2{border-right:1px solid var(--rule);border-left:1px dashed var(--line)}
+.g td.guess b{font-weight:500;color:var(--ink)}
+.g td.guess small::before{content:"("}.g td.guess small::after{content:")"}
+.g td.real{background:var(--qwen-s)}
+.g td.real b{font-weight:700}
+.g td.cant{background:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 7px)}
+.g td.cant .no{font-size:13px;font-weight:600;color:var(--ink2)}
+.g td.cant small{background:var(--card);padding:0 4px;border-radius:3px}
+.foot{font-size:12.5px;color:var(--mut);margin:7px 0 0}
+.two{display:grid;grid-template-columns:1.1fr 1fr;gap:22px}
+h2{font-size:17px;margin:0 0 4px}
+.lead{color:var(--ink2);margin:0 0 10px;font-size:14px}
+table.an{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+.an th,.an td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.an thead th{font-size:12px;color:var(--mut);font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.an tbody th{font-weight:500}
+.an tbody th small{display:block;font-weight:400;color:var(--mut);font-size:12px}
+.an td.an b{color:var(--qwen);font-size:15px}
+.an td.src2{color:var(--mut);font-size:12.5px}
+.callout{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:12px 0 0;font-size:14px;color:var(--ink2)}
+.callout b{color:var(--ink)}
+ul.lim{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+ul.lim li{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+ul.lim b{display:block;font-size:14.5px}
+ul.lim span{display:block;color:var(--ink2);font-size:13.5px}
+ul.lim em{display:block;font-style:normal;font-size:12px;color:var(--qwen);margin-top:2px}
+.ocs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.oc{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--bg)}
+.oc span{display:block;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.oc b{display:block;font-size:26px;font-variant-numeric:tabular-nums;margin:2px 0}
+.oc small{display:block;color:var(--ink2);font-size:13px}
+.oc.ok b{color:var(--ink)}
+.oc.bad{background:var(--bad)}.oc.bad b,.oc.bad small{color:var(--badink)}
+.cmp2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.cmp2 div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.cmp2 h3{margin:0 0 4px;font-size:14.5px}
+.cmp2 p{margin:0;color:var(--ink2);font-size:13.5px}
+ol.notes{margin:0;padding-left:20px;color:var(--ink2);font-size:13.5px}
+ol.notes li{margin:0 0 6px}
+ol.notes b{color:var(--ink)}
+ul.srcs{margin:0;padding-left:18px;font-size:13.5px}
+ul.srcs li{margin:0 0 5px;overflow-wrap:anywhere}
+a{color:var(--bestb)}
+
+.bcs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.bc{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--bg)}
+.bc header{display:flex;gap:10px;align-items:flex-start}
+.bc .bn{flex:none;width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--bg);font-weight:700;font-size:13px;display:grid;place-items:center;margin-top:2px}
+.bc header div:nth-child(2){flex:1;min-width:0}
+.bc h3{margin:0;font-size:16px}
+.bc header p{margin:0;font-size:12.5px;color:var(--ink2);line-height:1.3}
+.bc .ai{text-align:right;flex:none}
+.bc .ai b{display:block;font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
+.bc .ai small{font-size:11px;color:var(--mut)}
+table.vs{width:100%;border-collapse:collapse;margin:8px 0 0;font-size:13px;font-variant-numeric:tabular-nums}
+.vs th,.vs td{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right}
+.vs th:first-child{text-align:left;font-weight:400;color:var(--ink2)}
+.vs thead th{font-size:11.5px;color:var(--mut);font-weight:500}
+.vs thead th:first-child{color:var(--mut)}
+.vs td.w{font-weight:700;background:var(--ok)}
+.vsrc{margin:3px 0 6px;font-size:11.5px;color:var(--mut)}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:12px;padding:2px 9px;border-radius:999px}
+.chip.ok{background:var(--ok);color:var(--ink)}.chip.bad{background:var(--bad);color:var(--badink)}
+.bnote{margin:6px 0 0;font-size:12.5px;color:var(--ink2);line-height:1.35}
+.under{display:grid;grid-template-columns:1.05fr 1fr;gap:22px;margin-top:12px}
+.rank{display:grid;gap:4px}
+.rr{display:grid;grid-template-columns:20px 330px 1fr;gap:8px;align-items:center;padding:3px 0}
+.rr .rk{font-size:12px;font-weight:700;color:var(--ink2);text-align:center}
+.rr .rn b{font-size:13.5px;font-weight:600;line-height:1.2}
+.rr .rn small{font-size:11.5px;color:var(--mut);line-height:1.2;margin-left:8px}
+.rr .rb{display:flex;align-items:center;gap:8px}
+.rr .rb i{display:block;height:14px;border-radius:0 4px 4px 0;background:var(--bar)}
+.rr.qwen .rb i{background:var(--qbar)}
+.rr .rb span{font-size:13.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.rr:hover{background:var(--bg);border-radius:6px}
+.rcap{font-size:12px;color:var(--mut);margin:6px 0 0}
+ul.mean{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink2)}
+ul.mean li{margin:0 0 6px}
+ul.mean b{color:var(--ink)}
+
+table.u27{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.u27 th,.u27 td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.u27 thead th{font-size:12px;color:var(--mut);font-weight:500;border-bottom:1px solid var(--rule)}
+.u27 tbody th b{font-size:14.5px}
+.u27 small{display:block;font-size:12px;color:var(--mut);font-weight:400;line-height:1.25}
+.u27 td.rk2{width:28px;font-weight:700;color:var(--ink2);text-align:center}
+.u27 td.sz{white-space:nowrap;color:var(--ink2)}
+.u27 td.ix{width:230px}
+.u27 .ib{display:flex;align-items:center;gap:8px}
+.u27 .ib i{display:block;height:12px;border-radius:0 4px 4px 0;background:var(--bar)}
+.u27 .ib i.q{background:var(--qbar)}
+.u27 .ib b{font-size:15px}
+.u27 td.ok2{color:var(--ink)}
+.u27 td.no2{color:var(--ink2);background:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 7px)}
+.u27 td.warn2{background:var(--bad)}
+.u27 td.warn2 b,.u27 td.warn2 small{color:var(--badink)}
+.u27 b.cd{font-weight:600;font-size:13.5px}
+.u27 tr.qwen>*{border-top:2px solid var(--rule)}
+.u27 tr.mine th b::after,.u27 tr.qwen th b::after{content:""}
+.newtag{font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;background:var(--qwen-t);color:var(--ink);margin-left:6px;vertical-align:1px}
+.u27foot{font-size:12px;color:var(--mut);margin:6px 0 0}
+.two5{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:12px}
+.two5 h3{font-size:15px;margin:0 0 6px}
+.two5 ol,.two5 ul{margin:0;padding-left:20px;font-size:13.5px;color:var(--ink2)}
+.two5 li{margin:0 0 5px}
+.two5 b{color:var(--ink)}
+
+
+table.pk{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+.pk th,.pk td{padding:4px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pk thead th{vertical-align:bottom;border-bottom:1px solid var(--rule);text-align:center;padding-bottom:7px}
+.pk thead th b{display:block;font-size:15.5px}
+.pk thead th small{display:block;font-size:12px;color:var(--mut);font-weight:400}
+.pk .pn{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--bg);font-size:12px;font-weight:700;margin-bottom:3px}
+.pk th.pa{text-align:left;width:300px}
+.pk th.pa b{display:block;font-size:14.5px}
+.pk th.pa small{display:block;font-size:12px;color:var(--mut);font-weight:400;line-height:1.25}
+.pk td{text-align:center;width:17%}
+.pk td b{font-size:16px;font-weight:600}
+.pk td small{display:block;font-size:11.5px;color:var(--ink2);line-height:1.2}
+.pk td.t b{font-size:13.5px}
+.pk td.best{background:var(--ok)}
+.pk td.best b{font-weight:800}
+.pk td.now,.pk th.now{border-left:1px dashed var(--rule)}
+.pk th.now b{color:var(--ink2)}
+.pk td.nodata{color:var(--mut);font-size:13px;background:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 7px)}
+.pk td.cant{background:repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 7px)}
+.pk td.cant .no{font-weight:600;color:var(--ink2);font-size:13px}
+.pk tr.gstart>*{border-top:2px solid var(--rule)}
+.six{display:grid;grid-template-columns:1fr 330px;gap:20px;align-items:start}
+.six>div{min-width:0}
+.side h3{font-size:14.5px;margin:0 0 6px}
+.side ul{margin:0 0 12px;padding-left:18px;font-size:13px;color:var(--ink2)}
+.side li{margin:0 0 5px}
+.side b{color:var(--ink)}
+.fnote{font-size:12px;color:var(--mut);margin:6px 0 0;line-height:1.4}
+
+@media (max-width:760px){.bcs,.under,.six{grid-template-columns:1fr}.pk{min-width:640px}.rr{grid-template-columns:20px 150px 1fr}.wrap{padding:12px 16px}.two,.cmp2{grid-template-columns:1fr}.ocs{grid-template-columns:1fr 1fr}.legend .dir{margin-left:0}}
+</style></head>
+<body><div class="wrap">
+<header class="top"><h1>Where Qwen Lands</h1><span class="date">Qwen3.5 9B placed on Google's Gemini 4 Argon benchmark table · 30 Sep 2026 · 1 real number, the rest are guesses</span></header>
+<p class="verdict"><b>Qwen would come last on all 19 rows.</b> Best case, it gets close only on pictures and video (LVBench <b>70.0%</b>, its own published score, vs 79.7–91.7%). It falls far behind on long coding jobs (≈5–15% vs 55–78%). <b>In Agentic Coder on your Mac it can't take 6 of the 19 tests</b>, and it scores lower again on the other 13.</p>
+<nav class="tabbar" role="tablist" aria-label="Sections">
+<button role="tab" id="t-table" aria-controls="table" aria-selected="true">1 · The table</button>
+<button role="tab" id="t-why" aria-controls="why" aria-selected="false">2 · Why it lands there</button>
+<button role="tab" id="t-ours" aria-controls="ours" aria-selected="false">3 · Our own tests</button>
+<button role="tab" id="t-notes" aria-controls="notes" aria-selected="false">4 · How I guessed</button>
+<button role="tab" id="t-better" aria-controls="better" aria-selected="false">5 · Under 27B</button>
+<button role="tab" id="t-mine" aria-controls="mine" aria-selected="false">6 · For your work</button>
+</nav>
+
+<section class="tabpanel on" id="table" role="tabpanel" aria-labelledby="t-table">
+<div class="legend">
+<span><i class="lb"></i>best of the four (Gemini)</span><span><i class="lo"></i>best of the four (another model)</span>
+<span><i class="lr"></i>Qwen's own published score</span><span><b style="font-weight:500;color:var(--ink)">≈35%</b> (28–45) my guess, likely range</span><span><i class="lc"></i>Agentic Coder can't run it</span>
+<span class="dir">All numbers are % · higher = better</span>
+</div>
+<div class="scroll"><table class="g">
+<thead><tr><th class="cat" style="border-bottom-color:var(--rule)"></th><th class="bh">Benchmark</th><th></th>
+<th class="mh gem">Gemini 4<br>Argon</th><th class="mh">GPT-6<br>Astra</th><th class="mh">Claude<br>Fable 5.1</th><th class="mh">Claude<br>Opus 5.5</th><th class="gap"></th>
+<th class="qh">Qwen3.5 9B<small>best case: full model,<br>big GPU, its own setup</small></th><th class="qh">Qwen3.5 9B<small>in Agentic Coder,<br>your Mac today</small></th></tr></thead>
+<tbody>
+<tr class=""><th class="cat" rowspan="4" scope="rowgroup">Knowledge work</th><th class="b" scope="row">Vals Index</th><td class="ql"></td><td class="m gem top-g">68.9%</td><td class="m">63.1%</td><td class="m">65.8%</td><td class="m">67.0%</td><td class="gap"></td><td class="q q1 guess"><b>≈35%</b><small>28–45</small></td><td class="q q2 guess"><b>≈25%</b><small>18–35</small></td></tr>
+<tr class=""><th class="b" scope="row">AutomationBench</th><td class="ql">Score</td><td class="m gem top-g">51.3%</td><td class="m">41.4%</td><td class="m">31.4%</td><td class="m">42.5%</td><td class="gap"></td><td class="q q1 guess"><b>≈12%</b><small>6–20</small></td><td class="q q2 cant"><span class="no">can't</span><small>needs app plug-ins (MCP)</small></td></tr>
+<tr class=""><th class="b" scope="row">Vals Finance Agent v2</th><td class="ql"></td><td class="m gem top-g">65.4%</td><td class="m">53.5%</td><td class="m">58.9%</td><td class="m">58.6%</td><td class="gap"></td><td class="q q1 guess"><b>≈25%</b><small>15–35</small></td><td class="q q2 guess"><b>≈15%</b><small>8–25</small></td></tr>
+<tr class="gend"><th class="b" scope="row">Harvey&#x27;s Legal Agent Benchmark</th><td class="ql"></td><td class="m gem top-g">19.6%</td><td class="m">5.4%</td><td class="m">6.7%</td><td class="m">3.8%</td><td class="gap"></td><td class="q q1 guess"><b>≈1%</b><small>0–3</small></td><td class="q q2 guess"><b>&lt;1%</b><small>0–2</small></td></tr>
+<tr class=""><th class="cat" rowspan="4" scope="rowgroup">Agentic coding</th><th class="b" scope="row">DeepSWE v1.1</th><td class="ql"></td><td class="m gem top-g">77.9%</td><td class="m">74.1%</td><td class="m">67.4%</td><td class="m">74.2%</td><td class="gap"></td><td class="q q1 guess"><b>≈15%</b><small>8–25</small></td><td class="q q2 guess"><b>≈8%</b><small>3–15</small></td></tr>
+<tr class=""><th class="b" scope="row">FrontierSWE v2</th><td class="ql"></td><td class="m gem">55.0%</td><td class="m top-o">65.5%</td><td class="m">56.3%</td><td class="m">62.3%</td><td class="gap"></td><td class="q q1 guess"><b>≈8%</b><small>3–15</small></td><td class="q q2 guess"><b>≈4%</b><small>1–10</small></td></tr>
+<tr class=""><th class="b" scope="row">Vibe Code Bench</th><td class="ql"></td><td class="m gem top-g">91.9%</td><td class="m">89.6%</td><td class="m">90.3%</td><td class="m">90.3%</td><td class="gap"></td><td class="q q1 guess"><b>≈40%</b><small>25–55</small></td><td class="q q2 guess"><b>≈25%</b><small>10–40</small></td></tr>
+<tr class="gend"><th class="b" scope="row">Terminal-bench 4.0</th><td class="ql"></td><td class="m gem">57.4%</td><td class="m">58.2%</td><td class="m">57.9%</td><td class="m top-o">66.4%</td><td class="gap"></td><td class="q q1 guess"><b>≈10%</b><small>5–16</small></td><td class="q q2 guess"><b>≈5%</b><small>2–10</small></td></tr>
+<tr class="gend"><th class="cat" rowspan="1" scope="rowgroup">ML engineering</th><th class="b" scope="row">PostTrainBench</th><td class="ql"></td><td class="m gem">45.3%</td><td class="m">44.3%</td><td class="m">40.2%</td><td class="m top-o">49.3%</td><td class="gap"></td><td class="q q1 guess"><b>≈15%</b><small>10–22</small></td><td class="q q2 cant"><span class="no">can't</span><small>needs an NVIDIA H100</small></td></tr>
+<tr class=""><th class="cat" rowspan="3" scope="rowgroup">Science and math</th><th class="b" scope="row">Terminal-Bench Science 0.1</th><td class="ql"></td><td class="m gem">57.6%</td><td class="m top-o">68.1%</td><td class="m">52.6%</td><td class="m">63.3%</td><td class="gap"></td><td class="q q1 guess"><b>≈10%</b><small>5–18</small></td><td class="q q2 guess"><b>≈5%</b><small>2–10</small></td></tr>
+<tr class=""><th class="b" scope="row">LABBench 2</th><td class="ql"></td><td class="m gem top-g">88.8%</td><td class="m">85.4%</td><td class="m">68.6%</td><td class="m">73.1%</td><td class="gap"></td><td class="q q1 guess"><b>≈35%</b><small>20–50</small></td><td class="q q2 guess"><b>≈22%</b><small>10–35</small></td></tr>
+<tr class="gend"><th class="b" scope="row">RiemannBench</th><td class="ql"></td><td class="m gem top-g">76.0%</td><td class="m">72.0%</td><td class="m">65.6%</td><td class="m">69.6%</td><td class="gap"></td><td class="q q1 guess"><b>≈30%</b><small>15–45</small></td><td class="q q2 guess"><b>≈15%</b><small>5–25</small></td></tr>
+<tr class=""><th class="cat" rowspan="2" scope="rowgroup">Long context</th><th class="b" rowspan="2" scope="row">GraphWalks</th><td class="ql">Up to 128k, BFS (F1)</td><td class="m gem top-g">99.7%</td><td class="m">98.7%</td><td class="m">91.4%</td><td class="m">90.6%</td><td class="gap"></td><td class="q q1 guess"><b>≈45%</b><small>30–60</small></td><td class="q q2 guess"><b>≈10%</b><small>5–20</small></td></tr>
+<tr class="gend sub"><td class="ql">256k to 1M, BFS (F1)</td><td class="m gem top-g">84.2%</td><td class="m">71.8%</td><td class="m">65.0%</td><td class="m">66.8%</td><td class="gap"></td><td class="q q1 guess"><b>≈15%</b><small>5–30</small></td><td class="q q2 cant"><span class="no">can't</span><small>won&#x27;t fit in 16 GB</small></td></tr>
+<tr class=""><th class="cat" rowspan="2" scope="rowgroup">Computer use</th><th class="b" scope="row">Agent&#x27;s Last Exam</th><td class="ql">Pass rate</td><td class="m gem top-g">39.5%</td><td class="m">34.2%</td><td class="m"><span class="dash">—</span></td><td class="m">38.2%</td><td class="gap"></td><td class="q q1 guess"><b>≈8%</b><small>3–15</small></td><td class="q q2 cant"><span class="no">can't</span><small>no screen control</small></td></tr>
+<tr class="gend"><th class="b" scope="row">OSWorld-2.0</th><td class="ql">Offline subset<br>Partial score</td><td class="m gem">69.2%</td><td class="m top-o">72.6%</td><td class="m"><span class="dash">—</span></td><td class="m"><span class="dash">—</span></td><td class="gap"></td><td class="q q1 guess"><b>≈38%</b><small>28–45</small></td><td class="q q2 cant"><span class="no">can't</span><small>no screen control</small></td></tr>
+<tr class=""><th class="cat" rowspan="2" scope="rowgroup">Multimodal understanding</th><th class="b" scope="row">Chartography</th><td class="ql"></td><td class="m gem top-g">71.6%</td><td class="m">71.0%</td><td class="m">46.2%</td><td class="m">66.3%</td><td class="gap"></td><td class="q q1 guess"><b>≈45%</b><small>35–55</small></td><td class="q q2 guess"><b>≈38%</b><small>28–48</small></td></tr>
+<tr class="gend"><th class="b" scope="row">LVBench</th><td class="ql"></td><td class="m gem top-g">91.7%</td><td class="m">87.5%</td><td class="m">79.7%</td><td class="m">83.7%</td><td class="gap"></td><td class="q q1 real"><b>70.0%</b><small>Qwen&#x27;s own</small></td><td class="q q2 cant"><span class="no">can't</span><small>no video input</small></td></tr>
+<tr class="gend"><th class="cat" rowspan="1" scope="rowgroup">Cybersecurity</th><th class="b" scope="row">CWE-bench v1</th><td class="ql"></td><td class="m gem top-g">68.0%</td><td class="m top-o">68.0%</td><td class="m">58.0%</td><td class="m">67.0%</td><td class="gap"></td><td class="q q1 guess"><b>≈25%</b><small>15–35</small></td><td class="q q2 guess"><b>≈18%</b><small>10–28</small></td></tr>
+</tbody></table></div>
+<p class="foot">The four big columns are copied from Google's table (methodology: deepmind.google/models/evals-methodology/gemini-4-argon). The two Qwen columns are mine.</p>
+</section>
+
+<section class="tabpanel" id="why" role="tabpanel" aria-labelledby="t-why">
+<div class="two">
+<div>
+<h2>Short quizzes vs long jobs</h2>
+<p class="lead">These are the real Qwen3.5 9B scores I built on. On short quizzes it keeps up with models ten times its size. On long, many-step jobs it falls far behind, and almost every row in Google's table is a long job.</p>
+<table class="an"><thead><tr><th>Test</th><th>Qwen3.5 9B</th><th>Compared with</th><th>Where from</th></tr></thead>
+<tbody>
+<tr><th scope="row">Terminal-Bench 2.0<small>long terminal jobs</small></th><td class="an"><b>16.1%</b></td><td>best model then: 84.7%</td><td class="src2">Tmax paper · Epoch had 9.2%</td></tr>
+<tr><th scope="row">OSWorld-Verified<small>using a desktop</small></th><td class="an"><b>41.8%</b></td><td>older version of the table's OSWorld-2.0</td><td class="src2">Qwen model card</td></tr>
+<tr><th scope="row">LVBench<small>long videos</small></th><td class="an"><b>70.0%</b></td><td>table: 79.7–91.7%</td><td class="src2">Qwen model card</td></tr>
+<tr><th scope="row">CharXiv (reasoning)<small>reading charts</small></th><td class="an"><b>73.0%</b></td><td>cousin of Chartography</td><td class="src2">Qwen model card</td></tr>
+<tr><th scope="row">AA-LCR<small>long documents</small></th><td class="an"><b>63.0%</b></td><td>GPT-OSS-120B: 50.7%</td><td class="src2">Qwen model card</td></tr>
+<tr><th scope="row">GPQA Diamond<small>science quiz</small></th><td class="an"><b>81.7%</b></td><td>GPT-OSS-120B: 80.1%</td><td class="src2">Qwen model card</td></tr>
+<tr><th scope="row">HMMT Feb 25<small>contest math</small></th><td class="an"><b>83.2%</b></td><td>GPT-OSS-120B: 90.0%</td><td class="src2">Qwen model card</td></tr>
+</tbody></table>
+<div class="callout"><b>The pattern:</b> on quizzes (science, math, charts, video) a 9B model now gets near the big ones. Give it a long job in a terminal and it reaches about a fifth of the top score (16.1% vs 84.7% on Terminal-Bench 2.0). That's why my guesses are close on the picture rows and low on the coding rows.</div>
+</div>
+<div>
+<h2>What Agentic Coder on your Mac changes</h2>
+<p class="lead">The middle Qwen column assumes a big GPU and a test setup built for each test. The right-hand column is the same model as you run it.</p>
+<ul class="lim">
+<li><b>No screen control</b><span>Agentic Coder's tools read, write, run commands and search the web, but none of them moves a mouse.</span><em>hits: Agent's Last Exam · OSWorld-2.0</em></li>
+<li><b>Pictures and PDFs, no video</b><span>The vision add-on reads pictures and PDFs (8 of 8 on the Vision check). Videos are not an input.</span><em>hits: LVBench</em></li>
+<li><b>32k context setting</b><span>Your settings give Qwen 32,768 tokens of context. The model can go to 262k, but a 16 GB Mac runs out of memory first.</span><em>hits: GraphWalks · long coding jobs</em></li>
+<li><b>8,192 thinking tokens</b><span>Your thinking limit is 8,192 tokens. For hard math, Qwen's own guide asks for room to write up to 81,920 tokens.</span><em>hits: RiemannBench · science</em></li>
+<li><b>~16 tokens a second</b><span>Qwen writes 15–18 tokens a second on the M4. Tests with a time limit (5 h, 10 h) get far fewer steps done.</span><em>hits: Terminal-bench · DeepSWE</em></li>
+<li><b>No plug-ins, no NVIDIA GPU</b><span>MCP plug-ins are planned but not built, and PostTrainBench trains models on an H100.</span><em>hits: AutomationBench · PostTrainBench</em></li>
+</ul>
+</div>
+</div>
+</section>
+
+<section class="tabpanel" id="ours" role="tabpanel" aria-labelledby="t-ours">
+<h2>What we've measured on Qwen in Agentic Coder</h2>
+<p class="lead">From the test record (Tests tab). These are short jobs with a check at the end, and Qwen passes most of them.</p>
+<div class="ocs">
+<div class="oc ok"><span>Practice tasks</span><b>24 / 24</b><small>24 of the 28 practice tasks, High effort, 30 Sep</small></div>
+<div class="oc ok"><span>Sorting check</span><b>80 / 82</b><small>requests sorted right, 29 Sep</small></div>
+<div class="oc ok"><span>Done check</span><b>3 / 3</b><small>after the false-"done" fixes (2 / 3 before), 30 Sep</small></div>
+<div class="oc ok"><span>Vision check</span><b>8 / 8</b><small>pictures and PDFs, 30 Sep (earlier runs 3, 7 / 8)</small></div>
+<div class="oc ok"><span>Web check</span><b>7 / 7</b><small>WebFetch and WebSearch, 30 Sep (5 / 7 first)</small></div>
+<div class="oc ok"><span>Subagent check</span><b>5 / 5</b><small>helpers through the Agent tool, 30 Sep</small></div>
+<div class="oc ok"><span>Skills check</span><b>7 / 7</b><small>with a skill: 124 s vs 277 s without, 30 Sep</small></div>
+<div class="oc bad"><span>Real coding work</span><b>D</b><small>4 samples, 29 Sep: 3 times it said "done" when it was not</small></div>
+</div>
+<div class="cmp2">
+<div><h3>Why 24 of 24 here doesn't mean a high score there</h3><p>Our practice tasks take a few minutes each and fit in one window of context. Google's tests run for hours (Agent's Last Exam gives 5 hours, PostTrainBench 10), over whole codebases, scored by strict checkers. Small models lose track over long jobs. That's the "D" on real coding work: the code looked finished and Qwen said "done", but it wasn't.</p></div>
+<div><h3>How to get a real number instead of a guess</h3><p>Two of these tests are open and small enough to try: <b>Terminal-Bench</b> (runs in Docker, so it would need a harness that drives Agentic Coder) and <b>Chartography-style chart questions</b> through the vision add-on. Either one would turn a guess into a measurement. It would be a multi-hour run, and I haven't started one.</p></div>
+</div>
+</section>
+
+<section class="tabpanel" id="notes" role="tabpanel" aria-labelledby="t-notes">
+<div class="two">
+<div>
+<h2>How each guess was made</h2>
+<ol class="notes">
+<li><b>One real number.</b> LVBench 70.0% is from Qwen's own model card for Qwen3.5-9B. No one has published a Qwen3.5 9B score on the other 18 tests.</li>
+<li><b>Best case = nearest real score × the gap on that kind of work.</b> Long coding/terminal rows use the Terminal-Bench 2.0 gap (Qwen at about 1/5 of the top model). Computer-use rows start from Qwen's OSWorld-Verified 41.8%. Chart and video rows start from CharXiv 73.0% and LVBench 70.0%. Long-context rows start from AA-LCR 63.0%.</li>
+<li><b>Agentic Coder column = best case, cut for your setup.</b> The biggest cuts are on rows that hit your 32k context (GraphWalks) and 8,192 thinking tokens (RiemannBench). Rows that need something the app doesn't have show "can't".</li>
+<li><b>The range in brackets</b> is how wrong I could easily be. Treat the single number as the middle of that range, not a measurement.</li>
+<li><b>Same rules as Google's sheet:</b> one try per task, highest thinking setting. Qwen's model card scores are at full precision. Your file is the Q5 version, which costs about a point.</li>
+</ol>
+<div class="callout"><b>A caution about the table itself:</b> Google ran some tests itself and copied other models' numbers from their makers. So even the big four columns weren't all measured the same way.</div>
+</div>
+<div>
+<h2>Sources</h2>
+<ul class="srcs">
+<li><a href="https://storage.googleapis.com/deepmind-media/gemini/gemini_4_argon_model_evaluation.pdf">Gemini 4 Argon, Model evaluation (Google PDF)</a>: the table's methodology</li>
+<li><a href="https://huggingface.co/Qwen/Qwen3.5-9B">Qwen3.5-9B model card</a>: LVBench 70.0, OSWorld-Verified 41.8, CharXiv 73.0, AA-LCR 63.0, GPQA 81.7, HMMT 83.2</li>
+<li><a href="https://arxiv.org/abs/2606.23321">Tmax: a simple recipe for terminal agents (arXiv 2606.23321)</a>: Qwen 3.5 9B 16.1% on Terminal-Bench 2.0</li>
+<li><a href="https://llmrun.dev/benchmark/terminalbench?show=all">llmrun.dev Terminal-Bench board (from Epoch)</a>: Qwen3.5 9B 9.2%, GPT 5.5 84.7%</li>
+<li><a href="https://www.vals.ai/models/alibaba_qwen3.6-27b">Vals AI, Qwen 3.6 27B</a>: 57.9% on the Vals Index (a model 3× the size)</li>
+<li>Tabs 5–6: <a href="https://artificialanalysis.ai/models/open-source/small">Artificial Analysis, small open models</a> · <a href="https://huggingface.co/Qwen/Qwen3.8-27B">Qwen3.8-27B</a> · <a href="https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf">Bonsai 2 27B</a> · <a href="https://huggingface.co/IFM/K2-Horizon-7B">K2 Horizon 7B</a> · <a href="https://huggingface.co/google/gemma-4-12b-it">Gemma 4</a> · <a href="https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512">Devstral Small 2</a></li>
+<li>Agentic Coder test record (Tests tab) and your settings file: context 32,768, thinking 8,192, model qwen, effort high</li>
+</ul>
+</div>
+</div>
+</section>
+<section class="tabpanel" id="better" role="tabpanel" aria-labelledby="t-better">
+<h2>Under 27B: every model I could check that beats or ties your Qwen3.5 9B</h2>
+<p class="lead">Each score is the Artificial Analysis Intelligence Index v4.3.2, read from that model's own page on 30 Sep (higher = better). "Real size" is the parameter count in the model's own file. Memory is Agentic Coder's own formula at 32k, with pictures on.</p>
+<div class="scroll"><table class="u27">
+<thead><tr><th></th><th>Model</th><th>Real size</th><th>Index · higher = better</th><th>Reads pictures</th><th>Memory at 32k · lower = better</th><th>In Agentic Coder</th></tr></thead>
+<tbody>
+<tr class=""><td class="rk2">1</td><th scope="row"><b>K2 Horizon 7B</b><small>MBZUAI IFM · Sep 2026</small></th><td class="sz">9.0B</td><td class="ix"><div class="ib"><i class="" style="width:84%"></i><b>21</b></div></td><td class="no2">✕ text only</td><td class=""><b>8.6</b> GB</td><td><b class="cd">needs IFM's llama.cpp</b><small>not merged upstream</small></td></tr>
+<tr class="nofit"><td class="rk2">2</td><th scope="row"><b>Gemma 4 26B A4B</b><small>Google</small></th><td class="sz">25.2B · 3.8B active</td><td class="ix"><div class="ib"><i class="" style="width:68%"></i><b>17</b></div></td><td class="ok2">✓ yes</td><td class="no2"><b>too big</b><small>smallest file 9.9 + 1.2 GB</small></td><td><b class="cd">—</b></td></tr>
+<tr class=""><td class="rk2">3</td><th scope="row"><b>K2 Horizon 3.7B</b><small>MBZUAI IFM · Sep 2026</small></th><td class="sz">5.1B</td><td class="ix"><div class="ib"><i class="" style="width:64%"></i><b>16</b></div></td><td class="no2">✕ text only</td><td class=""><b>5.9</b> GB</td><td><b class="cd">needs IFM's llama.cpp</b><small>not merged upstream</small></td></tr>
+<tr class="mine"><td class="rk2">4</td><th scope="row"><b>Gemma 4 12B</b><small>Google · yours</small></th><td class="sz">12B</td><td class="ix"><div class="ib"><i class="" style="width:56%"></i><b>14</b></div></td><td class="ok2">✓ yes</td><td class=""><b>8.3</b> GB</td><td><b class="cd">ready</b><small>pictures on</small></td></tr>
+<tr class="new"><td class="rk2">5</td><th scope="row"><b>Apriel 1.6 15B</b> <span class="newtag">missed before</span><small>ServiceNow · Nov 2025 · MIT</small></th><td class="sz">15B</td><td class="ix"><div class="ib"><i class="" style="width:52%"></i><b>13</b></div></td><td class="ok2">✓ yes</td><td class="warn2"><b>11.8</b> GB<small>tight: 10.2 at 16k</small></td><td><b class="cd">engine can run it</b><small>needs a /model entry</small></td></tr>
+<tr class="new"><td class="rk2">5</td><th scope="row"><b>Qwen3.5 4B</b> <span class="newtag">missed before</span><small>Alibaba · Mar 2026</small></th><td class="sz">4B</td><td class="ix"><div class="ib"><i class="" style="width:52%"></i><b>13</b></div></td><td class="ok2">✓ yes</td><td class=""><b>6.0</b> GB</td><td><b class="cd">engine can run it</b><small>needs a /model entry</small></td></tr>
+<tr class="qwen"><td class="rk2"></td><th scope="row"><b>Qwen3.5 9B</b><small>Alibaba · yours, today</small></th><td class="sz">9B</td><td class="ix"><div class="ib"><i class="q" style="width:44%"></i><b>11</b></div></td><td class="ok2">✓ yes</td><td class=""><b>8.6</b> GB</td><td><b class="cd">ready</b><small>pictures on</small></td></tr>
+</tbody></table></div>
+<p class="u27foot">Also 11, text only: Granite 4.2 8B, G9v3-3B. Also 12: MiniCPM5-2B (2.6B, not checked further). Below Qwen: gpt-oss-20b 9, Gemma 4 E4B 9, Tri-21B 9, Devstral Small 2 8, Ministral 3 14B 6. Just over the line: Qwen3.8 27B / Bonsai 2 27B is 27.36B (tab 6).</p>
+<div class="two5">
+<div>
+<h3>Top 3 under 27B for your six areas (they need pictures)</h3>
+<ol>
+<li><b>Gemma 4 12B, index 14.</b> It's already installed, and it's the best model under 27B that reads pictures and fits.</li>
+<li><b>Qwen3.5 4B, index 13.</b> Small and quick (6 GB). The edge over your 9B is thin, though: on Qwen's own card the 9B wins most tests.</li>
+<li><b>Apriel 1.6 15B, index 13.</b> It reads pictures, but it's tight on 16 GB: use 16k context and close other apps.</li>
+</ol>
+<p class="u27foot" style="margin-top:4px">If text only is fine, <b>K2 Horizon 7B (21)</b> is far ahead, but Agentic Coder can't run it until llama.cpp adds support.</p>
+</div>
+<div>
+<h3>What this check changed</h3>
+<ul>
+<li><b>Two I had missed:</b> Apriel 1.6 15B and Qwen3.5 4B. Both score 13, above your 9B's 11.</li>
+<li><b>K2 Horizon "3.7B" is 5.1B</b> in its own file, just as the "7B" is 9.0B.</li>
+<li><b>Search results showed old scores</b> (Apriel "21" is 13 now; Ministral 3 14B "11" is 6), so I only used each model's own page.</li>
+<li><b>What I couldn't see:</b> the full ranked list. Its page shows 12 of 142 models. I checked about 20 likely models one by one, so a model I didn't think of could still be missing.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<section class="tabpanel" id="mine" role="tabpanel" aria-labelledby="t-mine">
+<h2>For your work: the top 3 that run on this Mac</h2>
+<p class="lead">Your six areas from the table. Every model here is open, under 30B and fits a 16 GB M4. The best in each row is shaded green.</p>
+<div class="six">
+<div>
+<div class="scroll"><table class="pk">
+<thead><tr><th class="pa"></th><th class="pc"><span class=pn>1</span><b>Qwen3.8 27B</b><small>as PrismML's Bonsai 2 27B · 1.7-bit</small></th><th class="pc"><span class=pn>2</span><b>K2 Horizon 7B</b><small>5-bit · 9.0B in its own file</small></th><th class="pc"><span class=pn>3</span><b>Gemma 4 12B</b><small>already on your Mac · Google</small></th><th class="pc now"><b>Qwen3.5 9B</b><small>what you use today</small></th></tr></thead><tbody>
+<tr class=""><th class="pa" scope="row"><b>Knowledge work</b><small>AA Intelligence Index · has office-work tests · higher = better</small></th><td class="best"><b>34*</b></td><td class=""><b>21</b></td><td class=""><b>14</b></td><td class="now"><b>11</b></td></tr>
+<tr class=""><th class="pa" scope="row"><b>Agentic coding</b><small>Terminal-Bench 2.1 · % · higher = better</small></th><td class="best"><b>73.0*†</b></td><td class=""><b>39.1</b></td><td class=""><b>27.3</b></td><td class="now"><b>29.2</b></td></tr>
+<tr class=""><th class="pa" scope="row"><b>ML engineering</b><small>PostTrainBench</small></th><td colspan="4" class="nodata">No published scores for any model this size</td></tr>
+<tr class=""><th class="pa" scope="row"><b>Science and math</b><small>Humanity's Last Exam · % · higher = better</small></th><td class="best"><b>30.8*†</b></td><td class=""><b>18.6</b></td><td class=""><b>15.7</b></td><td class="now"><b>14.9</b></td></tr>
+<tr class=""><th class="pa" scope="row"><b>Multimodal</b><small>MathVision · maths from pictures · %</small></th><td class="best"><b>90.0*</b></td><td class="cant"><span class="no">can't</span><small>reads text only</small></td><td class=""><b>79.7</b></td><td class="now"><b>78.9</b></td></tr>
+<tr class=""><th class="pa" scope="row"><b>Cybersecurity</b><small>CWE-bench</small></th><td colspan="4" class="nodata">No published scores for any model this size</td></tr>
+<tr class="gstart"><th class="pa" scope="row"><b>Download</b><small>GB · lower = better</small></th><td class=""><b>7.8</b><small>7.2 + 0.6 picture add-on</small></td><td class=""><b>6.5</b><small>Q5_K_M file</small></td><td class="best"><b>0</b><small>already here</small></td><td class="now best"><b>0</b><small>already here</small></td></tr>
+<tr class=""><th class="pa" scope="row"><b>Memory at 32k</b><small>GB · the app's formula, pictures on · lower = better</small></th><td class=""><b>10.0</b><small>ran at 9.3–9.8, no pictures</small></td><td class=""><b>8.6</b><small>text only</small></td><td class="best"><b>8.3</b></td><td class="now"><b>8.6</b></td></tr>
+<tr class=""><th class="pa" scope="row"><b>Writing speed</b><small>tokens a second · higher = faster</small></th><td class=""><b>10.8</b><small>measured here, 25 Sep</small></td><td class=""><b>≈15</b><small>estimate</small></td><td class=""><b>17.2</b><small>measured here</small></td><td class="now best"><b>18.1</b><small>measured here</small></td></tr>
+<tr class=""><th class="pa" scope="row"><b>In Agentic Coder</b><small></small></th><td class="t"><b>recipe kept</b><small>re-add · pictures not wired</small></td><td class="t"><b>needs IFM's llama.cpp</b><small>not merged yet</small></td><td class="t"><b>ready</b><small>pictures on</small></td><td class="now t"><b>ready</b><small>pictures on</small></td></tr>
+</tbody>
+</table></div>
+<p class="fnote">* The full-size Qwen3.8 27B. In PrismML's own 14 tests, Bonsai 2 27B keeps 98% of it: about 100% on maths and coding, 93% on knowledge and on pictures. † Qwen's own run. The other Terminal-Bench and Humanity's Last Exam numbers are from IFM's table, where all three ran the same way. MathVision comes from each maker's own card.</p>
+</div>
+<div class="side">
+<h3>What the triple check changed</h3>
+<ul>
+<li><b>#1 is now Bonsai 2 27B, not a plain 2-bit file.</b> PrismML tested both. The 2-bit file I had picked (7.27 GB) keeps <b>84%</b> of the full model (AIME26: 57.5 vs 94.6). Bonsai keeps <b>98%</b> (95.8).</li>
+<li><b>Bonsai can read pictures</b> with a 0.63 GB add-on. I said it couldn't. That was wrong: our setup just never loaded the add-on.</li>
+<li><b>K2 Horizon "7B" counts 9.0B</b> in its own file. That's about Qwen's size, not smaller.</li>
+</ul>
+<h3>Why #1 is safe on this Mac</h3>
+<ul>
+<li>It passed all 28 practice tasks <b>five times</b> here between 25 and 28 Sep, writing 10.8 tokens a second.</li>
+<li>Agentic Coder kept its recipe, and its engine is the app's default.</li>
+</ul>
+<h3>Right under it</h3>
+<ul>
+<li>Nothing else under 30B scores between 21 and 34. <b>Qwen3.6 27B</b> ties K2 at 21: same size as 3.8 but weaker.</li>
+</ul>
+<h3>Disk</h3>
+<ul><li>You have <b>6.7 GB free</b>; #1 needs 7.8 GB. The 7.2 GB file removed on 28 Sep may still be in your Trash. I can't look there.</li></ul>
+</div>
+</div>
+</section>
+
+</div>
+<script>
+(function(){
+  var tabs=[].slice.call(document.querySelectorAll('[role=tab]'));
+  function show(id,push){
+    tabs.forEach(function(t){var on=t.getAttribute('aria-controls')===id;t.setAttribute('aria-selected',on);t.tabIndex=on?0:-1;document.getElementById(t.getAttribute('aria-controls')).classList.toggle('on',on)});
+    if(push){try{history.replaceState(null,'','#'+id)}catch(e){}}
+  }
+  tabs.forEach(function(t){t.addEventListener('click',function(){show(t.getAttribute('aria-controls'),true)})});
+  document.addEventListener('keydown',function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey)return;
+    var i=tabs.findIndex(function(t){return t.getAttribute('aria-selected')==='true'});
+    if(e.key>='1'&&e.key<=String(tabs.length)){show(tabs[+e.key-1].getAttribute('aria-controls'),true)}
+    else if(e.key==='ArrowRight'){show(tabs[(i+1)%tabs.length].getAttribute('aria-controls'),true)}
+    else if(e.key==='ArrowLeft'){show(tabs[(i-1+tabs.length)%tabs.length].getAttribute('aria-controls'),true)}
+  });
+  function fromHash(){var h=location.hash.slice(1);if(h&&document.getElementById(h)&&document.getElementById(h).getAttribute('role')==='tabpanel')show(h,false)}
+  fromHash();window.addEventListener('hashchange',fromHash);
+})();
+</script>
+</body></html>

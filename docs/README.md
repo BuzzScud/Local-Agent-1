@@ -8,8 +8,16 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 355 KB | 2026-10-01 |
+| [tests/agentic-coder-model-check-k2-2026-10-01-0000.html](tests/agentic-coder-model-check-k2-2026-10-01-0000.html) | page | New model check · K2 Horizon 7B | 9 KB | 2026-10-01 |
+| [tests/agentic-coder-model-check-k2-2026-09-30-2346.html](tests/agentic-coder-model-check-k2-2026-09-30-2346.html) | page | New model check · K2 Horizon 7B | 8 KB | 2026-10-01 |
+| [tests/agentic-coder-model-check-k2-2026-09-30-2341.html](tests/agentic-coder-model-check-k2-2026-09-30-2341.html) | page | New model check · K2 Horizon 7B | 8 KB | 2026-10-01 |
+| [reports/where-qwen-lands-2026-09-30-v5.html](reports/where-qwen-lands-2026-09-30-v5.html) | page | Where Qwen Lands | 43 KB | 2026-10-01 |
+| [older versions/where-qwen-lands-2026-09-30-v4.html](older%20versions/where-qwen-lands-2026-09-30-v4.html) | page | Where Qwen Lands | 44 KB | 2026-10-01 |
+| [older versions/where-qwen-lands-2026-09-30-v3.html](older%20versions/where-qwen-lands-2026-09-30-v3.html) | page | Where Qwen Lands | 43 KB | 2026-10-01 |
+| [older versions/where-qwen-lands-2026-09-30-v2.html](older%20versions/where-qwen-lands-2026-09-30-v2.html) | page | Where Qwen Lands | 36 KB | 2026-10-01 |
+| [older versions/where-qwen-lands-2026-09-30.html](older%20versions/where-qwen-lands-2026-09-30.html) | page | Where Qwen Lands | 26 KB | 2026-10-01 |
 | [tests/agentic-coder-design-studio-check-2026-09-30-2122.html](tests/agentic-coder-design-studio-check-2026-09-30-2122.html) | page | Design studio check | 19 KB | 2026-10-01 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 333 KB | 2026-10-01 |
 | [tests/agentic-coder-skills-check-qwen-2026-09-30-1959.html](tests/agentic-coder-skills-check-qwen-2026-09-30-1959.html) | page | Skills check · Qwen3.5 9B | 11 KB | 2026-10-01 |
 | [design rounds/agentic-coder-agents-md-before-after-2026-09-30.html](design%20rounds/agentic-coder-agents-md-before-after-2026-09-30.html) | page | AGENTS.md Before After | 51 KB | 2026-09-30 |
 | [tests/agentic-coder-rules-file-qwen-2026-09-30-1832.html](tests/agentic-coder-rules-file-qwen-2026-09-30-1832.html) | page | Rules file old vs new · Qwen3.5 9B | 20 KB | 2026-09-30 |
@@ -103,9 +111,6 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html](tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html) | page | Prompt old vs new · Gemma 4 12B QAT | 21 KB | 2026-09-30 |
 | [design rounds/agentic-coder-arena-4-designs-2026-09-30.html](design%20rounds/agentic-coder-arena-4-designs-2026-09-30.html) | page | Arena · 4 designs | 221 KB | 2026-09-30 |
 | [design rounds/agentic-coder-test-builder-2-designs-2026-09-30.html](design%20rounds/agentic-coder-test-builder-2-designs-2026-09-30.html) | page | Test builder designs | 82 KB | 2026-09-30 |
-| [design rounds/agentic-coder-start-page-live-preview-2026-09-29.html](design%20rounds/agentic-coder-start-page-live-preview-2026-09-29.html) | page | Start page preview | 374 KB | 2026-09-30 |
-| [design rounds/agentic-coder-start-page-4-designs-2026-09-29.html](design%20rounds/agentic-coder-start-page-4-designs-2026-09-29.html) | page | Start page designs | 342 KB | 2026-09-30 |
-| [design rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html](design%20rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html) | page | Start page designs | 917 KB | 2026-09-30 |
 | [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-09-30 |
 | [design rounds/agentic-coder-conversation-2-designs-2026-09-29.html](design%20rounds/agentic-coder-conversation-2-designs-2026-09-29.html) | page | Conversation redesign | 172 KB | 2026-09-30 |
 | [tests/agentic-coder-weather-widget-session-2026-09-29.html](tests/agentic-coder-weather-widget-session-2026-09-29.html) | page | Weather widget session | 176 KB | 2026-09-30 |

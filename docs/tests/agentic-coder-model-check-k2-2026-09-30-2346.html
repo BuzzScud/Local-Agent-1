@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New model check · K2 Horizon 7B</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.panel[hidden]{display:none}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+.table-wrap{min-height:0;overflow:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small{display:block;color:var(--faint);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}.ok{color:var(--up)}.no{color:var(--down)}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 6px}ul.how code{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+@media (max-width:760px),(max-height:520px){body{overflow:auto;height:auto}.panel{overflow:visible}}
+td.wrap{white-space:normal;min-width:320px}
+</style>
+</head>
+<body>
+<header><h1>New model check · K2 Horizon 7B</h1><span class="date">Wed, Sep 30, 2026, 23:46 · code e8d382f+ · 8,192 tokens of context</span></header>
+<nav class="tabs" role="tablist">
+<button role="tab" aria-selected="true" data-tab="result">Result</button>
+<button role="tab" aria-selected="false" data-tab="checks">Checks</button>
+<button role="tab" aria-selected="false" data-tab="how">How it was measured</button>
+</nav>
+<section class="panel" id="result"><p class="verdict">Not ready yet: 7 of 8 checks passed on K2 Horizon 7B (failed: the thinking cap stops it (256 tokens at high)). Its tool calls came back as real calls every time.</p><div class="chips"><span class="chip ok">✓ It loads</span><span class="chip ok">✓ Its template takes the app&#39;s request</span><span class="chip ok">✓ A plain answer, thinking off</span><span class="chip ok">✓ A tool call, thinking off</span><span class="chip ok">✓ A tool call at Medium, its thinking apart</span><span class="chip ok">✓ A tool call at High, its thinking apart</span><span class="chip no">✗ The thinking cap stops it (256 tokens at High)</span><span class="chip ok">✓ Its other tool-call format (json)</span></div><div class="cards"><div class="card"><div class="k">Checks passed</div><div class="v">7 / 8</div><div class="s">higher is better</div></div><div class="card"><div class="k">Reads</div><div class="v">153.1</div><div class="s">tokens a second · higher is faster</div></div><div class="card"><div class="k">Writes</div><div class="v">13</div><div class="s">tokens a second · higher is faster</div></div><div class="card"><div class="k">Memory taken</div><div class="v">4.39 GB</div><div class="s">free memory, loading it at 8,192 tokens · lower is better</div></div></div></section>
+<section class="panel" id="checks" hidden><div class="table-wrap"><table>
+<thead><tr><th>Result</th><th>Check</th><th>What happened</th></tr></thead>
+<tbody><tr><td class="ok">PASS</td><td>It loads</td><td class="wrap">on ifm&#39;s llama.cpp in 74 s; free memory went down 4.39 GB, the server&#39;s own footprint 0.76 GB</td></tr><tr><td class="ok">PASS</td><td>Its template takes the app&#39;s request</td><td class="wrap">at thinking off, Medium, High: the instructions and all 8 tools</td></tr><tr><td class="ok">PASS</td><td>A plain answer, thinking off</td><td class="wrap">&quot;ready&quot; · 13.5 s</td></tr><tr><td class="ok">PASS</td><td>A tool call, thinking off</td><td class="wrap">Read({&quot;path&quot;:&quot;package.json&quot;}) · a real call</td></tr><tr><td class="ok">PASS</td><td>A tool call at Medium, its thinking apart</td><td class="wrap">Read({&quot;path&quot;:&quot;package.json&quot;}) · a real call · thought about 23 tokens · 3.0 s</td></tr><tr><td class="ok">PASS</td><td>A tool call at High, its thinking apart</td><td class="wrap">Read({&quot;path&quot;:&quot;package.json&quot;}) · a real call · thought about 26 tokens · 3.4 s</td></tr><tr><td class="no">FAIL</td><td>The thinking cap stops it (256 tokens at High)</td><td class="wrap">the cap ended its thinking at about 174 tokens (the server&#39;s closing message is in it), then answered &quot;&quot; · 24.4 s</td></tr><tr><td class="ok">PASS</td><td>Its other tool-call format (json)</td><td class="wrap">Read({&quot;path&quot;:&quot;package.json&quot;}) · a real call</td></tr><tr><td class="">measured</td><td>Reading and writing speed</td><td class="wrap">reads 153.1 tokens a second (2491 tokens of instructions and tools) · writes 13 (327 tokens of code)</td></tr></tbody></table></div></section>
+<section class="panel" id="how" hidden><ul class="how"><li>K2 Horizon 7B on its own server (ifm-k2horizon-42adf01) with the app's settings, 8,192 tokens of context; nothing else loaded. Each request goes through the app's own client: the same instructions and tools a reply gets, the same thinking split and the same reading of a tool call written as text.</li><li>The tool-call checks ask it to read package.json with the Read tool; a check passes when a Read of package.json comes back, as a real call or written in the text.</li><li>A level passes when its thinking comes apart from the answer and no thinking or tool tag is left in the open.</li><li>The cap check asks for a 256-token thinking cap at the highest level: it passes when the thinking ends near the cap (thinking tokens are counted from its length, about 3.6 letters a token) and an answer comes after.</li><li>Speeds are the server's own counts: reading the app's instructions and tools (not cached), and writing a small module with thinking off.</li><li>Pass: every check passes; the speeds are measured, not judged.</li><li>Raw results: <code>models/k2-horizon-7b/results/model-check-2026-09-30-2346</code></li></ul></section>
+<script>
+(function () {
+  var tabs = document.querySelectorAll('.tabs button');
+  function show(id) {
+    tabs.forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.tab === id)); });
+    document.querySelectorAll('.panel').forEach(function (p) { p.hidden = p.id !== id; });
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  }
+  tabs.forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.tab); }); });
+  var h = location.hash.slice(1);
+  if (document.getElementById(h)) show(h);
+})();
+</script>
+</body>
+</html>
