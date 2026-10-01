@@ -15,7 +15,7 @@ process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
 const { streamChat, openaiBody, refusedField } = await import('../src/agent/client.mjs');
 const { decide, complete } = await import('../src/flows/llm.mjs');
 const { setEndpoint, dropEndpoint, MODELS, GENERIC_REMOTE, DEFAULT_REMOTE, HOME } = await import('../../models/index.mjs');
-const { openForm, rowsOf, moveRow, startEdit, editField, pasteField, commitEdit, toProfile, formWarning, connectionChanged, showValue, rowNote, rowChanged, modelChoices, savePlan, remotesOf, remoteChoices, withTest } = await import('../src/app/remote-form.mjs');
+const { openForm, rowsOf, moveRow, startEdit, editField, pasteField, commitEdit, toProfile, formWarning, connectionChanged, showValue, rowNote, rowChanged, modelChoices, savePlan, remotesOf, remoteChoices, withTest, openModelPick, movePick, commitPick, closePick } = await import('../src/app/remote-form.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 const drain = async (it) => { const out = []; for await (const ev of it) out.push(ev); return out; };
@@ -163,6 +163,18 @@ test('each service keeps its own rows: flipping Run on loses nothing typed; the 
   // several models, Connect picked one: the Model row takes that name
   o = withTest(moveRow(f, 'source', 1), { ok: true, steps: [], models: ['llava:latest', 'coder:7b'], model: 'coder:7b' }, 2);
   expect(showValue(o, 'model')).toBe('coder:7b');
+  // several models and none named: the list opens on a coder; enter takes it; down then enter takes the next
+  let p = withTest(moveRow(f, 'source', 1), { ok: false, needModel: true, steps: [], models: ['llava:latest', 'coder:7b', 'tiny:3b'] }, 3);
+  p = openModelPick(p, p.test.models);
+  expect(p.pick.models).toEqual(['llava:latest', 'coder:7b', 'tiny:3b']);
+  expect(p.pick.models[p.pick.index]).toBe('coder:7b');
+  expect(p.pick.suggested).toBe('coder:7b');
+  expect(showValue(commitPick(p), 'model')).toBe('coder:7b');
+  expect(commitPick(p).pick).toBe(null);
+  expect(showValue(commitPick(movePick(p, 1)), 'model')).toBe('tiny:3b');
+  expect(closePick(p).pick).toBe(null);
+  expect(showValue(closePick(p), 'go')).toBe('pick a model');
+  expect(rowNote(p, 'model')).toMatch(/enter opens the list · ←→ picks one of the 3 it has/);
 });
 
 test('editing a row: typed and pasted text at the cursor; a key loses its spaces and breaks, a port keeps its digits; a whole https address sets Reach by', () => {

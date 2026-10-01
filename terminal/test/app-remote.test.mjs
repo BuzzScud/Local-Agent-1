@@ -236,3 +236,38 @@ test('/remote claude with no key yet asks only for it, then Connect; the compute
   expect(claude.seen.every((x) => x.key === claude.key)).toBe(true);
   expect(settingsOf(base).remote).toMatchObject({ use: true, source: 'machine', keyId: 'default' });
 }, T);
+
+// An Ollama-like server: no llama.cpp /health, an open /v1/models with several models.
+const ollama = () => new Promise((ok) => {
+  const srv = createServer(async (req, res) => {
+    if (req.url === '/v1/models') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ object: 'list', data: ['llava:latest', 'coder:30b', 'tiny:3b'].map((id) => ({ id })) })); return; }
+    if (req.url === '/v1/chat/completions') { for await (const _ of req); res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: 'ready' } }] })); return; }
+    res.statusCode = 404; res.end('404 page not found');
+  });
+  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
+});
+
+test('/remote Another service: Connect lists the models, a coder is highlighted, enter on another name connects with that one', async () => {
+  const { cwd, env, base } = setup();
+  const here = await startFakeServer([]);
+  const srv = await ollama();
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--url', here.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/remote' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 },
+    ...right(3), { sleep: 100 }, // Run on: Another service
+    ...down(1), { type: srv.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address (enter: on to API key)
+    ...down(3), { key: 'enter' }, { wait: 'has 3 models' }, { sleep: 150 }, { snapshot: 'list' }, // Connect → the list
+    { key: 'down' }, { sleep: 80 }, { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' },
+    ...quit,
+  ] });
+  await here.close();
+  await srv.close();
+  const list = r.snapshots.list;
+  expect(list).toMatch(/has 3 models/);
+  expect(list).toContain('llava:latest');
+  expect(list).toContain('coder:30b');
+  expect(list).toContain('tiny:3b');
+  expect(list).toMatch(/coder:30b\s+suggested/);
+  expect(r.snapshots.on).toMatch(/On the remote: tiny:3b/);
+  expect(settingsOf(base).remote).toMatchObject({ use: true, source: 'openai', kind: 'openai', model: 'tiny:3b', key: false });
+}, T);

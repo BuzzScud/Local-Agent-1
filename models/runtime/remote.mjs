@@ -284,12 +284,14 @@ export function pickRemoteModel(ids) {
 }
 
 // Whether the remote answers, with its key, and what it runs. Answers
-// { ok, steps: [{ ok, text }], ctx, slots, models, model, file, ms, error }.
+// { ok, steps: [{ ok, text }], ctx, slots, models, model, file, ms, error, needModel }.
 // reply: also ask for a two-word answer (the form's Connect), which proves the
 // whole way works (a hosted model may charge a fraction of a cent for it).
-export async function probe({ url, kind = 'llama', key = null, model = '', reply = false, signal, timeoutMs = 8000 }) {
+// autoPick: when several models are listed and none named, pick a text/coder
+// one (the CLI, connectRemote). The form passes false so you can pick from the list.
+export async function probe({ url, kind = 'llama', key = null, model = '', reply = false, autoPick = true, signal, timeoutMs = 8000 }) {
   const steps = [];
-  const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, vision: kind !== 'llama' };
+  const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, needModel: false, vision: kind !== 'llama' };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
   if (kind === 'claude') return claudeProbe({ url, key, model, reply, signal, timeoutMs, why });
   const t0 = Date.now();
@@ -319,8 +321,13 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
       out.models = r.body.data.map((m) => m.id).filter(Boolean);
       const named = String(model ?? '').trim();
       if (named && !out.models.includes(named) && out.models.length) steps.push({ ok: true, text: `"${named}" is not in its list of ${out.models.length}; it is asked for anyway` });
-      out.model = named || pickRemoteModel(out.models);
-      if (!out.model) return fail('it listed no models');
+      out.model = named || ((autoPick || out.models.length === 1) ? pickRemoteModel(out.models) : null);
+      if (!out.model) {
+        out.needModel = out.models.length > 0;
+        return fail(out.models.length
+          ? `pick a model: it has ${out.models.length} (${out.models.slice(0, 3).join(', ')}${out.models.length > 3 ? '…' : ''})`
+          : 'it listed no models');
+      }
       if (!named && out.models.length > 1) steps.push({ ok: true, text: `using ${out.model} of ${out.models.length}` });
       const picked = r.body.data.find((m) => m.id === out.model);
       out.ctx = ctxOf(picked);

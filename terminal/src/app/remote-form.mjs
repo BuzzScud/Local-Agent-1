@@ -4,9 +4,11 @@
 // its own set-up and its own key, so flipping Run on loses nothing. Connect
 // checks the rows as they are (the tunnel, the address, the key, one word
 // back) and only when that works saves them and switches; Save only keeps
-// them. ←→ moves a choice row; enter (or typing) on a text row edits it in
-// place. A key never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
+// them. An OpenAI-compatible server with several models and none named opens
+// the list (a coder highlighted); enter picks one and the check runs again.
+// ←→ moves a choice row; enter (or typing) on a text row edits it in place.
+// A key never leaves the Keychain except to go in a request's header.
+import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
 
 export const SOURCES = ['here', ...REMOTE_SOURCES];
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
@@ -110,13 +112,39 @@ export function modelChoices(form) {
   return [...new Set([...CLAUDE_MODELS.map((m) => m.id), v.model || DEFAULT_CLAUDE_MODEL, ...listed])];
 }
 
+// The list Connect (or enter on the Model row) opens: the names the server
+// listed, a coder highlighted when none is named yet. enter takes that one
+// and Connect checks it; esc puts the form back with the list still on the row.
+export function openModelPick(form, models = null) {
+  const ids = (models?.length ? models : modelChoices(form)).filter(Boolean);
+  if (ids.length < 2) return form;
+  const v = cur(form)?.model;
+  const suggested = (v && ids.includes(v) ? v : pickRemoteModel(ids)) || ids[0];
+  const index = Math.max(0, ids.indexOf(suggested));
+  const rows = rowsOf(form);
+  return { ...form, pick: { models: ids, index, suggested }, index: Math.max(0, rows.findIndex((r) => r.id === 'model')) };
+}
+export function movePick(form, dir) {
+  if (!form.pick) return form;
+  const n = form.pick.models.length;
+  return { ...form, pick: { ...form.pick, index: (form.pick.index + n + dir) % n } };
+}
+export function commitPick(form) {
+  const name = form.pick?.models[form.pick.index];
+  if (!name) return form;
+  return { ...withValues(form, { model: name }), pick: null };
+}
+export function closePick(form) {
+  return form.pick ? { ...form, pick: null } : form;
+}
+
 // ←→ on a choice row, clamped at the ends as in /effort. Run on moves to another
 // service (its rows as it left them); More opens (→) and folds (←); the Model
 // row walks modelChoices.
 export function moveRow(form, id, dir) {
   if (id === 'source') {
     const next = SOURCES[Math.max(0, Math.min(SOURCES.length - 1, SOURCES.indexOf(form.source) + dir))];
-    return next === form.source ? form : { ...form, source: next, index: 0, more: false, test: null, error: null, tried: false };
+    return next === form.source ? form : { ...form, source: next, index: 0, more: false, test: null, error: null, tried: false, pick: null };
   }
   if (id === 'more') return { ...form, more: dir > 0 };
   const v = cur(form);
@@ -132,7 +160,7 @@ export function moveRow(form, id, dir) {
 export function showValue(form, id) {
   if (id === 'source') return WORDS.source(form.source);
   if (id === 'more') return form.more ? '▾' : '▸';
-  if (id === 'go') return form.test?.running ? 'checking…' : form.source === 'here' ? (form.inUse === 'here' ? 'in use now' : 'enter to switch') : form.test && !form.test.ok ? '✗ it did not work' : 'enter to connect';
+  if (id === 'go') return form.test?.running ? 'checking…' : form.source === 'here' ? (form.inUse === 'here' ? 'in use now' : 'enter to switch') : form.test?.needModel ? 'pick a model' : form.test && !form.test.ok ? '✗ it did not work' : 'enter to connect';
   if (id === 'keep') return 'enter to save';
   const v = cur(form);
   const claude = v.kind === 'claude';
@@ -182,7 +210,7 @@ export function rowNote(form, id) {
     case 'kind': return v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'Ollama, LM Studio, vLLM… on that computer';
     case 'model': {
       if (claude) return CLAUDE_MODELS.find((m) => m.id === (v.model || DEFAULT_CLAUDE_MODEL))?.note ?? 'from your key’s list of models';
-      if (t?.models?.length) return `←→ picks one of the ${t.models.length} it has`;
+      if (t?.models?.length) return `enter opens the list · ←→ picks one of the ${t.models.length} it has`;
       return v.kind === 'llama' ? 'blank: whatever it runs' : 'the name the service wants (Connect lists them)';
     }
     case 'port': return claude ? 'blank: https’s own' : ssh ? 'the model’s port on that computer (coding serve: 8080)' : v.kind === 'llama' ? 'blank: 8080, coding serve’s' : 'blank: the address’s own';
@@ -325,7 +353,9 @@ export function commitEdit(form) {
 
 // Checks the shown service's rows as they are, before any save: the tunnel
 // (opened for the check and closed after), the address, the key, the model, one word.
-export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000 } = {}) {
+// autoPick: the CLI names a coder when several are listed; the form passes false
+// so Connect can open the list instead of guessing.
+export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, autoPick = true } = {}) {
   const r = toProfile(form);
   const problem = remoteProblem(r);
   if (problem) return { ok: false, steps: [{ ok: false, text: problem }], models: [] };
@@ -339,7 +369,7 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000 }
       tunnel = await openTunnel({ dest: r.address, remotePort: r.port ?? SERVE_PORT, ssh });
       url = tunnel.url;
     } else url = directUrl(r);
-    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, reply: true, signal, timeoutMs });
+    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, reply: true, autoPick, signal, timeoutMs });
     if (tunnel) res.steps.unshift({ ok: true, text: 'ssh tunnel open' });
     return res;
   } catch (e) {

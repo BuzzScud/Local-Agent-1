@@ -20,7 +20,7 @@ import { resolvePath } from '../agent/tools.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
-import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices } from './remote-form.mjs';
+import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, commitPick, closePick, modelChoices } from './remote-form.mjs';
 import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarning, webSettings, searchKeyId } from './web-form.mjs';
 import { PROVIDER_NAMES } from '../tools/web.mjs';
 import { readFile } from '../tools/read.mjs';
@@ -731,7 +731,8 @@ export function App({ opts, win, onRestart }) {
   // Connect: the shown service's rows are checked as they are (the tunnel opened
   // and closed for it); only when that works are they saved and the window
   // switched. One that does not work leaves the form open with what it found.
-  // This Mac: back to the model here, the remotes kept.
+  // Several models and none named: the list opens (a coder highlighted); enter
+  // picks one and the check runs again. This Mac: back to the model here.
   const connectForm = (pk) => {
     if (pk.source === 'here') {
       if (remoteRef.current.on && busyNow()) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting): switch when it is done.' }); return; }
@@ -744,11 +745,12 @@ export function App({ opts, win, onRestart }) {
     if (formWarning({ ...pk, tried: true })?.tone === 'error') { setPicker({ ...pk, tried: true, error: null }); return; }
     if (busyNow()) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting). Nothing was saved: connect again when it is done.' }); return; }
     const id = (remoteRef.current.tests = (remoteRef.current.tests ?? 0) + 1);
-    setPicker({ ...pk, tried: true, test: { running: true, id }, error: null });
-    testForm(pk).then((res) => {
+    setPicker({ ...pk, tried: true, test: { running: true, id }, error: null, pick: null });
+    testForm(pk, { autoPick: false }).then((res) => {
       const p = S.current.picker;
       if (p?.kind !== 'remote' || p.test?.id !== id) return;
       const done = withTest(p, res, id);
+      if (res.needModel && res.models?.length > 1) { setPicker(openModelPick(done, res.models)); return; }
       if (!res.ok) { setPicker(done); return; }
       if (busyNow()) { setPicker({ ...done, error: 'It works, but Agentic Coder got busy meanwhile. Nothing was saved: connect again when it is done.' }); return; }
       const before = settings.remote;
@@ -2452,6 +2454,16 @@ export function App({ opts, win, onRestart }) {
         else setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
         return;
       }
+      if (!web && pk.pick) {
+        const n = pk.pick.models.length;
+        if (key.upArrow) setPicker(movePick(pk, -1));
+        else if (key.downArrow || key.tab) setPicker(movePick(pk, 1));
+        else if (key.return) { const next = commitPick(pk); setPicker(next); connectForm(next); }
+        else if (/^[1-9]$/.test(ch) && Number(ch) <= n) { const next = commitPick({ ...pk, pick: { ...pk.pick, index: Number(ch) - 1 } }); setPicker(next); connectForm(next); }
+        else if (key.escape) setPicker(closePick(pk));
+        else if (key.ctrl && ch === 'c') { setPicker(null); push({ type: 'note', text: kept, tone: 'dim' }); }
+        return;
+      }
       const rows = web ? WEB_ROWS : remoteRows(pk);
       const n = rows.length;
       const row = rows[Math.min(pk.index, n - 1)];
@@ -2461,6 +2473,7 @@ export function App({ opts, win, onRestart }) {
       if (key.upArrow) setPicker({ ...pk, index: (pk.index + n - 1) % n });
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
       else if (key.leftArrow || key.rightArrow) setPicker((web ? moveWebRow : moveRow)(pk, row.id, key.rightArrow ? 1 : -1));
+      else if (key.return && !web && row.id === 'model' && modelChoices(pk).length > 1) setPicker(openModelPick(pk));
       else if (key.return && text) setPicker(startEdit(pk, row.id));
       else if (key.return && web) (row.id === 'test' ? runWebTest : saveWeb)(pk);
       else if (key.return && row.id === 'more') setPicker({ ...pk, more: !pk.more });

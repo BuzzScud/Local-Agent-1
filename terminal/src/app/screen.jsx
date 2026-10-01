@@ -930,11 +930,13 @@ function LimitsPicker({ app }) {
 // then only that service's rows. A choice row shows its value between ◀ ▶; a
 // text row its value, or what is being typed with the cursor (the API key as
 // dots); • marks a change not saved yet. A Connect that did not work leaves
-// its findings under the Connect row.
+// its findings under the Connect row. Several models and none named: the list
+// (a coder highlighted); enter picks one and Connect checks it.
 // /web is the same form with its own rows (web-form.mjs) and a Test row.
 function RemotePicker({ app }) {
   const pk = app.picker;
   const web = pk.kind === 'web';
+  if (!web && pk.pick) return <RemoteModelPick app={app} />;
   const ROWS = web ? WEB_ROWS : rowsOf(pk);
   const showValueOf = web ? showWebValue : showValue;
   const noteOf = web ? webRowNote : rowNote;
@@ -964,7 +966,7 @@ function RemotePicker({ app }) {
         const v = showValueOf(pk, r.id);
         const note = noteOf(pk, r.id);
         const done = r.id === checkRow && pk.test && !pk.test.running;
-        const tone = done ? (pk.test.ok ? C.ok : C.bad) : undefined;
+        const tone = done ? (pk.test.ok ? C.ok : pk.test.needModel ? C.warn : C.bad) : undefined;
         return (
           <React.Fragment key={r.id}>
             {r.id === checkRow ? <Text> </Text> : null}
@@ -986,7 +988,37 @@ function RemotePicker({ app }) {
       })}
       {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="wrap">{warn.text}</Text> : null}
       {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
-      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : web ? '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · the web' : '↑↓ choose · ←→ change · enter edits a row or runs it · esc cancels'}</Text>
+      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : web ? '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · the web' : modelChoices(pk).length > 1 ? '↑↓ choose · ←→ change · enter on Model opens the list · esc cancels' : '↑↓ choose · ←→ change · enter edits a row or runs it · esc cancels'}</Text>
+    </Box>
+  );
+}
+
+// The names an OpenAI-compatible server listed, after Connect (or enter on the
+// Model row). A coder is marked suggested when none was named yet.
+function RemoteModelPick({ app }) {
+  const pk = app.picker;
+  const ids = pk.pick.models;
+  const view = Math.max(3, Math.min(ids.length, Math.max(8, (app.rows ?? 24) - 16)));
+  const top = Math.max(0, Math.min(pk.pick.index - Math.floor(view / 2), Math.max(0, ids.length - view)));
+  const addr = showValue(pk, 'address');
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Remote model</Text>
+      <Text color={C.dim} wrap="truncate-end">{addr} has {ids.length} models. Pick one; Connect then checks it.</Text>
+      <Text> </Text>
+      {top > 0 ? <Text color={C.dim}>  ↑ {top} more</Text> : null}
+      {ids.slice(top, top + view).map((id, i) => {
+        const on = top + i === pk.pick.index;
+        return (
+          <Text key={`${top + i}:${id}`} wrap="truncate-end">
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {id}</Text>
+            {id === pk.pick.suggested ? <Text color={C.dim}>  suggested</Text> : null}
+          </Text>
+        );
+      })}
+      {top + view < ids.length ? <Text color={C.dim}>  ↓ {ids.length - top - view} more</Text> : null}
+      <Text> </Text>
+      <Text color={C.dim}>↑↓ choose · enter picks it and connects · 1–9 picks that row · esc back to the form</Text>
     </Box>
   );
 }

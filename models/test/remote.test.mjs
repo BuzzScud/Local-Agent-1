@@ -215,6 +215,13 @@ test('the check on an OpenAI-compatible server: its model list, the one it has p
       'model coder:7b',
       expect.stringMatching(/^answered "ready"/),
     ]);
+    // The form passes autoPick: false so Connect can open the list instead of guessing.
+    const listed = await probe({ url: `http://127.0.0.1:${many.address().port}`, kind: 'openai', reply: true, autoPick: false });
+    expect(listed.ok).toBe(false);
+    expect(listed.needModel).toBe(true);
+    expect(listed.models).toEqual(['llava:latest', 'coder:7b', 'tiny:3b']);
+    expect(listed.model).toBe(null);
+    expect(listed.error).toMatch(/^pick a model: it has 3/);
   } finally { await new Promise((r) => many.close(r)); }
   // A port nothing listens on (taken and let go at once).
   const free = createServer();
