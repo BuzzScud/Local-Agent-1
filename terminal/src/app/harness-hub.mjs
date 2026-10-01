@@ -129,8 +129,11 @@ export function harnessPage(d) {
       ${rs.map(([label, dir, show, better, val]) => `<div class="row"><span class="k">${label}<small>${dir}</small></span><span class="v${bestOf(better, val) === m.id ? ' best' : ''}">${show(m)}</span></div>`).join('')}
     </article>`).join('')}</div>`;
   };
-  // The same rows as a table, one column a model.
-  const grid = (cls, head, rows) => `<table class="grid ${cls}"><thead><tr><th>${head}</th>${M.map((m) => `<th ${of(m)}>${esc(m.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([label, dir, show, better, val]) => { const b = bestOf(better, val); return `<tr><th>${label}${dir ? `<small>${dir}</small>` : ''}</th>${M.map((m) => `<td ${of(m)}${b === m.id ? ' class="best"' : ''}>${show(m)}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`;
+  // The shortest name, as the Arena writes it (Gemma, Qwen, K2, Bonsai: a version after the first word dropped), unless two models would share it.
+  const tinyOf = (m) => m.name.split(' ')[0].replace(/\d+\.\d+$/, '');
+  const tiny = (m) => esc(M.filter((o) => tinyOf(o) === tinyOf(m)).length === 1 ? tinyOf(m) : m.name);
+  // The same rows as a table, one column a model. names: 'short' in a narrow card (the Results totals), where four whole names break mid-word.
+  const grid = (cls, head, rows, names = 'whole') => `<table class="grid ${cls}"><thead><tr><th>${head}</th>${M.map((m) => `<th ${of(m)}>${names === 'short' ? tiny(m) : esc(m.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([label, dir, show, better, val]) => { const b = bestOf(better, val); return `<tr><th>${label}${dir ? `<small>${dir}</small>` : ''}</th>${M.map((m) => `<td ${of(m)}${b === m.id ? ' class="best"' : ''}>${show(m)}</td>`).join('')}</tr>`; }).join('')}</tbody></table>`;
 
   // ── 1 · the flow
   const steps = `<div class="steps">${STEPS.map((s, i) => `<section class="card step"><h3><span class="n">${i + 1}</span>${s.name}</h3><p>${s.text}</p>${who(s.who, s.note)}</section>${i < STEPS.length - 1 ? '<i class="arr">→</i>' : ''}`).join('')}</div>`;
@@ -239,7 +242,7 @@ export function harnessPage(d) {
     results = `<h2>${M.length > 1 ? sw(`The same ${TS} on ${onWho}`, `{name} on the ${TS}`) : `The ${TS}`}</h2><p class="lead">Each task is graded by a check the model never sees.</p>
     <div class="two wideLeft res${RM.length > 2 ? ' many' : ''}"><div><div class="two tasksTwo">${block(run.tasks.slice(0, half))}${half < T ? block(run.tasks.slice(half)) : ''}</div>
       <p class="foot">${esc(run.name)}, ${when}: ${setup}${run.limitMins ? `, ${run.limitMins} minutes a task at most` : ''}.<span class="when-all"> The fastest pass in each row is bold.</span></p></div>
-    <div class="stack"><section class="card"><h3>The totals</h3>${grid('cmp', '', [R.passed, R.time, R.typical])}</section>
+    <div class="stack"><section class="card"><h3>The totals</h3>${grid('cmp', '', [R.passed, R.time, R.typical], M.length > 2 ? 'short' : 'whole')}</section>
       ${out.length ? `<section class="card when-all"><h3>Not in this run</h3><p class="sub">${list(out.map((m) => esc(m.name)))} ${out.length === 1 ? 'has' : 'have'} not run it yet. ${toAdd(out.length)}</p></section>` : ''}
       <section class="card verdict when-all"><h3>Which model, when</h3><dl>${rowsV.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section>
       ${M.map((m) => `<section class="card verdict" data-only="${esc(m.id)}" hidden><h3>How ${esc(m.name)} did</h3><dl>${alone(m).map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section>`).join('')}</div></div>`;
