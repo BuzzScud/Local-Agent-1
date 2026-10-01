@@ -25,8 +25,9 @@ test('the welcome on the top line, the prompt box on the last lines, space in be
   const footer = lines.findIndex((l) => l.includes('? for shortcuts'));
   expect(welcome).toBeLessThanOrEqual(2);          // at the top (this harness may show one line above)
   expect(footer).toBeGreaterThanOrEqual(43 - 3);   // the prompt box and footer at the bottom
-  expect(lines.slice(tipsEnd + 1, footer - 3).every((l) => !l.trim())).toBe(true); // space in between
-  expect(footer - 3 - tipsEnd).toBeGreaterThan(10);
+  // the box is three rows and sits one empty row above the footer (1 Oct 2026)
+  expect(lines.slice(tipsEnd + 1, footer - 4).every((l) => !l.trim())).toBe(true); // space in between
+  expect(footer - 4 - tipsEnd).toBeGreaterThan(10);
 }, T);
 
 test('start-up says what it waits for; a message typed meanwhile is sent when ready; the next start restores', async () => {

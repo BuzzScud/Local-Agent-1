@@ -49,6 +49,13 @@ test('the model is off at the start; a message waits for /start, which loads it 
   expect(r.snapshots.off).toContain(D.name);
   expect(r.snapshots.off).toContain('○ off · /start wakes it up');
   expect(r.snapshots.off).toContain('○ model off · ctrl+t start');
+  // The footer sits between two empty rows: one under the prompt box's bottom edge, and the one under it
+  // that Ink keeps for the cursor (1 Oct 2026; before, the box touched the footer and only the lower row was empty).
+  const lines = r.snapshots.off.split('\n');
+  const edge = lines.findLastIndex((l) => l.startsWith('╰'));
+  const foot = lines.findIndex((l, i) => i > edge && l.includes('ctrl+t start'));
+  expect(foot - edge).toBe(2);
+  expect(lines[edge + 1].trim()).toBe('');
   // The message waits, said once, with the Queued line.
   expect(r.snapshots.held).toContain('Queued: hello');
   expect(r.snapshots.held).toContain('sends once /start has loaded the model');
