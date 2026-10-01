@@ -11,7 +11,9 @@ import { homedir } from 'node:os';
 import { memoryDirs, readFacts, markUsed, namesMissingFile, fileNames, filesIn, looksLikeEvent, countDay } from './facts.mjs';
 import { choose } from './search.mjs';
 
-export const TOP = 3; // at most this many facts travel with a request
+// At most this many facts travel with a request (3 until 1 Oct 2026, the user's pick "keep more notes"). How
+// close a fact must be (the embedder's cut and margin) decides first, so most requests still bring one.
+export const TOP = 5;
 
 // A note that only says what happened is skipped, and the screen says so
 // (looksLikeEvent, in facts.mjs, which keeps it out of the short lines too).

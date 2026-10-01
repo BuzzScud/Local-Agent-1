@@ -160,7 +160,7 @@ function addedText(s) {
   ...r.facts.map(f => `   - (${f.kind}) ${f.text}`),
   ...(r.total > r.facts.length ? [`   … and ${r.total - r.facts.length} more`] : []),
   '',
-  '2. Claude Code’s notes about your work, when that source is on: the one or two that fit, cut to the part that fits. Notes about sign-ins, servers and secrets are left out.',
+  '2. Claude Code’s notes about your work, when that source is on: up to four that fit, cut to the part that fits. Notes about sign-ins, servers and secrets are left out.',
   '',
   '3. For a bug fix: the steps for its kind of bug (crash, wrong value, layout, data, speed…).',
   '',

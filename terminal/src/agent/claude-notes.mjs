@@ -1,7 +1,7 @@
 // Claude's notes: what Claude Code has written down about your work over
 // many conversations (its memory folder), as a second place Agentic Coder's memory
 // looks. There are hundreds of them, far more than the model can hold, so
-// they come the way saved facts do (recall.mjs): the one or two that fit a
+// they come the way saved facts do (recall.mjs): up to four that fit a
 // request, found by meaning, cut to the part that fits, written into the
 // request itself.
 //   read where they are   every time, so a note written today is there today
@@ -20,7 +20,9 @@ import { looksSecret } from './facts.mjs';
 import { wordsOf } from './recall.mjs';
 import { choose } from './search.mjs';
 
-export const TOP = 2; // at most this many notes travel with a request
+// At most this many notes travel with a request (2 until 1 Oct 2026, the user's pick "keep more notes": on
+// their recent requests it added a note to 6 of 13, about 300–630 tokens). CUT and MARGIN decide first.
+export const TOP = 4;
 export const PART_CHARS = 1100; // of one note
 // When a note comes along. Its meaning must be close to the request's (1 is
 // the same meaning): very close is enough by itself (CUT), less close counts

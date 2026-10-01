@@ -1308,7 +1308,7 @@ export class Agent extends EventEmitter {
   }
 
   // Claude's notes (claude-notes.mjs): what Claude Code wrote down about the
-  // user's work, read where it is. The one or two notes that fit the request
+  // user's work, read where it is. Up to four notes that fit the request
   // go along with it, as the saved facts do. They are never counted for or
   // against (no trust): Agentic Coder does not change them.
   async rememberClaude(text, goesAlong, signal) {
