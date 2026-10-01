@@ -21,6 +21,7 @@ export const KEYS = [
     ['↑ ↓', 'earlier prompts (on the first or last row of the box; inside a long prompt they move a row)'],
     ['/', 'the command list; keep typing to narrow it, enter or tab to pick'],
     ['@', 'attach a file: type part of its name and pick it (a picture is shown to the model, a PDF gives its text)'],
+    ['cmd+v', 'paste text; text copied off this window (one of your messages, the prompt box) comes back as you wrote it, without the line breaks, indents, padding and │ edges the screen drew (ctrl+z: as copied)'],
     ['ctrl+v', 'attach the picture on the clipboard (a screenshot copied with ctrl+shift+cmd+4) as [Image #1]; dragging a picture or PDF into the window attaches it too'],
     ['!', 'run a shell command yourself, e.g. !ls'],
     ['?', 'show or hide the short list of shortcuts (on an empty prompt)'],

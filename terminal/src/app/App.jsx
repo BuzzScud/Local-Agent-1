@@ -23,13 +23,13 @@ import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools
 import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices } from './remote-form.mjs';
 import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarning, webSettings, searchKeyId } from './web-form.mjs';
 import { PROVIDER_NAMES } from '../tools/web.mjs';
-import { footerLabel } from './mac-memory.mjs';
 import { readFile } from '../tools/read.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { walk } from '../tools/fs.mjs';
 import { editInput, insertText, cursorLine, cursorCell, mentionAt, selectedText, withUndo, undoEdit, redoEdit, moveBy, posAt, wordAt, promptTextWidth } from './edit-input.mjs';
 import { MOUSE_ON, MOUSE_OFF, ASK_CURSOR, DOUBLE_CLICK_MS, WHEEL_PAUSE_MS, parseMouse, parseCursorReply, isMouseText } from './mouse.mjs';
 import { copyToClipboard } from './clipboard.mjs';
+import { fromScreen } from './screen-copy.mjs';
 import { matchCommands, COMMANDS, SETTINGS } from './commands.mjs';
 import { startWeightsServer, listDocs, findDocsDir } from './weights.mjs';
 import { MODE_OPTIONS, VERSION } from './help.mjs';
@@ -1075,17 +1075,25 @@ export function App({ opts, win, onRestart }) {
     return () => clearInterval(id);
   }, [starting, live.phase, btwMoving]);
 
-  // The Mac's memory for the footer, read every 5 s (a few ms); the footer
-  // redraws only when what it says changes.
-  const [mac, setMac] = useState(opts.macMem ?? null);
+  // The Mac's memory for the footer, read every 5 s (a few ms). A new figure is
+  // drawn with the next redraw (a key, a spinner), not with one of its own: that
+  // would rewrite the bottom of the window every few seconds while nothing else
+  // moves, and Terminal drops a highlight whose rows are drawn again, so text
+  // there could not be copied (1 Oct 2026). A new pressure colour is drawn at once.
+  const macRef = useRef(opts.macMem ?? null);
+  const [, redrawMac] = useState(0);
   useEffect(() => {
     if (!opts.macMem) return;
     const id = setInterval(() => {
       const m = macMemory();
-      if (m) setMac((prev) => (prev && footerLabel(prev) === footerLabel(m) && prev.level === m.level ? prev : m));
-    }, 5000);
+      if (!m) return;
+      const prev = macRef.current;
+      macRef.current = m;
+      if (!prev || prev.level !== m.level) redrawMac((n) => n + 1);
+    }, Number(process.env.AGENTIC_MAC_EVERY) || 5000); // ms; the tests read it faster
     return () => clearInterval(id);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const mac = macRef.current;
 
   // Memory the model really uses (for the Live thinking meter line).
   useEffect(() => {
@@ -2171,7 +2179,14 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     if (S.current.perm || S.current.picker || (S.current.btw && !S.current.answerWait)) return;
-    setInput((s) => withUndo(s, insertText(s, text.replace(/\r\n?/g, '\n'))));
+    // Text copied off this screen (your message, the prompt box) comes back as it was written:
+    // without the screen's line breaks, indents, padding and │ edges. ctrl+z gives the paste as copied.
+    const raw = text.replace(/\r\n?/g, '\n');
+    const clean = fromScreen(raw, { cols: width });
+    setInput((s) => {
+      const pasted = withUndo(s, insertText(s, raw));
+      return clean === raw ? pasted : withUndo(pasted, insertText(s, clean));
+    });
   });
 
   // The prompt box's rows as it draws them (its width; the ! of shell mode is not drawn).
