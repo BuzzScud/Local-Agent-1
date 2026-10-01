@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Agent, AUTO, MAX_CALLS } from '../src/agent/agent.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { toolSchemas, MODEL_TOOL_DEFS } from '../src/agent/tools.mjs';
-import { wayPrompt, hooksOn, hooksFrom, changeHooks, hookRows, HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT } from '../src/agent/way.mjs';
+import { wayPrompt, hooksOn, hooksFrom, changeHooks, hookRows, HOOKS, MODEL_HOOKS, MODEL_TOOL_LINES, ONE_AT_A_TIME, ANSWER_HABIT } from '../src/agent/way.mjs';
 import { decide } from '../src/agent/permissions.mjs';
 import { AutoSave } from '../src/app/autosave.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
@@ -303,6 +303,8 @@ test('the hooks list, /hooks and the permission rules of the new tools', () => {
   expect(hooksOn('all').size).toBe(HOOKS.length);
   expect([...hooksOn('empty, tests nope')]).toEqual(['empty', 'tests']);
   expect(hooksOn(undefined).size).toBe(0);
+  expect([...hooksFrom({}, {})]).toEqual(MODEL_HOOKS);
+  expect([...hooksFrom({ hooks: [] }, {})]).toEqual([]);
   expect([...hooksFrom({ hooks: ['layout', 'empty'] }, {})]).toEqual(['empty', 'layout']);
   expect([...hooksFrom({ hooks: ['layout'] }, { AGENTIC_HOOKS: 'off' })]).toEqual([]);
   const r = changeHooks(new Set(), 'on', '1', {});

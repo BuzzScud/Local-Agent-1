@@ -4,13 +4,17 @@ Agentic Coder follows this file. It is the only copy: change it here, or in the 
 (Instructions → 08 SKILLS.md), and Agentic Coder changes on your next message.
 
 - Each skill is a `## Name` section: a `- Words:` line (the words or phrases that bring it,
-  split by commas), an `- About:` line (one line, shown in the list), then its steps.
-- When a request uses a skill's Words, its steps go with that request, and Agentic Coder works
-  step by step with them instead of its focused fix and change paths. The skill with the most
-  matching words wins; a phrase counts twice.
+  split by commas), an `- About:` line (one line, shown in the list), an optional `- Fence:`
+  line (`read`, `check`, `scratch`, split by commas), then its steps.
+- When a request uses a skill's Words, its steps go with that request on both ways (App and
+  Model), and on App the work goes step by step with them instead of the focused fix and
+  change paths. The skill with the most matching words wins; a phrase counts twice.
+- The fence is what the loop enforces, not a sentence in the steps. `read` refuses Edit and
+  Write. `check` requires one command before the turn may end as done. `scratch` puts the
+  message's edits back when its check fails (the free loop does this either way).
 - Every skill is also listed in the instructions by name and About, so the model can open one
-  the words missed with Read SKILLS/<name>. When Who decides is Model (/effort), only the list
-  is given and the model opens a skill itself.
+  the words missed. The path is SKILLS/<name>, or Rules/SKILLS/<name> when this project has a
+  SKILLS folder of its own, so the read cannot land in that folder.
 - Keep each skill short: its steps are read again with every request they go with (about
   4 seconds for 2,000 characters on Qwen).
 - Pick Words that only your kind of task uses: a skill wins over the focused paths, so

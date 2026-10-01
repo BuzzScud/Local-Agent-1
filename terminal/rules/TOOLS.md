@@ -16,5 +16,5 @@ Agentic Coder follows this file. It is the only copy: change it here, or in the 
 - To change an existing file, use Edit with old_text copied exactly from Read, without line numbers. Include enough context to match once. Use Write for new files.
 - To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.
 - Say a change is done only after a tool shows it works: a test you ran, the program's output, or the changed lines read back.
-- When a skill in the Skills list fits the task and its steps did not come with the request, Read SKILLS/<name> before you start.
+- When a skill in the Skills list fits the task and its steps did not come with the request, Read it first at the path the list gives (SKILLS/<name>, or Rules/SKILLS/<name> when this project has a SKILLS folder).
 - Call one tool at a time and wait for its result.

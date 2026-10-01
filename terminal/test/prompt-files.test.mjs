@@ -30,7 +30,7 @@ const SHIPPED = [FIND,
   EDIT,
   "- To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.",
   '- Say a change is done only after a tool shows it works: a test you ran, the program\'s output, or the changed lines read back.',
-  '- When a skill in the Skills list fits the task and its steps did not come with the request, Read SKILLS/<name> before you start.',
+  '- When a skill in the Skills list fits the task and its steps did not come with the request, Read it first at the path the list gives (SKILLS/<name>, or Rules/SKILLS/<name> when this project has a SKILLS folder).',
   ONE_AT].join('\n');
 const SKILLS = `# Skills
 
@@ -86,7 +86,12 @@ test('SKILLS.md: each "## Name" is a skill with its Words, About and steps; a co
   expect(s[0].words).toEqual(['add a test', 'write a test', 'a test for', 'unit test']);
   expect(s[0].about).toBe('add a test for one behaviour and run just that test file');
   expect(s[0].body).toBe('1. Find the tests.\n2. Run only that test file.');
+  expect(s[0].fence).toEqual([]);
   expect(skillProblems(s)).toEqual({ errors: [], warnings: [] });
+  const fenced = parseSkills('## Look only\n- Words: look only\n- About: read, do not edit\n- Fence: read, check\n\n1. Read it.\n');
+  expect(fenced[0].fence).toEqual(['read', 'check']);
+  expect(fenced[0].body).toBe('1. Read it.');
+  expect(skillProblems(parseSkills('## Bad\n- Fence: nope\n1. x\n')).errors.join(' ')).toContain('does not know (nope)');
   const bad = skillProblems(parseSkills('## A b\n1. x\n## a-b\n- Words: y\n'));
   expect(bad.errors.join(' ')).toContain('both open as SKILLS/a-b');
   expect(bad.errors.join(' ')).toContain('has no steps');
@@ -156,6 +161,8 @@ test('Read SKILLS/<name> opens one skill and SKILLS the list; they are read-only
   writeFileSync(join(proj, 'SKILLS', 'a.md'), 'the project\'s own');
   expect(readSkillPath(proj, 'SKILLS/a.md')).toBeNull();
   expect((await execute('Read', { path: 'SKILLS/a.md' }, {}, { cwd: proj })).text).toContain("the project's own");
+  expect(readSkillPath(proj, 'Rules/SKILLS/write-a-test').text).toContain('Rules/SKILLS/write-a-test (Write a test):');
+  expect(systemPrompt({ cwd: proj, git: 'none' })).toContain('- Rules/SKILLS/write-a-test:');
 });
 
 test('Who decides Model: with the one-at-a-time line it is swapped; without it the model\'s lines go at the end of Tool use, and back takes them out', () => {
@@ -264,7 +271,7 @@ test('the hub: files.json, save and undo over HTTP; another site is refused; a f
   } finally { s.stop(); }
 });
 
-test('the agent: a skill\'s steps go with the request and the focused paths are skipped; Model gets only the list; a save between messages is read', async () => {
+test('the agent: a skill\'s steps go with the request and the focused paths are skipped; Model gets the matched skill too; a save between messages is read', async () => {
   writeFileSync(join(proj, 'cart.mjs'), 'export const total = (xs) => xs.reduce((a, b) => a + b, 0);\n');
   writeFileSync(join(proj, 'package.json'), '{"type":"module","scripts":{"test":"node --test"}}');
   const model = MODELS[DEFAULT_MODEL];
@@ -291,12 +298,28 @@ test('the agent: a skill\'s steps go with the request and the focused paths are 
     await agent.send('thanks');
     expect(seen).toContain('Updated prompt files loaded (AGENTS.md, TOOLS.md, SKILLS.md).');
     expect(agent.messages[0].content).toContain('- SKILLS/tidy-imports: sort and dedupe imports');
-    // Model: only the list, no steps with the request
-    const m = new Agent({ url: fake.url, model, cwd: proj, system: systemPrompt({ cwd: proj, git: 'none' }), memory: false, flows: true, mode: 'edits', verify: false, way: 'model' });
+    // Model way opens the matched skill too: the steps go with the request, not only the list.
+    const m = new Agent({ url: fake.url, model, cwd: proj, system: systemPrompt({ cwd: proj, git: 'none' }), memory: false, flows: true, mode: 'edits', verify: false, way: 'model', hooks: [] });
     const before = fake.requests.length;
     await m.send('add a test for the total in cart.mjs');
     const mine = fake.requests.slice(before).filter((r) => r.tools?.length);
     expect(mine[0].messages[0].content).toContain('- SKILLS/write-a-test:');
-    expect(mine[0].messages.findLast((m) => m.role === 'user').content).not.toContain('Skill "Write a test"');
+    expect(mine[0].messages.findLast((x) => x.role === 'user').content).toContain('Skill "Write a test"');
+  } finally { await fake.close(); }
+});
+
+test('a read fence refuses Edit, and the file stays as it was', async () => {
+  const model = MODELS[DEFAULT_MODEL];
+  writeFileSync(join(rules, 'SKILLS.md'), '## Look only\n- Words: look only\n- About: read, do not edit\n- Fence: read\n\n1. Read it.\n');
+  writeFileSync(join(proj, 'cart.mjs'), 'export const n = 1;\n');
+  const fake = await startFakeServer([
+    { tool: { name: 'Edit', args: { path: 'cart.mjs', old_text: 'export const n = 1;', new_text: 'export const n = 2;' } } },
+    { text: 'Read only.' },
+  ]);
+  try {
+    const agent = new Agent({ url: fake.url, model, cwd: proj, system: systemPrompt({ cwd: proj, git: 'none' }), memory: false, flows: false, mode: 'edits', verify: false, confirmPlan: false });
+    await agent.send('look only at cart.mjs');
+    expect(agent.messages.find((m) => m.role === 'tool').content).toContain('only reads');
+    expect(readFileSync(join(proj, 'cart.mjs'), 'utf8')).toBe('export const n = 1;\n');
   } finally { await fake.close(); }
 });

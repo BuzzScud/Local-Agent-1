@@ -27,7 +27,7 @@ export const LIMITS = [
     steps: () => ['app', 'model'],
     def: () => 'app',
     show: (v) => (v === 'model' ? 'Model' : 'App'),
-    note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · checks: /hooks' : 'the app sorts, reads ahead and checks, as before'),
+    note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · next-step, tests, stuck and said-done start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'),
   },
   // The search (group 'Search', shown first): which models find what goes
   // along with a request. Measured 29 Sep (models/qwen3-reranker-0.6b/README.md).

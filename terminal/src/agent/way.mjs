@@ -9,7 +9,8 @@
 //          for it are tools it may call (Map, CodeSearch, Rename, TestFirst, Remember:
 //          tools.mjs MODEL_TOOL_DEFS), several calls a reply run in order, and Read takes several
 //          paths. Your permission mode is the safety net (plan mode is the lock), the app's checks
-//          are hooks you switch on (/hooks, off unless you do), and the memory is saved by the
+//          are hooks you switch on (/hooks). Four start on, because this way has no focused
+//          path under it: next-step, tests, stuck, said-done. The memory is saved by the
 //          model with Remember, a line saying what it saved.
 // The technical recoveries stay on both ways: a reply that repeats itself, a call cut off at the
 // reply limit, thinking that ran out of room, the step limit, the same step three times.
@@ -22,7 +23,9 @@ export const wayEnv = (env = process.env) => env.AGENTIC_WAY ?? env.BONSAI_WAY;
 
 // The app's checks, as hooks. On App each one runs as it always has (its own switches still
 // hold: /design check for the layout, the plan question with confirmPlan, the check-ins).
-// On Model each one runs only when you switched it on.
+// On Model, four start on (MODEL_HOOKS): a reply that names a cause and stops, the project's
+// tests after a change, a question when the same step comes twice or three errors land in a
+// row, and a "done" with no file changed. The rest run only when you switch them on.
 export const HOOKS = [
   { id: 'empty', label: 'Empty reply', what: 'an empty answer is sent back once: "Reply to the user now"' },
   { id: 'next-step', label: 'Do it now', what: 'a reply that says what it will do and stops is sent back (twice at most), and a named cause gets "make the change now"' },
@@ -38,10 +41,13 @@ export const HOOKS = [
   { id: 'desktop', label: 'On the Desktop', what: 'a page asked for "on my desktop" that was saved somewhere else is sent back once to be moved there' },
 ];
 export const HOOK_IDS = HOOKS.map((h) => h.id);
+// On for Model way unless settings.json or AGENTIC_HOOKS says otherwise. App way runs every
+// hook either way. next-step is the fourth: a reply that names a cause and stops.
+export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done'];
 export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS ?? env.BONSAI_HOOKS;
 
 // The hooks on, as a Set: AGENTIC_HOOKS when set ("all", "off", or a list such as
-// "empty,tests"), else settings.json's "hooks" (a list), else none.
+// "empty,tests"), else settings.json's "hooks" (a list), else the four Model starts with.
 export function hooksOn(value) {
   if (value instanceof Set) return new Set(HOOK_IDS.filter((h) => value.has(h)));
   if (Array.isArray(value)) return new Set(HOOK_IDS.filter((h) => value.includes(h)));
@@ -53,7 +59,8 @@ export function hooksOn(value) {
 }
 export function hooksFrom(settings = {}, env = process.env) {
   if (hooksEnv(env) !== undefined) return hooksOn(hooksEnv(env));
-  return hooksOn(Array.isArray(settings.hooks) ? settings.hooks : []);
+  if (Array.isArray(settings.hooks)) return hooksOn(settings.hooks);
+  return hooksOn(MODEL_HOOKS);
 }
 
 // "/hooks <on|off> <number|id|label|all>" → { on, changed, text, tone }.
@@ -84,7 +91,7 @@ export function changeHooks(on, what, arg, env = process.env) {
 export function hookRows(on, way) {
   const rows = HOOKS.map((h, i) => [[[`${String(i + 1).padStart(2)}  ${way === 'app' || on.has(h.id) ? 'on ' : 'off'}  `], [h.label, true]], h.what]);
   const foot = way === 'app'
-    ? 'Who decides is App (/effort): the app runs every check, as before. On Model, only the ones you switch on run.'
+    ? 'Who decides is App (/effort): the app runs every check, as before. On Model, next-step, tests, stuck and said-done start on; /hooks switches the rest.'
     : '/hooks on 1 · /hooks on tests · /hooks off all · kept in settings.json';
   return [...rows, ['', foot]];
 }

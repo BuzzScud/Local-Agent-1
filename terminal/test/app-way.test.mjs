@@ -1,7 +1,7 @@
 // End-to-end, the real app in a pseudo-terminal with `--way model`: the model decides (agent/way.mjs).
 // What you see: no line saying how the request was sorted, nothing read before the model's first
 // word, both files read in one reply, the answer; /effort shows Who decides on Model, and /hooks
-// lists the app's checks, off.
+// lists the app's checks. Four start on (next-step, tests, stuck, said-done).
 import { test, expect } from 'bun:test';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
@@ -33,6 +33,8 @@ test('--way model: no sorting line, the model reads two files in one reply, /eff
   expect(chats.length).toBe(2);
   expect(chats[0].messages.map((m) => m.role)).toEqual(['system', 'user']);
   expect(r.snapshots.effort).toMatch(/Who decides\s+◀ Model\s+▶\s+it sorts, looks and saves for itself, like Claude Code/);
-  expect(r.snapshots.hooks).toMatch(/Hooks · 0 of 12 on while the model decides/);
+  expect(r.snapshots.hooks).toMatch(/Hooks · 4 of 12 on while the model decides/);
   expect(r.snapshots.hooks).toMatch(/1\s+off\s+Empty reply/);
+  expect(r.snapshots.hooks).toMatch(/on\s+Tests after a change/);
+  expect(r.snapshots.hooks).toMatch(/on\s+Said done, nothing changed/);
 }, T);

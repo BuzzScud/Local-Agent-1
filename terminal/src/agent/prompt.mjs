@@ -7,7 +7,7 @@ import { instructionBlock } from './instructions.mjs';
 import { RULES } from './rules.mjs';
 import { memoryNotes } from './facts.mjs';
 import { rulesRoomFor } from './room.mjs';
-import { toolUseText, TOOL_USE_OLD, readSkills, skillsList } from './prompt-files.mjs';
+import { toolUseText, TOOL_USE_OLD, readSkills, skillsList, skillPath } from './prompt-files.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Agentic Coder answers from what it knows there, and goes into a
@@ -218,7 +218,7 @@ export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date
   const today = localDay(date);
   const now = promptVersion() !== 'old';
   const tooling = toolUse ?? (now ? toolUseText() : TOOL_USE_OLD);
-  const list = now ? skillsList(skills ?? readSkills()) : '';
+  const list = now ? skillsList(skills ?? readSkills(), { path: skillPath(cwd) }) : '';
   return `You are Agentic Coder, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.
 
 You are inside the project's folder. Use paths relative to it, and "." for the folder itself. Never type a full path.

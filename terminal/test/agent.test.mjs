@@ -313,6 +313,77 @@ test('"done" with no file changed: an honest second answer gets no note; a comma
   expect(ran.agent.messages.some((m) => m.role === 'user' && /no file was changed in this message/.test(m.content))).toBe(false);
 });
 
+test('a trim keeps the last tool error, and shortens an older output', async () => {
+  const cwd = project();
+  const agent = new Agent({ url: 'http://127.0.0.1:1', model, cwd, system: 'x', ctx: 1000, trimAt: 0.5, whenFull: 'trim', thinking: false });
+  const long = 'x'.repeat(4000);
+  const err = `the tests failed: expected 1 got 2\n${'y'.repeat(500)}`;
+  const kept = { role: 'tool', content: err, tool_call_id: 'c', keep: 'error' };
+  agent.messages.push({ role: 'user', content: 'change export.mjs' });
+  agent.messages.push({ role: 'assistant', content: 'Looking.' });
+  agent.messages.push({ role: 'tool', content: long, tool_call_id: 'a' });
+  agent.messages.push({ role: 'tool', content: long, tool_call_id: 'b' });
+  agent.messages.push(kept);
+  agent.ctxUsed = 4000;
+  agent.turn = { lastError: err, requestMsg: agent.messages[1] };
+  await agent.fitContext();
+  expect(kept.content).toBe(err);
+  expect(agent.messages.some((m) => String(m.content).startsWith('[older output removed'))).toBe(true);
+});
+
+test('a failed check puts the message\'s edits back; a file another hand changed is left', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Write', args: { path: 'notes.txt', content: 'new\n' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows).toUpperCase();' } } },
+    { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' },
+  ];
+  const cwd = project();
+  const before = readFileSync(join(cwd, 'export.mjs'), 'utf8');
+  const fake = await startFakeServer(replies);
+  const notes = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  await agent.send('add a --json flag to export.mjs');
+  await fake.close();
+  // The tests ran and failed: export.mjs is as it was, and the new file is gone.
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toBe(before);
+  expect(existsSync(join(cwd, 'notes.txt'))).toBe(false);
+  expect(notes.some((t) => /The check failed, so this message's changes were put back: notes.txt, export.mjs/.test(t))).toBe(true);
+  // A file that changed after the model's last edit is not overwritten.
+  agent.turn = { originals: new Map([['export.mjs', before]]), wrote: new Map([['export.mjs', 'what the model wrote']]) };
+  writeFileSync(join(cwd, 'export.mjs'), 'yours\n');
+  expect(agent.putBack()).toEqual({ back: [], left: ['export.mjs'] });
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toBe('yours\n');
+});
+
+test('after an edit, what a command writes stays in the project', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows); // ok' } } },
+    { tool: { name: 'Bash', args: { command: 'mkdir -p out && echo made > out/made.txt' } } },
+    { tool: { name: 'Bash', args: { command: 'node --test' } } },
+    { text: 'Done.' },
+  ];
+  const { reason, cwd } = await run(replies);
+  expect(reason).toBe('done');
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('// ok');
+  expect(readFileSync(join(cwd, 'out', 'made.txt'), 'utf8')).toBe('made\n');
+});
+
+test('Model way with the tests hook off: an edit no check ran on is kept', async () => {
+  const cwd = project();
+  const fake = await startFakeServer([
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  return toCsv(rows); // ok' } } },
+    { text: 'Done, added the comment.' },
+  ]);
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, way: 'model', hooks: [], ask: async () => ({ choice: 'yes' }) });
+  await agent.send('add a comment to the return line in export.mjs');
+  await fake.close();
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('// ok');
+});
+
 test('"done" with no file changed: on Model, only with the said-done hook on', () => {
   const agent = new Agent({ url: 'http://127.0.0.1:1', model, cwd: project(), system: 'x' });
   agent.way = 'model'; agent.hooks = new Set();

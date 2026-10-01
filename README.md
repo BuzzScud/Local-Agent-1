@@ -348,8 +348,9 @@ the model reads your message and decides. Nothing is sorted and nothing is read 
 did becomes tools it may call (`Map` the project map, `CodeSearch` by meaning, `Rename`, `TestFirst`
 the fix and change paths, `Remember` a fact for later), it can send several calls in one reply (Read
 takes several paths too, for Gemma, which sends one call a reply), your permission mode is the safety
-net (plan mode is the lock), the app's checks are **hooks** you switch on with `/hooks` (off unless you
-do), and the memory is saved by the model with `Remember`, a line saying what (the app's own saves after
+net (plan mode is the lock), the app's checks are **hooks** (`/hooks`). Four start on, because this way
+has no focused path under it: next-step, tests, stuck and said-done. The rest are off until you switch
+them on. The memory is saved by the model with `Remember`, a line saying what (the app's own saves after
 a task and at quit are off then). The replies that repeat, calls cut off at the reply limit and the step
 limit are handled on both. The Arena's **Who decides: App vs Model** check (`/test way`) runs the
 Practice 28 both ways, with its rule written before the first run: Model holds when it passes as many

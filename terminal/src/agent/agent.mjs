@@ -7,7 +7,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS } from './tools.mjs';
-import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
@@ -15,7 +15,7 @@ import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
-import { pickSkill, skillNote, readSkills, skillsList, toolUseText } from './prompt-files.mjs';
+import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseText } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
 import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './studio.mjs';
@@ -529,7 +529,7 @@ export class Agent extends EventEmitter {
   // the memory), TOOLS.md's Tool use lines and SKILLS.md's list (prompt-files.mjs). A change to
   // any of them, saved in the hub or anywhere else, is read before the next message.
   promptStamp() {
-    try { return `${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseText()}\u0000${skillsList(readSkills())}`; } catch { return null; }
+    try { return `${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseText()}\u0000${skillsList(readSkills(), { path: skillPath(this.cwd) })}`; } catch { return null; }
   }
   promptFilesChanged() {
     const now = this.promptStamp();
@@ -784,8 +784,27 @@ export class Agent extends EventEmitter {
   withTurnNotes(messages) {
     const t = this.turn;
     const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
-    if (!extras.length) return messages;
-    return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
+    const pin = this.pinnedNote();
+    if (!extras.length && !pin) return messages;
+    return messages.map((m) => {
+      const notes = extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('');
+      const held = pin && m === t.requestMsg ? `\n\n(${pin})` : '';
+      return notes || held ? { ...m, content: `${m.content}${notes}${held}` } : m;
+    });
+  }
+
+  // What a trim must not drop, sent with the request: the success check, and the last tool
+  // error once its own message has been shortened. While that message is still whole, the
+  // model already has it. The focused tries put the last failure in the next prompt; this
+  // is the free loop's copy of that.
+  pinnedNote() {
+    const t = this.turn;
+    if (!t) return '';
+    const parts = [];
+    if (t.check) parts.push(`This request passes when this command passes: ${t.check}`);
+    const held = t.lastError && this.messages.some((m) => m.keep === 'error' && !String(m.content).startsWith('[older output removed'));
+    if (t.lastError && !held) parts.push(`The last tool error, kept whole:\n${t.lastError}`);
+    return parts.join('\n\n');
   }
   setMode(mode) { this.mode = mode; this.emit('mode', mode); }
   // What you saved with /permissions for the folder Agentic Coder works in now:
@@ -1037,10 +1056,10 @@ export class Agent extends EventEmitter {
       }
     }
     // A skill from SKILLS.md whose words the request uses (prompt-files.mjs): its steps go with
-    // the request, and the work goes step by step with them, not down a focused path. The model
-    // that decides gets only the list, and opens a skill itself (Read SKILLS/<name>).
+    // the request on both ways. On App the work goes step by step with them, not down a focused
+    // path. Model way used to get only the list and had to Read the skill itself.
     let skill = null;
-    if (!decides && !follow) { try { skill = pickSkill(text); } catch {} }
+    if (!follow) { try { skill = pickSkill(text); } catch {} }
     // First the focused paths (rename / fix / change); the loop handles the rest.
     // (The model that decides calls them itself: Rename and TestFirst.)
     this.carried = null;
@@ -1106,6 +1125,7 @@ export class Agent extends EventEmitter {
     this.turn = { changed: false, testedAfterChange: false, created: [], asked: [], diffs: '', looked: [], since: Date.now(), planOk: false,
       // The request's words steer which lines of a long file a Read shows first.
       request: typeof request?.content === 'string' ? request.content : '',
+      requestMsg: request,
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
       fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
@@ -1127,8 +1147,10 @@ export class Agent extends EventEmitter {
     }
     if (skill && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.skill = { request, notes: skillNote(skill), name: skill.name };
+      this.turn.fence = new Set(skill.fence ?? []);
       this.ctxUsed += tokensOf(this.turn.skill.notes);
-      this.emit('note', { text: `Skill: ${skill.name} (SKILLS.md; its words here: ${skill.matched.join(', ')}; ≈${tokensOf(this.turn.skill.notes).toLocaleString('en-US')} tokens).`, tone: 'dim', skill: skill.name });
+      const fence = skill.fence?.length ? `; fence: ${skill.fence.join(', ')}` : '';
+      this.emit('note', { text: `Skill: ${skill.name} (SKILLS.md; its words here: ${skill.matched.join(', ')}${fence}; ≈${tokensOf(this.turn.skill.notes).toLocaleString('en-US')} tokens).`, tone: 'dim', skill: skill.name });
     }
     // A check the fix path made and what the browser found (flows/pagecheck.mjs).
     if (this.carried && request?.role === 'user' && typeof request.content === 'string') {
@@ -1302,6 +1324,14 @@ export class Agent extends EventEmitter {
             this.messages.push({ role: 'user', content: auto(lookBackNote(this.lookedSince(turnStart))) });
             continue;
           }
+          // A skill's check fence: one command before the turn may end. The steps say
+          // so too; the loop is what holds it when that sentence loses.
+          if (this.turn.fence?.has('check') && !this.turn.ranCommand && asksForWork(this.turn.request) && (this.turn.checkNudges ?? 0) < 2) {
+            this.turn.checkNudges = (this.turn.checkNudges ?? 0) + 1;
+            this.emit('note', { text: 'This skill requires a command before it is done; asked it to run one.', tone: 'warn' });
+            this.messages.push({ role: 'user', content: auto('This skill is not done until a command has checked the work. Run that command with Bash, then answer.') });
+            continue;
+          }
           // It says the work is done, but nothing changed in this message: no
           // Edit, no Write, and no command that could have written instead.
           // Sent back once; if it still claims it with nothing changed, a note
@@ -1356,9 +1386,11 @@ export class Agent extends EventEmitter {
             assistant.tool_calls = [{ id: call.id, type: 'function', function: { name: 'Bash', arguments: call.args } }];
             this.emit('note', { text: `Checking the change: ${checkCmd}`, tone: 'dim' });
             const out = await this.runTool(call, signal);
-            this.messages.push({ role: 'tool', tool_call_id: call.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) });
+            const checkMsg = { role: 'tool', tool_call_id: call.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
+            this.messages.push(checkMsg);
             if (out.stop) { reason = out.stop; break; }
             if (out.error) {
+              this.noteError(out.text, checkMsg);
               this.messages.push({ role: 'user', content: auto(`${this.turn.check ? 'The named check fails' : 'The tests fail'} (output above). Find what is wrong in your change, fix it with Edit, then run ${this.turn.check ? 'the check' : 'the tests'} again.`) });
               continue;
             }
@@ -1454,6 +1486,8 @@ export class Agent extends EventEmitter {
           if (!out.error && c.name === 'Write') wrote.push(c);
           const result = { role: 'tool', tool_call_id: c.id, content: out.text, ...(out.images?.length ? { images: out.images } : {}) };
           this.messages.push(result);
+          if (out.error) this.noteError(out.text, result);
+          else if (/^(?:Rules\/)?SKILLS\//.test(String(out.text))) result.keep = 'skill';
           if (out.images?.length) this.ctxUsed += out.images.length * IMAGE_TOKENS;
           for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime });
           if (out.stop) stopped = out.stop;
@@ -1508,6 +1542,14 @@ export class Agent extends EventEmitter {
       else { reason = 'error'; this.emit('note', { text: e.message, tone: 'error' }); }
     } finally {
       this.busy = false;
+      try {
+        const why = this.putBackWhy(reason);
+        if (why) {
+          const { back, left } = this.putBack();
+          if (back.length) this.emit('note', { text: `${why}, so this message's changes were put back: ${back.join(', ')}.`, tone: 'warn' });
+          if (left.length) this.emit('note', { text: `Not put back, because they changed after the last edit: ${left.join(', ')}.`, tone: 'warn' });
+        }
+      } catch (e) { this.emit('note', { text: `Could not put the changes back (${e.message}).`, tone: 'warn' }); }
       this.turn?.scratch?.dispose();
     }
     if (reason === 'interrupted') {
@@ -2114,6 +2156,11 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'A question changes no files' }, error: true });
       return { text: 'This is a question, so no file is changed. Answer it from what you have read. If a change is needed, say which one, and the user can ask for it.', error: true };
     }
+    // A skill's read fence. The steps may say "do not edit"; this is what holds.
+    if (this.turn?.fence?.has('read') && (call.name === 'Edit' || call.name === 'Write')) {
+      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'This skill only reads' }, error: true });
+      return { text: 'This skill only reads. Edit and Write are turned off for it. Answer from what you have read.', error: true };
+    }
     // A picture, or a scanned PDF, the model reads by itself while it is not looking at pictures:
     // its vision is turned on first where it can be (visionOn: the window's reload, or coding -p's),
     // as when you attach one. Without it, Read says to ask you to attach it.
@@ -2221,6 +2268,7 @@ export class Agent extends EventEmitter {
     if (this.turn && !out.error && call.name === 'Search' && args.pattern) this.turn.searches = [args.pattern, ...(this.turn.searches ?? []).filter((p) => p !== args.pattern)].slice(0, 3);
     if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs) this.readFiles.add(prepared.abs);
     if (this.turn && !out.error && (call.name === 'Edit' || call.name === 'Write')) {
+      this.keepOriginal(prepared);
       this.turn.changed = true;
       this.turn.testedAfterChange = false;
       this.turn.edits = (this.turn.edits ?? 0) + 1;
@@ -2261,7 +2309,12 @@ export class Agent extends EventEmitter {
     }
     // A command may have written files the Edit and Write counts never see.
     if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
-    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) { this.turn.testedAfterChange = true; this.turn.checkOk = !out.error; if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error }; }
+    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) {
+      this.turn.testedAfterChange = true;
+      this.turn.checkOk = !out.error;
+      this.turn.checkFailed = Boolean(out.error);
+      if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error };
+    }
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
     return out;
   }
@@ -2300,19 +2353,26 @@ export class Agent extends EventEmitter {
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
     });
-    Object.assign(helper, { isHelper: true, look: 'off', toolFilter: kind === 'explore' ? EXPLORE_TOOLS : null, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    Object.assign(helper, { isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter: kind === 'explore' ? EXPLORE_TOOLS : null, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
     if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn) };
     const steps = [];
     let report = '';
     const say = (last) => this.emit('tool-running', { id, name: 'Agent', label: shown.label, arg: `${shown.arg} · ${steps.length} step${steps.length === 1 ? '' : 's'}${last ? ` · ${last}` : ''}` });
-    helper.on('tool', (ev) => { steps.push(`${ev.error ? '✗' : '⏺'} ${ev.label}(${String(ev.arg ?? '').slice(0, 80)})`); say(`${ev.label}(${String(ev.arg ?? '').slice(0, 50)})`); });
+    // Its changes count as this message's, so "done" after them is not "nothing changed".
+    const edited = new Set();
+    helper.on('tool', (ev) => { if (!ev.error && ['Update', 'Write', 'Create'].includes(ev.label) && ev.arg) edited.add(String(ev.arg)); steps.push(`${ev.error ? '✗' : '⏺'} ${ev.label}(${String(ev.arg ?? '').slice(0, 80)})`); say(`${ev.label}(${String(ev.arg ?? '').slice(0, 50)})`); });
     helper.on('assistant', (ev) => { if (ev.final) report = String(ev.text ?? ''); });
     say('');
     let reason;
     try { reason = await helper.send(args.prompt, { signal }); } catch (e) { reason = 'error'; report ||= `It stopped: ${e.message}`; }
     const secs = (Date.now() - t0) / 1000;
     this.stats.requests += helper.stats.requests;
+    if (edited.size && this.turn) {
+      this.turn.changed = true;
+      this.turn.testedAfterChange = false;
+      for (const f of edited) this.happened?.files.add(f);
+    }
     const done = reason === 'done' || reason === 'answered';
     const body = report.trim() || '(it ended without a report)';
     const view = { kind: 'agent', steps: steps.length, secs, reason, content: `${steps.join('\n')}${steps.length ? '\n\n' : ''}${body}` };
@@ -2417,6 +2477,60 @@ export class Agent extends EventEmitter {
     const line = saveLine(out);
     if (line) this.emit('note', { text: line, tone: 'dim' });
     return { text: 'Saved to the memory.' };
+  }
+
+  // The last tool error, kept out of the trim (fitContext skips a message with keep).
+  // Only the latest one: every error kept would fill the memory.
+  noteError(text, msg) {
+    if (!this.turn) return;
+    for (const m of this.messages) if (m.keep === 'error') delete m.keep;
+    if (msg) msg.keep = 'error';
+    this.turn.lastError = String(text ?? '').slice(0, 2500);
+  }
+
+  // Edits land in the project, so commands see them and keep what they write. The text
+  // each file had before this message first changed it is kept, with what the last edit
+  // wrote; a failed check puts the first back (putBack). A helper's edits go in its
+  // parent's book, so the parent's check covers them too.
+  keepOriginal(prepared) {
+    const t = this.parentTurn?.() ?? this.turn;
+    if (!t || t.question || !prepared?.rel) return;
+    t.originals ??= new Map();
+    t.wrote ??= new Map();
+    if (!t.originals.has(prepared.rel)) t.originals.set(prepared.rel, prepared.created ? null : prepared.before);
+    t.wrote.set(prepared.rel, prepared.after);
+  }
+
+  // Why this message's changes go back, or null: a skill's check fence ran no command,
+  // or the last check ran and failed. A check that never ran holds nothing back (the
+  // tests hook off, or nothing to run). A stop or a no keeps the rest, as before: a no
+  // refuses that one change, and /rewind undoes the message.
+  putBackWhy(reason) {
+    const t = this.turn;
+    if (this.isHelper || !t?.originals?.size || reason === 'interrupted' || reason === 'declined') return null;
+    if (t.fence?.has('check') && !t.ranCommand) return "The skill's check never ran";
+    if (t.checkFailed) return 'The check failed';
+    return null;
+  }
+
+  // Each changed file back to its text before this message. A file that changed after
+  // the model's last edit (you, a formatter, a command) is left as it is.
+  putBack() {
+    const t = this.turn;
+    const back = [];
+    const left = [];
+    for (const [rel, before] of t.originals) {
+      const abs = join(this.cwd, rel);
+      let now = null;
+      try { now = readFileSync(abs, 'utf8'); } catch {}
+      if (now !== t.wrote.get(rel)) { left.push(rel); continue; }
+      if (before === null) rmSync(abs, { force: true });
+      else writeFileSync(abs, before);
+      back.push(rel);
+    }
+    t.originals = new Map();
+    t.wrote = new Map();
+    return { back, left };
   }
 
   // A command in a question turn that may write: it runs in a throwaway copy
@@ -2711,7 +2825,7 @@ export class Agent extends EventEmitter {
     for (const i of tools) {
       if (est - freed < this.ctx * TRIM_TO) break;
       const m = this.messages[i];
-      if (keep.has(i) || m.content.length <= 300) continue;
+      if (keep.has(i) || m.keep || m.content.length <= 300) continue;
       freed += tokensOf(m.content);
       m.content = `[older output removed to save space: ${m.content.slice(0, 120).replace(/\n/g, ' ')}…]`;
     }

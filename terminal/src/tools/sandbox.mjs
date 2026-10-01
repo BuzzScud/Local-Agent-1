@@ -11,6 +11,9 @@
 // and it may not touch what already runs on this Mac: no signals to processes
 // it did not start, no connections to the services that were listening when
 // it started (Postgres, your desks' servers), no reading their data folders.
+// Outbound network is closed. `allow default` used to leave it open, so a
+// command could still phone home. A server the command starts on this Mac
+// can still be reached; the internet cannot.
 // ("What went wrong?" about a pasted Postgres log once led the model to find
 // the real local database and shut it down.) Servers the command starts
 // itself, such as a test's, work as usual.
@@ -73,6 +76,14 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [] } = {}) {
   return [
     '(version 1)',
     '(allow default)',
+    // Last matching rule wins. The deny closes the internet; the allows put
+    // back this Mac (a test's own server) and ordinary sockets. The denies
+    // further down still close what was already listening, and those sockets.
+    // sandbox-exec takes only "localhost" or "*" as the host ("127.0.0.1:*"
+    // stops every command with exit 65); localhost covers 127.0.0.1 and ::1.
+    '(deny network-outbound)',
+    '(allow network-outbound (remote ip "localhost:*"))',
+    '(allow network-outbound (remote unix-socket))',
     `(deny file-read-data (subpath ${q(h)}))`,
     `(deny file-write* (subpath ${q(h)}) (subpath "/Volumes"))`,
     '(deny file-read-data (subpath "/Volumes"))',

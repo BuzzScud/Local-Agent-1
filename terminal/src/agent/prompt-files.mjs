@@ -72,8 +72,16 @@ export function toolUseText(text = readPromptFile('tools').text) {
 
 const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill';
 
+// A skill's fence is what the loop enforces. The steps stay in the prompt; a
+// sentence there is all a small model has, and on a 9B model that sentence loses.
+//   read     Edit and Write are refused
+//   check    one command must run before the turn may end as done
+//   scratch  a failed check puts the message's edits back (the free loop does this either way)
+export const FENCES = ['read', 'check', 'scratch'];
+
 // SKILLS.md: each "## Name" is a skill with its "- Words:" and "- About:"
-// lines, and the rest of its section as its steps. <!-- … --> is left out.
+// lines, an optional "- Fence:" line, and the rest of its section as its steps.
+// <!-- … --> is left out. The fence line is not a step.
 export function parseSkills(text) {
   const skills = [];
   for (const part of String(text ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/^## /m).slice(1)) {
@@ -81,12 +89,15 @@ export function parseSkills(text) {
     const name = head.trim();
     if (!name) continue;
     const field = (key) => lines.find((l) => l.toLowerCase().startsWith(`- ${key}:`))?.slice(key.length + 3).trim() ?? '';
+    const named = field('fence').toLowerCase().split(/[\s,]+/).filter(Boolean);
     skills.push({
       name,
       slug: slugOf(name),
       words: field('words').toLowerCase().split(',').map((w) => w.trim()).filter(Boolean),
       about: field('about'),
-      body: lines.filter((l) => !/^- (words|about):/i.test(l)).join('\n').trim(),
+      fence: named.filter((w) => FENCES.includes(w)),
+      fenceBad: named.filter((w) => !FENCES.includes(w)),
+      body: lines.filter((l) => !/^- (words|about|fence):/i.test(l)).join('\n').trim(),
     });
   }
   return skills;
@@ -102,6 +113,7 @@ export function skillProblems(skills) {
     if (seen.has(s.slug)) errors.push(`"${s.name}" and "${seen.get(s.slug)}" both open as SKILLS/${s.slug}: give one another name.`);
     seen.set(s.slug, s.name);
     if (!s.body) errors.push(`"${s.name}" has no steps under it.`);
+    if (s.fenceBad?.length) errors.push(`"${s.name}" has a Fence it does not know (${s.fenceBad.join(', ')}): use read, check or scratch.`);
     if (!s.words.length) warnings.push(`"${s.name}" has no Words line, so no request brings it: the model can still open it from the list.`);
     if (!s.about) warnings.push(`"${s.name}" has no About line: the list shows only its name.`);
   }
@@ -127,25 +139,39 @@ export function pickSkill(text, skills = readSkills()) {
 // A skill's steps as they go with a request.
 export const skillNote = (s) => `Skill "${s.name}" from SKILLS.md: this request uses its words, so follow its steps:\n${s.body}`;
 
+// The path that opens a skill. SKILLS/<name> when the project has no folder of
+// that name; Rules/SKILLS/<name> when it does, so the read cannot land in the
+// project's own folder (readSkillPath used to return null, and Read hit the project).
+export function skillPath(cwd) {
+  try { if (cwd && existsSync(join(cwd, 'SKILLS'))) return 'Rules/SKILLS'; } catch {}
+  return 'SKILLS';
+}
+
 // The list in the instructions: every skill by the path that opens it.
-export function skillsList(skills) {
+export function skillsList(skills, { path = 'SKILLS' } = {}) {
   if (!skills.length) return '';
   return `Skills
 Steps for some kinds of task (SKILLS.md). When one fits and its steps did not come with the request, Read it first:
-${skills.map((s) => `- SKILLS/${s.slug}${s.about ? `: ${s.about}` : ''}`).join('\n')}`;
+${skills.map((s) => `- ${path}/${s.slug}${s.about ? `: ${s.about}` : ''}`).join('\n')}`;
 }
 
-// Read "SKILLS" (the list) or "SKILLS/<name>" (one skill), when the project
-// has no SKILLS folder of its own. null: not such a path.
+// Read "SKILLS" (the list) or "SKILLS/<name>" (one skill). When the project has
+// a SKILLS folder, only "Rules/SKILLS" and "Rules/SKILLS/<name>" open the rules.
+// null: not such a path (a project's own SKILLS.md, or its own SKILLS folder).
 export function readSkillPath(cwd, p, skills) {
   // Not "SKILLS.md": that is a file a project may have or be asked to make.
-  const m = /^(?:\.\/)?SKILLS(?:\/(.+?)(?:\.md)?)?\/?$/.exec(String(p ?? '').trim());
-  if (!m || existsSync(join(cwd, 'SKILLS'))) return null;
+  const raw = String(p ?? '').trim();
+  const m = /^(?:\.\/)?(?:Rules\/)?SKILLS(?:\/(.+?)(?:\.md)?)?\/?$/.exec(raw);
+  if (!m) return null;
+  const path = skillPath(cwd);
+  const askedRules = /^(?:\.\/)?Rules\/SKILLS(?:\/|$)/.test(raw);
+  if (path === 'Rules/SKILLS' && !askedRules) return null;
   const all = skills ?? readSkills();
   if (!all.length) return { error: 'There are no skills (SKILLS.md has none).' };
-  if (!m[1]) return { text: skillsList(all) };
+  const shown = path;
+  if (!m[1]) return { text: skillsList(all, { path: shown }) };
   const want = slugOf(m[1]);
   const s = all.find((x) => x.slug === want);
-  if (!s) return { error: `No skill SKILLS/${m[1]}. The skills: ${all.map((x) => `SKILLS/${x.slug}`).join(', ')}.` };
-  return { text: `SKILLS/${s.slug} (${s.name}):\n${s.body}` };
+  if (!s) return { error: `No skill ${shown}/${m[1]}. The skills: ${all.map((x) => `${shown}/${x.slug}`).join(', ')}.` };
+  return { text: `${shown}/${s.slug} (${s.name}):\n${s.body}` };
 }

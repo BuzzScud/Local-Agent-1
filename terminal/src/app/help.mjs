@@ -101,7 +101,7 @@ export function cliRows(lingerMins = 30, models = []) {
       ['--local', 'use the model on this Mac even when /remote is on'],
       ['--start', 'load the model as the window opens (otherwise it is off until you type /start; /autostart on does this every time)'],
       ['--no-flows', 'always work step by step (skip the focused fix/change/rename paths)'],
-      ['--way model', "the model decides, like Claude Code: no sorting or reading ahead, its own tools, the app's checks only as /hooks switches them (--way app: as before; /effort's Who decides row keeps it)"],
+      ['--way model', "the model decides, like Claude Code: no sorting or reading ahead, its own tools. next-step, tests, stuck and said-done start on; /hooks switches the rest (--way app: as before; /effort's Who decides row keeps it)"],
       ['-v, --version', 'print the version'],
       ['-h, --help', 'this help'],
     ],
@@ -140,7 +140,7 @@ export const SAFETY = [
   'Some commands are always refused: deleting folders wholesale, sudo, git push, resetting git, stopping other programs or services.',
   'Files like .env, keys and .git always ask before a change, even in Auto-edit.',
   '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
-  'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, or reach services already running.',
+  'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, reach services already running, or open a connection off this Mac.',
   'Everything runs on this Mac. Nothing you type is sent anywhere, unless you turn on /remote: then your prompts, your code and the files it reads go to the machine you named, and it says so when it switches.',
   'The web: a search sends its words to the search service you picked in /web, and a page is read from its site. Each asks first (a site once, if you say so); a redirect to another site is not followed. What comes back is marked as data, never instructions.',
 ];
