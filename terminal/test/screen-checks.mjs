@@ -20,7 +20,10 @@ export function checkScreen(lines, { cols, rows, anchored = false, scrollback = 
   // A border piece on its own line (─────╮ without its ╭, or a lone │) is a leftover.
   // The conversation's rail (rail.jsx) sits at column 2: "  │", "  ╰─ ", "  ┊"; boxes start at column 0.
   const rail = (l) => /^ {2}(│|╰─ |┊)/.test(l);
-  const frags = text.filter((l) => !rail(l) && (/^\s*─/.test(l) && BORDER.test(l) || /^\s+│\s*$/.test(l)));
+  // The start page's line between its columns (start.jsx: column 40, or 30 below 100 columns) runs
+  // the page's whole height, so it stands alone on a row where both columns are blank.
+  const pageRail = (l) => /^\s+│\s*$/.test(l) && l.indexOf('│') === (cols >= 100 ? 40 : 30);
+  const frags = text.filter((l) => !rail(l) && !pageRail(l) && (/^\s*─/.test(l) && BORDER.test(l) || /^\s+│\s*$/.test(l)));
   add('box borders whole', !frags.length, frags.slice(0, 2).map((l) => l.trim().slice(0, 40)).join(' | '));
   const open = text.filter((l) => /^\s*╭/.test(l)).length;
   const close = text.filter((l) => /^\s*╰/.test(l) && !rail(l)).length;

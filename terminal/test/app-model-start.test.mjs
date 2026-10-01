@@ -143,3 +143,25 @@ test('/mouse on: a click on the model\'s label in the footer starts it, and a cl
   expect(r.snapshots.end).toContain('○ model off · ctrl+t start');
   expect(r.snapshots.end).not.toContain('[<0;'); // the reports were never typed
 }, 100_000);
+
+test('the start page stays live until your first message: /start wakes the bot in place, and the message prints the page once', async () => {
+  const { cwd, env } = withStandInModel();
+  const name = D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const r = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: '? for shortcuts' }, { sleep: 800 }, { snapshot: 'off' },
+    { type: '/start' }, { key: 'enter' },
+    { wait: ' · effort ', ms: 45_000 }, { sleep: 800 }, { snapshot: 'ready' },
+    { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 }, { sleep: 300 },
+    ...quit,
+  ] });
+  expect(r.snapshots.off).toMatch(new RegExp(`${name} · off`));
+  // after /start the same page says ready: changed in place, not printed a second time
+  expect(r.snapshots.ready).toMatch(new RegExp(`${name} · effort `));
+  expect(r.snapshots.ready).not.toMatch(new RegExp(`${name} · off`));
+  expect(r.snapshots.ready).not.toContain('Starting');
+  expect(r.snapshots.ready.match(/This folder/g)).toHaveLength(1);
+  // the first message printed it once, above the message
+  const all = r.text;
+  expect(all.match(/This folder/g)).toHaveLength(1);
+  expect(all.indexOf('This folder')).toBeLessThan(all.indexOf('Hello from the stand-in model.'));
+}, 100_000);

@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdBudget, footerParts } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, SHORTCUT_ROWS, footerParts } from './screen.jsx';
 import { startTip } from './start.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
@@ -265,10 +265,11 @@ export function App({ opts, win, onRestart }) {
   const [popup, setPopup] = useState(null); // a box in the middle of the window (/help); any key closes it
   const [placeholder, setPlaceholder] = useState(pick(PLACEHOLDERS));
   // The start page (start.jsx): the tip under the prompt box until your first message, the
-  // conversations it lists, and whether it is still held live while the model loads at launch.
+  // conversations it lists, and whether it is still held live (until your first message, so it
+  // follows the model on this Mac: off, loading after /start, ready).
   const [tip, setTip] = useState(() => startTip(opts.start));
   const recentRef = useRef(opts.start?.recent ?? []);
-  const holdRef = useRef(!opts.url && !modelOff);
+  const holdRef = useRef(!opts.url && !remoteAtStart);
   // Quitting or restarting: the terminal's cursor leaves the prompt box for the
   // line under it, so what is printed after the app goes there, not into the box.
   const [leaving, setLeaving] = useState(false);
@@ -1088,6 +1089,7 @@ export function App({ opts, win, onRestart }) {
     // message waits for it), or, where it cannot be, the message goes with a line saying so.
     if (images.length && !agent.canSee && !visionAsked && remoteFnRef.current.needVision?.(value, shown)) return;
     const blind = images.length && !agent.canSee;
+    holdRef.current = false; // your first message prints the start page above it
     push({ type: 'user', text: shown, attached });
     let content = blind ? `${text}\n\n(The user attached ${images.length === 1 ? 'a picture' : `${images.length} pictures`} (${images.map((i) => i.path).join(', ')}), but this model is not looking at pictures now.)` : text;
     if (pendingContext.current.length) { content = `${pendingContext.current.join('\n\n')}\n\n${content}`; pendingContext.current = []; }
@@ -1644,6 +1646,7 @@ export function App({ opts, win, onRestart }) {
           // The start page again, listing the conversation just cleared (a new key: its rows are measured afresh).
           try { recentRef.current = listSessions(opts.cwd); } catch {}
           itemsRef.current = [{ key: `welcome${++seq}`, type: 'welcome' }];
+          holdRef.current = !opts.url && !remoteRef.current?.on; // live again until the next message
           setItems(itemsRef.current);
           win?.clear();
           rewindRef.current?.setSession(sessionRef.current.id);
@@ -2624,9 +2627,11 @@ export function App({ opts, win, onRestart }) {
   const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff };
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start };
   itemsRef.current = items;
-  // Held until the model is ready; let go for good once it is, when too much came meanwhile, or
-  // when a panel, pop-up or question opens under it (the page and a tall panel would not fit together).
-  if (holdRef.current && !(starting && items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && heldRows(items, measure.current) <= holdBudget(rows ?? 40))) holdRef.current = false;
+  // Held until your first message (sendPrompt lets it go). Let go for good, printed as it is, when
+  // what came under it, the / menu or the shortcuts would not fit in the window beside it, or when a
+  // panel, pop-up or question opens (the page and a tall panel would not fit together).
+  const underRows = heldRows(items, measure.current) + (menu ? Math.min(MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? SHORTCUT_ROWS : 0);
+  if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && underRows <= holdRoom(items, measure.current, rows ?? 40))) holdRef.current = false;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;

@@ -1,9 +1,9 @@
 // The start page (29 Sep 2026, the user's pick: "like Claude", open). No box: a titled line, then
-// two columns. Left, centred: a greeting, the ⠿ mark drawn big, the model and the folder. Right:
-// Recent activity, a thin line, This folder. While the model loads at launch the page stays live
-// (Screen holds it back from the scrollback): a lit dot goes round the mark and the model line says
-// what it waits for; ready lights every dot and the page prints once. The safety check (cli.jsx)
-// uses the same columns. The tips live on the line under the prompt box (startTip).
+// two columns. Left, centred: a greeting, the Visor bot, the model and the folder. Right: Recent
+// activity, a thin line, This folder. Until your first message the page stays live (Screen holds it
+// back from the scrollback), so the bot and the model line follow the model: asleep and "off", then
+// what the start waits for after /start, then ready. Your first message prints it once. The safety
+// check (cli.jsx) uses the same columns. The tips live on the line under the prompt box (startTip).
 import React from 'react';
 import { Box, Text } from 'ink';
 import { C } from '../ui/theme.mjs';
@@ -62,18 +62,64 @@ export const READING_TIP = 'the first start reads its instructions, about 30 s �
 export const tipsOn = (env = process.env) => !/^(off|0|false|no)$/i.test(env.AGENTIC_TIPS ?? '');
 export const startTip = (start, pick = (xs) => xs[Math.floor(Math.random() * xs.length)]) => (!tipsOn() ? null : start?.notes?.includes('AGENTS.md') ? pick(TIPS) : INIT_TIP);
 
-// The ⠿ mark, big: six dots, 2 across and 3 down. 'spin': a lit dot goes round them (the orbit
-// spinner, drawn large; k = the step); 'lit': all on; 'off': before the safety check's yes.
-const ORDER = [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0], [1, 0]];
-export function logoRows(mode, k = 0) {
-  const color = (r, c) => {
-    if (mode === 'off') return 240;
-    if (mode === 'lit') return [157, 114, 71][r];
-    const i = ORDER.findIndex(([a, b]) => a === r && b === c);
-    const head = k % ORDER.length;
-    return i === head ? 120 : i === (head + ORDER.length - 1) % ORDER.length ? 71 : 238;
-  };
-  return [0, 1, 2].map((r) => <Text key={`mark${r}`}><Text color={`ansi256(${color(r, 0)})`}>●</Text> <Text color={`ansi256(${color(r, 1)})`}>●</Text></Text>);
+// The Visor bot (1 Oct 2026, the user's pick after four rounds): a white helmet with a dark screen
+// for a face, its eyes drawn on the screen in green light, two ear lights and a chest strip. It
+// says what the model is doing: asleep (– –) while it is off, looking about while it loads (the
+// ears blink, the strip fills), happy (^ ^) when it is ready, one eye open at the safety check.
+// 20 × 14 pixels, two to a character (▀ with a background colour), so 20 columns × 7 rows.
+const BOT = [
+  '......hhhhhhhh......',
+  '....hHHHHHHHHHHH....',
+  '...HHVVVVVVVVVVHH...',
+  '..eHVVVVVVVVVVVVHe..',
+  '..eHVVVVVVVVVVVVHe..',
+  '...HVVVVVVVVVVVVH...',
+  '...HHVVVVVVVVVVHH...',
+  '....GHHHHHHHHHHG....',
+  '......GGGGGGGG......',
+  '.....BBBBBBBBBB.....',
+  '...aaB12345678Baa...',
+  '.....BBBBBBBBBB.....',
+  '......BB....BB......',
+  '.....DDD....DDD.....',
+];
+const ASLEEP = { h: 248, H: 245, G: 241, V: 234, e: 239, B: 244, a: 242, D: 240 };
+const AWAKE = { h: 255, H: 252, G: 246, V: 234, B: 250, a: 248, D: 245 };
+const SHUT = [[6, 4], [7, 4], [8, 4], [11, 4], [12, 4], [13, 4]];
+// state: 'off' | 'trust' | 'loading' | 'ready'; k: the step while it loads (two a second).
+// The pixels' colours (xterm-256 numbers), null where the window shows through.
+export function botPixels(state, k = 0) {
+  const asleep = state === 'off' || state === 'trust';
+  const ready = state === 'ready';
+  const pal = asleep ? ASLEEP : { ...AWAKE, e: ready ? 114 : [120, 71][k % 2] };
+  const lit = ready ? 8 : asleep ? 0 : k % 9; // the chest strip, lit from the left
+  const px = BOT.map((row) => [...row].map((c) => (c === '.' ? null : /\d/.test(c) ? (Number(c) <= lit ? 120 : 237) : pal[c])));
+  const eyes = (pts, color) => { for (const [x, y] of pts) px[y][x] = color; };
+  if (state === 'off') eyes(SHUT, 65);
+  else if (state === 'trust') eyes([...SHUT.slice(0, 3), [11, 3], [12, 3], [11, 4], [12, 4]], 65);
+  else if (ready) eyes([[6, 3], [7, 3], [5, 4], [8, 4], [12, 3], [13, 3], [11, 4], [14, 4]], 157);
+  else if (k % 10 === 9) eyes(SHUT, 120); // a blink
+  else {
+    const dx = [0, 0, 1, 1, 0, 0, -1, -1][k % 8]; // it looks right, then left
+    eyes([[6, 3], [7, 3], [6, 4], [7, 4], [11, 3], [12, 3], [11, 4], [12, 4]].map(([x, y]) => [x + dx, y]), 120);
+  }
+  return px;
+}
+// Two pixel rows to a line: ▀ in the top one's colour on the bottom one's (█, ▀ or ▄ alone when
+// one of them is empty or both match).
+export function botRows(state, k = 0) {
+  const px = botPixels(state, k);
+  const rows = [];
+  for (let y = 0; y < px.length; y += 2) {
+    rows.push(<Text key={`bot${y}`}>{px[y].map((top, x) => {
+      const bottom = px[y + 1]?.[x] ?? null;
+      if (top == null && bottom == null) return <Text key={x}> </Text>;
+      if (top == null) return <Text key={x} color={`ansi256(${bottom})`}>▄</Text>;
+      if (bottom == null || bottom === top) return <Text key={x} color={`ansi256(${top})`}>{bottom == null ? '▀' : '█'}</Text>;
+      return <Text key={x} color={`ansi256(${top})`} backgroundColor={`ansi256(${bottom})`}>▀</Text>;
+    })}</Text>);
+  }
+  return rows;
 }
 
 // The two columns: the left one centred, a thin rail between, the right one as it comes.
@@ -130,8 +176,8 @@ export function StartPage({ start, width, loading = null }) {
   const recent = recentOf(s.recent ?? []);
   const left = [
     <Text bold color={WHITE}>{(s.recent ?? []).length ? 'Welcome back!' : 'Welcome!'}</Text>, null,
-    // two steps a second: the page is redrawn only when the mark or the seconds move
-    ...logoRows(loading ? 'spin' : s.off ? 'off' : 'lit', loading ? Math.floor(loading.secs * 2) : 0), null,
+    // two steps a second: the page is redrawn only when the bot or the seconds move
+    ...botRows(loading ? 'loading' : s.off ? 'off' : 'ready', loading ? Math.floor(loading.secs * 2) : 0), null,
     modelLine,
     <Text color={PATH} wrap="truncate-end">{fitPath(where(s.cwd ?? ''), L - 2)}</Text>,
   ];
@@ -156,7 +202,7 @@ export function StartPage({ start, width, loading = null }) {
   );
 }
 
-// The safety check, in the start page's columns: the mark off, nothing read yet, the question on
+// The safety check, in the start page's columns: the bot peeking, nothing read yet, the question on
 // the right with its two answers (selected: the row ❯ marks).
 export const TRUST_TEXT = 'Is this a folder you created or one you trust? Agentic Coder reads its notes (AGENTS.md) into the model, and can read, edit and run things here once you allow them. A yes covers this folder and everything inside it, and is remembered.';
 export const TRUST_OPTIONS = ['Yes, I trust this folder', 'No, exit'];
@@ -165,7 +211,7 @@ export function TrustPage({ width, cwd, model, selected = 0 }) {
   const RW = Math.max(10, width - L - 3);
   const left = [
     <Text bold color={WHITE}>Welcome!</Text>, null,
-    ...logoRows('off'), null,
+    ...botRows('trust'), null,
     <Text color={WHITE} wrap="truncate-end">{model}</Text>,
     <Text color={C.dim}>loads after you say yes</Text>, null,
     <Text color={PATH} wrap="truncate-end">{fitPath(cwd, L - 2)}</Text>,

@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, logoRows, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
+import { StartPage, TrustPage, botPixels, botRows, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit } from './app-setup.mjs';
@@ -56,16 +56,22 @@ test('loading and ready take the same rows, so nothing moves when the page is pr
   }
 });
 
-test('the mark goes round while it loads, is all lit when ready, and off before the safety check\'s yes', () => {
-  // The dots' colours, row by row, read from the drawing itself (the tests run without colour).
-  const dots = (mode, k) => logoRows(mode, k).flatMap((row) => row.props.children.filter((c) => c?.props?.color).map((c) => Number(c.props.color.match(/\((\d+)\)/)[1])));
-  expect(dots('lit')).toEqual([157, 157, 114, 114, 71, 71]);
-  expect(dots('off')).toEqual([240, 240, 240, 240, 240, 240]);
-  const a = dots('spin', 0);
-  expect(a.filter((c) => c === 120)).toHaveLength(1); // one lit dot, one fading behind it
-  expect(a.filter((c) => c === 71)).toHaveLength(1);
-  expect(dots('spin', 1)).not.toEqual(a); // it moves on
-  expect(dots('spin', 6)).toEqual(a); // round in six steps
+test('the bot sleeps while the model is off, looks about while it loads, and is happy when ready', () => {
+  // Its eyes: the green light on the screen in its face (rows 2–6); the chest strip is row 10.
+  const eyes = (state, k) => botPixels(state, k).flatMap((row, y) => row.map((c, x) => (y >= 2 && y <= 6 && [65, 120, 157].includes(c) && x >= 4 && x <= 15 ? `${x},${y}:${c}` : null))).filter(Boolean);
+  const strip = (state, k) => botPixels(state, k)[10].slice(6, 14);
+  expect(eyes('off')).toEqual(['6,4:65', '7,4:65', '8,4:65', '11,4:65', '12,4:65', '13,4:65']); // – –
+  expect(eyes('trust')).toContain('11,3:65'); // one eye open at the safety check
+  expect(eyes('ready')).toEqual(['6,3:157', '7,3:157', '12,3:157', '13,3:157', '5,4:157', '8,4:157', '11,4:157', '14,4:157']); // ^ ^
+  expect(strip('off', 0).every((c) => c === 237)).toBe(true);
+  expect(strip('ready', 0).every((c) => c === 120)).toBe(true);
+  expect(strip('loading', 3).filter((c) => c === 120)).toHaveLength(3); // it fills while it loads
+  expect(eyes('loading', 2)).not.toEqual(eyes('loading', 0)); // it looks about
+  expect(eyes('loading', 9).every((e) => e.includes(',4:'))).toBe(true); // and blinks
+  // 20 columns × 7 rows, every row as wide
+  const rows = botRows('ready');
+  expect(rows).toHaveLength(7);
+  for (const r of rows) expect(r.props.children).toHaveLength(20);
 });
 
 test('a new folder: welcome, nothing here yet, and /init', () => {
