@@ -316,6 +316,9 @@ export function App({ opts, win, onRestart }) {
   // Pictures pasted with ctrl+v ([Image #n] → its file), and a message waiting while vision turns on.
   const pastedRef = useRef({ n: 0, files: new Map() });
   const visionWaitRef = useRef(null);
+  // A model that cannot look at pictures (K2 Horizon) handed one message to a
+  // model that can: the one to load again once that reply is over.
+  const switchBackRef = useRef(null);
   const abortRef = useRef(null);
   const historyRef = useRef(loadHistory(cwd));
   const histIdx = useRef(null);
@@ -454,6 +457,12 @@ export function App({ opts, win, onRestart }) {
       return { title: `Look at the picture? ${model.name} needs its vision add-on`, blurb: `A one-time download of ${gb} GB (then kept with the model). It loads only in windows where you attach a picture.`, what: 'the picture', current: null, options: [
         { id: 'get', label: `Download it (${gb} GB) and look`, note: 'then the model reloads once with it (about 20 s)' },
         { id: 'skip', label: 'Send without the picture', note: 'the message goes now, with a line saying a picture was attached' },
+      ] };
+    }
+    if (id === 'vision-switch') {
+      return { title: `${model.name} cannot look at pictures`, blurb: `Hand this message to a model that can? Only one model fits in memory, so it loads in ${model.name}'s place (about 20–40 s), answers, and ${model.name} comes back after (the conversation stays).`, what: 'the picture', current: null, options: [
+        ...seeingModels().map((m) => ({ id: `use:${m.id}`, label: `${m.name} for this message`, note: `it looks at the picture, then ${model.name} again` })),
+        { id: 'skip', label: 'Send without the picture', note: `${model.name} answers, with a line saying a picture was attached` },
       ] };
     }
     if (id === 'remote-down') {
@@ -755,12 +764,28 @@ export function App({ opts, win, onRestart }) {
   };
 
   // ---- pictures: the model's vision add-on, loaded when a picture is first attached ----
+  // The other models on this Mac that can look at pictures (their file and their add-on here).
+  const seeingModels = () => Object.values(MODELS).filter((m) => m.id !== model.id && m.vision && existsSync(modelPath(m)) && existsSync(visionPath(m)));
+  // After the reply of a model that took one message with a picture: the model you
+  // had comes back (the conversation stays). true when it switched.
+  remoteFnRef.current.switchBack = async () => {
+    const back = switchBackRef.current;
+    if (!back) return false;
+    switchBackRef.current = null;
+    await switchModel(back, () => `Back on ${back.name}.`);
+    return true;
+  };
   // true: the message waits (vision turning on, or a question about downloading it);
   // false: it goes now (text only, with a note why).
   const needVision = (value, shown) => {
     if (model.remote) { push({ type: 'note', text: `The remote model (${remoteLabel(settings.remote)}) cannot look at pictures${model.remote.kind === 'llama' ? ': its coding serve has no vision add-on (coding setup there gets it)' : ''}. The message goes with a line saying so.`, tone: 'warn' }); return false; }
     if (opts.url) { push({ type: 'note', text: 'The model server given with --url is not looking at pictures (start it with its --mmproj file). The message goes with a line saying so.', tone: 'warn' }); return false; }
-    if (!model.vision) { push({ type: 'note', text: `${model.name} cannot look at pictures. The message goes with a line saying so.`, tone: 'warn' }); return false; }
+    if (!model.vision) {
+      // Another model on this Mac can: you are asked whether it takes this message.
+      if (seeingModels().length) { visionWaitRef.current = { value, shown }; openChoice('vision-switch'); return true; }
+      push({ type: 'note', text: `${model.name} cannot look at pictures. The message goes with a line saying so.`, tone: 'warn' });
+      return false;
+    }
     visionWaitRef.current = { value, shown };
     if (!existsSync(visionPath(model))) { openChoice('vision-get'); return true; }
     turnVisionOn();
@@ -919,6 +944,22 @@ export function App({ opts, win, onRestart }) {
       getVision(model, (t) => flash(String(t).trim(), 4000))
         .then(() => turnVisionOn())
         .catch((e) => { visionWaitRef.current = null; push({ type: 'note', text: `The vision add-on did not download: ${e.message}. The message goes without the picture.`, tone: 'error' }); if (wait) setTimeout(() => remoteFnRef.current.send?.(wait.value, wait.shown, { visionAsked: true }), 50); });
+      return;
+    }
+    if (id === 'vision-switch') {
+      const wait = visionWaitRef.current;
+      visionWaitRef.current = null;
+      const go = () => { if (wait) setTimeout(() => remoteFnRef.current.send?.(wait.value, wait.shown, { visionAsked: true }), 50); };
+      const seer = String(value).startsWith('use:') ? MODELS[String(value).slice(4)] : null;
+      if (!seer) { go(); return; }
+      const back = model;
+      (async () => {
+        await switchModel(withVision(seer), () => `${seer.name} looks at the picture; ${back.name} comes back after its reply.`);
+        switchBackRef.current = back;
+        // It did not load (or loaded without its add-on): the message goes to the model you had.
+        if (!agentRef.current?.canSee) { push({ type: 'note', text: `${seer.name} could not take the picture; back to ${back.name}, and the message goes without it.`, tone: 'warn' }); await remoteFnRef.current.switchBack(); }
+        go();
+      })();
       return;
     }
     if (id === 'remote-down') {
@@ -1143,7 +1184,10 @@ export function App({ opts, win, onRestart }) {
         if (reason === 'declined') setPlaceholder('Tell Agentic Coder what to do instead');
         saveNow();
         const q = queuedRef.current;
-        if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => sendPrompt(q), 50); }
+        if (q) { queuedRef.current = null; setQueued(null); }
+        // A model that took one message with a picture hands back to yours first.
+        if (switchBackRef.current) setTimeout(async () => { await remoteFnRef.current.switchBack?.(); if (q) sendPrompt(q); }, 50);
+        else if (q) setTimeout(() => sendPrompt(q), 50);
       }),
     ];
     return () => offs.forEach((f) => f());
@@ -2313,6 +2357,7 @@ export function App({ opts, win, onRestart }) {
         // A different model — or the same edited copy with newer edits saved
         // since — restarts the model server in place; the window stays.
         const changed = picked.id !== model.id || (picked.edited && model.edited && picked.edited.saved !== model.edited.saved);
+        switchBackRef.current = null; // your pick wins over a model coming back after a picture
         // A model whose file (or its own model server) is not here yet: say how to get it, keep the one in use.
         const missing = changed && !picked.edited ? [!existsSync(modelPath(picked)) && `downloads it (${(picked.bytes / 1e9).toFixed(1)} GB)`, picked.engine && !existsSync(serverBinOf(picked)) && 'builds its model server (about 3 minutes)'].filter(Boolean) : [];
         if (missing.length) { push({ type: 'note', text: `${picked.name} is not ready on this Mac yet: coding setup --model ${picked.id} ${missing.join(' and ')}. Then pick it again.`, tone: 'warn' }); return; }
@@ -2387,6 +2432,14 @@ export function App({ opts, win, onRestart }) {
       else if (key.escape || (key.ctrl && ch === 'c')) {
         setPicker(null);
         if (pk.id === 'memory-save') { applyChoice('memory-save', 'skip'); return; }
+        // The message with the picture was not sent: it goes back into the prompt.
+        if (pk.id === 'vision-switch') {
+          const wait = visionWaitRef.current;
+          visionWaitRef.current = null;
+          if (wait) setInput((s) => withUndo(s, { value: wait.value, cursor: wait.value.length }));
+          push({ type: 'note', text: 'Not sent: your message is back in the prompt.', tone: 'dim' });
+          return;
+        }
         const kept = pk.options.find((o) => o.id === pk.current);
         push({ type: 'note', text: `Kept ${pk.what} as ${kept ? kept.label.toLowerCase() : 'it was'}.`, tone: 'dim' });
       }
