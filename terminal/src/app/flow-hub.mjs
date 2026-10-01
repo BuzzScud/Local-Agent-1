@@ -12,7 +12,7 @@
 // (steps.mjs), the same the Harness tab tells as its five.
 //   scripts/flow-page.mjs saves a dated copy of the page into docs/diagrams/.
 import shell from './flow.html' with { type: 'text' };
-import { MODELS, sideBySide } from '../../../models/index.mjs';
+import { MODELS, sideByMost } from '../../../models/index.mjs';
 import { harnessData } from './harness-hub.mjs';
 import { STEPS, STAGES, stepsOf, stagesInWords } from './steps.mjs';
 
@@ -22,7 +22,8 @@ export const PATHS = ['rename', 'fix', 'change', 'multi', 'loop'];
 // What the tab shows, as data: the Harness tab's facts, plus the paths and the example task.
 // `models`, `settings` and `record` can be given (a test's own).
 export function flowData(cwd, { models = Object.values(MODELS), settings, record } = {}) {
-  const side = record ?? sideBySide(models.map((m) => m.id));
+  // The newest run every model shares, else the one the most of them share (the rest show "not run yet").
+  const side = record ?? sideByMost(models.map((m) => m.id));
   const h = harnessData(cwd, { models, settings, record: side });
   const M = h.models, run = h.run;
   const of = (m, t) => m.run?.tasks?.[t.id ?? t];
@@ -62,6 +63,9 @@ export function flowPage(d, { dated = '' } = {}) {
   const two = M.length === 2 ? 'both' : 'every model';
   // A model's name where there is little room: its first word, unless another model shares it or it is too short to tell.
   const short = (m) => { const w = m.name.split(' ')[0]; return w.length > 2 && M.filter((o) => o.name.split(' ')[0] === w).length === 1 ? w : m.name; };
+  // A run only some models share (the most of them; sideByMost): who is in it, by name.
+  const inRun = M.filter((m) => m.run), part = Boolean(run) && inRun.length < M.length;
+  const runWho = part ? list(inRun.map(short)) : two;
   const tags = (m) => m.tags.map((t) => `<span class="tag${t === 'in use now' ? ' live' : ''}">${t}</span>`).join('');
   const live = (m) => m.tags.includes('in use now');
   const runDay = run ? new Date(run.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
@@ -200,7 +204,7 @@ export function flowPage(d, { dated = '' } = {}) {
       const sub = (fn) => { const g = new Fig(f.id, 0, 0); fn(g); return g.p.join(''); };
       f.raw(allOrOne(sub((g) => M.forEach((m, r) => rowOf(g, m, 286 + r * 54))), (m) => sub((g) => rowOf(g, m, 286))));
     } else {
-      f.text(20, 270, run ? `No task of the run of ${runDay} fits as an example here (one every model passed on a focused path).` : `${noRun} One real request then shows here, step by step${many ? ' on each model' : ''}.`, { k: 's' });
+      f.text(20, 270, run ? `No task of the run of ${runDay} fits as an example here (one ${part ? 'each model in it' : 'every model'} passed on a focused path).` : `${noRun} One real request then shows here, step by step${many ? ' on each model' : ''}.`, { k: 's' });
     }
   }
 
@@ -348,7 +352,7 @@ export function flowPage(d, { dated = '' } = {}) {
     f.box(1140, 60, 120, 90, { k: 'you', t: 'Report page', s: ['written to', 'the repo\'s', 'docs/'] });
     [[190, 240], [410, 460], [650, 700], [900, 945], [1090, 1140]].forEach(([a, b]) => f.arrow([[a, 105], [b, 105]]));
     if (run) {
-      f.text(20, 176, many ? `NEWEST RUN ${two.toUpperCase()} DID` : 'THE NEWEST RUN', { k: 'gl' });
+      f.text(20, 176, many ? `NEWEST RUN ${runWho.toUpperCase()} DID` : 'THE NEWEST RUN', { k: 'gl' });
       f.text(20, 193, `${run.name}, ${runDay}`, { k: 's' });
       f.twin(945, 162, 315, (m) => (m.run ? `${m.run.passed} of ${T} passed · ${mins(m.run.secs)}` : 'not run yet'), { best: bestOf('high', (m) => m.run?.passed) });
       f.text(240, 193, 'Each check is proven first: it must fail on the untouched project and pass with the reference answer.', { k: 's' });
@@ -402,7 +406,7 @@ ${M.map((m) => `│  ├─ ${esc(`${d.folders[m.id]}/`.padEnd(19))}<em>${esc(m.
     ['big', 'Big picture', 'Two parts joined by one door', `You type in a terminal. The terminal decides how to do the job and calls the model only when it has to. ${ownBox}`,
       fig(f1, `Agentic Coder: you talk to the terminal (part 1); the terminal reaches a local model only through models/index.mjs (part 2): ${M.map((m) => m.name).join(' or ')}${many ? ', one loaded at a time' : ''}.`) + legend + cap('The terminal never reads a model’s settings directly; it goes through one file, models/index.mjs. `/update` exits the app with code 75, and the launcher rebuilds and restarts it in the same window.')],
     ['req', 'One request', 'What happens to one request', `${STEPS.length} steps from your Enter key to “done”. The line over them is the Harness tab’s ${STAGES.length}: ${esc(stagesInWords())}.${EX ? ` Under them, <b>${many ? sw('the same real request on each model', 'one real request on {name}') : 'one real request'}</b>, step for step.` : ''}`,
-      fig(f2, `The ${STEPS.length} steps a request takes, the ${STAGES.length} stages they group into${EX ? ', and one real task on each model under them' : ''}.`) + legend + cap(`Only some steps use the model (amber dot).${EX ? ` The ${many ? 'rows are' : 'row is'} task ${EX.n} of the newest run ${many ? `${two} did` : 'it did'}: what ${many ? 'each model' : 'it'} really did at each step.` : ''}`)],
+      fig(f2, `The ${STEPS.length} steps a request takes, the ${STAGES.length} stages they group into${EX ? ', and one real task on each model under them' : ''}.`) + legend + cap(`Only some steps use the model (amber dot).${EX ? ` The ${many ? 'rows are' : 'row is'} task ${EX.n} of the newest run ${many ? `${runWho} did` : 'it did'}: what ${many ? 'each model' : 'it'} really did at each step.` : ''}`)],
     ['sort', 'Sorting', 'Step 2 in detail: where a request goes', 'Rules look at your words first. The model is asked only when no rule fits.',
       fig(f2b, 'Sorting: rules decide first; the model decides only when no rule fits; seven possible destinations; the sorting check for each model.') + legend + cap('Under your request a dim line says where it went, for example Sorted as: change · shortcut. A rule change that moves any of the 101 test requests to another path fails the sort test.')],
     ['loop', 'The loop', 'The step-by-step loop', 'When no shortcut fits, the model works one tool at a time, and you approve each edit or command.',
@@ -412,7 +416,7 @@ ${M.map((m) => `│  ├─ ${esc(`${d.folders[m.id]}/`.padEnd(19))}<em>${esc(m.
     ['mem', 'Memory', 'Memory: the model stays the same, what it knows changes', 'Facts about you and each project are saved after tasks, brought back when they fit, and scored by how the next task went.',
       fig(f5, 'Memory lifecycle: save up to five facts after a task, keep them in two stores, bring back the ones that fit, score them by the result. The same for every model.') + legend + cap('Turn it off with `"memory": false` in settings.json, or stop only the auto-saving with `AGENTIC_MEMORY_SAVE=off`. `/memory` shows both memories; `/memory undo` takes the last save back.')],
     ['bench', 'Test bench', 'The test bench: how a model gets graded', `The same agent, run with no screen, on throwaway copies, then checked.${many ? ' Every model is graded the same way.' : ''}`,
-      fig(f6, 'Test bench: practice task, throwaway copy, own llama-server, headless agent, check, report page; the newest run every model did.') + legend + cap(`A new model is tested the same way: \`node models/evals/bench/run.mjs --model <id>\`. The numbers on this tab come from the newest test ${many ? 'every model ran with the same settings' : 'the model ran'}.`)],
+      fig(f6, `Test bench: practice task, throwaway copy, own llama-server, headless agent, check, report page; the newest run ${many ? `${runWho} did` : 'it did'}.`) + legend + cap(`A new model is tested the same way: \`node models/evals/bench/run.mjs --model <id>\`. The numbers on this tab come from the newest test ${many ? 'every model ran with the same settings' : 'the model ran'}.`)],
     ['where', 'Where it lives', 'Where things live', 'The code is in one repo; what the app builds and remembers is in two hidden folders in your home.', where],
   ];
   // The models' names: with more than one, each is a button that draws the flow with that model alone, beside one that brings them all back.

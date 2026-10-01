@@ -13,7 +13,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import shell from './harness.html' with { type: 'text' };
-import { MODELS, DEFAULT_MODEL, MODELS_DIR, needBytes, kvBytesPerToken, hasDraft, sideBySide } from '../../../models/index.mjs';
+import { MODELS, DEFAULT_MODEL, MODELS_DIR, needBytes, kvBytesPerToken, hasDraft, sideByMost } from '../../../models/index.mjs';
 import { toolDefs } from '../agent/tools.mjs';
 import { loadSettings } from './store.mjs';
 import { readLimits } from './limits.mjs';
@@ -25,7 +25,8 @@ export function harnessData(cwd, { models = Object.values(MODELS), settings = lo
   const limits = readLimits(settings, models.find((m) => m.id === inUse) ?? models[0]);
   // Context "auto" starts at 32k (16k when memory is short): sized as 32k here.
   const ctx = limits.context || 32768;
-  const side = record ?? sideBySide(models.map((m) => m.id));
+  // The newest run every model shares, else the one the most of them share (the rest show "not run yet").
+  const side = record ?? sideByMost(models.map((m) => m.id));
   return {
     made: new Date().toISOString(),
     settings: { model: inUse, effort: settings.effort ?? null, context: ctx, auto: !limits.context, thinkingCap: limits.thinking, steps: limits.steps, tries: limits.tries },
@@ -87,6 +88,7 @@ const TOOL_WORDS = { TodoWrite: 'a to-do list', Ask: 'a question to you' };
 export function harnessPage(d) {
   const M = d.models, S = d.settings, run = d.run;
   const T = run?.tasks.length ?? 0;
+  const TS = T === 1 ? '1 task' : `${T} tasks`, WERE = T === 1 ? 'was' : 'were', HAVE = T === 1 ? 'has' : 'have';
   const ran = M.filter((m) => m.run);
   const tools = d.tools.map((t) => TOOL_WORDS[t] ?? t);
   const at = `${k(S.context)}${S.auto ? ' (auto)' : ''}`;
@@ -100,20 +102,21 @@ export function harnessPage(d) {
   // The one that is strictly best in a row gets the mark; a tie marks no one.
   const bestOf = (dir, val) => {
     if (!dir || !val) return null;
-    const v = M.map(val); if (v.some((x) => x == null)) return null;
-    const top = dir === 'low' ? Math.min(...v) : Math.max(...v);
-    return v.filter((x) => x === top).length === 1 ? M[v.indexOf(top)].id : null;
+    // Among the models that have a number (a model with no run yet, or not measured, is left out), two at least.
+    const v = M.map(val), has = v.filter((x) => x != null); if (has.length < 2) return null;
+    const top = dir === 'low' ? Math.min(...has) : Math.max(...has);
+    return has.filter((x) => x === top).length === 1 ? M[v.indexOf(top)].id : null;
   };
   // A row: [label, which way is good (words), what to show, 'low' | 'high' | null, the number to compare].
   const R = {
     passed: ['Tasks passed', `of ${T} · higher = better`, (m) => (m.run ? `<b>${m.run.passed}</b> of ${T}` : NONE), 'high', (m) => m.run?.passed],
-    time: [`Time for the ${T} tasks`, 'lower = faster', (m) => (m.run ? `<b>${mins(m.run.secs)}</b>` : NONE), 'low', (m) => m.run?.secs],
+    time: [`Time for the ${TS}`, 'lower = faster', (m) => (m.run ? `<b>${mins(m.run.secs)}</b>` : NONE), 'low', (m) => m.run?.secs],
     typical: ['A typical task', 'the middle one · lower = faster', (m) => (m.run ? `<b>${clock(m.run.median)}</b>` : NONE), 'low', (m) => m.run?.median],
     read: ['Reading speed', 'tokens a second · higher = faster', (m) => (m.read ? `<b>${m.read}</b>` : '<span class="none">not measured</span>'), 'high', (m) => m.read],
     write: ['Writing speed', `tokens a second · higher = faster${M.some((m) => m.writeFrom === 'card') ? ' · from each one’s speed test' : ''}`, (m) => (m.write ? `<b>${m.write}</b>` : '<span class="none">not measured</span>'), 'high', (m) => m.write],
     mem: [`Memory a start takes at ${at}`, 'GB · lower = better · the model alone, before the search models', (m) => `<b>${m.needGB.toFixed(1)}</b> GB`, 'low', (m) => m.needGB],
-    think: ['Thinking it used', `tokens over the ${T} tasks`, (m) => (m.run ? `<b>${num(m.run.thinkTokens)}</b>` : NONE), null],
-    calls: ['Times it was asked', `model calls over the ${T} tasks`, (m) => (m.run ? `<b>${num(m.run.modelCalls)}</b>` : NONE), null],
+    think: ['Thinking it used', `tokens over the ${TS}`, (m) => (m.run ? `<b>${num(m.run.thinkTokens)}</b>` : NONE), null],
+    calls: ['Times it was asked', `model calls over the ${TS}`, (m) => (m.run ? `<b>${num(m.run.modelCalls)}</b>` : NONE), null],
     sampling: ['Its maker’s settings', 'temperature · top-p · top-k', (m) => samp(m.sampling) ?? '<span class="none">the engine’s own</span>', null],
   };
   // Rows that need the shared run are left out while there is none, so no card shows a line of blanks.
@@ -158,6 +161,8 @@ export function harnessPage(d) {
   ${pair([R.write, R.think, R.calls, R.sampling], M.length > 1 ? sw('What differs at this step', '{name} at this step') : 'At this step')}`;
 
   // ── 3 · differences
+  // The effort levels /model offers: the same for every model goes in "The same for…", else a row of its own here.
+  const sameLevels = M.every((m) => m.levels.join() === (M[0]?.levels ?? []).join());
   const diff = grid('diff', M.length > 1 ? sw('What differs', 'What it brings') : 'What it brings', [
     ['Made by', '', (m) => esc(m.by) || '—'],
     ['Model file', 'GB on disk', (m) => `${m.fileGB} GB`],
@@ -168,6 +173,7 @@ export function harnessPage(d) {
     [R.write[0], R.write[1], (m) => m.write ?? 'not measured', 'high', (m) => m.write],
     ['Its maker’s settings', 'temperature · top-p · top-k', (m) => samp(m.sampling) ?? 'the engine’s own'],
     ['The same, while thinking', 'temperature · top-p · top-k', (m) => samp(m.thinkingSampling) ?? 'the engine’s own'],
+    ...(sameLevels ? [] : [['Effort levels', 'what /model offers', (m) => esc(m.levels.join(' · ')) || 'on or off']]),
     ['Sorting check', 'requests sorted right · higher = better', (m) => (m.sort ? `${esc(m.sort.right)} of ${esc(m.sort.total)}` : 'not run yet'), 'high', (m) => m.sort?.right],
     ['In /model', '', (m) => m.tags.join(' · ') || 'listed'],
   ]);
@@ -179,7 +185,7 @@ export function harnessPage(d) {
     [`The ${tools.length} tools`, tools.join(', ')],
     ['The 3 safety gates', 'blocked words, your OK, the fence around the project'],
     ['The limits', `${S.steps} steps, ${S.tries} tries, stops on a repeated step or 5 errors in a row`],
-    ['Thinking', `${levels.join(' or ') || 'on or off'}; a reply thinks up to ${num(S.thinkingCap)} tokens${budgets.length === 1 && budgets[0] !== S.thinkingCap ? ` (your setting; ${num(budgets[0])} as it comes)` : ''}`],
+    ['Thinking', `${sameLevels ? `${levels.join(' or ') || 'on or off'}; a reply thinks` : 'A reply thinks'} up to ${num(S.thinkingCap)} tokens${budgets.length === 1 && budgets[0] !== S.thinkingCap ? ` (your setting; ${num(budgets[0])} as it comes)` : ''}`],
     ['Conversation size', `${at} now${longest.length === 1 ? `; up to ${k(longest[0])}` : ''}`],
   ];
   const differences = `<h2>${sw('Where the models differ, and where they don’t', 'What {name} brings, and what stays the same')}</h2><p class="lead">The harness is one set of code. These are the only places ${the_model} changes anything.<span class="when-all"> The better number in a row is bold.</span></p>
@@ -194,10 +200,12 @@ export function harnessPage(d) {
   let results;
   if (!run) {
     results = `<h2>The same tasks on every model</h2><p class="lead">Each task is graded by a check the model never sees.</p>
-    <section class="card empty"><h3>No test yet that ${M.length === 2 ? 'both models' : 'every model'} ran</h3><p class="sub">Run the same test on each model from the Arena, with the same settings. The newest one they have in common shows here, task by task.</p></section>`;
+    <section class="card empty"><h3>No test yet that ${M.length === 2 ? 'both models' : 'two of the models'} ran</h3><p class="sub">Run the same test on each model from the Arena, with the same settings. The newest one they have in common shows here, task by task.</p></section>`;
   } else {
-    const cell = (m, t) => { const r = m.run.tasks[t.id]; const fastest = r.pass && M.every((o) => o === m || !o.run.tasks[t.id].pass || r.secs < o.run.tasks[t.id].secs); return `<td ${of(m)} class="${r.pass ? 'ok' : 'no'}${fastest ? ' best' : ''}"><span class="mark">${r.pass ? 'pass' : 'fail'}</span><span class="t">${mss(r.secs)}</span></td>`; };
-    const block = (ts) => `<table class="grid tasks"><colgroup><col class="cn"><col>${M.map((m) => `<col class="cm" ${of(m)}>`).join('')}</colgroup><thead><tr><th>#</th><th>Task</th>${M.map((m) => `<th ${of(m)}>${short(m)}<small>min:sec</small></th>`).join('')}</tr></thead><tbody>${ts.map((t) => `<tr><td class="num">${t.n || ''}</td><th>${esc(t.title)}</th>${M.map((m) => cell(m, t)).join('')}</tr>`).join('')}</tbody></table>`;
+    // The models in this run: every model, or the most that share one (the others are named below the totals).
+    const RM = ran, out = M.filter((m) => !m.run);
+    const cell = (m, t) => { const r = m.run.tasks[t.id]; const fastest = r.pass && RM.every((o) => o === m || !o.run.tasks[t.id].pass || r.secs < o.run.tasks[t.id].secs); return `<td ${of(m)} class="${r.pass ? 'ok' : 'no'}${fastest ? ' best' : ''}"><span class="mark">${r.pass ? 'pass' : 'fail'}</span><span class="t">${mss(r.secs)}</span></td>`; };
+    const block = (ts) => `<table class="grid tasks"><colgroup><col class="cn"><col>${RM.map((m) => `<col class="cm" ${of(m)}>`).join('')}</colgroup><thead><tr><th>#</th><th>Task</th>${RM.map((m) => `<th ${of(m)}>${short(m)}<small>min:sec</small></th>`).join('')}</tr></thead><tbody>${ts.map((t) => `<tr><td class="num">${t.n || ''}</td><th>${esc(t.title)}</th>${RM.map((m) => cell(m, t)).join('')}</tr>`).join('')}</tbody></table>`;
     const half = Math.ceil(T / 2);
     const when = new Date(run.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     const setup = `thinking ${run.thinking ? 'on' : 'off'}${run.effort ? ` (${esc(String(run.effort)[0].toUpperCase() + String(run.effort).slice(1))})` : ''}${run.ctx ? `, ${k(run.ctx)}` : ''}`;
@@ -210,31 +218,37 @@ export function harnessPage(d) {
     const tie = top.run.passed === low.run.passed;
     const clear = fast !== slow && fast === top && !tie;
     const rowsV = [
-      ['Faster', fast === slow ? `<b>${short(fast)}: ${mins(fast.run.secs)}</b> for the ${T} tasks.` : `<b>${short(fast)}, about ${(slow.run.secs / fast.run.secs).toFixed(1)}×.</b> ${mins(fast.run.secs)} against ${mins(slow.run.secs)} for the same ${T} tasks. It thought for ${num(fast.run.thinkTokens)} tokens, ${short(slow)} for ${num(slow.run.thinkTokens)}.`],
+      ['Faster', fast === slow ? `<b>${short(fast)}: ${mins(fast.run.secs)}</b> for the ${TS}.` : `<b>${short(fast)}, about ${(slow.run.secs / fast.run.secs).toFixed(1)}×.</b> ${mins(fast.run.secs)} against ${mins(slow.run.secs)} for the same ${TS}. It thought for ${num(fast.run.thinkTokens)} tokens, ${short(slow)} for ${num(slow.run.thinkTokens)}.`],
       ['Passes more', `${tie ? `<b>The same: ${top.run.passed} of ${T} each.</b>` : `<b>${short(top)}, by ${top.run.passed - low.run.passed}.</b> ${top.run.passed} against ${low.run.passed}.`} ${ran.map(missed).filter(Boolean).join(' ')}`],
-      ...(M.some((m) => m.watch.length) ? [['Watch', M.filter((m) => m.watch.length).map((m) => `<b>${short(m)}:</b> ${m.watch.map(esc).join(' ')}`).join(' ') + ` Nothing in the ${T} tasks catches that.`]] : []),
+      ...(RM.some((m) => m.watch.length) ? [['Watch', RM.filter((m) => m.watch.length).map((m) => `<b>${short(m)}:</b> ${m.watch.map(esc).join(' ')}`).join(' ') + ` Nothing in the ${TS} catches that.`]] : []),
       ['Not shown', notShown],
       ['So', fast === slow ? 'One model has run this so far.' : clear ? `<b>${short(fast)} for small fixes and features a test can check.</b>${fast.watch.length ? ' Read its “done” yourself where no test can.' : ''}` : tie ? `<b>${short(fast)} when speed matters;</b> they pass the same.` : `<b>No clear winner:</b> ${short(fast)} is faster, ${short(top)} passes more.`],
     ];
     // One model picked: how it did on its own, and beside the quickest of the others.
     const beside = (m) => { const o = byTime.find((x) => x !== m); if (!o) return ''; const d = m.run.passed - o.run.passed; return `About ${(Math.max(m.run.secs, o.run.secs) / Math.min(m.run.secs, o.run.secs)).toFixed(1)}× ${m.run.secs <= o.run.secs ? 'faster' : 'slower'} than ${short(o)}, and it passed ${d ? `${Math.abs(d)} ${d > 0 ? 'more' : 'fewer'}` : 'as many'}.`; };
-    const alone = (m) => [
+    // A model not in this run: how to add it.
+    const toAdd = (n) => `Run “${esc(run.name)}” on ${n === 1 ? 'it' : 'them'} from the Arena (Who runs it), with the same settings: ${setup}.`;
+    const alone = (m) => (!m.run ? [['Not run yet', `${esc(m.name)} has not run this test. ${toAdd(1)} It then shows here beside the others.`]] : [
       ['Passed', `<b>${m.run.passed} of ${T}.</b> ${missedOf(m) ? `It missed ${missedOf(m)}.` : 'It missed nothing.'}`],
-      ['Time', `<b>${mins(m.run.secs)}</b> for the ${T} tasks. A typical task took ${clock(m.run.median)}.`],
+      ['Time', `<b>${mins(m.run.secs)}</b> for the ${TS}. A typical task took ${clock(m.run.median)}.`],
       ...(ran.length > 1 ? [[`Beside ${ran.length === 2 ? 'the other' : 'the others'}`, beside(m)]] : []),
-      ...(m.watch.length ? [['Watch', `${m.watch.map(esc).join(' ')} Nothing in the ${T} tasks catches that.`]] : []),
+      ...(m.watch.length ? [['Watch', `${m.watch.map(esc).join(' ')} Nothing in the ${TS} catches that.`]] : []),
       ['Not shown', notShown],
-    ];
-    results = `<h2>${M.length > 1 ? sw(`The same ${T} tasks on ${both}`, `{name} on the ${T} tasks`) : `The ${T} tasks`}</h2><p class="lead">Each task is graded by a check the model never sees.</p>
-    <div class="two wideLeft res${M.length > 2 ? ' many' : ''}"><div><div class="two tasksTwo">${block(run.tasks.slice(0, half))}${block(run.tasks.slice(half))}</div>
+    ]);
+    const onWho = out.length ? list(RM.map(short)) : both;
+    results = `<h2>${M.length > 1 ? sw(`The same ${TS} on ${onWho}`, `{name} on the ${TS}`) : `The ${TS}`}</h2><p class="lead">Each task is graded by a check the model never sees.</p>
+    <div class="two wideLeft res${RM.length > 2 ? ' many' : ''}"><div><div class="two tasksTwo">${block(run.tasks.slice(0, half))}${half < T ? block(run.tasks.slice(half)) : ''}</div>
       <p class="foot">${esc(run.name)}, ${when}: ${setup}${run.limitMins ? `, ${run.limitMins} minutes a task at most` : ''}.<span class="when-all"> The fastest pass in each row is bold.</span></p></div>
     <div class="stack"><section class="card"><h3>The totals</h3>${grid('cmp', '', [R.passed, R.time, R.typical])}</section>
+      ${out.length ? `<section class="card when-all"><h3>Not in this run</h3><p class="sub">${list(out.map((m) => esc(m.name)))} ${out.length === 1 ? 'has' : 'have'} not run it yet. ${toAdd(out.length)}</p></section>` : ''}
       <section class="card verdict when-all"><h3>Which model, when</h3><dl>${rowsV.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section>
       ${M.map((m) => `<section class="card verdict" data-only="${esc(m.id)}" hidden><h3>How ${esc(m.name)} did</h3><dl>${alone(m).map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('')}</dl></section>`).join('')}</div></div>`;
   }
 
   // ── 5 · more like Opus 5.5
-  const either = M.length > 1 ? 'with either model' : '';
+  // Who the shared run covers: every model, or the most that share one.
+  const onEach = ran.length < M.length ? `on each of ${list(ran.map(short))}` : 'on each model';
+  const either = M.length > 1 ? (M.length === 2 ? 'with either model' : 'with any model') : '';
   const OPUS = [
     ['1 · Gets a task', 'You type a request.', 'has', 'has it'],
     // Adaptive thinking, the local way (30 Sep): think when it pays, and the step-down (flows/llm.mjs, agent.mjs).
@@ -243,7 +257,7 @@ export function harnessPage(d) {
     ['2 · A sealed box, safety checks on', 'The fence, blocked words, your OK and your saved /permissions rules.', 'has', 'has it'],
     ['3 · Think, use one tool, read, repeat', `The same loop, up to ${S.steps} steps, plus a shortcut Opus doesn’t have.`, 'has', 'has it'],
     ['4 · Graded by hidden tests', 'The guard: the harness stops trusting a test that no draft can pass.', 'done', 'built 29 Sep'],
-    ['5 · Each test run 5 times', run ? (run.reps >= 5 ? `The ${T} tasks on the Results tab were run ${run.reps} times on each model.` : `Not yet: the ${T} tasks on the Results tab were run ${run.reps > 1 ? `${run.reps} times` : 'once'} on each model.`) : 'Not yet: no test has been run on every model.', run?.reps >= 5 ? 'done' : 'open', run?.reps >= 5 ? 'done' : 'still open'],
+    ['5 · Each test run 5 times', run ? (run.reps >= 5 ? `The ${TS} on the Results tab ${WERE} run ${run.reps} times ${onEach}.` : `Not yet: the ${TS} on the Results tab ${WERE} run ${run.reps > 1 ? `${run.reps} times` : 'once'} ${onEach}.`) : 'Not yet: no test has been run on every model.', run?.reps >= 5 ? 'done' : 'open', run?.reps >= 5 ? 'done' : 'still open'],
     ['Memory · old parts squeezed', 'When nearly full, the model writes its notes and carries on.', 'has', 'has it'],
     ['When it stops', `It answers, goes in circles, hits ${S.steps} steps, or you press Esc.`, 'has', 'has it'],
     ['Safety net · a backup model', 'None. Only one model fits in this Mac’s memory at a time.', 'skip', 'skip'],
@@ -251,7 +265,7 @@ export function harnessPage(d) {
     ['Teams of agents', 'One model, one step at a time. Two answers at once gained nothing here.', 'skip', 'skip'],
   ];
   const FOUR = [
-    ['Score it the way Opus is scored', run?.reps >= 5 ? 'done' : 'open', run?.reps >= 5 ? 'done' : 'partly', run ? (run.reps >= 5 ? `The ${T} tasks have been run ${run.reps} times on each model.` : `The ${T} tasks have been run ${run.reps > 1 ? `${run.reps} times` : 'once'} on each model. Five runs a task is still to do.`) : 'No test has been run on every model yet.'],
+    ['Score it the way Opus is scored', run?.reps >= 5 ? 'done' : 'open', run?.reps >= 5 ? 'done' : 'partly', run ? (run.reps >= 5 ? `The ${TS} ${HAVE} been run ${run.reps} times ${onEach}.` : `The ${TS} ${HAVE} been run ${run.reps > 1 ? `${run.reps} times` : 'once'} ${onEach}. Five runs a task is still to do.`) : 'No test has been run on every model yet.'],
     ['A grader the model can’t bend', 'done', 'built', `The guard is in the harness, so it covers ${list(M.map(short))} alike.`],
     ['Turn thinking up', 'done', 'built', `High is there for every model.${run?.thinking ? ` The run on the Results tab used it: ${ran.map((m) => `${short(m)} ${m.run.passed} of ${T}`).join(', ')}.` : ''}`],
     ['More room to remember', 'done', 'built', `${at} is in use.${M.length === 2 && M[0].kbPerToken !== M[1].kbPerToken ? ` A token costs ${short(M[0])} ${M[0].kbPerToken} KB and ${short(M[1])} ${M[1].kbPerToken} KB.` : ''}`],

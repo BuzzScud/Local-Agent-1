@@ -267,6 +267,20 @@ export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top
   return { run: null, sort };
 }
 
+// The newest run the most of these models share, two at least, when no run has every one of them:
+// a model added later shows "not run yet" beside the run the others share, instead of no run at all.
+// ids in the answer: the models in that run (empty when there is none); sort is every model's.
+export function sideByMost(ids = Object.keys(MODELS), opts = {}) {
+  const all = sideBySide(ids, opts);
+  if (all.run || ids.length < 3) return { ...all, ids: all.run ? ids : [] };
+  const groups = (k, from = 0, pick = []) => (pick.length === k ? [pick] : ids.slice(from).flatMap((id, i) => groups(k, from + i + 1, [...pick, id])));
+  for (let k = ids.length - 1; k >= 2; k--) {
+    const found = groups(k).map((g) => [g, sideBySide(g, opts)]).filter(([, s]) => s.run).sort((a, b) => String(b[1].run.at).localeCompare(String(a[1].run.at)));
+    if (found.length) return { run: found[0][1].run, sort: all.sort, ids: found[0][0] };
+  }
+  return { ...all, ids: [] };
+}
+
 // The same page the hub shows, with the record written into it, saved into
 // the DOCS folder (the repo's docs/). Skipped quietly when the folder or the
 // page's source is not here, and in a worktree or a frozen copy (its docs/
