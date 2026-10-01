@@ -967,7 +967,7 @@ function RemotePicker({ app }) {
           </React.Fragment>
         );
       })}
-      {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="truncate-end">{warn.text}</Text> : null}
+      {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="wrap">{warn.text}</Text> : null}
       {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
       <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : web ? '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · the web' : '↑↓ choose · ←→ change · enter edits a row or runs it · esc cancels'}</Text>
     </Box>

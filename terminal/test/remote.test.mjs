@@ -236,6 +236,18 @@ test('Connect and Save only: what is kept, and which remote is in use next', () 
   expect(remoteChoices({ remotes: { machine, claude: plan.remotes.claude, openai: { source: 'openai', kind: 'openai', address: '' } } }).map((r) => r.name)).toEqual(['Claude API · Opus 5.5', 'My other computer · 10.0.0.5']);
 });
 
+test('a Claude key: its ID (apikey_…) pasted for the key stops Connect and says where the real one is; another kind of key is worth a word; a proxy’s keys are its own', () => {
+  const claude = (key, address = '') => {
+    const f = { ...moveRow(openForm({}), 'source', 1), keys: { claude: key, machine: null, openai: null } };
+    return address ? { ...f, profiles: { ...f.profiles, claude: { ...f.profiles.claude, address } } } : f;
+  };
+  expect(formWarning(claude('apikey_01TestTestTestTestTestAMMp'))).toEqual({ tone: 'error', text: 'That is the key’s ID (apikey_…), not the key. Make a key in console.anthropic.com → API keys and copy the sk-ant-… it shows once.' });
+  expect(formWarning(claude('test-other-0123456789'))).toEqual({ tone: 'warn', text: 'A Claude API key starts with sk-ant-, and this one does not.' });
+  expect(formWarning(claude(['sk', 'ant', 'api03', 'x'.repeat(24)].join('-')))).toBe(null); // the real shape (built here, so no key-like text sits in the file)
+  expect(formWarning(claude('apikey_01TestTestTestTestTestAMMp', 'http://127.0.0.1:9000'))).toBe(null); // a proxy's address: its own keys
+  expect(formWarning(claude(null))).toBe(null); // no key typed: nothing to say before Connect
+});
+
 test('the warning under the form: plain http to the internet, a key with a space; Claude needs no address', () => {
   const on = (r) => openForm({ remote: { use: true, ...r } }, { on: true });
   expect(formWarning({ ...on({ kind: 'claude', key: true }), tried: true })).toBe(null);

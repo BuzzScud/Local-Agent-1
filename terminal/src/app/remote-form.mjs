@@ -6,7 +6,7 @@
 // back) and only when that works saves them and switches; Save only keeps
 // them. ←→ moves a choice row; enter (or typing) on a text row edits it in
 // place. A key never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
+import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
 
 export const SOURCES = ['here', ...REMOTE_SOURCES];
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
@@ -176,7 +176,7 @@ export function rowNote(form, id) {
     case 'connect': return ssh ? 'through ssh: nothing open to the network' : v.connect === 'https' ? 'encrypted, across the internet' : 'plain http: a home network or Tailscale';
     case 'key': {
       const pending = form.keys[form.source] !== null ? ' · • not saved yet' : '';
-      if (claude) return `console.anthropic.com → API keys · kept in the ${store}${process.env.ANTHROPIC_API_KEY ? ' · blank: ANTHROPIC_API_KEY' : ''}${pending}`;
+      if (claude) return `sk-ant-… from console.anthropic.com → API keys · kept in the ${store}${process.env.ANTHROPIC_API_KEY ? ' · blank: ANTHROPIC_API_KEY' : ''}${pending}`;
       return `${form.source === 'machine' ? 'the one coding serve printed' : 'the service’s key'} · kept in the ${store}${pending}`;
     }
     case 'kind': return v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'Ollama, LM Studio, vLLM… on that computer';
@@ -213,12 +213,16 @@ export function toProfile(form, source = form.source) {
   };
 }
 
-// The warning under the form: a key that cannot be sent; after a Connect, the
-// problem that stopped it; else plain http to the internet, worth knowing.
+// The warning under the form: a key that cannot be sent (on Anthropic's own
+// address, a Claude key's ID pasted for the key stops Connect; another kind of
+// key is worth a word); after a Connect, the problem that stopped it; else
+// plain http to the internet, worth knowing.
 export function formWarning(form) {
   if (form.source === 'here') return null;
   const k = form.keys[form.source];
   if (k && !validKey(k)) return { tone: 'error', text: 'The API key has a space or a line break in it: paste it again.' };
+  const bad = form.source === 'claude' && !cur(form).address ? claudeKeyProblem(k) : null;
+  if (bad) return { tone: /^apikey_/i.test(k) ? 'error' : 'warn', text: `${bad[0].toUpperCase()}${bad.slice(1)}.` };
   const r = toProfile(form);
   const p = remoteProblem(r);
   if (p && form.tried) return { tone: 'error', text: `Not ready: ${p}.` };

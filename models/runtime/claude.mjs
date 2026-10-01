@@ -22,6 +22,16 @@ export const CLAUDE_MODELS = [
 // A model's short name (Opus 5.5), else its id as the API gives it.
 export const claudeName = (id) => CLAUDE_MODELS.find((m) => m.id === id)?.name ?? id;
 
+// What is wrong with a Claude API key, in plain words, or null. A key starts
+// "sk-ant-" and is shown once, when it is made; the Console's ID for a key
+// (apikey_01…) looks like one but is not.
+export function claudeKeyProblem(key) {
+  if (!key) return null;
+  if (/^apikey_/i.test(key)) return 'that is the key’s ID (apikey_…), not the key. Make a key in console.anthropic.com → API keys and copy the sk-ant-… it shows once';
+  if (!key.startsWith('sk-ant-')) return 'a Claude API key starts with sk-ant-, and this one does not';
+  return null;
+}
+
 let sdk = null;
 export async function claudeSdk() {
   sdk ??= (await import('@anthropic-ai/sdk')).default;
@@ -102,7 +112,7 @@ export async function claudeProbe({ url, key = null, model = '', reply = false, 
     return out;
   } catch (e) {
     if (signal?.aborted) throw e;
-    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return fail(key ? 'the API key was not accepted' : 'it needs an API key: enter one in the API key row, or set ANTHROPIC_API_KEY');
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return fail(key ? `the API key was not accepted${claudeKeyProblem(key) ? `: ${claudeKeyProblem(key)}` : ''}` : 'it needs an API key: enter one in the API key row, or set ANTHROPIC_API_KEY');
     if (e instanceof Anthropic.NotFoundError) return fail(`there is no model "${want}": pick another in the Model row (←→)`);
     if (e instanceof Anthropic.RateLimitError) return fail('the API key is rate limited right now (429): try again in a moment');
     if (e instanceof Anthropic.APIConnectionError) return fail(why(e.cause ?? e));

@@ -161,7 +161,9 @@ test('the check (/remote’s Test, connecting): the key, the model list and its 
   expect(ok.ok).toBe(true);
   expect(ok).toMatchObject({ model: 'claude-opus-5-5', ctx: 1_000_000, models: ['claude-opus-5-5', 'claude-haiku-4-5'] });
   expect(ok.steps.map((s) => s.text)).toEqual([expect.stringMatching(/^reached in \d+ ms · the key was accepted$/), 'model claude-opus-5-5 · 1000k context', expect.stringMatching(/^answered "ready" in [\d.]+ s$/)]);
-  expect((await probe({ url, kind: 'claude', key: 'test-wrong-key-000000000' })).error).toBe('the API key was not accepted');
+  expect((await probe({ url, kind: 'claude', key: 'test-wrong-key-000000000' })).error).toBe('the API key was not accepted: a Claude API key starts with sk-ant-, and this one does not');
+  // the Console's ID for a key, pasted for the key: said in so many words
+  expect((await probe({ url, kind: 'claude', key: 'apikey_01TestTestTestTestTestAMMp' })).error).toBe('the API key was not accepted: that is the key’s ID (apikey_…), not the key. Make a key in console.anthropic.com → API keys and copy the sk-ant-… it shows once');
   const other = await probe({ url, kind: 'claude', key: fake.key, model: 'claude-made-up-9' });
   expect(other.steps[1].text).toBe('"claude-made-up-9" is not in its list of 2; it is asked for anyway');
   const c = await connectRemote(R({ address: url, key: true }), { key: fake.key });
@@ -182,7 +184,7 @@ test('the form: Run on ◀ Claude API ▶ shows Anthropic’s address, https, th
     // with ANTHROPIC_API_KEY set, a blank key row uses it
     process.env.ANTHROPIC_API_KEY = 'test-env-key-0123456789';
     expect(showValue(f, 'key')).toBe('ANTHROPIC_API_KEY');
-    expect(rowNote(f, 'key')).toMatch(/^console\.anthropic\.com → API keys · kept in the .+ · blank: ANTHROPIC_API_KEY$/);
+    expect(rowNote(f, 'key')).toMatch(/^sk-ant-… from console\.anthropic\.com → API keys · kept in the .+ · blank: ANTHROPIC_API_KEY$/);
   } finally { if (env === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = env; }
   expect(rowNote(f, 'context')).toMatch(/at most 200k/);
   expect(rowNote(f, 'source')).toBe('Anthropic’s models · billed to your API key');
