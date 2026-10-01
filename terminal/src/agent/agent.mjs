@@ -74,6 +74,15 @@ const FULL = 0.85; // past this share (with the reply room counted) trimming was
 // model's own budget, so raising it in model.mjs leaves the answer its 2,048.
 const replyRoom = (thinking, budget = 2048) => (thinking ? 2048 + budget : 2048);
 const NOTES_ROOM = 700; // tokens for its notes when memory fills (about 200 words, with room to spare)
+// Its notes think only briefly. With the full thinking cap, Bonsai's thinking took all
+// 700 tokens three times running and left no notes (countdown card, 1 Oct).
+const NOTES_THINK = 128;
+// When the memory is tight, a reply's thinking shrinks to what fits under the trim line,
+// down to this, before notes are written. At 16k with a 4,096 cap the request's start
+// (7,300 tokens) was already over the line, so notes came after every step (1 Oct).
+const LEAST_THINK = 512;
+// Claude's notes that go with a request in a memory of 16k or less (else claude-notes.mjs TOP).
+const SMALL_CTX_NOTES = 2;
 // Its own thinking goes back with each step: the model's chat template shows
 // every earlier step's thinking, and without it each step looked as if it had
 // thought nothing, so it worked the cause out again (or lost it). The newest
@@ -234,6 +243,20 @@ export function cutCallNote(name, path) {
 export const CALL_MARK = /<tool_call>|<ifm\|tool_calls?>/;
 export const CALL_STOPS = ['<tool_call>', '<ifm|tool_calls>', '<ifm|tool_call>'];
 export const beforeCall = (s) => String(s ?? '').split(CALL_MARK)[0];
+
+// Tool-call text written into a file by mistake: a line that is only a call's
+// tag. On 1 Oct Bonsai closed a Write's content with </content> instead of
+// </parameter>, so its next call (<tool_call><function=Bash>… ls) was saved at
+// the end of the page and showed beside the card. A file that already has such
+// a line (a parser's notes, its tests) keeps its own: `before` is the text it
+// replaces. Returns { line, text } of the first one, or null.
+const CALL_LINE = /^[ \t]*(<\/?tool_call>|<\/?ifm\|tool_calls?>|<function=[^>\s]+>|<\/function>|<parameter=[^>\s]+>|<\/parameter>)[ \t]*$/;
+export function leakedCall(text, before = '') {
+  const had = new Set(String(before ?? '').split('\n').map((l) => l.trim()).filter((l) => CALL_LINE.test(l)));
+  const lines = String(text ?? '').split('\n');
+  const i = lines.findIndex((l) => CALL_LINE.test(l) && !had.has(l.trim()));
+  return i < 0 ? null : { line: i + 1, text: lines[i].trim() };
+}
 
 // A tool call written as text instead of a real call: <tool_call>{...}</tool_call>
 export function toolCallInText(text) {
@@ -638,6 +661,29 @@ export class Agent extends EventEmitter {
       this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request are gone, so it thinks only briefly from here and finishes in time.`, tone: 'dim' });
     }
     return true;
+  }
+
+  // What the conversation holds now, the two newest messages counted (they
+  // may not be in ctxUsed yet).
+  estNow() {
+    return this.ctxUsed + this.messages.slice(-2).reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : ''), 0);
+  }
+
+  // The thinking the next reply may use: none with thinking off, STEP_DOWN_CAP
+  // past half the request's time, else the model's cap, shrunk to what fits
+  // under the trim line with the answer's 2,048 (but never below LEAST_THINK).
+  thinkRoom(est = this.estNow()) {
+    if (!this.thinking) return 0;
+    const cap = this.steppedDown() ? STEP_DOWN_CAP : (this.model?.thinkingBudget ?? 2048);
+    const fits = Math.floor(this.ctx * this.trimAt - est - 2048);
+    return Math.max(Math.min(cap, LEAST_THINK), Math.min(cap, fits));
+  }
+
+  // What a restart from notes keeps: the instructions, the request and the
+  // notes that go with it (design cards, a skill…), and the tools.
+  keptTokens() {
+    const opening = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m));
+    return this.withTurnNotes([this.messages[0], ...opening]).reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : ''), 0) + 1300;
   }
 
   // What the focused paths (src/flows) need from the agent.
@@ -1309,15 +1355,16 @@ export class Agent extends EventEmitter {
 
   // Claude's notes (claude-notes.mjs): what Claude Code wrote down about the
   // user's work, read where it is. Up to four notes that fit the request
-  // go along with it, as the saved facts do. They are never counted for or
-  // against (no trust): Agentic Coder does not change them.
+  // go along with it, as the saved facts do (two in a memory of 16k or less,
+  // where the request's start must leave room to work: 1 Oct). They are never
+  // counted for or against (no trust): Agentic Coder does not change them.
   async rememberClaude(text, goesAlong, signal) {
     const c = this.memory.claude;
     if (!c) return;
     const dir = c === true ? notesDir() : notesDir({ setting: c.dir ?? c });
     if (!dir) return;
     let r;
-    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal, retriever: this.search.retriever, reranker: this.reranker }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
+    try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal, retriever: this.search.retriever, reranker: this.reranker, top: this.ctx <= 16384 ? SMALL_CTX_NOTES : undefined }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
     if (!r.notes.length) return;
     goesAlong(claudeText(r.notes));
     if (this.happened) this.happened.claude = r.notes.map((n) => n.id);
@@ -1702,7 +1749,11 @@ export class Agent extends EventEmitter {
   // One model reply, streamed.
   async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
     const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-    const maxTokens = cap ?? replyRoom(this.thinking, this.model?.thinkingBudget); // fitContext keeps this much free
+    const maxTokens = cap ?? replyRoom(this.thinking, this.model?.thinkingBudget);
+    // fitContext keeps the answer's 2,048 and this much thinking free: in a tight
+    // memory the thinking shrinks (thinkRoom), not the answer.
+    const think = this.thinkRoom();
+    const thinkCap = this.thinking && think < (this.model?.thinkingBudget ?? 2048) ? think : undefined;
     // High effort is for working the problem out. Once this turn has changed a
     // file, the steps left (run the tests, report) think briefly instead.
     const effort = this.effort === 'high' && this.turn?.changed ? 'medium' : this.effort;
@@ -1720,7 +1771,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap: this.steppedDown() ? STEP_DOWN_CAP : undefined, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly });
+      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -1865,6 +1916,17 @@ export class Agent extends EventEmitter {
     if (prepared.error) {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: prepared.error }, error: true });
       return { text: prepared.error, error: true };
+    }
+    // Tool-call text in what would be written (leakedCall): turned back, so the
+    // file never gets it, and the model sends the call again without it.
+    if (call.name === 'Write' || call.name === 'Edit') {
+      // prepared.before: the file as it is now (empty for a new one).
+      const leak = leakedCall(call.name === 'Write' ? args.content : args.new_text, prepared.before ?? args.old_text ?? '');
+      if (leak) {
+        const msg = `Nothing was written: line ${leak.line} of your ${call.name === 'Write' ? 'content' : 'new_text'} is "${leak.text}", which is tool-call text, not part of the file (the end of your call got into it). Send the ${call.name} again with only the file's own text, and make any next call separately.`;
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: `Turned back: line ${leak.line} is tool-call text (${leak.text})` }, error: true });
+        return { text: msg, error: true };
+      }
     }
     // Like Claude Code: an existing file must be read before it is edited, so
     // old_text is copied from what is really there.
@@ -2398,17 +2460,29 @@ export class Agent extends EventEmitter {
   // the conversation is under TRIM_TO. (Trimming just enough once emptied the
   // file the model had just read, so it read it again, step after step.)
   async fitContext(signal) {
-    const pending = this.messages.slice(-2).reduce((n, m) => n + tokensOf(typeof m.content === 'string' ? m.content : ''), 0);
     // The next reply needs its room too: at 16k, trimming without counting it
-    // let a High reply run into the end of the memory mid-thought.
-    const room = replyRoom(this.thinking, this.model?.thinkingBudget);
-    let est = this.ctxUsed + pending;
+    // let a High reply run into the end of the memory mid-thought. The room is
+    // the answer's 2,048 and the thinking that still fits (thinkRoom): in a
+    // tight memory the thinking shrinks first, and nothing is cut while it fits.
+    let est = this.estNow();
+    const room = replyRoom(this.thinking, this.thinkRoom(est));
     if (est + room < this.ctx * this.trimAt) return;
+    // Notes and a summary both start over from what a restart keeps. When that
+    // alone leaves no room for a reply, they free nothing and come back after
+    // the very next step: at 16k a 7,300-token start wrote notes four times in
+    // 18 minutes and changed nothing (countdown card, 1 Oct). Then only
+    // trimming old output can help.
+    const kept = this.keptTokens();
+    const restartFits = kept + NOTES_ROOM + room < this.ctx * this.trimAt;
+    if (!restartFits && this.turn && !this.turn.toldTight) {
+      this.turn.toldTight = true;
+      this.emit('note', { text: `The ${Math.round(this.ctx / 1024)}k memory is nearly all taken by this request's start (about ${kept.toLocaleString('en-US')} tokens: the instructions, the request and what came with it), so notes would free nothing; carrying on without them. A bigger memory in /effort gives it room.`, tone: 'warn' });
+    }
     // Notes first. Emptying old output makes the model read again everything
     // after it (measured: 186 to 261 s each time, up to half of a long try).
     // Its notes are written in the conversation it already holds, so only
     // the notes themselves are read afterwards.
-    if (this.whenFull === 'notes' && est + NOTES_ROOM < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
+    if (this.whenFull === 'notes' && restartFits && est + NOTES_ROOM + NOTES_THINK < this.ctx * 0.97 && await this.notesInPlace(signal)) return;
     let freed = 0;
     // Old thinking first: every step before the newest KEEP_THOUGHTS keeps
     // only its cause/fix lines (keyLines); the rest served its step already.
@@ -2433,7 +2507,7 @@ export class Agent extends EventEmitter {
     est -= freed;
     this.ctxUsed = Math.max(0, this.ctxUsed - freed);
     if (freed) this.emit('note', { text: `Trimmed old tool output to save memory (about ${freed.toLocaleString()} tokens).`, tone: 'dim' });
-    if (est + room >= this.ctx * this.fullAt) await this.compact(signal);
+    if (restartFits && est + room >= this.ctx * this.fullAt) await this.compact(signal);
   }
 
   // Its notes, written by the model in the conversation it already holds
@@ -2453,7 +2527,9 @@ export class Agent extends EventEmitter {
     let summary = '';
     try {
       const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM, slot: this.slots?.main, signal })) {
+      // Thinking stays on (turning it off would change the prompt and read it all
+      // again) but is capped at NOTES_THINK, so the 700 tokens go to the notes.
+      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM + (this.thinking ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal })) {
         if (ev.type === 'text') summary += ev.text;
       }
     } catch (e) {
