@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/agentic-coder-start-page-upgrades-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-upgrades-2-designs-2026-10-01.html) | page | Start page upgrades | 641 KB | 2026-10-01 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 355 KB | 2026-10-01 |
 | [tests/agentic-coder-model-check-k2-2026-10-01-0000.html](tests/agentic-coder-model-check-k2-2026-10-01-0000.html) | page | New model check · K2 Horizon 7B | 9 KB | 2026-10-01 |
 | [design rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html) | page | Start page agents | 1.4 MB | 2026-10-01 |
