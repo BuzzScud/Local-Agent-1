@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Arena</title>
 <!-- The Arena: run a test on one model, or battle any two (Gemma vs Qwen by default). Served by
-     models/evals/battle/runner.mjs and shown in the hub's Arena tab. One screen (the Workbench,
-     picked 30 Sep 2026): the tests on the left, the result in the middle, this run's panel on the
-     right. It took the place of the hub's Tests tab (▶ Run tests) and its Battle tab. Nothing loads
-     from the internet. -->
+     models/evals/battle/runner.mjs and shown in the hub's Arena tab. Four steps, one at a time (the
+     wizard, picked 1 Oct 2026, Design 1 · Steps across the top): 1 Model & settings (the panel),
+     2 Tests (the list: One test, or a Group), 3 Run (the group's timeline on top, a terminal of
+     everything it does), 4 Results (that group's, and every earlier one). The step chips and Back /
+     Next move freely; a run going keeps going on every step. It took the place of the Workbench
+     (30 Sep), which had taken the place of the hub's Tests and Battle tabs. Nothing loads from the
+     internet. -->
 <style>
 /* The hub's own tokens (terminal/src/app/hub.html), plus the two models' colours. */
 :root {
@@ -358,19 +361,122 @@ body.compact .tch { padding: 5px 14px; }
 .mfoot { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-top: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
 .mfoot .help { font-size: 12.5px; color: var(--ink3); margin-left: 6px; }
 @media (max-width: 900px) { .mbody { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); } .mlist { border-right: none; border-bottom: 1px solid var(--line); } .modal, .modal.newm { inset: 8px; transform: none; width: auto; height: auto; } .mform .steps3, .mform1 .steps3 { grid-template-columns: 1fr; overflow: auto; } }
-#toast { position: fixed; left: 50%; bottom: 16px; translate: -50% 0; z-index: 60; background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 10px; font-size: 13px; max-width: min(480px, calc(100vw - 32px)); box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
+#toast { position: fixed; left: 50%; bottom: 76px; translate: -50% 0; z-index: 60; background: var(--ink); color: var(--surface); padding: 9px 14px; border-radius: 10px; font-size: 13px; max-width: min(480px, calc(100vw - 32px)); box-shadow: 0 8px 24px rgba(0,0,0,.25); opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none; }
 #toast.on { opacity: 1; transform: none; }
 #toast.bad { background: var(--bad); color: #fff; }
 
-/* ---------- The Workbench: three columns on one screen ---------- */
-.wb { height: 100%; min-height: 560px; display: grid; grid-template-columns: minmax(250px, 330px) minmax(0, 1fr) minmax(250px, 320px); gap: 12px; padding: 12px 18px 10px; }
-.wb > .col { display: grid; gap: 10px; min-height: 0; min-width: 0; grid-template-columns: minmax(0, 1fr); }
-.wb > .left { grid-template-rows: auto minmax(0, 1fr); }
-.wb > .mid { grid-template-rows: minmax(0, 1fr); position: relative; }
-.wb > .right { grid-template-rows: minmax(0, 1fr) auto; }
+/* ---------- The wizard: four steps, one at a time (Design 1 · Steps across the top, 1 Oct 2026) ---------- */
+.wz { height: 100%; min-height: 560px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
 .box { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; min-height: 0; box-shadow: var(--shadow); }
-/* A wide window (the hub at about 2000 px) has room for the panel's notes. */
-@media (min-width: 1900px) { .wb { grid-template-columns: 330px minmax(0, 1fr) 500px; } .pr { grid-template-columns: 116px 150px minmax(0, 1fr) !important; } .pr .nt { display: block !important; } }
+.sbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 18px 0; }
+.sc1 { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 0 10px; align-items: center; border: 0; background: none; text-align: left; padding: 8px 12px 10px; cursor: pointer; border-bottom: 2px solid var(--line); min-width: 0; color: var(--ink); }
+.sc1:hover { background: var(--panel); border-radius: 10px 10px 0 0; }
+.sc1 .no { grid-row: 1 / 3; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 750; font-size: 13px; border: 1.5px solid var(--line2); color: var(--ink2); }
+.sc1 b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink2); font-weight: 600; }
+.sc1 > span:last-child { font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc1.done .no { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.sc1.on { border-bottom-color: var(--accent); } .sc1.on .no { background: var(--accent); border-color: var(--accent); color: #fff; } .sc1.on b { color: var(--ink); font-weight: 700; }
+.sc1.run:not(.on) .no { border-color: var(--b); color: var(--b); }
+.wbody { min-height: 0; padding: 12px 18px; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.foot1 { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(200px, 300px); gap: 14px; align-items: center; padding: 10px 18px; border-top: 1px solid var(--line); background: var(--surface); }
+.foot1 .sum { text-align: center; font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .foot1 .sum b { color: var(--ink); }
+.foot1 .l .btn, .foot1 .r .btn, .foot1 .r .go { width: 100%; }
+/* Step 1: the panel, and this run in words. */
+.s1 { display: grid; grid-template-columns: minmax(520px, 640px) minmax(0, 1fr); gap: 14px; min-height: 0; }
+.s1 .pr { grid-template-columns: 132px 170px minmax(0, 1fr); } .s1 .pr .nt { display: block; }
+.words { padding: 16px 18px; display: grid; gap: 12px; align-content: start; overflow: auto; }
+.words h3 { margin: 0; font-size: 16px; }
+.words .say { font-size: 15px; line-height: 1.55; color: var(--ink2); } .words .say b { color: var(--ink); }
+.words .k { color: var(--ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+.whoc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.wc { border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 11px; cursor: pointer; display: grid; gap: 1px; background: var(--page); text-align: left; color: var(--ink); min-width: 0; }
+.wc:hover { border-color: var(--line2); } .wc.on { border-color: var(--accent); background: var(--a-soft); }
+.wc b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .wc span { font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Step 2: the list (One · Group on top), and what runs. */
+.s2 { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+.lwrap { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.modesw { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink3); }
+.modesw span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modeseg { display: inline-flex; border: 1px solid var(--line2); border-radius: 9px; overflow: hidden; }
+.modeseg button { border: 0; background: var(--surface); padding: 4px 14px; cursor: pointer; font-size: 13px; color: var(--ink2); }
+.modeseg button + button { border-left: 1px solid var(--line2); }
+.modeseg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); font-weight: 600; }
+.tg.radio { border-radius: 50%; } .tg.radio.on { color: transparent; background: radial-gradient(circle, #fff 0 3px, var(--accent) 3.5px); }
+.pick { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.pick .phd { padding: 12px 16px 8px; display: grid; gap: 4px; min-width: 0; }
+.pick .phd .k { color: var(--ink3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+.pick .phd b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick .phd .sub { font-size: 12.5px; color: var(--ink3); }
+.pick .pfd { padding: 12px 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.pick .pfd .row { display: flex; gap: 8px; } .pick .pfd .row .go { flex: 1; padding: 10px 14px; font-size: 15px; }
+.pick .pfd .hint { color: var(--ink3); font-size: 12px; text-align: center; }
+.pitem { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 16px; border-top: 1px solid var(--line); font-size: 13.5px; }
+.pitem span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .pitem small { color: var(--ink3); font-size: 12px; white-space: nowrap; }
+.pkids { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px 16px; padding: 4px 16px 10px; font-size: 12.5px; color: var(--ink2); }
+.pkids span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .pkids i { font-style: normal; color: var(--ink3); display: inline-block; width: 28px; font-variant-numeric: tabular-nums; }
+.preview { padding: 4px 16px 14px; display: grid; gap: 12px; align-content: start; }
+.preview .pp { color: var(--ink2); font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preview .kv { max-width: none; }
+.preview .rules { max-width: none; flex-wrap: wrap; }
+/* Step 3: the group on top, then the terminal. */
+.s3 { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); gap: 10px; min-height: 0; }
+.runtop { padding: 10px 14px 8px; display: grid; gap: 6px; }
+.rrw { display: grid; grid-template-columns: 70px minmax(0, 1fr) 230px; gap: 12px; align-items: center; min-width: 0; }
+.rrw .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; }
+.rrw .rt { font-size: 12.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; text-align: right; }
+.rrw .rt b { color: var(--ink); }
+.rrw .now { font-size: 12.5px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; } .rrw .now b { color: var(--ink); }
+.cells { display: flex; gap: 3px; height: 22px; min-width: 0; }
+.cell { flex: 1 1 0; max-width: 64px; border-radius: 4px; background: var(--panel); border: 1px solid var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; min-width: 0; overflow: hidden; }
+.cell.ok { background: var(--ok); border-color: var(--ok); } .cell.bad { background: var(--bad); border-color: var(--bad); } .cell.warn { background: var(--warn); border-color: var(--warn); } .cell.done { background: var(--ink3); border-color: var(--ink3); }
+.cell.run { background: var(--a-soft); border: 1.5px solid var(--a); color: var(--a); animation: pulse 1.4s infinite; }
+.cell.left { background: none; border-style: dashed; }
+.ckprog { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink2); min-width: 0; }
+.ckprog .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--panel); overflow: hidden; } .ckprog .bar i { display: block; height: 100%; background: var(--a); }
+.term.scroll { display: block; overflow: auto; }
+.term .c { color: #7cc4e8; } .term .p { color: #b9a0f5; } .term .hd { color: #fff; font-weight: 700; } .term .add { color: #7fd092; } .term .del { color: #f08a74; }
+.term .cur::after { content: "▍"; color: #e7e5df; animation: pulse 1s infinite; }
+.runbar { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--ink2); min-width: 0; }
+.runbar .nx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.empty { padding: 28px 24px; display: grid; gap: 12px; align-content: start; max-width: 760px; }
+.empty h2 { margin: 0; font-size: 20px; }
+/* Step 4: the group's results; one opened in full; the earlier groups. */
+.s4 { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: 10px; min-height: 0; }
+.s4 .head { display: flex; align-items: center; gap: 8px; min-width: 0; position: relative; }
+.s4 .head .fill { flex: 1; }
+.s4 .head .h2 { margin: 0; font-size: 18px; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.s4 .head .h2 .t { overflow: hidden; text-overflow: ellipsis; }
+.s4 .main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; min-height: 0; }
+.cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.card { padding: 9px 13px; display: grid; gap: 2px; min-width: 0; }
+.card .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; }
+.card .v { font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .v.ok { color: var(--ok); } .card .v.bad { color: var(--bad); }
+.card .d { font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rtab { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.xrow, .xhead { display: grid; grid-template-columns: 34px minmax(0, 1.6fr) var(--xc, 120px) minmax(0, 1fr); gap: 0 12px; align-items: center; padding: 0 14px; }
+.xrow.two, .xhead.two { grid-template-columns: 34px minmax(0, 1.4fr) 110px 110px minmax(0, 1fr); }
+.xhead { height: 31px; font-size: 12px; color: var(--ink3); font-weight: 600; background: var(--panel); border-bottom: 1px solid var(--line); }
+.xrow { min-height: 32px; border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer; }
+.xrow:hover { background: var(--panel); } .xrow.sel { background: var(--panel); box-shadow: inset 2px 0 0 var(--accent); }
+.xrow > * { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.xrow .no { color: var(--ink3); font-variant-numeric: tabular-nums; } .xrow .tm { font-variant-numeric: tabular-nums; } .xrow .tr { color: var(--ink3); font-size: 12.5px; } .xrow .tr.vote { color: var(--accent); font-weight: 650; }
+.detail { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.detail .dh { padding: 12px 14px 6px; display: grid; gap: 3px; min-width: 0; }
+.detail .dh b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail .db { padding: 4px 14px 10px; display: grid; gap: 12px; align-content: start; }
+.detail .df { padding: 10px 14px; border-top: 1px solid var(--line); display: flex; gap: 8px; }
+.detail .df .btn { flex: 1; }
+.drun { display: grid; gap: 6px; } .drun .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .drun .top b { font-size: 13.5px; } .drun .why { font-size: 12.5px; color: var(--ink2); }
+.hmenu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 400px; max-height: 60vh; background: var(--surface); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 14px 34px rgba(0,0,0,.28); padding: 6px; display: grid; gap: 2px; align-content: start; }
+.hh { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 700; padding: 6px 10px 3px; }
+.hrow { display: grid; gap: 1px; text-align: left; border: 0; background: none; border-radius: 9px; padding: 7px 10px; cursor: pointer; color: var(--ink); min-width: 0; }
+.hrow:hover { background: var(--panel); } .hrow.on { background: var(--panel); box-shadow: inset 2px 0 0 var(--accent); }
+.hrow b { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .hrow span { font-size: 12px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hrow .sc { color: var(--ok); font-weight: 650; } .hrow .sc.bad { color: var(--bad); }
+.s4full { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: 10px; min-height: 0; }
+.s4full .backbar { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 13px; color: var(--ink3); white-space: nowrap; overflow: hidden; }
+.s4full .mid4 { min-height: 0; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .car { display: inline-block; width: 0; height: 0; border: 4px solid transparent; border-top: 5px solid currentColor; border-bottom: 0; vertical-align: middle; opacity: .8; }
 .car.shut { border: 4px solid transparent; border-left: 5px solid currentColor; border-right: 0; }
 
@@ -382,7 +488,7 @@ body.compact .tch { padding: 5px 14px; }
 .lh .btn { padding: 4px 9px; font-size: 12.5px; }
 .lh .cmenu { top: calc(100% + 2px); right: 4px; }
 /* The list: sets (open one for its tests), then the checks. */
-.tl-box { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.tl-box { display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); overflow: hidden; }
 /* Under the list, in the hub: the Test builder (a window over the whole hub). */
 .lfoot { padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface); }
 .lfoot .btn { width: 100%; padding: 7px 12px; font-weight: 600; }
@@ -421,13 +527,6 @@ body.compact .tch { padding: 5px 14px; }
 .pr.who .val b { color: var(--accent); } .pr.dim { opacity: .55; }
 .pnote { margin: 6px 14px 8px; padding: 6px 10px; border-radius: 9px; background: var(--panel); font-size: 12.5px; line-height: 1.45; } .pnote b { font-weight: 650; }
 .pfoot { padding: 8px 14px; display: flex; align-items: center; gap: 10px; color: var(--ink3); font-size: 12px; border-top: 1px solid var(--line); line-height: 1.4; } .pfoot span { flex: 1; min-width: 0; }
-/* The run box: what is picked and the button, or what is running and the line. */
-.runbox { padding: 9px 12px 10px; display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
-.runbox .sum { font-size: 12.5px; color: var(--ink2); line-height: 1.45; } .runbox .sum b { color: var(--ink); font-weight: 650; }
-.runbox .row { display: flex; gap: 8px; min-width: 0; } .runbox .row .go { flex: 1; min-width: 0; }
-.runbox .now { font-size: 12.5px; line-height: 1.45; border-bottom: 1px solid var(--line); padding-bottom: 8px; display: grid; gap: 6px; }
-.runbox .now .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.runbox .bar { height: 5px; border-radius: 3px; background: var(--panel); overflow: hidden; } .runbox .bar i { display: block; height: 100%; background: var(--accent); }
 .go { border: 0; border-radius: 10px; padding: 8px 14px; background: var(--accent); color: var(--accent-ink); font-weight: 650; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .go:hover:not(:disabled) { filter: brightness(1.07); }
 .go:disabled { background: var(--panel); color: var(--ink3); cursor: default; }
@@ -468,15 +567,21 @@ body.compact .tch { padding: 5px 14px; }
 #over.on { display: grid; }
 #over .oh { display: flex; align-items: center; gap: 12px; padding: 8px 18px; border-bottom: 1px solid var(--line); background: var(--surface); } #over .oh b { font-size: 15px; } #over .oh span { color: var(--ink3); font-size: 12.5px; }
 #over iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--page); }
-@media (max-width: 1100px) { .wb { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); } .wb > .right { grid-column: 1 / -1; grid-template-rows: auto auto; } .panel > .scroll { max-height: 220px; } }
-@media (max-width: 800px) { .wb { grid-template-columns: minmax(0, 1fr); height: auto; } .wb > .left { grid-template-rows: auto 320px; } .rv { height: auto; } .rv.test { grid-template-rows: none; } .ccols { grid-template-columns: minmax(0, 1fr); } .cards3 { grid-template-columns: minmax(0, 1fr); } }
+/* Short windows tighten; narrower ones drop the notes; a phone gets one column and the page scrolls. */
+body.compact .sc1 { padding: 5px 12px 7px; } body.compact .wbody { padding: 8px 18px; } body.compact .foot1 { padding: 6px 18px; }
+body.compact .xrow { min-height: 29px; } body.compact .card { padding: 6px 12px; } body.compact .card .v { font-size: 17px; }
+body.compact .term { font-size: 11.5px; line-height: 1.42; }
+@media (max-width: 1500px) { .s1 { grid-template-columns: minmax(470px, 560px) minmax(0, 1fr); } .s1 .pr { grid-template-columns: 124px 150px minmax(0, 1fr); } .rrw { grid-template-columns: 64px minmax(0, 1fr) 200px; } }
+@media (max-width: 1360px) { .s1 .pr .nt { display: none; } .s1 .pr { grid-template-columns: 124px minmax(0, 1fr); } .s1 { grid-template-columns: minmax(330px, 420px) minmax(0, 1fr); } .s2 { grid-template-columns: minmax(340px, 1fr) minmax(0, 1fr); } .xrow.two, .xhead.two { grid-template-columns: 30px minmax(0, 1.3fr) 96px 96px minmax(0, .8fr); } }
+@media (max-width: 1100px) { .sc1 > span:last-child { display: none; } .s1, .s2, .s4 .main { grid-template-columns: minmax(0, 1fr); } .s1 > .words, .s4 .main > .detail { display: none; } .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .foot1 { grid-template-columns: 120px minmax(0, 1fr) minmax(160px, 240px); } }
+@media (max-width: 800px) { .wz { height: auto; } .wbody { min-height: 70vh; } .foot1 .sum { display: none; } .foot1 { grid-template-columns: 1fr 1fr; } .sbar { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px 10px 0; } .sc1 { grid-template-columns: minmax(0, 1fr); justify-items: center; padding: 6px 4px 8px; } .sc1 .no { grid-row: auto; } .sc1 b { font-size: 12px; } .rrw { grid-template-columns: minmax(0, 1fr); } .rrw .lbl, .rrw .rt { text-align: left; } .s4 .head { flex-wrap: wrap; } }
 </style>
 </head>
 <body>
-<main id="app"><div class="wb">
-  <div class="col left"><div class="box lh" id="lhead"></div><div class="box tl-box" id="list"></div></div>
-  <div class="col mid" id="main"><div class="panelmsg"><div class="none">Reading the arena…</div></div></div>
-  <div class="col right"><div class="box panel" id="panel"></div><div class="box runbox" id="runbox"></div></div>
+<main id="app"><div class="wz">
+  <nav class="sbar" id="sbar" aria-label="The four steps"></nav>
+  <div class="wbody" id="wbody"><div class="empty"><div class="none">Reading the arena…</div></div></div>
+  <footer class="foot1" id="foot"></footer>
 </div></main>
 <div id="tip"></div>
 <div id="modal"></div>
@@ -486,7 +591,9 @@ body.compact .tch { padding: 5px 14px; }
 (function () {
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const mainEl = $('#main'), tip = $('#tip'), toastEl = $('#toast'), overEl = $('#over');
+  const tip = $('#tip'), toastEl = $('#toast'), overEl = $('#over');
+  // The full result of a test or a check (Step 4, a row opened): it is drawn here once that step's frame is up.
+  let mainEl = document.createElement('div');
   const whole = (s) => Math.round(s);
   const mmss = (s) => { const r = Math.max(0, whole(s)); return `${Math.floor(r / 60)}:${String(r % 60).padStart(2, '0')}`; };
   const human = (s) => { const r = Math.max(0, whole(s)); return r < 60 ? `${r} s` : `${Math.floor(r / 60)} min ${String(r % 60).padStart(2, '0')} s`; };
@@ -511,13 +618,15 @@ body.compact .tch { padding: 5px 14px; }
   // Inside the hub: the Test builder opens as a window over the whole hub (the hub holds it, and its tests).
   const inHub = () => Boolean(HUB) && window.parent !== window;
   const toHub = (msg) => { if (!inHub()) return false; try { parent.postMessage(msg, HUB); return true; } catch { return false; } };
-  // What you picked and set, kept for next time: the ticks, what is shown, who runs it, the panel.
+  // What you picked and set, kept for next time: the ticks, what is shown, who runs it, the panel, the
+  // step you were on, One or Group (and the one), the group shown in Run and Results.
   // The sets are not kept: every one starts shut each time the page opens.
   const KEEP = 'agentic-arena-v1';
-  let ui = { ticked: [], open: {}, sel: null, who: 'both', effort: 'low', vals: {}, row: 0 };
+  let ui = { ticked: [], open: {}, sel: null, who: 'both', effort: 'low', vals: {}, row: 0, step: 1, mode: 'group', one: null, batch: null };
   try { ui = { ...ui, ...JSON.parse(store.get(KEEP) || '{}'), open: {} }; } catch { /* as it starts */ }
   const save = () => store.set(KEEP, JSON.stringify(ui));
-  const S = { modal: false, st: null, m: {}, runs: {}, jobs: {}, jobLines: {}, view: {}, cmp: {}, tab: {}, openPrompt: false, hl: null, full: null, menu: false, runsOpen: false, rec: false, find: '', err: '', sending: false };
+  const S = { modal: false, st: null, m: {}, runs: {}, jobs: {}, jobLines: {}, view: {}, cmp: {}, tab: {}, openPrompt: false, hl: null, full: null, menu: false, runsOpen: false, rec: false, find: '', err: '', sending: false,
+    bat: {}, bats: [], open4: null, rsel: null, hmenu: false, down: '', first: true };
 
   async function api(path, body) {
     const r = await fetch(path, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -656,8 +765,10 @@ body.compact .tch { padding: 5px 14px; }
   const found = (t) => !S.find || `${numOf(t)} ${t.title} ${t.prompt}`.toLowerCase().includes(S.find);
   function listHtml() {
     const st = S.st; const [m1, m2] = shownPair();
-    const tick = (k, off, label, some = 0) => `<button type="button" class="tg${isTicked(k) && !off ? ' on' : some ? ' some' : ''}" data-tick="${esc(k)}" aria-pressed="${isTicked(k) && !off ? 'true' : some ? 'mixed' : 'false'}" aria-label="Pick ${esc(label)}"${some ? ` data-tip="${some === 1 ? '1 test inside is ticked: open the set to see it' : `${some} tests inside are ticked: open the set to see them`}"` : ''}${off ? ' disabled' : ''}>✓</button>`;
-    let rows = '<div class="lgrp">Sets<span>open one to pick single tests</span></div>';
+    const one = oneMode();
+    const tick = (k, off, label, some = 0) => (one ? (k.startsWith('set:') ? '<span></span>' : `<button type="button" class="tg radio${isOne(k) ? ' on' : ''}" data-pickone="${esc(k)}" aria-pressed="${isOne(k)}" aria-label="Run ${esc(label)}"></button>`)
+      : `<button type="button" class="tg${isTicked(k) && !off ? ' on' : some ? ' some' : ''}" data-tick="${esc(k)}" aria-pressed="${isTicked(k) && !off ? 'true' : some ? 'mixed' : 'false'}" aria-label="Pick ${esc(label)}"${some ? ` data-tip="${some === 1 ? '1 test inside is ticked: open the set to see it' : `${some} tests inside are ticked: open the set to see them`}"` : ''}${off ? ' disabled' : ''}>✓</button>`);
+    let rows = `<div class="lgrp">Sets<span>${one ? 'open one to pick a test' : 'tick a whole set, or open it for single tests'}</span></div>`;
     for (const s of st.sets) {
       const mine = inSet(s);
       const none = !mine.length, hits = mine.filter(found), open = S.find ? hits.length > 0 : Boolean(ui.open[s.id]);
@@ -666,18 +777,19 @@ body.compact .tch { padding: 5px 14px; }
       // While runs of the set wait, "N in line" stands where its count was: the two together cut a long name (Practice 28).
       const inLine = (st.line ?? []).filter((x) => x.groupSet === s.id).length;
       // A shut set with ticked tests inside shows a bar in its box, so a tick is never out of sight.
-      const hid = open ? 0 : mine.filter((t) => isTicked(`test:${t.id}`)).length;
-      rows += `<div class="lrow${none ? ' off' : ''}${sel().kind === 'set' && sel().id === s.id ? ' sel' : ''}" data-set="${s.id}">${tick(`set:${s.id}`, none, s.name, hid)}<span class="nm"><span class="tw">${none ? '' : `<i class="car${open ? '' : ' shut'}"></i>`}</span><b class="tt">${esc(s.name)}</b>${inLine ? `<span class="st q">${inLine} in line</span>` : `<small>${none ? 'none yet: + New makes one' : `${s.ids.length} test${s.ids.length === 1 ? '' : 's'}`}</small>`}</span>${agg(m1)}${agg(m2)}</div>`;
-      if (open) for (const t of S.find ? hits : mine) rows += `<div class="lrow kid${sel().kind === 'test' && sel().id === t.id ? ' sel' : ''}" data-test="${esc(t.id)}">${tick(`test:${t.id}`, false, t.title)}<span class="nm" data-tip="${esc(t.title)}"><span class="tt">${numOf(t) ? `${numOf(t)} · ` : ''}${esc(t.title)}</span>${t.level && !s.level ? `<small>${LEVEL_NAME[t.level] ?? ''}</small>` : ''}${stateTag('test', t.id, t.toVote)}</span><span class="c">${markOf(t.last?.[m1.id])}</span><span class="c">${markOf(t.last?.[m2.id])}</span></div>`;
+      const hid = open || one ? 0 : mine.filter((t) => isTicked(`test:${t.id}`)).length;
+      rows += `<div class="lrow${none ? ' off' : ''}" data-set="${s.id}">${tick(`set:${s.id}`, none, s.name, hid)}<span class="nm"><span class="tw">${none ? '' : `<i class="car${open ? '' : ' shut'}"></i>`}</span><b class="tt">${esc(s.name)}</b>${inLine ? `<span class="st q">${inLine} in line</span>` : `<small>${none ? 'none yet: + New makes one' : `${s.ids.length} test${s.ids.length === 1 ? '' : 's'}`}</small>`}</span>${agg(m1)}${agg(m2)}</div>`;
+      if (open) for (const t of S.find ? hits : mine) rows += `<div class="lrow kid${one && isOne(`test:${t.id}`) ? ' sel' : ''}" data-test="${esc(t.id)}">${tick(`test:${t.id}`, false, t.title)}<span class="nm" data-tip="${esc(t.title)}"><span class="tt">${numOf(t) ? `${numOf(t)} · ` : ''}${esc(t.title)}</span>${t.level && !s.level ? `<small>${LEVEL_NAME[t.level] ?? ''}</small>` : ''}${stateTag('test', t.id, t.toVote)}</span><span class="c">${markOf(t.last?.[m1.id])}</span><span class="c">${markOf(t.last?.[m2.id])}</span></div>`;
     }
     const cs = checks().filter((c) => !S.find || `${c.name} ${c.what}`.toLowerCase().includes(S.find));
     if (cs.length) rows += '<div class="lgrp">Checks<span>each prints its own lines</span></div>';
     for (const c of cs) {
       const mk = (r) => (!r ? '<span class="mk nil">–</span>' : r.grade === 'measure' ? `<span class="mk nil" data-tip="${r.passed} of ${r.total}: a measurement">•</span>` : `<span class="mk ${r.result === 'pass' ? 'ok' : 'bad'}" data-tip="${r.total != null ? `${r.passed} of ${r.total}` : r.result} · ${when(r.at)}">${r.result === 'pass' ? '✓' : '✗'}</span>`);
-      rows += `<div class="lrow${sel().kind === 'check' && sel().id === c.id ? ' sel' : ''}" data-check="${c.id}">${tick(`check:${c.id}`, false, c.name)}<span class="nm" data-tip="${esc(c.what)}"><span class="tt">${esc(c.name)}</span>${c.model ? '' : '<small>no model</small>'}${stateTag('check', c.id, false)}</span>${c.model ? `<span class="c">${mk(c.last[m1.id])}</span><span class="c">${mk(c.last[m2.id])}</span>` : `<span class="c">${mk(c.last.none)}</span><span class="c"></span>`}</div>`;
+      rows += `<div class="lrow${one && isOne(`check:${c.id}`) ? ' sel' : ''}" data-check="${c.id}">${tick(`check:${c.id}`, false, c.name)}<span class="nm" data-tip="${esc(c.what)}"><span class="tt">${esc(c.name)}</span>${c.model ? '' : '<small>no model</small>'}${stateTag('check', c.id, false)}</span>${c.model ? `<span class="c">${mk(c.last[m1.id])}</span><span class="c">${mk(c.last[m2.id])}</span>` : `<span class="c">${mk(c.last.none)}</span><span class="c"></span>`}</div>`;
     }
     const foot = inHub() ? '<div class="lfoot"><button class="btn" data-act="builder" data-tip="Make your own tests, easy, medium or hard: they go in My tests">Test builder</button></div>' : '';
-    return `<div class="lhead"><span></span><span>Test</span><span>${esc(nameOf(m1.id))}</span><span>${esc(nameOf(m2.id))}</span></div><div class="scroll" data-scroll="list">${rows}</div>${foot}`;
+    const sw = `<div class="modesw"><div class="modeseg" role="group" aria-label="One test or a group"><button type="button" data-mode="one" aria-pressed="${one}">One</button><button type="button" data-mode="group" aria-pressed="${!one}">Group</button></div><span>${one ? 'One test or check: click a row, it is the one that runs' : 'Tick any number: sets, single tests and checks, run one after the other'}</span></div>`;
+    return `${sw}<div class="lhead"><span></span><span>Test</span><span>${esc(nameOf(m1.id))}</span><span>${esc(nameOf(m2.id))}</span></div><div class="scroll" data-scroll="list">${rows}</div>${foot || '<span></span>'}`;
   }
   function headHtml() {
     const busy = Boolean(S.st.running), any = tests().some((t) => t.latest), q = S.st.line.length;
@@ -686,13 +798,13 @@ body.compact .tch { padding: 5px 14px; }
       <button role="menuitem" data-act="clearline"${q ? '' : ' disabled'}><b>Clear the line</b><span>${q ? `the ${q} waiting to run come${q > 1 ? '' : 's'} out of the line; ${busy ? 'the run going now finishes' : 'nothing else changes'}` : 'nothing is waiting to run'}</span></button>
       <button role="menuitem" data-act="clearresults"${any && !busy ? '' : ' disabled'}><b>Clear all results</b><span>${busy ? 'stop what is running first' : any ? 'every run of a test and your votes move to the arena’s trash folder; the score goes back to 0–0; your tests and the record stay' : 'there are no results yet'}</span></button>
       <div class="ckey">In the list: ✓ pass · ✗ fail · ■ stopped or out of time · – never run, each under the model that ran it. A battle shows there once you vote; until then it says “to vote”.</div></div>` : '';
-    return `<b>Arena</b><input id="find" type="text" placeholder="Find a test…" value="${esc(S.find)}" aria-label="Find a test"><button class="btn" data-act="new">+ New</button>${HUB ? '<button class="btn" data-act="rec">Record</button>' : ''}<button class="btn dots" data-act="menu" aria-haspopup="menu" aria-expanded="${Boolean(S.menu)}" aria-label="More: edit tests, clear, what the marks mean">⋯</button>${menu}`;
+    return `<b>Tests</b><input id="find" type="text" placeholder="Find a test…" value="${esc(S.find)}" aria-label="Find a test"><button class="btn" data-act="new">+ New</button>${HUB ? '<button class="btn" data-act="rec">Record</button>' : ''}<button class="btn dots" data-act="menu" aria-haspopup="menu" aria-expanded="${Boolean(S.menu)}" aria-label="More: edit tests, clear, what the marks mean">⋯</button>${menu}`;
   }
 
   // ---------- The run box: what is picked, or what is running ----------
-  function pickedItems() {
+  function pickedItems(keys = ui.ticked) {
     const who = whoNow(), think = effort() !== 'low', settings = setNow();
-    return ui.ticked.map((k) => {
+    return keys.map((k) => {
       const i = k.indexOf(':'), kind = k.slice(0, i), id = k.slice(i + 1);
       if (kind === 'set') { const s = setById(id); return s?.ids.length ? { kind, id, who, think, settings, tests: s.ids, name: s.name } : null; }
       if (kind === 'test') { const t = testById(id); return t ? { kind, id, who, think, settings, tests: [id], name: t.title } : null; }
@@ -718,27 +830,265 @@ body.compact .tch { padding: 5px 14px; }
     const what = nc && !nt ? `check${nc === 1 ? '' : 's'}` : `test${n === 1 ? '' : 's'}`;
     return isVs(whoNow()) ? (nc ? `▶ Run ${n} ${what} on ${vsOf(whoNow()).map(nameOf).join(' and ')}` : `▶ Battle ${n} ${what}`) : `▶ Run ${n} ${what} on ${nameOf(whoNow())}`;
   }
-  function runboxHtml() {
-    const st = S.st, r = st.running, q = st.line ?? [], items = pickedItems();
-    let nowHtml = '';
-    if (r) {
-      const inG = r.group ? q.filter((x) => x.group === r.group).length : 0;
-      const whoTxt = r.kind === 'check' ? (r.who ? nameOf(r.who) : 'no model') : r.who === 'both' ? (r.side ? `Model ${r.side}, run ${r.side === 'A' ? 1 : 2} of 2` : `a battle${r.vs ? ` of ${r.vs.map(nameOf).join(' and ')}` : ''}`) : nameOf(r.who);
-      nowHtml = `<div class="now"><div class="t"><span class="live">${r.waiting ? esc(r.waiting) : 'Running'}</span>${r.waiting ? '' : ` · <span data-since="${r.sideStartedAt ?? r.startedAt}"></span>`}</div><div class="t"><b>${esc(r.title)}</b> · ${esc(whoTxt)}${r.think ? ' · High' : ''}</div>
-        ${r.group ? `<div class="bar"><i style="width:${Math.round(((r.groupOf - inG - 1) / r.groupOf) * 100)}%"></i></div><div class="t" style="color:var(--ink3)">${esc(r.groupName)} · test ${r.groupOf - inG} of ${r.groupOf}</div>` : ''}
-        <div class="row"><button class="btn stop" data-act="stop" style="flex:1">■ Stop</button>${q.length ? `<button class="btn" data-act="clearline">✕ Clear the line (${q.length})</button>` : ''}</div>${q.length && !r.group ? `<div class="t" style="color:var(--ink3)">then ${esc(q.slice(0, 3).map((x) => x.title).join(', '))}${q.length > 3 ? ` and ${q.length - 3} more` : ''}</div>` : ''}</div>`;
-    } else if (q.length) {
-      nowHtml = `<div class="now"><div class="t"><b>${st.paused ? 'Paused' : 'Starting the next'}</b> · ${q.length} waiting: ${esc(q.slice(0, 2).map((x) => x.title).join(', '))}${q.length > 2 ? '…' : ''}</div><div class="row">${st.paused ? '<button class="btn pri" data-act="resume" style="flex:1">▶ Resume</button>' : ''}<button class="btn" data-act="clearline">✕ Clear the line</button></div></div>`;
-    }
-    const n = items.length;
-    const sum = n ? `<b>${n} picked</b> · ${esc(isVs(whoNow()) ? `${whoWords(whoNow())}, one at a time` : fullName(whoNow()))} · ${estimate(items)} · ${esc(levels().find((l) => l.id === effort()).show)} · ${esc(setWords(setNow()))}` : '<b>Nothing picked</b> · tick a test, a set or a check on the left';
-    return `${nowHtml}<div class="sum">${sum}${st.fake ? ' · <span style="color:var(--warn)">practice mode: no model runs</span>' : ''}</div>${S.err ? `<div class="err">${esc(S.err)}</div>` : ''}
-      <div class="row"><button class="btn" data-act="clear"${n ? '' : ' disabled'}>Clear</button><button class="go" data-act="go"${n && !S.sending ? '' : ' disabled'}>${goLabel(items, Boolean(r || q.length))}</button></div>`;
+  // ---------- The wizard: four steps, one at a time (picked 1 Oct 2026) ----------
+  const STEPS = ['Model & settings', 'Tests', 'Run', 'Results'];
+  const stepNow = () => Math.max(1, Math.min(4, Number(ui.step) || 1));
+  function go(n) { ui.step = Math.max(1, Math.min(4, n)); S.menu = false; S.hmenu = false; S.runsOpen = false; if (ui.step !== 4) S.open4 = null; save(); draw(); poll(true); }
+  // One · Group: One runs the one row you picked; Group runs every tick (sets, tests, checks), one after the other.
+  const oneMode = () => ui.mode === 'one';
+  const isOne = (k) => Boolean(ui.one) && `${ui.one.kind}:${ui.one.id}` === k;
+  const pickedNow = () => (oneMode() ? pickedItems(ui.one ? [`${ui.one.kind}:${ui.one.id}`] : []) : pickedItems());
+  const countOf = (items) => items.reduce((n, it) => n + (it.tests?.length ?? 1), 0);
+  const groupName = (items) => (items.length === 1 ? items[0].name : `${items[0].name} and ${items.length - 1} more`);
+  async function runPicked() {
+    const items = pickedNow();
+    if (!items.length || S.sending) return;
+    if (await addLine(payload(items), groupName(items))) go(3); else draw();
   }
-  async function addLine(items) {
+  const shortWho = (w) => (isVs(w) ? vsOf(w).map(nameOf).join(' vs ') : nameOf(w));
+  const effWords = () => levels().find((l) => l.id === effort())?.show ?? 'Low';
+  const setShort = () => { const n = changed().length; return n ? `${n} row${n === 1 ? '' : 's'} changed` : 'defaults'; };
+
+  // ---------- The groups: each press of ▶ Run ----------
+  // Step 3 shows the group running now (else the one you picked, else the newest); Step 4 the one you picked, else the newest.
+  const runBatchId = () => S.st?.running?.batch ?? ui.batch ?? S.st?.batch ?? null;
+  const resBatchId = () => ui.batch ?? S.st?.batch ?? null;
+  const batchWho = (B) => (B.who === 'both' ? (B.vs ?? S.st.pair).map(nameOf).join(' vs ') : B.who ? fullName(B.who) : 'no model');
+  const batchHow = (B) => `${batchWho(B)} · ${B.think ? 'High' : 'Low'}${B.settings ? ' · own settings' : ''}`;
+  const itemRuns = (it) => Object.entries(it.runs ?? {}).filter(([, r]) => r && !r.skipped);
+  const itemSecs = (it) => (it.kind === 'check' ? it.secs ?? 0 : itemRuns(it).reduce((n, [, r]) => n + (r.secs ?? 0), 0));
+  // One item of a group as one mark: ✓ every run of it passed · ✗ one failed · ■ stopped or out of time · ! did not finish · • no checks.
+  function itemMark(it) {
+    if (it.state === 'running') return { cls: 'run', sym: '▶', words: 'running' };
+    if (it.state === 'waiting') return { cls: '', sym: '', words: 'waiting' };
+    if (it.state === 'left') return { cls: 'left', sym: '', words: 'not run: the line was cleared' };
+    if (it.kind === 'check') { const [cls, words] = jobResult(it); return { cls, sym: cls === 'ok' ? '✓' : cls === 'warn' ? '■' : '✗', words }; }
+    const rs = itemRuns(it).map(([, r]) => r);
+    if (!rs.length) return { cls: 'warn', sym: '■', words: 'not run: it was stopped' };
+    if (rs.some((r) => r.error)) return { cls: 'bad', sym: '!', words: 'did not finish' };
+    if (rs.some((r) => r.stopped || r.overLimit)) return { cls: 'warn', sym: '■', words: rs.some((r) => r.stopped) ? 'stopped' : 'out of time' };
+    if (rs.every((r) => r.pass == null)) return { cls: 'done', sym: '•', words: 'finished: no checks' };
+    return rs.every((r) => r.pass) ? { cls: 'ok', sym: '✓', words: 'pass' } : { cls: 'bad', sym: '✗', words: 'fail' };
+  }
+  const notPassed = (B) => B.items.filter((x) => x.state === 'done' && ['bad', 'warn'].includes(itemMark(x).cls));
+
+  // ---------- The step chips and the footer ----------
+  function sbarHtml() {
+    const st = stepNow(), r = S.st.running, B = S.bat[runBatchId()], items = pickedNow();
+    const R = S.bat[resBatchId()] ?? S.bats.find((b) => b.id === resBatchId());
+    const sum = [`${shortWho(whoNow())} · ${effWords()} · ${setShort()}`,
+      items.length ? `${oneMode() ? 'One' : 'Group'} · ${items.length === 1 && items[0].kind !== 'set' ? items[0].name : `${countOf(items)} to run`}` : 'nothing picked yet',
+      r ? (B && r.batch === B.id ? `running ${Math.min(B.count, B.done + 1)} of ${B.count}` : 'running') : S.st.line.length ? `${S.st.line.length} waiting${S.st.paused ? ' · paused' : ''}` : B ? `done · ${B.passed} of ${B.done} passed` : 'nothing has run yet',
+      R ? `${R.name} · ${R.passed} of ${R.done} passed` : 'no results yet'];
+    return STEPS.map((t, k) => { const i = k + 1, cls = i === st ? 'on' : i < st ? 'done' : ''; return `<button type="button" class="sc1 ${cls}${i === 3 && r ? ' run' : ''}" data-go="${i}" aria-current="${i === st ? 'step' : 'false'}"><span class="no">${cls === 'done' ? '✓' : i}</span><b>${t}</b><span>${esc(sum[k])}</span></button>`; }).join('');
+  }
+  function footHtml() {
+    const st = stepNow(), r = S.st.running, busy = Boolean(r || S.st.line.length), items = pickedNow();
+    const left = `<div class="l"><button type="button" class="btn" data-act="back"${st === 1 ? ' disabled' : ''}>‹ Back</button></div>`;
+    const sum = st === 3 && r ? `<span class="live">Running</span> <b>${esc(S.bat[runBatchId()]?.name ?? r.title)}</b> · ${esc(r.who === 'both' ? (r.vs ?? S.st.pair).map(nameOf).join(' vs ') : r.who ? nameOf(r.who) : 'no model')} · ${r.think ? 'High' : 'Low'}`
+      : `<b>${esc(shortWho(whoNow()))}</b> · ${esc(effWords())} · ${esc(setShort())} · <b>${esc(items.length ? groupName(items) : 'nothing picked')}</b>`;
+    const next = st === 1 ? '<button type="button" class="btn pri" data-act="next">Next: pick tests ›</button>'
+      : st === 2 ? `<button type="button" class="go" data-act="go"${items.length && !S.sending ? '' : ' disabled'}>${items.length ? esc(goLabel(items, busy)) : 'Pick a test first'}</button>`
+      : st === 3 ? '<button type="button" class="btn pri" data-act="next">Results ›</button>' : '<button type="button" class="btn pri" data-act="next">New run ›</button>';
+    return `${left}<div class="sum">${sum}${S.st.fake ? ' · <span style="color:var(--warn)">practice mode: no model runs</span>' : ''}</div><div class="r">${next}</div>`;
+  }
+
+  // ---------- Step 1: the panel, and this run in words ----------
+  function wordsHtml() {
+    const w = whoNow(), lv = levels().find((l) => l.id === effort()), ch = changed();
+    const who = isVs(w) ? `<b>a battle of ${esc(vsOf(w).map(fullName).join(' and '))}</b>, one after the other, with the names hidden until you vote` : `<b>${esc(fullName(w))}</b> alone`;
+    const quick = [...hereIds(), ...(defPair() ? [defPair()] : [])];
+    return `<h3>This run, in words</h3><div class="say">It runs on ${who}, at <b>${esc(lv.show)}</b> effort (${esc(lv.note)}), with ${ch.length ? `<b>${ch.length} row${ch.length > 1 ? 's' : ''} changed</b> (${esc(ch.map((r) => `${r.label} ${stepOf(r).show}`).join(', '))}): its results are kept with those settings` : '<b>every row at the tests’ defaults</b>, so its results compare with every earlier run'}.</div>
+      <div class="k">Quick pick · the same as the Who row</div>
+      <div class="whoc">${quick.map((q) => `<button type="button" class="wc${q === w ? ' on' : ''}" data-who="${esc(q)}"><b>${esc(isVs(q) ? `${vsOf(q).map(nameOf).join(' vs ')} · a battle` : fullName(q))}</b><span>${esc(isVs(q) ? 'two models, one after the other' : freeWords())}</span></button>`).join('')}</div>
+      <div class="note" style="margin:0">Next: pick the tests. You can come back here at any time; a run already going keeps the settings it started with.</div>`;
+  }
+
+  // ---------- Step 2: what runs (One: that test or check; Group: everything ticked) ----------
+  function pickHtml() {
+    const items = pickedNow(), busy = Boolean(S.st.running || S.st.line.length);
+    const err = S.err ? `<div class="err">${esc(S.err)}</div>` : '';
+    if (oneMode()) {
+      const o = ui.one, t = o?.kind === 'test' ? testById(o.id) : null, c = o?.kind === 'check' ? checkById(o.id) : null;
+      if (!t && !c) return `<div class="phd"><span class="k">The one that runs</span><b>Nothing picked yet</b><span class="sub">Click a test or a check on the left. Open a set to see its tests.</span></div><div></div><div class="pfd">${err}<div class="row"><button type="button" class="go" disabled>▶ Run</button></div></div>`;
+      const [m1, m2] = shownPair();
+      if (t) {
+        const rules = rulesOf(t), qi = lineAt('test', t.id);
+        return `<div class="phd"><span class="k">The one that runs</span><b title="${esc(t.title)}">${esc(t.title)}</b><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip">${OWN.includes(t.suite) ? `${SUITE_NAME[t.suite]} · ${numOf(t)}` : 'My tests'}</span><span class="chip">${kindName[t.kind] ?? t.kind}</span>${t.level ? `<span class="chip">${LEVEL_NAME[t.level] ?? t.level}</span>` : ''}${stateTag('test', t.id, t.toVote)}</div></div>
+          <div class="preview scroll" data-scroll="pick"><div class="pp">${esc(t.prompt)}</div><div class="rules">${rules.length ? rules.map((x) => `<span class="chip" data-tip="${esc(x)}">${esc(x)}</span>`).join('') : '<span class="chip plain">no checks: your vote decides</span>'}</div>
+          <div class="kv"><span>How it runs</span><span>${esc(isVs(whoNow()) ? `a battle: ${whoWords(whoNow())}, names hidden until you vote` : `on ${fullName(whoNow())} alone`)} · ${esc(effWords())} · ${esc(setWords(setNow()))} · stops at ${isVs(whoNow()) ? '10 min' : minsOf(t.limit ?? 600)}</span><span>Starter files</span><span>${t.files?.length ? `${t.files.slice(0, 8).map(esc).join(', ')}${t.files.length > 8 ? ` and ${t.files.length - 8} more` : ''}` : 'none (an empty folder)'}</span><span>Last runs</span><span>${[m1, m2].map((m) => `${esc(nameOf(m.id))} ${markOf(t.last?.[m.id])}`).join(' · ')}</span></div></div>
+          <div class="pfd">${err}<div class="row"><button type="button" class="btn" data-act="edit">Edit</button><button type="button" class="go" data-act="go"${S.sending || qi >= 0 ? ' disabled' : ''}>${qi >= 0 ? `In line (#${qi + 1})` : esc(goLabel(items, busy))}</button></div></div>`;
+      }
+      const cmd = (effort() !== 'low' && c.commandThink ? c.commandThink : c.command)?.[c.model ? pmid() : 'none'] ?? '';
+      const mk = (r) => (!r ? '–' : r.result === 'pass' ? '✓' : r.result === 'fail' ? '✗' : '•');
+      const lastC = c.model ? [m1, m2].map((m) => `${esc(nameOf(m.id))} ${mk(c.last[m.id])}`).join(' · ') : c.last.none ? `${mk(c.last.none)} · ${esc(when(c.last.none.at))}` : 'never run';
+      return `<div class="phd"><span class="k">The one that runs</span><b>${esc(c.name)}</b><div style="display:flex;gap:6px;align-items:center"><span class="chip">a check</span><span class="chip">${c.model ? (c.think ? 'uses the whole panel' : 'uses the panel, never thinks') : 'takes no model'}</span>${stateTag('check', c.id, false)}</div></div>
+        <div class="preview scroll" data-scroll="pick"><div class="pp">${esc(c.what)}</div><div class="kv"><span>How it runs</span><span>${c.model ? esc(isVs(whoNow()) ? `on ${whoWords(whoNow())}, one after the other` : `on ${fullName(whoNow())}`) : 'no model'}${c.model ? ` · ${esc(effWords())}` : ''}</span><span>Command</span><span><code>${esc(cmd)}</code></span><span>Last runs</span><span>${lastC}</span><span>Time</span><span>${c.minutes ? `about ${c.minutes} min` : 'not timed yet'}</span></div></div>
+        <div class="pfd">${err}<div class="row"><button type="button" class="go" data-act="go"${S.sending || lineAt('check', c.id) >= 0 ? ' disabled' : ''}>${lineAt('check', c.id) >= 0 ? `In line (#${lineAt('check', c.id) + 1})` : esc(goLabel(items, busy))}</button></div></div>`;
+    }
+    const n = countOf(items);
+    const rows = items.map((it) => `<div class="pitem"><span><b>${esc(it.name)}</b></span><small>${it.kind === 'set' ? `${it.tests.length} tests` : it.kind === 'check' ? 'a check' : 'a test'}</small><button type="button" class="fx" data-untick="${esc(`${it.kind}:${it.id}`)}" aria-label="Take ${esc(it.name)} out" data-tip="Take it out">×</button></div>${it.kind === 'set' ? `<div class="pkids">${it.tests.map((id) => testById(id)).filter(Boolean).map((t) => `<span title="${esc(t.title)}"><i>${numOf(t)}</i>${esc(t.title)}</span>`).join('')}</div>` : ''}`).join('');
+    return `<div class="phd"><span class="k">The group</span><b>${n ? `${n} to run, one after the other` : 'Nothing picked yet'}</b><span class="sub">${n ? `${esc(isVs(whoNow()) ? `${whoWords(whoNow())}: each test twice` : `on ${fullName(whoNow())}`)} · ${esc(effWords())} · ${esc(setWords(setNow()))} · ${esc(estimate(items))}` : 'Tick sets, tests or checks on the left.'}</span></div>
+      <div class="scroll" data-scroll="pick">${rows}</div>
+      <div class="pfd">${err}<div class="row"><button type="button" class="btn" data-act="clear"${n ? '' : ' disabled'}>Clear</button><button type="button" class="go" data-act="go"${n && !S.sending ? '' : ' disabled'}>${n ? esc(goLabel(items, busy)) : '▶ Run'}</button></div><div class="hint">▶ starts the group and opens Step 3. While something runs, it goes in the line after it.</div></div>`;
+  }
+
+  // ---------- Step 3: the group on top, then a terminal of everything it does ----------
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const fit = (t, n) => (t.length > n ? `${t.slice(0, n - 1)}…` : t.padEnd(n));
+  const vcls = (v) => (v.cls === 'ok' ? 'g' : v.cls === 'bad' ? 'r' : 'y');
+  function doneLine(it, i) {
+    const m = itemMark(it);
+    const res = it.kind === 'check' ? `<span class="${m.cls === 'ok' ? 'g' : m.cls === 'warn' ? 'y' : 'r'}">${esc(m.words)}</span>${it.secs != null ? ` <span class="d">· ${dur(it.secs)}</span>` : ''}`
+      : itemRuns(it).map(([side, r]) => { const v = verdict(r); return `${it.mode === 'battle' ? `<span class="${side === 'A' ? 'c' : 'y'}">${side}</span> ` : ''}<span class="${vcls(v)}">${esc(v.text)}</span> ${mmss(r.secs ?? 0)} <span class="d">· ${r.stepCount ?? 0} steps</span>`; }).join('   ') || '<span class="y">not run</span>';
+    return `<div><span class="d">${pad2(i + 1)}</span> ${esc(fit(it.title, 46))}  ${res}${it.mode === 'battle' ? (it.vote ? ' <span class="d">· voted</span>' : ' <span class="c">· to vote</span>') : ''}</div>`;
+  }
+  function stepLines(steps, t0) {
+    return steps.map((x) => { const col = x.kind === 'error' ? 'r' : x.kind === 'bash' ? 'c' : x.kind === 'edit' ? 'p' : x.kind === 'ask' ? 'y' : x.kind === 'tries' ? 'w' : '';
+      return `<div><span class="d">${mmss(Math.max(0, x.t - t0)).padStart(5)}</span>  <span class="${col}">${esc(String(x.label).padEnd(7))}</span> ${esc(x.arg)}</div>${(x.out ?? []).map((l) => `<div class="${/^\+ /.test(l) ? 'add' : /^- /.test(l) ? 'del' : 'd'}">          ${esc(l)}</div>`).join('')}${x.err ? `<div class="r">          ${esc(x.err)}</div>` : ''}`; }).join('');
+  }
+  function liveTest(it) {
+    const r = S.st.running, det = S.m[r?.match ?? it.match];
+    if (!det) return `<div class="y">${esc(r?.waiting ?? 'Getting the memory ready…')}</div>`;
+    let out = '';
+    for (const side of det.mode === 'solo' ? ['A'] : ['A', 'B']) {
+      const name = det.mode === 'solo' ? fullName(det.order?.A ?? r?.who) : `Model ${side}`;
+      const live = det.live && det.live.side === side ? det.live : null, done = det.runs?.[side];
+      if (!live && !done) { out += `<div class="d">${esc(name)} · waits its turn</div>`; continue; }
+      out += `<div class="${side === 'A' ? 'c' : 'y'}">${esc(name)}</div>`;
+      if (live) {
+        const ev = live.events ?? [], loadedT = ev.find((e) => e.type === 'note' && e.text === 'loaded')?.t ?? null;
+        for (const e of ev) {
+          if (e.type === 'note') out += `<div class="d">       ${esc(e.text === 'loaded' ? 'loaded: the clock starts' : e.text)}</div>`;
+          else if (e.type === 'asked') out += `<div class="y">       asked: ${esc(e.text)}</div><div class="d">          → ${esc(e.reply ?? 'nothing written for this: it decides by itself')}</div>`;
+          else if (e.type === 'step') out += stepLines([e], loadedT ?? 0);
+        }
+        const clock = loadedT == null ? 0 : Math.max(0, (Date.now() - live.startedAt) / 1000 - loadedT);
+        out += `<div class="d cur">${loadedT == null ? '       loading the model' : `${mmss(clock).padStart(5)}  working`}</div>`;
+      } else if (done.skipped) out += '<div class="y">       not run: it was stopped first</div>';
+      else { const v = verdict(done); out += `${stepLines(done.steps ?? [], 0)}<div><span class="d">${mmss(done.secs ?? 0).padStart(5)}</span>  <span class="${vcls(v)}">${esc(v.text)}</span> <span class="d">· ${done.stepCount ?? 0} steps</span></div>`; }
+    }
+    return out;
+  }
+  function liveCheck(it) {
+    const live = S.jobs[it.test]?.live;
+    if (!live || live.status === 'waiting') return `<div class="y">${esc(live?.waiting ?? S.st.running?.waiting ?? 'Getting the memory ready…')}</div>`;
+    return `${(live.lines ?? []).slice(-300).map(outLine).join('')}<div class="d cur"></div>`;
+  }
+  function termHtml(B, cur) {
+    const out = [`<div class="hd">── ${esc(B.name)} · ${esc(batchHow(B))} · ${B.count} to run ──</div>`];
+    B.items.forEach((it, i) => { if (it.state === 'done') out.push(doneLine(it, i)); else if (it.state === 'left') out.push(`<div class="d">${pad2(i + 1)} ${esc(fit(it.title, 46))}  not run: the line was cleared</div>`); });
+    if (cur) out.push('<div> </div>', `<div class="hd">── ${pad2(B.items.indexOf(cur) + 1)} · ${esc(cur.title)} ──</div>`, cur.kind === 'check' ? liveCheck(cur) : liveTest(cur));
+    else if (B.status === 'done' || B.status === 'stopped') out.push('<div> </div>', `<div class="hd">── ${B.status === 'stopped' ? 'stopped' : 'done'} · ${B.passed} of ${B.done} passed · ${dur(B.items.reduce((n, it) => n + itemSecs(it), 0) || 1)} ──</div>`);
+    else out.push(`<div class="d">${B.status === 'paused' ? 'paused: ▶ Resume goes on with what is left' : 'waiting for its turn…'}</div>`);
+    return out.join('');
+  }
+  function leftWords(B) {
+    const ws = B.items.filter((x) => x.state === 'waiting');
+    if (!ws.length) return '';
+    let secs = 0, unknown = 0;
+    for (const it of ws) for (const m of it.who === 'both' ? (it.vs ?? S.st.pair) : [it.who]) { const x = it.kind === 'check' ? checkById(it.test)?.last?.[m ?? 'none']?.secs : testById(it.test)?.last?.[m]?.secs; if (x) secs += x; else unknown += 1; }
+    return secs ? `about ${dur(secs)} left${unknown ? ` + ${unknown} not timed` : ''}` : `${ws.length} waiting`;
+  }
+  function runHtml() {
+    const B = S.bat[runBatchId()], r = S.st.running, q = S.st.line;
+    lanesShown = null;
+    if (!B) return `<div class="empty"><h2>Nothing has run yet</h2><div class="none">Pick a test, or a group of them, in Step 2 and press ▶ Run. What it does shows here, live: every step, every command and what it printed.</div><div><button type="button" class="btn pri" data-go="2">‹ Pick tests</button></div></div>`;
+    const cur = B.items.find((x) => x.state === 'running');
+    const cells = B.items.map((it, i) => { const m = itemMark(it); return `<span class="cell ${m.cls}" data-tip="${esc(`${i + 1} · ${it.title}: ${m.words}`)}">${m.sym}</span>`; }).join('');
+    const bad = notPassed(B).length, spent = B.items.reduce((n, it) => n + itemSecs(it), 0);
+    let now;
+    if (cur && r && r.batch === B.id) {
+      const who = r.kind === 'check' ? (r.who ? nameOf(r.who) : 'no model') : r.who === 'both' ? (r.side ? `Model ${r.side}, run ${r.side === 'A' ? 1 : 2} of 2` : 'a battle') : nameOf(r.who);
+      const head = `<div class="rrw"><span class="lbl">Now</span><span class="now">${r.waiting ? `<span class="live">${esc(r.waiting)}</span>` : '<span class="live">Running</span>'} <b>${esc(cur.title)}</b> · ${esc(who)}${r.think ? ' · High' : ''}</span><span class="rt">${esc(leftWords(B))}</span></div>`;
+      const det = r.kind === 'test' ? S.m[r.match] : null;
+      if (det) { lanesShown = battleLanes(det).ls; now = `${head}<div class="rrw"><span></span><svg class="tlsvg" id="tl3" height="74" role="img" aria-label="The run on one clock"></svg><span class="rt"><span data-since="${r.sideStartedAt ?? r.startedAt}"></span></span></div><div class="rrw"><span></span>${keyHtml()}<span></span></div>`; }
+      else if (r.kind === 'check') { const live = S.jobs[r.test]?.live, cnt = live?.count; now = `${head}<div class="rrw"><span></span><div class="ckprog">${cnt?.done != null ? `<span>${cnt.done}${cnt.total ? ` of ${cnt.total}` : ''} so far, ${cnt.passed} passed</span><div class="bar"><i style="width:${cnt.total ? Math.round((cnt.done / cnt.total) * 100) : 0}%"></i></div>` : '<span>it prints its own lines below</span>'}</div><span class="rt"><span data-since="${live?.runStartedAt ?? r.startedAt}"></span></span></div>`; }
+      else now = head;
+    } else {
+      const lbl = B.status === 'paused' ? 'Paused' : B.status === 'waiting' ? 'Next' : 'Done';
+      const words = B.status === 'paused' ? `Stopped part way: <b>${B.waiting}</b> still waiting. ▶ Resume goes on with them.` : B.status === 'waiting' ? (r ? `It starts after <b>${esc(r.title)}</b>, from another group.` : 'Starting…') : `<b>${B.passed} of ${B.done}</b> passed${B.status === 'stopped' ? `, and ${B.count - B.done} did not run: it was stopped` : ''}.`;
+      now = `<div class="rrw"><span class="lbl">${lbl}</span><span class="now">${words}</span><span class="rt">${B.status === 'done' || B.status === 'stopped' ? '<button type="button" class="btn pri" data-go="4">See the results ›</button>' : ''}</span></div>`;
+    }
+    const top = `<div class="box runtop"><div class="rrw"><span class="lbl">Group</span><div class="cells">${cells}</div><span class="rt"><b>${B.done} of ${B.count}</b> · ${spent ? dur(spent) : '0 s'}${bad ? ` · ${bad} did not pass` : ''}</span></div>${now}</div>`;
+    const mine = q.filter((x) => x.batch === B.id);
+    const bar = `<div class="runbar">${r ? '<button type="button" class="btn stop" data-act="stop">■ Stop</button>' : S.st.paused && q.length ? '<button type="button" class="btn pri" data-act="resume">▶ Resume</button>' : ''}<span class="nx">${mine.length ? `next: ${esc(mine.slice(0, 3).map((x) => x.title).join(' · '))}${mine.length > 3 ? ` and ${mine.length - 3} more` : ''}` : q.length ? `then ${q.length} from another group` : 'nothing waits to run'}</span>${q.length ? `<button type="button" class="btn" data-act="clearline">✕ Clear the line (${q.length})</button>` : ''}</div>`;
+    return `${top}<div class="term scroll" id="term">${termHtml(B, cur)}</div>${bar}`;
+  }
+  function drawRun() {
+    const el = $('#run'); if (!el) return;
+    const t = $('#term', el), stick = !t || t.scrollTop + t.clientHeight >= t.scrollHeight - 24, top = t?.scrollTop ?? 0;
+    if (put(el, runHtml())) { const t2 = $('#term', el); if (t2) t2.scrollTop = stick ? t2.scrollHeight : top; }
+    drawTimeline();
+  }
+
+  // ---------- Step 4: the group's results, one opened in full, the earlier groups ----------
+  function histHtml() {
+    const cur = resBatchId();
+    const rows = S.bats.map((b) => `<button type="button" class="hrow${b.id === cur ? ' on' : ''}" data-batch="${esc(b.id)}"><b>${esc(b.name)}</b><span>${esc(when(b.at))} · ${esc(batchHow(b))} · ${b.status === 'running' || b.status === 'waiting' ? 'running now' : `<span class="sc${b.passed === b.done && b.done ? '' : ' bad'}">${b.passed} of ${b.done} passed</span>${b.count > b.done ? ` · ${b.count - b.done} not run` : ''}`}</span></button>`).join('');
+    return `<div class="hmenu scroll" role="menu"><div class="hh">Every press of ▶ Run, newest first</div>${rows || '<div class="none">No runs yet.</div>'}</div>`;
+  }
+  function detailHtml(B) {
+    const it = B.items.find((x) => x.key === S.rsel) ?? B.items[0];
+    if (!it) return '<div class="dh"><b>Nothing in this group</b></div><div></div><div></div>';
+    const i = B.items.indexOf(it), m = itemMark(it);
+    const head = `<div class="dh"><b title="${esc(it.title)}">${i + 1} · ${esc(it.title)}</b><span class="muted" style="color:var(--ink3);font-size:12.5px">${it.kind === 'check' ? 'a check: what it printed last' : it.mode === 'battle' ? (it.vote ? 'a battle: you voted, so the names show' : 'a battle: the names show once you vote') : it.state === 'done' ? 'every step, from the run' : esc(m.words)}</span></div>`;
+    let body;
+    if (it.kind === 'check' && it.state === 'done') {
+      const lines = it.job ? S.jobLines[it.job] : null;
+      body = `<div class="drun"><div class="top"><b>${esc(it.model ? fullName(it.model) : 'No model')}</b><span class="res ${m.cls === 'ok' ? 'ok' : m.cls === 'warn' ? 'warn' : 'bad'}">${esc(m.words)}</span>${it.secs != null ? `<span style="color:var(--ink3)">${dur(it.secs)}</span>` : ''}</div>${it.result?.why && it.status === 'failed' ? `<div class="why">${esc(it.result.why)}</div>` : ''}</div>${lines?.length ? `<div class="term">${lines.slice(-60).map(outLine).join('')}</div>` : ''}`;
+    } else if (it.state === 'done') {
+      const det = S.m[it.match];
+      body = itemRuns(it).map(([side, r]) => {
+        const full = det?.runs?.[side] ?? r, v = verdict(full);
+        const name = it.mode === 'battle' ? `Model ${side}${it.order ? ` · ${fullName(it.order[side])}` : ''}` : fullName(it.order?.A ?? B.who);
+        return `<div class="drun"><div class="top"><b>${esc(name)}</b><span class="res ${v.cls}">${esc(v.text)}</span><span style="color:var(--ink3);font-size:12.5px">${mmss(full.secs ?? 0)} · ${full.stepCount ?? 0} steps · ${full.errors ?? 0} errors</span></div>${det?.runs?.[side] ? `<div class="why">${esc(checkLine(runOf(det, side)))}</div>` : ''}${full.steps?.length ? `<ul class="steps">${full.steps.map((x) => `<li><span class="tm">${mmss(x.t)}</span><span class="dot k-${x.kind}"></span><span class="lb">${esc(x.label)} <i>${esc(x.arg)}</i></span>${x.err ? `<span class="er">${esc(x.err)}</span>` : ''}</li>`).join('')}</ul>` : ''}</div>`;
+      }).join('') || '<div class="none">Not run: it was stopped first.</div>';
+    } else body = `<div class="none">${it.state === 'running' ? 'Running now: Step 3 shows it live.' : it.state === 'waiting' ? 'Waiting in the line.' : 'It never ran: the line was cleared.'}</div>`;
+    const vote = it.mode === 'battle' && it.state === 'done' && !it.vote;
+    const can = it.state === 'done' && (it.kind === 'check' || it.match);
+    return `${head}<div class="db scroll" data-scroll="detail">${body}</div><div class="df">${can ? `<button type="button" class="btn${vote ? ' pri' : ''}" data-act="open4" data-key="${esc(it.key)}">${vote ? 'Open it to vote ›' : 'Open the full result ›'}</button>` : it.state === 'running' ? '<button type="button" class="btn" data-go="3">Watch it in Step 3 ›</button>' : ''}</div>`;
+  }
+  function resHtml() {
+    const B = S.bat[resBatchId()];
+    if (!B) return `<div class="empty"><h2>No results yet</h2><div class="none">Each press of ▶ Run is kept here as a group: every test in it, each model's result and every step. Pick tests in Step 2 to make the first.</div><div style="display:flex;gap:8px">${S.bats.length ? '<button type="button" class="btn" data-act="hmenu">Earlier runs <i class="car"></i></button>' : ''}<button type="button" class="btn pri" data-go="2">‹ Pick tests</button></div><div style="position:relative">${S.hmenu ? histHtml() : ''}</div></div>`;
+    const two = B.who === 'both', done = B.items.filter((x) => x.state === 'done'), bad = notPassed(B);
+    const tests = done.filter((x) => x.kind === 'test').length, steps = done.reduce((n, it) => n + itemRuns(it).reduce((k, [, r]) => k + (r.stepCount ?? 0), 0), 0);
+    const toVote = done.filter((x) => x.mode === 'battle' && !x.vote).length, spent = B.items.reduce((n, it) => n + itemSecs(it), 0);
+    const card = (k, v, d, c = '') => `<div class="box card"><span class="k">${k}</span><span class="v ${c}">${v}</span><span class="d" title="${esc(d)}">${esc(d)}</span></div>`;
+    const cards = [card('Passed', `${B.passed} of ${B.done}`, bad.length ? `did not pass: ${bad.map((x) => B.items.indexOf(x) + 1).join(', ')}` : B.done ? 'every one passed' : 'nothing finished yet', B.done && B.passed === B.done ? 'ok' : ''),
+      card('Time in all', spent ? dur(spent) : '–', B.done ? `${mmss(spent / B.done)} a run on average` : ''),
+      card('Steps', tests ? `${steps}` : '–', tests ? `${(steps / tests).toFixed(1)} a test` : 'a check prints lines instead'),
+      two ? card('To vote', `${toVote}`, toVote ? 'battles waiting for your vote: open one' : 'every battle has your vote') : card('Settings', B.think ? 'High' : 'Low', B.settings ? setWords(B.settings) : 'every row at the tests’ defaults')].join('');
+    const head = `<div class="xhead${two ? ' two' : ''}"><span>#</span><span>Test</span>${two ? '<span>Model A</span><span>Model B</span>' : `<span>${esc(B.who ? nameOf(B.who) : 'Result')}</span>`}<span>${two ? 'Vote' : 'Steps · how'}</span></div>`;
+    const cellOf = (r) => (r && !r.skipped ? `${markOf(r)} <span class="tm">${mmss(r.secs ?? 0)}</span>` : '<span class="mk nil">–</span>');
+    const rows = B.items.map((it, i) => {
+      const m = itemMark(it);
+      const res = it.kind === 'check' || it.state !== 'done' ? [`<span class="mk ${['ok', 'bad', 'warn'].includes(m.cls) ? m.cls : 'nil'}">${esc(m.words)}</span>`] : (two ? ['A', 'B'] : ['A']).map((sd) => cellOf(it.runs?.[sd]));
+      while (two && res.length < 2) res.push('');
+      const toV = it.mode === 'battle' && it.state === 'done' && !it.vote;
+      const note = it.kind === 'check' ? `${it.model ? nameOf(it.model) : 'no model'}${it.secs != null ? ` · ${dur(it.secs)}` : ''}` : it.state !== 'done' ? '' : it.mode === 'battle' ? (it.vote ? `you picked ${it.vote === 'T' ? 'a tie' : `Model ${it.vote}${it.order ? ` (${nameOf(it.order[it.vote])})` : ''}`}` : 'to vote') : `${it.runs?.A?.stepCount ?? 0} steps${it.runs?.A?.errors ? ` · ${it.runs.A.errors} errors` : ''}`;
+      return `<div class="xrow${two ? ' two' : ''}${(S.rsel ?? B.items[0]?.key) === it.key ? ' sel' : ''}" data-xrow="${esc(it.key)}"><span class="no">${i + 1}</span><span title="${esc(it.title)}">${esc(it.title)}</span>${res.map((x) => `<span>${x}</span>`).join('')}<span class="tr${toV ? ' vote' : ''}">${esc(note)}</span></div>`;
+    }).join('');
+    const live = B.status === 'running' || B.status === 'waiting';
+    return `<div class="head"><h2 class="h2"><span class="t">${esc(B.name)}</span><span class="chip">${esc(when(B.at))} · ${esc(batchHow(B))}</span>${live ? '<span class="chip"><span class="live">still running</span></span>' : ''}</h2><button type="button" class="btn" data-act="hmenu" aria-expanded="${S.hmenu}">Earlier runs <i class="car"></i></button>${S.hmenu ? histHtml() : ''}<span class="fill"></span>${bad.length && !live ? `<button type="button" class="btn" data-act="again" data-failed="1">↻ Run the ${bad.length} that did not pass again</button>` : ''}<button type="button" class="btn" data-go="2">Change tests</button><button type="button" class="btn" data-go="1">Change settings</button><button type="button" class="btn pri" data-act="again"${live ? ' disabled' : ''}>▶ Run again</button></div>
+      <div class="cards">${cards}</div>
+      <div class="main"><div class="box rtab">${head}<div class="scroll" data-scroll="res">${rows}</div></div><div class="box detail">${detailHtml(B)}</div></div>`;
+  }
+  function back4Html() { const B = S.bat[resBatchId()], it = B?.items.find((x) => x.key === S.open4); return `<button type="button" class="btn" data-act="back4">‹ All results</button><span>${esc(B?.name ?? '')}${it ? ` · ${B.items.indexOf(it) + 1} of ${B.count}` : ''}</span>`; }
+  function openFull(key) {
+    const B = S.bat[resBatchId()], it = B?.items.find((x) => x.key === key);
+    if (!it) return;
+    S.open4 = key; S.rsel = key;
+    if (it.kind === 'check') select('check', it.test);
+    else { select('test', it.test); S.view[it.test] = { match: it.match }; S.cmp[it.test] = null; }
+    draw(); poll(true);
+  }
+  // Into the line, as one group (its name: what you picked, in words). The runner's answer, or null.
+  async function addLine(items, name) {
     S.err = ''; S.sending = true; draw();
-    try { const r = await api('/api/line', { items }); toast(r.added > 1 ? `${r.added} in the line, one at a time.` : 'In the line. It starts when the memory is free.'); return true; }
-    catch (e) { S.err = `${e.message[0].toUpperCase()}${e.message.slice(1)}.`; return false; }
+    try { const r = await api('/api/line', { items, ...(name ? { name } : {}) }); toast(r.added > 1 ? `${r.added} in the line, one at a time.` : 'In the line. It starts when the memory is free.'); if (r.batch) ui.batch = r.batch; save(); return r; }
+    catch (e) { S.err = `${e.message[0].toUpperCase()}${e.message.slice(1)}.`; toast(S.err, true); return null; }
     finally { S.sending = false; }
   }
 
@@ -830,7 +1180,7 @@ body.compact .tch { padding: 5px 14px; }
   }
   let lanesShown = null;
   function drawTimeline() {
-    const one = $('#tl3', mainEl); const ls = lanesShown; if (!one || !ls) return;
+    const one = $('#tl3'); const ls = lanesShown; if (!one || !ls) return;
     setLimit(ls);
     const end = axisEnd(ls.map((l) => l.run));
     const W = Math.max(300, Math.round(one.getBoundingClientRect().width)), L = 74, R = 20;
@@ -1192,7 +1542,7 @@ body.compact .tch { padding: 5px 14px; }
       S.modal = false; drawModal(); F = null;
       ui.open[suiteOf(testById(r.id) ?? { suite: 'mine' })] = true; select('test', r.id);
       await poll(true);
-      if (run) { const t = testById(r.id); ui.open[suiteOf(t)] = true; await addLine([itemNow('test', r.id)]); await poll(true); }
+      if (run) { const t = testById(r.id); ui.open[suiteOf(t)] = true; if (await addLine([itemNow('test', r.id)], t?.title)) go(3); else await poll(true); }
     } catch (e) { toast(`Could not save: ${e.message}`, true); btns.forEach((b) => { b.disabled = false; }); }
   }
 
@@ -1214,6 +1564,7 @@ body.compact .tch { padding: 5px 14px; }
     return '<div class="panelmsg"><h2>Pick a test on the left</h2><div class="none">Click a test, a set or a check to see its last run here. Tick the ones to run, say who runs them on the right, and press the button.</div></div>';
   }
   function drawMain(force) {
+    if (stepNow() !== 4 || !S.open4) return;
     if (force) mainEl._html = null;
     const was = mainEl.dataset.sel, key = `${sel().kind}:${sel().id}`;
     if (put(mainEl, mainHtml())) {
@@ -1225,20 +1576,38 @@ body.compact .tch { padding: 5px 14px; }
     }
     drawTimeline(); tickClocks(); fades();
   }
+  // The step's frame, put up when the step changes (a part already up keeps what it shows and its scroll).
+  function frame() {
+    const st = stepNow(), k = st === 4 && S.open4 ? '4full' : String(st), body = $('#wbody');
+    if (body.dataset.k === k) return;
+    body.dataset.k = k;
+    body.innerHTML = st === 1 ? '<div class="s1"><div class="box panel" id="panel"></div><div class="box words" id="words"></div></div>'
+      : st === 2 ? '<div class="s2"><div class="box tl-box"><div class="lh" id="lhead"></div><div class="lwrap" id="list"></div></div><div class="box pick" id="pick"></div></div>'
+      : st === 3 ? '<div class="s3" id="run"></div>'
+      : k === '4full' ? '<div class="s4full"><div class="backbar" id="back4"></div><div class="mid4" id="main"></div></div>' : '<div class="s4" id="res"></div>';
+    mainEl = $('#main') ?? document.createElement('div');
+  }
   function draw() {
     if (!S.st) return;
-    const focus = document.activeElement?.id === 'find' ? [document.activeElement.selectionStart] : null;
-    if (put($('#lhead'), headHtml()) && focus) { const f = $('#find'); f.focus(); f.setSelectionRange(focus[0], focus[0]); }
-    put($('#list'), listHtml());
     if (P()) { ui.row = Math.max(0, Math.min(ui.row, panelRows().length - 1)); for (const [id, v] of Object.entries(ui.vals)) if (!P().rows.find((r) => r.id === id)?.steps.some((x) => x.v === v)) delete ui.vals[id]; }
-    put($('#panel'), panelHtml());
-    put($('#runbox'), runboxHtml());
-    drawMain();
+    frame();
+    const st = stepNow();
+    put($('#sbar'), sbarHtml());
+    put($('#foot'), footHtml());
+    if (st === 1) { put($('#panel'), panelHtml()); put($('#words'), wordsHtml()); }
+    if (st === 2) {
+      const focus = document.activeElement?.id === 'find' ? [document.activeElement.selectionStart] : null;
+      if (put($('#lhead'), headHtml()) && focus) { const f = $('#find'); f.focus(); f.setSelectionRange(focus[0], focus[0]); }
+      put($('#list'), listHtml()); put($('#pick'), pickHtml());
+    }
+    if (st === 3) drawRun();
+    if (st === 4) { if (S.open4) { put($('#back4'), back4Html()); drawMain(); } else put($('#res'), resHtml()); }
+    fades();
   }
   function tickClocks() {
     for (const el of document.querySelectorAll('[data-since]')) el.textContent = mmss((Date.now() - Number(el.dataset.since)) / 1000);
     const ls = lanesShown ?? [];
-    for (const el of mainEl.querySelectorAll('[data-clock]')) { const l = ls[Number(el.dataset.clock)]; if (l?.det?.live) el.textContent = mmss(runOf(l.det, l.side).clock); }
+    for (const el of document.querySelectorAll('[data-clock]')) { const l = ls[Number(el.dataset.clock)]; if (l?.det?.live) el.textContent = mmss(runOf(l.det, l.side).clock); }
     if (ls.some((l) => l.det?.live)) { for (const l of ls) if (l.det?.live) l.run = runOf(l.det, l.side); drawTimeline(); }
   }
   function drawOver() {
@@ -1254,17 +1623,27 @@ body.compact .tch { padding: 5px 14px; }
     if (polling && !force) return; polling = true;
     try {
       S.st = await api('/api/state');
+      // Opening the Arena while something runs lands on Run.
+      if (S.first) { S.first = false; if (S.st.running) ui.step = 3; }
       applyAsk();
-      const s = sel();
-      const okSel = (s.kind === 'test' && testById(s.id)) || (s.kind === 'set' && setById(s.id)) || (s.kind === 'check' && checkById(s.id));
-      if (!okSel) { const r = S.st.running; const t = r?.kind === 'test' ? testById(r.test) : tests().filter((x) => x.latest).sort((a, b) => String(b.latest.at).localeCompare(String(a.latest.at)))[0] ?? null; ui.sel = t ? { kind: 'test', id: t.id } : r?.kind === 'check' ? { kind: 'check', id: r.test } : { kind: 'set', id: S.st.sets[0]?.id }; }
-      const cur = sel();
-      if (cur.kind === 'test') {
+      const st = stepNow(), r = S.st.running;
+      // The groups: every one for Earlier runs and the chips; the one Run and Results show, in full.
+      try { S.bats = (await api('/api/batches')).batches; } catch { /* as they were */ }
+      for (const id of new Set([runBatchId(), resBatchId()].filter(Boolean))) {
+        try { S.bat[id] = await api(`/api/batch?id=${encodeURIComponent(id)}`); } catch { delete S.bat[id]; if (ui.batch === id) ui.batch = null; }
+      }
+      if (st === 3 && r?.kind === 'test' && r.match) await fetchMatch(r.match);
+      if (st === 3 && r?.kind === 'check') { try { S.jobs[r.test] = await api(`/api/jobs?test=${encodeURIComponent(r.test)}`); } catch { /* as it was */ } }
+      const B = st === 4 && !S.open4 ? S.bat[resBatchId()] : null, it = B ? B.items.find((x) => x.key === S.rsel) ?? B.items[0] : null;
+      if (it?.match && it.state === 'done' && (!S.m[it.match] || S.m[it.match].status === 'running' || S.m[it.match].vote !== it.vote)) await fetchMatch(it.match);
+      if (it?.job && it.state === 'done' && !S.jobLines[it.job]) { try { S.jobLines[it.job] = (await api(`/api/job?id=${encodeURIComponent(it.job)}`)).lines ?? []; } catch { S.jobLines[it.job] = []; } }
+      const cur = st === 4 && S.open4 ? sel() : { kind: 'none' };
+      if (cur.kind === 'test' && testById(cur.id)) {
         const t = testById(cur.id), v = S.view[t.id];
         const ids = new Set(v?.match ? [v.match] : v?.left ? [v.left.match, v.right?.match] : [t.latest?.id, S.cmp[t.id]?.match]);
         await Promise.all([...ids].filter(Boolean).map(fetchMatch));
         try { S.runs[t.id] = (await api(`/api/runs?test=${encodeURIComponent(t.id)}`)).runs; } catch { /* the list as it was */ }
-      } else if (cur.kind === 'check') {
+      } else if (cur.kind === 'check' && checkById(cur.id)) {
         try {
           const d = await api(`/api/jobs?test=${encodeURIComponent(cur.id)}`);
           S.jobs[cur.id] = d;
@@ -1274,7 +1653,7 @@ body.compact .tch { padding: 5px 14px; }
       }
       draw();
     } catch (e) {
-      put($('#runbox'), `<div class="err">The arena’s runner is not answering (${esc(e.message)}). Open the Arena tab again to start it.</div>`);
+      $('#foot').innerHTML = `<span></span><div class="sum"><span class="err">The arena’s runner is not answering (${esc(e.message)}). Open the Arena tab again to start it.</span></div><span></span>`;
     } finally { polling = false; }
     clearTimeout(poll.t); poll.t = setTimeout(poll, S.st?.running || S.st?.line?.length ? 1000 : 2500);
   }
@@ -1296,7 +1675,10 @@ body.compact .tch { padding: 5px 14px; }
     if (a.model && whoList().includes(a.model)) ui.who = a.model;
     if (a.think) ui.effort = a.think === 'on' ? 'high' : 'low';
     const p = a.test ? pickByName(a.test, a.n) : null;
-    if (p) { const k = `${p[0]}:${p[1]}`; if (!ui.ticked.includes(k)) ui.ticked.push(k); select(p[0], p[1]); }
+    if (p) {
+      if (p[0] === 'set') { ui.mode = 'group'; if (!ui.ticked.includes(`set:${p[1]}`)) ui.ticked.push(`set:${p[1]}`); } else { ui.mode = 'one'; ui.one = { kind: p[0], id: p[1] }; }
+      select(p[0], p[1]); ui.step = 2; S.open4 = null;
+    }
     save();
     if (a.fresh) setTimeout(() => { if (!S.modal) openForm(); }, 0);
     if (a.rec && HUB) { S.rec = true; drawOver(); }
@@ -1319,9 +1701,23 @@ body.compact .tch { padding: 5px 14px; }
   document.addEventListener('click', async (e) => {
     if (S.menu && !e.target.closest('.cmenu, [data-act="menu"]')) { S.menu = false; draw(); }
     if (S.runsOpen && !e.target.closest('.runsm, [data-act="runs"]')) { S.runsOpen = false; drawMain(true); }
+    if (S.hmenu && !e.target.closest('.hmenu, [data-act="hmenu"]')) { S.hmenu = false; draw(); }
     if (e.target.closest('button:disabled')) return;
+    // The wizard: a step chip, One · Group, the one to run, a quick pick of who, a group's row or an earlier group.
+    const w = e.target.closest('[data-go], [data-mode], [data-pickone], [data-who], [data-untick], [data-batch], [data-xrow]');
+    if (w) {
+      const d = w.dataset;
+      if (d.go) go(Number(d.go));
+      else if (d.mode) { ui.mode = d.mode; S.err = ''; save(); draw(); }
+      else if (d.pickone) { const i = d.pickone.indexOf(':'); ui.one = { kind: d.pickone.slice(0, i), id: d.pickone.slice(i + 1) }; S.err = ''; save(); draw(); }
+      else if (d.who) { ui.who = d.who; save(); draw(); }
+      else if (d.untick) { ui.ticked = ui.ticked.filter((k) => k !== d.untick); save(); draw(); }
+      else if (d.batch) { ui.batch = d.batch; S.hmenu = false; S.rsel = null; S.open4 = null; save(); await poll(true); }
+      else if (d.xrow) { S.rsel = d.xrow; draw(); await poll(true); }
+      return;
+    }
     const seg = e.target.closest('.seg');
-    if (seg && Number(seg.dataset.step) >= 0 && selTest()) { S.tab[sel().id] = 'did'; S.hl = { slot: seg.dataset.slot, i: Number(seg.dataset.step) }; drawMain(true); const row = mainEl.querySelector(`[data-row="${S.hl.slot}${S.hl.i}"]`); if (row) { const box = row.closest('.tbody'); box.scrollTop = row.offsetTop - box.clientHeight / 3; fades(); } return; }
+    if (seg && Number(seg.dataset.step) >= 0 && selTest() && stepNow() === 4 && S.open4) { S.tab[sel().id] = 'did'; S.hl = { slot: seg.dataset.slot, i: Number(seg.dataset.step) }; drawMain(true); const row = mainEl.querySelector(`[data-row="${S.hl.slot}${S.hl.i}"]`); if (row) { const box = row.closest('.tbody'); box.scrollTop = row.offsetTop - box.clientHeight / 3; fades(); } return; }
     // The list: a tick, a set (it opens and shows), a test, a check.
     const tg = e.target.closest('[data-tick]');
     if (tg) { const k = tg.dataset.tick; ui.ticked = isTicked(k) ? ui.ticked.filter((x) => x !== k) : [...ui.ticked, k]; S.err = ''; save(); draw(); return; }
@@ -1331,12 +1727,13 @@ body.compact .tch { padding: 5px 14px; }
     if (pr) { ui.row = Number(pr.dataset.pr); save(); draw(); return; }
     const el = e.target.closest('[data-act]');
     if (!el) {
+      // The list: a set opens or shuts; a test or a check is the one (One), or its tick goes on or off (Group).
       const row = e.target.closest('[data-set], [data-test], [data-check]');
       if (!row) return;
-      if (row.dataset.set) { const id = row.dataset.set; if (!setById(id)?.ids.length && !tests().some((t) => suiteOf(t) === id)) return; const same = sel().kind === 'set' && sel().id === id; ui.open[id] = same ? !ui.open[id] : true; select('set', id); }
-      else if (row.dataset.test) { const t = testById(row.dataset.test); ui.open[suiteOf(t)] = true; select('test', row.dataset.test); }
-      else select('check', row.dataset.check);
-      await poll(true);
+      if (row.dataset.set) { const id = row.dataset.set; if (!setById(id)?.ids.length && !tests().some((t) => suiteOf(t) === id)) return; ui.open[id] = !ui.open[id]; }
+      else { const kind = row.dataset.test ? 'test' : 'check', id = row.dataset.test ?? row.dataset.check, k = `${kind}:${id}`;
+        if (oneMode()) ui.one = { kind, id }; else ui.ticked = isTicked(k) ? ui.ticked.filter((x) => x !== k) : [...ui.ticked, k]; }
+      S.err = ''; save(); draw();
       return;
     }
     const act = el.dataset.act;
@@ -1344,12 +1741,25 @@ body.compact .tch { padding: 5px 14px; }
       if (act === 'menu') { S.menu = !S.menu; draw(); }
       if (act === 'rec') { S.rec = !S.rec; drawOver(); }
       if (act === 'reset') { ui.vals = {}; save(); draw(); drawMain(true); }
-      if (act === 'clear') { ui.ticked = []; S.err = ''; save(); draw(); }
-      // The button: everything ticked goes in the line, in the list's order.
-      if (act === 'go') { const items = pickedItems(); if (await addLine(payload(items))) { const first = items[0]; if (first.kind === 'test') select('test', first.id); else if (first.kind === 'set') { const t = testById(first.tests[0]); ui.open[first.id] = true; select('test', t.id); } else select('check', first.id); } await poll(true); }
-      if (act === 'run') { S.view[sel().id] = null; S.cmp[sel().id] = null; await addLine([itemNow('test', sel().id)]); await poll(true); }
-      if (act === 'runset') { await addLine([itemNow('set', el.dataset.id)]); await poll(true); }
-      if (act === 'runcheck') { await addLine([itemNow('check', el.dataset.id)]); await poll(true); }
+      if (act === 'clear') { if (oneMode()) ui.one = null; else ui.ticked = []; S.err = ''; save(); draw(); }
+      // The steps: Back, Next (on Tests it is ▶ Run), and ▶ Run: what is picked goes in the line as one group, in the list's order.
+      if (act === 'back') go(stepNow() - 1);
+      if (act === 'next') { const st = stepNow(); if (st === 2) await runPicked(); else go(st === 4 ? 1 : st + 1); }
+      if (act === 'go') await runPicked();
+      // Results: an earlier group, one row in full (and back), the whole group again or only what did not pass.
+      if (act === 'hmenu') { S.hmenu = !S.hmenu; draw(); }
+      if (act === 'open4') openFull(el.dataset.key);
+      if (act === 'back4') { S.open4 = null; draw(); }
+      if (act === 'again') {
+        const B = S.bat[resBatchId()]; if (!B) return;
+        const bad = notPassed(B);
+        const items = el.dataset.failed ? bad.map((x) => ({ kind: x.kind, id: x.test, who: x.kind === 'check' ? x.model ?? null : x.who, ...(x.vs ? { vs: x.vs } : {}), think: B.think, settings: B.settings })) : B.ask ?? [];
+        if (await addLine(items, el.dataset.failed ? `${B.name}: the ${bad.length} that did not pass` : B.name)) go(3);
+      }
+      // A test or a check opened in full (Results): run it again, as a group of its own.
+      if (act === 'run') { const t = selTest(); S.view[t.id] = null; S.cmp[t.id] = null; if (await addLine([itemNow('test', t.id)], t.title)) go(3); }
+      if (act === 'runset') { if (await addLine([itemNow('set', el.dataset.id)], setById(el.dataset.id)?.name)) go(3); }
+      if (act === 'runcheck') { if (await addLine([itemNow('check', el.dataset.id)], checkById(el.dataset.id)?.name)) go(3); }
       if (act === 'unqueue') { await api('/api/unqueue', { key: el.dataset.key }); await poll(true); }
       if (act === 'stop') { if (confirm('Stop what is running? The line of runs waiting is paused too.')) { await api('/api/stop', {}); await poll(true); } }
       if (act === 'resume') { await api('/api/resume', {}); await poll(true); }
@@ -1378,6 +1788,7 @@ body.compact .tch { padding: 5px 14px; }
       // + New: in the hub, the Test builder window on a new test (tests are made in full there); on its own, the window here.
       if (act === 'new') { S.menu = false; draw(); if (toHub({ agentic: 'new-test' })) return; openForm(); }
       if (act === 'builder') { S.menu = false; draw(); toHub({ agentic: 'open-builder', ...(selTest()?.suite === 'mine' ? { test: selTest().id } : {}) }); }
+      if (act === 'edit' && stepNow() === 2 && ui.one?.kind === 'test') select('test', ui.one.id);
       // Edit on one of your tests: the Test builder window at that test. The sets that came with the arena keep the window here.
       if (act === 'edit' && selTest()?.suite === 'mine' && toHub({ agentic: 'open-builder', test: selTest().id })) { S.menu = false; draw(); return; }
       if (act === 'edit' || act === 'edittests') { S.menu = false; draw(); openModal(sel().kind === 'test' ? sel().id : null); }
@@ -1430,17 +1841,17 @@ body.compact .tch { padding: 5px 14px; }
   document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('scroll')) fades(); }, true);
   document.addEventListener('keydown', (e) => {
     if (S.modal && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveForm(false); return; }
-    if (e.key === 'Escape' && (S.menu || S.runsOpen)) { S.menu = false; S.runsOpen = false; draw(); drawMain(true); return; }
+    if (e.key === 'Escape' && (S.menu || S.runsOpen || S.hmenu)) { S.menu = false; S.runsOpen = false; S.hmenu = false; draw(); drawMain(true); return; }
     if (e.key === 'Escape' && S.modal) { closeModal(); return; }
     if (e.key === 'Escape' && S.rec) { S.rec = false; drawOver(); return; }
     if (e.key === 'Escape' && S.full != null) { S.full = null; drawMain(true); return; }
-    if (e.key === '/' && !S.modal && !S.rec && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); $('#find')?.focus(); return; }
-    // The panel's keys: ↑ ↓ picks a row, ← → changes it.
-    if (S.modal || S.rec || !P() || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select')) return;
+    if (e.key === '/' && !S.modal && !S.rec && !e.target.closest?.('input, textarea, select')) { e.preventDefault(); if (stepNow() !== 2) go(2); $('#find')?.focus(); return; }
+    // The panel's keys (Step 1): ↑ ↓ picks a row, ← → changes it.
+    if (S.modal || S.rec || !P() || stepNow() !== 1 || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select')) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') ui.row = Math.max(0, Math.min(panelRows().length - 1, ui.row + (e.key === 'ArrowDown' ? 1 : -1)));
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') moveRow(ui.row, e.key === 'ArrowRight' ? 1 : -1);
     else return;
-    e.preventDefault(); save(); draw(); drawMain(true);
+    e.preventDefault(); save(); draw();
     $('#panel .pr[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   });
   // The record page's ▶ (the hub's own page, in the window over this one): that test, picked here.

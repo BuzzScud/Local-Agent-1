@@ -13,6 +13,8 @@
 // Each run of a test stops at 10 minutes and is kept in battles/<id>/ (battle.json, A/ and B/): one
 // place for every run, so any two runs of a test can be put side by side. A check's run is kept in
 // runs/<id>/ (job.json, run.log). The panel's effort and changed rows go with every run.
+// Each press of ▶ Run is one group (a batch, kept in state.json): its runs carry its id, so the
+// page's Results step shows what that press ran, and any earlier one (/api/batches, /api/batch).
 // Before a model loads, the runner holds the memory (running.json): kept-loaded models nobody
 // uses are unloaded, an Agentic Coder window lets go of its model once its reply ends, and
 // anything else (coding -p, a run from Terminal) is waited for.
@@ -72,13 +74,13 @@ const CHECKS = () => RUN_TESTS.filter((t) => !t.set && !t.pick);
 
 // ---------- The line ----------
 // item: { key, kind: 'test' | 'check', test, title, who: a model's id | 'both' (a battle of vs) | null, vs?: [a, b], think, settings,
-//         group?, groupSet?, groupName?, groupOf? (a set's tests), pair? (a check on two models) }
+//         group?, groupSet?, groupName?, groupOf? (a set's tests), pair? (a check on two models), batch? (the press of ▶ Run it came from) }
 let state = readJson(P.state, {});
 {
   // A line kept by the runner from before the Arena: its battles and its test runs, in that order.
   const old = [...(state.testLine ?? []).map((x) => ({ kind: 'check', test: x.test, who: x.model ?? null, think: Boolean(x.think), settings: x.settings ?? null })),
     ...(state.queue ?? []).map((id) => ({ kind: 'test', test: id, who: 'both', think: false, settings: null }))];
-  state = { line: state.line ?? old.map((x, i) => ({ key: `kept-${i}`, title: x.test, ...x })), paused: Boolean(state.paused), done: state.done ?? [], job: state.job ?? null };
+  state = { line: state.line ?? old.map((x, i) => ({ key: `kept-${i}`, title: x.test, ...x })), paused: Boolean(state.paused), done: state.done ?? [], job: state.job ?? null, batches: state.batches ?? [] };
 }
 const saveState = () => writeJson(P.state, state);
 saveState();
@@ -215,7 +217,7 @@ async function runMatch(item) {
   const vs = vsOf(item.vs);
   const order = both ? (Math.random() < 0.5 ? [vs[0], vs[1]] : [vs[1], vs[0]]) : [item.who];
   const b = { id: freshId(P.battles, `${stamp()}-${test.id}`.slice(0, 90)), test: test.id, title: test.title, kind: test.kind, at: new Date().toISOString(), mode: both ? 'battle' : 'solo',
-    order: both ? { A: order[0], B: order[1] } : { A: order[0] }, think: Boolean(item.think), settings: item.settings ?? null, group: item.group ?? null,
+    order: both ? { A: order[0], B: order[1] } : { A: order[0] }, think: Boolean(item.think), settings: item.settings ?? null, group: item.group ?? null, key: item.key, batch: item.batch ?? null,
     // Each run's time limit: a battle stops each side at 10 minutes; a test on one model at its own (a test of yours: its level's, Easy 5, Medium 10, Hard 20).
     limit: both ? LIMIT_SECS : limitSecsOf(test), status: 'running', runs: {}, vote: null };
   const save = () => writeJson(join(P.battles, b.id, 'battle.json'), b);
@@ -300,7 +302,7 @@ async function runCheck(item) {
   const cmd = runCommand(item.test, { model: item.who, think: item.think, models: IDS, settings: item.settings });
   const t = cmd.test;
   const id = freshId(P.runs, `${stamp()}-${t.id}${t.model ? `-${item.who}` : ''}${cmd.think ? '-think' : ''}${cmd.settings ? '-set' : ''}`);
-  job = { id, key: item.key, test: t.id, name: t.name, total: cmd.total ?? null, model: t.model ? item.who : null, modelName: t.model ? MODELS[item.who].name : null, think: cmd.think, settings: cmd.settings, pair: item.pair ?? null, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
+  job = { id, key: item.key, test: t.id, name: t.name, total: cmd.total ?? null, model: t.model ? item.who : null, modelName: t.model ? MODELS[item.who].name : null, think: cmd.think, settings: cmd.settings, pair: item.pair ?? null, batch: item.batch ?? null, status: 'waiting', startedAt: Date.now(), dir: join(P.runs, id) };
   const title = jobTitle(job);
   mkdirSync(job.dir, { recursive: true });
   saveJob();
@@ -466,12 +468,12 @@ function view() {
     for (const side of ['A', 'B']) if (passed(b.runs[side])) score.passes[b.order[side]] += 1;
     if (b.vote === 'T') score.ties += 1; else score.votes[b.order[b.vote]] += 1;
   }
-  const running = now ? { key: now.key, kind: now.kind, test: now.test, title: now.title, who: now.who, vs: now.who === 'both' ? vsOf(now.vs) : null, think: Boolean(now.think), group: now.group ?? null, groupName: now.groupName ?? null, groupOf: now.groupOf ?? null, pair: now.pair ?? null, startedAt: now.startedAt,
+  const running = now ? { key: now.key, kind: now.kind, test: now.test, title: now.title, who: now.who, vs: now.who === 'both' ? vsOf(now.vs) : null, think: Boolean(now.think), group: now.group ?? null, groupName: now.groupName ?? null, groupOf: now.groupOf ?? null, pair: now.pair ?? null, batch: now.batch ?? null, startedAt: now.startedAt,
     match: current?.match ?? null, side: current?.side ?? null, sideStartedAt: current?.startedAt ?? null, job: now.kind === 'check' && job ? job.id : null, waiting: !current && !(jobLive() && job.status === 'running') ? (waiting ?? 'Getting the memory ready…') : null } : null;
   return {
     // Every model in /model, and whether its file is here (only those can run); the battle a pick of none means.
     models: IDS.map((id) => ({ id, name: MODELS[id].name, here: FAKE || existsSync(join(MODELS_DIR, MODELS[id].file)) })), pair: PAIR, limit: LIMIT_SECS, fake: FAKE, paused: state.paused, waiting,
-    line: state.line, running, done: state.done.slice(0, 40), loaded: loadedNow(),
+    line: state.line, running, done: state.done.slice(0, 40), loaded: loadedNow(), batch: state.batches[0]?.id ?? null,
     sets: ['new28', 'work28', 'practice', 'mine', ...Object.keys(LEVELS).map((lv) => `mine-${lv}`)].map((id) => ({ id, name: SETS[id][0], ids: tests.filter(SETS[id][1]).map((t) => t.id), ...(id.startsWith('mine-') ? { level: id.slice(5) } : {}) })).filter((x) => !x.level || x.ids.length),
     checks: checkRows(), panel: runPanel(), score,
     tests: tests.map((t) => { const b = latest[t.id], bt = lastBattle[t.id];
@@ -501,6 +503,37 @@ function runsOf(testId) {
   return out;
 }
 
+// ---------- The groups: each press of ▶ Run ----------
+// A group's items as they stand: waiting, running, or what each run came to (a battle's names only once you voted).
+function batchView(bt, all = listBattles(), jobs = listJobs()) {
+  const byKey = new Map(all.filter((b) => b.batch === bt.id).map((b) => [b.key, b]));
+  const jobByKey = new Map(jobs.filter((j) => j.batch === bt.id).map((j) => [j.key, j]));
+  const waitingKeys = new Set(state.line.filter((x) => x.batch === bt.id).map((x) => x.key));
+  const items = bt.items.map((it) => {
+    const running = now?.key === it.key;
+    const base = { key: it.key, kind: it.kind, test: it.test, title: it.title, who: it.who, vs: it.vs ?? null };
+    if (it.kind === 'check') {
+      const j = jobByKey.get(it.key);
+      if (running || (j && (j.status === 'waiting' || j.status === 'running'))) return { ...base, state: 'running', job: j?.id ?? null };
+      if (j) return { ...base, state: 'done', job: j.id, status: j.status, result: j.result ?? null, secs: j.secs ?? null, model: j.model ?? null };
+      return { ...base, state: waitingKeys.has(it.key) ? 'waiting' : 'left' };
+    }
+    const b = byKey.get(it.key);
+    if (running || b?.status === 'running') return { ...base, state: 'running', match: b?.id ?? current?.match ?? null };
+    if (b) return { ...base, state: 'done', match: b.id, mode: b.mode ?? 'battle', status: b.status, vote: b.vote ?? null, order: reveal(b), runs: Object.fromEntries(Object.entries(b.runs ?? {}).map(([s, r]) => [s, brief(r)])) };
+    return { ...base, state: waitingKeys.has(it.key) ? 'waiting' : 'left' };
+  });
+  const ran = items.filter((x) => x.state === 'done');
+  const runsOk = (x) => (x.kind === 'check' ? x.status === 'done' && (x.result?.done == null || x.result.passed === x.result.done) : Object.values(x.runs ?? {}).filter((r) => r && !r.skipped).every(passed) && Object.values(x.runs ?? {}).some((r) => r && !r.skipped));
+  return { id: bt.id, name: bt.name, at: bt.at, who: bt.who, vs: bt.vs ?? null, think: bt.think, settings: bt.settings ?? null, ask: bt.ask, count: items.length,
+    done: ran.length, passed: ran.filter(runsOk).length, waiting: items.filter((x) => x.state === 'waiting').length,
+    status: items.some((x) => x.state === 'running') ? 'running' : items.some((x) => x.state === 'waiting') ? (state.paused ? 'paused' : 'waiting') : items.some((x) => x.state === 'left') || ran.some((x) => x.status === 'stopped') ? 'stopped' : 'done', items };
+}
+function batchesView() {
+  const all = listBattles(), jobs = listJobs();
+  return state.batches.map((bt) => { const v = batchView(bt, all, jobs); delete v.items; delete v.ask; return v; });
+}
+
 const TYPES = { '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const send = (res, code, body, type = 'application/json') => { res.writeHead(code, { 'content-type': type, 'cache-control': 'no-store' }); res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body)); };
 const readBody = (req, max = 30e6) => new Promise((ok) => { const parts = []; let n = 0; req.on('data', (c) => { n += c.length; if (n > max) req.destroy(); else parts.push(c); }); req.on('end', () => { try { ok(JSON.parse(Buffer.concat(parts).toString('utf8') || '{}')); } catch { ok({}); } }); });
@@ -515,6 +548,8 @@ http.createServer(async (req, res) => {
       if (url.pathname === '/api/state') return send(res, 200, view());
       if (url.pathname === '/api/match' || url.pathname === '/api/battle') { const b = matchView(url.searchParams.get('id') ?? ''); return b ? send(res, 200, b) : send(res, 404, { error: 'no such run' }); }
       if (url.pathname === '/api/runs') return send(res, 200, { runs: runsOf(url.searchParams.get('test') ?? '') });
+      if (url.pathname === '/api/batches') return send(res, 200, { batches: batchesView() });
+      if (url.pathname === '/api/batch') { const bt = state.batches.find((x) => x.id === url.searchParams.get('id')); return bt ? send(res, 200, batchView(bt)) : send(res, 404, { error: 'no such group' }); }
       if (url.pathname === '/api/jobs') { const t = url.searchParams.get('test') ?? ''; return send(res, 200, { jobs: listJobs().filter((j) => j.test === t && !(jobLive() && j.id === job.id)).slice(0, 40).map((j) => ({ id: j.id, test: j.test, model: j.model ?? null, think: Boolean(j.think), settings: j.settings ?? null, status: j.status, result: j.result ?? null, secs: j.secs ?? null, endedAt: j.endedAt ?? null, pair: j.pair ?? null })), live: jobLive() && job.test === t ? jobView(job) : null }); }
       if (url.pathname === '/api/job') { const id = url.searchParams.get('id') ?? ''; if (job && job.id === id) return send(res, 200, jobView(job)); const dir = inside(P.runs, id); const j = dir && readJson(join(dir, 'job.json')); return j ? send(res, 200, jobView({ ...j, dir })) : send(res, 404, { error: 'no such run' }); }
       // A page a model made: /files/<run>/<A|B>/<its path>
@@ -530,9 +565,15 @@ http.createServer(async (req, res) => {
       case '/api/line': {
         const items = makeItems(body.items);
         if (!items.length) return send(res, 400, { error: 'nothing picked to run' });
+        // One press of ▶ Run is one group: its name (the page's words, or the first item's), who, the effort and the settings.
+        const first = (Array.isArray(body.items) ? body.items : [])[0] ?? {};
+        const batch = { id: newKey(), name: String(body.name ?? '').trim().slice(0, 80) || (items.length === 1 ? items[0].title : `${items.length} runs`), at: new Date().toISOString(), who: first.who ?? null, vs: first.who === 'both' ? vsOf(first.vs) : null,
+          think: first.think === true, settings: cleanSettings(first.settings), ask: body.items, items: items.map((x) => ({ key: x.key, kind: x.kind, test: x.test, title: x.title, who: x.who, ...(x.vs ? { vs: x.vs } : {}) })) };
+        for (const x of items) x.batch = batch.id;
+        state.batches = [batch, ...state.batches].slice(0, 60);
         state.line.push(...items); state.paused = false; saveState(); tick();
         log(`line: ${items.length} added (${state.line.length} waiting)`);
-        return send(res, 200, { ok: true, added: items.length, keys: items.map((x) => x.key) });
+        return send(res, 200, { ok: true, added: items.length, keys: items.map((x) => x.key), batch: batch.id });
       }
       case '/api/unqueue': { const n = state.line.length; state.line = state.line.filter((x) => x.key !== body.key && (!body.group || x.group !== body.group)); saveState(); return send(res, 200, { ok: true, removed: n - state.line.length }); }
       case '/api/clearline': {
@@ -566,6 +607,8 @@ http.createServer(async (req, res) => {
       case '/api/clearresults': {
         if (busy) return send(res, 409, { error: 'something is running: stop it first' });
         const n = trashBattles(); log(`results cleared (${n} runs moved to trash)`);
+        // The groups go too, but for one still waiting in the line.
+        state.batches = state.batches.filter((bt) => state.line.some((x) => x.batch === bt.id)); saveState();
         return send(res, 200, { ok: true, moved: n });
       }
       case '/api/tests/delete': { trashTest(String(body.id ?? '')); state.line = state.line.filter((x) => !(x.kind === 'test' && x.test === body.id)); saveState(); return send(res, 200, { ok: true }); }

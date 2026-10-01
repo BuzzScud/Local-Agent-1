@@ -43,6 +43,9 @@ const events = join(out, 'events.jsonl');
 writeFileSync(events, '');
 const t0 = Date.now();
 const emit = (e) => appendFileSync(events, `${JSON.stringify({ t: (Date.now() - t0) / 1000, ...e })}\n`);
+// Under a step, the Arena's run screen shows what it gave: a command's last lines, a change's first ones.
+const outOf = (ev) => (ev.view?.kind === 'diff' ? (ev.view.hunk ?? []).filter((h) => h.type !== ' ').slice(0, 3).map((h) => `${h.type} ${String(h.text).slice(0, 150)}`)
+  : Array.isArray(ev.view?.lines) ? ev.view.lines.filter((l) => String(l).trim()).slice(-3).map((l) => String(l).slice(0, 160)) : []);
 
 const dir = mkdtempSync(join(tmpdir(), 'agentic-battle-'));
 const work = join(dir, 'project');
@@ -73,7 +76,7 @@ try {
   const answers = (q) => { const hit = (meta.answers ?? []).find((r) => new RegExp(r.match, 'i').test(q)); emit({ type: 'asked', text: q, reply: hit?.reply ?? null }); return hit ? hit.reply : 'I do not know. If the files do not tell you, decide for yourself and say what you chose.'; };
   run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort: thinking ? 'high' : undefined, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: true, flows: true, helpers, embedder, prewarm: true, design,
     onEvent: (type, ev) => {
-      if (type === 'tool') emit({ type: 'step', label: ev.label, arg: String(ev.arg ?? '').replace(/\s+/g, ' ').slice(0, 120), kind: ev.error ? 'error' : (KIND[ev.label] ?? 'read'), err: ev.error ? String(ev.error).slice(0, 160) : '' });
+      if (type === 'tool') { const o = outOf(ev); emit({ type: 'step', label: ev.label, arg: String(ev.arg ?? '').replace(/\s+/g, ' ').slice(0, 120), kind: ev.error ? 'error' : (KIND[ev.label] ?? 'read'), err: ev.error ? String(ev.error).slice(0, 160) : '', ...(o.length ? { out: o } : {}) }); }
       if (type === 'note') emit({ type: 'note', text: ev.text });
     } });
 } catch (e) { run = { reason: why === 'stopped' ? 'stopped' : `crash: ${e.message}`, finalText: '', log: [], secs: 0 }; emit({ type: 'note', text: why === 'stopped' ? 'stopped' : `crashed: ${e.message}` }); }

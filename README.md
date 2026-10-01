@@ -247,10 +247,11 @@ bun run check              # is anything here that should not be? secrets, packa
 
 Every test run adds a line to the test record (`~/.agentic-coder/tests/record.jsonl`); `/tests` in Agentic
 Coder (or `coding hub tests`) shows it. Tests are run from the hub's **Arena** tab (`/arena`, or `/test` with a
-test named; it is the Tests tab and the Battle tab as one): tick tests, sets or checks on the left, say who runs
-them on the right (Gemma, Qwen, or both: a battle, with a blind vote) and set the run in the panel, then press the
-button and watch the result in the middle. Everything runs one at a time in one line, keeps going if you close
-Agentic Coder, and Stop is there while it runs.
+test named; it is the Tests tab and the Battle tab as one), in four steps: **1 Model & settings** (who runs it, a
+model alone or any two in a battle with a blind vote, and the panel), **2 Tests** (One test or check, or a Group of
+tests, sets and checks), **3 Run** (the group's timeline on top and a terminal of every step, command and answer as it
+happens) and **4 Results** (that group's, with every step, and every earlier group). Everything runs one at a time in
+one line, keeps going if you close Agentic Coder, and Stop is there while it runs.
 
 The hub's **Test builder** tab (`coding hub builder`, or + New in the Arena) is where tests of your own are
 made: paste a list of prompts or write one, give each a level (Easy, Medium, Hard: its points and its time limit),

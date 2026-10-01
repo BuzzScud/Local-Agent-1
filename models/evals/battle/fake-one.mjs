@@ -16,6 +16,7 @@ const t0 = Date.now();
 const ev = join(out, 'events.jsonl');
 writeFileSync(ev, '');
 const emit = (e) => appendFileSync(ev, `${JSON.stringify({ t: (Date.now() - t0) / 1000, ...e })}\n`);
+emit({ type: 'note', text: 'loaded' }); // as run-one.mjs says once its model is up: the clock starts
 const STEPS = [['Read', 'the starter files', 'read'], ['Search', 'where it is used', 'read'], ['Update', 'the main file', 'edit'], ['Bash', 'npm test', 'bash'], ['Update', 'a test', 'edit'], ['Bash', 'npm test', 'bash']].slice(0, 3 + (h % 4));
 let stopped = false;
 process.on('SIGTERM', () => { stopped = true; });
@@ -24,7 +25,7 @@ for (const [label, arg, kind] of STEPS) {
   if (stopped) break;
   await new Promise((r) => setTimeout(r, stepMs));
   const s = { t: (Date.now() - t0) / 1000, label, arg, kind, err: '' };
-  steps.push(s); emit({ type: 'step', ...s });
+  steps.push(s); emit({ type: 'step', ...s, ...(kind === 'bash' ? { out: ['(a practice run: no model)', '3 tests pass'] } : {}) });
 }
 const pass = !stopped && h % 4 !== 0;
 const pages = [];
