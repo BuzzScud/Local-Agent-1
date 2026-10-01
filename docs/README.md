@@ -10,8 +10,12 @@ files with nothing loaded from outside; download one and open it in a browser to
 |---|---|---|---|---|
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 355 KB | 2026-10-01 |
 | [tests/agentic-coder-model-check-k2-2026-10-01-0000.html](tests/agentic-coder-model-check-k2-2026-10-01-0000.html) | page | New model check · K2 Horizon 7B | 9 KB | 2026-10-01 |
+| [design rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html) | page | Start page agents | 1.4 MB | 2026-10-01 |
+| [design rounds/agentic-coder-start-page-icons-3-designs-2026-09-30.html](design%20rounds/agentic-coder-start-page-icons-3-designs-2026-09-30.html) | page | Start page icons | 1.4 MB | 2026-10-01 |
 | [tests/agentic-coder-model-check-k2-2026-09-30-2346.html](tests/agentic-coder-model-check-k2-2026-09-30-2346.html) | page | New model check · K2 Horizon 7B | 8 KB | 2026-10-01 |
 | [tests/agentic-coder-model-check-k2-2026-09-30-2341.html](tests/agentic-coder-model-check-k2-2026-09-30-2341.html) | page | New model check · K2 Horizon 7B | 8 KB | 2026-10-01 |
+| [design rounds/agentic-coder-start-page-left-column-3-designs-2026-09-30-v2.html](design%20rounds/agentic-coder-start-page-left-column-3-designs-2026-09-30-v2.html) | page | Start page left column v2 | 1.2 MB | 2026-10-01 |
+| [older versions/agentic-coder-start-page-left-column-3-designs-2026-09-30.html](older%20versions/agentic-coder-start-page-left-column-3-designs-2026-09-30.html) | page | Start page left column | 723 KB | 2026-10-01 |
 | [reports/where-qwen-lands-2026-09-30-v5.html](reports/where-qwen-lands-2026-09-30-v5.html) | page | Where Qwen Lands | 43 KB | 2026-10-01 |
 | [older versions/where-qwen-lands-2026-09-30-v4.html](older%20versions/where-qwen-lands-2026-09-30-v4.html) | page | Where Qwen Lands | 44 KB | 2026-10-01 |
 | [older versions/where-qwen-lands-2026-09-30-v3.html](older%20versions/where-qwen-lands-2026-09-30-v3.html) | page | Where Qwen Lands | 43 KB | 2026-10-01 |
@@ -111,6 +115,9 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html](tests/agentic-coder-prompt-old-vs-new-gemma-2026-09-30-0700.html) | page | Prompt old vs new · Gemma 4 12B QAT | 21 KB | 2026-09-30 |
 | [design rounds/agentic-coder-arena-4-designs-2026-09-30.html](design%20rounds/agentic-coder-arena-4-designs-2026-09-30.html) | page | Arena · 4 designs | 221 KB | 2026-09-30 |
 | [design rounds/agentic-coder-test-builder-2-designs-2026-09-30.html](design%20rounds/agentic-coder-test-builder-2-designs-2026-09-30.html) | page | Test builder designs | 82 KB | 2026-09-30 |
+| [design rounds/agentic-coder-start-page-live-preview-2026-09-29.html](design%20rounds/agentic-coder-start-page-live-preview-2026-09-29.html) | page | Start page preview | 374 KB | 2026-09-30 |
+| [design rounds/agentic-coder-start-page-4-designs-2026-09-29.html](design%20rounds/agentic-coder-start-page-4-designs-2026-09-29.html) | page | Start page designs | 342 KB | 2026-09-30 |
+| [design rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html](design%20rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html) | page | Start page designs | 917 KB | 2026-09-30 |
 | [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-09-30 |
 | [design rounds/agentic-coder-conversation-2-designs-2026-09-29.html](design%20rounds/agentic-coder-conversation-2-designs-2026-09-29.html) | page | Conversation redesign | 172 KB | 2026-09-30 |
 | [tests/agentic-coder-weather-widget-session-2026-09-29.html](tests/agentic-coder-weather-widget-session-2026-09-29.html) | page | Weather widget session | 176 KB | 2026-09-30 |
