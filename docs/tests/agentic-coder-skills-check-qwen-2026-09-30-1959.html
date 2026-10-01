@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills check · Qwen3.5 9B</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--faint:#a19c90;--line:#e3dfd5;--soft:#efece4;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--faint:#6f6c66;--line:#2e3037;--soft:#24262c;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.panel[hidden]{display:none}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:top}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small{display:block;color:var(--faint);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.what{white-space:normal;color:var(--mute);font-size:13.5px;min-width:260px}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--faint)}.small{font-size:13px;margin:0}
+ol.list{margin:0;padding-left:22px;columns:2 360px;column-gap:32px}ol.list li{margin:0 0 6px;break-inside:avoid}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 7px}ul.how code{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card .v{font-size:20px}th,td{padding:5px 10px}ul.how li{margin:0 0 4px}}
+@media (max-width:760px),(max-height:560px){body{overflow:auto;height:auto}.panel{overflow:visible}.table-wrap{overflow-x:auto}td.what{min-width:220px}}
+</style>
+</head>
+<body>
+<header><h1>Skills check · Qwen3.5 9B</h1><span class="date">Sep 30 19:59 · a545aa8+</span></header>
+<div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true" data-tab="result">1 · Result</button><button type="button" role="tab" aria-selected="false" data-tab="checks">2 · The checks</button><button type="button" role="tab" aria-selected="false" data-tab="how">3 · How it was measured</button></div>
+<main class="panel" id="p-result"><p class="verdict">Yes: with the skill Qwen3.5 9B passed 3 of 3 tasks (without it: 3) and took 55% less time in all, inside the rule. Without the skill’s words, the model did not open it from the skills list.</p><div class="chips"><span class="chip ok">✓ pass: with the skill, at least as many tasks pass and at most 25% more time</span><span class="chip">Sep 30 19:59 · a545aa8+</span></div><div class="cards"><div class="card"><div class="k">Tasks passed without → with the skill · higher is better</div><div class="v">3 → 3 of 3</div><div class="s">the same three tasks, one after the other</div></div><div class="card"><div class="k">Time, all three tasks · lower is faster</div><div class="v">277 s → 124 s</div><div class="s">−55% with the skill</div></div><div class="card"><div class="k">Ran just the new test file · higher is better</div><div class="v">1 → 3 of 3</div><div class="s">the skill’s step 3: not the whole suite</div></div><div class="card"><div class="k">No words: opened from the list · yes is better</div><div class="v">no</div><div class="s">Read SKILLS/write-a-test by itself</div></div></div><ol class="list"><li><span class="ok">✓</span> add a test for withTax in src/cart.mjs · no skill <span class="dim">· 141 s</span></li><li><span class="ok">✓</span> add a test for withTax in src/cart.mjs · with the skill <span class="dim">· 56 s</span></li><li><span class="ok">✓</span> write a test for applyDiscount in src/price.mjs · no skill <span class="dim">· 90 s</span></li><li><span class="ok">✓</span> write a test for applyDiscount in src/price.mjs · with the skill <span class="dim">· 38 s</span></li><li><span class="ok">✓</span> add a unit test that total of an empty list is 0 (src/cart.mjs) · no skill <span class="dim">· 46 s</span></li><li><span class="ok">✓</span> add a unit test that total of an empty list is 0 (src/cart.mjs) · with the skill <span class="dim">· 30 s</span></li><li><span class="ok">✓</span> create a file test/tax.test.mjs that checks withTax from src/cart.mjs · no skill words (the list) <span class="dim">· 72 s</span></li></ol><p class="dim small">Tab 2 has what each check showed.</p></main>
+<main class="panel" id="p-checks" hidden><div class="table-wrap"><table><thead><tr><th>#</th><th>Check</th><th>Result</th><th class="num">Seconds<small>lower is faster</small></th><th>What it showed</th></tr></thead><tbody><tr><td class="dim">1</td><td><b>add a test for withTax in src/cart.mjs · no skill</b></td><td class="ok">✓ passed</td><td class="num">141 s</td><td class="what">1 new test · suite passes · code unchanged · no skill · ran npm test (the whole suite ran) · 9 steps</td></tr><tr><td class="dim">2</td><td><b>add a test for withTax in src/cart.mjs · with the skill</b></td><td class="ok">✓ passed</td><td class="num">56 s</td><td class="what">1 new test · suite passes · code unchanged · skill picked · ran npm test -- test/cart.test.mjs · 7 steps</td></tr><tr><td class="dim">3</td><td><b>write a test for applyDiscount in src/price.mjs · no skill</b></td><td class="ok">✓ passed</td><td class="num">90 s</td><td class="what">6 new tests · suite passes · code unchanged · no skill · ran npm test -- test/price.test.mjs · 8 steps</td></tr><tr><td class="dim">4</td><td><b>write a test for applyDiscount in src/price.mjs · with the skill</b></td><td class="ok">✓ passed</td><td class="num">38 s</td><td class="what">3 new tests · suite passes · code unchanged · skill picked · ran node test/price.test.mjs · 7 steps</td></tr><tr><td class="dim">5</td><td><b>add a unit test that total of an empty list is 0 (src/cart.mjs) · no skill</b></td><td class="ok">✓ passed</td><td class="num">46 s</td><td class="what">1 new test · suite passes · code unchanged · no skill · ran npm test (the whole suite ran) · 8 steps</td></tr><tr><td class="dim">6</td><td><b>add a unit test that total of an empty list is 0 (src/cart.mjs) · with the skill</b></td><td class="ok">✓ passed</td><td class="num">30 s</td><td class="what">1 new test · suite passes · code unchanged · skill picked · ran node --test test/cart.test.mjs · 6 steps</td></tr><tr><td class="dim">7</td><td><b>create a file test/tax.test.mjs that checks withTax from src/cart.mjs · no skill words (the list)</b></td><td class="ok">✓ passed</td><td class="num">72 s</td><td class="what">5 new tests · suite passes · code unchanged · no skill · ran npm test (the whole suite ran) · 6 steps</td></tr></tbody></table></div></main>
+<main class="panel" id="p-how" hidden><ul class="how"><li>The model: Qwen3.5 9B, through <b>coding -p --yes</b> (thinking off, no memory, Who decides: App), in a throwaway home whose engine and model files are links to the ones in ~/.agentic-coder. A first request loads the model and is not counted.</li><li>The skill: “Write a test”, the example terminal/rules/SKILLS.md ships switched off, turned on in a throwaway rules folder (AGENTIC_RULES_DIR). Without skills, the same file as shipped: none on, so the app takes its own path, as today.</li><li>The project: a small shop (src/cart.mjs, src/price.mjs) with node --test and one test; a second test file leaves a mark when the whole suite runs, so a run of just one file is told apart. Each run starts from a fresh copy.</li><li>A task passes when a new test uses the function asked about, the whole suite passes afterwards (run by the check), and the code under test is unchanged.</li><li>The rule, written before the first run: with the skill, at least as many tasks pass as without, and the three take at most 25% more time in all. The seventh run asks without the skill’s words, so only the skills list in the instructions can lead the model to it.</li><li>Nothing in ~/.agentic-coder was written but this run’s line in the test record. The Mac’s load at the end: 2.7. Code: a545aa8+.</li><li>Raw results, on this Mac: <code>models/qwen3.5-9b/results/skills-check-2026-09-30-1959</code></li></ul></main>
+<script>
+const tabs = [...document.querySelectorAll('[data-tab]')];
+const show = (id) => { tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === id))); document.querySelectorAll('.panel').forEach((p) => { p.hidden = p.id !== 'p-' + id; }); try { history.replaceState(null, '', '#' + id); } catch {} };
+tabs.forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+addEventListener('keydown', (e) => { if (e.metaKey || e.ctrlKey || e.altKey) return; const n = Number(e.key); if (n >= 1 && n <= tabs.length) show(tabs[n - 1].dataset.tab); });
+const fromHash = () => { if (tabs.some((b) => '#' + b.dataset.tab === location.hash)) show(location.hash.slice(1)); };
+addEventListener('hashchange', fromHash);
+fromHash();
+</script>
+</body>
+</html>

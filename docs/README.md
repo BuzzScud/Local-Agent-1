@@ -8,10 +8,11 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 333 KB | 2026-10-01 |
+| [tests/agentic-coder-skills-check-qwen-2026-09-30-1959.html](tests/agentic-coder-skills-check-qwen-2026-09-30-1959.html) | page | Skills check · Qwen3.5 9B | 11 KB | 2026-10-01 |
 | [design rounds/agentic-coder-agents-md-before-after-2026-09-30.html](design%20rounds/agentic-coder-agents-md-before-after-2026-09-30.html) | page | AGENTS.md Before After | 51 KB | 2026-09-30 |
 | [tests/agentic-coder-rules-file-qwen-2026-09-30-1832.html](tests/agentic-coder-rules-file-qwen-2026-09-30-1832.html) | page | Rules file old vs new · Qwen3.5 9B | 20 KB | 2026-09-30 |
 | [tests/agentic-coder-subagent-check-qwen-2026-09-30-1823.html](tests/agentic-coder-subagent-check-qwen-2026-09-30-1823.html) | page | Subagent check · Qwen3.5 9B | 9 KB | 2026-09-30 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 326 KB | 2026-09-30 |
 | [older versions/agentic-coder-vision-check-qwen-2026-09-30-1709.html](older%20versions/agentic-coder-vision-check-qwen-2026-09-30-1709.html) | page | Vision check · Qwen3.5 9B | 11 KB | 2026-09-30 |
 | [older versions/agentic-coder-vision-check-qwen-2026-09-30-1655.html](older%20versions/agentic-coder-vision-check-qwen-2026-09-30-1655.html) | page | Vision check · Qwen3.5 9B | 11 KB | 2026-09-30 |
 | [older versions/agentic-coder-vision-check-gemma-2026-09-30-1714.html](older%20versions/agentic-coder-vision-check-gemma-2026-09-30-1714.html) | page | Vision check · Gemma 4 12B QAT | 11 KB | 2026-09-30 |
