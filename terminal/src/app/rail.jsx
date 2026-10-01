@@ -157,7 +157,7 @@ export function CheckNode({ check }) {
   if (!n) return <Node g="◎" c={C.ok}><Text><Text color={C.ok} bold>Layout check</Text><Text color={PATH}>  {check.page}</Text><Text color={C.ok}>  ✓ nothing broken</Text><Text color={C.dim}> · {where}</Text></Text></Node>;
   return (
     <Box flexDirection="column">
-      <Node g="◎" c={C.warn}><Text><Text color={C.warn} bold>Layout check</Text><Text color={PATH}>  {check.page}</Text><Text color={C.warn}>  ✗ {plural(n, 'problem')}{check.again ? ' left' : ''}</Text><Text color={C.dim}> · {where}{check.again ? '' : ' · sent back to fix'}</Text></Text></Node>
+      <Node g="◎" c={C.warn}><Text><Text color={C.warn} bold>Layout check</Text><Text color={PATH}>  {check.page}</Text><Text color={C.warn}>  ✗ {plural(n, 'problem')}{check.again ? ' left' : ''}</Text><Text color={C.dim}> · {where}{(check.sent ?? !check.again) ? ' · sent back to fix' : ''}</Text></Text></Node>
       {check.problems.slice(0, 6).map((p, i) => <Pipe key={i}><Text color="ansi256(250)">{p}</Text></Pipe>)}
       {n > 6 ? <Pipe><Text color={C.dim}>… {n - 6} more</Text></Pipe> : null}
     </Box>

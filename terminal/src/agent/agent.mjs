@@ -47,6 +47,10 @@ import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 
 const MAX_STEPS = 40;
+// How many times what the layout check finds goes back to the model in one
+// message: the first look, and once more when its fix left something (30 Sep:
+// Qwen's one fix made the play button fainter, 3.9 → 3.7:1, and the turn ended).
+const LAYOUT_ROUNDS = 2;
 // When the model decides (way.mjs): the calls of one reply that run, in order.
 export const MAX_CALLS = 8;
 // Its own tools on Model (tools.mjs MODEL_TOOL_DEFS), run by the agent itself.
@@ -510,10 +514,11 @@ export class Agent extends EventEmitter {
   }
 
   // The layout check of the pages this message changed (flows/layoutcheck.mjs):
-  // the text for the model when something is broken, else null. `again`: the
-  // look after its fix, which only tells you what is left.
+  // the text for the model when something is broken, else null. `again`: a
+  // look after its fix, which says what is left. `send`: what it finds goes
+  // back to the model (the first look, and the second of LAYOUT_ROUNDS).
   // `quiet`: no notes (the look at the end of the turn, see stillBroken).
-  async checkLayout(again = false, { quiet = false } = {}) {
+  async checkLayout(again = false, { quiet = false, send = !again } = {}) {
     if (!designSettings(this.designSaved).check || !this.turn?.startTexts?.size) return null;
     const pages = pagesToCheck(this.cwd, [...this.turn.startTexts.keys()]);
     if (!pages.length) return null;
@@ -534,11 +539,11 @@ export class Agent extends EventEmitter {
       if (r.skipped) { this.emit('note', { text: `Layout check skipped for ${rel}: ${r.skipped}.`, tone: 'dim' }); continue; }
       const n = r.problems.length;
       // `check` is the same result for the screen, which draws it as a step with each problem named.
-      const check = { page: rel, problems: r.problems, secs: r.secs, again };
+      const check = { page: rel, problems: r.problems, secs: r.secs, again, sent: send };
       if (quiet) { if (n) left.push({ page: rel, problems: r.problems }); continue; }
       if (!n) this.emit('note', { text: `Layout check, ${rel}: nothing broken at 1440 px, on a phone or in dark mode (${r.secs.toFixed(1)} s).`, tone: 'dim', check });
-      else this.emit('note', { text: `Layout check, ${rel}: ${n} problem${n === 1 ? '' : 's'}${again ? ' left' : ''} (${r.secs.toFixed(1)} s)${again ? `: ${r.problems.slice(0, 3).join(' ')}` : ', sent back to fix.'}`, tone: 'warn', check });
-      if (n) { notes.push(layoutNote(rel, r.problems)); left.push({ page: rel, problems: r.problems }); }
+      else this.emit('note', { text: `Layout check, ${rel}: ${n} problem${n === 1 ? '' : 's'}${again ? ' left' : ''} (${r.secs.toFixed(1)} s)${send ? ', sent back to fix.' : `: ${r.problems.slice(0, 3).join(' ')}`}`, tone: 'warn', check });
+      if (n) { notes.push(layoutNote(rel, r.problems, again)); left.push({ page: rel, problems: r.problems }); }
     }
     // After its fix: what is still broken, and how many edits the turn had then.
     if (this.turn && again) { this.turn.layoutLeft = left.length ? left : null; this.turn.editsAtLook = this.turn.edits ?? 0; }
@@ -927,7 +932,7 @@ export class Agent extends EventEmitter {
     let verified = false;
     let doneUnchanged = false; // sent back once for saying done with nothing changed
     let lostChecked = false;
-    let layoutSent = false;
+    let layoutSends = 0; // what the layout check found, sent back at most LAYOUT_ROUNDS times
     let layoutDone = false;
     let correctedAlready = false;
     let blankRetry = false;
@@ -1091,12 +1096,13 @@ export class Agent extends EventEmitter {
             }
           }
           // A page it made or changed: opened in a browser and measured
-          // (flows/layoutcheck.mjs). What is broken goes back once; after the
-          // fix it looks again and says what is left.
+          // (flows/layoutcheck.mjs). What is broken goes back; after the fix
+          // it looks again, and what is left goes back once more
+          // (LAYOUT_ROUNDS); after that the turn ends with "Still broken".
           if (this.turn.changed && !layoutDone && !signal?.aborted && this.hook('layout')) {
-            const found = await this.checkLayout(layoutSent);
-            if (found && !layoutSent) {
-              layoutSent = true;
+            const found = await this.checkLayout(layoutSends > 0, { send: layoutSends < LAYOUT_ROUNDS });
+            if (found && layoutSends < LAYOUT_ROUNDS) {
+              layoutSends++;
               this.messages.push({ role: 'user', content: auto(found) });
               continue;
             }

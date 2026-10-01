@@ -224,6 +224,50 @@ test('the layout check: problems in plain words, each once; head lines checked f
   expect(L.layoutNote('page.html', out)).toMatch(/^The layout check opened page\.html in a browser[\s\S]*\n1\. [\s\S]*Fix these in the page with Edit/);
 });
 
+// Qwen, 30 Sep: the media player's play button was #1c1b18 on #2a78d6 (3.9:1) at 1440 px and
+// 2.4:1 in dark mode. Only the first was told (one key for both), and the "fix" went the wrong
+// way: white on a lighter blue, 3.7:1. Now dark mode is told too, with a colour that passes.
+test('the layout check: faint text is told in light and in dark mode, each with a colour that passes and which way it goes', () => {
+  const found = (over = {}) => ({ w: 1440, h: 900, errors: [], sideways: null, wide: [], overlaps: [], spills: [], cuts: [], contrast: [], faint: 1, tiny: 0, tinyEx: null, blank: false, ...over });
+  const html = '<meta charset="utf-8"><meta name="viewport" content="width=device-width">';
+  const play = '"▶" (button.main-play-btn)';
+  const out = L.problemsOf(html, [
+    { pass: L.PASSES[0], found: found({ contrast: [{ el: play, fg: '#ffffff', bg: '#3b82f6', ratio: 3.7, need: 4.5 }] }) },
+    { pass: L.PASSES[1], found: found({ w: 390, contrast: [{ el: play, fg: '#ffffff', bg: '#3b82f6', ratio: 3.7, need: 4.5 }] }) },
+    { pass: L.PASSES[2], found: found({ contrast: [{ el: play, fg: '#ffffff', bg: '#60a5fa', ratio: 2.5, need: 4.5 }] }) },
+  ]);
+  expect(out).toHaveLength(2); // the phone's is the same as 1440 px; dark mode's colours are its own
+  // a page with no dark colours of its own: the same pair in dark mode is told once
+  const same = L.problemsOf(html, [
+    { pass: L.PASSES[0], found: found({ contrast: [{ el: play, fg: '#ffffff', bg: '#3b82f6', ratio: 3.7, need: 4.5 }] }) },
+    { pass: L.PASSES[2], found: found({ contrast: [{ el: play, fg: '#ffffff', bg: '#3b82f6', ratio: 3.7, need: 4.5 }] }) },
+  ]);
+  expect(same).toHaveLength(1);
+  expect(out[0]).toMatch(/^Text is too faint to read at 1440×900: "▶" \(button\.main-play-btn\) is #ffffff on #3b82f6 \(3\.7:1; needs 4\.5:1\)\. To pass: keep the text and make the background darker, such as (#[0-9a-f]{6}) \((\d\.\d):1\)\.$/);
+  expect(out[1]).toMatch(/^Text is too faint to read in dark mode: "▶" \(button\.main-play-btn\) is #ffffff on #60a5fa \(2\.5:1; needs 4\.5:1\)\. To pass: keep the text and make the background darker, such as #[0-9a-f]{6}/);
+  // the colours given really pass
+  for (const p of out) {
+    const [, hex] = /such as (#[0-9a-f]{6})/.exec(p);
+    expect(L.contrastOf('#ffffff', hex)).toBeGreaterThanOrEqual(4.5);
+  }
+  // each way that works: grey text on white can only get darker; dark text on the old blue
+  // only passes with a lighter blue; white on it only with a darker one
+  const grey = L.passingColours('#b0b0b0', '#ffffff', 4.5);
+  expect(grey.back).toBeNull();
+  expect(grey.text.way).toBe('darker');
+  expect(L.contrastOf(grey.text.hex, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+  const ink = L.passingColours('#1c1b18', '#2a78d6', 4.5);
+  expect(ink.text).toBeNull(); // not even black reaches 4.8:1 on it
+  expect(ink.back.way).toBe('lighter');
+  expect(L.contrastOf('#1c1b18', ink.back.hex)).toBeGreaterThanOrEqual(4.5);
+  expect(L.passingColours('#ffffff', '#2a78d6', 4.5).back.way).toBe('darker');
+  // large text needs 3:1
+  expect(L.contrastOf('#ffffff', L.passingColours('#ffffff', '#60a5fa', 3).back.hex)).toBeGreaterThanOrEqual(3);
+  // the second time, the note says the last change did not fix it
+  expect(L.layoutNote('card.html', out, true)).toMatch(/^The layout check looked at card\.html again after your fix, and it still finds:\n1\. [\s\S]*\nYour last change did not fix these\. Fix them with Edit \(small edits, not a rewrite\); where a colour is given, use it\./);
+  expect(L.layoutNote('card.html', out.slice(0, 1), true)).toContain('Your last change did not fix it. Fix it with Edit');
+});
+
 test('the probe goes first in <head> on its own line, so script line numbers stay right; server pages are left alone', () => {
   const html = '<!doctype html>\n<html>\n<head><meta charset="utf-8">\n<script>x()</script>';
   const out = L.withProbe(html, '/tmp/site', 'file:///tmp/p/probe.js');
@@ -365,6 +409,9 @@ test.skipIf(!chrome)('the agent: a "fix" the layout check does not agree with en
     { text: 'I made dash.html.' },
     { tool: { name: 'Edit', args: { path: 'dash.html', old_text: 'color:#c8c8c8', new_text: 'color:#b0b0b0' } } },
     { text: 'Darkened the date so it meets the 4.5:1 contrast requirement.' },
+    // the second round (LAYOUT_ROUNDS): still too light
+    { tool: { name: 'Edit', args: { path: 'dash.html', old_text: 'color:#b0b0b0', new_text: 'color:#a0a0a0' } } },
+    { text: 'Darkened the date again; it meets 4.5:1 now.' },
   ]);
   const seen = [];
   const agent = new Agent({ url: fake.url, model: MODELS[DEFAULT_MODEL], cwd, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, ctx: 32768, mode: 'edits', flows: false, verify: false, checkIns: false, ask: async () => ({ choice: 'yes' }), design: { auto: false, check: true } });
@@ -378,7 +425,12 @@ test.skipIf(!chrome)('the agent: a "fix" the layout check does not agree with en
   }
   const last = seen.at(-1);
   expect(last.type).toBe('note');
-  expect(last.text).toMatch(/^Still broken: Text is too faint to read .*"Updated 3 min ago" \(p\.meta\) is #b0b0b0 on #ffffff .*The page check looked at dash\.html again after the fix\.$/);
+  expect(last.text).toMatch(/^Still broken: Text is too faint to read .*"Updated 3 min ago" \(p\.meta\) is #a0a0a0 on #ffffff .*The page check looked at dash\.html again after the fix\.$/);
+  // what was left after the first fix went back once more, with a colour that passes
+  const again = fake.requests.map((r) => JSON.stringify(r.messages.at(-1))).filter((m) => m.includes('looked at dash.html again after your fix'));
+  expect(again).toHaveLength(1);
+  expect(again[0]).toContain('#b0b0b0 on #ffffff');
+  expect(again[0]).toMatch(/To pass: keep the background and make the text darker, such as #[0-9a-f]{6}/);
   // it comes after the answer that said it was fixed
   expect(seen.findIndex((x) => x.type === 'answer' && /4\.5:1/.test(x.text))).toBeLessThan(seen.length - 1);
   expect(fake.remaining()).toBe(0);

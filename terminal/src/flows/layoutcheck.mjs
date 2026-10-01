@@ -17,9 +17,10 @@
 //   dead button   a button that changes nothing when clicked, twice (a pass of
 //                 its own; Qwen, 29 Sep: "Load Different Data" said it swapped
 //                 5 scenarios and always drew the same one)
-// The problems go back to the model once (agent.mjs), in plain words with the
-// element and the numbers; after its fix the check runs again and says what is
-// left. How: a copy of the page in a scratch folder with two tags added at the
+// The problems go back to the model (agent.mjs), in plain words with the
+// element and the numbers, and for faint text a colour that would pass; after
+// its fix the check runs again, and what is left goes back once more
+// (LAYOUT_ROUNDS) before the turn ends with a "Still broken" line. How: a copy of the page in a scratch folder with two tags added at the
 // top of <head> (on the same line, so script line numbers stay right): the
 // probe script, and a <base> pointing at the page's own folder so its CSS,
 // scripts and images still load. Chrome's --dump-dom prints the page after
@@ -325,7 +326,61 @@ export async function layoutCheck(pageAbs, { chrome = findChrome(), passes = PAS
 
 const where = (p) => (p.name === 'phone' ? `on a phone (${p.width} px wide)` : p.dark ? 'in dark mode' : `at ${p.width}×${p.height}`);
 
-// Plain sentences, each problem once (the first size it shows at).
+// Colours a pair of text and background could have to pass, close to the
+// pair that failed (Qwen, 30 Sep: told the play button's #1c1b18 on #2a78d6
+// was 3.9:1, it chose white on a LIGHTER blue, 3.7:1 — the wrong way). For
+// each of the two, the nearest shade of the same hue (HSL lightness) that
+// reaches a little over the need with the other kept, and which way it went.
+const rgbOf = (hex) => { const h = String(hex).replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
+const hexOf = (rgb) => `#${rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')}`;
+const lumOf = (rgb) => {
+  const c = rgb.map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+export const contrastOf = (a, b) => { const x = lumOf(rgbOf(a)), y = lumOf(rgbOf(b)); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+function hslOf([r, g, b]) {
+  const [R, G, B] = [r / 255, g / 255, b / 255];
+  const max = Math.max(R, G, B), min = Math.min(R, G, B), l = (max + min) / 2, d = max - min;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = max === R ? ((G - B) / d) % 6 : max === G ? (B - R) / d + 2 : (R - G) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+}
+function rgbOfHsl(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+// `move` made darker (when it is already the darker of the two) or lighter
+// until it reaches `target` against `keep`: { hex, ratio, way }, or null when
+// even black or white would not.
+function shadeThatPasses(move, keep, target, need) {
+  const [h, s, l] = hslOf(rgbOf(move));
+  const darker = lumOf(rgbOf(move)) <= lumOf(rgbOf(keep));
+  const end = darker ? 0 : 1;
+  const at = (x) => hexOf(rgbOfHsl(h, s, x));
+  if (contrastOf(at(end), keep) < target) return null;
+  let lo = l, hi = end; // lo falls short, hi reaches it
+  for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (contrastOf(at(mid), keep) >= target) hi = mid; else lo = mid; }
+  const hex = at(hi), ratio = contrastOf(hex, keep);
+  return ratio >= need ? { hex, ratio, way: darker ? 'darker' : 'lighter' } : null;
+}
+export function passingColours(fg, bg, need) {
+  const target = need + 0.3; // a little over, so the next look does not land on 4.4
+  return { text: shadeThatPasses(fg, bg, target, need), back: shadeThatPasses(bg, fg, target, need) };
+}
+const oneDecimal = (r) => (Math.floor(r * 10) / 10).toFixed(1);
+function passingHint(fg, bg, need) {
+  const { text, back } = passingColours(fg, bg, need);
+  const ways = [
+    text && `keep the background and make the text ${text.way}, such as ${text.hex} (${oneDecimal(text.ratio)}:1)`,
+    back && `keep the text and make the background ${back.way}, such as ${back.hex} (${oneDecimal(back.ratio)}:1)`,
+  ].filter(Boolean);
+  return ways.length ? ` To pass: ${ways.join('; or ')}.` : '';
+}
+
+// Plain sentences, each problem once (the first size it shows at; faint text
+// once for each pair of colours, so dark mode's own colours are told too).
 export function problemsOf(html, results) {
   const out = [];
   const seen = new Set();
@@ -352,15 +407,21 @@ export function problemsOf(html, results) {
     for (const [a, b] of f.overlaps ?? []) add(`ov:${a}|${b}`, `Text is drawn on top of other text ${at}: ${a} overlaps ${b}.`);
     for (const s of f.spills ?? []) add(`sp:${s.el}`, `Text runs out of its box ${at}: ${s.el}, by ${s.by} px.`);
     for (const c of f.cuts ?? []) add(`cut:${c.el}`, `Text is cut off ${at}: ${c.el} hides ${c.by} px of it with no "…".`);
-    for (const c of f.contrast ?? []) add(`con:${c.el}`, `Text is too faint to read ${at}: ${c.el} is ${c.fg} on ${c.bg} (${c.ratio}:1; needs ${c.need}:1)${f.faint > 3 ? `, one of ${f.faint} such pieces` : ''}.`);
+    // Keyed by its colours too: by the piece alone, the play button's 2.4:1
+    // in dark mode was dropped, as its 3.9:1 at 1440 px came first (30 Sep).
+    // A page with no dark colours of its own shows the same pair: told once.
+    for (const c of f.contrast ?? []) add(`con:${c.el}|${c.fg}|${c.bg}`, `Text is too faint to read ${at}: ${c.el} is ${c.fg} on ${c.bg} (${c.ratio}:1; needs ${c.need}:1)${f.faint > 3 ? `, one of ${f.faint} such pieces` : ''}.${passingHint(c.fg, c.bg, c.need)}`);
     if (f.tiny && f.tinyEx) add('tiny', `Some text is too small to read (${f.tiny} piece${f.tiny === 1 ? '' : 's'} under 11 px, e.g. ${f.tinyEx.el} at ${f.tinyEx.size} px).`);
   }
   return out;
 }
 
-// What goes back to the model.
-export function layoutNote(rel, problems) {
-  return `The layout check opened ${rel} in a browser (1440×900, a 390-wide phone, and dark mode), clicked its buttons, and found:\n${problems.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n')}\nFix these in the page with Edit (small edits, not a rewrite), then say in one sentence what you changed.`;
+// What goes back to the model. `again`: the look after its fix, when what is
+// left goes back a second time.
+export function layoutNote(rel, problems, again = false) {
+  const list = problems.slice(0, 8).map((p, i) => `${i + 1}. ${p}`).join('\n');
+  if (again) return `The layout check looked at ${rel} again after your fix, and it still finds:\n${list}\nYour last change did not fix ${problems.length === 1 ? 'it' : 'these'}. Fix ${problems.length === 1 ? 'it' : 'them'} with Edit (small edits, not a rewrite); where a colour is given, use it. Then say in one sentence what you changed.`;
+  return `The layout check opened ${rel} in a browser (1440×900, a 390-wide phone, and dark mode), clicked its buttons, and found:\n${list}\nFix these in the page with Edit (small edits, not a rewrite), then say in one sentence what you changed.`;
 }
 
 // A page that only works through its own server (a Vite or React index.html,

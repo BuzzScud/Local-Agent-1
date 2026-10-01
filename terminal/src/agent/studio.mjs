@@ -51,9 +51,10 @@ export function studioDir() {
 
 // The user's look (the rules card's colours) as a Tailwind theme: only these
 // colours exist, and each switches with the system's dark mode by itself, so a
-// piece needs no dark: classes. The blue is one step deeper than the rules
-// card's #2a78d6, which is 4.1–4.4:1 as text and under white text; #1f66bd is
-// 5.3–5.7:1. Used when the folder has no styles/theme.css.
+// piece needs no dark: classes. The blue is #1f66bd (5.3–5.7:1), one step
+// deeper than the rules card's old #2a78d6 (4.1–4.4:1 as text and under white
+// text); the rules card has used #1f66bd too since 30 Sep. Used when the folder
+// has no styles/theme.css.
 export const DEFAULT_THEME = `@import "tailwindcss";
 @theme { --color-*: initial; }
 @theme inline {

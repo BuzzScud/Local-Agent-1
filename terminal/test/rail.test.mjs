@@ -47,6 +47,9 @@ test('the layout check is a step that names each problem; after the fix it says 
   expect(first).toContain('◎ Layout check  Desktop/notification-card.html  ✗ 2 problems · 1440 px, phone, dark · 0.6 s · sent back to fix');
   expect(first).toContain('  │ Text is too faint to read at 1440×900: "New" (span.badge) is #ffffff on #2a78d6 (4.4:1; needs 4.5:1).');
   expect(draw(h(CheckNode, { check: { page: 'card.html', problems, secs: 0.5, again: true } }), 200)).toContain('✗ 2 problems left · 1440 px, phone, dark · 0.5 s');
+  expect(draw(h(CheckNode, { check: { page: 'card.html', problems, secs: 0.5, again: true, sent: false } }), 200)).not.toContain('sent back to fix');
+  // the second of two rounds (agent.mjs LAYOUT_ROUNDS): what is left goes back again, and says so
+  expect(draw(h(CheckNode, { check: { page: 'card.html', problems, secs: 0.5, again: true, sent: true } }), 200)).toContain('✗ 2 problems left · 1440 px, phone, dark · 0.5 s · sent back to fix');
   expect(draw(h(CheckNode, { check: { page: 'card.html', problems: [], secs: 0.5, again: false } }), 200)).toContain('◎ Layout check  card.html  ✓ nothing broken · 1440 px, phone, dark · 0.5 s');
 });
 
