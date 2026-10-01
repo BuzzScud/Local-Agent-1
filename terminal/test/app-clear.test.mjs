@@ -23,7 +23,7 @@ test('/clear wipes the screen and the scrollback, shows the start page again, an
   // start page's Recent activity (where /resume brings it back).
   const cleared = r.snapshots.cleared;
   for (const gone of ['PINEAPPLE-42', 'new conversation']) expect(cleared).not.toContain(gone);
-  expect(cleared.split('\n').filter((l) => l.includes('what is two plus two'))).toEqual([expect.stringMatching(/│  \d+m ago {4}what is two plus two/)]);
+  expect(cleared.split('\n').filter((l) => l.includes('what is two plus two'))).toEqual([expect.stringMatching(/│  \d+m ago +what is two plus two/)]);
   expect(cleared.match(/Recent activity/g)).toHaveLength(1);
   expect(cleared).toContain('? for shortcuts');
   const term = r.terms.cleared;

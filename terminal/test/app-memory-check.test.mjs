@@ -47,7 +47,7 @@ test('another copy already loaded: the start says who has it and waits, then sta
       { wait: 'esc starts anyway', ms: 30_000 }, { sleep: 200 }, { snapshot: 'waiting' },
       { wait: ' · effort ', ms: 45_000 }, ...quit,
     ] });
-    expect(r.snapshots.waiting).toMatch(new RegExp(`${DN} · waiting( for memory)? · \\d+s`)); // the start page's model line
+    expect(r.snapshots.waiting).toMatch(new RegExp(`${DN}[\\s│]+[◐◓◑◒] waiting( for memory)? \\d+s`)); // the start page's steps, under the model's name
     expect(r.snapshots.waiting).toMatch(new RegExp(`another program \\(port 17999, [\\d.]+ GB\\) has ${DN} loaded, and two copies do not fit\\. It starts by itself when that is done · esc starts anyway`));
     expect(r.text).not.toContain('Starting anyway');
   } finally { stop(other); }

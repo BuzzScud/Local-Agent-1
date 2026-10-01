@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, botPixels, botRows, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
+import { StartPage, TrustPage, botPixels, botRows, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit } from './app-setup.mjs';
@@ -25,12 +25,18 @@ const START = {
   ],
 };
 
-test('the page: a titled line, the greeting, the model, the folder; recent activity and this folder beside them', () => {
+test('the page: a titled line, the greeting, the bot, the model; recent activity, this folder and keys to try beside them', () => {
   const lines = draw(h(StartPage, { start: START, width: 107 }), 107);
   expect(lines[0]).toMatch(/^── Agentic Coder v\d+\.\d+\.\d+ ─+$/);
   const text = lines.join('\n');
-  for (const s of ['Welcome back!', 'Qwen3.5 9B · effort high · 64k', '~ · your home folder', 'Recent activity', '1h ago', '6h ago', '1d ago', '/resume for more', 'This folder', 'no git', 'reads AGENTS.md + memory']) expect(text).toContain(s);
-  expect(text.match(/in-app notif/g)).toHaveLength(1); // the same prompt run again shows once
+  for (const s of ['Welcome back!', 'Qwen3.5 9B', '● ready · effort high · 64k context', 'Recent activity', '1h ago', '6h ago', '1d ago', '1 prompt', '/resume for more', 'This folder', 'Try', '@ a file   ! a command   / every command']) expect(text).toContain(s);
+  expect(draw(h(StartPage, { start: START, width: 127 }), 127).join('\n')).toContain('/ every command   shift+tab ask · edit · plan'); // as many keys as fit
+  expect(text).toMatch(/where\s+~ · your home folder/); // this folder as labelled rows
+  expect(text).toMatch(/git\s+none here/);
+  expect(text).toMatch(/reads\s+AGENTS\.md \+ memory/);
+  const turns = draw(h(StartPage, { start: { ...START, recent: [{ ...START.recent[0], turns: 4 }] }, width: 107 }), 107).join('\n');
+  expect(turns).toContain('4 prompts'); // how many prompts each one had
+  expect(text.match(/Write a self-contained/g)).toHaveLength(1); // the same prompt run again shows once
   expect(text).toContain('w01 · Fix a futures roll that stays'); // one line, the separator run gone
   expect(text).not.toContain('┌');
   expect(text).not.toContain('╭'); // no box
@@ -45,10 +51,14 @@ test('loading and ready take the same rows, so nothing moves when the page is pr
     const ready = draw(h(StartPage, { start: START, width: w }), w);
     const loading = draw(h(StartPage, { start: START, width: w, loading: { phase: 'reading', secs: 12.4 } }), w);
     expect(loading.length).toBe(ready.length);
-    expect(loading.join('\n')).toContain(w >= 100 ? 'Qwen3.5 9B · reading instructions · 12s' : 'Qwen3.5 9B · reading · 12s');
-    // a long name gets the short words, never a cut line
+    // the start's steps under the model's name: done, now (with its seconds), still to come
+    expect(loading.join('\n')).toContain(w >= 100 ? '✓ model ─ ◐ instructions 12s ─ ○ ready' : '✓ model ◐ reading 12s ○ ready');
+    const model = draw(h(StartPage, { start: START, width: w, loading: { phase: 'loading', secs: 3 } }), w).join('\n');
+    expect(model).toMatch(/[◐◓◑◒] model 3s/);
+    expect(model).toContain('○ ready');
+    // a long name has its own line, never a cut one
     const gemma = draw(h(StartPage, { start: { ...START, model: 'Gemma 4 12B QAT' }, width: w, loading: { phase: 'reading', secs: 12.4 } }), w).join('\n');
-    expect(gemma).toContain(w >= 100 ? 'Gemma 4 12B QAT · reading · 12s' : 'Gemma 4 12B QAT · reading 12s');
+    expect(gemma).toContain('Gemma 4 12B QAT');
     expect(gemma).not.toContain('…│');
     for (const l of [...ready, ...loading]) expect(l.length).toBeLessThanOrEqual(w);
     // the left column never wraps: the rail between the columns is on every row but the title's two
@@ -57,21 +67,32 @@ test('loading and ready take the same rows, so nothing moves when the page is pr
 });
 
 test('the bot sleeps while the model is off, looks about while it loads, and is happy when ready', () => {
-  // Its eyes: the green light on the screen in its face (rows 2–6); the chest strip is row 10.
-  const eyes = (state, k) => botPixels(state, k).flatMap((row, y) => row.map((c, x) => (y >= 2 && y <= 6 && [65, 120, 157].includes(c) && x >= 4 && x <= 15 ? `${x},${y}:${c}` : null))).filter(Boolean);
-  const strip = (state, k) => botPixels(state, k)[10].slice(6, 14);
-  expect(eyes('off')).toEqual(['6,4:65', '7,4:65', '8,4:65', '11,4:65', '12,4:65', '13,4:65']); // – –
-  expect(eyes('trust')).toContain('11,3:65'); // one eye open at the safety check
-  expect(eyes('ready')).toEqual(['6,3:157', '7,3:157', '12,3:157', '13,3:157', '5,4:157', '8,4:157', '11,4:157', '14,4:157']); // ^ ^
-  expect(strip('off', 0).every((c) => c === 237)).toBe(true);
-  expect(strip('ready', 0).every((c) => c === 120)).toBe(true);
+  // Its eyes: the green light on the glass in its face (rows 4–9); the chest strip is row 15.
+  const eyes = (state, k) => botPixels(state, k).flatMap((row, y) => row.map((c, x) => (y >= 4 && y <= 9 && x >= 4 && x <= 17 && [65, 71, 120, 157, 194].includes(c) ? `${x},${y}:${c}` : null))).filter(Boolean);
+  const strip = (state, k) => botPixels(state, k)[BOT_STRIP_ROW].slice(7, 15);
+  expect(eyes('off')).toEqual(['6,7:65', '7,7:65', '8,7:65', '13,7:65', '14,7:65', '15,7:65']); // – –
+  expect(botPixels('off')[0][18]).toBe(243); // and a Z
+  expect(eyes('trust')).toContain('13,6:71'); // one eye open at the safety check
+  expect(eyes('ready')).toEqual(['7,6:157', '8,6:157', '13,6:157', '14,6:157', '6,7:157', '9,7:157', '12,7:157', '15,7:157']); // ^ ^
+  expect(strip('off', 0).every((c) => c === 236)).toBe(true);
+  expect(strip('ready', 0).every((c) => c === 114)).toBe(true);
   expect(strip('loading', 3).filter((c) => c === 120)).toHaveLength(3); // it fills while it loads
   expect(eyes('loading', 2)).not.toEqual(eyes('loading', 0)); // it looks about
-  expect(eyes('loading', 9).every((e) => e.includes(',4:'))).toBe(true); // and blinks
-  // 20 columns × 7 rows, every row as wide
+  expect(eyes('loading', 9).every((e) => e.includes(',7:'))).toBe(true); // and blinks
+  expect(botPixels('loading', 0)[0][10]).not.toBe(botPixels('loading', 2)[0][10]); // the antenna's light pulses
+  // 22 columns × 10 rows, every row as wide
   const rows = botRows('ready');
-  expect(rows).toHaveLength(7);
-  for (const r of rows) expect(r.props.children).toHaveLength(20);
+  expect(rows).toHaveLength(10);
+  for (const r of rows) expect(r.props.children).toHaveLength(22);
+});
+
+test('the bot fills every cell it uses: no █ or ▀, which leave a seam under each row in Terminal.app', () => {
+  // SF Mono's █ ▀ ▄ cover only the middle 84% of a line; a background colour fills all of it.
+  for (const state of ['off', 'trust', 'loading', 'ready']) {
+    const cells = botRows(state, 3).flatMap((r) => r.props.children);
+    expect(cells.map((c) => c.props.children).join('')).not.toMatch(/[█▀]/);
+    expect(cells.some((c) => c.props.backgroundColor && c.props.children === ' ')).toBe(true); // backgrounds carry the solid parts
+  }
 });
 
 test('a new folder: welcome, nothing here yet, and /init', () => {
@@ -110,7 +131,7 @@ test('the safety check in the same columns: nothing read, the question, the answ
   for (const w of [80, 107]) {
     const lines = draw(h(TrustPage, { width: w, cwd: "~/Desktop/new-project", model: "Qwen3.5 9B", selected: 1 }), w);
     const text = lines.join('\n');
-    for (const s of ['Quick safety check', 'Is this a folder you created or one you trust?', '  1. Yes, I trust this folder', '❯ 2. No, exit', 'not trusted yet', 'nothing read here yet', 'loads after you say yes']) expect(text).toContain(s);
+    for (const s of ['Quick safety check', 'Is this a folder you created or one you trust?', '  1. Yes, I trust this folder', '❯ 2. No, exit', 'not trusted yet', 'nothing read here yet', 'wakes up after you say yes']) expect(text).toContain(s);
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(w);
   }
 });
@@ -154,7 +175,7 @@ test('a panel opened while the model loads prints the page out of its way: whole
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
   writeFileSync(join(home, 'models', D.file), 'stand-in');
   const r = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_LOAD_MS: '9000' }, rows: 30, args: ['--no-flows'], timeoutMs: 90_000, steps: [
-    { wait: ' · loading', ms: 30_000 }, { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 300 }, { snapshot: 'panel' },
+    { wait: 'loading · ctrl+t stop', ms: 30_000 }, { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 300 }, { snapshot: 'panel' },
     { key: 'esc' }, { wait: `Starting ${D.name}` }, { sleep: 300 }, { snapshot: 'closed' },
     ...quit,
   ] });

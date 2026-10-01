@@ -17,7 +17,7 @@ import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remo
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
-import { StartPage, READING_TIP } from './start.jsx';
+import { StartPage } from './start.jsx';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const diffW = (width) => Math.max(40, Math.min(110, width - 12));
@@ -605,9 +605,9 @@ export function modelLabels(ms) {
 // labelAt: the label's first and last cell on the footer's row, counted from 1.
 export function footerParts(app) {
   const { mode, notice, width } = app;
-  // Until your first message a tip sits here (start.jsx); while a first start reads its
-  // instructions it says how long that takes.
-  const tip = app.tip ? (app.starting && app.startPhase === 'reading' ? READING_TIP : app.tip) : null;
+  // Until your first message a tip sits here (start.jsx); the start page's steps say what the
+  // start waits for.
+  const tip = app.tip ?? null;
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : tip ? `※ Tip: ${tip}` : '? for shortcuts');
   // The update and weights badges share the lower right with the mode label.
   const badges = [app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
@@ -1188,9 +1188,9 @@ const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
 // under it in order. What came meanwhile shows under the live page; when that would not fit in the
 // window beside it the page is let go (printed as it is) and the Starting line takes over.
 export const heldRows = (items, ctx) => items.slice(1).reduce((n, it) => n + (itemHeights.get(rowsKey(it, ctx)) ?? Infinity), 0);
-// Rows the held page leaves under it: the window less the page (16 until it is measured), the
+// Rows the held page leaves under it: the window less the page (17 until it is measured), the
 // prompt box, the footer and the cursor's line.
-export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 16) - 5;
+export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 17) - 5;
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.

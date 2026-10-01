@@ -37,18 +37,18 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
   writeFileSync(join(home, 'models', D.file), 'stand-in');
   const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: ' · reading', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
+    { wait: '✓ model', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
     { wait: 'sends as soon as the model is ready' }, { snapshot: 'queued' },
     { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
-  expect(first.snapshots.queued).toMatch(new RegExp(`${DN} · reading( instructions)? · \\d+s`)); // the start page's model line, live while it loads (the long words when the name leaves room)
+  expect(first.snapshots.queued).toMatch(new RegExp(`${DN}[\\s│]+✓ model ─ [◐◓◑◒] (instructions|reading) \\d+s`)); // the start page's steps under the model's name, live while it loads
   expect(first.snapshots.queued).toContain('⏵ Queued: hello');
   // Live while it loaded, then printed once, ready: one start page in the whole scrollback.
   expect(first.text.match(/Recent activity/g)).toHaveLength(1);
-  expect(first.text).toMatch(new RegExp(`${DN} · effort \\w+ · \\d+k`));
+  expect(first.text).toMatch(/● ready · effort \w+ · \d+k/);
   expect(readdirSync(join(home, 'slots')).filter((f) => f.startsWith('warm-'))).toHaveLength(1);
   const second = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
-    { wait: ' · restoring', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
+    { wait: 'restoring', ms: 45_000 }, { wait: '? for shortcuts', ms: 45_000 },
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
   ] });
   expect(second.text).toContain('Hello from the stand-in model.');

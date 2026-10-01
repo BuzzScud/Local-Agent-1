@@ -46,7 +46,8 @@ test('the model is off at the start; a message waits for /start, which loads it 
   ] });
   // At the start: nothing loaded; the start page and the footer say the model is off.
   expect(seen.atOpen).toBe(0);
-  expect(r.snapshots.off).toMatch(new RegExp(`${D.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} · off`));
+  expect(r.snapshots.off).toContain(D.name);
+  expect(r.snapshots.off).toContain('○ off · /start wakes it up');
   expect(r.snapshots.off).toContain('○ model off · ctrl+t start');
   // The message waits, said once, with the Queued line.
   expect(r.snapshots.held).toContain('Queued: hello');
@@ -154,10 +155,10 @@ test('the start page stays live until your first message: /start wakes the bot i
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the stand-in model.', ms: 45_000 }, { sleep: 300 },
     ...quit,
   ] });
-  expect(r.snapshots.off).toMatch(new RegExp(`${name} · off`));
+  expect(r.snapshots.off).toMatch(new RegExp(`${name}[\\s│]+○ off · /start wakes it up`));
   // after /start the same page says ready: changed in place, not printed a second time
-  expect(r.snapshots.ready).toMatch(new RegExp(`${name} · effort `));
-  expect(r.snapshots.ready).not.toMatch(new RegExp(`${name} · off`));
+  expect(r.snapshots.ready).toMatch(new RegExp(`${name}[\\s│]+● ready · effort `));
+  expect(r.snapshots.ready).not.toContain('○ off ·');
   expect(r.snapshots.ready).not.toContain('Starting');
   expect(r.snapshots.ready.match(/This folder/g)).toHaveLength(1);
   // the first message printed it once, above the message
