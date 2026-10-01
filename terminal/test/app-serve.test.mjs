@@ -55,7 +55,7 @@ test('coding serve: a new key readable by you only, the form’s values printed,
   const key = readFileSync(join(serveHome, 'serve.key'), 'utf8').trim();
   expect(key).toMatch(/^ac-[A-Za-z0-9_-]{32}$/);
   expect(statSync(join(serveHome, 'serve.key')).mode & 0o777).toBe(0o600);
-  for (const line of ['Type this into /remote over there:', 'Connect   SSH tunnel', `Port      ${port}`, 'Server    llama.cpp', `API key   ${key}`, 'The key was made now']) expect(text).toContain(line);
+  for (const line of ['Type this into /remote over there:', 'Run on    My other computer', 'Reach by  SSH tunnel', `API key   ${key}`, `Port      ${port}   (behind More)`, 'The key was made now']) expect(text).toContain(line);
   expect(text).not.toContain('macOS may ask'); // --local opens nothing to the network
   const reg = JSON.parse(readFileSync(join(serveHome, 'servers', `${port}.json`), 'utf8'));
   expect(reg.serve).toEqual({ host: '127.0.0.1', keyFile: join(serveHome, 'serve.key'), https: false });
@@ -85,7 +85,7 @@ test('coding serve on the network: it listens on every address, says where other
   const args = join(serveHome, 'args.jsonl');
   const first = await startServe(['--port', String(port), '--ctx', '8k'], { cwd: proj, env: { AGENTIC_HOME: serveHome, FAKE_LLAMA_ARGS: args } });
   const k1 = readFileSync(join(serveHome, 'serve.key'), 'utf8').trim();
-  expect(first.out()).toContain('Connect   http');
+  expect(first.out()).toContain('Reach by  Home network (http)');
   expect(first.out()).toContain('macOS may ask whether llama-server may accept incoming connections');
   expect(first.out()).toContain('Plain http is for a home network or Tailscale');
   await first.stop();

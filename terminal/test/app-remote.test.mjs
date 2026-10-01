@@ -1,10 +1,13 @@
 // End-to-end, the real app in a pseudo-terminal (see app.test.mjs). Here:
-// /remote, the form for a model on another machine: filled in by keys and a
-// paste, checked with Test, saved, then used; a remote saved as on is used
-// from the start (nothing loads on this Mac); one that does not answer asks
-// what to do. The key is kept in a file in the test's home, never the Keychain.
+// /remote, the form for where the model runs: Run on first, then only that
+// service's rows, filled in by keys and a paste; Connect checks first and
+// changes nothing when that fails, else saves and switches; /remote claude
+// asks only for the key; each service keeps its own key and is a /model row.
+// A remote saved as on is used from the start (nothing loads on this Mac); one
+// that does not answer asks what to do. The keys are kept in a file in the
+// test's home, never the Keychain.
 import { test, expect } from 'bun:test';
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -21,20 +24,30 @@ const DGB = `${(D.bytes / 1e9).toFixed(1)} GB`;
 const KEY = 'test-remote-test-0123456789';
 const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
 const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 70 }]).flat();
+const up = (n) => Array.from({ length: n }, () => [{ key: 'up' }, { sleep: 70 }]).flat();
+const right = (n) => Array.from({ length: n }, () => [{ key: 'right' }, { sleep: 80 }]).flat();
+// No key from the shell running the tests stands in for the ones typed here.
+const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
+// A row of the form on the screen (its label at the start of a line in the box).
+const hasRow = (screen, label) => new RegExp(`│ [ ❯] ${label}\\s`).test(screen);
 
-test('/remote: fill in the form (a pasted key), Test it, Save: the next message goes to the remote with its key, and only the key’s end is saved in settings', async () => {
+test('/remote: Run on My other computer, its rows filled in (a pasted key); a Connect that fails changes nothing, the next one saves and switches, and only the key’s end is in settings', async () => {
   const { cwd, env, base } = setup();
   const here = await startFakeServer([]);
   const remote = await startFakeServer([{ text: 'Hello from the remote.' }], { key: KEY, props: true });
-  const r = await runInPty({ cwd, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--url', here.url, '--no-flows'], steps: [
+  let afterFail = 'unread';
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--url', here.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' },
     { type: '/remote' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 }, { snapshot: 'form' },
-    { key: 'right' }, { sleep: 80 }, // Use: Remote
-    ...down(2), { type: '127.0.0.1' }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address
-    ...down(1), { type: String(remote.port) }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Port
-    ...down(1), { key: `\x1b[200~${KEY}\n\x1b[201~` }, { sleep: 150 }, { snapshot: 'typingKey' }, { key: 'enter' }, { sleep: 80 }, // API key, pasted
-    ...down(4), { key: 'enter' }, { wait: '✔ it works' }, { sleep: 150 }, { snapshot: 'tested' }, // Test
-    ...down(1), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Save
+    ...right(2), { sleep: 100 }, { snapshot: 'computer' }, // Run on: My other computer
+    ...down(1), { type: '127.0.0.1' }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address (enter: on to Reach by)
+    ...down(1), { key: `\x1b[200~test-wrong-0123456789\n\x1b[201~` }, { sleep: 150 }, { snapshot: 'typingKey' }, { key: 'enter' }, { sleep: 80 }, // API key, pasted (enter: on to More)
+    { key: 'enter' }, { sleep: 100 }, // More opens
+    ...down(1), { type: String(remote.port) }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, { snapshot: 'more' }, // Port
+    ...down(3), { key: 'enter' }, { wait: 'it did not work' }, { sleep: 150 }, { snapshot: 'failed' }, // Connect: the wrong key
+    { fn: () => { afterFail = existsSync(join(base, 'home', 'settings.json')) ? settingsOf(base).remote ?? null : null; } },
+    ...up(6), { key: `\x1b[200~${KEY}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key again
+    ...down(5), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the remote.' },
     { type: '/doctor' }, { key: 'enter' }, { wait: 'Doctor · on a remote model' }, { sleep: 150 }, { snapshot: 'doctor' },
     ...quit,
@@ -42,28 +55,35 @@ test('/remote: fill in the form (a pasted key), Test it, Save: the next message 
   await here.close();
   await remote.close();
   const form = r.snapshots.form;
-  for (const row of ['Use', 'Connect', 'Address', 'Port', 'API key', 'Server', 'Model', 'Context', 'Test', 'Save']) expect(form).toContain(row);
-  expect(form).toMatch(/Use\s+◀ This Mac\s+▶/);
-  expect(form).toMatch(/Server\s+◀ llama\.cpp\s+▶/);
-  expect(r.snapshots.typingKey).toContain(`${'•'.repeat(KEY.length)}`);
-  expect(r.snapshots.typingKey).toContain(`${KEY.length} characters`);
-  expect(r.snapshots.typingKey).not.toContain(KEY);
-  expect(r.snapshots.tested).toMatch(/Test\s+✔ it works/);
-  expect(r.snapshots.tested).toContain('the key was accepted');
-  expect(r.snapshots.tested).toContain('runs gemma-4-12B-it-qat-UD-Q4_K_XL.gguf · 32k context · 2 slots');
+  expect(form).toMatch(/Run on\s+◀ This Mac\s+▶/);
+  expect(form).toMatch(/Switch\s+in use now/);
+  for (const row of ['Address', 'API key', 'Connect', 'Save only']) expect(hasRow(form, row)).toBe(false); // This Mac has nothing to fill in
+  const computer = r.snapshots.computer;
+  expect(computer).toMatch(/Run on\s+◀ My other computer\s+▶/);
+  for (const row of ['Address', 'Reach by', 'API key', 'More', 'Connect', 'Save only']) expect(hasRow(computer, row)).toBe(true);
+  for (const row of ['Port', 'Server', 'Context']) expect(hasRow(computer, row)).toBe(false); // behind More
+  expect(computer).not.toContain('Not ready'); // nothing tried yet
+  expect(r.snapshots.typingKey).toContain(`${'•'.repeat('test-wrong-0123456789'.length)}`);
+  expect(r.snapshots.typingKey).not.toContain('test-wrong-0123456789');
+  expect(r.snapshots.more).toMatch(new RegExp(`Port\\s+${remote.port}`));
+  expect(r.snapshots.more).toMatch(/Server\s+◀ llama\.cpp\s+▶/);
+  expect(r.snapshots.failed).toMatch(/Connect\s+✗ it did not work/);
+  expect(r.snapshots.failed).toContain('the API key was not accepted');
+  expect(afterFail).toBe(null); // nothing saved by a Connect that did not work
   expect(r.snapshots.on).toContain(`On the remote: Gemma 4 12B QAT · 127.0.0.1:${remote.port} · llama.cpp`);
   expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain(`now go to 127.0.0.1:${remote.port}; /remote switches back`);
   expect(r.snapshots.doctor).toContain('in the key file (••••6789)');
-  // the chat went to the remote with the key; nothing went there without it but /health
-  const chats = remote.seen.filter((x) => x.path === '/v1/chat/completions');
+  // the chat went to the remote with the key; nothing went there with the right key but /health and the checks
+  const chats = remote.seen.filter((x) => x.path === '/v1/chat/completions' && x.auth === `Bearer ${KEY}`);
   expect(chats.length).toBeGreaterThan(0);
-  expect(remote.seen.filter((x) => x.path !== '/health').every((x) => x.auth === `Bearer ${KEY}`)).toBe(true);
   expect(here.requests.filter((b) => JSON.stringify(b).includes('hello')).length).toBe(0);
-  // saved: the key's end in settings.json, the key in its own file readable by you only
+  // saved: the computer's set-up, its key's end, its key under its own name in a file readable by you only
+  const saved = { source: 'machine', address: '127.0.0.1', port: remote.port, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: '6789', keyId: 'machine' };
   const s = settingsOf(base);
-  expect(s.remote).toEqual({ use: true, address: '127.0.0.1', port: remote.port, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: '6789' });
+  expect(s.remote).toEqual({ ...saved, use: true });
+  expect(s.remotes).toEqual({ machine: saved });
   expect(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).not.toContain(KEY);
-  expect(JSON.parse(readFileSync(join(base, 'home', 'remote-keys.json'), 'utf8'))).toEqual({ default: KEY });
+  expect(JSON.parse(readFileSync(join(base, 'home', 'remote-keys.json'), 'utf8'))).toEqual({ machine: KEY });
   expect(statSync(join(base, 'home', 'remote-keys.json')).mode & 0o777).toBe(0o600);
 }, T);
 
@@ -81,7 +101,7 @@ test('a remote saved as on is used from the start: nothing loads on this Mac, th
   await remote.close();
   expect(r.snapshots.on).not.toContain('Could not start the model');
   expect(r.snapshots.on).not.toContain('coding setup');
-  expect(r.snapshots.model).toMatch(/Remote · 127\.0\.0\.1:\d+\s+llama\.cpp · another machine\s+✔ in use/);
+  expect(r.snapshots.model).toMatch(/My other computer · 127\.0\.0\.1:\d+\s+llama\.cpp · another computer\s+✔ in use/);
   expect(remote.seen.some((x) => x.path === '/v1/chat/completions' && x.auth === `Bearer ${KEY}`)).toBe(true);
 }, T);
 
@@ -102,8 +122,9 @@ test('a remote that does not answer at the start: nothing loads here; it says wh
   expect(asked).toContain('Try again');
   expect(asked).toMatch(new RegExp(`Use ${DN} on this Mac for now`)); // the model on this Mac: the default
   expect(asked).toContain('Open /remote');
-  expect(r.snapshots.form).toMatch(/Use\s+◀ Remote\s+▶/);
-  expect(r.snapshots.form).toMatch(new RegExp(`Port\\s+${port}`));
+  expect(r.snapshots.form).toMatch(/Run on\s+◀ My other computer\s+▶/);
+  expect(r.snapshots.form).toMatch(/Address\s+127\.0\.0\.1/);
+  expect(r.snapshots.form).toMatch(new RegExp(`More\\s+▸\\s+port ${port}`)); // behind More, named on it
 }, T);
 
 test('the remote goes away in the middle: it tries to connect again once, then the reply stops and it asks what to do', async () => {
@@ -142,38 +163,76 @@ test('coding -p follows /remote: the answer comes from the remote; --local would
   await remote.close();
 }, T);
 
-test('/remote with Server: Claude API: Test lists the models, Save, and the reply comes through Anthropic’s Messages API with the key in x-api-key', async () => {
+test('/remote with Run on: Claude API: a key, a model from the list, its address behind More; Connect, and the reply comes through Anthropic’s Messages API with the key in x-api-key', async () => {
   const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
   const { cwd, env, base } = setup();
   const here = await startFakeServer([]);
   const claude = await startFakeAnthropic([{ text: 'ready' }, { thinking: 'A short hello will do.', text: 'Hello from Claude.' }]);
-  const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 80 }]).flat();
-  const right = (n) => Array.from({ length: n }, () => [{ key: 'right' }, { sleep: 80 }]).flat();
-  const r = await runInPty({ cwd, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file' }, args: ['--url', here.url, '--no-flows'], steps: [
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--url', here.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' },
     { type: '/remote' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 },
-    ...right(1), // Use: Remote
-    ...down(2), { type: claude.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address: the stand-in
-    ...down(2), { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key
-    ...down(1), ...right(2), { sleep: 150 }, { snapshot: 'kind' }, // Server: llama.cpp → OpenAI-compatible → Claude API
-    ...down(3), { key: 'enter' }, { wait: '✔ it works' }, { sleep: 150 }, { snapshot: 'tested' },
-    ...down(1), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' },
+    ...right(1), { sleep: 100 }, { snapshot: 'claude' }, // Run on: Claude API
+    ...down(1), { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key (enter: on to Model)
+    ...right(1), { sleep: 100 }, { snapshot: 'model' }, // Model: Opus 5.5 → Sonnet 5.5
+    ...down(1), { key: 'enter' }, { sleep: 100 }, // More opens
+    ...down(1), { type: claude.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address: the stand-in (enter: on to Context)
+    ...down(1), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.' }, { sleep: 200 },
     ...quit,
   ] });
   await here.close();
   await claude.close();
-  expect(r.snapshots.kind).toMatch(/Server\s+◀ Claude API\s+▶/);
-  expect(r.snapshots.kind).toMatch(/Model\s+claude-opus-5-5/);
-  expect(r.snapshots.tested).toContain('model claude-opus-5-5 · 1000k context');
-  expect(r.snapshots.tested).toContain('answered "ready"');
-  expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain(`On the remote: claude-opus-5-5 · 127.0.0.1:${claude.port} · Claude API`);
+  const c = r.snapshots.claude;
+  expect(c).toMatch(/Run on\s+◀ Claude API\s+▶/);
+  expect(c).toMatch(/Model\s+◀ Opus 5\.5\s+▶/);
+  for (const row of ['Reach by', 'Port', 'Server', 'Address']) expect(hasRow(c, row)).toBe(false); // the Claude API has none of these (its address is behind More)
+  expect(r.snapshots.model).toMatch(/Model\s+◀ Sonnet 5\.5\s+▶\s+•\s+quicker, half the price/);
+  expect(r.snapshots.on.replace(/\s+/g, ' ')).toContain(`On the remote: claude-sonnet-5-5 · 127.0.0.1:${claude.port} · Claude API`);
   const posts = claude.seen.filter((s) => s.path.startsWith('/v1/messages'));
   expect(posts.length).toBeGreaterThanOrEqual(2);
+  expect(posts[0].body).toMatchObject({ model: 'claude-sonnet-5-5', messages: [{ role: 'user', content: 'Reply with the single word: ready' }] }); // Connect's check
   expect(claude.seen.every((s) => s.key === claude.key)).toBe(true);
   const chat = posts.at(-1).body;
-  expect(chat).toMatchObject({ model: 'claude-opus-5-5', stream: true });
+  expect(chat).toMatchObject({ model: 'claude-sonnet-5-5', stream: true });
   expect(chat.system).toContain('Agentic Coder');
   expect(chat.tools.length).toBeGreaterThan(3);
-  expect(settingsOf(base).remote).toMatchObject({ use: true, kind: 'claude', key: true });
+  expect(settingsOf(base).remote).toMatchObject({ use: true, source: 'claude', kind: 'claude', model: 'claude-sonnet-5-5', key: true, keyId: 'claude' });
+  expect(JSON.parse(readFileSync(join(base, 'home', 'remote-keys.json'), 'utf8'))).toEqual({ claude: claude.key });
+}, T);
+
+test('/remote claude with no key yet asks only for it, then Connect; the computer keeps its own key; /model lists both and switches back', async () => {
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const { cwd, env, base } = setup();
+  const remote = await startFakeServer([{ text: 'From the computer.' }, { text: 'The computer again.' }], { key: KEY, props: true });
+  const claude = await startFakeAnthropic([{ text: 'ready' }, { text: 'From Claude.' }]);
+  // the computer saved before Run on (its key under "default"); the Claude API saved with the stand-in's address and no key
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({
+    remote: { use: true, address: '127.0.0.1', port: remote.port, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: '6789' },
+    remotes: { claude: { source: 'claude', address: claude.url, port: null, connect: 'http', kind: 'claude', model: 'claude-opus-5-5', context: 0, key: false, keyEnd: '', keyId: 'claude' } },
+  }));
+  writeFileSync(join(base, 'home', 'remote-keys.json'), JSON.stringify({ default: KEY }), { mode: 0o600 });
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], steps: [
+    { wait: 'On the remote:', ms: 20_000 }, { sleep: 200 },
+    { type: 'one' }, { key: 'enter' }, { wait: 'From the computer.' }, { sleep: 200 },
+    { type: '/remote claude' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 }, { snapshot: 'asked' },
+    { key: `\x1b[200~${claude.key}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 100 }, { snapshot: 'ready' }, // the key; enter: on to Connect
+    { key: 'enter' }, { wait: 'On the remote: claude-opus-5-5' }, { sleep: 200 },
+    { type: 'two' }, { key: 'enter' }, { wait: 'From Claude.' }, { sleep: 200 },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model' }, { sleep: 150 }, { snapshot: 'model' },
+    ...down(12), { key: 'enter' }, { wait: 'On the remote: Gemma' }, { sleep: 200 }, // the last row: the computer
+    { type: 'three' }, { key: 'enter' }, { wait: 'The computer again.' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await remote.close();
+  await claude.close();
+  expect(r.snapshots.asked).toMatch(/Run on\s+◀ Claude API\s+▶/);
+  expect(r.snapshots.asked).toMatch(/API key\s+█?\s*0 characters/); // typing in the key row straight away
+  expect(r.snapshots.ready).toMatch(/❯ Connect\s+enter to connect/);
+  expect(r.snapshots.model).toMatch(/Claude API · Opus 5\.5\s+Anthropic · billed to your key\s+✔ in use/);
+  expect(r.snapshots.model).toMatch(/My other computer · 127\.0\.0\.1:\d+\s+llama\.cpp · another computer/);
+  // each key under its own name: the computer's where it was, Claude's under "claude"
+  expect(JSON.parse(readFileSync(join(base, 'home', 'remote-keys.json'), 'utf8'))).toEqual({ default: KEY, claude: claude.key });
+  expect(remote.seen.filter((x) => x.path === '/v1/chat/completions').every((x) => x.auth === `Bearer ${KEY}`)).toBe(true);
+  expect(claude.seen.every((x) => x.key === claude.key)).toBe(true);
+  expect(settingsOf(base).remote).toMatchObject({ use: true, source: 'machine', keyId: 'default' });
 }, T);

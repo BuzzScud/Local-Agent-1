@@ -137,27 +137,27 @@ check in the Arena tests them with the real model.
 ### A model on another machine
 
 The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, a
-hosted API, or Claude. Type `/remote` in Agentic Coder and fill in one form:
+hosted API, or Claude. Type `/remote` in Agentic Coder: the first row, **Run on**, picks where,
+and only that choice's rows show (the ones seldom changed behind **More**, ←→ or enter):
 
-| Row | What goes in it |
-|---|---|
-| Use | This Mac or Remote |
-| Connect | http (a home network or Tailscale), https (across the internet), or an SSH tunnel (Agentic Coder opens `ssh -L` itself, with your ssh keys) |
-| Address | an IP or a name (`192.168.1.40`, `studio.local`), a whole `https://…/v1` address, or for SSH `user@host` or a name from `~/.ssh/config`; blank for the Claude API |
-| Port | the model's port (8080 for `coding serve` and llama-server) |
-| API key | typed or pasted; kept in the macOS Keychain, never in a file of the repo or in settings.json |
-| Server | llama.cpp (`coding serve`, llama-server), OpenAI-compatible (vLLM, Ollama, LM Studio, OpenRouter, OpenAI), or Claude API |
-| Model | the name the server wants (Test lists them); blank for llama.cpp, and `claude-opus-5-5` for the Claude API |
-| Context | the server's own, or one you pick (the Claude API: at most 200k unless you pick more) |
+| Run on | Its rows | Behind More |
+|---|---|---|
+| This Mac | none: Switch comes back here | |
+| Claude API | API key (from console.anthropic.com, or blank with `ANTHROPIC_API_KEY` set), Model (◀ Opus 5.5 · Sonnet 5.5 · Fable 5.1 · Haiku 4.5 ▶) | Address (blank: Anthropic's), Context (at most 200k unless you pick more) |
+| My other computer | Address (an IP or a name, or for SSH `user@host` or a name from `~/.ssh/config`), Reach by (Home network (http) · Internet (https) · SSH tunnel, which Agentic Coder opens itself with your ssh keys), API key (the one `coding serve` printed) | Port (8080 for `coding serve` and llama-server), Server (llama.cpp, or OpenAI-compatible for Ollama, LM Studio, vLLM), Model, Context |
+| Another service | Address (the whole `https://…` address, path included), API key, Model (the name it wants; ←→ through its list after a Connect) | Reach by, Port, Context |
 
-**Test** checks it before anything is saved (reached, key accepted, what it runs, one word back).
-**Save** keeps it and switches. When the remote does not answer, Agentic Coder says why and asks:
-try again, use the model on this Mac for now, or open the form. `/remote on` and `/remote off`
-switch without the form; `/model` lists the remote as one more row; `coding -p` follows it
-(`--local` runs on this Mac instead).
+Each one keeps its own rows and its own API key (in the macOS Keychain, never in a file of the
+repo or in settings.json), so flipping Run on loses nothing. **Connect** checks the rows as they
+are (reached, key accepted, what it runs, one word back) and only when that works saves them and
+switches; when it does not, nothing changes and what it found shows under the row. **Save only**
+keeps them for later. When a remote stops answering, Agentic Coder says why and asks: try again,
+use the model on this Mac for now, or open the form. `/remote claude`, `/remote computer` and
+`/remote service` switch straight to one (the form asks for its first row when it is not set up),
+`/remote here` comes back to this Mac, and `/model` lists each one set up as a row of its own;
+`coding -p` follows the one in use (`--local` runs on this Mac instead).
 
-**Claude:** Use = Remote, Server = Claude API, paste an API key from console.anthropic.com
-(or leave it blank when `ANTHROPIC_API_KEY` is set), Test, Save. It goes through Anthropic's own
+**Claude:** `/remote claude`, paste an API key, enter, enter. It goes through Anthropic's own
 Messages API and official SDK: High effort thinks first and shows its summarized thinking, Low
 asks for effort low, JSON answers are held to their schema, the conversation is cached, and a
 request the model declines is retried on Anthropic's fallback model. Every step sends the
@@ -167,7 +167,7 @@ On the other machine, if it is a Mac or a Linux box with this repo installed:
 
 ```
 coding serve              # the model for other machines, behind a new API key; prints what to type into /remote
-coding serve --local      # this machine only: reach it with Connect = SSH tunnel
+coding serve --local      # this machine only: reach it with Reach by = SSH tunnel
 coding serve --https cert.pem key.pem   # https with your certificate (tailscale cert makes one)
 ```
 

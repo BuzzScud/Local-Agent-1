@@ -1,8 +1,10 @@
 // A model on another machine (/remote): its address, its API key, the SSH
 // tunnel when it is reached that way, and a check that it answers. The
-// terminal keeps one remote in settings.json ("remote") and its key in the
-// macOS Keychain; every call to a model server asks endpointOf(url) for the
-// key and the kind of server, so the rest of the app keeps passing a plain url.
+// terminal keeps the remote in use in settings.json ("remote"), one saved
+// set-up per service ("remotes": claude, machine, openai), and each one's key
+// in the macOS Keychain under its own name (keyIdOf); every call to a model
+// server asks endpointOf(url) for the key and the kind of server, so the rest
+// of the app keeps passing a plain url.
 //   kind 'llama':  llama.cpp's llama-server (`coding serve` on the other
 //                  machine, or one you started): everything works as it does
 //                  on this Mac, the thinking switch and the side slot included.
@@ -23,6 +25,13 @@ export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 // The address used: what was typed, or Anthropic's for a Claude API remote left blank.
 const addressOf = (r) => String(r?.address ?? '').trim() || (r?.kind === 'claude' ? CLAUDE_HOST : '');
 export const CONNECTS = ['http', 'https', 'ssh'];
+// What a remote is, as /remote's Run on row names it: the Claude API, another
+// computer running llama.cpp (coding serve), or another OpenAI-compatible service.
+export const REMOTE_SOURCES = ['claude', 'machine', 'openai'];
+// A remote saved before the Run on row has no source: its kind says which.
+export const sourceOf = (r) => (REMOTE_SOURCES.includes(r?.source) ? r.source : r?.kind === 'claude' ? 'claude' : r?.kind === 'openai' ? 'openai' : 'machine');
+// The name its key is kept under: its service's (a key saved before is under 'default').
+export const keyIdOf = (r) => r?.keyId || 'default';
 // llama-server's own default port (and `coding serve`'s).
 export const SERVE_PORT = 8080;
 export const DEFAULT_REMOTE = { use: false, address: '', port: null, connect: 'http', kind: 'llama', model: '', context: 0, key: false, keyEnd: '' };
@@ -143,8 +152,10 @@ export const keyStore = () => (process.platform === 'darwin' && process.env.AGEN
 // A key the server can take in a header: printable, no spaces or line breaks.
 export const validKey = (key) => typeof key === 'string' && /^[\x21-\x7e]{1,4096}$/.test(key);
 
+// AGENTIC_REMOTE_KEY stands in for any remote's key (not a web search service's).
+const envKey = (id) => (process.env.AGENTIC_REMOTE_KEY && !String(id).startsWith('search-') ? process.env.AGENTIC_REMOTE_KEY : null);
 export function readKey(id = 'default') {
-  if (process.env.AGENTIC_REMOTE_KEY && id === 'default') return process.env.AGENTIC_REMOTE_KEY;
+  if (envKey(id)) return envKey(id);
   if (keyStore() === 'keychain') {
     const r = spawnSync(SECURITY, ['find-generic-password', '-a', id, '-s', SERVICE, '-w'], { encoding: 'utf8', timeout: 10_000 });
     return r.status === 0 ? r.stdout.replace(/\n$/, '') || null : null;
@@ -160,7 +171,7 @@ export function saveKey(key, id = 'default', label = 'Agentic Coder remote model
     // process's arguments, which any program on the Mac can list.
     const q = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
     spawnSync(SECURITY, ['-i'], { input: `add-generic-password -U -a ${q(id)} -s ${q(SERVICE)} -l ${q(label)} -w ${q(key)}\n`, encoding: 'utf8', timeout: 10_000 });
-    if (readKey(id) !== key && !(process.env.AGENTIC_REMOTE_KEY && id === 'default')) throw new Error('the Keychain did not keep the key');
+    if (readKey(id) !== key && !envKey(id)) throw new Error('the Keychain did not keep the key');
     return 'keychain';
   }
   let all = {};
@@ -254,7 +265,7 @@ const ctxOf = (m) => m?.context_length ?? m?.max_model_len ?? m?.max_context_len
 
 // Whether the remote answers, with its key, and what it runs. Answers
 // { ok, steps: [{ ok, text }], ctx, slots, models, model, file, ms, error }.
-// reply: also ask for a two-word answer (the form's Test row), which proves the
+// reply: also ask for a two-word answer (the form's Connect), which proves the
 // whole way works (a hosted model may charge a fraction of a cent for it).
 export async function probe({ url, kind = 'llama', key = null, model = '', reply = false, signal, timeoutMs = 8000 }) {
   const steps = [];
@@ -266,7 +277,7 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
     if (kind === 'llama') {
       const h = await getJson(url, '/health', { signal, timeoutMs });
       if (h.status === 503) return fail('the server is up but its model is still loading; try again in a minute');
-      if (!h.ok && h.status !== 401) return fail(`the address answered ${h.status}: is it a llama.cpp server? (Server row: OpenAI-compatible for others)`);
+      if (!h.ok && h.status !== 401) return fail(`the address answered ${h.status}: is it a llama.cpp server? (Ollama, LM Studio, vLLM…: More → Server: OpenAI-compatible)`);
       out.ms = Date.now() - t0;
       steps.push({ ok: true, text: `reached in ${out.ms} ms` });
       const p = await getJson(url, '/props', { key, signal, timeoutMs });
@@ -344,7 +355,7 @@ export function remoteModel(r, info = {}) {
     ?? null;
   const where = remoteLabel(r);
   const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
-  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where }, bytes: 0, draft: null, slots: info.slots ?? 1 };
+  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
   return { ...GENERIC_REMOTE, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: ctx ?? GENERIC_REMOTE.maxCtx };
 }
@@ -359,7 +370,7 @@ export function remoteModel(r, info = {}) {
 export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } = {}) {
   const problem = remoteProblem(r);
   if (problem) throw new Error(`The remote is not set up: ${problem}. Open /remote`);
-  const secret = key === undefined ? (r.key ? readKey() : null) : key;
+  const secret = key === undefined ? (r.key ? readKey(keyIdOf(r)) : null) : key;
   if (r.key && !secret) throw new Error('The remote\'s API key is missing from the Keychain. Enter it again in /remote');
   let tunnel = null;
   let url;

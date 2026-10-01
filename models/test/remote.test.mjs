@@ -108,6 +108,33 @@ test('the key is kept in a file readable by you only when the Keychain is not us
   expect(JSON.parse(e.stdout.trim().split('\n')[0]).read).toBe('from-env-key');
 });
 
+test('each service keeps its key under its own name (a key saved before Run on stays under "default"), and connecting reads the right one', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-remote-'));
+  const remote = JSON.stringify(join(import.meta.dir, '..', 'runtime', 'remote.mjs'));
+  const script = `const m = await import(${remote});
+    m.saveKey('test-claude-0123456789', 'claude'); m.saveKey('test-old-0123456789');
+    console.log(JSON.stringify({ claude: m.readKey('claude'), old: m.readKey(), machine: m.readKey('machine'), search: m.readKey('search-brave') }));`;
+  const run = (env) => JSON.parse(spawnSync('bun', ['-e', script], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: home, AGENTIC_REMOTE_KEYSTORE: 'file', ...env } }).stdout.trim());
+  expect(run({ AGENTIC_REMOTE_KEY: '' })).toEqual({ claude: 'test-claude-0123456789', old: 'test-old-0123456789', machine: null, search: null });
+  // AGENTIC_REMOTE_KEY stands in for any remote's key, never a web search service's
+  expect(run({ AGENTIC_REMOTE_KEY: 'from-env-key' })).toEqual({ claude: 'from-env-key', old: 'from-env-key', machine: 'from-env-key', search: null });
+  const { sourceOf, keyIdOf, REMOTE_SOURCES } = await import('../index.mjs');
+  expect(REMOTE_SOURCES).toEqual(['claude', 'machine', 'openai']);
+  expect([sourceOf({ kind: 'claude' }), sourceOf({ kind: 'openai' }), sourceOf({ kind: 'llama' }), sourceOf({ kind: 'openai', source: 'machine' })]).toEqual(['claude', 'openai', 'machine', 'machine']);
+  expect([keyIdOf({ key: true }), keyIdOf({ keyId: 'claude' })]).toEqual(['default', 'claude']);
+  // connecting reads the key under the remote's own name (saved here only in a throwaway home:
+  // run in one process after a file that loaded the models part first, HOME can be the real one)
+  if (HOME === join(homedir(), '.agentic-coder')) throw new Error('not in a throwaway home: the key would land in the real one');
+  const fake = await startFakeServer([], { key: 'test-machine-0123456789', props: true });
+  const { saveKey } = await import('../index.mjs');
+  saveKey('test-machine-0123456789', 'machine');
+  const c = await connectRemote(R({ source: 'machine', keyId: 'machine', address: fake.url, kind: 'llama', key: true, keyEnd: '6789' }));
+  expect(endpointOf(fake.url)).toMatchObject({ key: 'test-machine-0123456789' });
+  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine' });
+  c.stop();
+  await fake.close();
+});
+
 test('the ssh command: no password prompt, fails when the port cannot be forwarded, local end on this Mac only, the address after --', () => {
   const a = sshArgs({ dest: 'me@studio', remotePort: 8080, localPort: 17650 });
   expect(a).toEqual(expect.arrayContaining(['-N', 'BatchMode=yes', 'ExitOnForwardFailure=yes', '-L', '127.0.0.1:17650:127.0.0.1:8080']));

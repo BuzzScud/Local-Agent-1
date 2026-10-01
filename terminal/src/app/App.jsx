@@ -16,10 +16,10 @@ import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, withVision, visionPath, getVision } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
-import { REMOTE_ROWS, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, toProfile, connectionChanged, formWarning, kindWord } from './remote-form.mjs';
+import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices } from './remote-form.mjs';
 import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarning, webSettings, searchKeyId } from './web-form.mjs';
 import { PROVIDER_NAMES } from '../tools/web.mjs';
 import { footerLabel } from './mac-memory.mjs';
@@ -658,37 +658,79 @@ export function App({ opts, win, onRestart }) {
       throw new Error(`the remote model at ${remoteLabel(settings.remote)} stopped answering: ${e.message}`);
     }
   };
-  // The form opens on what is in use in this window, and the rest as saved.
-  const openRemoteForm = () => setPicker(openForm({ ...DEFAULT_REMOTE, ...(settings.remote ?? {}), use: Boolean(remoteRef.current.on) }));
-  // Test: the rows as they are now (the tunnel opened and closed for it);
-  // its findings land on the Test row, unless the form moved on meanwhile.
-  const runRemoteTest = (pk) => {
-    const id = (remoteRef.current.tests = (remoteRef.current.tests ?? 0) + 1);
-    setPicker({ ...pk, test: { running: true, id }, error: null });
-    testForm(pk).then((res) => setPicker((p) => {
-      if (p?.kind !== 'remote' || p.test?.id !== id) return p;
-      // One model on an OpenAI-compatible server, and none named: that one.
-      const values = !p.values.model && p.values.kind === 'openai' && res.models?.length === 1 ? { ...p.values, model: res.models[0] } : p.values;
-      return { ...p, values, test: { ...res, id } };
-    }));
+  // The form opens on the service in use in this window (This Mac when none is),
+  // or on `source`; ask: a row to start typing in (/remote claude with no key yet).
+  const openRemoteForm = ({ source = null, ask = null } = {}) => {
+    const f = openForm(settings, { on: Boolean(remoteRef.current.on), source });
+    if (!ask) { setPicker(f); return; }
+    setPicker({ ...startEdit({ ...f, index: remoteRows(f).findIndex((r) => r.id === ask) }, ask), ask });
   };
-  // Save: the key to the Keychain, the rest to settings.json; then switch when
-  // Use changed (or the remote in use now points somewhere else).
-  const saveRemote = (pk) => {
-    const r = toProfile(pk);
-    if (formWarning(pk)?.tone === 'error') { setPicker({ ...pk, error: 'Nothing was saved: fix the line above first.' }); return; }
-    const keyChanged = pk.key !== null;
-    const switching = r.use !== Boolean(remoteRef.current.on) || (r.use && connectionChanged(settings.remote, r, keyChanged));
-    if (switching && (S.current.live !== IDLE || agent.busy || S.current.starting)) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting). Nothing was saved: save again when it is done.' }); return; }
-    if (keyChanged) {
-      try { if (pk.key) saveKey(pk.key); else removeKey(); } catch (e) { setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return; }
+  const busyNow = () => S.current.live !== IDLE || agent.busy || S.current.starting;
+  // Saves what the form changed: the keys first (nothing is written when one
+  // cannot be kept), then settings.json. Answers the plan, or null.
+  const keepForm = (pk, { connect }) => {
+    const plan = savePlan(pk, settings, { connect });
+    if (formWarning(pk)?.tone === 'error' && pk.source !== 'here') { setPicker({ ...pk, tried: true, error: 'Nothing was saved: fix the line above first.' }); return null; }
+    try {
+      for (const k of plan.keys) { if (k.op === 'save') saveKey(k.key, k.id, `Agentic Coder · ${sourceWord(k.source)}`); else removeKey(k.id); }
+    } catch (e) { setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return null; }
+    const next = saveSettings({ remotes: plan.remotes, ...(plan.remote ? { remote: plan.remote } : {}) });
+    settings.remotes = next.remotes;
+    if (plan.remote) settings.remote = next.remote;
+    return plan;
+  };
+  // Connect: the shown service's rows are checked as they are (the tunnel opened
+  // and closed for it); only when that works are they saved and the window
+  // switched. One that does not work leaves the form open with what it found.
+  // This Mac: back to the model here, the remotes kept.
+  const connectForm = (pk) => {
+    if (pk.source === 'here') {
+      if (remoteRef.current.on && busyNow()) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting): switch when it is done.' }); return; }
+      if (!keepForm(pk, { connect: true })) return;
+      setPicker(null);
+      if (remoteRef.current.on) useLocal();
+      else push({ type: 'note', text: 'Already on this Mac. The remotes stay saved: Run on (or /remote claude) switches.', tone: 'dim' });
+      return;
     }
-    setPicker(null);
-    settings.remote = saveSettings({ remote: r }).remote;
-    if (switching) { if (r.use) useRemote(r); else useLocal(); return; }
-    push({ type: 'note', text: `Remote saved${r.address ? ` (${remoteLabel(r)} · ${kindWord(r.kind)}${r.key ? ' · with a key' : ''})` : ''}. ${r.use ? 'In use now.' : 'This window stays on this Mac; Use: Remote switches.'}`, tone: 'dim' });
+    if (formWarning({ ...pk, tried: true })?.tone === 'error') { setPicker({ ...pk, tried: true, error: null }); return; }
+    if (busyNow()) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting). Nothing was saved: connect again when it is done.' }); return; }
+    const id = (remoteRef.current.tests = (remoteRef.current.tests ?? 0) + 1);
+    setPicker({ ...pk, tried: true, test: { running: true, id }, error: null });
+    testForm(pk).then((res) => {
+      const p = S.current.picker;
+      if (p?.kind !== 'remote' || p.test?.id !== id) return;
+      const done = withTest(p, res, id);
+      if (!res.ok) { setPicker(done); return; }
+      if (busyNow()) { setPicker({ ...done, error: 'It works, but Agentic Coder got busy meanwhile. Nothing was saved: connect again when it is done.' }); return; }
+      const before = settings.remote;
+      const plan = keepForm(done, { connect: true });
+      if (!plan) return;
+      setPicker(null);
+      const r = settings.remote;
+      if (!remoteRef.current.on || !remoteRef.current.conn || connectionChanged(before, r, plan.keys.some((k) => k.op === 'save' && k.id === done.source))) { useRemote(r); return; }
+      push({ type: 'note', text: `${sourceWord(done.source)} saved and still in use (${remoteLabel(r)}).`, tone: 'dim' });
+    });
   };
-  remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm };
+  // Save only: kept for next time; this window stays where it is.
+  const saveOnlyForm = (pk) => {
+    const plan = keepForm(pk, { connect: false });
+    if (!plan) return;
+    setPicker(null);
+    const r = plan.remotes[pk.source];
+    const where = remoteRef.current.on ? sourceWord(sourceOf(settings.remote)) : 'this Mac';
+    const inUse = remoteRef.current.on && sourceOf(settings.remote) === pk.source;
+    push({ type: 'note', text: `${sourceWord(pk.source)} saved${r?.address ? ` (${remoteLabel(r)}${r.key ? ' · with a key' : ''})` : r?.key ? ' (with a key)' : ''}. This window stays on ${where}${inUse ? ': the changes are used from the next Connect or start' : `; Connect (or /remote ${pk.source === 'machine' ? 'computer' : pk.source === 'openai' ? 'service' : 'claude'}) switches`}.`, tone: 'dim' });
+  };
+  // /remote claude, /remote computer, /remote service: straight to that saved
+  // service; one not set up yet opens the form on it, typing in its first row.
+  const remoteTo = (source) => {
+    const r = remotesOf(settings)[source];
+    if (!readyRemote(r)) { openRemoteForm({ source, ask: source === 'claude' ? 'key' : 'address' }); return; }
+    if (remoteRef.current.on && remoteRef.current.conn && sourceOf(settings.remote) === source) { push({ type: 'note', text: `Already on ${sourceWord(source)} (${remoteLabel(settings.remote)}).`, tone: 'dim' }); return; }
+    settings.remote = saveSettings({ remote: { ...r, use: true } }).remote;
+    useRemote(settings.remote);
+  };
+  remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm, to: remoteTo };
 
   // ---- /web: what the model may do on the web (web-form.mjs, tools/web.mjs) ----
   const openWebPicker = () => setPicker(openWebForm(settings.web, { claude: model.remote?.kind === 'claude' }));
@@ -1841,23 +1883,27 @@ export function App({ opts, win, onRestart }) {
       }
       case 'web': openWebPicker(); break;
       case 'remote': {
-        // /remote alone: the form. on / off: switch without it.
+        // /remote alone: the form. claude / computer / service: straight to that
+        // service (the form, asking for its first row, when it is not set up);
+        // here or off: back to this Mac; on: the last remote used.
         const w = arg.toLowerCase();
         const r = settings.remote ?? DEFAULT_REMOTE;
-        if (w === 'off') {
-          settings.remote = saveSettings({ remote: { ...r, use: false } }).remote;
+        const to = { claude: 'claude', computer: 'machine', machine: 'machine', service: 'openai', openai: 'openai' }[w];
+        if (to) { remoteFnRef.current.to(to); break; }
+        if (w === 'off' || w === 'here') {
+          if (settings.remote) settings.remote = saveSettings({ remote: { ...r, use: false } }).remote;
           if (remoteRef.current.on) remoteFnRef.current.useLocal();
           else push({ type: 'note', text: 'Already on the model on this Mac. The remote stays off for next time too.', tone: 'dim' });
           break;
         }
         if (w === 'on') {
-          if (!r.address) { push({ type: 'note', text: 'No remote is set up yet: fill in the form, then Save.', tone: 'dim' }); remoteFnRef.current.openForm(); break; }
+          if (!readyRemote(settings.remote ? remotesOf(settings)[sourceOf(r)] : null)) { push({ type: 'note', text: 'No remote is set up yet: pick Run on, fill in its rows, then Connect.', tone: 'dim' }); remoteFnRef.current.openForm(); break; }
           settings.remote = saveSettings({ remote: { ...r, use: true } }).remote;
           if (!remoteRef.current.conn) remoteFnRef.current.useRemote(settings.remote);
           else push({ type: 'note', text: `Already on the remote (${remoteLabel(r)}).`, tone: 'dim' });
           break;
         }
-        if (w) { push({ type: 'note', text: '/remote alone opens the form; /remote on and /remote off switch.', tone: 'dim' }); break; }
+        if (w) { push({ type: 'note', text: '/remote alone opens the form; /remote claude, computer or service switches to one, /remote here (or off) comes back to this Mac.', tone: 'dim' }); break; }
         remoteFnRef.current.openForm();
         break;
       }
@@ -1877,10 +1923,9 @@ export function App({ opts, win, onRestart }) {
         // edited copy, when one is saved, is one more row after the models.
         const levels = model.thinkingLevels ?? [];
         const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
-        // A remote set up in /remote is one more row.
-        const r = settings.remote;
-        const models = [...Object.values(MODELS), ...editedModels(), ...(r?.address ? [{ id: 'remote', remoteRow: true, name: `Remote · ${remoteLabel(r)}`, kind: r.kind }] : [])];
-        setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => m.id === model.id)), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
+        // Each service set up in /remote is one more row (Claude API, the other computer, another service).
+        const models = [...Object.values(MODELS), ...editedModels(), ...remoteChoices(settings)];
+        setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
         break;
       }
       case 'stats':
@@ -2038,9 +2083,9 @@ export function App({ opts, win, onRestart }) {
     // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
     const rp = S.current.picker;
     if (rp?.kind === 'remote' || rp?.kind === 'web') {
-      const row = (rp.kind === 'web' ? WEB_ROWS : REMOTE_ROWS)[rp.index];
+      const row = (rp.kind === 'web' ? WEB_ROWS : remoteRows(rp))[rp.index];
       if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
-      else if (row.type === 'text' || row.type === 'secret') setPicker({ ...startEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
+      else if (row?.type === 'text' || row?.type === 'secret') setPicker({ ...startEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
       return;
     }
     if (S.current.perm || S.current.picker || (S.current.btw && !S.current.answerWait)) return;
@@ -2253,10 +2298,10 @@ export function App({ opts, win, onRestart }) {
         setThinking(on, on ? lv.id : undefined);
         setPicker(null);
         const picked = pk.models[pk.index];
-        // The remote's row: /remote's Use turns to Remote. A model here while on the remote: back to this Mac.
+        // A remote's row: that service, as /remote claude (computer, service) would. A model here while on a remote: back to this Mac.
         if (picked.remoteRow) {
-          if (!model.remote || !remoteRef.current.conn) { settings.remote = saveSettings({ remote: { ...settings.remote, use: true } }).remote; useRemote(settings.remote); }
-          else push({ type: 'note', text: `${model.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
+          if (model.remote?.source === picked.source && remoteRef.current.conn) push({ type: 'note', text: `${model.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
+          else remoteTo(picked.source);
           return;
         }
         if (model.remote) {
@@ -2273,9 +2318,10 @@ export function App({ opts, win, onRestart }) {
       }
       return;
     }
-    // /remote: ↑↓ a row, ←→ a choice row, enter (or a letter) edits a text row,
-    // runs Test, or saves; while a row is being edited, its keys only.
-    // /web: the same form keys, its own rows (web-form.mjs).
+    // /remote: ↑↓ a row, ←→ a choice row (More: open / fold), enter (or a
+    // letter) edits a text row, opens or folds More, runs Connect or Save only,
+    // and on a choice row goes to the next row; while a row is being edited, its
+    // keys only. /web: the same form keys, its own rows (web-form.mjs), Test and Save.
     if (cur.picker?.kind === 'remote' || cur.picker?.kind === 'web') {
       const pk = cur.picker;
       const web = pk.kind === 'web';
@@ -2287,9 +2333,9 @@ export function App({ opts, win, onRestart }) {
         else setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
         return;
       }
-      const rows = web ? WEB_ROWS : REMOTE_ROWS;
+      const rows = web ? WEB_ROWS : remoteRows(pk);
       const n = rows.length;
-      const row = rows[pk.index];
+      const row = rows[Math.min(pk.index, n - 1)];
       // A key row with no search service picked has nothing to take.
       const text = (row.type === 'text' || row.type === 'secret') && !(web && pk.values.search === 'off');
       const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab && ch >= ' ';
@@ -2297,8 +2343,11 @@ export function App({ opts, win, onRestart }) {
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % n });
       else if (key.leftArrow || key.rightArrow) setPicker((web ? moveWebRow : moveRow)(pk, row.id, key.rightArrow ? 1 : -1));
       else if (key.return && text) setPicker(startEdit(pk, row.id));
-      else if (key.return && row.id === 'test') (web ? runWebTest : runRemoteTest)(pk);
-      else if (key.return) (web ? saveWeb : saveRemote)(pk);
+      else if (key.return && web) (row.id === 'test' ? runWebTest : saveWeb)(pk);
+      else if (key.return && row.id === 'more') setPicker({ ...pk, more: !pk.more });
+      else if (key.return && row.id === 'go') { if (!pk.test?.running) connectForm(pk); }
+      else if (key.return && row.id === 'keep') saveOnlyForm(pk);
+      else if (key.return) setPicker({ ...pk, index: Math.min(n - 1, pk.index + 1) });
       // Typing on a text row starts it over with what you type (enter keeps the old text to change it).
       else if (typed && text) setPicker({ ...startEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
       else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: kept, tone: 'dim' }); }
@@ -2532,7 +2581,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle, onRemote: Boolean(model.remote),
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

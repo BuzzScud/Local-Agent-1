@@ -1,7 +1,7 @@
-// The Claude API as a /remote (Server: Claude API): Anthropic's Messages API
+// The Claude API as a /remote (Run on: Claude API): Anthropic's Messages API
 // through its official SDK (@anthropic-ai/sdk), loaded only when a Claude
 // remote is used. Here: the client, what each model takes, and the check
-// the form's Test row and connecting run. The chat itself is
+// the form's Connect and connecting run. The chat itself is
 // terminal/src/agent/claude.mjs.
 export const CLAUDE_HOST = 'api.anthropic.com';
 // The model used when the Model row is blank: Anthropic's default today.
@@ -10,6 +10,17 @@ export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
 // 1M tokens, but every step sends the conversation again, so a session is
 // kept to this much (the Context row can raise it).
 export const CLAUDE_CTX = 200_000;
+// The models /remote's Model row steps through for the Claude API (←→), most
+// used first; a Test or a connect adds any other the key lists. Prices are per
+// million tokens in / out, as Anthropic lists them (Sep 2026).
+export const CLAUDE_MODELS = [
+  { id: 'claude-opus-5-5', name: 'Opus 5.5', note: 'the default, strong at code · $4 / $20' },
+  { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5', note: 'quicker, half the price · $2 / $10' },
+  { id: 'claude-fable-5-1', name: 'Fable 5.1', note: 'the most capable, the dearest · $10 / $50' },
+  { id: 'claude-haiku-4-5', name: 'Haiku 4.5', note: 'the quickest and cheapest · $1 / $5' },
+];
+// A model's short name (Opus 5.5), else its id as the API gives it.
+export const claudeName = (id) => CLAUDE_MODELS.find((m) => m.id === id)?.name ?? id;
 
 let sdk = null;
 export async function claudeSdk() {
@@ -92,7 +103,7 @@ export async function claudeProbe({ url, key = null, model = '', reply = false, 
   } catch (e) {
     if (signal?.aborted) throw e;
     if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return fail(key ? 'the API key was not accepted' : 'it needs an API key: enter one in the API key row, or set ANTHROPIC_API_KEY');
-    if (e instanceof Anthropic.NotFoundError) return fail(`there is no model "${want}": pick one in the Model row (Test lists them)`);
+    if (e instanceof Anthropic.NotFoundError) return fail(`there is no model "${want}": pick another in the Model row (←→)`);
     if (e instanceof Anthropic.RateLimitError) return fail('the API key is rate limited right now (429): try again in a moment');
     if (e instanceof Anthropic.APIConnectionError) return fail(why(e.cause ?? e));
     return fail(`${e.status ? `${e.status} ` : ''}${String(e.message ?? e).slice(0, 160)}`);

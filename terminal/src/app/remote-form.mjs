@@ -1,131 +1,273 @@
-// /remote: one form, like /effort's panel, for a model on another machine.
-// Rows: Use (This Mac · Remote), Connect (http · https · SSH tunnel),
-// Address, Port, API key, Server (llama.cpp · OpenAI-compatible), Model,
-// Context, then Test and Save. ←→ moves a choice row; enter (or typing) on a
-// text row edits it in place; Test checks the values as they are now, before
-// anything is saved; Save keeps them and switches when Use changed. The key
-// never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, CONNECTS, REMOTE_KINDS, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, parseAddress, remoteProblem, remoteRisk, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
+// /remote: one form for where the model runs. Its first row, Run on, picks
+// This Mac · Claude API · My other computer · Another service, and only that
+// one's rows show (the ones seldom changed behind More). Each service keeps
+// its own set-up and its own key, so flipping Run on loses nothing. Connect
+// checks the rows as they are (the tunnel, the address, the key, one word
+// back) and only when that works saves them and switches; Save only keeps
+// them. ←→ moves a choice row; enter (or typing) on a text row edits it in
+// place. A key never leaves the Keychain except to go in a request's header.
+import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
 
+export const SOURCES = ['here', ...REMOTE_SOURCES];
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
-export const REMOTE_ROWS = [
-  { id: 'use', label: 'Use', type: 'choice' },
-  { id: 'connect', label: 'Connect', type: 'choice' },
-  { id: 'address', label: 'Address', type: 'text' },
-  { id: 'port', label: 'Port', type: 'text' },
-  { id: 'key', label: 'API key', type: 'secret' },
-  { id: 'kind', label: 'Server', type: 'choice' },
-  { id: 'model', label: 'Model', type: 'text' },
-  { id: 'context', label: 'Context', type: 'choice' },
-  { id: 'test', label: 'Test', type: 'action' },
-  { id: 'save', label: 'Save', type: 'action' },
-];
-const CHOICES = { use: [false, true], connect: CONNECTS, kind: REMOTE_KINDS, context: CONTEXTS };
+const ROW = {
+  source: { id: 'source', label: 'Run on', type: 'choice' },
+  address: { id: 'address', label: 'Address', type: 'text' },
+  connect: { id: 'connect', label: 'Reach by', type: 'choice' },
+  key: { id: 'key', label: 'API key', type: 'secret' },
+  kind: { id: 'kind', label: 'Server', type: 'choice' },
+  model: { id: 'model', label: 'Model', type: 'text' },
+  port: { id: 'port', label: 'Port', type: 'text' },
+  context: { id: 'context', label: 'Context', type: 'choice' },
+  more: { id: 'more', label: 'More', type: 'toggle' },
+  go: { id: 'go', label: 'Connect', type: 'action' },
+  keep: { id: 'keep', label: 'Save only', type: 'action' },
+};
+// Each service's rows: the ones most people fill in, then the ones behind More.
+const LAYOUT = {
+  claude: { main: ['key', 'model'], more: ['address', 'context'] },
+  machine: { main: ['address', 'connect', 'key'], more: ['port', 'kind', 'model', 'context'] },
+  openai: { main: ['address', 'key', 'model'], more: ['connect', 'port', 'context'] },
+};
+const CHOICES = { connect: ['http', 'https', 'ssh'], kind: ['llama', 'openai'], context: CONTEXTS };
 const WORDS = {
-  use: (v) => (v ? 'Remote' : 'This Mac'),
-  connect: (v) => ({ http: 'http', https: 'https', ssh: 'SSH tunnel' })[v] ?? v,
+  source: (v) => ({ here: 'This Mac', claude: 'Claude API', machine: 'My other computer', openai: 'Another service' })[v] ?? v,
+  connect: (v) => ({ http: 'Home network (http)', https: 'Internet (https)', ssh: 'SSH tunnel' })[v] ?? v,
   kind: (v) => ({ llama: 'llama.cpp', openai: 'OpenAI-compatible', claude: 'Claude API' })[v] ?? v,
   context: (v) => (v ? `${Math.round(v / 1024)}k` : 'from server'),
 };
 export const kindWord = (k) => WORDS.kind(k);
+export const sourceWord = (s) => WORDS.source(s);
 
-// The form as it opens: what settings.json keeps ("remote"). key: null =
-// the saved key stays; '' = none; a string = a new one, saved with Save.
-export function openForm(saved) {
-  const values = { ...DEFAULT_REMOTE, ...(saved ?? {}) };
-  return { kind: 'remote', index: 0, values, saved: { ...values }, key: null, editing: null, test: null, error: null };
+// A service's set-up before anything is typed.
+const FRESH = {
+  claude: { ...DEFAULT_REMOTE, source: 'claude', kind: 'claude', connect: 'https', model: DEFAULT_CLAUDE_MODEL },
+  machine: { ...DEFAULT_REMOTE, source: 'machine', kind: 'llama', connect: 'http' },
+  openai: { ...DEFAULT_REMOTE, source: 'openai', kind: 'openai', connect: 'https' },
+};
+const strip = ({ use, ...rest }) => rest;
+
+// Each service's saved set-up (settings.json "remotes"), or null when it has none.
+// A remote saved before the Run on row (only in "remote") is its service's.
+export function remotesOf(settings) {
+  const saved = settings?.remotes ?? {};
+  const out = {};
+  for (const s of REMOTE_SOURCES) out[s] = saved[s] ? { ...FRESH[s], ...strip(saved[s]), source: s } : null;
+  const r = settings?.remote;
+  if (r && (r.address || r.key || r.kind === 'claude')) {
+    const s = sourceOf(r);
+    out[s] ??= { ...FRESH[s], ...strip(r), source: s };
+  }
+  return out;
 }
 
-// ←→ on a choice row (clamped at the ends, as in /effort); on the Model row
-// after a Test, through the models the server listed.
+// Whether a saved service can be switched to as it is (/remote claude, /model):
+// an address, or for the Claude API a key (its own, or ANTHROPIC_API_KEY).
+export const readyRemote = (r) => Boolean(r) && !remoteProblem(r) && (r.kind !== 'claude' || Boolean(r.key || process.env.ANTHROPIC_API_KEY));
+
+// The saved services as /model rows, the one in use marked by the caller.
+export function remoteChoices(settings) {
+  const all = remotesOf(settings);
+  return REMOTE_SOURCES.filter((s) => readyRemote(all[s])).map((s) => {
+    const r = all[s];
+    return { id: `remote-${s}`, remoteRow: true, source: s, kind: r.kind, profile: r, name: `${WORDS.source(s)} · ${s === 'claude' ? claudeName(r.model || DEFAULT_CLAUDE_MODEL) : remoteLabel(r)}` };
+  });
+}
+export const remoteRowDesc = (x) => (x.source === 'claude' ? 'Anthropic · billed to your key' : x.source === 'openai' ? 'OpenAI-compatible service' : `${WORDS.kind(x.kind)} · another computer`);
+
+// The form as it opens: on the service in use (This Mac when no remote is),
+// or on `source`. keys: null = the saved key stays; '' = none; a string = a
+// new one, saved with Connect or Save only.
+export function openForm(settings, { on = false, source = null } = {}) {
+  const saved = remotesOf(settings);
+  const inUse = on ? sourceOf(settings?.remote) : 'here';
+  return {
+    kind: 'remote', source: source ?? inUse, inUse, index: 0, more: false,
+    profiles: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, { ...(saved[s] ?? FRESH[s]) }])),
+    saved: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, saved[s]])),
+    keys: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, null])),
+    editing: null, test: null, error: null, tried: false,
+  };
+}
+
+const cur = (form) => form.profiles[form.source] ?? null;
+const withValues = (form, patch, more = {}) => ({ ...form, profiles: { ...form.profiles, [form.source]: { ...cur(form), ...patch } }, error: null, ...more });
+
+// The rows shown now: Run on, its service's rows (More's when open), Connect, Save only.
+export function rowsOf(form) {
+  if (form.source === 'here') return [ROW.source, { ...ROW.go, label: 'Switch' }];
+  const l = LAYOUT[form.source];
+  return [ROW.source, ...l.main.map((id) => ROW[id]), ROW.more, ...(form.more ? l.more.map((id) => ROW[id]) : []), ROW.go, ROW.keep];
+}
+
+// The models the Model row steps through: the Claude list (and any other the key
+// listed), or what an OpenAI-compatible server listed when it was checked.
+export function modelChoices(form) {
+  const v = cur(form);
+  if (!v) return [];
+  const listed = form.test?.models ?? [];
+  if (v.kind !== 'claude') return listed;
+  return [...new Set([...CLAUDE_MODELS.map((m) => m.id), v.model || DEFAULT_CLAUDE_MODEL, ...listed])];
+}
+
+// ←→ on a choice row, clamped at the ends as in /effort. Run on moves to another
+// service (its rows as it left them); More opens (→) and folds (←); the Model
+// row walks modelChoices.
 export function moveRow(form, id, dir) {
-  if (id === 'model') {
-    const list = form.test?.models ?? [];
-    if (!list.length) return form;
-    const at = list.indexOf(form.values.model);
-    const next = list[Math.max(0, Math.min(list.length - 1, at < 0 ? (dir > 0 ? 0 : list.length - 1) : at + dir))];
-    return { ...form, values: { ...form.values, model: next }, error: null };
+  if (id === 'source') {
+    const next = SOURCES[Math.max(0, Math.min(SOURCES.length - 1, SOURCES.indexOf(form.source) + dir))];
+    return next === form.source ? form : { ...form, source: next, index: 0, more: false, test: null, error: null, tried: false };
   }
-  const steps = CHOICES[id];
-  if (!steps) return form;
-  const at = Math.max(0, steps.indexOf(form.values[id]));
-  const v = steps[Math.max(0, Math.min(steps.length - 1, at + dir))];
-  const values = { ...form.values, [id]: v };
-  // The Claude API is https only: a tunnel set before is turned to https.
-  if (id === 'kind' && v === 'claude' && values.connect === 'ssh') values.connect = 'https';
-  return { ...form, values, error: null, ...(id === 'use' || id === 'context' ? {} : { test: null }) };
+  if (id === 'more') return { ...form, more: dir > 0 };
+  const v = cur(form);
+  if (!v) return form;
+  const steps = id === 'model' ? modelChoices(form) : CHOICES[id];
+  if (!steps?.length) return form;
+  const at = steps.indexOf(id === 'model' && v.kind === 'claude' ? v.model || DEFAULT_CLAUDE_MODEL : v[id]);
+  const next = steps[Math.max(0, Math.min(steps.length - 1, at < 0 ? (dir > 0 ? 0 : steps.length - 1) : at + dir))];
+  return withValues(form, { [id]: next }, id === 'context' || id === 'model' ? {} : { test: null });
 }
 
 // What a row shows between ◀ ▶ (or after its label).
 export function showValue(form, id) {
-  const v = form.values;
-  if (WORDS[id]) return WORDS[id](v[id]);
+  if (id === 'source') return WORDS.source(form.source);
+  if (id === 'more') return form.more ? '▾' : '▸';
+  if (id === 'go') return form.test?.running ? 'checking…' : form.source === 'here' ? (form.inUse === 'here' ? 'in use now' : 'enter to switch') : form.test && !form.test.ok ? '✗ it did not work' : 'enter to connect';
+  if (id === 'keep') return 'enter to save';
+  const v = cur(form);
   const claude = v.kind === 'claude';
+  if (WORDS[id]) return WORDS[id](v[id]);
   if (id === 'address') return v.address || (claude ? CLAUDE_HOST : 'not set');
   if (id === 'port') return v.port ? String(v.port) : claude && !parseAddress(v.address)?.scheme ? '443' : v.connect === 'ssh' || (v.kind === 'llama' && !parseAddress(v.address)?.scheme) ? `${SERVE_PORT}` : 'the address’s own';
   if (id === 'key') {
-    if (form.key === '') return 'none';
-    if (form.key) return `${'•'.repeat(8)}${keyEnd(form.key)}`;
-    return v.key ? `${'•'.repeat(8)}${v.keyEnd ?? ''}` : 'none';
+    const k = form.keys[form.source];
+    if (k === '') return 'none';
+    if (k) return `${'•'.repeat(8)}${keyEnd(k)}`;
+    if (v.key) return `${'•'.repeat(8)}${v.keyEnd ?? ''}`;
+    return claude && process.env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY' : 'none';
   }
-  if (id === 'model') return v.model || (claude ? DEFAULT_CLAUDE_MODEL : v.kind === 'llama' ? 'the one it runs' : 'not set');
-  if (id === 'test') return form.test?.running ? 'checking…' : form.test ? (form.test.ok ? '✔ it works' : '✗ it does not') : 'enter to check';
-  if (id === 'save') return 'enter to save';
+  if (id === 'model') return claude ? claudeName(v.model || DEFAULT_CLAUDE_MODEL) : v.model || (v.kind === 'llama' ? 'the one it runs' : 'not set');
   return '';
 }
 
-// The line after a row: what it means, or what the last Test found.
+// The line after a row: what it means, or what the last check found.
 export function rowNote(form, id) {
-  const v = form.values;
   const t = form.test && !form.test.running ? form.test : null;
+  if (id === 'source') return ({ here: 'the model loads on this Mac · nothing leaves it', claude: 'Anthropic’s models · billed to your API key', machine: 'running coding serve or a llama-server', openai: 'OpenRouter, OpenAI, Ollama, LM Studio, vLLM…' })[form.source];
+  if (id === 'go') {
+    if (form.test?.running) return 'reaching it, checking the key, asking for one word…';
+    if (t) return t.steps.map((s) => `${s.ok ? '✔' : '✗'} ${s.text}`).join(' · ');
+    if (form.source === 'here') return form.inUse === 'here' ? 'this window runs here already' : 'back to the model here · the remotes stay saved';
+    return form.source === 'claude' ? 'checks the key and asks for one word (a fraction of a cent), then switches' : 'checks it answers, then saves and switches';
+  }
+  if (id === 'keep') return form.inUse === form.source ? 'keeps it · Connect uses it now' : `keeps it · this window stays on ${form.inUse === 'here' ? 'this Mac' : WORDS.source(form.inUse)}`;
+  const v = cur(form);
   const claude = v.kind === 'claude';
+  const ssh = v.connect === 'ssh' && !claude;
   const store = keyStore() === 'keychain' ? 'Keychain' : 'private key file';
   switch (id) {
-    case 'use': return v.use ? (claude ? 'your prompts, code and the files it reads go to Anthropic, billed to the key' : 'your prompts, code and the files it reads go to the remote') : 'the model loads on this Mac';
-    case 'connect': return claude ? 'https: the Claude API has no plain http or tunnel' : v.connect === 'ssh' ? 'through ssh: nothing open to the network, uses your ssh keys' : v.connect === 'https' ? 'encrypted: across the internet, or a hosted API' : 'a home network or Tailscale';
-    case 'address': return claude ? `blank: ${CLAUDE_HOST}, Anthropic’s API` : v.connect === 'ssh' ? 'user@host, or a name from ~/.ssh/config' : 'an IP or a name · a whole http(s):// address works too';
-    case 'port': return claude ? 'blank: https’s own' : v.connect === 'ssh' ? 'the model’s port on that machine (coding serve: 8080)' : 'blank: 8080 for llama.cpp, else the address’s own';
-    case 'key': return claude ? `from console.anthropic.com · blank uses ANTHROPIC_API_KEY · kept in the ${store}${form.key !== null ? ' · • not saved yet' : ''}` : `enter to type or paste · kept in the ${store}${form.key !== null ? ' · • not saved yet' : ''}`;
-    case 'kind': return claude ? 'Anthropic’s Messages API, through its official SDK' : v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'vLLM, Ollama, LM Studio, OpenRouter, OpenAI…';
-    case 'model': return t?.models?.length ? `←→ picks one of the ${t.models.length} it has` : claude ? `blank: ${DEFAULT_CLAUDE_MODEL} (Test lists the others)` : v.kind === 'llama' ? 'blank: whatever it runs' : 'the name the server wants (Test lists them)';
-    case 'context': return claude ? `the server’s own, at most ${Math.round(CLAUDE_CTX / 1000)}k: each step sends the conversation again` : t?.ctx ? `the server says ${Math.round(t.ctx / 1024)}k` : 'the server’s own, else 32k';
-    case 'test': return form.test?.running ? 'reaching it, checking the key, asking for one word…' : t ? t.steps.map((s) => `${s.ok ? '✔' : '✗'} ${s.text}`).join(' · ') : 'reaches it, checks the key, asks for one word';
-    case 'save': return v.use !== form.saved.use ? (v.use ? 'keeps all of it and switches to the remote' : 'keeps all of it and goes back to this Mac') : 'keeps all of it';
+    case 'more': {
+      if (form.more) return 'enter folds them away';
+      const fresh = FRESH[form.source];
+      const set = LAYOUT[form.source].more.filter((r) => (r === 'model' && v.kind === 'llama' ? v.model : v[r] !== fresh[r]));
+      return set.length ? set.map((r) => `${ROW[r].label.toLowerCase()} ${showValue(form, r)}`).join(' · ') : LAYOUT[form.source].more.map((r) => ROW[r].label.toLowerCase()).join(', ');
+    }
+    case 'address': return claude ? `blank: ${CLAUDE_HOST} · a proxy’s address works too` : ssh ? 'user@host, or a name from ~/.ssh/config' : form.source === 'openai' ? 'the whole address, https:// and its path included' : 'its IP or name (a Tailscale name works too)';
+    case 'connect': return ssh ? 'through ssh: nothing open to the network' : v.connect === 'https' ? 'encrypted, across the internet' : 'plain http: a home network or Tailscale';
+    case 'key': {
+      const pending = form.keys[form.source] !== null ? ' · • not saved yet' : '';
+      if (claude) return `console.anthropic.com → API keys · kept in the ${store}${process.env.ANTHROPIC_API_KEY ? ' · blank: ANTHROPIC_API_KEY' : ''}${pending}`;
+      return `${form.source === 'machine' ? 'the one coding serve printed' : 'the service’s key'} · kept in the ${store}${pending}`;
+    }
+    case 'kind': return v.kind === 'llama' ? 'coding serve, or a llama-server you started' : 'Ollama, LM Studio, vLLM… on that computer';
+    case 'model': {
+      if (claude) return CLAUDE_MODELS.find((m) => m.id === (v.model || DEFAULT_CLAUDE_MODEL))?.note ?? 'from your key’s list of models';
+      if (t?.models?.length) return `←→ picks one of the ${t.models.length} it has`;
+      return v.kind === 'llama' ? 'blank: whatever it runs' : 'the name the service wants (Connect lists them)';
+    }
+    case 'port': return claude ? 'blank: https’s own' : ssh ? 'the model’s port on that computer (coding serve: 8080)' : v.kind === 'llama' ? 'blank: 8080, coding serve’s' : 'blank: the address’s own';
+    case 'context': return claude ? `the model’s own, at most ${Math.round(CLAUDE_CTX / 1000)}k: each step sends the chat again` : t?.ctx ? `the server says ${Math.round(t.ctx / 1024)}k` : 'the server’s own, else 32k';
     default: return '';
   }
 }
 
-// The values as settings.json keeps them (the key itself goes to the Keychain).
-export function toProfile(form) {
-  const v = form.values;
-  const hasKey = form.key === null ? Boolean(v.key) : Boolean(form.key);
+// Whether a row differs from what is saved (the • after it).
+export function rowChanged(form, id) {
+  if (form.source === 'here' || !(id in ROW) || ['source', 'more', 'go', 'keep'].includes(id)) return false;
+  if (id === 'key') return form.keys[form.source] !== null;
+  const before = form.saved[form.source] ?? FRESH[form.source];
+  return (cur(form)[id] ?? null) !== (before[id] ?? null);
+}
+
+// A service's set-up as settings.json keeps it (the key itself goes to the Keychain).
+export function toProfile(form, source = form.source) {
+  const v = form.profiles[source];
+  const k = form.keys[source];
+  const hasKey = k === null ? Boolean(v.key) : Boolean(k);
   return {
-    use: Boolean(v.use), address: String(v.address ?? '').trim(), port: v.port ?? null, connect: v.connect, kind: v.kind,
-    model: String(v.model ?? '').trim(), context: v.context ?? 0, key: hasKey, keyEnd: form.key === null ? (hasKey ? v.keyEnd ?? '' : '') : keyEnd(form.key),
+    source, address: String(v.address ?? '').trim(), port: v.port ?? null,
+    connect: v.kind === 'claude' && v.connect === 'ssh' ? 'https' : v.connect, kind: v.kind,
+    model: String(v.model ?? '').trim(), context: v.context ?? 0,
+    key: hasKey, keyEnd: k === null ? (hasKey ? v.keyEnd ?? '' : '') : keyEnd(k),
+    keyId: k || !hasKey ? source : keyIdOf(v),
   };
 }
 
-// The warning under the form: the problem that stops a save, else the risk worth knowing.
+// The warning under the form: a key that cannot be sent; after a Connect, the
+// problem that stopped it; else plain http to the internet, worth knowing.
 export function formWarning(form) {
+  if (form.source === 'here') return null;
+  const k = form.keys[form.source];
+  if (k && !validKey(k)) return { tone: 'error', text: 'The API key has a space or a line break in it: paste it again.' };
   const r = toProfile(form);
-  if (form.key && !validKey(form.key)) return { tone: 'error', text: 'The API key has a space or a line break in it: paste it again.' };
-  if (r.use || r.address) { const p = remoteProblem(r); if (p && (r.use || form.test)) return { tone: r.use ? 'error' : 'warn', text: `Not ready: ${p}.` }; }
-  const risk = remoteRisk(r);
+  const p = remoteProblem(r);
+  if (p && form.tried) return { tone: 'error', text: `Not ready: ${p}.` };
+  const risk = r.address ? remoteRisk(r) : null;
   return risk ? { tone: 'warn', text: `⚠ ${risk}.` } : null;
 }
 
 // Whether the saved remote and the new one reach a different place (or with another key).
 export function connectionChanged(before, after, keyChanged) {
   const b = { ...DEFAULT_REMOTE, ...(before ?? {}) };
-  return keyChanged || ['address', 'port', 'connect', 'kind', 'model', 'context'].some((k) => (b[k] ?? null) !== (after[k] ?? null));
+  return keyChanged || sourceOf(b) !== sourceOf(after) || ['address', 'port', 'connect', 'kind', 'model', 'context'].some((k) => (b[k] ?? null) !== (after[k] ?? null));
+}
+
+// What Connect or Save only writes. remotes: every service saved before or
+// changed in the form (and the one shown). remote, the one in use next: on
+// Connect the one shown (This Mac: the last remote, off); on Save only, with
+// no remote on, the one just saved (so /remote on finds it), else the one in
+// use, with its rows as now. keys: what goes in or out of the Keychain.
+export function savePlan(form, settings, { connect = false } = {}) {
+  const remotes = { ...(settings?.remotes ?? {}) };
+  const keys = [];
+  for (const s of REMOTE_SOURCES) {
+    const k = form.keys[s];
+    const changed = k !== null || LAYOUT[s].main.concat(LAYOUT[s].more).some((id) => (form.profiles[s][id] ?? null) !== ((form.saved[s] ?? FRESH[s])[id] ?? null));
+    if (!changed && !form.saved[s] && s !== form.source) continue;
+    remotes[s] = toProfile(form, s);
+    const old = form.saved[s];
+    if (k) {
+      keys.push({ op: 'save', id: s, key: k, source: s });
+      if (old?.key && keyIdOf(old) !== s) keys.push({ op: 'remove', id: keyIdOf(old) });
+    } else if (k === '' && old?.key) keys.push({ op: 'remove', id: keyIdOf(old) });
+  }
+  const before = settings?.remote ?? null;
+  const was = before ? sourceOf(before) : null;
+  let remote;
+  if (connect) remote = form.source === 'here' ? (before ? { ...before, ...(remotes[was] ?? {}), use: false } : null) : { ...remotes[form.source], use: true };
+  else if (!before?.use && form.source !== 'here') remote = { ...remotes[form.source], use: false };
+  else remote = before && remotes[was] ? { ...remotes[was], use: Boolean(before.use) } : before;
+  return { remotes, remote, keys };
 }
 
 // ---- editing a text row in place ----------------------------------------------------------------
+// /web edits its rows with these too: its form keeps one set of values and one key.
 
 // Enter or a typed letter on a text row: the key starts empty (a new one
 // replaces the old); the others start with what is there.
 export function startEdit(form, id, typed = '') {
-  const text = id === 'key' ? '' : id === 'port' ? (form.values.port ? String(form.values.port) : '') : String(form.values[id] ?? '');
+  const v = form.profiles ? cur(form) : form.values;
+  const text = id === 'key' ? '' : id === 'port' ? (v.port ? String(v.port) : '') : String(v[id] ?? '');
   const value = text + typed;
   return { ...form, editing: { id, value, cursor: value.length }, error: null };
 }
@@ -153,34 +295,40 @@ export function pasteField(e, text) {
   return { ...e, value, cursor: e.cursor + t.length };
 }
 
-// Enter while editing: the row takes the text. A whole address with its own
-// scheme sets Connect to match (http:// or https://).
+// Enter while editing: the row takes the text and the cursor goes to the next
+// row (to Connect when the form was opened to ask for this one row). A whole
+// address with its own scheme sets Reach by to match (http:// or https://).
 export function commitEdit(form) {
   const e = form.editing;
   if (!e) return form;
-  const values = { ...form.values };
-  let key = form.key;
+  const values = { ...(form.profiles ? cur(form) : form.values) };
   const text = e.value.trim();
-  if (e.id === 'key') key = text;
-  else if (e.id === 'port') values.port = text ? Number(text) : null;
-  else values[e.id] = text;
+  if (e.id === 'port') values.port = text ? Number(text) : null;
+  else if (e.id !== 'key') values[e.id] = text;
   if (e.id === 'address' && values.connect !== 'ssh') {
     const a = parseAddress(text);
     if (a?.scheme) values.connect = a.scheme;
   }
-  return { ...form, values, key, editing: null, test: e.id === 'model' ? form.test : null, error: null };
+  // /web: the row takes it, the cursor stays.
+  if (!form.profiles) return { ...form, values, key: e.id === 'key' ? text : form.key, editing: null, test: null, error: null };
+  const keys = e.id === 'key' ? { ...form.keys, [form.source]: text } : form.keys;
+  const next = { ...form, profiles: { ...form.profiles, [form.source]: values }, keys, editing: null, test: e.id === 'model' ? form.test : null, error: null };
+  const rows = rowsOf(next);
+  const index = next.ask === e.id ? rows.findIndex((r) => r.id === 'go') : Math.min(rows.length - 1, next.index + 1);
+  return { ...next, index, ask: null };
 }
 
-// ---- the Test row ------------------------------------------------------------------------------
+// ---- checking (Connect) ------------------------------------------------------------------------
 
-// Checks the form's values as they are, before any save: the tunnel (opened
-// for the check and closed after), the address, the key, the model, one word.
+// Checks the shown service's rows as they are, before any save: the tunnel
+// (opened for the check and closed after), the address, the key, the model, one word.
 export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000 } = {}) {
   const r = toProfile(form);
   const problem = remoteProblem(r);
   if (problem) return { ok: false, steps: [{ ok: false, text: problem }], models: [] };
-  const key = form.key !== null ? form.key || null : r.key ? readKey() : null;
-  if (r.key && !key) return { ok: false, steps: [{ ok: false, text: 'the saved key is not in the Keychain: enter it again' }], models: [] };
+  const k = form.keys[form.source];
+  const key = k !== null ? k || null : r.key ? readKey(keyIdOf(r)) : null;
+  if (r.key && !key) return { ok: false, steps: [{ ok: false, text: `the saved key is not in the ${keyStore() === 'keychain' ? 'Keychain' : 'key file'}: enter it again` }], models: [] };
   let tunnel = null;
   try {
     let url;
@@ -188,10 +336,17 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000 }
       tunnel = await openTunnel({ dest: r.address, remotePort: r.port ?? SERVE_PORT, ssh });
       url = tunnel.url;
     } else url = directUrl(r);
-    const res = await probe({ url, kind: r.kind, key, model: r.model, reply: true, signal, timeoutMs });
+    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, reply: true, signal, timeoutMs });
     if (tunnel) res.steps.unshift({ ok: true, text: 'ssh tunnel open' });
     return res;
   } catch (e) {
     return { ok: false, steps: [{ ok: false, text: e.message }], models: [] };
   } finally { tunnel?.stop(); }
+}
+
+// A check's findings on the form; an OpenAI-compatible server with one model, and none named: that one.
+export function withTest(form, res, id) {
+  const v = cur(form);
+  const one = v && !v.model && v.kind === 'openai' && res.models?.length === 1;
+  return { ...(one ? withValues(form, { model: res.models[0] }) : form), test: { ...res, id } };
 }

@@ -113,7 +113,7 @@ export const PLACES = [
   ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
   ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the mouse, the model'],
   ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
-  ['Keychain · agentic-coder-remote', 'the API key of the model /remote uses, and the web search service’s key /web uses (settings.json keeps only their last 4 characters)'],
+  ['Keychain · agentic-coder-remote', 'each /remote service’s API key (the Claude API, your other computer, another service), and the web search service’s key /web uses (settings.json keeps only their last 4 characters)'],
   ['~/.agentic-coder/serve.key', 'the API key coding serve asks other machines for (readable by you only)'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],

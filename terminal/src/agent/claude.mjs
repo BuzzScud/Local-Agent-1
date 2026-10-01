@@ -1,4 +1,4 @@
-// The chat when the remote is the Claude API (/remote, Server: Claude API):
+// The chat when the remote is the Claude API (/remote, Run on: Claude API):
 // the agent's conversation (OpenAI format: role system / user / assistant with
 // tool_calls / tool) becomes one Messages API request, and Claude's stream
 // comes back as the same events as every other kind (client.mjs).

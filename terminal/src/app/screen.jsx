@@ -13,7 +13,7 @@ import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
-import { REMOTE_ROWS, showValue, rowNote, formWarning, kindWord } from './remote-form.mjs';
+import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
@@ -909,20 +909,24 @@ function LimitsPicker({ app }) {
   );
 }
 
-// /remote: the model on another machine in one form (remote-form.mjs). A
-// choice row shows its value between ◀ ▶; a text row its value, or what is
-// being typed with the cursor (the API key as dots); • marks a change not
-// saved yet. The last Test's findings sit on the Test row.
-// /web is the same form with its own rows (web-form.mjs).
+// /remote: where the model runs, in one form (remote-form.mjs): Run on first,
+// then only that service's rows. A choice row shows its value between ◀ ▶; a
+// text row its value, or what is being typed with the cursor (the API key as
+// dots); • marks a change not saved yet. A Connect that did not work leaves
+// its findings under the Connect row.
+// /web is the same form with its own rows (web-form.mjs) and a Test row.
 function RemotePicker({ app }) {
   const pk = app.picker;
   const web = pk.kind === 'web';
-  const ROWS = web ? WEB_ROWS : REMOTE_ROWS;
+  const ROWS = web ? WEB_ROWS : rowsOf(pk);
   const showValueOf = web ? showWebValue : showValue;
   const noteOf = web ? webRowNote : rowNote;
-  const lw = Math.max(...ROWS.map((r) => r.label.length)) + 2;
+  // The label column fits every row either form can show, so it does not move when Run on or More changes the rows.
+  const lw = web ? Math.max(...ROWS.map((r) => r.label.length)) + 2 : 11;
   const vw = 22;
   const warn = (web ? webWarning : formWarning)(pk);
+  // The row that checks: Test on /web, Connect on /remote; what it found goes on lines of its own (they can be long).
+  const checkRow = web ? 'test' : 'go';
   const typing = (e) => {
     const shown = e.id === 'key' ? '•'.repeat(e.value.length) : e.value;
     const room = Math.max(8, app.width - lw - 12);
@@ -930,42 +934,42 @@ function RemotePicker({ app }) {
     const before = shown.slice(from, e.cursor), at = shown[e.cursor] ?? ' ', after = shown.slice(e.cursor + 1, from + room);
     return <><Text>{from ? '…' : ''}{before}</Text><Text inverse>{at}</Text><Text>{after}</Text>{e.id === 'key' ? <Text color={C.dim}>  {e.value.length} characters</Text> : null}</>;
   };
-  const changed = (id) => (id === 'key' ? pk.key !== null : id in pk.values && pk.values[id] !== pk.saved[id]);
+  const changed = (id) => (web ? (id === 'key' ? pk.key !== null : id in pk.values && pk.values[id] !== pk.saved[id]) : rowChanged(pk, id));
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Text bold>{web ? 'Web' : 'Remote model'}</Text>
-      <Text color={C.dim} wrap="truncate-end">{web ? 'What the model may do on the web. Test checks the key before anything is saved. Kept for every folder.' : 'Where the model runs. Test checks the rows as they are, before anything is saved. Kept for next time.'}</Text>
+      <Text color={C.dim} wrap="truncate-end">{web ? 'What the model may do on the web. Test checks the key before anything is saved. Kept for every folder.' : 'Pick where it runs, fill in its rows, then Connect. Nothing changes unless it works.'}</Text>
       {ROWS.map((r, i) => {
         const on = i === pk.index;
         const e = pk.editing?.id === r.id ? pk.editing : null;
-        const choice = r.type === 'choice' || (r.id === 'model' && pk.test?.models?.length > 1);
+        const choice = r.type === 'choice' || (!web && r.id === 'model' && modelChoices(pk).length > 1);
         const unsaved = changed(r.id);
         const v = showValueOf(pk, r.id);
         const note = noteOf(pk, r.id);
-        const tone = r.id === 'test' && pk.test && !pk.test.running ? (pk.test.ok ? C.ok : C.bad) : undefined;
+        const done = r.id === checkRow && pk.test && !pk.test.running;
+        const tone = done ? (pk.test.ok ? C.ok : C.bad) : undefined;
         return (
           <React.Fragment key={r.id}>
-            {r.id === 'test' ? <Text> </Text> : null}
+            {r.id === checkRow ? <Text> </Text> : null}
             <Text wrap="truncate-end">
               <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.label.padEnd(lw)}</Text>
               {e ? typing(e) : (
                 <>
                   <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '◀ ' : '  '}</Text>
-                  <Text color={tone ?? (unsaved ? C.accent : r.type === 'action' ? C.dim : undefined)} bold={unsaved}>{v.padEnd(vw)}</Text>
+                  <Text color={tone ?? (unsaved ? C.accent : r.type === 'action' || r.type === 'toggle' ? C.dim : undefined)} bold={unsaved}>{v.padEnd(vw)}</Text>
                   <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '▶ ' : '  '}</Text>
                   <Text color={unsaved ? C.accent : C.faint}>{unsaved ? '•' : ' '}</Text>
-                  <Text color={tone ?? C.dim}>{'  '}{r.id === 'test' && pk.test && !pk.test.running ? '' : note}</Text>
+                  <Text color={tone ?? C.dim}>{'  '}{done ? '' : note}</Text>
                 </>
               )}
             </Text>
-            {/* What the last Test found, on lines of its own (they can be long). */}
-            {r.id === 'test' && pk.test && !pk.test.running ? <Box paddingLeft={lw + 4}><Text color={tone}>{note}</Text></Box> : null}
+            {done ? <Box paddingLeft={lw + 4}><Text color={tone}>{note}</Text></Box> : null}
           </React.Fragment>
         );
       })}
       {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="truncate-end">{warn.text}</Text> : null}
       {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
-      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : `↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · ${web ? 'the web' : kindWord(pk.values.kind)}`}</Text>
+      <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : web ? '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc cancels · the web' : '↑↓ choose · ←→ change · enter edits a row or runs it · esc cancels'}</Text>
     </Box>
   );
 }
@@ -1003,11 +1007,11 @@ function ModelPicker({ app }) {
         const on = i === pk.index;
         // the names in one column, however long the longest is (an edited copy's is its model's plus " · edited"; a remote's carries its address)
         const nameW = Math.max(16, ...pk.models.map((x) => x.name.length + 2));
-        const descOf = (x) => (x.remoteRow ? `${kindWord(x.kind)} · another machine` : x.edited
+        const descOf = (x) => (x.remoteRow ? remoteRowDesc(x) : x.edited
           ? `${(x.bytes / 1e9).toFixed(1)} GB · ${x.edited.edits.length} edit${x.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(x.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
           : `${(x.bytes / 1e9).toFixed(1)} GB · on this Mac`);
         const desc = descOf(m); const descW = Math.max(24, ...pk.models.map((x) => descOf(x).length + 2));
-        const inUse = m.remoteRow ? app.onRemote : !app.onRemote && m.name === app.modelName;
+        const inUse = m.remoteRow ? app.remoteSource === m.source : !app.remoteSource && m.name === app.modelName;
         return (
           <Text key={m.id} wrap="truncate-end">
             <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {m.name.padEnd(nameW)}</Text>

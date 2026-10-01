@@ -14,9 +14,9 @@ export { HOME, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BI
 export { ModelServer, scanServers, serverArgs, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
 export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, visionBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
-export { REMOTE_KINDS, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, GENERIC_REMOTE, remoteModel, connectRemote } from './runtime/remote.mjs';
+export { REMOTE_KINDS, REMOTE_SOURCES, sourceOf, keyIdOf, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, GENERIC_REMOTE, remoteModel, connectRemote } from './runtime/remote.mjs';
 export { serve, serveArgs, serveKey, lanAddresses, SERVE_KEY_FILE } from './runtime/serve.mjs';
-export { CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, claudeSdk, claudeClient, claudeCaps, claudeProbe } from './runtime/claude.mjs';
+export { CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeSdk, claudeClient, claudeCaps, claudeProbe } from './runtime/claude.mjs';
 export { setup, getVision, RUNTIME } from './runtime/setup.mjs';
 export { Embedder, embedderReady } from './runtime/embed.mjs';
 export { Reranker, rerankerReady } from './runtime/rerank.mjs';

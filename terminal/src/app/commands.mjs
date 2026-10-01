@@ -22,7 +22,7 @@ export const COMMANDS = [
   // The model is off when a window opens (the user's pick, 30 Sep 2026): /start loads it, /stop gives its memory back.
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
-  { name: 'remote', desc: 'Use a model on another machine or the Claude API: address, API key, http/https or an SSH tunnel, the kind of server; Test checks it', arg: '[on|off]', picker: true },
+  { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },

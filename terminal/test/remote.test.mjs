@@ -15,7 +15,7 @@ process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
 const { streamChat, openaiBody, refusedField } = await import('../src/agent/client.mjs');
 const { decide, complete } = await import('../src/flows/llm.mjs');
 const { setEndpoint, dropEndpoint, MODELS, GENERIC_REMOTE, DEFAULT_REMOTE, HOME } = await import('../../models/index.mjs');
-const { openForm, moveRow, startEdit, editField, pasteField, commitEdit, toProfile, formWarning, connectionChanged, showValue, rowNote, REMOTE_ROWS } = await import('../src/app/remote-form.mjs');
+const { openForm, rowsOf, moveRow, startEdit, editField, pasteField, commitEdit, toProfile, formWarning, connectionChanged, showValue, rowNote, rowChanged, modelChoices, savePlan, remotesOf, remoteChoices, withTest } = await import('../src/app/remote-form.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 const drain = async (it) => { const out = []; for await (const ev of it) out.push(ev); return out; };
@@ -105,27 +105,66 @@ test('a quick pick is not tried on an OpenAI-compatible remote (no template, tok
 
 // ---- the form ----------------------------------------------------------------------------------
 
-test('the form opens on what is saved; ←→ moves a choice row and stops at its ends; the Model row walks the server’s list after a Test', () => {
-  let f = openForm({ address: '10.0.0.5', key: true, keyEnd: '3f9a' });
-  expect(REMOTE_ROWS.map((r) => r.label)).toEqual(['Use', 'Connect', 'Address', 'Port', 'API key', 'Server', 'Model', 'Context', 'Test', 'Save']);
-  expect(['use', 'connect', 'address', 'port', 'key', 'kind', 'model', 'context', 'test'].map((id) => showValue(f, id))).toEqual(['This Mac', 'http', '10.0.0.5', '8080', '••••••••3f9a', 'llama.cpp', 'the one it runs', 'from server', 'enter to check']);
-  f = moveRow(f, 'use', 1);
-  expect(f.values.use).toBe(true);
-  expect(moveRow(f, 'use', 1).values.use).toBe(true); // stops at the end
+const labels = (f) => rowsOf(f).map((r) => r.label);
+const at = (f, id) => ({ ...f, index: rowsOf(f).findIndex((r) => r.id === id) });
+
+test('the form opens on This Mac with only Run on and Switch; → walks the services, each with only its rows, and More opens the rest', () => {
+  let f = openForm({});
+  expect(labels(f)).toEqual(['Run on', 'Switch']);
+  expect([showValue(f, 'source'), showValue(f, 'go')]).toEqual(['This Mac', 'in use now']);
+  expect(moveRow(f, 'source', -1)).toBe(f); // stops at the end
+  f = moveRow(f, 'source', 1);
+  expect(showValue(f, 'source')).toBe('Claude API');
+  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Connect', 'Save only']);
+  expect([showValue(f, 'model'), showValue(f, 'key')]).toEqual(['Opus 5.5', 'none']);
+  expect(rowNote(f, 'more')).toBe('address, context');
+  f = moveRow(f, 'more', 1);
+  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Connect', 'Save only']);
+  expect(showValue(f, 'address')).toBe('api.anthropic.com');
+  f = moveRow(f, 'source', 1);
+  expect(showValue(f, 'source')).toBe('My other computer');
+  expect(f.more).toBe(false); // another service: More folded again
+  expect(labels(f)).toEqual(['Run on', 'Address', 'Reach by', 'API key', 'More', 'Connect', 'Save only']);
+  expect(rowNote(f, 'more')).toBe('port, server, model, context');
   f = moveRow(moveRow(f, 'connect', 1), 'connect', 1);
   expect(showValue(f, 'connect')).toBe('SSH tunnel');
   expect(rowNote(f, 'address')).toBe('user@host, or a name from ~/.ssh/config');
-  f = moveRow(f, 'context', 1);
-  expect(showValue(f, 'context')).toBe('8k');
-  expect(moveRow(f, 'model', 1)).toBe(f); // no list yet
-  f = { ...f, test: { ok: true, steps: [], models: ['a', 'b', 'c'] } };
-  expect(moveRow(moveRow(f, 'model', 1), 'model', 1).values.model).toBe('b');
-  expect(rowNote(f, 'model')).toBe('←→ picks one of the 3 it has');
+  f = moveRow(f, 'source', 1);
+  expect(showValue(f, 'source')).toBe('Another service');
+  expect(labels(f)).toEqual(['Run on', 'Address', 'API key', 'Model', 'More', 'Connect', 'Save only']);
+  // nothing typed yet: no "Not ready" until a Connect was tried
+  expect(formWarning(f)).toBe(null);
+  expect(formWarning({ ...f, tried: true })).toEqual({ tone: 'error', text: 'Not ready: it has no address yet.' });
 });
 
-test('editing a row: typed and pasted text at the cursor; a key loses its spaces and breaks, a port keeps its digits; a whole https address sets Connect', () => {
-  let f = openForm({});
-  f = startEdit(f, 'address');
+test('each service keeps its own rows: flipping Run on loses nothing typed; the Claude Model row steps through its list, and any other the key lists', () => {
+  let f = moveRow(moveRow(openForm({}), 'source', 1), 'source', 1); // My other computer
+  f = commitEdit({ ...startEdit(at(f, 'address'), 'address'), editing: { id: 'address', value: '192.168.1.40', cursor: 12 } });
+  expect(f.index).toBe(rowsOf(f).findIndex((r) => r.id === 'connect')); // enter keeps it and goes to the next row
+  f = moveRow(f, 'source', -1); // Claude API
+  f = commitEdit({ ...startEdit(at(f, 'key'), 'key'), editing: { id: 'key', value: 'test-claude-0123456789wxyz', cursor: 26 } });
+  expect(showValue(f, 'key')).toBe('••••••••wxyz');
+  expect(rowChanged(f, 'key')).toBe(true);
+  expect(modelChoices(f)).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5']);
+  f = moveRow(f, 'model', 1);
+  expect([showValue(f, 'model'), rowNote(f, 'model')]).toEqual(['Sonnet 5.5', 'quicker, half the price · $2 / $10']);
+  f = moveRow(moveRow(moveRow(f, 'model', 1), 'model', 1), 'model', 1);
+  expect(showValue(f, 'model')).toBe('Haiku 4.5'); // stops at the end
+  f = withTest(f, { ok: false, steps: [], models: ['claude-opus-4-8', 'claude-haiku-4-5'] }, 1);
+  expect(modelChoices(f).at(-1)).toBe('claude-opus-4-8');
+  expect(showValue(moveRow(f, 'model', 1), 'model')).toBe('claude-opus-4-8');
+  f = moveRow(f, 'source', 1); // back to the computer: its address is still there, the Claude key still waits
+  expect(showValue(f, 'address')).toBe('192.168.1.40');
+  expect(f.keys.claude).toBe('test-claude-0123456789wxyz');
+  // an OpenAI-compatible server with one model, none named: that one
+  let o = moveRow(f, 'source', 1);
+  o = withTest(o, { ok: true, steps: [], models: ['only-one'] }, 2);
+  expect(showValue(o, 'model')).toBe('only-one');
+});
+
+test('editing a row: typed and pasted text at the cursor; a key loses its spaces and breaks, a port keeps its digits; a whole https address sets Reach by', () => {
+  let f = moveRow(moveRow(moveRow(openForm({}), 'source', 1), 'source', 1), 'source', 1); // Another service
+  f = startEdit(at(f, 'address'), 'address');
   for (const ch of 'gpu.example') f = { ...f, editing: editField(f.editing, ch, {}) };
   f = { ...f, editing: editField(f.editing, '', { backspace: true }) };
   f = { ...f, editing: editField(f.editing, '', { leftArrow: true }) };
@@ -133,37 +172,74 @@ test('editing a row: typed and pasted text at the cursor; a key loses its spaces
   expect(f.editing).toMatchObject({ value: 'gpu.exampXl', cursor: 10 });
   f = { ...f, editing: editField(f.editing, 'u', { ctrl: true }) };
   expect(f.editing.value).toBe('l');
-  f = { ...f, editing: pasteField({ id: 'address', value: '', cursor: 0 }, 'https://api.example.com/api/v1\n') };
+  f = { ...f, editing: pasteField({ id: 'address', value: '', cursor: 0 }, 'http://192.168.1.9:11434\n') };
   f = commitEdit(f);
-  expect(f.values).toMatchObject({ address: 'https://api.example.com/api/v1', connect: 'https' });
+  expect(f.profiles.openai).toMatchObject({ address: 'http://192.168.1.9:11434', connect: 'http' });
+  expect(rowNote(f, 'more')).toBe('reach by Home network (http)'); // a row behind More that differs is named on it
   const k = pasteField({ id: 'key', value: '', cursor: 0 }, '  sk-abc\n def  ');
   expect(k.value).toBe('sk-abcdef');
   expect(pasteField({ id: 'port', value: '', cursor: 0 }, ' 90a80 ').value).toBe('9080');
   // the key starts empty; enter on an empty key = no key
-  let g = startEdit(openForm({ key: true, keyEnd: 'abcd' }), 'key');
-  expect(g.editing.value).toBe('');
-  g = commitEdit(g);
-  expect(g.key).toBe('');
+  let g = openForm({ remote: { use: true, address: '10.0.0.5', kind: 'llama', key: true, keyEnd: 'abcd' } }, { on: true });
+  expect(showValue(g, 'source')).toBe('My other computer');
+  g = commitEdit(startEdit(at(g, 'key'), 'key'));
+  expect(g.keys.machine).toBe('');
   expect(showValue(g, 'key')).toBe('none');
   expect(toProfile(g)).toMatchObject({ key: false, keyEnd: '' });
+  // /web's form (one set of values, one key) edits the same way, the cursor staying on its row
+  const w = commitEdit({ ...startEdit({ values: { search: 'brave' }, key: null, index: 1 }, 'key'), editing: { id: 'key', value: 'test-brave-0123', cursor: 15 } });
+  expect(w).toMatchObject({ key: 'test-brave-0123', index: 1, editing: null });
 });
 
-test('what Save keeps: never the key itself; a new key shows as dots and its end; what counts as pointing somewhere else', () => {
-  let f = openForm({ ...DEFAULT_REMOTE, address: '10.0.0.5', use: true });
-  f = commitEdit({ ...startEdit(f, 'key'), editing: { id: 'key', value: 'test-new-0123456789abcd', cursor: 21 } });
-  expect(showValue(f, 'key')).toBe('••••••••abcd');
-  const r = toProfile(f);
-  expect(r).toEqual({ use: true, address: '10.0.0.5', port: null, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: 'abcd' });
-  expect(JSON.stringify(r)).not.toContain('test-new');
-  expect(connectionChanged(f.saved, r, false)).toBe(false);
-  expect(connectionChanged(f.saved, r, true)).toBe(true);
-  expect(connectionChanged(f.saved, { ...r, port: 9000 }, false)).toBe(true);
+test('a remote saved before Run on opens as its service, its key under the old name; Connect with a new key saves it under the service and lets the old name go', () => {
+  const old = { use: true, address: '10.0.0.5', port: null, connect: 'http', kind: 'llama', model: '', context: 0, key: true, keyEnd: '3f9a' };
+  expect(remotesOf({ remote: old }).machine).toMatchObject({ source: 'machine', address: '10.0.0.5', key: true });
+  expect(remotesOf({ remote: old }).claude).toBe(null);
+  let f = openForm({ remote: old }, { on: true });
+  expect([showValue(f, 'source'), showValue(f, 'key')]).toEqual(['My other computer', '••••••••3f9a']);
+  expect(toProfile(f).keyId).toBe('default'); // still found where it was
+  // Save only, nothing changed: the computer kept as it was, still in use
+  let plan = savePlan(f, { remote: old });
+  expect(plan.keys).toEqual([]);
+  expect(plan.remote).toMatchObject({ source: 'machine', address: '10.0.0.5', use: true, keyId: 'default' });
+  // a new key for it, and Connect: saved under "machine", the old entry removed
+  f = commitEdit({ ...startEdit(at(f, 'key'), 'key'), editing: { id: 'key', value: 'test-new-0123456789abcd', cursor: 23 } });
+  plan = savePlan(f, { remote: old }, { connect: true });
+  expect(plan.keys).toEqual([{ op: 'save', id: 'machine', key: 'test-new-0123456789abcd', source: 'machine' }, { op: 'remove', id: 'default' }]);
+  expect(plan.remotes.machine).toMatchObject({ keyId: 'machine', keyEnd: 'abcd' });
+  expect(JSON.stringify(plan.remotes) + JSON.stringify(plan.remote)).not.toContain('test-new');
 });
 
-test('the warning under the form: a problem that stops Save when Use is Remote, plain http to the internet, a key with a space', () => {
-  expect(formWarning(openForm({ use: true }))).toEqual({ tone: 'error', text: 'Not ready: it has no address yet.' });
-  expect(formWarning(openForm({ use: false }))).toBe(null);
-  expect(formWarning(openForm({ use: true, address: '203.0.113.9' })).text).toMatch(/^⚠ plain http to 203\.0\.113\.9/);
-  expect(formWarning(openForm({ use: true, address: '192.168.1.40' }))).toBe(null);
-  expect(formWarning({ ...openForm({ address: '10.0.0.5' }), key: 'has space' }).tone).toBe('error');
+test('Connect and Save only: what is kept, and which remote is in use next', () => {
+  const machine = { source: 'machine', address: '10.0.0.5', port: null, connect: 'http', kind: 'llama', model: '', context: 0, key: false, keyEnd: '', keyId: 'machine' };
+  const settings = { remote: { ...machine, use: true }, remotes: { machine } };
+  let f = moveRow(openForm(settings, { on: true }), 'source', -1); // Claude API, from the computer in use
+  f = commitEdit({ ...startEdit(at(f, 'key'), 'key'), editing: { id: 'key', value: 'test-claude-0123456789wxyz', cursor: 26 } });
+  // Save only: the Claude API kept with its key; the window stays on the computer
+  let plan = savePlan(f, settings);
+  expect(plan.remotes.claude).toMatchObject({ source: 'claude', kind: 'claude', model: 'claude-opus-5-5', key: true, keyEnd: 'wxyz', keyId: 'claude' });
+  expect(plan.remotes.machine).toEqual(machine);
+  expect(plan.remote).toEqual({ ...machine, use: true });
+  expect(rowNote(f, 'keep')).toBe('keeps it · this window stays on My other computer');
+  // Connect: the Claude API in use next
+  plan = savePlan(f, settings, { connect: true });
+  expect(plan.remote).toMatchObject({ source: 'claude', use: true, key: true });
+  expect(connectionChanged(settings.remote, plan.remote, true)).toBe(true);
+  // This Mac + Switch: the remotes kept, the last one off
+  plan = savePlan(moveRow(f, 'source', -1), settings, { connect: true });
+  expect(plan.remote).toMatchObject({ source: 'machine', use: false });
+  expect(Object.keys(plan.remotes).sort()).toEqual(['claude', 'machine']);
+  // Save only with no remote on: the one saved becomes the one /remote on finds
+  plan = savePlan(f, { remotes: { machine } });
+  expect(plan.remote).toMatchObject({ source: 'claude', use: false });
+  // /model's rows: each service ready to switch to
+  expect(remoteChoices({ remotes: { machine, claude: plan.remotes.claude, openai: { source: 'openai', kind: 'openai', address: '' } } }).map((r) => r.name)).toEqual(['Claude API · Opus 5.5', 'My other computer · 10.0.0.5']);
+});
+
+test('the warning under the form: plain http to the internet, a key with a space; Claude needs no address', () => {
+  const on = (r) => openForm({ remote: { use: true, ...r } }, { on: true });
+  expect(formWarning({ ...on({ kind: 'claude', key: true }), tried: true })).toBe(null);
+  expect(formWarning(on({ address: '203.0.113.9' })).text).toMatch(/^⚠ plain http to 203\.0\.113\.9/);
+  expect(formWarning(on({ address: '192.168.1.40' }))).toBe(null);
+  expect(formWarning({ ...on({ address: '10.0.0.5' }), keys: { claude: null, machine: 'has space', openai: null } }).tone).toBe('error');
 });

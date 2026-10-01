@@ -16,7 +16,7 @@ const { claudeParams, strictSchema } = await import('../src/agent/claude.mjs');
 const { streamChat } = await import('../src/agent/client.mjs');
 const { complete } = await import('../src/flows/llm.mjs');
 const { setEndpoint, dropEndpoint, connectRemote, probe, claudeCaps, GENERIC_REMOTE, directUrl, remoteLabel, remoteProblem, remoteRisk, HOME } = await import('../../models/index.mjs');
-const { openForm, moveRow, showValue, rowNote } = await import('../src/app/remote-form.mjs');
+const { openForm, moveRow, showValue, rowNote, toProfile } = await import('../src/app/remote-form.mjs');
 
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
@@ -170,12 +170,20 @@ test('the check (/remote’s Test, connecting): the key, the model list and its 
   await fake.close();
 });
 
-test('the form: Server ◀ Claude API ▶ shows Anthropic’s address, https, the default model and what the key is', () => {
-  let f = openForm({ kind: 'openai', connect: 'ssh' });
-  f = moveRow(f, 'kind', 1);
-  expect(f.values).toMatchObject({ kind: 'claude', connect: 'https' });
-  expect(['kind', 'address', 'port', 'model'].map((id) => showValue(f, id))).toEqual(['Claude API', 'api.anthropic.com', '443', 'claude-opus-5-5']);
-  expect(rowNote(f, 'key')).toMatch(/^from console\.anthropic\.com · blank uses ANTHROPIC_API_KEY/);
+test('the form: Run on ◀ Claude API ▶ shows Anthropic’s address, https, the default model and what the key is', () => {
+  let f = openForm({ remote: { use: true, kind: 'openai', connect: 'ssh', address: 'gpu' } }, { on: true });
+  expect(showValue(f, 'source')).toBe('Another service');
+  f = { ...moveRow(moveRow(f, 'source', -1), 'source', -1), more: true }; // past My other computer
+  const env = process.env.ANTHROPIC_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try {
+    expect(['source', 'address', 'model', 'key'].map((id) => showValue(f, id))).toEqual(['Claude API', 'api.anthropic.com', 'Opus 5.5', 'none']);
+    expect(toProfile(f)).toMatchObject({ source: 'claude', kind: 'claude', connect: 'https', model: 'claude-opus-5-5' });
+    // with ANTHROPIC_API_KEY set, a blank key row uses it
+    process.env.ANTHROPIC_API_KEY = 'test-env-key-0123456789';
+    expect(showValue(f, 'key')).toBe('ANTHROPIC_API_KEY');
+    expect(rowNote(f, 'key')).toMatch(/^console\.anthropic\.com → API keys · kept in the .+ · blank: ANTHROPIC_API_KEY$/);
+  } finally { if (env === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = env; }
   expect(rowNote(f, 'context')).toMatch(/at most 200k/);
-  expect(rowNote({ ...f, values: { ...f.values, use: true } }, 'use')).toMatch(/go to Anthropic, billed to the key/);
+  expect(rowNote(f, 'source')).toBe('Anthropic’s models · billed to your API key');
 });

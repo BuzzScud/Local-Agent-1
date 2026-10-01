@@ -74,18 +74,18 @@ export async function serve({ modelId = DEFAULT_MODEL, port = SERVE_PORT, local 
   say(`Serving ${model.name} for /remote on another machine · ${st.slots} slot${st.slots === 1 ? '' : 's'} · ${Math.round(c.ctx / 1024)}k context · ${model.visionOn ? 'it can look at pictures' : 'no pictures (coding setup gets its vision add-on)'}`);
   say('');
   say('Type this into /remote over there:');
+  say(`  ${pad('Run on')}My other computer`);
   if (local) {
-    say(`  ${pad('Connect')}SSH tunnel`);
     say(`  ${pad('Address')}${process.env.USER ?? 'you'}@${hostname()}   (or this machine's name in ~/.ssh/config)`);
+    say(`  ${pad('Reach by')}SSH tunnel`);
   } else {
     const addrs = lanAddresses();
-    say(`  ${pad('Connect')}${scheme}${cert ? '' : '   (an SSH tunnel works too: coding serve --local)'}`);
     if (!addrs.length) say(`  ${pad('Address')}${hostname()}   (no network address found: is Wi-Fi on?)`);
     addrs.forEach((a, i) => say(`  ${pad(i ? '' : 'Address')}${a.address.padEnd(17)}${a.where}`));
+    say(`  ${pad('Reach by')}${cert ? 'Internet (https)' : 'Home network (http)   (an SSH tunnel works too: coding serve --local)'}`);
   }
-  say(`  ${pad('Port')}${port}`);
-  say(`  ${pad('Server')}llama.cpp`);
   say(`  ${pad('API key')}${key}`);
+  if (port !== SERVE_PORT) say(`  ${pad('Port')}${port}   (behind More)`);
   say('');
   say(`The key ${made ? 'was made now and ' : ''}is kept in ${SERVE_KEY_FILE.replace(process.env.HOME ?? '', '~')} (coding serve --new-key makes another).`);
   if (!local) say('The first time, macOS may ask whether llama-server may accept incoming connections: allow it.');
