@@ -7,7 +7,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS } from './tools.mjs';
-import { existsSync, statSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
@@ -22,7 +22,7 @@ import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './stud
 import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, dirname, relative } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
 import { wayOf, hooksOn, wayPrompt } from './way.mjs';
 import { clarify } from '../flows/clarify.mjs';
@@ -183,6 +183,14 @@ export function asksForWork(text) {
   if (/^\W*(why|what|how|where|when|which|who|explain|is|are|does|do)\b/i.test(text ?? '')) return false;
   return /\b(add|fix|change|make|implement|create|build|rename|remove|delete|update|refactor|write|save|put|move|replace|edit|restyle|redesign|improve|convert|generate)\b/i.test(text ?? '');
 }
+// A request that wants its file on the Desktop: "download it to my desktop",
+// "on the Desktop", "save to desktop", "in ~/Desktop". Not the screen size
+// ("broken on desktop", "the desktop view", "on desktop and mobile") or "a
+// desktop app".
+const DESKTOP_PLACE = /\b(?:(?:to|onto|into)\s+(?:(?:my|the|your)\s+|~\/)?|(?:on|in|at)\s+(?:(?:my|the|your)\s+|~\/))desktop\b(?!\s*(?:view|version|layout|size|width|apps?|mode|screens?|browsers?|site|breakpoint)\b|\s+(?:and|or)\s+(?:on\s+)?(?:mobile|phones?|tablets?)\b)/i;
+export function wantsDesktop(text) {
+  return DESKTOP_PLACE.test(String(text ?? ''));
+}
 export function claimsDone(text) {
   const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
   if (/\b(nothing (?:was |has been |is )?(?:changed|written|edited|done)|no (?:files?|changes?|edits?) (?:was |were |have been |has been )?(?:changed|made|written|needed)|(?:did|do|have|has|could|can)(?: not|n'?t)|cannot|unable|not (?:done|changed|made|finished|written))\b/i.test(t)) return false;
@@ -289,7 +297,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -325,6 +333,12 @@ export class Agent extends EventEmitter {
     this.reranker = reranker;
     // /rewind (app/rewind.mjs): copies of the project around each message and command.
     this.rewind = rewind;
+    // The home folder its Desktop is in (a test gives a folder of its own),
+    // and the screen's way to open a finished page in the browser: given by
+    // the app only, so coding -p and the tests never open or offer anything
+    // (deliverDesktop).
+    this.home = home;
+    this.openPage = openPage;
     // The design examples and the layout check (design.mjs): settings.json's
     // "design" as saved; AGENTIC_DESIGN, AGENTIC_DESIGN_SETS and AGENTIC_LAYOUT win over it.
     this.designSaved = design ?? {};
@@ -934,6 +948,7 @@ export class Agent extends EventEmitter {
     let lostChecked = false;
     let layoutSends = 0; // what the layout check found, sent back at most LAYOUT_ROUNDS times
     let layoutDone = false;
+    let desktopSent = false; // sent back once to move a page asked for on the Desktop
     let correctedAlready = false;
     let blankRetry = false;
     try {
@@ -1108,6 +1123,23 @@ export class Agent extends EventEmitter {
             }
             layoutDone = true;
           }
+          // A page asked for "on my desktop" saved somewhere else, when the
+          // Desktop is inside this folder: back once, with the command that
+          // moves it (Qwen, 30 Sep: "download it to my desktop" became
+          // ~/media-player-card.html, a cp onto itself, and "ready on your
+          // Desktop"). Outside this folder, the end of the turn offers a copy.
+          if (this.turn.changed && !desktopSent && !signal?.aborted && this.hook('desktop') && this.desktopInside() && asksForWork(this.turn.request) && wantsDesktop(this.turn.request)) {
+            const away = this.pagesOffDesktop();
+            if (away.length) {
+              desktopSent = true;
+              const shq = (p) => (/^[\w./-]+$/.test(p) ? p : `'${p.replace(/'/g, "'\\''")}'`);
+              const moves = away.map((p) => `mv ${shq(relative(this.cwd, p.abs))} ${shq(relative(this.cwd, this.desktopTarget(p.abs)))}`);
+              const names = away.map((p) => this.tilde(p.abs)).join(' and ');
+              this.emit('note', { text: `Asked for on the Desktop, but ${names} ${away.length === 1 ? 'is' : 'are'} not there; asked it to move ${away.length === 1 ? 'it' : 'them'}.`, tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto(`The request asks for the file on the Desktop, but ${names} ${away.length === 1 ? 'is' : 'are'} not on the Desktop. Move ${away.length === 1 ? 'it' : 'them'} there with Bash: ${moves.join(', then ')}. Then say where ${away.length === 1 ? 'it is' : 'they are'} now, with the full path, in one sentence.`) });
+              continue;
+            }
+          }
           // It changed files and says it is done: does the work cover every
           // part of the request? Once per message; a miss sends it back.
           if (this.turn.changed && this.verify && !verified && !signal?.aborted && this.hook('done')) {
@@ -1195,6 +1227,7 @@ export class Agent extends EventEmitter {
     }
     const t = this.turn ?? {};
     await this.stillBroken(reason);
+    await this.deliverDesktop(reason);
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0 });
     return reason;
   }
@@ -2106,6 +2139,67 @@ export class Agent extends EventEmitter {
     if ((t.edits ?? 0) !== t.editsAtLook) { try { await this.checkLayout(true, { quiet: true }); } catch { return; } }
     for (const { page, problems } of t.layoutLeft ?? []) {
       this.emit('note', { text: `Still broken: ${problems[0].replace(/\.$/, '')}${problems.length > 1 ? ` (and ${problems.length - 1} more)` : ''}. The page check looked at ${page} again after the fix.`, tone: 'warn', stillBroken: { page, problems } });
+    }
+  }
+
+  // The Desktop, as `~/…` for the screen, and whether this folder's commands
+  // can write there (started from the home folder or the Desktop itself).
+  get desktopDir() { return join(this.home, 'Desktop'); }
+  desktopInside() { return this.desktopDir === this.cwd || this.desktopDir.startsWith(`${this.cwd}/`); }
+  tilde(p) { return p === this.home ? '~' : p.startsWith(`${this.home}/`) ? `~${p.slice(this.home.length)}` : p; }
+  // The pages this message changed that are somewhere else than the Desktop
+  // (one moved there since is gone from where it was, so it is not counted).
+  pagesOffDesktop() {
+    const t = this.turn;
+    if (!t?.startTexts) return [];
+    const out = [];
+    for (const rel of [...t.startTexts.keys()].filter((r) => /\.html?$/i.test(r))) {
+      const abs = resolvePath(this.cwd, rel).abs;
+      if (!existsSync(abs) || abs.startsWith(`${this.desktopDir}/`)) continue;
+      out.push({ rel, abs });
+    }
+    return out.slice(0, 2);
+  }
+  // Where a page goes on the Desktop: its own name, or name-v2, -v3… when a
+  // page of that name is there already (the user keeps the original).
+  desktopTarget(abs) {
+    const name = basename(abs);
+    const dot = name.lastIndexOf('.');
+    const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
+    let target = join(this.desktopDir, name);
+    for (let v = 2; existsSync(target); v++) target = join(this.desktopDir, `${stem}-v${v}${ext}`);
+    return target;
+  }
+
+  // The end of a turn that made a page "on my desktop", on the app's screen
+  // (openPage): what the model cannot do from inside the fence. A page still
+  // somewhere else is offered to be copied to the Desktop (the user's pick,
+  // 30 Sep: ask each time), and the page on the Desktop opens in the browser.
+  async deliverDesktop(reason) {
+    const t = this.turn;
+    if (!this.openPage || reason !== 'done' || !t?.changed || !t.startTexts || !asksForWork(t.request) || !wantsDesktop(t.request)) return;
+    const pages = [];
+    for (const rel of [...t.startTexts.keys()].filter((r) => /\.html?$/i.test(r))) {
+      const abs = resolvePath(this.cwd, rel).abs;
+      // Moved to the Desktop with a Bash mv: there under its own name, changed in this message.
+      const moved = join(this.desktopDir, basename(abs));
+      if (!existsSync(abs)) { try { if (statSync(moved).mtimeMs >= t.since - 1000) pages.push(moved); } catch {} continue; }
+      if (abs.startsWith(`${this.desktopDir}/`)) { pages.push(abs); continue; }
+      const target = this.desktopTarget(abs);
+      const question = `Copy ${basename(abs)} to your Desktop${basename(target) !== basename(abs) ? ` as ${basename(target)}` : ''}? It is in ${this.tilde(dirname(abs))} now.`;
+      const id = `desktop_${Date.now()}`;
+      this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+      const answer = await this.ask({ id, name: 'Ask', args: { question, options: ['Yes, copy it', 'No, leave it there'] }, prepared: {}, label: 'Ask', arg: question });
+      const said = (answer.text ?? '').trim();
+      const yes = answer.choice === 'yes' || answer.choice === 'always' || /^(yes|y|ok|okay|sure|copy)\b/i.test(said);
+      this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: said || (yes ? 'yes' : 'no') } });
+      if (!yes) continue;
+      try { copyFileSync(abs, target); } catch (e) { this.emit('note', { text: `Could not copy ${basename(abs)} to the Desktop: ${e.code ?? e.message}.`, tone: 'warn' }); continue; }
+      this.emit('note', { text: `Copied to ${this.tilde(target)}.`, tone: 'dim' });
+      pages.push(target);
+    }
+    for (const page of pages.slice(0, 2)) {
+      try { await this.openPage(page); this.emit('note', { text: `Opened ${this.tilde(page)} in your browser.`, tone: 'dim' }); } catch (e) { this.emit('note', { text: `Could not open ${this.tilde(page)}: ${e.message}.`, tone: 'warn' }); }
     }
   }
 

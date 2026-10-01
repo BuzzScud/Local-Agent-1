@@ -35,6 +35,7 @@ export const HOOKS = [
   { id: 'checkin', label: 'Check-ins', what: 'after 6 looks with no change, it asks you where to look' },
   { id: 'stuck', label: 'Stuck asks', what: 'the same step twice, or three errors in a row, asks you for a hint' },
   { id: 'said-done', label: 'Said done, nothing changed', what: 'a reply that says the work is done when no file changed is sent back once; if it still claims it, a line says nothing was changed' },
+  { id: 'desktop', label: 'On the Desktop', what: 'a page asked for "on my desktop" that was saved somewhere else is sent back once to be moved there' },
 ];
 export const HOOK_IDS = HOOKS.map((h) => h.id);
 export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS ?? env.BONSAI_HOOKS;

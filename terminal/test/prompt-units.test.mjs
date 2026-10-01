@@ -5,7 +5,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { systemPrompt, SESSION_MARK, projectNotes, fitSections, localDay, WORK_HABITS, NOTES_RANK, promptVersion, notesRoom } from '../src/agent/prompt.mjs';
+import { systemPrompt, SESSION_MARK, projectNotes, fitSections, localDay, WORK_HABITS, NOTES_RANK, promptVersion, notesRoom, stayRule } from '../src/agent/prompt.mjs';
 import { WHOLE_FILE_MAX, SHOW_WHOLE_MAX, isWholeFile } from '../src/flows/units.mjs';
 
 test('the instructions start the same in every project and on every day (so the warm-up can be saved)', () => {
@@ -133,4 +133,26 @@ test('each notes file is named by its kind: this folder, a folder above, the hom
   expect(n.sources.map((s) => s.kind)).toEqual(['project', 'parent', 'home']);
   expect(n.text).toContain('From ~/work/AGENTS.md (rules for every folder under ~/work):\nWork rule.');
   expect(n.text).not.toContain('Private note.');
+});
+
+// Qwen, 30 Sep, started from the home folder: the rule said the Desktop was blocked, the
+// note at the end said it was a folder here, and "download it to my desktop" was saved as
+// ~/media-player-card.html. The rule now says where the Desktop is from where it started.
+test('the folder rule says where the Desktop is: inside from the home folder or the Desktop, outside from a project', () => {
+  const home = '/Users/someone';
+  const fromHome = stayRule(home, home);
+  expect(fromHome).toContain('It is the home folder, so the Desktop is the folder Desktop here: a file the user wants "on my desktop" goes in it (Write Desktop/<name>), not here.');
+  expect(fromHome).not.toContain('the Desktop, other projects) are blocked');
+  expect(stayRule(join(home, 'Desktop'), home)).toContain('It is the Desktop, so a file the user wants "on my desktop" goes right here.');
+  const fromProject = stayRule(join(home, 'code', 'shop'), home);
+  expect(fromProject).toContain('Files and commands outside it (the home folder, the Desktop, other projects) are blocked');
+  expect(fromProject).toContain('A file the user wants "on my desktop" is made in this folder, and you say where it is.');
+  // the prompt carries it; the old prompt (AGENTIC_PROMPT=old) keeps the line it had
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-stay-'));
+  expect(systemPrompt({ cwd, git: 'test', tests: null })).toContain(stayRule(cwd));
+  const keep = process.env.AGENTIC_PROMPT;
+  process.env.AGENTIC_PROMPT = 'old';
+  try {
+    expect(systemPrompt({ cwd, git: 'test', tests: null })).toContain('- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.\n- These commands are blocked');
+  } finally { if (keep === undefined) delete process.env.AGENTIC_PROMPT; else process.env.AGENTIC_PROMPT = keep; }
 });

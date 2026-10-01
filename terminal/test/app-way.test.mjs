@@ -33,6 +33,6 @@ test('--way model: no sorting line, the model reads two files in one reply, /eff
   expect(chats.length).toBe(2);
   expect(chats[0].messages.map((m) => m.role)).toEqual(['system', 'user']);
   expect(r.snapshots.effort).toMatch(/Who decides\s+◀ Model\s+▶\s+it sorts, looks and saves for itself, like Claude Code/);
-  expect(r.snapshots.hooks).toMatch(/Hooks · 0 of 11 on while the model decides/);
+  expect(r.snapshots.hooks).toMatch(/Hooks · 0 of 12 on while the model decides/);
   expect(r.snapshots.hooks).toMatch(/1\s+off\s+Empty reply/);
 }, T);

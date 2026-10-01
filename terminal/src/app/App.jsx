@@ -340,6 +340,10 @@ export function App({ opts, win, onRestart }) {
       helpers, embedder, ranker: embedder, rewind: rewindRef.current,
       // The design examples and the layout check (/design), as saved.
       design: settings.design,
+      // A page asked for "on my desktop" opens in the browser at the end of the turn, and one
+      // saved elsewhere is offered to be copied there (agent.mjs deliverDesktop): the app does
+      // it, as the model cannot start apps. AGENTIC_OPEN=off (the tests) leaves both out.
+      openPage: process.env.AGENTIC_OPEN === 'off' ? null : (page) => { spawnSync(process.platform === 'darwin' ? 'open' : 'xdg-open', [page], { stdio: 'ignore', timeout: 10_000 }); },
       url: opts.url ?? 'http://127.0.0.1:0', model: modelWithLimits(model, limitsRef.current), cwd,
       // a server given with --url and --slots 2 has a side slot for the save and the sorting
       ...(opts.url && opts.slots > 1 ? { slots: { main: 0, side: 1 } } : {}),

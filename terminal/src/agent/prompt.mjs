@@ -200,6 +200,18 @@ export const NOTES_RANK = "These are the user's and this project's own rules. Wh
 // The user's calendar day, not UTC's: after 8 pm in New York the UTC date is already tomorrow.
 export const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+const STAY_OLD = '- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.';
+// The first rule, with where the Desktop is from here. From the home folder
+// it used to say the Desktop was blocked while the note at the end said it
+// was a folder here, and Qwen saved "download it to my desktop" as
+// ~/media-player-card.html, then said it was on the Desktop (30 Sep 2026).
+export function stayRule(cwd, home = homedir()) {
+  const vague = 'a vague request such as "fix the bug" means this folder only.';
+  if (cwd === join(home, 'Desktop')) return `- Stay inside this folder. It is the Desktop, so a file the user wants "on my desktop" goes right here. Other folders are blocked; ${vague}`;
+  if (cwd === home) return `- Stay inside this folder. It is the home folder, so the Desktop is the folder Desktop here: a file the user wants "on my desktop" goes in it (Write Desktop/<name>), not here. Other places are blocked; ${vague}`;
+  return `- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; ${vague} A file the user wants "on my desktop" is made in this folder, and you say where it is.`;
+}
+
 // toolUse and skills: terminal/rules/TOOLS.md and SKILLS.md as they are now
 // (prompt-files.mjs); the old prompt keeps the Tool use lines it had and no skills.
 export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions, toolUse, skills }) {
@@ -217,7 +229,7 @@ Tool use
 ${tooling}
 
 ${list ? `${list}\n\n` : ''}${now ? `${WORK_HABITS}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
-- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.
+${now ? stayRule(cwd) : STAY_OLD}
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 

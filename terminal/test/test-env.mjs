@@ -15,3 +15,6 @@ process.env.AGENTIC_DESIGN ??= 'off';
 process.env.AGENTIC_LAYOUT ??= 'off';
 // The design studio too (src/agent/studio.mjs): its pieces and its build.
 process.env.AGENTIC_STUDIO ??= 'off';
+// A page asked for "on my desktop" (src/app/App.jsx openPage): no test opens a
+// browser, or offers to copy a page to the real Desktop.
+process.env.AGENTIC_OPEN ??= 'off';

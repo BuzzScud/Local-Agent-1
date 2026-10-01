@@ -102,8 +102,16 @@ export function sandboxed(command, root, { readOnly } = {}) {
   return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly }), '/bin/zsh', '-c', command]];
 }
 
-// What a blocked command prints, turned into a hint for the model.
+// What a blocked command prints, turned into a hint for the model. A blocked
+// app (zsh: "operation not permitted: open") has its own: with the files
+// hint, Qwen took `open ~/page.html` for a file outside the project, and the
+// note it came with sent it to answer at once, saying the page was on the
+// Desktop when it was not (30 Sep).
+const LAUNCHERS = APP_LAUNCHERS.map((p) => p.split('/').pop()).join('|');
 export function fenceHint(output) {
+  if (new RegExp(`operation not permitted: (?:${LAUNCHERS})\\b`, 'i').test(output)) {
+    return '\n(Apps cannot be started from here, so do not try again: say where the file is, with its full path.)';
+  }
   return /Operation not permitted|operation not permitted|EPERM|sandbox/i.test(output)
     ? '\n(Files outside the project folder cannot be read or changed, and apps cannot be opened; stay inside the project.)'
     : '';

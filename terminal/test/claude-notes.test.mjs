@@ -136,6 +136,8 @@ test('what goes with the request says whose notes these are and that the files a
   expect(text).toContain('When the notes hold the answer to a question, answer from them now');
   expect(text).toContain('do not go looking for them');
   expect(text).toContain('where a file in THIS folder says otherwise, the file is right');
+  // a note that ends "Then `open` it" sent Qwen to run open, which the fence stops (30 Sep)
+  expect(text).toContain('You cannot start apps: where a note says to open a file or a page, say where it is, with its full path, instead.');
   expect(text).toContain('[pdf from html] (how something is done on this Mac)\nHow to make a pdf.\nUse A4.');
   expect(claudeText([])).toBe('');
 });

@@ -1,8 +1,8 @@
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Agent, safeArgs, claimsAlreadyThere, asksForWork, claimsDone, AUTO, CHECK_INS } from '../src/agent/agent.mjs';
+import { Agent, safeArgs, claimsAlreadyThere, asksForWork, claimsDone, wantsDesktop, AUTO, CHECK_INS } from '../src/agent/agent.mjs';
 // Agentic Coder's "go ahead" nudge, as it reads now (labelled as automatic).
 const isNudge = (c) => c.startsWith(AUTO) && c.includes('did not do it');
 import { systemPrompt } from '../src/agent/prompt.mjs';
@@ -585,4 +585,109 @@ test('three cut-off calls in a row stop the turn instead of looping for half an 
   expect(reason).toBe('stuck');
   expect(events.some((e) => /cut off mid-call, so it stopped/.test(e.text))).toBe(true);
   expect(fake.remaining()).toBe(1);
+});
+
+// Qwen, 30 Sep, started from the home folder: "download it to my desktop" was saved as
+// ~/media-player-card.html, "copied" onto itself, `open` was stopped by the fence, and the
+// answer said it was on the Desktop. The Desktop step: sent back once with the command that
+// moves it; from a project, the app offers a copy; on the app's screen the page then opens.
+test('a request that wants its file on the Desktop, and the screen sizes that are not', () => {
+  for (const t of ['Create a card. download it to my desktop when you are done', 'downlaod to my desktop', 'Make a page on my Desktop', 'save it in ~/Desktop', 'put the card on the desktop', 'save to desktop']) expect(wantsDesktop(t)).toBe(true);
+  for (const t of ['make a desktop app', 'it looks broken on desktop', 'make the button bigger in the desktop view', 'check it on the desktop and mobile', 'fix the desktop layout', 'what is on the menu']) expect(wantsDesktop(t)).toBe(false);
+});
+
+const CARD = '<!doctype html><html><head><meta charset="utf-8"><title>Card</title></head><body><p>Midnight Drive</p></body></html>';
+const desktopAgent = (fake, { cwd, home, ask, openPage }) => new Agent({ url: fake.url, model, cwd, home, system: systemPrompt({ cwd, git: 'test', tests: null }), thinking: false, mode: 'edits', flows: false, verify: false, confirmPlan: false, checkIns: false, ask, openPage });
+
+test('from the home folder, a page asked for on the Desktop but saved beside it goes back once to be moved, then opens', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-home-'));
+  mkdirSync(join(home, 'Desktop'));
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'card.html', content: CARD } } },
+    { text: 'The card is ready on your Desktop at ~/card.html.' },
+    { tool: { name: 'Bash', args: { command: 'mv card.html Desktop/card.html' } } },
+    { text: 'Moved it: it is at ~/Desktop/card.html now.' },
+    { text: 'never sent' },
+  ]);
+  const opened = [];
+  const notes = [];
+  const agent = desktopAgent(fake, { cwd: home, home, ask: async () => ({ choice: 'yes' }), openPage: (p) => { opened.push(p); } });
+  agent.on('note', (e) => notes.push(e.text));
+  const reason = await agent.send('Create a self-contained HTML file for a media player card. download it to my desktop when you are done');
+  await fake.close();
+  expect(reason).toBe('done');
+  const back = fake.requests[2].messages.at(-1).content;
+  expect(back).toStartWith(AUTO);
+  expect(back).toContain('The request asks for the file on the Desktop, but ~/card.html is not on the Desktop. Move it there with Bash: mv card.html Desktop/card.html.');
+  expect(notes).toContain('Asked for on the Desktop, but ~/card.html is not there; asked it to move it.');
+  expect(existsSync(join(home, 'Desktop', 'card.html'))).toBe(true);
+  expect(opened).toEqual([join(home, 'Desktop', 'card.html')]);
+  expect(notes.at(-1)).toBe('Opened ~/Desktop/card.html in your browser.');
+  expect(fake.remaining()).toBe(1); // sent back once, then done
+});
+
+test('from a project, a page asked for on the Desktop is offered to be copied there (as -v2 beside an older one), then opens', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-home-'));
+  const cwd = join(home, 'shop');
+  mkdirSync(cwd); mkdirSync(join(home, 'Desktop'));
+  writeFileSync(join(home, 'Desktop', 'card.html'), 'the first one');
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: 'card.html', content: CARD } } },
+    { text: 'I made card.html in this folder.' },
+    { text: 'never sent' },
+  ]);
+  const asked = [];
+  const opened = [];
+  const ask = async (req) => {
+    if (req.name !== 'Ask') return { choice: 'yes' };
+    asked.push(req.args.question);
+    return { choice: 'answer', text: req.args.options[0] };
+  };
+  const reason = await desktopAgent(fake, { cwd, home, ask, openPage: (p) => { opened.push(p); } }).send('make a media player card page and put it on my desktop');
+  await fake.close();
+  expect(reason).toBe('done');
+  expect(fake.remaining()).toBe(1); // nothing sent back: the Desktop is outside this folder
+  expect(asked).toEqual(['Copy card.html to your Desktop as card-v2.html? It is in ~/shop now.']);
+  expect(readFileSync(join(home, 'Desktop', 'card.html'), 'utf8')).toBe('the first one'); // the original is kept
+  expect(readFileSync(join(home, 'Desktop', 'card-v2.html'), 'utf8')).toBe(CARD);
+  expect(opened).toEqual([join(home, 'Desktop', 'card-v2.html')]);
+});
+
+test('without the app\'s screen (coding -p, the benches) nothing is offered, copied or opened; a no leaves it where it is', async () => {
+  // each run in a folder of its own: writing the same page again changes nothing
+  const folders = () => {
+    const home = mkdtempSync(join(tmpdir(), 'agentic-home-'));
+    const cwd = join(home, 'shop');
+    mkdirSync(cwd); mkdirSync(join(home, 'Desktop'));
+    return { home, cwd };
+  };
+  const script = () => [{ tool: { name: 'Write', args: { path: 'card.html', content: CARD } } }, { text: 'I made card.html.' }];
+  const asked = [];
+  const ask = async (req) => { if (req.name === 'Ask') asked.push(req.args.question); return req.name === 'Ask' ? { choice: 'answer', text: 'No, leave it there' } : { choice: 'yes' }; };
+  let fake = await startFakeServer(script());
+  const first = folders();
+  await desktopAgent(fake, { ...first, ask }).send('make a card page and put it on my desktop');
+  await fake.close();
+  expect(asked).toEqual([]);
+  expect(existsSync(join(first.home, 'Desktop', 'card.html'))).toBe(false);
+  const opened = [];
+  fake = await startFakeServer(script());
+  const second = folders();
+  await desktopAgent(fake, { ...second, ask, openPage: (p) => { opened.push(p); } }).send('make a card page and put it on my desktop');
+  await fake.close();
+  expect(asked).toEqual(['Copy card.html to your Desktop? It is in ~/shop now.']);
+  expect(existsSync(join(second.home, 'Desktop', 'card.html'))).toBe(false);
+  expect(opened).toEqual([]);
+});
+
+// `open ~/media-player-card.html` was stopped by the fence with the files hint, whose words
+// ("outside the project folder") made agent.mjs add "answer from the note now" (30 Sep).
+test('a blocked app gets its own hint, without the words that send it back to the note', async () => {
+  const { fenceHint } = await import('../src/tools/sandbox.mjs');
+  const app = fenceHint('zsh:1: operation not permitted: open');
+  expect(app).toContain('Apps cannot be started from here, so do not try again: say where the file is, with its full path.');
+  expect(app).not.toMatch(/outside the project folder/);
+  expect(fenceHint('zsh:1: operation not permitted: osascript')).toContain('Apps cannot be started');
+  expect(fenceHint('cat: /Users/x/a.txt: Operation not permitted')).toContain('Files outside the project folder cannot be read or changed');
+  expect(fenceHint('all fine')).toBe('');
 });

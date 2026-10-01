@@ -306,7 +306,9 @@ export function claudeText(notes) {
   // "The request comes first": a note that says where finished files go
   // ("on the Desktop") once sent a file there that the request wanted "in
   // this folder" (practice task 18, 28 Sep 2026).
-  return `From Claude's notes. Claude Code wrote these for itself in earlier conversations with this user. The request above comes first: where it names a place, a file name or a way of doing it, do what it says, whatever a note says. When the notes hold the answer to a question, answer from them now, in your own plain words, and say that it comes from Claude's notes. The files and folders a note names are mostly in other folders, which you cannot open from here: do not go looking for them. A note can name tools you do not have, and it can be out of date: where a file in THIS folder says otherwise, the file is right.\n${blocks.join('\n\n')}`;
+  // "Apps": a note that ends "Then `open` it" sent Qwen to run open, which
+  // the fence stops (30 Sep 2026).
+  return `From Claude's notes. Claude Code wrote these for itself in earlier conversations with this user. The request above comes first: where it names a place, a file name or a way of doing it, do what it says, whatever a note says. When the notes hold the answer to a question, answer from them now, in your own plain words, and say that it comes from Claude's notes. The files and folders a note names are mostly in other folders, which you cannot open from here: do not go looking for them. A note can name tools you do not have, and it can be out of date: where a file in THIS folder says otherwise, the file is right. You cannot start apps: where a note says to open a file or a page, say where it is, with its full path, instead.\n${blocks.join('\n\n')}`;
 }
 
 // For the /memory panel and the results page: how many notes there are, how
