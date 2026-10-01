@@ -32,6 +32,13 @@ test('the pages, the model facts and exact byte ranges come back; bad ranges are
     expect((await fetch(s.url + 'model')).status).toBe(416); // whole-file reads are not offered
     expect((await fetch(s.url + 'model', { headers: { Range: 'bytes=2000-2100' } })).status).toBe(416);
     expect((await fetch(s.url + 'nope')).status).toBe(404);
+    // the tab icon every page asks for: a 48 × 48 PNG of the bot, not a 404 the browser logs as an error
+    const icon = await fetch(s.url + 'favicon.ico');
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get('content-type')).toBe('image/png');
+    const bytes = Buffer.from(await icon.arrayBuffer());
+    expect([...bytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([48, 48]);
     // no DOCS folder: the list says so, a page is 404
     expect((await (await fetch(s.url + 'docs.json')).json()).missing).toBe(true);
     expect((await fetch(s.url + 'docs/anything.html')).status).toBe(404);

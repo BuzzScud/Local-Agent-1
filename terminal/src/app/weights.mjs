@@ -19,6 +19,7 @@
 //     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
 //     no model (builder-hub.mjs). The tests are the Arena's "My tests", on this Mac only
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
+//   /favicon.ico      the tab icon every page asks for: the Visor bot (favicon.mjs)
 // The DOCS folder is the repo's docs/ (the main folder's, from a worktree),
 // with the owner's own things in docs/private/: see docs-dir.mjs.
 import { statSync, existsSync, readdirSync, openSync, readSync, closeSync } from 'node:fs';
@@ -40,6 +41,7 @@ import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, modelPath, readEdited, 
 import { loadSettings } from './store.mjs';
 import { applyEdits } from './gguf-edit.mjs';
 import { findDocsDir } from './docs-dir.mjs';
+import { faviconPng } from './favicon.mjs';
 
 // Folders that are not pages: the memory's own files (the hub's Memory tab shows them;
 // now in private/, once at the top) and the index's tools. Never listed or served.
@@ -203,6 +205,7 @@ export function startWeightsServer({ path, models = Object.values(MODELS), docsD
         if (!clean || !KINDS[ext(file)] || !full.startsWith(resolve(docsDir) + '/') || !existsSync(full) || !statSync(full).isFile()) return new Response('not found', { status: 404 });
         return new Response(Bun.file(full), { headers: { 'content-type': KINDS[ext(file)][1], 'cache-control': 'no-store' } });
       }
+      if (url.pathname === '/favicon.ico') return new Response(faviconPng(), { headers: { 'content-type': 'image/png', 'cache-control': 'max-age=86400' } });
       return new Response('not found', { status: 404 });
     },
   });
