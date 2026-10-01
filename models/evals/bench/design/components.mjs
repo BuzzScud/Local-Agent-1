@@ -8,6 +8,11 @@
 //                    layout check (what /design turns on)
 //   3 · Folder off   the same requests with neither, so every page has a
 //                    before and an after
+//   4 · Studio on    the same requests with the design studio's pieces in the
+//                    example card's place, their styles built into the page,
+//                    and the layout check (terminal/src/agent/studio.mjs; added
+//                    30 Sep, before the first run); its own blind vote against
+//                    the folder-on page. Not part of the folder's rule below
 // Run it on Gemma and on Qwen: the results page (one a day, docs/tests/)
 // puts the two side by side, with a blind vote on the pictures.
 // The rules, written before the first run (30 Sep 2026):
@@ -18,7 +23,8 @@
 //     every folder-on run carried its cards, and the folder-on pages have no
 //     more layout problems in all than the folder-off ones;
 //   the battle: a point for a clean folder-on page, a point for your vote.
-//   node models/evals/bench/design/components.mjs --model qwen [--think on|off] [--only 1,3] [--minutes 10] [--order on,off]
+//   node models/evals/bench/design/components.mjs --model qwen [--think on|off] [--only 1,3] [--minutes 10] [--order on,off,studio]
+//   --order on,off: the first three parts only (no studio)
 //   --no-record: a look only; no line in the test record
 //   --page-only [--date 2026-09-30]: the page again from what is saved, no model
 //   --dry: print the card pick and the command it would run, and stop
@@ -32,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { MODELS, DEFAULT_MODEL, modelFolder, recordTest, codeLabel } from '../../../index.mjs';
-import { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard, testLimits, testDefaults } from '../../../../terminal/index.mjs';
+import { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard, testLimits, testDefaults, readPieces, pickPieces } from '../../../../terminal/index.mjs';
 import { DOCS_DIR } from '../../../../docs/tools/to-docs.mjs';
 import { readSet } from './run.mjs';
 import { buildBattlePage, modelSummary } from './components-page.mjs';
@@ -56,6 +62,8 @@ export function cardPick(p, { dir = designDir(), cards } = {}) {
     id: p.id, page, rules: pick.always.map(cardName), example: example ? cardName(example) : null, fits,
     look: pick.look && example ? cardName(pick.look) : null, more: pick.more.map(cardName),
     sent: notes ? notes.cards.map(cardName) : [], chars: notes?.chars ?? 0, pass: page && fits && Boolean(notes),
+    // What the studio part sends instead of the example card (no rule: a look).
+    pieces: pickPieces(p.prompt).pieces.map((x) => x.file.replace(/^components\//, '').replace(/\.html?$/i, '')),
   };
 }
 export const pickWords = (k) => (!k.page ? 'not seen as a page request, so no cards go along'
@@ -97,33 +105,35 @@ async function main() {
   const only = opt('only', null);
   const requests = only ? only.split(',').map((n) => all[Number(n) - 1] ?? all.find((p) => p.id === n.trim() || String(p.n) === n.trim())).filter(Boolean) : all;
   if (!requests.length) { console.error(`no request ${only}; the requests: ${all.map((p, i) => `${i + 1} ${p.id}`).join(', ')}`); return 2; }
-  const order = opt('order', 'on,off').split(',');
-  if (order.length !== 2 || !order.includes('on') || !order.includes('off')) { console.error('--order on,off or off,on'); return 2; }
+  const order = opt('order', 'on,off,studio').split(',').map((o) => o.trim());
+  if (!order.includes('on') || !order.includes('off') || order.some((o) => !['on', 'off', 'studio'].includes(o)) || new Set(order).size !== order.length) { console.error('--order: on and off in either order, and studio if wanted (on,off,studio)'); return 2; }
   const minutes = Number(opt('minutes', 10));
   const look = args.includes('--no-record');
   const out = opt('out', join(home, 'models', basename(modelFolder(model)), 'results', RESULTS(today)));
   // The parts decide; nothing in the environment may.
-  for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS', 'AGENTIC_DESIGN_STYLE']) delete process.env[k];
+  for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS', 'AGENTIC_DESIGN_STYLE', 'AGENTIC_STUDIO']) delete process.env[k];
 
   // Part 1: the card pick.
   const dir = designDir();
   const sets = dir ? readCards(dir).sets : [];
   if (!dir || !sets.length) { console.error('refused: the "design examples" folder is missing or empty (docs/private/design examples; AGENTIC_DESIGN_DIR names another).'); return 6; }
-  console.log(`UI component battle on ${model.name}${think ? ', thinking at High' : ', thinking off'}: ${requests.length} request${requests.length === 1 ? '' : 's'}, three parts`);
+  const studio = order.includes('studio');
+  if (studio && !readPieces().pieces.length) { console.error('refused: the "design studio" folder is missing or has no pieces (docs/private/design studio). --order on,off runs without it.'); return 6; }
+  console.log(`UI component battle on ${model.name}${think ? ', thinking at High' : ', thinking off'}: ${requests.length} request${requests.length === 1 ? '' : 's'}, ${studio ? 'four' : 'three'} parts`);
   console.log(`Part 1 · Card pick (no model). design examples: ${sets.map((s) => `${s.name} ${s.cards.length}`).join(' · ')}`);
   const picks = requests.map((p) => cardPick(p, { dir }));
-  for (const k of picks) console.log(`${k.pass ? 'PASS' : 'FAIL'} card pick · ${k.id} · ${pickWords(k)}`);
+  for (const k of picks) console.log(`${k.pass ? 'PASS' : 'FAIL'} card pick · ${k.id} · ${pickWords(k)}${studio ? ` · studio: ${k.pieces.length ? k.pieces.join(' + ') : 'no piece fits (the cards go instead)'}` : ''}`);
 
-  const arms = order.map((o) => (o === 'on' ? 'full' : 'today'));
+  const arms = order.map((o) => ({ on: 'full', off: 'today', studio: 'studio' }[o]));
   const runArgs = [join(here, 'run.mjs'), '--model', model.id, '--set', opt('set', 'components'), '--arms', arms.join(','), '--pages', requests.map((p) => p.id).join(','),
     '--effort', think ? 'high' : 'low', '--minutes', String(minutes), '--out', out];
-  if (args.includes('--dry')) { console.log(`parts 2 and 3: ${[process.execPath, ...runArgs].join(' ')}`); return 0; }
+  if (args.includes('--dry')) { console.log(`parts 2 ${order.length === 2 ? 'and 3' : `to ${order.length + 1}`}: ${[process.execPath, ...runArgs].join(' ')}`); return 0; }
 
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'pick.json'), JSON.stringify({ at: new Date().toISOString(), code: codeLabel(root), folder: sets.map((s) => ({ set: s.name, cards: s.cards.length })), picks }, null, 1));
 
   // Parts 2 and 3: one run of run.mjs, the folder on and then off (or as --order says).
-  console.log(`Parts 2 and 3 · ${order.map((o) => `folder ${o}`).join(', then ')}: ${requests.length * 2} pages, at most ${minutes} min each`);
+  console.log(`Parts 2 to ${order.length + 1} · ${order.map((o) => (o === 'studio' ? 'studio on' : `folder ${o}`)).join(', then ')}: ${requests.length * order.length} pages, at most ${minutes} min each`);
   let stopping = false;
   let child = null;
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => {
@@ -137,7 +147,7 @@ async function main() {
   let ran = 0; // pages this run got to
   const code = await new Promise((ok) => {
     child = spawn(process.execPath, runArgs, { cwd: root, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
-    createInterface({ input: child.stdout }).on('line', (l) => { if (/^(PASS|FAIL) folder /.test(l)) ran++; console.log(l); });
+    createInterface({ input: child.stdout }).on('line', (l) => { if (/^(PASS|FAIL) (folder|studio) /.test(l)) ran++; console.log(l); });
     createInterface({ input: child.stderr }).on('line', (l) => console.error(l));
     child.on('exit', (c) => ok(c));
   });
@@ -151,20 +161,20 @@ async function main() {
   try { runs = JSON.parse(readFileSync(join(out, 'runs.json'), 'utf8')); } catch { /* no page was run */ }
   const mine = runs.filter((r) => requests.some((p) => p.id === r.page));
   const s = modelSummary({ picks, runs: mine, requests });
-  const full = !stopping && code === 0 && s.on.runs === requests.length && s.off.runs === requests.length;
+  const full = !stopping && code === 0 && s.on.runs === requests.length && s.off.runs === requests.length && (!studio || s.studio.runs === requests.length);
   const page = writeBattlePage({ home, docsDir, date: today, requests: all });
   if (page) console.log(`results page: ${page}`);
   else console.log(`no results page: ${existsSync(docsDir) ? 'no page was run' : `the DOCS folder is not here (${docsDir})`}`);
   const limits = testLimits(model) ?? testDefaults(model);
-  const passed = picks.filter((k) => k.pass).length + s.on.clean + s.off.clean;
+  const passed = picks.filter((k) => k.pass).length + s.on.clean + s.off.clean + (studio ? s.studio.clean : 0);
   if (look) console.log('a look only: no line in the test record');
   else recordTest({
     kind: 'other', model: model.id, name: `UI component battle${only ? `, requests ${only}` : ''}`, code: codeLabel(root), effort: think ? 'high' : 'low', ctx: limits.context ?? null,
     passed, total: picks.length + mine.length, secs: wall, result: full ? (s.working ? 'pass' : 'fail') : 'stopped', part: Boolean(only),
-    note: `card pick ${picks.filter((k) => k.pass).length} of ${picks.length} · folder on: ${s.on.clean} of ${s.on.runs} clean, ${s.on.problems} problems, cards on ${s.on.carried} of ${s.on.runs} · folder off: ${s.off.clean} of ${s.off.runs} clean, ${s.off.problems} problems`,
+    note: `card pick ${picks.filter((k) => k.pass).length} of ${picks.length} · folder on: ${s.on.clean} of ${s.on.runs} clean, ${s.on.problems} problems, cards on ${s.on.carried} of ${s.on.runs} · folder off: ${s.off.clean} of ${s.off.runs} clean, ${s.off.problems} problems${studio ? ` · studio on: ${s.studio.clean} of ${s.studio.runs} clean, ${s.studio.problems} problems, pieces on ${s.studio.pieces} of ${s.studio.runs}` : ''}`,
     bar: RULE, raw: relative(home, out), page: page ?? '',
   });
-  console.log(`UI component battle on ${model.name}: card pick ${picks.filter((k) => k.pass).length} of ${picks.length}, folder on ${s.on.clean} of ${s.on.runs} clean, folder off ${s.off.clean} of ${s.off.runs} clean · ${full ? (s.working ? 'THE FOLDER IS WORKING' : 'THE FOLDER IS NOT WORKING') : 'PART RUN'}`);
+  console.log(`UI component battle on ${model.name}: card pick ${picks.filter((k) => k.pass).length} of ${picks.length}, folder on ${s.on.clean} of ${s.on.runs} clean, folder off ${s.off.clean} of ${s.off.runs} clean${studio ? `, studio on ${s.studio.clean} of ${s.studio.runs} clean` : ''} · ${full ? (s.working ? 'THE FOLDER IS WORKING' : 'THE FOLDER IS NOT WORKING') : 'PART RUN'}`);
   return 0;
 }
 

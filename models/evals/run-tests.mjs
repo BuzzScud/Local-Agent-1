@@ -29,14 +29,15 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listMetas, practiceList, LEVELS } from './battle/store.mjs';
 
-// The UI component battle's requests (bench/design/components.json): each prints three lines, a
-// card pick, a page with the design folder on and one with it off. null: the list is not here.
+// The UI component battle's requests (bench/design/components.json): each prints four lines, a
+// card pick, a page with the design folder on, one with it off and one with the design studio
+// on. null: the list is not here.
 // Read from the repo each time: beside this file, or, inside the built app, in the repo the
 // launcher names (AGENTIC_REPO).
 const COMPONENTS = ['bench', 'design', 'components.json'];
 export function componentLines() {
   for (const dir of [dirname(fileURLToPath(import.meta.url)), process.env.AGENTIC_REPO ? join(process.env.AGENTIC_REPO, 'models', 'evals') : null]) {
-    try { if (dir) return JSON.parse(readFileSync(join(dir, ...COMPONENTS), 'utf8')).length * 3; } catch { /* not there: the next place */ }
+    try { if (dir) return JSON.parse(readFileSync(join(dir, ...COMPONENTS), 'utf8')).length * 4; } catch { /* not there: the next place */ }
   }
   return null;
 }
@@ -119,7 +120,7 @@ export const RUN_TESTS = [
   { id: 'way', name: 'Who decides: App vs Model', what: 'the Practice 28 twice: the app deciding (word rules sort, it reads ahead and checks, as before), then the model deciding (no sorting, its own tools, several calls a reply, the checks off), like Claude Code; it holds when the model passes as many and takes at most 25% more time, with a results page', model: true, think: true, total: 56, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/way-ab.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'tasks', name: '^Who decides: App vs Model$', part: false } },
-  { id: 'components', name: 'UI component battle', what: 'your UI component requests in three parts: which design cards each one gets (no model), the pages built with the design folder on, and again with it off; run it on both models for the battle, with a results page and a blind vote', model: true, think: true, total: null, lines: componentLines, count: '^(PASS|FAIL)\\s',
+  { id: 'components', name: 'UI component battle', what: 'your UI component requests in four parts: which design cards and studio pieces each one gets (no model), the pages built with the design folder on, again with it off, and with the design studio on; run it on both models for the battle, with a results page and blind votes', model: true, think: true, total: null, lines: componentLines, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/bench/design/components.mjs', args: (m, n, think) => ['--model', m, '--think', think ? 'on' : 'off'],
     stop: 'SIGTERM', record: { kind: 'other', name: '^UI component battle$', part: false } },
   { id: 'edited', name: 'Edited copy vs original', what: 'this model’s edited copy (the Weights tab’s Save the copy) against the model itself, one after the other: six fixed questions and one for each word your edits change, side by side, with a results page (it needs a copy of this model saved)', model: true, think: false, total: null, count: '^(PASS|FAIL|ASKED)\\s',
@@ -134,6 +135,9 @@ export const RUN_TESTS = [
   { id: 'reader', name: 'Weights reader check', what: 'the Weights tab reads every model file on this Mac exactly as llama.cpp does: a few matrices of every storage type each file keeps, weight for weight, with a results page (the first run fetches llama.cpp’s reader through uv)', model: false, total: null, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/reader-check.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'other', name: '^Weights reader check$', part: false } },
+  { id: 'studio', name: 'Design studio check', what: 'every piece in your design studio (docs/private/design studio) built the way the app builds it and opened in headless Chrome: on a desktop, a phone and in dark mode, every button clicked, theme colours only, under its size, found by its own name; no model, with a results page and a live gallery of the pieces beside them', model: false, total: null, count: '^(PASS|FAIL)\\s',
+    script: 'models/evals/bench/design/studio-check.mjs', args: () => [],
+    stop: 'SIGTERM', record: { kind: 'other', name: '^Design studio check$', part: false } },
 ];
 
 export const runTestById = (id) => RUN_TESTS.find((t) => t.id === id) ?? null;

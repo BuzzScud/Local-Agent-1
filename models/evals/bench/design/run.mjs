@@ -8,6 +8,8 @@
 //   full    the cards and the layout check (what /design turns on)
 //   opus    only the Opus 5.5 cards, no layout check
 //   fable   only the Fable 5.1 cards, no layout check
+//   studio  the design studio's pieces (in the example card's place), their
+//           built styles and the layout check (terminal/src/agent/studio.mjs)
 // Every page it made is then measured the same way, whatever the arm: the
 // layout check's problems (sideways scroll, overlapping or faint text, script
 // errors, missing head lines), and two screenshots (1440×900 and a 390-wide
@@ -27,7 +29,7 @@ import { join, dirname, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, hasDraft, recordTest, codeLabel } from '../../../index.mjs';
-import { runHeadless, loadSettings, readLimits, modelWithLimits, testLimits, testDefaults, layoutCheck, findChrome, designDir, readCards } from '../../../../terminal/index.mjs';
+import { runHeadless, loadSettings, readLimits, modelWithLimits, testLimits, testDefaults, layoutCheck, findChrome, designDir, readCards, readPieces } from '../../../../terminal/index.mjs';
 import { buildPage, resultsDirs, PAGE_OUT } from './page.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -45,11 +47,13 @@ const today = new Date().toLocaleDateString('en-CA'); // the local date, 2026-09
 // Kept in pages.json, so the memory can tell them apart from real work (models/evals/prompts.mjs).
 export const PAGES = JSON.parse(readFileSync(join(here, 'pages.json'), 'utf8'));
 export const ARMS = {
-  today: { label: 'Today (no cards)', design: { auto: false, check: false } },
-  cards: { label: 'Cards, all sets', design: { auto: true, check: false, sets: 'all' } },
-  full: { label: 'Cards + layout check', design: { auto: true, check: true, sets: 'all' } },
-  opus: { label: 'Opus cards only', design: { auto: true, check: false, sets: ['opus'] } },
-  fable: { label: 'Fable cards only', design: { auto: true, check: false, sets: ['fable'] } },
+  today: { label: 'Today (no cards)', design: { auto: false, check: false, studio: false } },
+  cards: { label: 'Cards, all sets', design: { auto: true, check: false, sets: 'all', studio: false } },
+  full: { label: 'Cards + layout check', design: { auto: true, check: true, sets: 'all', studio: false } },
+  opus: { label: 'Opus cards only', design: { auto: true, check: false, sets: ['opus'], studio: false } },
+  fable: { label: 'Fable cards only', design: { auto: true, check: false, sets: ['fable'], studio: false } },
+  // The design studio's pieces in the example card's place, the build and the layout check (studio.mjs).
+  studio: { label: 'Studio + layout check', design: { auto: true, check: true, sets: 'all', studio: true } },
 };
 
 // A named set of requests, or a file of them: [{ id, name, prompt, file? }].
@@ -100,8 +104,9 @@ async function main() {
   const dir = designDir();
   const sets = readCards(dir).sets;
   if (!dir || !sets.length) { console.error('refused: the "design examples" folder is missing or empty (docs/private/design examples).'); return 6; }
+  if (armIds.includes('studio') && !readPieces().pieces.length) { console.error('refused: the "design studio" folder is missing or has no pieces (docs/private/design studio; AGENTIC_STUDIO_DIR names another).'); return 6; }
   // The arms decide; nothing in the environment may.
-  for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS']) delete process.env[k];
+  for (const k of ['AGENTIC_DESIGN', 'AGENTIC_LAYOUT', 'AGENTIC_DESIGN_SETS', 'AGENTIC_STUDIO']) delete process.env[k];
 
   const settings = loadSettings(root);
   const limits = set ? testLimits(base0) ?? testDefaults(base0) : readLimits(settings, base0);
@@ -186,7 +191,8 @@ async function main() {
         reason: ac.signal.aborted && !stopping ? 'time' : r?.reason ?? (error ? 'error' : 'stopped'), tools, outTokens: r?.outTokens ?? null, thinkTokens: r?.thinkTokens ?? null,
         file: made ? relative(home, join(keep, basename(made))) : null, bytes: made ? statSync(made).size : 0,
         problems: measured?.problems ?? null, skipped: measured?.skipped ?? null, shots,
-        cards: notes.find((t) => t.startsWith('Design examples:')) ?? null, layoutNotes: notes.filter((t) => t.startsWith('Layout check')),
+        cards: notes.find((t) => /^Design (examples|studio)\b/.test(t)) ?? null, layoutNotes: notes.filter((t) => t.startsWith('Layout check')),
+        built: notes.filter((t) => t.startsWith('Built the styles')),
         finalText: String(r?.finalText ?? '').slice(0, 400),
       };
       writeFileSync(join(keep, 'run.json'), JSON.stringify(row, null, 1));
@@ -195,7 +201,7 @@ async function main() {
       writeFileSync(runsFile, JSON.stringify(saved, null, 1));
       console.log(`${mmss(secs * 1000)} · ${made ? `${basename(made)} · ${row.problems == null ? `not measured (${row.skipped})` : `${row.problems.length} layout problem${row.problems.length === 1 ? '' : 's'}`}` : 'no page made'}${row.reason === 'time' ? ' · stopped at the time limit' : ''}`);
       // The line the Tests tab counts: a page with nothing for the layout check to find passes.
-      if (set && !(stopping && row.reason !== 'time' && !made)) console.log(`${row.problems && !row.problems.length ? 'PASS' : 'FAIL'} ${arm === 'today' ? 'folder off' : 'folder on'} · ${pg.id} · ${!made ? 'no page made' : row.problems == null ? 'not measured' : `${row.problems.length} layout problem${row.problems.length === 1 ? '' : 's'}`} · ${mmss(secs * 1000)}`);
+      if (set && !(stopping && row.reason !== 'time' && !made)) console.log(`${row.problems && !row.problems.length ? 'PASS' : 'FAIL'} ${arm === 'today' ? 'folder off' : arm === 'studio' ? 'studio on' : 'folder on'} · ${pg.id} · ${!made ? 'no page made' : row.problems == null ? 'not measured' : `${row.problems.length} layout problem${row.problems.length === 1 ? '' : 's'}`} · ${mmss(secs * 1000)}`);
     }
   }
   current = null;

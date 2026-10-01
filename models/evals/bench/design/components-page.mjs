@@ -1,17 +1,19 @@
 // The results page of the UI component battle (components.mjs): one
 // self-contained HTML file for a day, built from every model's saved runs, with
 // the pictures and the pages themselves inside it. Six tabs that each fit the
-// window: the verdict, the card pick, the battle (Gemma against Qwen with the
-// folder on), before and after (the folder off against on), every problem the
-// layout check found, and how it was run. The two picture tabs are a blind vote:
-// which model (or which side of the folder) made a picture shows only once you
+// window (seven when the studio part ran): the verdict, the card pick, the
+// battle (Gemma against Qwen with the folder on), before and after (the folder
+// off against on), the design studio against the cards, every problem the
+// layout check found, and how it was run. The picture tabs are a blind vote:
+// which model (or which side) made a picture shows only once you
 // have voted on it. Votes are kept in the browser (localStorage), not in the file.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
-const ARM = { on: 'full', off: 'today' };
+const ARM = { on: 'full', off: 'today', studio: 'studio' };
+const ARM_NAME = { on: 'Folder on', off: 'Folder off', studio: 'Studio on' };
 const img = (dir, f) => {
   if (!f) return '';
   try { return `data:image/${f.endsWith('.png') ? 'png' : 'jpeg'};base64,${readFileSync(join(dir, f)).toString('base64')}`; } catch { return ''; }
@@ -26,6 +28,7 @@ function side(runs, arm, ids) {
   return {
     runs: rs.length, made: rs.filter((r) => r.file).length, clean: measured.filter((r) => !r.problems.length).length, measured: measured.length,
     problems: measured.reduce((s, r) => s + r.problems.length, 0), carried: rs.filter((r) => r.cards).length,
+    pieces: rs.filter((r) => /^Design studio\b/.test(r.cards ?? '')).length,
     secs: rs.length ? rs.reduce((s, r) => s + r.secs, 0) / rs.length : null,
   };
 }
@@ -44,11 +47,17 @@ export function modelSummary({ picks = [], runs = [], requests }) {
   const picksOk = picked.length > 0 && picked.every((k) => k.pass);
   const carriedAll = on.runs > 0 && on.carried === on.runs;
   const noWorse = both.length > 0 && sum('on') <= sum('off');
-  return { on, off, both: both.length, onBoth: sum('on'), offBoth: sum('off'), picksOk, carriedAll, noWorse, working: picksOk && carriedAll && noWorse };
+  // The studio part: against the folder-on pages, on the requests measured on both (no rule: a look).
+  const studio = side(runs, 'studio', ids);
+  const pair = ids.filter((id) => measured('studio', id) && measured('on', id));
+  const over = (arm) => pair.reduce((s, id) => s + measured(arm, id).problems.length, 0);
+  return { on, off, studio, both: both.length, onBoth: sum('on'), offBoth: sum('off'), picksOk, carriedAll, noWorse, working: picksOk && carriedAll && noWorse,
+    studioPair: pair.length, studioBoth: over('studio'), onStudioBoth: over('on') };
 }
 
-// "Design examples: your rules/rules + fable/widget (≈1,500 tokens)." → the card names.
-const carriedCards = (note) => (note ? String(note).replace(/^Design examples[^:]*:\s*/, '').replace(/\s*\(≈[^)]*\)\.?\s*$/, '').split(' + ').map((x) => x.trim()).filter(Boolean) : []);
+// "Design examples: your rules/rules + fable/widget (≈1,500 tokens)." → the card names
+// ("Design studio: your rules/rules + studio/cards/stat-card (…)" → with the pieces).
+const carriedCards = (note) => (note ? String(note).replace(/^Design (?:examples|studio)[^:]*:\s*/, '').replace(/\s*\(≈[^)]*\)\.?\s*$/, '').split(' + ').map((x) => x.trim()).filter(Boolean) : []);
 
 export function buildBattlePage({ dirs, date, requests, rule }) {
   const models = [];
@@ -71,10 +80,12 @@ export function buildBattlePage({ dirs, date, requests, rule }) {
   const label = (p) => `${p.n != null ? `${p.n} · ` : ''}${p.name ?? p.id}`;
 
   // What the two picture tabs draw from: every run, its pictures and its page.
-  const data = { key: `agentic-ui-battle-${date}`, models: models.map((m) => ({ id: m.id, name: m.name })), requests: reqs.map((p) => ({ id: p.id, label: label(p) })), runs: {}, battle: [], before: [] };
+  const data = { key: `agentic-ui-battle-${date}`, models: models.map((m) => ({ id: m.id, name: m.name })), requests: reqs.map((p) => ({ id: p.id, label: label(p) })), runs: {}, battle: [], before: [], studio: [] };
+  const hasStudio = models.some((m) => m.s.studio.runs);
+  const ARMS = hasStudio ? ['on', 'off', 'studio'] : ['on', 'off'];
   for (const m of models) {
     for (const p of reqs) {
-      for (const arm of ['on', 'off']) {
+      for (const arm of ARMS) {
         const r = runOf(m, p.id, arm);
         if (!r) continue;
         const keep = join(m.dir, ARM[arm], p.id);
@@ -92,6 +103,7 @@ export function buildBattlePage({ dirs, date, requests, rule }) {
     const [a, b] = models;
     for (const p of reqs) if (has(a, p.id, 'on') && has(b, p.id, 'on')) data.battle.push({ id: `battle|${p.id}`, req: p.id, sides: flip(`${date}|${p.id}|battle`) ? [`${b.id}|${p.id}|on`, `${a.id}|${p.id}|on`] : [`${a.id}|${p.id}|on`, `${b.id}|${p.id}|on`] });
   }
+  for (const m of models) for (const p of reqs) if (has(m, p.id, 'on') && has(m, p.id, 'studio')) data.studio.push({ id: `studio|${m.id}|${p.id}`, req: p.id, model: m.id, sides: flip(`${date}|${p.id}|${m.id}|studio`) ? [`${m.id}|${p.id}|studio`, `${m.id}|${p.id}|on`] : [`${m.id}|${p.id}|on`, `${m.id}|${p.id}|studio`] });
   for (const m of models) for (const p of reqs) if (has(m, p.id, 'on') && has(m, p.id, 'off')) data.before.push({ id: `before|${m.id}|${p.id}`, req: p.id, model: m.id, sides: flip(`${date}|${p.id}|${m.id}`) ? [`${m.id}|${p.id}|off`, `${m.id}|${p.id}|on`] : [`${m.id}|${p.id}|on`, `${m.id}|${p.id}|off`] });
 
   // 1 · The verdict.
@@ -104,23 +116,25 @@ export function buildBattlePage({ dirs, date, requests, rule }) {
       !s.both ? 'there is no pair of measured pages to compare yet' : `the folder-on pages have ${s.onBoth} layout problem${s.onBoth === 1 ? '' : 's'} against ${s.offBoth} with it off`,
     ];
     const word = !s.off.runs || !s.both ? 'not decided yet' : s.working ? 'the folder is working' : 'the folder is not working';
-    return `<b>${esc(m.name)}</b>: ${word}. ${`${why.slice(0, -1).join(', ')}, and ${why.at(-1)}`.replace(/^./, (c) => c.toUpperCase())}.`;
+    const studio = !s.studio.runs ? '' : ` <b>The studio</b>: ${s.studio.clean} of ${s.studio.runs} pages with no layout problems${s.studioPair ? `, ${s.studioBoth} problem${s.studioBoth === 1 ? '' : 's'} in all against ${s.onStudioBoth} with the cards on the same requests` : ''}; pieces went along on ${s.studio.pieces} of ${s.studio.runs} runs.`;
+    return `<b>${esc(m.name)}</b>: ${word}. ${`${why.slice(0, -1).join(', ')}, and ${why.at(-1)}`.replace(/^./, (c) => c.toUpperCase())}.${studio}`;
   });
   const chips = models.flatMap((m) => [
     { text: `${m.name}: a fitting card for every request`, ok: m.s.picksOk },
     { text: `${m.name}: cards on ${m.s.on.carried} of ${m.s.on.runs} folder-on runs`, ok: m.s.on.runs ? m.s.carriedAll : null },
     { text: `${m.name}: layout problems on ${m.s.onBoth} ≤ off ${m.s.offBoth}`, ok: m.s.both ? m.s.noWorse : null },
+    ...(m.s.studio.runs ? [{ text: `${m.name}: studio problems ${m.s.studioBoth} ≤ cards ${m.s.onStudioBoth}`, ok: m.s.studioPair ? m.s.studioBoth <= m.s.onStudioBoth : null }] : []),
   ]);
-  const cols = models.flatMap((m) => ['on', 'off'].map((arm) => ({ m, arm, s: m.s[arm] })));
+  const cols = models.flatMap((m) => ARMS.map((arm) => ({ m, arm, s: m.s[arm] })));
   const ROWS = [
     ['Pages made', 'higher is better', (c) => (c.s.runs ? c.s.made : null), (c) => `${c.s.made} of ${c.s.runs}`, 'max'],
     ['Pages with no layout problems', 'higher is better', (c) => (c.s.runs ? c.s.clean : null), (c) => `${c.s.clean} of ${c.s.runs}`, 'max'],
     ['Layout problems in all', 'lower is better', (c) => (c.s.measured ? c.s.problems : null), (c) => String(c.s.problems), 'min'],
     ['Time a page', 'lower is better', (c) => c.s.secs, (c) => mmss(c.s.secs), 'min'],
-    ['Runs that carried the design cards', 'on: every run · off: none', (c) => (c.s.runs ? c.s.carried : null), (c) => `${c.s.carried} of ${c.s.runs}`, null],
+    ['Runs that carried the design cards', `on: every run · off: none${hasStudio ? ' · studio: its pieces' : ''}`, (c) => (c.s.runs ? c.s.carried : null), (c) => `${c.s.carried} of ${c.s.runs}`, null],
   ];
-  const table = `<div class="wrap"><table><thead><tr><th rowspan="2">Measure</th>${models.map((m) => `<th class="n grp" colspan="2">${esc(m.name)}</th>`).join('')}</tr>
-<tr>${cols.map((c) => `<th class="n">Folder ${c.arm}</th>`).join('')}</tr></thead><tbody>${ROWS.map(([name, dir, v, show, want]) => {
+  const table = `<div class="wrap"><table><thead><tr><th rowspan="2">Measure</th>${models.map((m) => `<th class="n grp" colspan="${ARMS.length}">${esc(m.name)}</th>`).join('')}</tr>
+<tr>${cols.map((c) => `<th class="n">${ARM_NAME[c.arm]}</th>`).join('')}</tr></thead><tbody>${ROWS.map(([name, dir, v, show, want]) => {
     const vals = cols.map(v).filter((x) => x != null);
     const best = want && vals.length ? (want === 'max' ? Math.max(...vals) : Math.min(...vals)) : null;
     const ties = cols.filter((c) => v(c) === best).length;
@@ -149,8 +163,8 @@ export function buildBattlePage({ dirs, date, requests, rule }) {
   const folder = picks?.folder ? picks.folder.map((s) => `${s.set} ${s.cards}`).join(' · ') : '';
 
   // 5 · Every problem.
-  const rows = models.flatMap((m) => reqs.flatMap((p) => ['on', 'off'].map((arm) => ({ m, p, arm, r: runOf(m, p.id, arm) })))).filter((x) => x.r);
-  const problems = `<div class="wrap tall"><table><thead><tr><th>Model</th><th>Request</th><th>Folder</th><th class="n">Time</th><th>What the layout check found in the page it ended with</th></tr></thead><tbody>${rows.map(({ m, p, arm, r }) => `<tr><td>${esc(m.name)}</td><td>${esc(label(p))}</td><td>${arm}</td><td class="n">${mmss(r.secs)}${r.reason === 'time' ? '<div class="sub">stopped at the limit</div>' : ''}</td><td class="wrapcell">${!r.file ? '<span class="tag bad">no page made</span>' : r.problems == null ? `<span class="tag idle">not measured</span> ${esc(r.skipped)}` : r.problems.length ? `<ol>${r.problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>` : '<span class="tag ok">no problems</span>'}${r.layoutNotes?.length ? `<div class="sub">During the run: ${esc(r.layoutNotes.join(' '))}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  const rows = models.flatMap((m) => reqs.flatMap((p) => ARMS.map((arm) => ({ m, p, arm, r: runOf(m, p.id, arm) })))).filter((x) => x.r);
+  const problems = `<div class="wrap tall"><table><thead><tr><th>Model</th><th>Request</th><th>Part</th><th class="n">Time</th><th>What the layout check found in the page it ended with</th></tr></thead><tbody>${rows.map(({ m, p, arm, r }) => `<tr><td>${esc(m.name)}</td><td>${esc(label(p))}</td><td class="nw">${ARM_NAME[arm]}</td><td class="n">${mmss(r.secs)}${r.reason === 'time' ? '<div class="sub">stopped at the limit</div>' : ''}</td><td class="wrapcell">${!r.file ? '<span class="tag bad">no page made</span>' : r.problems == null ? `<span class="tag idle">not measured</span> ${esc(r.skipped)}` : r.problems.length ? `<ol>${r.problems.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>` : '<span class="tag ok">no problems</span>'}${r.layoutNotes?.length ? `<div class="sub">During the run: ${esc(r.layoutNotes.join(' '))}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
 
   // 6 · How it was run.
   const when = models.flatMap((m) => m.runs.map((r) => r.at)).sort()[0];
@@ -158,12 +172,13 @@ export function buildBattlePage({ dirs, date, requests, rule }) {
     `${models.map((m) => `${esc(m.name)}${m.effort === 'high' ? ', thinking on at High' : ', thinking off'}`).join(' · ')}. One model at a time, each request in an empty folder, the way <code>coding -p</code> runs it, with the tests’ settings (32k of memory unless the Tests page’s panel changed it).`,
     '<b>Part 1 · Card pick</b> needs no model: the app’s own code says whether a request is a page request and which cards go along.',
     '<b>Part 2 · Folder on</b>: the cards of every set and the layout check, which sends what it finds back to the model once. <b>Part 3 · Folder off</b>: neither.',
+    ...(hasStudio ? ['<b>Part 4 · Studio on</b>: the design studio’s pieces that fit the request (real code with Tailwind classes, in your colours) in the example card’s place, the rules card, the CSS for the page’s classes built into it after every change, and the layout check. Its vote is against the folder-on page.'] : []),
     'Every page was then measured the same way, whichever part made it: opened in headless Chrome at 1440×900, on a 390-wide phone and in dark mode, and checked for sideways scroll, text that overlaps, runs out of its box or is too faint, script errors, and a missing charset or viewport line. The pictures are 900×620 and a 390-wide phone.',
     `The rules, written before the first run: a page passes when one was made and the layout check finds nothing; the folder is working on a model when there is ${esc(rule)}; the battle gives a point for a clean folder-on page and a point for your vote.`,
     `Code: ${[...new Set(models.map((m) => m.code))].map((c) => `<code>${esc(c)}</code>`).join(', ')}. First run ${esc(new Date(when).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }))}. Raw results: ${models.map((m) => `<code>${esc(m.dir.split('/models/')[1] ? `models/${m.dir.split('/models/')[1]}` : m.dir)}</code>`).join(' · ')}.`,
   ];
 
-  const tabs = [['verdict', 'The verdict'], ['pick', 'Card pick'], ['battle', 'The battle'], ['before', 'Before and after'], ['problems', 'Every problem'], ['how', 'How it was run']];
+  const tabs = [['verdict', 'The verdict'], ['pick', 'Card pick'], ['battle', 'The battle'], ['before', 'Before and after'], ...(hasStudio ? [['studio', 'Studio vs cards']] : []), ['problems', 'Every problem'], ['how', 'How it was run']];
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UI component battle</title>
@@ -239,7 +254,11 @@ ${pickTable}
 <h2>Part 3 · Before and after: the same model, the folder off and on</h2>
 <div id="before-body"></div>
 </section>
-<section id="problems" hidden><h2>Everything the layout check found, page by page</h2>${problems}</section>
+${hasStudio ? `<section id="studio" hidden>
+<h2>Part 4 · The design studio against the cards: the same model and request</h2>
+<div id="studio-body"></div>
+</section>
+` : ''}<section id="problems" hidden><h2>Everything the layout check found, page by page</h2>${problems}</section>
 <section id="how" hidden><h2>How it was run</h2><div class="how">
 <ul>${how.map((x) => `<li>${x}</li>`).join('')}</ul>
 <div><h3 style="margin-top:0">The requests, word for word</h3>${reqs.map((p) => `<div><b>${esc(label(p))}</b><p class="prompt">${esc(p.prompt)}</p></div>`).join('')}</div>
@@ -265,10 +284,11 @@ ${pickTable}
   addEventListener('keydown',function(e){if(e.metaKey||e.ctrlKey||e.altKey)return;var n=parseInt(e.key,10);if(n>=1&&n<=tabs.length)show(tabs[n-1].dataset.t);var i=tabs.map(function(b){return b.getAttribute('aria-selected');}).indexOf('true');if(e.key==='ArrowRight'&&tabs[i+1])show(tabs[i+1].dataset.t);if(e.key==='ArrowLeft'&&tabs[i-1])show(tabs[i-1].dataset.t);});
 
   // One picture tab: a row of choices, two pictures, a vote.
-  var S={battle:{req:null,live:{}},before:{req:null,model:null,live:{}}};
+  var S={battle:{req:null,live:{}},before:{req:null,model:null,live:{}},studio:{req:null,model:null,live:{}}};
+  var ARMN={on:'Folder on',off:'Folder off',studio:'Studio on'};
   function figure(kind,pair,i){
     var key=pair.sides[i],r=D.runs[key],open=voted(pair),parts=key.split('|'),won=open&&V[pair.id]===i;
-    var who=kind==='battle'?modelName(parts[0]):'Folder '+parts[2];
+    var who=kind==='battle'?modelName(parts[0]):ARMN[parts[2]];
     var name=open?'<b>'+esc(who)+'</b>':'<b>'+(i===0?'Left':'Right')+'</b>';
     var facts=!open?'':(r.made?(r.problems==null?'<span class="tag idle">not measured</span>':r.problems===0?'<span class="tag ok">no layout problems</span>':'<span class="tag warn">'+r.problems+' layout problem'+(r.problems===1?'':'s')+'</span>'):'')+'<span class="t">'+mmss(r.secs)+(r.time?', stopped at the limit':'')+'</span>'+(parts[2]==='on'?'<span class="t">· '+(r.cards.length?esc(r.cards.join(' + ')):'no cards carried')+'</span>':'');
     var live=S[kind].live[key];
@@ -278,33 +298,33 @@ ${pickTable}
   }
   function voteBar(kind,pair){
     var v=V[pair.id],open=voted(pair);
-    var say=!open?(kind==='battle'?'Which one is the better component? The models’ names show once you vote.':'Which one looks better? Which side had the design folder shows once you vote.')
-      :v==='tie'?'You called it a tie.':'You picked '+(kind==='battle'?esc(modelName(pair.sides[v].split('|')[0])):'the folder '+pair.sides[v].split('|')[2])+'.';
+    var say=!open?(kind==='battle'?'Which one is the better component? The models’ names show once you vote.':kind==='studio'?'Which one looks better? Which side had the design studio shows once you vote.':'Which one looks better? Which side had the design folder shows once you vote.')
+      :v==='tie'?'You called it a tie.':'You picked '+(kind==='battle'?esc(modelName(pair.sides[v].split('|')[0])):ARMN[pair.sides[v].split('|')[2]].toLowerCase())+'.';
     return '<div class="vote"><button data-vote="0" aria-pressed="'+(v===0)+'">◀ Left is better</button><button data-vote="tie" aria-pressed="'+(v==='tie')+'">About the same</button><button data-vote="1" aria-pressed="'+(v===1)+'">Right is better ▶</button><div class="say">'+say+'</div></div>';
   }
   function draw(kind){
     var body=$('#'+kind+'-body'),pairs=D[kind],st=S[kind];
     if(!body)return;
-    if(!pairs.length){body.innerHTML='<div class="lock">'+(kind==='battle'?'A battle needs the folder-on page of both models for a request. Run the test on the other model too.':'Nothing to compare yet: a request needs a page with the folder on and one with it off.')+'</div>';return;}
+    if(!pairs.length){body.innerHTML='<div class="lock">'+(kind==='battle'?'A battle needs the folder-on page of both models for a request. Run the test on the other model too.':kind==='studio'?'Nothing to compare yet: a request needs a page with the folder on and one with the studio on.':'Nothing to compare yet: a request needs a page with the folder on and one with it off.')+'</div>';return;}
     var reqs=D.requests.filter(function(r){return pairs.some(function(p){return p.req===r.id;});});
     if(!st.req||!reqs.some(function(r){return r.id===st.req;}))st.req=reqs[0].id;
     var mine=pairs.filter(function(p){return p.req===st.req;});
-    if(kind==='before'&&(!st.model||!mine.some(function(p){return p.model===st.model;})))st.model=mine[0].model;
+    if(kind!=='battle'&&(!st.model||!mine.some(function(p){return p.model===st.model;})))st.model=mine[0].model;
     var pair=kind==='battle'?mine[0]:mine.filter(function(p){return p.model===st.model;})[0];
     var done=pairs.filter(voted).length;
     var dot=function(on){return '<span class="dot'+(on?' on':'')+'"></span>';};
     var bar='<div class="bar"><span>Request</span>'+reqs.map(function(r){var ps=pairs.filter(function(p){return p.req===r.id;});return '<button class="pill" data-req="'+esc(r.id)+'" aria-pressed="'+(r.id===st.req)+'">'+dot(ps.every(voted))+esc(r.label)+'</button>';}).join('');
     // The battle's own vote first: this tab names the models.
-    var gate=kind==='before'?D.battle.filter(function(p){return p.req===st.req;})[0]:null;
+    var gate=kind!=='battle'?D.battle.filter(function(p){return p.req===st.req;})[0]:null;
     var locked=gate&&!voted(gate);
-    if(kind==='before'&&!locked)bar+='<span class="gap"></span><span>Model</span>'+mine.map(function(p){return '<button class="pill" data-model="'+esc(p.model)+'" aria-pressed="'+(p.model===st.model)+'">'+dot(voted(p))+esc(modelName(p.model))+'</button>';}).join('');
+    if(kind!=='battle'&&!locked)bar+='<span class="gap"></span><span>Model</span>'+mine.map(function(p){return '<button class="pill" data-model="'+esc(p.model)+'" aria-pressed="'+(p.model===st.model)+'">'+dot(voted(p))+esc(modelName(p.model))+'</button>';}).join('');
     bar+='<span class="right">'+done+' of '+pairs.length+' voted</span></div>';
     body.innerHTML=bar+(locked?'<div class="lock">Vote on <b>'+esc(reqLabel(st.req))+'</b> in the battle first: this tab names the models, and that would give the battle away.<br><br><button class="pill" data-go="battle">Go to the battle</button></div>'
       :'<div class="pairs">'+figure(kind,pair,0)+figure(kind,pair,1)+'</div>'+voteBar(kind,pair));
     $$('[data-req]',body).forEach(function(b){b.onclick=function(){st.req=b.dataset.req;draw(kind);};});
     $$('[data-model]',body).forEach(function(b){b.onclick=function(){st.model=b.dataset.model;draw(kind);};});
     $$('[data-go]',body).forEach(function(b){b.onclick=function(){S.battle.req=st.req;draw('battle');show('battle');};});
-    $$('[data-vote]',body).forEach(function(b){b.onclick=function(){var v=b.dataset.vote;V[pair.id]=v==='tie'?'tie':Number(v);save();draw(kind);if(kind==='battle')draw('before');tally();};});
+    $$('[data-vote]',body).forEach(function(b){b.onclick=function(){var v=b.dataset.vote;V[pair.id]=v==='tie'?'tie':Number(v);save();draw(kind);if(kind==='battle'){draw('before');draw('studio');}tally();};});
     $$('[data-live-btn]',body).forEach(function(b){b.onclick=function(){var k=b.dataset.liveBtn;st.live[k]=!st.live[k];draw(kind);};});
     $$('iframe[data-live]',body).forEach(function(f){f.srcdoc=D.runs[f.dataset.live].html;});
     fit();
@@ -317,7 +337,9 @@ ${pickTable}
   function tally(){
     var cells={};
     D.before.forEach(function(p){if(!voted(p))return;['on','off'].forEach(function(arm){var k=p.model+'|'+arm;cells[k]=cells[k]||{won:0,of:0};cells[k].of++;});if(V[p.id]!=='tie'){var arm=p.sides[V[p.id]].split('|')[2];cells[p.model+'|'+arm].won++;}});
-    $$('[data-votecell]').forEach(function(td){var c=cells[td.dataset.votecell];td.innerHTML=c?c.won+' of '+c.of:'<span class="dim">no votes yet</span>';});
+    // The studio's cell: its wins against the folder-on page.
+    D.studio.forEach(function(p){if(!voted(p))return;var k=p.model+'|studio';cells[k]=cells[k]||{won:0,of:0,vs:'against the cards'};cells[k].of++;if(V[p.id]!=='tie'&&p.sides[V[p.id]].split('|')[2]==='studio')cells[k].won++;});
+    $$('[data-votecell]').forEach(function(td){var c=cells[td.dataset.votecell];td.innerHTML=c?c.won+' of '+c.of+(c.vs?' <span class="dim">'+c.vs+'</span>':''):'<span class="dim">no votes yet</span>';});
     var score=$('#score');
     if(score&&D.models.length>=2){
       var pts={},clean={},votes={};D.models.forEach(function(m){pts[m.id]=0;clean[m.id]=0;votes[m.id]=0;});
@@ -328,8 +350,8 @@ ${pickTable}
         :'<b>The battle</b> (folder on): '+esc(a.name)+' '+pts[a.id]+' · '+esc(b.name)+' '+pts[b.id]+', '+lead+'. Clean pages '+clean[a.id]+' · '+clean[b.id]+', your votes '+votes[a.id]+' · '+votes[b.id]+' ('+done+' of '+D.battle.length+' voted'+(done<D.battle.length?': tab 3':'')+').';
     }
   }
-  var clear=$('#clear');if(clear)clear.onclick=function(){V={};save();draw('battle');draw('before');tally();};
-  draw('battle');draw('before');tally();
+  var clear=$('#clear');if(clear)clear.onclick=function(){V={};save();draw('battle');draw('before');draw('studio');tally();};
+  draw('battle');draw('before');draw('studio');tally();
   var h=(location.hash||'').slice(1);show(document.getElementById(h)&&$('[data-t="'+h+'"]')?h:'verdict');
 })();
 </script>

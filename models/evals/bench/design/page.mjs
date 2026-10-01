@@ -14,8 +14,8 @@ export function resultsDirs(root, date) {
   return readdirSync(models).map((m) => join(models, m, 'results', `design-bench-${date}`)).filter((d) => existsSync(join(d, 'runs.json')));
 }
 
-const ARM_ORDER = ['today', 'cards', 'full', 'opus', 'fable'];
-const ARM_LABEL = { today: 'Today (no cards)', cards: 'Cards, all sets', full: 'Cards + layout check', opus: 'Opus cards only', fable: 'Fable cards only' };
+const ARM_ORDER = ['today', 'cards', 'full', 'opus', 'fable', 'studio'];
+const ARM_LABEL = { today: 'Today (no cards)', cards: 'Cards, all sets', full: 'Cards + layout check', opus: 'Opus cards only', fable: 'Fable cards only', studio: 'Studio + layout check' };
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 const img = (dir, f) => {
