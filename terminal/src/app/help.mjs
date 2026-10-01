@@ -68,7 +68,7 @@ export const KEYS = [
   ] },
 ];
 
-// `coding …` from a terminal. lingerMins: how long the model stays loaded.
+// `coding …` from a terminal. lingerMins: how long a model left by a closed window stays loaded.
 export function cliRows(lingerMins = 30) {
   return {
     usage: [
@@ -77,7 +77,7 @@ export function cliRows(lingerMins = 30) {
       ['coding -p "question"', 'answer once and exit (changes are refused unless --yes; commands you allowed in /permissions run)'],
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
-      ['coding stop', `free the model's memory now (it stays loaded ${lingerMins} min after you quit)`],
+      ['coding stop', `free the memory of a model no window uses (one left by a window that crashed stays loaded up to ${lingerMins} min)`],
       ['coding serve', 'this machine’s model for /remote on another machine, behind an API key (--local: for an SSH tunnel; --port, --ctx, --model, --https cert key, --new-key)'],
       ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (the Arena with the Test builder open over it), memory, instructions, help'],
       ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
@@ -91,6 +91,7 @@ export function cliRows(lingerMins = 30) {
       ['--yes', 'with -p: allow edits and commands without asking (your /permissions never-list still holds)'],
       ['--url http://host:port', 'use a llama-server that is already running'],
       ['--local', 'use the model on this Mac even when /remote is on'],
+      ['--start', 'load the model as the window opens (otherwise it is off until you type /start; /autostart on does this every time)'],
       ['--no-flows', 'always work step by step (skip the focused fix/change/rename paths)'],
       ['--way model', "the model decides, like Claude Code: no sorting or reading ahead, its own tools, the app's checks only as /hooks switches them (--way app: as before; /effort's Who decides row keeps it)"],
       ['-v, --version', 'print the version'],

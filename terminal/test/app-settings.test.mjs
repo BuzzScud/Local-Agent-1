@@ -12,10 +12,10 @@ import { helpData } from '../src/app/help.mjs';
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 60 }]).flat();
 
-test('the / menu holds 16 commands and /settings the other 17; every one is still a command, and the Help page lists both parts', () => {
+test('the / menu holds 18 commands and /settings the other 18; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
-  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'remote', 'test', 'morning', 'settings', 'exit']);
-  expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'helpers', 'hooks', 'rules', 'instructions', 'memory', 'web', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
+  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'test', 'morning', 'settings', 'exit']);
+  expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'autostart', 'helpers', 'hooks', 'rules', 'instructions', 'memory', 'web', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {
     expect(COMMANDS.some((c) => c.name === n)).toBe(true); // typed in full it still runs
@@ -36,7 +36,7 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' },
     { type: '/se' }, { wait: 'Everything else in one menu' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 200 }, { snapshot: 'menu' },
-    ...down(13), { sleep: 150 }, { snapshot: 'stats' }, { key: 'enter' }, { wait: 'writing speed' },
+    ...down(14), { sleep: 150 }, { snapshot: 'stats' }, { key: 'enter' }, { wait: 'writing speed' },
     { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 150 }, { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Kept for next time' }, { sleep: 150 }, { snapshot: 'meters' }, { key: 'esc' }, { wait: 'Kept the status bar as off' },
     { type: '/settings' }, { key: 'enter' }, { wait: 'Everything not in the / menu' }, { sleep: 150 }, { key: 'up' }, { sleep: 100 }, { snapshot: 'wrapped' }, { key: 'esc' }, { sleep: 300 }, { snapshot: 'closed' },
     { type: '/doctor' }, { sleep: 250 }, { snapshot: 'typed' }, { key: 'enter' }, { wait: 'free memory' },
@@ -52,6 +52,7 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   expect(m).toMatch(/❯ Permissions\s+0 saved · ask first\s+what runs without asking, what never runs/); // the first row of Setup
   expect(m).toMatch(/Status bar\s+off\s+model, speed and memory under the prompt/);
   expect(m).toMatch(/Mouse\s+off\s+drag to highlight text in the prompt box/);
+  expect(m).toMatch(/Model at start\s+off · \/start loads it\s+load the model as a window opens/);
   expect(m).toMatch(/Helpers\s+\d of 4 on\s/);
   expect(m).toMatch(/Hooks\s+all run: App decides\s+the app's checks, while the model decides/);
   expect(m).toMatch(/Test record\s+no runs yet\s/); // a fresh home has no test record
@@ -59,7 +60,7 @@ test('/settings: three groups, a value on every row, enter runs the row (Stats),
   expect(m).toMatch(/Update\s+\d+\.\d+\.\d+ · nothing new\s/);
   // every row has something in its value column: no blank cell
   const rows = m.split('\n').filter((l) => /^│ [❯ ] \S/.test(l));
-  expect(rows).toHaveLength(17);
+  expect(rows).toHaveLength(18);
   expect(m).toMatch(/Web\s+no search · pages on\s+search the web and read pages/);
   for (const l of rows) expect(l).toMatch(/^│ [❯ ] \S[\w ]*?\s{2,}\S.*\s{3,}\S/);
   expect(r.snapshots.stats).toMatch(/❯ Stats\s/);
@@ -75,9 +76,10 @@ test('/settings in the smallest window (80 × 24): the gaps drop and the whole m
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, cols: 80, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [
-    // 17 rows at this height: the line under the title goes, and the title joins the first group's line (the menu's footer is drawn)
-    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: '↑↓ to choose · enter to open' }, { sleep: 300 }, { snapshot: 'menu' }, { key: 'esc' }, { sleep: 300 },
-    // with the status bar on there is one line less: the key hint goes too, the menu's top edge stays
+    // 18 rows at this height (Model at start, 30 Sep 2026): the line under the title goes, the title joins the
+    // first group's line, and the key hint goes too; every row still shows, title to last row
+    { wait: '? for shortcuts' }, { type: '/settings' }, { key: 'enter' }, { wait: 'Update' }, { sleep: 300 }, { snapshot: 'menu' }, { key: 'esc' }, { sleep: 300 },
+    // with the status bar on there is one line less: the last heading (Tools) goes too, the menu's top edge stays
     { type: '/meters on' }, { key: 'enter' }, { wait: 'Status bar on' },
     { type: '/settings' }, { key: 'enter' }, { wait: 'Test record' }, { sleep: 300 }, { snapshot: 'bar' }, { key: 'esc' }, { sleep: 300 },
     ...quit,
@@ -86,13 +88,14 @@ test('/settings in the smallest window (80 × 24): the gaps drop and the whole m
   const screen = r.snapshots.menu.trimEnd().split('\n').slice(-24).join('\n');
   expect(screen).toMatch(/│ Settings\s/);
   expect(screen).toMatch(/Update\s/);
-  expect(screen).toContain('↑↓ to choose · enter to open · esc to go back');
+  expect(screen).toMatch(/Model at start\s/);
   expect(screen).not.toMatch(/│\s+│\n│ Setup/); // no blank line before a group at this height
   expect(screen).toMatch(/╭─+╮\n│ Settings\s/); // its top edge is on screen
   const vb = r.terms.bar.buffer.active; // the window as it is, 24 rows
   const bar = Array.from({ length: 24 }, (_, i) => vb.getLine(vb.baseY + i)?.translateToString(true) ?? '').join('\n');
   expect(bar).toMatch(/╭─+╮\n│ Settings · Setup\s+│/);
   expect(bar).toMatch(/Update\s/);
+  expect(bar).toMatch(/Test record .*\n│ {3}Stats\s/); // no Tools heading at this height
   expect(bar).toMatch(/ctx .* of 32k/); // the status bar under it
 }, T);
 

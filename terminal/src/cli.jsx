@@ -94,6 +94,8 @@ function parse(argv) {
     else if (a === '--way') o.way = String(val() ?? '').toLowerCase() === 'model' ? 'model' : 'app';
     // --local: this run uses the model on this Mac even when /remote is on.
     else if (a === '--local') o.local = true;
+    // --start: the model loads as the window opens (otherwise it waits for /start; /autostart on keeps that).
+    else if (a === '--start') o.load = true;
     else rest.push(a);
   }
   if (rest.length) o.prompt = rest.join(' ');

@@ -141,11 +141,25 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   Read shows the built line folded (`hideBuilt`), and an Edit naming the fold means the real line (`realBuilt`).
   The app built with `bun build --compile` finds the package through `AGENTIC_REPO`, which the launcher sets.
   Switches: settings.json `design.studio`, `AGENTIC_STUDIO` (off in the tests, test-env.mjs), `/design studio on|off`;
-  `/design studio` alone lists the pieces (a /design word, not a command of its own: the / menu keeps 16 and
-  /settings 17, which is all that fits an 80 × 24 window). The Arena's **Design studio check** (`models/evals/bench/design/studio-check.mjs`,
+  `/design studio` alone lists the pieces (a /design word, not a command of its own: the / menu keeps 18 and
+  /settings 18, which is all that fits an 80 × 24 window). The Arena's **Design studio check** (`models/evals/bench/design/studio-check.mjs`,
   no model) opens every piece in headless Chrome and writes a live gallery of them beside the pieces (private) and a
   results page of names and results to `docs/tests/`; the **UI component battle** has a fourth part, Studio on,
   with its own blind vote against the folder-on page.
+
+## The model at start
+
+- **The model is off when a window opens** (since 30 Sep 2026, the user's pick): `/start` loads it and
+  `/stop` unloads it and gives its memory back (a reply under way stops first; another window on the same
+  copy keeps it). `/autostart on` (settings.json `modelAtStart`, a /settings row), `--start` or
+  `AGENTIC_MODEL_AT_START=on` load it as the window opens; `/update` passes `--start` so the new version
+  joins the copy it kept. A message sent while it is off waits (the Queued line) and goes after `/start`.
+  Quitting or closing the Terminal window unloads it at once (before, a closed window or a joined copy stayed 30
+  minutes), unless another window uses it; the memory's save at
+  quit still runs on it first. With the model off at quit, that save waits in a `.wait` file in
+  `memory-jobs/` for the next `/start` in that folder (`AutoSave.runWaiting`), and a handed-over save whose
+  model has gone waits the same way: nothing loads after a window has closed. The app tests set
+  `AGENTIC_MODEL_AT_START=on` in `setup()` (app-setup.mjs); `app-model-start.test.mjs` tests it off.
 
 ## The public repo
 

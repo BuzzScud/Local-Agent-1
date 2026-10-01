@@ -77,6 +77,20 @@ async function exited(pid, ms = 15000) {
   return false;
 }
 
+// A window lets go of a model server: stopped when no other window uses it (a copy kept loaded
+// by an earlier window, which this one only joined, is stopped too), else left to the others.
+// The deciding steps run at once, so a window closing as it calls this still frees the memory.
+// Answers { others: windows still on it, done: settles once the process has gone }.
+function letGo(srv) {
+  if (!srv) return { others: 0, done: Promise.resolve() };
+  const port = srv.port;
+  const others = port ? liveUsers(port).filter((p) => p !== process.pid).length : 0;
+  const joined = !others && srv.shared ? scanServers().find((e) => e.port === port && e.pid === srv.shared.pid) : null;
+  const stopped = srv.stop({ keep: others > 0 });
+  if (joined) stopServer(joined);
+  return { others, done: stopped.then(() => (joined ? exited(joined.pid) : true)) };
+}
+
 // "@path" in a prompt attaches that file for the model.
 // @picture.png and @doc.pdf too: a picture is attached as a picture (images), a
 // PDF as its text. A file dragged into the window (its path) and a pasted
@@ -147,6 +161,20 @@ export function App({ opts, win, onRestart }) {
   // /remote on (and no --url or --local): the model on another machine. Until
   // it answers, `model` is a stand-in named after it.
   const remoteAtStart = !opts.url && !opts.local && Boolean(settings.remote?.use);
+  // The model on this Mac loads when you type /start, not as the window opens (the user's pick,
+  // 30 Sep 2026), so a window you only look around in takes none of the Mac's memory.
+  // /autostart on (settings.json "modelAtStart"), --start or AGENTIC_MODEL_AT_START=on load it at once.
+  // wantRef: this window wants the model loaded (/start sets it, /stop clears it).
+  const wantRef = useRef(null);
+  const envAtStart = process.env.AGENTIC_MODEL_AT_START; // on or off: wins over /autostart (the tests set it)
+  const loadsAtOpen = () => Boolean(opts.load) || (envAtStart ? /^(on|1|true|yes)$/i.test(envAtStart) : settings.modelAtStart === true);
+  wantRef.current ??= !opts.url && !remoteAtStart && loadsAtOpen();
+  // The model on this Mac is off: nothing loaded, nothing loading (the start page, the footer and /stats say so).
+  const [modelOff, setModelOff] = useState(!opts.url && !remoteAtStart && !wantRef.current);
+  // Nothing to talk to: the model on this Mac is off (no --url server, no remote in use).
+  const modelOffNow = () => !wantRef.current && !opts.url && !remoteRef.current?.on;
+  const aliveRef = useRef(true); // false once the window has closed
+  const loadRef = useRef(0); // bumped by every load, switch and /stop: only the newest one goes on
   // The model can change while the window is open (/model switches to the
   // edited copy and back), so it is state; the last pick is kept in settings.
   const [model, setModel] = useState(() => (remoteAtStart ? remoteModel(settings.remote) : modelById(opts.modelId) ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL]));
@@ -227,8 +255,9 @@ export function App({ opts, win, onRestart }) {
   };
   const [stats, setStats] = useState({});
   const [ctx, setCtx] = useState(opts.ctx ?? 32768);
-  const [starting, setStarting] = useState(!opts.url);
-  const [startedAt] = useState(Date.now());
+  const [starting, setStarting] = useState(!opts.url && !modelOff);
+  // When the window opened, and then when the model last began to load (the "Starting …" seconds).
+  const [startedAt, setStartedAt] = useState(Date.now());
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState(null);
   const [queued, setQueued] = useState(null);
@@ -239,7 +268,7 @@ export function App({ opts, win, onRestart }) {
   // conversations it lists, and whether it is still held live while the model loads at launch.
   const [tip, setTip] = useState(() => startTip(opts.start));
   const recentRef = useRef(opts.start?.recent ?? []);
-  const holdRef = useRef(!opts.url);
+  const holdRef = useRef(!opts.url && !modelOff);
   // Quitting or restarting: the terminal's cursor leaves the prompt box for the
   // line under it, so what is printed after the app goes there, not into the box.
   const [leaving, setLeaving] = useState(false);
@@ -436,6 +465,7 @@ export function App({ opts, win, onRestart }) {
         { id: 'edit', label: 'Open /remote', note: 'change the address, the key or how it connects' },
       ] };
     }
+    if (id === 'autostart') return { title: 'Model at start', blurb: `Whether ${model.name} loads as a window opens. Off, it waits for /start, so a window you only look around in takes none of the Mac's memory. Kept for next time.`, what: 'the model at start', current: settings.modelAtStart ? 'on' : 'off', options: [{ id: 'off', label: 'Off', note: 'the model loads when you type /start' }, { id: 'on', label: 'On', note: 'the model loads as soon as a window opens' }] };
     if (id === 'mouse') return { title: 'Mouse in the prompt box', blurb: 'Drag over the text you are typing to highlight it: copied at once, delete removes it, typing replaces it. While the box has text the mouse is Agentic Coder’s; hold fn for Terminal’s own highlight. Kept for next time.', what: 'the mouse', current: S.current.mouse ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'click, drag to highlight, double click for a word' }, { id: 'off', label: 'Off', note: 'the mouse stays Terminal’s; option+click still works' }] };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
   };
@@ -468,12 +498,22 @@ export function App({ opts, win, onRestart }) {
   // midTurn: the model asked for it in the middle of its reply (vision for a picture it read).
   const switchModel = async (next, done, { midTurn = false } = {}) => {
     if (S.current.live !== IDLE && !midTurn) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+    // The model is off (not started yet, or /stop): the pick is kept and nothing loads; /start loads it.
+    if (modelOffNow() && !midTurn) {
+      setModel(next);
+      agent.model = modelWithLimits(next, limitsRef.current);
+      push({ type: 'note', text: `${done ? 'It applies' : `${next.name} is picked; it loads`} when you type /start. The model is off, so nothing loads now.`, tone: 'dim' });
+      return;
+    }
     const cur = serverRef.current;
     // Only one 27B fits in memory, so nobody else may be on the old server.
     const others = cur?.port ? liveUsers(cur.port).filter((p) => p !== process.pid) : [];
     if (others.length) { push({ type: 'note', text: `Another Agentic Coder window is using ${model.name}. Close it first, then switch.`, tone: 'warn' }); return; }
     setModel(next);
-    setStarting(true); setStartPhase('loading');
+    setStarting(true); setStartPhase('loading'); setStartedAt(Date.now());
+    // /stop while it switches calls the switch off (stopModel bumps loadRef): it ends quietly.
+    const my = ++loadRef.current;
+    const stillOn = () => loadRef.current === my && !modelOffNow();
     try {
       const oldPid = cur?.child?.pid ?? cur?.shared?.pid;
       const mem = memoryForRestart(); // before the old server stops: what it gives back counts as free
@@ -481,8 +521,9 @@ export function App({ opts, win, onRestart }) {
       stopIdleServers(); // a server we only attached to (kept loaded earlier) is freed too
       // Wait for the old one to really exit: two 27Bs never fit side by side.
       if (oldPid && !(await exited(oldPid))) throw new Error('the old model server did not stop');
-      await waitForBattle();
-      const back = await waitForOthers(next);
+      await waitForBattle(stillOn);
+      const back = await waitForOthers(next, stillOn);
+      if (!stillOn()) return;
       const fixed = limitsRef.current.context;
       const available = Math.max(mem.free, back, availableBytes());
       const c = fixed ? { ctx: fixed, reason: null } : chooseContext(next, { effort: agent.thinking ? agent.effort : undefined, available });
@@ -512,7 +553,11 @@ export function App({ opts, win, onRestart }) {
       const n = next.edited?.edits.length ?? 0;
       if (done) push({ type: 'note', text: done(agent.ctx), tone: 'dim' });
       else push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
-    } catch (e) { push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /effort to try again.` : `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' }); }
+      if (!stillOn()) return;
+    } catch (e) {
+      if (!stillOn()) return;
+      push({ type: 'note', text: done ? `Could not restart ${next.name}: ${e.message}. /effort to try again.` : `Could not switch: ${e.message}. Pick a model in /model to try again.`, tone: 'error' });
+    }
     setStarting(false);
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
@@ -550,6 +595,9 @@ export function App({ opts, win, onRestart }) {
     remoteRef.current.conn = conn;
     remoteRef.current.why = null;
     serverRef.current = null;
+    // The Mac's own model is let go: back on this Mac, it is off until /start.
+    wantRef.current = false;
+    setModelOff(false);
     await before.server?.stop().catch(() => {});
     setRamGb(null);
     memoryNote.current = null;
@@ -572,8 +620,9 @@ export function App({ opts, win, onRestart }) {
     else if (atStart) setTimeout(() => { autoRef.current.atStart(); }, 3000).unref?.();
     return true;
   };
-  // Back to the model on this Mac: the tunnel closes, the model loads here (switchModel).
-  const useLocal = async ({ note } = {}) => {
+  // Back to the model on this Mac: the tunnel closes. The model loads here only when you ask for
+  // it (load: "Use … on this Mac for now", or /autostart on); otherwise it is off until /start.
+  const useLocal = async ({ note, load = false } = {}) => {
     if (S.current.live !== IDLE || agent.busy) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
     remoteRef.current.on = false;
     remoteRef.current.conn?.stop();
@@ -581,6 +630,16 @@ export function App({ opts, win, onRestart }) {
     const back = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
     localModelRef.current = null;
     agent.slots = null;
+    if (!load && !wantRef.current && !loadsAtOpen()) {
+      agent.url = 'http://127.0.0.1:0';
+      setModel(back);
+      agent.model = modelWithLimits(back, limitsRef.current);
+      setModelOff(true);
+      push({ type: 'note', text: `${note ?? `Back on ${back.name}, on this Mac.`} The model is off: /start loads it.`, tone: 'dim' });
+      return;
+    }
+    wantRef.current = true;
+    setModelOff(false);
     await switchModel(back, () => note ?? `Back on ${back.name}, on this Mac.`);
   };
   // The remote stopped answering in the middle of a reply: connect again once
@@ -699,6 +758,7 @@ export function App({ opts, win, onRestart }) {
     const value = {
       meters: S.current.meters ? 'on' : 'off',
       mouse: S.current.mouse ? 'on' : 'off',
+      autostart: settings.modelAtStart ? 'on · loads at once' : 'off · /start loads it',
       helpers: `${agent.helpers.size} of 4 on`,
       hooks: agent.way === 'app' ? 'all run: App decides' : `${agent.hooks.size} of ${HOOKS.length} on`,
       permissions: settingsValue(agent.cwd),
@@ -821,7 +881,7 @@ export function App({ opts, win, onRestart }) {
     }
     if (id === 'remote-down') {
       if (value === 'retry') useRemote(settings.remote);
-      else if (value === 'local') useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.' });
+      else if (value === 'local') useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.', load: true });
       else openRemoteForm();
       return;
     }
@@ -839,6 +899,11 @@ export function App({ opts, win, onRestart }) {
       setMouse(on);
       saveSettings({ mouse: on });
       push({ type: 'note', text: on ? 'Mouse on: with text in the prompt box, a click puts the cursor there and a drag highlights (copied at once; delete removes it). Hold fn to highlight the way Terminal does.' : 'Mouse off: the mouse is Terminal’s again. option+click and shift+arrows still work.', tone: 'dim' });
+    } else if (id === 'autostart') {
+      const on = value === 'on';
+      settings.modelAtStart = on;
+      saveSettings({ modelAtStart: on });
+      push({ type: 'note', text: on ? `Model at start on: ${model.name} loads as soon as a window opens. /stop still unloads it.` : 'Model at start off: a window opens with the model off, and /start loads it.', tone: 'dim' });
     } else if (id === 'startmode') {
       const r = changePermissions(agent.cwd, `mode ${value}`, { mode: agent.mode, session: agent.allowedPrefixes });
       if (r.mode) setMode(r.mode);
@@ -877,6 +942,7 @@ export function App({ opts, win, onRestart }) {
     if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.${way}`, tone: 'dim' }); return; }
     if (opts.url) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model server was given with --url, so restart it yourself for the context or thinking cap to take effect.`, tone: 'warn' }); return; }
     if (model.remote) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model runs on the remote: its context is set there (coding serve --ctx, or /remote's Context row), and the new cap is asked for with each reply.`, tone: 'dim' }); return; }
+    if (modelOffNow()) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model is off, so it applies when you type /start; kept for next time.${way}`, tone: 'dim' }); return; }
     push({ type: 'note', text: `Saved: ${list}. Restarting ${model.name} for it (about a minute); the conversation stays.`, tone: 'dim' });
     switchModel(model, (ctx) => `${model.name} restarted: context ${Math.round(ctx / 1024)}k · thinking cap ${showLimit('thinking', next.thinking)}.`);
   };
@@ -926,6 +992,13 @@ export function App({ opts, win, onRestart }) {
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
 
   const sendPrompt = useCallback((value, shown = value, { visionAsked = false } = {}) => {
+    // The model is off: the message waits (the Queued line) and goes once /start has loaded it.
+    if (modelOffNow()) {
+      const had = queuedRef.current;
+      queuedRef.current = value; setQueued(value);
+      if (!had) push({ type: 'note', text: 'The model is off. /start loads it (your message waits and goes out after).', tone: 'dim' });
+      return;
+    }
     const { text, attached, images } = expandMentions(value, cwd, agent.maxResultChars, pastedRef.current.files);
     // A picture, and a model not looking at pictures yet: its vision is turned on first (the
     // message waits for it), or, where it cannot be, the message goes with a line saying so.
@@ -1071,9 +1144,118 @@ export function App({ opts, win, onRestart }) {
     return () => clearInterval(tick);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Start the model server (unless one was given with --url).
+  // Load the model on this Mac: at the window's start when it loads then (/autostart on, --start),
+  // and on /start. stillOn() turns false when the window closes or /stop comes first: the load
+  // then ends quietly (a server /stop stopped mid-load fails its start, and that is not said).
+  const loadedOnce = useRef(false);
+  const loadModel = async () => {
+    const my = ++loadRef.current;
+    const stillOn = () => aliveRef.current && loadRef.current === my;
+    wantRef.current = true;
+    setModelOff(false);
+    setStarting(true); setStartPhase('loading'); setStartedAt(Date.now());
+    await waitForBattle(stillOn);
+    if (!stillOn()) return;
+    // --ctx wins; then the context /effort saved; then what fits (chooseContext).
+    let size = opts.ctx ?? (limitsRef.current.context || undefined);
+    const picked = !opts.ctx && limitsRef.current.context;
+    // A model still loaded from an earlier start (or another window) is used
+    // as it is; otherwise the memory size is chosen from what is free now.
+    let running = runningServer(model);
+    // Kept loaded at another size than the one you picked, with no other
+    // window on it: it restarts at yours (before, it kept the old size until coding stop).
+    let freeBefore = 0; // what is free with that copy's memory back (freeWithHandBack)
+    if (picked && running?.linger && running.ctx !== picked && !(running.users ?? []).some((p) => p !== process.pid)) {
+      freeBefore = freeWithHandBack(model, running.ctx, { draft: Boolean(running.draft) });
+      stopServer(running);
+      await exited(running.pid);
+      running = null;
+    }
+    if (!size && running) size = running.ctx;
+    // Another copy loaded outside the app windows: wait for it (esc starts anyway).
+    // What the copies it waited for give back counts as free, as a restart's does.
+    if (!running) freeBefore = Math.max(freeBefore, await waitForOthers(model, stillOn));
+    if (!stillOn()) return;
+    let helper;
+    if (!size) {
+      const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined, available: Math.max(freeBefore, availableBytes()) });
+      size = c.ctx;
+      helper = c.helper; // false: High keeps its memory, the speed helper stays off
+      memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
+    }
+    // A context you picked is used as asked, checked against what is free now
+    // (before loading) with the search models still to load: said when it
+    // does not fit, and shown by /stats.
+    if (picked && !running) {
+      const loaded = new Set(scanServers().map((e) => e.model));
+      const chk = contextCheck(model, size, { draft: hasDraft(model), available: Math.max(freeBefore, availableBytes()), search: searchBytes(searchModels(agent, limitsRef.current), (m) => loaded.has(m.file)) });
+      memoryNote.current = chk.note;
+      if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
+    }
+    agent.ctx = size;
+    setCtx(size);
+    agent.syncRules(); // rules that follow the Context, settled before the model reads them
+    const srv = new ModelServer(modelWithLimits(model, limitsRef.current));
+    serverRef.current = srv;
+    srv.on('crash', ({ code, signal }) => {
+      if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
+      push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
+      restartRef.current = srv.restart().then(() => { push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { restartRef.current = null; });
+    });
+    let st;
+    try {
+      st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
+      if (!stillOn()) return;
+      const want = !opts.ctx && limitsRef.current.context;
+      if (want && st.shared && st.ctx !== want) push({ type: 'note', text: `${model.name} was already loaded at ${Math.round(st.ctx / 1024)}k, so it runs at that. Your /effort context (${Math.round(want / 1024)}k) applies after /stop and /start, or save it again in /effort.`, tone: 'warn' });
+      if (st.shared) {
+        agent.ctx = st.ctx;
+        setCtx(st.ctx);
+        agent.syncRules();
+        if (!st.idle) push({ type: 'note', text: `Sharing the model with another Agentic Coder window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
+      }
+    } catch (e) {
+      if (stillOn()) {
+        // Nothing loaded: the window is as it was before /start.
+        serverRef.current = null; wantRef.current = false;
+        setStarting(false); setModelOff(true);
+        push({ type: 'note', text: `Could not start the model: ${e.message}. /start tries again.`, tone: 'error' });
+      }
+      return;
+    }
+    agent.url = srv.url;
+    agent.canSee = Boolean(srv.vision);
+    if (st.slots > 1) agent.slots = { main: 0, side: 1 };
+    // Read the instructions and tools before the first message (restored from
+    // disk after the first time), so the first reply starts fast. A server
+    // shared with another window is already warm.
+    setStartPhase('reading');
+    // A model kept loaded from an earlier start is ours now: warm it for
+    // this folder too (instant when nothing changed). Another window's is left alone.
+    if (!st.shared || st.idle) try {
+      agent.warmed = true; // this window's own reading of the instructions: a restart from notes restores it
+      await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (stillOn()) setStartPhase(p); } });
+    } catch {}
+    if (!stillOn()) return;
+    setStarting(false);
+    const first = !loadedOnce.current;
+    loadedOnce.current = true;
+    // A save that waited for the model (the window closed while it was off) runs on it now.
+    autoRef.current.runWaiting();
+    const q = queuedRef.current;
+    if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
+    // The first load here: what the last window's second look would save is asked about (at
+    // the window's start already, when the model was off then); then (first use here) what is
+    // already written is read, in the background.
+    else if (first) setTimeout(() => { (askedAtOpen.current ? autoRef.current.seed() : autoRef.current.atStart()).catch(() => {}); }, 3000).unref?.();
+  };
+  const loadFnRef = useRef(null);
+  loadFnRef.current = loadModel;
+  const askedAtOpen = useRef(false);
+
+  // The window opens: the model loads now only when it should (wantRef); otherwise it is off until /start.
   useEffect(() => {
-    let alive = true;
+    aliveRef.current = true;
     (async () => {
       if (opts.url) {
         setStarting(false);
@@ -1081,97 +1263,67 @@ export function App({ opts, win, onRestart }) {
         try { const p = await (await fetch(`${opts.url.replace(/\/+$/, '')}/props`, { signal: AbortSignal.timeout(3000) })).json(); agent.canSee = Boolean(p?.modalities?.vision); } catch { agent.canSee = false; }
         // A server given by hand: what the last window's second look would
         // save is still asked about (no model needed); the first-use reading waits for a start of its own.
-        setTimeout(() => { if (alive) autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();
+        setTimeout(() => { if (aliveRef.current) autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();
         return;
       }
       // /remote on: the model on another machine; nothing loads here.
       if (remoteAtStart) { await remoteFnRef.current.useRemote(settings.remote, { atStart: true }); return; }
-      await waitForBattle(() => alive);
-      if (!alive) return;
-      // --ctx wins; then the context /effort saved; then what fits (chooseContext).
-      let size = opts.ctx ?? (limitsRef.current.context || undefined);
-      const picked = !opts.ctx && limitsRef.current.context;
-      // A model still loaded from an earlier start (or another window) is used
-      // as it is; otherwise the memory size is chosen from what is free now.
-      let running = runningServer(model);
-      // Kept loaded at another size than the one you picked, with no other
-      // window on it: it restarts at yours (before, it kept the old size until coding stop).
-      let freeBefore = 0; // what is free with that copy's memory back (freeWithHandBack)
-      if (picked && running?.linger && running.ctx !== picked && !(running.users ?? []).some((p) => p !== process.pid)) {
-        freeBefore = freeWithHandBack(model, running.ctx, { draft: Boolean(running.draft) });
-        stopServer(running);
-        await exited(running.pid);
-        running = null;
-      }
-      if (!size && running) size = running.ctx;
-      // Another copy loaded outside the app windows: wait for it (esc starts anyway).
-      // What the copies it waited for give back counts as free, as a restart's does.
-      if (!running) freeBefore = Math.max(freeBefore, await waitForOthers(model, () => alive));
-      if (!alive) return;
-      let helper;
-      if (!size) {
-        const c = chooseContext(model, { effort: agent.thinking ? agent.effort : undefined, available: Math.max(freeBefore, availableBytes()) });
-        size = c.ctx;
-        helper = c.helper; // false: High keeps its memory, the speed helper stays off
-        memoryNote.current = c.reason ?? null; // shown by /stats, not on the start screen
-      }
-      // A context you picked is used as asked, checked against what is free now
-      // (before loading) with the search models still to load: said when it
-      // does not fit, and shown by /stats.
-      if (picked && !running) {
-        const loaded = new Set(scanServers().map((e) => e.model));
-        const chk = contextCheck(model, size, { draft: hasDraft(model), available: Math.max(freeBefore, availableBytes()), search: searchBytes(searchModels(agent, limitsRef.current), (m) => loaded.has(m.file)) });
-        memoryNote.current = chk.note;
-        if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
-      }
-      agent.ctx = size;
-      setCtx(size);
-      agent.syncRules(); // rules that follow the Context, settled before the model reads them
-      const srv = new ModelServer(modelWithLimits(model, limitsRef.current));
-      serverRef.current = srv;
-      srv.on('crash', ({ code, signal }) => {
-        if (srv.restarts >= 3) { push({ type: 'note', text: `The model server keeps stopping (code ${code ?? signal}). See ~/.agentic-coder/logs/server.log, then restart Agentic Coder.`, tone: 'error' }); return; }
-        push({ type: 'note', text: `The model server stopped (code ${code ?? signal}); restarting it.`, tone: 'warn' });
-        restartRef.current = srv.restart().then(() => { push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { restartRef.current = null; });
-      });
-      let st;
-      try {
-        st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
-        const want = !opts.ctx && limitsRef.current.context;
-        if (want && st.shared && st.ctx !== want) push({ type: 'note', text: `${model.name} was already loaded at ${Math.round(st.ctx / 1024)}k, so it runs at that. Your /effort context (${Math.round(want / 1024)}k) applies after coding stop, or save it again in /effort.`, tone: 'warn' });
-        if (st.shared) {
-          agent.ctx = st.ctx;
-          setCtx(st.ctx);
-          agent.syncRules();
-          if (!st.idle) push({ type: 'note', text: `Sharing the model with another Agentic Coder window (port ${st.port}); replies wait their turn.`, tone: 'dim' });
-        }
-      } catch (e) {
-        if (alive) { setStarting(false); push({ type: 'note', text: `Could not start the model: ${e.message}`, tone: 'error' }); }
-        return;
-      }
-      agent.url = srv.url;
-      agent.canSee = Boolean(srv.vision);
-      if (st.slots > 1) agent.slots = { main: 0, side: 1 };
-      // Read the instructions and tools before the first message (restored from
-      // disk after the first time), so the first reply starts fast. A server
-      // shared with another window is already warm.
-      if (alive) setStartPhase('reading');
-      // A model kept loaded from an earlier start is ours now: warm it for
-      // this folder too (instant when nothing changed). Another window's is left alone.
-      if (!st.shared || st.idle) try {
-        agent.warmed = true; // this window's own reading of the instructions: a restart from notes restores it
-        await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (alive) setStartPhase(p); } });
-      } catch {}
-      if (!alive) return;
-      setStarting(false);
-      const q = queuedRef.current;
-      if (q) { queuedRef.current = null; setQueued(null); sendPrompt(q); }
-      // What the last window's second look would save is asked about; then
-      // (first use here) what is already written is read, in the background.
-      else setTimeout(() => { autoRef.current.atStart(); }, 3000).unref?.();
+      if (wantRef.current) { await loadFnRef.current(); return; }
+      // The model is off: what the last window's second look would save is still asked about (no model needed).
+      askedAtOpen.current = true;
+      setTimeout(() => { if (aliveRef.current) autoRef.current.askPending().catch(() => {}); }, 3000).unref?.();
     })();
-    return () => { alive = false; serverRef.current?.stop({ keep: true }); weightsRef.current?.stop(); weightsRef.current = null; };
+    // The window is gone (quit, a closed Terminal window): its model goes too, unless another window still uses it.
+    return () => { aliveRef.current = false; letGo(serverRef.current); serverRef.current = null; weightsRef.current?.stop(); weightsRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // /stop: the model is unloaded and its memory given back. A reply under way stops first; a load
+  // under way is called off. Another window on the same copy keeps it: this window only lets go.
+  const stopModel = async () => {
+    if (opts.url) { push({ type: 'note', text: `This window uses the model server at ${opts.url} (--url). Agentic Coder did not start it, so /stop leaves it running.`, tone: 'dim' }); return; }
+    if (remoteRef.current.on) { push({ type: 'note', text: 'On the remote model: nothing is loaded on this Mac. /remote off goes back to the model on this Mac.', tone: 'dim' }); return; }
+    const srv = serverRef.current;
+    const b = battleRef.current;
+    const wasOn = wantRef.current || Boolean(srv?.port);
+    if (!wasOn) {
+      // Nothing loaded here; a copy an earlier window left loaded is freed (as `coding stop` does).
+      const r = stopIdleServers();
+      push({ type: 'note', text: r.stopped.length ? `The model was off here; freed the copy an earlier window had left loaded (port ${r.stopped.map((e) => e.port).join(', ')}).` : 'The model is already off. /start loads it.', tone: 'dim' });
+      return;
+    }
+    // A reply under way stops first (as esc does), and the memory's save in the background too.
+    if (S.current.live !== IDLE || agent.busy) {
+      interrupt();
+      for (const t0 = Date.now(); (S.current.live !== IDLE || agent.busy) && Date.now() - t0 < 10_000;) await new Promise((r) => setTimeout(r, 100));
+    }
+    autoRef.current.cancel();
+    loadRef.current++; // a load still under way ends quietly
+    wantRef.current = false;
+    b.released = false; b.reloading = false;
+    serverRef.current = null;
+    agent.url = 'http://127.0.0.1:0';
+    agent.slots = null;
+    agent.warmed = false;
+    setBattle(null); setWaiting(null); waitRef.current = null;
+    setStarting(false); setStartPhase('loading');
+    setModelOff(true);
+    setRamGb(null);
+    const before = availableBytes();
+    const { others, done } = letGo(srv);
+    // The small search models (the memory's and the code search's) go too; they load again at their next use.
+    for (const x of [agent.embedder, agent.reranker]) {
+      if (!x?.server) continue;
+      letGo(x.server).done.catch(() => {});
+      x.server = null;
+    }
+    await done.catch(() => {});
+    const freed = Math.max(0, availableBytes() - before);
+    push({ type: 'note', text: others
+      ? `This window let go of ${model.name}. Another Agentic Coder window still uses it, so it stays loaded until that one quits or types /stop.`
+      : `${model.name} is unloaded${freed > 5e8 ? `: ${(freed / 1e9).toFixed(1)} GB back to the Mac` : ''}. /start loads it again.`, tone: 'dim' });
+  };
+  const stopFnRef = useRef(null);
+  stopFnRef.current = stopModel;
   // What the memory saved after the last window here had closed, said once.
   useEffect(() => {
     if (!agent.memory) return;
@@ -1212,10 +1364,21 @@ export function App({ opts, win, onRestart }) {
     saveNow();
     // What the memory has not saved yet is handed to a process of its own,
     // which needs the model a little longer and stops it when it is done.
-    const handed = autoRef.current.leave({ stopAfter: Boolean(serverRef.current?.child) });
-    await agent.embedder?.stop({ keep: true }).catch(() => {});
-    await agent.reranker?.stop({ keep: true }).catch(() => {});
-    await serverRef.current?.stop({ keep: handed });
+    // With the model off, the save waits for the next /start here instead: nothing loads after you quit.
+    const off = !opts.url && !remoteRef.current.on && !serverRef.current?.port;
+    const handed = autoRef.current.leave({ stopAfter: true, modelOff: off, given: Boolean(opts.url) });
+    // Otherwise the model goes now (the user's pick, 30 Sep 2026: not kept loaded after you
+    // quit), unless another window still uses it; the small search models go with it.
+    const srv = serverRef.current;
+    serverRef.current = null;
+    if (handed) {
+      await agent.embedder?.stop({ keep: true }).catch(() => {});
+      await agent.reranker?.stop({ keep: true }).catch(() => {});
+      await srv?.stop({ keep: true });
+    } else {
+      const small = [agent.embedder?.server, agent.reranker?.server].map((x) => letGo(x).done.catch(() => {}));
+      await Promise.all([letGo(srv).done.catch(() => {}), ...small]);
+    }
     remoteRef.current.conn?.stop();
     exit();
   }, [exit, saveNow, agent]);
@@ -1247,9 +1410,14 @@ export function App({ opts, win, onRestart }) {
       ...(opts.way ? ['--way', opts.way] : []),
       ...(opts.ctx ? ['--ctx', String(opts.ctx)] : []),
       ...(['low', 'medium', 'high'].includes(level) ? ['--effort', level] : []),
+      // The model loaded now stays loaded across the restart, so the new version joins it at once.
+      ...(!opts.url && !remoteRef.current.on && serverRef.current?.port ? ['--start'] : []),
     ]);
     setLeaving(true);
-    await serverRef.current?.stop({ keep: true });
+    // Kept loaded for the new version, which joins it at its start (--start above).
+    const srv = serverRef.current;
+    serverRef.current = null;
+    await srv?.stop({ keep: true });
     exit();
   }, [effort, exit, model, onRestart, opts.ctx, opts.flows, opts.url, opts.way, push, saveNow, thinking]);
 
@@ -1323,7 +1491,8 @@ export function App({ opts, win, onRestart }) {
       type: 'panel', title: 'Doctor', pad: 22, rows: [
         [`${ok(ver.status === 0)} model server`, ver.status === 0 ? `${engineOf(model).id} ${(ver.stderr + ver.stdout).match(/build \d+/)?.[0] ?? 'ok'} · ${short(bin)}` : `missing at ${short(bin)}`],
         [`${ok(size === model.bytes)} model file`, size ? `${(size / 1e9).toFixed(2)} GB · ${short(file)}` : `missing: download ${model.url}`],
-        [`${ok(!!agent.url && !starting)} server running`, serverRef.current?.port ? `port ${serverRef.current.port}, context ${Math.round(agent.ctx / 1024)}k` : opts.url ? opts.url : 'not running'],
+        // Off is fine (it waits for /start), so it is not marked as a fault.
+        modelOffNow() ? ['· server running', 'no: the model is off · /start loads it'] : [`${ok(!!agent.url && !starting)} server running`, serverRef.current?.port ? `port ${serverRef.current.port}, context ${Math.round(agent.ctx / 1024)}k` : opts.url ? opts.url : 'not running'],
         [`${ok(true)} vision`, !model.vision ? `${model.name} cannot look at pictures` : agent.canSee ? 'on: it can look at pictures in this window' : existsSync(visionPath(model)) ? 'off: turns on when you attach a picture' : `not downloaded: attaching a picture offers it (${(model.vision.bytes / 1e9).toFixed(2)} GB), or coding setup`],
         [`${ok(avail > needBytes(model, 16384))} free memory`, `${(avail / 1e9).toFixed(1)} GB (32k needs ${(needBytes(model, 32768) / 1e9).toFixed(1)} GB, 16k ${(needBytes(model, 16384) / 1e9).toFixed(1)} GB)`],
         [`${ok(disk === null || disk > 2)} disk space`, disk === null ? 'unknown' : `${disk.toFixed(1)} GB free`],
@@ -1370,6 +1539,7 @@ export function App({ opts, win, onRestart }) {
         // A quick side question, like Claude Code's: it runs while Agentic Coder works.
         if (!arg) { push({ type: 'note', text: 'Ask the question after it: /btw what are you doing right now?', tone: 'dim' }); break; }
         if (S.current.starting) { push({ type: 'note', text: 'The model is still starting; ask again in a moment.', tone: 'dim' }); break; }
+        if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then ask again.', tone: 'dim' }); break; }
         // Without a side lane the question would take the conversation's lane
         // and throw away its reading.
         if (agent.slots?.side === undefined) { push({ type: 'note', text: '/btw needs the model server\'s side lane, and this one has a single lane (with --url, add --slots 2).', tone: 'warn' }); break; }
@@ -1405,6 +1575,7 @@ export function App({ opts, win, onRestart }) {
       }
       case 'compact':
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
+        if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then /compact can summarize.', tone: 'dim' }); break; }
         setLive({ phase: 'working', turnStart: Date.now(), verb: 'Compacting', tokens: 0 });
         try { await agent.compact(undefined, { instructions: arg || undefined }); } catch (e) { push({ type: 'note', text: e.message, tone: 'error' }); }
         setLive(IDLE);
@@ -1661,6 +1832,23 @@ export function App({ opts, win, onRestart }) {
         remoteFnRef.current.openForm();
         break;
       }
+      case 'start': {
+        // /start: the model on this Mac loads (the window opens with it off, unless /autostart is on).
+        if (opts.url) { push({ type: 'note', text: `This window uses the model server at ${opts.url} (--url); there is nothing to load.`, tone: 'dim' }); break; }
+        if (remoteRef.current.on) { push({ type: 'note', text: `On the remote model (${remoteLabel(settings.remote)}): nothing loads on this Mac. /remote off goes back to this Mac.`, tone: 'dim' }); break; }
+        if (S.current.starting) { push({ type: 'note', text: `${model.name} is already loading.`, tone: 'dim' }); break; }
+        if (serverRef.current?.port) { push({ type: 'note', text: `${model.name} is already loaded (port ${serverRef.current.port}). /stop unloads it.`, tone: 'dim' }); break; }
+        loadFnRef.current();
+        break;
+      }
+      case 'stop':
+        await stopFnRef.current();
+        break;
+      case 'autostart': {
+        if (!arg.trim()) { openChoice('autostart'); break; }
+        applyChoice('autostart', /^(on|yes|true)$/i.test(arg.trim()) ? 'on' : 'off');
+        break;
+      }
       case 'model': {
         // The model list and the thinking level in one picker. Each model's
         // edited copy, when one is saved, is one more row after the models.
@@ -1683,8 +1871,8 @@ export function App({ opts, win, onRestart }) {
           ['pictures', agent.canSee ? 'on: it can look at pictures' : model.vision ? 'off: turns on when you attach one (ctrl+v, a dragged file, @file.png)' : 'this model cannot look at pictures'],
           ['search', `embedder ${showLimit('embedder', limitsRef.current.embedder)} · retriever ${showLimit('retriever', limitsRef.current.retriever).toLowerCase()} · reranker ${showLimit('reranker', limitsRef.current.reranker)}${agent.reranker?.last ? ` (last ${(agent.reranker.last.ms / 1000).toFixed(1)} s for ${agent.reranker.last.pieces})` : ''} · /effort moves them`],
           ['limits', `context ${showLimit('context', limitsRef.current.context)} · thinking cap ${showLimit('thinking', limitsRef.current.thinking)} · ${limitsRef.current.tries} tries · ${limitsRef.current.steps} steps · /effort moves them`],
-          ['kept loaded', `${LINGER_SECS / 60} min after the last window quits · coding stop frees it now`],
-          ['server', model.remote ? `remote ${remoteLabel(settings.remote)} · ${kindWord(settings.remote?.kind)}${remoteRef.current.conn ? '' : ' · not connected'}` : serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? '—'],
+          ['loaded', modelOffNow() ? 'no: the model is off · /start loads it' : model.remote || opts.url ? 'not by Agentic Coder' : `yes · until /stop or you quit${settings.modelAtStart ? ' · loads as a window opens (/autostart)' : ''}`],
+          ['server', model.remote ? `remote ${remoteLabel(settings.remote)} · ${kindWord(settings.remote?.kind)}${remoteRef.current.conn ? '' : ' · not connected'}` : serverRef.current?.port ? `port ${serverRef.current.port} · restarts ${serverRef.current.restarts}` : opts.url ?? (modelOffNow() ? 'off' : '—')],
         ] });
         break;
       case 'doctor':
@@ -2297,7 +2485,7 @@ export function App({ opts, win, onRestart }) {
     return () => { on = false; };
   }, [items, width]);
   // What primeRows needs to measure items as they are printed.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff };
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start };
   itemsRef.current = items;
   // Held until the model is ready; let go for good once it is, when too much came meanwhile, or
@@ -2309,7 +2497,7 @@ export function App({ opts, win, onRestart }) {
   const app = {
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
-    modelName: model.name, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, modelOff, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle, onRemote: Boolean(model.remote),
     // The weights badge, lower right: edited weights saved and waiting, in

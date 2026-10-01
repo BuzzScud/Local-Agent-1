@@ -60,7 +60,7 @@ test('a folder not yet trusted gets the safety check first; arrows + enter say y
   const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
   const cwd = join(base, 'demo-project');
   cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
-  const env = { AGENTIC_HOME: join(base, 'home') }; // no trust seeded
+  const env = { AGENTIC_HOME: join(base, 'home'), AGENTIC_MODEL_AT_START: 'on' }; // no trust seeded
   const fake = await startFakeServer([{ text: 'Hello.' }]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: 'Quick safety check' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'onNo' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
@@ -84,7 +84,7 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
     const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
     const cwd = join(base, 'demo-project');
     cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
-    return { base, cwd, env: { AGENTIC_HOME: join(base, 'home') } };
+    return { base, cwd, env: { AGENTIC_HOME: join(base, 'home'), AGENTIC_MODEL_AT_START: 'on' } };
   };
   const a = mk();
   const no = await runInPty({ cwd: a.cwd, env: a.env, args: ['--no-flows'], steps: [

@@ -110,7 +110,7 @@ function phaseWords(name, phase, secs, room) {
   return ways.find(([w, t]) => `${name} · ${w}${t}`.length <= room) ?? ways.at(-1);
 }
 
-// start: { model, effort, ctx, cwd, git, notes, also, recent, now } (also: this folder's own settings
+// start: { model, effort, ctx, cwd, git, notes, also, recent, now, off } (off: the model is not loaded; also: this folder's own settings
 // file and a start-up mode saved with /permissions, a line each). loading: null once ready, or
 // { phase, secs } while the model loads (the page is live then).
 export function StartPage({ start, width, loading = null }) {
@@ -120,14 +120,18 @@ export function StartPage({ start, width, loading = null }) {
   const s = start ?? {};
   const name = s.model ?? 'the model';
   const ctxK = s.ctx ? `${Math.round(s.ctx / 1024)}k` : '';
+  // off: the model is not loaded (it waits for /start), said in the longest words that fit.
+  const offWords = ['/start loads it', '/start', ''].find((w) => `${name} · off${w ? ` · ${w}` : ''}`.length <= L - 1) ?? '';
   const modelLine = loading
     ? (() => { const [w, t] = phaseWords(name, loading.phase, loading.secs, L - 1); return <Text wrap="truncate-end"><Text color={WHITE}>{name}</Text><Text color={C.dim}> · </Text><Text color={C.accent}>{w}</Text><Text color={C.dim}>{t}</Text></Text>; })()
+    : s.off
+    ? <Text wrap="truncate-end"><Text color={WHITE}>{name}</Text><Text color={C.dim}> · off</Text>{offWords ? <><Text color={C.dim}> · </Text><Text color={C.accent}>{offWords}</Text></> : null}</Text>
     : <Text wrap="truncate-end"><Text color={WHITE}>{name}</Text><Text color={C.dim}>{s.effort ? ` · ${wide ? `effort ${s.effort}` : s.effort}` : ''}{ctxK ? ` · ${ctxK}` : ''}</Text></Text>;
   const recent = recentOf(s.recent ?? []);
   const left = [
     <Text bold color={WHITE}>{(s.recent ?? []).length ? 'Welcome back!' : 'Welcome!'}</Text>, null,
     // two steps a second: the page is redrawn only when the mark or the seconds move
-    ...logoRows(loading ? 'spin' : 'lit', loading ? Math.floor(loading.secs * 2) : 0), null,
+    ...logoRows(loading ? 'spin' : s.off ? 'off' : 'lit', loading ? Math.floor(loading.secs * 2) : 0), null,
     modelLine,
     <Text color={PATH} wrap="truncate-end">{fitPath(where(s.cwd ?? ''), L - 2)}</Text>,
   ];

@@ -333,7 +333,7 @@ function Meters({ app }) {
   return (
     <Box paddingX={2} width={app.width}>
       <Text color={C.dim} wrap="truncate-end">
-        {modelName}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
+        {modelName}{app.modelOff ? ' (off · /start)' : ''}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
       </Text>
     </Box>
   );
@@ -548,7 +548,7 @@ function PermissionPrompt({ app }) {
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
-  const SHOW = 16; // the whole / menu (the rest is in /settings)
+  const SHOW = 18; // the whole / menu (the rest is in /settings); 18 still fits an 80 × 24 window
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
   return (
@@ -596,7 +596,9 @@ function Footer({ app }) {
   const badges = [app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
   // The Mac's memory, live: first on the right, so a narrow window cuts it first.
   const mac = app.mac ? footerLabel(app.mac) : '';
-  const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2 - (badges ? badges.length + 3 : 0) - (mac ? mac.length + 5 : 0));
+  // The model off (it waits for /start): said first on the right, so you see it takes no memory.
+  const off = app.modelOff ? 'model off · /start' : '';
+  const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2 - (badges ? badges.length + 3 : 0) - (mac ? mac.length + 5 : 0) - (off ? off.length + 5 : 0));
   const ml = modeLabel(mode, { cycle: pick.cycle });
   const badge = badges ? <Text color={C.accent}>{badges}</Text> : null;
   const macEl = mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {mac}</Text> : null;
@@ -605,7 +607,7 @@ function Footer({ app }) {
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
         {/* A long left side (a tip) is cut to what is left; the right side stays whole, two spaces clear of it. */}
         <Box flexShrink={1} marginRight={2}><Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text></Box>
-        <Box flexShrink={0}><Text wrap="truncate-start">{macEl}{macEl && (badge || ml) ? <Text color={C.dim}> · </Text> : null}{badge}{badge && ml ? <Text color={C.dim}> · </Text> : null}{ml}</Text></Box>
+        <Box flexShrink={0}><Text wrap="truncate-start">{off ? <Text color={C.dim}>○ {off}{macEl || badge || ml ? ' · ' : ''}</Text> : null}{macEl}{macEl && (badge || ml) ? <Text color={C.dim}> · </Text> : null}{badge}{badge && ml ? <Text color={C.dim}> · </Text> : null}{ml}</Text></Box>
       </Box>
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
@@ -773,8 +775,10 @@ function SettingsPicker({ app }) {
   const need = (lines) => tight && pk.rows.length + pk.groups.length + lines + under + 1 > app.rows;
   const noBlurb = need(5);
   const noTitle = need(4);
-  // Still one line short (17 rows with the status bar at 24): the key hint at the bottom goes too.
+  // Still one line short (18 rows at 24): the key hint at the bottom goes too; and with the
+  // status bar as well, the last group's heading ("Tools": its rows follow the ones above).
   const noFoot = need(3);
+  const noLastHead = need(2);
   let at = 0;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
@@ -782,7 +786,7 @@ function SettingsPicker({ app }) {
       {noBlurb ? null : <Text color={C.dim}>{pk.blurb ?? 'Everything not in the / menu. Each still works typed in full, like /doctor.'}</Text>}
       {pk.groups.map((g, gi) => (
         <Box key={g.group} flexDirection="column" marginTop={tight ? 0 : 1}>
-          <Text bold>{noTitle && gi === 0 ? `${pk.title ?? 'Settings'} · ${g.group}` : g.group}</Text>
+          {noLastHead && gi === pk.groups.length - 1 ? null : <Text bold>{noTitle && gi === 0 ? `${pk.title ?? 'Settings'} · ${g.group}` : g.group}</Text>}
           {g.rows.map((r) => {
             const on = at++ === pk.index;
             return (
@@ -1211,7 +1215,7 @@ export function Screen({ app }) {
       ) : null}
       <LiveArea app={app} />
       {app.btwWaiting ? <Box marginBottom={1}><Text color={C.dim}>⏵ Your /btw answer is kept: it shows again once you have answered</Text></Box> : null}
-      {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : ''}</Text></Box> : null}
+      {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : app.modelOff ? '  · sends once /start has loaded the model' : ''}</Text></Box> : null}
       </Box>
       <Box flexGrow={1} />
       {app.popup ? <><Popup app={app} /><Box flexGrow={1} /></> : null}

@@ -13,7 +13,7 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { HOME, ModelServer, LINGER_SECS, stopIdleServers, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote } from '../../../models/index.mjs';
+import { HOME, ModelServer, LINGER_SECS, stopIdleServers, runningServer, modelById, MODELS, DEFAULT_MODEL, Embedder, embedderReady, readRecord, connectRemote } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { saveLessons, seedMemory, worthSaving, saveLine, proposeSave, applySave, shownOf, rememberDeclined } from '../agent/lessons.mjs';
 import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
@@ -133,13 +133,23 @@ export class AutoSave {
   }
 
   // The window closes: what is unsaved goes to a process of its own.
-  // stopAfter: this window started the model, so it is stopped once the save
-  // is done (as quitting did before). Answers true when a save was handed over.
-  leave({ stopAfter = false } = {}) {
+  // stopAfter: the model is stopped once the save is done (unless another
+  // window still uses it). given: the server was given with --url. modelOff: nothing is loaded (/stop, or never
+  // started), so the save is kept as a .wait file for the next /start here
+  // (runWaiting): nothing loads after you quit. Answers true when a save was handed over.
+  leave({ stopAfter = false, modelOff = false, given = false } = {}) {
     this.cancel();
     const a = this.agent;
     // The second look reads every turn again, saved or not (practice turns never).
-    if (!this.on || !worthSaving(a.lessons, { again: true }) || !a.url || /:0$/.test(a.url)) return false;
+    if (!this.on || !worthSaving(a.lessons, { again: true })) return false;
+    if (modelOff && !a.model?.remote) {
+      try {
+        mkdirSync(JOBS(), { recursive: true });
+        writeFileSync(join(JOBS(), `${Date.now()}-${process.pid}.wait`), JSON.stringify({ at: new Date().toISOString(), cwd: a.cwd, home: a.memory.home ?? null, model: a.model.id, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
+      } catch { /* not kept */ }
+      return false;
+    }
+    if (!a.url || /:0$/.test(a.url)) return false;
     try {
       mkdirSync(JOBS(), { recursive: true });
       const file = join(JOBS(), `${Date.now()}-${process.pid}.json`);
@@ -147,12 +157,46 @@ export class AutoSave {
       // save is kept for the next start (askPending).
       // On a remote (/remote) the job connects again itself (its tunnel ends with this window); its key is never written here.
       const remote = Boolean(a.model?.remote);
-      writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: remote ? null : a.url, remote, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
+      writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: remote ? null : a.url, remote, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, given, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
       const [cmd, ...args] = self();
       spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
       return true;
     } catch { return false; }
   }
+
+  // The model has loaded (/start): the saves that waited for it here (the window closed while
+  // it was off) go to their own process, on this model, which stays this window's to stop.
+  runWaiting() {
+    const a = this.agent;
+    if (!this.on || !a.url || /:0$/.test(a.url)) return 0;
+    let n = 0;
+    for (const w of waitingFor(a.cwd)) {
+      try {
+        const file = w.file.replace(/\.wait$/, '.json');
+        writeFileSync(file, JSON.stringify({ ...w.job, url: a.url, remote: false, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter: false }));
+        rmSync(w.file, { force: true });
+        const [cmd, ...args] = self();
+        spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
+        n++;
+      } catch { /* tried again at the next load */ }
+    }
+    return n;
+  }
+}
+
+// The saves kept for the next /start in this folder (leave with modelOff); one older than two weeks is let go.
+export function waitingFor(cwd) {
+  const out = [];
+  try {
+    for (const f of readdirSync(JOBS()).filter((x) => x.endsWith('.wait')).sort()) {
+      const file = join(JOBS(), f);
+      let job;
+      try { job = JSON.parse(readFileSync(file, 'utf8')); } catch { rmSync(file, { force: true }); continue; }
+      if (Date.now() - Date.parse(job.at) > PENDING_DAYS * 86_400_000) { rmSync(file, { force: true }); continue; }
+      if (job.cwd === cwd) out.push({ file, job });
+    }
+  } catch { /* none kept */ }
+  return out;
 }
 
 // `coding memory-save <job>`: the save handed over by a window that closed.
@@ -169,14 +213,22 @@ export async function runJob(file) {
     url = remote.url;
     model = remote.model;
     if (remote.slots < 2) job.slot = null;
-  } else try {
+  } else if (!job.given) try {
+    // Only a model still loaded is used: if it has gone meanwhile, the save waits for the next
+    // /start here (a .wait file, as when the window closed with the model off). Nothing loads for it.
+    if (!runningServer(model)) {
+      writeFileSync(file.replace(/\.json$/, '.wait'), JSON.stringify({ at: new Date().toISOString(), cwd: job.cwd, home: job.home ?? null, model: job.model, review: job.review, ask: job.ask, lessons: job.lessons, messages: job.messages }));
+      rmSync(file, { force: true });
+      return null;
+    }
     // The model this window left loaded: using it keeps it from being stopped.
     const s = new ModelServer(model);
     const st = await s.start({ ctx: job.ctx ?? 16384, lingerSecs: LINGER_SECS });
     server = s;
     url = s.url;
     if (st.slots < 2) job.slot = null;
-  } catch { /* a server given by hand (--url) is used as it is */ }
+  } catch { /* it could not be joined: job.url is used as it is */ }
+  // given: a server given by hand (--url) is used as it is.
   let out = null;
   let embedder = null;
   try {
