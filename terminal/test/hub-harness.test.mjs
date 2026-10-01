@@ -164,6 +164,33 @@ test('before the models share a run the tab says so: no blank rows, the speeds c
   expect(one).not.toContain('data-pick='); expect(one).not.toContain('class="sw" data-both="one set of steps');
 });
 
+test('a model added after the run: Results shows the run the others share, names who has not run it, and how to; levels that differ get their own row', () => {
+  // Gamma has a Medium level the others lack, and no run.
+  const gamma = card('gamma', 'Gamma 7B', { measured: { read: 184, write: 15 }, thinkingLevels: [{ id: 'low', label: 'Low', effort: null }, { id: 'medium', label: 'Medium', effort: 'medium' }, { id: 'high', label: 'High', effort: 'high' }] });
+  const d = harnessData(null, { models: [...CARDS, gamma], settings: SETTINGS, record: RECORD });
+  expect(d.models.map((m) => Boolean(m.run))).toEqual([true, true, false]);
+  const page = harnessPage(d);
+  // The task tables: only the two that ran it.
+  expect(page).toContain('<col class="cm" data-model="alpha"><col class="cm" data-model="beta"></colgroup>');
+  expect(page).not.toContain('<col class="cm" data-model="gamma">');
+  expect(page).not.toContain('class="two wideLeft res many"');
+  expect(page).toContain('The same 3 tasks on Alpha and Beta');
+  // Who is not in it, and how to add them: once for all, and in Gamma's own view.
+  expect(page).toContain('<h3>Not in this run</h3><p class="sub">Gamma 7B has not run it yet. Run “Prompt old vs new” on it from the Arena (Who runs it), with the same settings: thinking on (High), 32k.</p>');
+  expect(page).toMatch(/data-only="gamma" hidden><h3>How Gamma 7B did<\/h3><dl><div><dt>Not run yet<\/dt>/);
+  // The totals keep every column; the best is marked among the ones that ran.
+  expect(page).toMatch(/Tasks passed[\s\S]*?not run yet/);
+  expect(page).toContain('on each of Alpha and Beta');
+  // Low · Medium · High is not the same for every model any more: a row of its own, out of "The same for…".
+  expect(page).toContain('Effort levels');
+  expect(page).toContain('Low · Medium · High');
+  expect(page).toContain('<dt>Thinking</dt><dd>A reply thinks up to 8,192 tokens');
+  expect(page).toContain('This harness today, with any model');
+  // Two models with the same levels: no extra row, the levels stay in "The same for both".
+  const two = harnessPage(harnessData(null, { models: CARDS, settings: SETTINGS, record: RECORD }));
+  expect(two).not.toContain('Effort levels'); expect(two).toContain('<dt>Thinking</dt><dd>Low or High; a reply thinks'); expect(two).toContain('with either model');
+});
+
 test('a click on a model’s name shows the harness with that model alone: the names are buttons, and everything that is one model’s says whose it is', () => {
   const page = harnessPage(harnessData(null, { models: CARDS, settings: SETTINGS, record: RECORD }));
   // The buttons: one that shows every model (lit to start with), then one a model, with the names the words will use.

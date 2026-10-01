@@ -70,8 +70,13 @@ export const KEYS = [
   ] },
 ];
 
+// The models for the setup line, from the model list (passed in, so Help itself imports no models): the default first.
+export const setupModels = (all, defaultId) => [all[defaultId], ...Object.values(all).filter((m) => m.id !== defaultId)].filter(Boolean).map((m) => ({ id: m.id, name: m.name }));
+
 // `coding …` from a terminal. lingerMins: how long a model left by a closed window stays loaded.
-export function cliRows(lingerMins = 30) {
+// models: the ones in /model ({ id, name }, the default first), for the setup line.
+export function cliRows(lingerMins = 30, models = []) {
+  const others = models.slice(1);
   return {
     usage: [
       ['coding', 'start in the current folder'],
@@ -79,7 +84,7 @@ export function cliRows(lingerMins = 30) {
       ['coding -p "question"', 'answer once and exit (changes are refused unless --yes; commands you allowed in /permissions run)'],
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
-      ['coding setup --model k2', 'the same for another model in /model (k2: K2 Horizon 7B, with its own model server)'],
+      [`coding setup --model ${others[0]?.id ?? '<id>'}`, `the same for another model in /model${others.length ? ` (${others.map((m) => `${m.id}: ${m.name}`).join(', ')})` : ''}`],
       ['coding stop', `free the memory of a model no window uses (one left by a window that crashed stays loaded up to ${lingerMins} min)`],
       ['coding serve', 'this machine’s model for /remote on another machine, behind an API key (--local: for an SSH tunnel; --port, --ctx, --model, --https cert key, --new-key)'],
       ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (the Arena with the Test builder open over it), memory, instructions, help'],
@@ -104,8 +109,8 @@ export function cliRows(lingerMins = 30) {
 }
 
 // The text `coding --help` prints.
-export function cliHelpText({ version, modelName, lingerMins }) {
-  const { usage, options } = cliRows(lingerMins);
+export function cliHelpText({ version, modelName, lingerMins, models = [] }) {
+  const { usage, options } = cliRows(lingerMins, models);
   const pad = (rows) => rows.map(([a, b]) => `  ${a.padEnd(26)}${b}`).join('\n');
   return `coding ${version} — a coding agent in your terminal, running ${modelName} on this Mac (or on another machine: /remote)\n\nUsage\n${pad(usage)}\n\nOptions\n${pad(options)}\n`;
 }
@@ -158,13 +163,13 @@ export const TIPS = [
 ];
 
 // Everything the Help page shows, for /help.json.
-export function helpData({ version = '', modelName = '', effort = [], lingerMins = 30 } = {}) {
+export function helpData({ version = '', modelName = '', effort = [], lingerMins = 30, models = [] } = {}) {
   return {
     version, modelName,
     commands: COMMANDS.map((c) => ({ name: c.name, arg: c.arg ?? '', desc: c.desc, menu: !!c.picker, settings: IN_SETTINGS.has(c.name) })),
     settings: SETTINGS.map((g) => ({ group: g.group, names: g.rows.map((r) => r.name) })),
     keys: KEYS,
-    cli: cliRows(lingerMins),
+    cli: cliRows(lingerMins, models),
     modes: MODE_OPTIONS,
     effort: effort.map((l) => ({ id: l.id, label: l.label, note: l.note ?? '' })),
     places: PLACES,

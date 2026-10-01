@@ -3,11 +3,11 @@
 // Agentic Coder window closes, and stops by itself after 2 hours with nothing to do.
 //   http://127.0.0.1:8758/    the Arena page (the hub shows it in its Arena tab)
 // Everything you start goes in ONE line (state.json), run one at a time, because only one model fits:
-//   a test on both models   a battle: which model is "Model A" is picked at random (A goes first) and
-//                           stays hidden until you vote
+//   a test on two models    a battle (any two; Gemma and Qwen unless it names others): which model
+//                           is "Model A" is picked at random (A goes first) and stays hidden until you vote
 //   a test on one model     a run of it alone: no vote, the name shows
 //   a check                 one of the tests in models/evals/run-tests.mjs that prints its own lines
-//                           (real requests, the sorting check, the unit tests…); on both models it is
+//                           (real requests, the sorting check, the unit tests…); on two models it is
 //                           two runs, one after the other
 // A set (the New 28, the Work 28, the Practice 28, your own tests) goes in as its tests, one item each.
 // Each run of a test stops at 10 minutes and is kept in battles/<id>/ (battle.json, A/ and B/): one
@@ -35,7 +35,13 @@ const FAKE = process.env.AGENTIC_BATTLE_FAKE === '1';
 const P = paths();
 const PORT = BATTLE_PORT;
 const ORIGINS = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`];
-const IDS = ['gemma', 'qwen'].every((id) => MODELS[id]) ? ['gemma', 'qwen'] : Object.keys(MODELS).slice(0, 2);
+// Every model in /model can run a test alone, and any two can battle (1 Oct 2026: K2 Horizon and
+// Bonsai joined Gemma and Qwen). A battle names its two (vs); one that names none is the default pair.
+const IDS = Object.keys(MODELS);
+const PAIR = ['gemma', 'qwen'].every((id) => MODELS[id]) ? ['gemma', 'qwen'] : IDS.slice(0, 2);
+// A model's short name in a battle's record line: "Gemma vs Qwen", "K2 vs Bonsai" (a version after the name is dropped).
+const shortOf = (id) => MODELS[id].name.split(' ')[0].replace(/\d+\.\d+$/, '');
+const vsOf = (v) => (Array.isArray(v) && v.length === 2 && v[0] !== v[1] && v.every((id) => IDS.includes(id)) ? [...v] : PAIR);
 const IDLE_EXIT_MS = Number(process.env.AGENTIC_BATTLE_IDLE_SECS ?? 7200) * 1000;
 const GRACE_MS = 90_000; // a run that goes past 10 min + this (stuck loading, say) is stopped
 
@@ -65,8 +71,8 @@ const SETS = {
 const CHECKS = () => RUN_TESTS.filter((t) => !t.set && !t.pick);
 
 // ---------- The line ----------
-// item: { key, kind: 'test' | 'check', test, title, who: 'gemma' | 'qwen' | 'both' | null, think, settings,
-//         group?, groupSet?, groupName?, groupOf? (a set's tests), pair? (a check on both models) }
+// item: { key, kind: 'test' | 'check', test, title, who: a model's id | 'both' (a battle of vs) | null, vs?: [a, b], think, settings,
+//         group?, groupSet?, groupName?, groupOf? (a set's tests), pair? (a check on two models) }
 let state = readJson(P.state, {});
 {
   // A line kept by the runner from before the Arena: its battles and its test runs, in that order.
@@ -82,6 +88,8 @@ const newKey = () => `${stamp()}-${(seq++).toString(36)}`;
 // A folder name nothing has yet: two runs of one test can start within the same second.
 const freshId = (dir, base) => { let id = base; for (let n = 2; existsSync(join(dir, id)); n++) id = `${base}-${n}`; return id; };
 const whoOf = (w) => { if (w === 'both' || IDS.includes(w)) return w; throw new Error(`pick who runs it: ${IDS.join(', ')} or both`); };
+// A battle's two models, kept on its item; a run on one model has none.
+const vsFor = (who, v) => (who === 'both' ? { vs: vsOf(v) } : {});
 
 let current = null;   // { match, test, side, child, startedAt } while a test runs
 let now = null;       // the item running now
@@ -109,17 +117,18 @@ function makeItems(list) {
       const ts = tests.filter(S[1]);
       if (!ts.length) throw new Error(`${S[0]} has no tests yet`);
       const who = whoOf(b.who), group = newKey();
-      for (const t of ts) out.push({ key: newKey(), kind: 'test', test: t.id, title: t.title, who, think, settings, group, groupSet: b.id, groupName: S[0], groupOf: ts.length });
+      for (const t of ts) out.push({ key: newKey(), kind: 'test', test: t.id, title: t.title, who, ...vsFor(who, b.vs), think, settings, group, groupSet: b.id, groupName: S[0], groupOf: ts.length });
     } else if (b.kind === 'test') {
       const t = tests.find((x) => x.id === b.id);
       if (!t) throw new Error('no such test');
-      out.push({ key: newKey(), kind: 'test', test: t.id, title: t.title, who: whoOf(b.who), think, settings });
+      const who = whoOf(b.who);
+      out.push({ key: newKey(), kind: 'test', test: t.id, title: t.title, who, ...vsFor(who, b.vs), think, settings });
     } else if (b.kind === 'check') {
       const c = CHECKS().find((x) => x.id === b.id);
       if (!c) throw new Error('no such check');
       if (!c.model) { out.push({ key: newKey(), kind: 'check', test: c.id, title: c.name, who: null, think: false, settings: null }); continue; }
       const who = whoOf(b.who), pair = who === 'both' ? newKey() : null;
-      for (const m of who === 'both' ? IDS : [who]) {
+      for (const m of who === 'both' ? vsOf(b.vs) : [who]) {
         const cmd = runCommand(c.id, { model: m, think, models: IDS, settings }); // throws what is wrong with it
         out.push({ key: newKey(), kind: 'check', test: c.id, title: c.name, who: m, think: cmd.think, settings: cmd.settings, ...(pair ? { pair } : {}) });
       }
@@ -169,7 +178,7 @@ async function waitForMemory(title, run, of, modelId, kind = 'battle') {
   }
 }
 
-// ---------- A test: on both models (a battle) or on one ----------
+// ---------- A test: on two models (a battle) or on one ----------
 function runOne(test, modelId, out, match, side, item) {
   const limit = match.limit;
   return new Promise((done) => {
@@ -202,7 +211,8 @@ async function runMatch(item) {
   const test = listTests().find((t) => t.id === item.test);
   if (!test) { log(`${item.test}: no such test now; left out`); return null; }
   const both = item.who === 'both';
-  const order = both ? (Math.random() < 0.5 ? [IDS[0], IDS[1]] : [IDS[1], IDS[0]]) : [item.who];
+  const vs = vsOf(item.vs);
+  const order = both ? (Math.random() < 0.5 ? [vs[0], vs[1]] : [vs[1], vs[0]]) : [item.who];
   const b = { id: freshId(P.battles, `${stamp()}-${test.id}`.slice(0, 90)), test: test.id, title: test.title, kind: test.kind, at: new Date().toISOString(), mode: both ? 'battle' : 'solo',
     order: both ? { A: order[0], B: order[1] } : { A: order[0] }, think: Boolean(item.think), settings: item.settings ?? null, group: item.group ?? null,
     // Each run's time limit: a battle stops each side at 10 minutes; a test on one model at its own (a test of yours: its level's, Easy 5, Medium 10, Hard 20).
@@ -229,7 +239,7 @@ async function runMatch(item) {
     const rs = sides.map((s) => b.runs[s]).filter((r) => r && !r.skipped);
     const secs = Math.round(rs.reduce((s, r) => s + (r.secs ?? 0), 0));
     const base = { code: codeLabel(REPO), effort: effortOf(item), ctx: item.settings?.context ?? 32768, secs, part: true, raw: join(P.battles, b.id), ...(item.settings ? { settings: item.settings } : {}) };
-    if (both) recordTest({ ...base, kind: 'other', name: `Battle · ${test.title} (Gemma vs Qwen, 1 run each)`, passed: rs.filter(passed).length, total: 2, result: b.status === 'stopped' ? 'stopped' : rs.filter(passed).length === 2 ? 'pass' : 'fail', note: 'which model did what: the Arena, once you vote' });
+    if (both) recordTest({ ...base, kind: 'other', name: `Battle · ${test.title} (${vs.map(shortOf).join(' vs ')}, 1 run each)`, passed: rs.filter(passed).length, total: 2, result: b.status === 'stopped' ? 'stopped' : rs.filter(passed).length === 2 ? 'pass' : 'fail', note: 'which model did what: the Arena, once you vote' });
     else if (!item.group && rs.length) recordTest({ ...base, kind: 'sets', model: order[0], name: `${test.suite === 'practice' ? `Practice test ${test.n}${test.variant ?? ''}` : OWN.includes(test.suite) ? `${suiteName(test)} test ${test.n}` : `My test ${test.n ?? test.id}`}: ${test.title}, one model`, passed: rs.filter(passed).length, total: 1, result: b.status === 'stopped' ? 'stopped' : undefined,
       // A test of yours is worth its level's points (Easy 1, Medium 2, Hard 3).
       ...(pointsOf(test) ? { level: test.level, points: { got: rs.filter(passed).length ? pointsOf(test) : 0, of: pointsOf(test) }, note: `${rs.filter(passed).length ? pointsOf(test) : 0} of ${pointsOf(test)} points` } : {}) });
@@ -453,10 +463,11 @@ function view() {
     for (const side of ['A', 'B']) if (passed(b.runs[side])) score.passes[b.order[side]] += 1;
     if (b.vote === 'T') score.ties += 1; else score.votes[b.order[b.vote]] += 1;
   }
-  const running = now ? { key: now.key, kind: now.kind, test: now.test, title: now.title, who: now.who, think: Boolean(now.think), group: now.group ?? null, groupName: now.groupName ?? null, groupOf: now.groupOf ?? null, pair: now.pair ?? null, startedAt: now.startedAt,
+  const running = now ? { key: now.key, kind: now.kind, test: now.test, title: now.title, who: now.who, vs: now.who === 'both' ? vsOf(now.vs) : null, think: Boolean(now.think), group: now.group ?? null, groupName: now.groupName ?? null, groupOf: now.groupOf ?? null, pair: now.pair ?? null, startedAt: now.startedAt,
     match: current?.match ?? null, side: current?.side ?? null, sideStartedAt: current?.startedAt ?? null, job: now.kind === 'check' && job ? job.id : null, waiting: !current && !(jobLive() && job.status === 'running') ? (waiting ?? 'Getting the memory ready…') : null } : null;
   return {
-    models: IDS.map((id) => ({ id, name: MODELS[id].name })), limit: LIMIT_SECS, fake: FAKE, paused: state.paused, waiting,
+    // Every model in /model, and whether its file is here (only those can run); the battle a pick of none means.
+    models: IDS.map((id) => ({ id, name: MODELS[id].name, here: FAKE || existsSync(join(MODELS_DIR, MODELS[id].file)) })), pair: PAIR, limit: LIMIT_SECS, fake: FAKE, paused: state.paused, waiting,
     line: state.line, running, done: state.done.slice(0, 40), loaded: loadedNow(),
     sets: ['new28', 'work28', 'practice', 'mine', ...Object.keys(LEVELS).map((lv) => `mine-${lv}`)].map((id) => ({ id, name: SETS[id][0], ids: tests.filter(SETS[id][1]).map((t) => t.id), ...(id.startsWith('mine-') ? { level: id.slice(5) } : {}) })).filter((x) => !x.level || x.ids.length),
     checks: checkRows(), panel: runPanel(), score,

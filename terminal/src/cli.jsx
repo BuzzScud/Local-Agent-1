@@ -40,7 +40,7 @@ import { rulesFor } from './app/perm-store.mjs';
 import { webSettings } from './app/web-form.mjs';
 import { modeWord } from './app/perms.mjs';
 
-import { VERSION, cliHelpText } from './app/help.mjs';
+import { VERSION, cliHelpText, setupModels } from './app/help.mjs';
 export { VERSION };
 
 // Claude Code's quick safety check: the first visit to a folder asks once
@@ -65,7 +65,7 @@ async function ensureTrusted(cwd) {
   return false;
 }
 
-const HELP = cliHelpText({ version: VERSION, modelName: MODELS[DEFAULT_MODEL].name, lingerMins: LINGER_SECS / 60 });
+const HELP = cliHelpText({ version: VERSION, modelName: MODELS[DEFAULT_MODEL].name, lingerMins: LINGER_SECS / 60, models: setupModels(MODELS, DEFAULT_MODEL) });
 
 function parse(argv) {
   const o = { cwd: process.cwd() };

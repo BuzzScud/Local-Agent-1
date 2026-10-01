@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, pathOf, taskSteps, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, sideByMost, pathOf, taskSteps, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 import { RUN_TESTS } from '../evals/run-tests.mjs';
 import { MODELS } from '../registry.mjs';
 
@@ -119,6 +119,9 @@ test('a run is filed under its model: the one it names, else its results folder,
   expect(modelOf({ kind: 'bug', at, name: 'x', raw: 'models/bonsai-2-27b/results/step3' })).toBe('bonsai');
   expect(modelOf({ kind: 'other', at, name: 'Gemma speed probe', note: '' })).toBe('gemma');
   expect(modelOf({ kind: 'other', at, name: 'Bonsai 27B probe' })).toBe('bonsai');
+  // a battle is of two models, whichever two: "K2 vs Bonsai" names Bonsai, but the line is of no one model
+  expect(modelOf({ kind: 'other', at, name: 'Battle · Fix a date that shows one day early (K2 vs Bonsai, 1 run each)' })).toBeNull();
+  expect(modelOf({ kind: 'other', at, name: 'Battle · Fix a date that shows one day early (Gemma vs Qwen, 1 run each)' })).toBeNull();
   // both models named (a comparison), or an "other" check that names none, is of no one model
   expect(modelOf({ kind: 'other', at, name: 'Gemma vs Qwen', note: '' })).toBeNull();
   expect(modelOf({ kind: 'other', at, name: 'Repo check (fast)' })).toBeNull();
@@ -253,6 +256,31 @@ test('side by side: no run in common, raw results that are gone, or a different 
   recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T10:00:00.000Z', model: 'gemma', effort: 'high', ctx: 32768, passed: 1, total: 1, raw: 'models/gemma/results/run-b' }, quiet(other.file));
   recordTest({ kind: 'tasks', name: 'The 28 practice tasks', at: '2026-09-30T11:00:00.000Z', model: 'qwen', effort: 'high', ctx: 65536, passed: 1, total: 1, raw: 'models/qwen/results/run-b' }, quiet(other.file));
   expect(sideBySide(['gemma', 'qwen'], { file: other.file, top: dir }).run).toBe(null);
+});
+
+// A model added later has no run yet: the Harness and Flow tabs show the newest run the most models share.
+test('side by most: no run all four share falls back to the newest run the most of them share (two at least), naming who is in it', () => {
+  const { dir, file } = scratch();
+  // Each line its own minute: a line's id is its kind and time.
+  const at = (h, model) => `2026-09-30T${h}:0${['gemma', 'qwen', 'k2', 'bonsai'].indexOf(model)}:00.000Z`;
+  const line = (model, name, h) => recordTest({ kind: 'tasks', name, at: at(h, model), model, effort: 'high', ctx: 32768, passed: 1, total: 1, raw: `models/${model}/results/${name.replace(/ /g, '-')}` }, quiet(file));
+  for (const model of ['gemma', 'qwen', 'k2', 'bonsai']) for (const name of ['Old pair', 'New pair', 'Three']) taskRun(dir, `models/${model}/results/${name.replace(/ /g, '-')}`, [row('3-add-function', true, 10)]);
+  // Nothing shared: no run, and every model's sorting score is still there.
+  expect(sideByMost(['gemma', 'qwen', 'k2', 'bonsai'], { file, top: dir })).toEqual({ run: null, sort: { gemma: null, qwen: null, k2: null, bonsai: null }, ids: [] });
+  line('gemma', 'Old pair', 10); line('qwen', 'Old pair', 10);
+  line('k2', 'New pair', 12); line('bonsai', 'New pair', 12);
+  // Two pairs: the newer one.
+  expect(sideByMost(['gemma', 'qwen', 'k2', 'bonsai'], { file, top: dir })).toMatchObject({ ids: ['k2', 'bonsai'], run: { name: 'New pair' } });
+  // Three that share an older run beat a newer pair: the most models first, then the newest.
+  line('gemma', 'Three', 11); line('qwen', 'Three', 11); line('k2', 'Three', 11);
+  const three = sideByMost(['gemma', 'qwen', 'k2', 'bonsai'], { file, top: dir });
+  expect(three.ids).toEqual(['gemma', 'qwen', 'k2']);
+  expect(Object.keys(three.run.models)).toEqual(['gemma', 'qwen', 'k2']);
+  // Every model in it: the same as side by side.
+  line('bonsai', 'Three', 11);
+  expect(sideByMost(['gemma', 'qwen', 'k2', 'bonsai'], { file, top: dir })).toMatchObject({ ids: ['gemma', 'qwen', 'k2', 'bonsai'], run: { name: 'Three' } });
+  // One or two models: side by side as it was.
+  expect(sideByMost(['gemma', 'k2'], { file, top: dir }).ids).toEqual(['gemma', 'k2']);
 });
 
 // The hub's Flow tab draws the paths and one real task from here.

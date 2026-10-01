@@ -2041,7 +2041,7 @@ export function App({ opts, win, onRestart }) {
         // The hub on its Arena tab: a test on one model, or a battle of two. The Arena runs on its own
         // (the hub starts it), so what runs there keeps going when this window closes.
         const hub = openHub('arena'); if (!hub) break;
-        push({ type: 'note', text: `The Arena opened in the browser at ${hub.url} · run a test on one model, or battle Gemma and Qwen with it, one model at a time, each run stopped at 10 min · while something runs there, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
+        push({ type: 'note', text: `The Arena opened in the browser at ${hub.url} · run a test on one model, or battle two with it, one model at a time, each run stopped at 10 min · while something runs there, ${model.name} here is unloaded and comes back by itself when it ends`, tone: 'dim' });
         break;
       }
       case 'test': {

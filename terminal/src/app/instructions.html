@@ -174,7 +174,7 @@ function addedText(s) {
  ].join('\n');
 }
 function modelsText(s) {
- return 'Sent by the server, not written in the prompt. Each model’s chat template is stored inside its file (the server runs with --jinja), so both read the same tools and messages in their own format. Every request also carries a thinking switch (enable_thinking, with reasoning_effort when thinking is on) and a reply limit: 2,048 tokens, plus the thinking budget when thinking is on. The server stops thinking at the budget.\n' + s.models.map(m => [
+ return 'Sent by the server, not written in the prompt. Each model’s chat template is stored inside its file (the server runs with --jinja), so each reads the same tools and messages in its own format. Every request also carries a thinking switch (enable_thinking, with reasoning_effort when thinking is on) and a reply limit: 2,048 tokens, plus the thinking budget when thinking is on. The server stops thinking at the budget.\n' + s.models.map(m => [
   '', `${m.name}  (${m.id})`,
   ...m.levels.flatMap(l => [`  Thinking ${l.label}: ${l.note}`, `    sent: ${Object.entries(l.kwargs).map(([k, v]) => `${k} ${v}`).join(', ')} · reply limit ${l.replyLimit.toLocaleString()} tokens`]),
   ...(m.effortDial ? [] : ['  No effort dial: only enable_thinking counts. reasoning_effort is sent too, but this model’s template ignores it.']),
