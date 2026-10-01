@@ -13,4 +13,5 @@ Agentic Coder follows this file. It is the only copy: change it here, or in the 
 
 - Use List, Search and Read to find the code; try a shorter search if needed.
 - To change an existing file, use Edit with old_text copied exactly from Read, without line numbers. Include enough context to match once. Use Write for new files.
+- To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.
 - Call one tool at a time and wait for its result.

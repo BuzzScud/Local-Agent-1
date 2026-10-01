@@ -291,8 +291,8 @@ each saved as a real file and read again before your next message:
   it when there is none; the tab says how much of it Qwen gets in the rules room, and when this
   folder's CLAUDE.md is what is read today.
 - **07 TOOLS.md** (`terminal/rules/TOOLS.md`): its `## Tool use` lines are the Tool use part of
-  the prompt, word for word. As shipped they are the lines from before, so nothing changes until
-  you edit them.
+  the prompt, word for word. As shipped they are the lines from before plus one: check a change
+  with only the test file that covers it, not the whole suite (the Skills check's finding).
 - **08 SKILLS.md** (`terminal/rules/SKILLS.md`): steps for kinds of task. Each `## Name` has a
   `- Words:` line and an `- About:` line, then its steps. When a request uses a skill's Words
   (the one with most wins, a phrase counting twice), its steps go with that request and the work

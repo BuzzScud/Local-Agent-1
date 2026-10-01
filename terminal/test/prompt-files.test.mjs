@@ -22,6 +22,9 @@ const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL, HOME } = await import('../../models/index.mjs');
 
 const SOURCE = new URL('../rules/', import.meta.url).pathname;
+// The Tool use lines as shipped: the ones from before, and since 30 Sep evening one about running only the test file.
+const ONE_FILE = "- To check a change, run only the test file that covers it (the test command with that file's path, like npm test -- test/cart.test.mjs), not the whole suite.";
+const SHIPPED = TOOL_USE_OLD.replace('\n- Call one tool at a time', `\n${ONE_FILE}\n- Call one tool at a time`);
 const SKILLS = `# Skills
 
 Intro text. A \`## Name\` inside a line is not a skill.
@@ -62,11 +65,11 @@ afterEach(() => {
   for (const [k, v] of [['AGENTIC_RULES_DIR', saved.rules], ['AGENTIC_HOME', saved.home]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
 
-test('as shipped, TOOLS.md and SKILLS.md change nothing: the Tool use lines as before and no skill on (the example is switched off)', () => {
+test('as shipped: the Tool use lines as before plus "run only the test file", and no skill on (the example is switched off)', () => {
   expect(parseSkills(BUILT_IN.skills)).toEqual([]);
   expect(BUILT_IN.skills).toContain('<!--\n## Write a test');
   expect(parseSkills(BUILT_IN.skills.replace('<!--\n## Write', '## Write').replace(/\n-->\n$/, '\n')).map((s) => s.name)).toEqual(['Write a test']);
-  expect(toolUseText(BUILT_IN.tools)).toBe(TOOL_USE_OLD);
+  expect(toolUseText(BUILT_IN.tools)).toBe(SHIPPED);
   expect(HOME).toBe(FIRST_HOME); // the models part took the throwaway home, not ~/.agentic-coder
 });
 
@@ -96,9 +99,9 @@ test('a skill is picked by its words, a phrase counting twice; a clarifying ques
 });
 
 test('the instructions: TOOLS.md is the Tool use part word for word, the skills list sits before This session; the old prompt keeps both as they were', () => {
-  expect(toolUseText()).toBe(TOOL_USE_OLD); // the shipped TOOLS.md changes nothing
+  expect(toolUseText()).toBe(SHIPPED); // the shipped TOOLS.md, word for word
   const p = systemPrompt({ cwd: proj, git: 'none', date: new Date(2026, 8, 30) });
-  expect(p).toContain(`Tool use\n${TOOL_USE_OLD}\n\nSkills\n`);
+  expect(p).toContain(`Tool use\n${SHIPPED}\n\nSkills\n`);
   expect(p).toContain('- SKILLS/write-a-test: add a test for one behaviour and run just that test file\n- SKILLS/explain-a-file: explain one file');
   expect(p.indexOf('\nSkills\n')).toBeLessThan(p.indexOf('\nWork habits\n'));
   expect(p.indexOf('\nSkills\n')).toBeLessThan(p.indexOf(SESSION_MARK));
@@ -110,7 +113,7 @@ test('the instructions: TOOLS.md is the Tool use part word for word, the skills 
   expect(q).not.toContain('\nSkills\n');
   // a TOOLS.md without the section: the built-in lines
   writeFileSync(join(rules, 'TOOLS.md'), '# Tools\n');
-  expect(toolUseText()).toBe(TOOL_USE_OLD);
+  expect(toolUseText()).toBe(SHIPPED);
   const old = process.env.AGENTIC_PROMPT;
   process.env.AGENTIC_PROMPT = 'old';
   try {
@@ -196,7 +199,7 @@ test('saving TOOLS.md and SKILLS.md: what their readers need, the limits, and a 
   expect(() => validateFile('agents', 'bad\u0001')).toThrow('control characters');
   expect(() => validateFile('nope', 'x')).toThrow('Pick AGENTS.md');
   const d = filesData(proj);
-  expect(d.files.tools).toMatchObject({ exists: true, fromDisk: true, toolUse: TOOL_USE_OLD, oneAtATime: true });
+  expect(d.files.tools).toMatchObject({ exists: true, fromDisk: true, toolUse: SHIPPED, oneAtATime: true });
   expect(d.files.skills.skills.map((s) => s.slug)).toEqual(['write-a-test', 'explain-a-file']);
   const t = saveFile('tools', proj, '# Tools\n\n## Tool use\n- Search first.\n', d.files.tools.revision);
   expect(t).toMatchObject({ toolUse: '- Search first.', oneAtATime: false });
