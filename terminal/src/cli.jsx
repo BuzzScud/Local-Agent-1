@@ -226,8 +226,13 @@ if (process.argv[2] === 'serve') {
   } catch (e) { process.stderr.write(`coding serve: ${e.message}\n`); await s?.stop().catch(() => {}); process.exit(1); }
   await new Promise(() => {});
 }
+// coding setup [--model <id>]: the default model, or the one named (its file and its engine).
 if (process.argv[2] === 'setup') {
-  try { await setup(); process.exit(0); } catch (e) { process.stderr.write(`\ncoding setup: ${e.message}\n`); process.exit(1); }
+  const a = process.argv.slice(3);
+  const at = a.indexOf('--model');
+  const want = at >= 0 ? a[at + 1] : undefined;
+  if (at >= 0 && !MODELS[want]) { process.stderr.write(`coding setup: no model "${want ?? ''}". The models: ${Object.keys(MODELS).join(', ')}\n`); process.exit(1); }
+  try { await setup(want ? { modelId: want } : undefined); process.exit(0); } catch (e) { process.stderr.write(`\ncoding setup: ${e.message}\n`); process.exit(1); }
 }
 
 const opts = parse(process.argv.slice(2));

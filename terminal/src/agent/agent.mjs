@@ -228,6 +228,13 @@ export function cutCallNote(name, path) {
   return `Your ${name} call ran out of room before the end and was not run. Do it again in smaller pieces.`;
 }
 
+// Where a tool call written as text starts: <tool_call> (Qwen's kind and the
+// 27B's), <ifm|tool_calls> / <ifm|tool_call> (K2 Horizon's). The text before
+// it is what the model said; the stop words keep a text-only reply from one.
+export const CALL_MARK = /<tool_call>|<ifm\|tool_calls?>/;
+export const CALL_STOPS = ['<tool_call>', '<ifm|tool_calls>', '<ifm|tool_call>'];
+export const beforeCall = (s) => String(s ?? '').split(CALL_MARK)[0];
+
 // A tool call written as text instead of a real call: <tool_call>{...}</tool_call>
 export function toolCallInText(text) {
   // The 27B's own format: <tool_call><function=Name><parameter=key>value</parameter>…</function></tool_call>
@@ -236,6 +243,32 @@ export function toolCallInText(text) {
     const args = {};
     for (const p of x[2].matchAll(/<parameter=([^>\s]+)>\n?([\s\S]*?)\n?<\/parameter>/g)) args[p[1]] = paramValue(p[2]);
     return { name: x[1], args: JSON.stringify(args), before: text.slice(0, x.index).trim() };
+  }
+  // K2 Horizon's (its chat template): inside <ifm|tool_calls>, each call is
+  //   <ifm|tool_call>Name\n<ifm|arg_key>k</ifm|arg_key>\n[<ifm|arg_type>t</ifm|arg_type>\n]<ifm|arg_value>v</ifm|arg_value>\n…</ifm|tool_call>
+  // (xml, its default, and xml_typed), or <ifm|tool_call>{"name": …, "arguments": {…}}</ifm|tool_call> (json).
+  // A text value is written as it is; anything else as JSON (the type says which when given).
+  const k = /<ifm\|tool_call>([\s\S]*?)<\/ifm\|tool_call>/.exec(text);
+  if (k) {
+    const at = /<ifm\|tool_calls>/.exec(text);
+    const before = text.slice(0, at && at.index < k.index ? at.index : k.index).trim();
+    const body = k[1].trim();
+    if (body.startsWith('{')) {
+      try {
+        const j = JSON.parse(body);
+        if (typeof j.name === 'string') return { name: j.name, args: typeof j.arguments === 'string' ? j.arguments : JSON.stringify(j.arguments ?? {}), before };
+      } catch {}
+      return null;
+    }
+    const name = /^([^\s<]+)/.exec(body)?.[1];
+    if (!name) return null;
+    const args = {};
+    const re = /<ifm\|arg_key>([\s\S]*?)<\/ifm\|arg_key>\s*(?:<ifm\|arg_type>([\s\S]*?)<\/ifm\|arg_type>\s*)?<ifm\|arg_value>([\s\S]*?)<\/ifm\|arg_value>/g;
+    for (const p of body.matchAll(re)) {
+      const type = p[2]?.trim();
+      args[p[1].trim()] = type === 'string' ? p[3] : paramValue(p[3]);
+    }
+    return { name, args: JSON.stringify(args), before };
   }
   // JSON inside the tags, as other Qwen-style models write it.
   const m = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/.exec(text);
@@ -990,7 +1023,7 @@ export class Agent extends EventEmitter {
         // A call cut off by the reply limit (finish 'length'): running it can
         // only give "not valid JSON", and the old error told the model to send
         // the same too-big call again. Instead: build the file in parts.
-        const cutCall = turn.finish === 'length' && (calls[0] ?? (/<tool_call>/.test(text) ? { name: /<function=([^>\s]+)>/.exec(text)?.[1] ?? 'the last', args: text } : null));
+        const cutCall = turn.finish === 'length' && (calls[0] ?? (CALL_MARK.test(text) ? { name: /<function=([^>\s]+)>|<ifm\|tool_call>\s*([^\s<{]+)/.exec(text)?.slice(1).find(Boolean) ?? 'the last', args: text } : null));
         if (cutCall) {
           cuts++;
           if (cuts >= 3) {
@@ -998,10 +1031,10 @@ export class Agent extends EventEmitter {
             this.emit('note', { text: 'Three replies in a row were cut off mid-call, so it stopped. Ask for the file in smaller pieces.', tone: 'warn' });
             break;
           }
-          const p = /"path"\s*:\s*"([^"]+)"|<parameter=path>\s*\n?([^\n<]+)/.exec(cutCall.args ?? '');
-          const thought = turn.reasoning.split('<tool_call>')[0].trim();
-          this.messages.push({ role: 'assistant', content: text.split('<tool_call>')[0], ...(thought ? { reasoning_content: thought } : {}) });
-          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, p?.[1] ?? p?.[2]?.trim())) });
+          const p = /"path"\s*:\s*"([^"]+)"|<parameter=path>\s*\n?([^\n<]+)|<ifm\|arg_key>path<\/ifm\|arg_key>\s*(?:<ifm\|arg_type>[^<]*<\/ifm\|arg_type>\s*)?<ifm\|arg_value>([^\n<]+)/.exec(cutCall.args ?? '');
+          const thought = beforeCall(turn.reasoning).trim();
+          this.messages.push({ role: 'assistant', content: beforeCall(text), ...(thought ? { reasoning_content: thought } : {}) });
+          this.messages.push({ role: 'user', content: auto(cutCallNote(cutCall.name, p?.[1] ?? (p?.[2] ?? p?.[3])?.trim())) });
           this.emit('note', { text: `The ${cutCall.name} call ran out of room mid-way; asked it to build the file in parts.`, tone: 'warn' });
           continue;
         }
@@ -1009,7 +1042,7 @@ export class Agent extends EventEmitter {
         // call in it: the call is dropped and Agentic Coder waits for your answer.
         if (calls.length && text.trim() && asksTheUserDirectly(text)) calls = [];
         const assistant = { role: 'assistant', content: text };
-        const thought = turn.reasoning.split('<tool_call>')[0].trim();
+        const thought = beforeCall(turn.reasoning).trim();
         if (thought) assistant.reasoning_content = thought;
         if (calls.length) assistant.tool_calls = calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: safeArgs(c.args) } }));
         this.messages.push(assistant);
@@ -1610,7 +1643,7 @@ export class Agent extends EventEmitter {
         // It should not call a tool here; if it writes one out anyway, or
         // nothing at all, keep a plain greeting instead.
         // (With tools off it once wrote "Hello!…" and then a Read call as text.)
-        let text = turn.text.split('<tool_call>')[0].trim();
+        let text = beforeCall(turn.text).trim();
         if (turn.calls.length || toolCallInText(text) || !text) text = /\b(thanks|thank you|thx|ty)\b/i.test(said) ? 'You’re welcome.' : 'Hello! What would you like to work on?';
         this.messages.push({ role: 'assistant', content: text });
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: true });
@@ -1687,7 +1720,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: ['<tool_call>'] } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap: this.steppedDown() ? STEP_DOWN_CAP : undefined, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly });
+      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap: this.steppedDown() ? STEP_DOWN_CAP : undefined, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -2420,14 +2453,14 @@ export class Agent extends EventEmitter {
     let summary = '';
     try {
       const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: ['<tool_call>'] }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM, slot: this.slots?.main, signal })) {
+      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM, slot: this.slots?.main, signal })) {
         if (ev.type === 'text') summary += ev.text;
       }
     } catch (e) {
       if (signal?.aborted) throw e;
       return false;
     }
-    summary = summary.split('<tool_call>')[0].trim();
+    summary = beforeCall(summary).trim();
     if (summary.length < 40) return false;
     const before = this.ctxUsed;
     if (!this.restartFrom(summary, held)) return false;

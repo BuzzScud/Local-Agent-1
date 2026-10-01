@@ -126,8 +126,9 @@ test('Read of a picture: shown to the model when it can see, explained when it c
   expect(needsSight(proj, { path: 'text.pdf', page: 1 })).toBe(true);
 });
 
-test('the vision add-on: each model has one; loaded only with vision on (--mmproj, when its file is here), and counted in the memory then', () => {
-  for (const m of Object.values(MODELS)) expect([m.id, Boolean(m.vision?.url && m.vision.sha256?.length === 64 && m.vision.bytes > 1e8)]).toEqual([m.id, true]);
+test('the vision add-on: each model has one but K2 Horizon (text only); loaded only with vision on (--mmproj, when its file is here), and counted in the memory then', () => {
+  for (const m of Object.values(MODELS).filter((x) => x.vision)) expect([m.id, Boolean(m.vision.url && m.vision.sha256?.length === 64 && m.vision.bytes > 1e8)]).toEqual([m.id, true]);
+  expect(Object.values(MODELS).filter((x) => !x.vision).map((x) => x.id)).toEqual(['k2']); // a picture with it asks to hand that message to one that can see (App.jsx)
   const q = MODELS.qwen;
   expect(visionBytes(q)).toBe(0);
   expect(visionBytes(withVision(q))).toBe(q.vision.bytes + q.vision.computeBytes);

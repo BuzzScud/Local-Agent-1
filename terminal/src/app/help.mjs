@@ -78,6 +78,7 @@ export function cliRows(lingerMins = 30) {
       ['coding -p "question"', 'answer once and exit (changes are refused unless --yes; commands you allowed in /permissions run)'],
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
+      ['coding setup --model k2', 'the same for another model in /model (k2: K2 Horizon 7B, with its own model server)'],
       ['coding stop', `free the memory of a model no window uses (one left by a window that crashed stays loaded up to ${lingerMins} min)`],
       ['coding serve', 'this machine’s model for /remote on another machine, behind an API key (--local: for an SSH tunnel; --port, --ctx, --model, --https cert key, --new-key)'],
       ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (the Arena with the Test builder open over it), memory, instructions, help'],

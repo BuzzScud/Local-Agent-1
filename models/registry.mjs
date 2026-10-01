@@ -16,16 +16,20 @@ export const HOME = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? (ex
 //   official: llama.cpp's own release, as Google's guide for Gemma 4 asks.
 //   prism:    Prism ML's llama.cpp with our Metal patch (it checks 2-8 guessed
 //             words in one pass): the Bonsai 27B's ternary file needs it.
-// AGENTIC_ENGINE=official|prism runs everything on one (a comparison, or a way back).
+//   ifm:      MBZUAI IFM's llama.cpp (branch model/K2Horizon, on llama.cpp of
+//             28 Aug 2026): the only one that runs K2 Horizon so far.
+// AGENTIC_ENGINE=official|prism runs everything on one (a comparison, or a way
+// back), except a model only one engine runs (engineOnly in its model.mjs).
 export const ENGINES = {
   official: { id: 'official', tag: 'llama-v0.5.0-7fe450e', repo: 'https://github.com/ggml-org/llama.cpp.git', commit: '7fe450e19305b828c199d602c23a8337aaa1f03b', patch: false },
   prism: { id: 'prism', tag: 'prism-adfffbe-pq2mc1', repo: 'https://github.com/PrismML-Eng/llama.cpp.git', commit: 'adfffbe41b2cabcd51fff326ab045662265062bb', patch: true },
+  ifm: { id: 'ifm', tag: 'ifm-k2horizon-42adf01', repo: 'https://github.com/ifm-ai/llama.cpp.git', commit: '42adf019f76013dac873b5b43950d54d5ab27216', patch: false },
 };
 // Prism's, measured 28 Sep 2026 with the app's flags: the same speed plain, and
 // with Gemma's two speed helpers ~5% faster than the official v0.5.0 (16.7 vs
 // 15.9 words/s; models/gemma-4-12b/results/engine-compare-2026-09-28).
 export const DEFAULT_ENGINE = 'prism';
-export const engineOf = (m) => ENGINES[process.env.AGENTIC_ENGINE] ?? ENGINES[m?.engine] ?? ENGINES[DEFAULT_ENGINE];
+export const engineOf = (m) => (m?.engineOnly && ENGINES[m.engine]) || (ENGINES[process.env.AGENTIC_ENGINE] ?? ENGINES[m?.engine] ?? ENGINES[DEFAULT_ENGINE]);
 export const serverBinOf = (m) => join(HOME, 'engine', engineOf(m).tag, 'llama-server');
 export const MODELS_DIR = join(HOME, 'models');
 export const LOG_DIR = join(HOME, 'logs');
@@ -39,8 +43,9 @@ export const DEFAULT_PORT = 17600;
 // To bring it back: import it here, add it to ALL, run `coding setup`.
 import gemma4_12b from './gemma-4-12b/model.mjs';
 import qwen35_9b from './qwen3.5-9b/model.mjs';
+import k2Horizon7b from './k2-horizon-7b/model.mjs';
 
-const ALL = [gemma4_12b, qwen35_9b];
+const ALL = [gemma4_12b, qwen35_9b, k2Horizon7b];
 export const MODELS = Object.fromEntries(ALL.map((m) => [m.id, m]));
 
 // Qwen3.5 9B since 30 Sep 2026: with thinking on it passed 24 of 24 practice
@@ -78,10 +83,13 @@ export function thinkingLevel(model, thinking, effort) {
 }
 
 // What to send the chat template for thinking off, or on at an effort.
+// A model's own template switches (templateKwargs: K2 Horizon's tool-call
+// format) go with them.
 export function thinkingKwargs(model, thinking, effort) {
-  if (!thinking) return { enable_thinking: false };
+  const own = model?.templateKwargs ?? {};
+  if (!thinking) return { ...own, enable_thinking: false };
   const lv = thinkingLevel(model, true, effort);
-  return { enable_thinking: true, ...(lv.effort ? { reasoning_effort: lv.effort } : {}) };
+  return { ...own, enable_thinking: true, ...(lv.effort ? { reasoning_effort: lv.effort } : {}) };
 }
 
 export const modelPath = (m) => join(MODELS_DIR, m.file);

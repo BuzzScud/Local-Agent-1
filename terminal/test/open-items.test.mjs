@@ -182,7 +182,7 @@ test('"hello" gets one reply with tools switched off', async () => {
   expect(fake.requests[0].tools.length).toBeGreaterThan(0); // same prompt as always, so the saved warm-up still matches
   expect(events.filter((e) => e.type === 'tool')).toEqual([]);
   expect(events.find((e) => e.type === 'assistant').text).toBe('Hello! What shall we work on?');
-  expect(fake.requests[0].stop).toEqual(['<tool_call>']);
+  expect(fake.requests[0].stop).toEqual(['<tool_call>', '<ifm|tool_calls>', '<ifm|tool_call>']); // Qwen's and K2 Horizon's call marks
 });
 
 test('a greeting followed by a call written as text keeps only the greeting', async () => {

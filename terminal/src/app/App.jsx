@@ -2313,6 +2313,9 @@ export function App({ opts, win, onRestart }) {
         // A different model — or the same edited copy with newer edits saved
         // since — restarts the model server in place; the window stays.
         const changed = picked.id !== model.id || (picked.edited && model.edited && picked.edited.saved !== model.edited.saved);
+        // A model whose file (or its own model server) is not here yet: say how to get it, keep the one in use.
+        const missing = changed && !picked.edited ? [!existsSync(modelPath(picked)) && `downloads it (${(picked.bytes / 1e9).toFixed(1)} GB)`, picked.engine && !existsSync(serverBinOf(picked)) && 'builds its model server (about 3 minutes)'].filter(Boolean) : [];
+        if (missing.length) { push({ type: 'note', text: `${picked.name} is not ready on this Mac yet: coding setup --model ${picked.id} ${missing.join(' and ')}. Then pick it again.`, tone: 'warn' }); return; }
         if (changed) { saveSettings({ model: picked.id }); switchModel(picked); }
         else push({ type: 'note', text: `${picked.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });
       }

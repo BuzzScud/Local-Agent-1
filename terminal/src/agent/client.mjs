@@ -6,6 +6,7 @@
 import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
 import { streamClaude } from './claude.mjs';
 import { openAIMessages } from './images.mjs';
+import { splitThink } from './think-tags.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
 // thinking switch and cap, its extra sampling. Not sent to another kind.
@@ -36,7 +37,15 @@ export function refusedField(status, text, body) {
 // toolChoice 'none' keeps the tool list in the prompt (so the saved reading of
 // the instructions still matches) but lets the model only write text.
 // parallel: the model may send several calls in one reply (when the model decides, agent/way.mjs).
-export async function* streamChat({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false }) {
+// A model whose thinking comes between tags of its own (thinkTags: K2 Horizon)
+// has it sorted from its answer on the way (think-tags.mjs).
+export async function* streamChat(args) {
+  const tags = args.model?.thinkTags;
+  if (!tags?.length || endpointOf(args.url)?.kind === 'claude') { yield* streamRaw(args); return; }
+  yield* splitThink(streamRaw(args), tags, { thinking: Boolean(args.thinking) });
+}
+
+async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false }) {
   const ep = endpointOf(url);
   // The Claude API speaks its own Messages API (claude.mjs).
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }

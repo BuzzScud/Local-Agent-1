@@ -9,8 +9,8 @@ import bonsai27b from '../bonsai-2-27b/model.mjs';
 const m = bonsai27b; // the 27B's recipe: its settings are still exact
 const g = MODELS.gemma;
 
-test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second model; the 27B stays as a recipe', () => {
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen']);
+test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second model, K2 Horizon 7B the third; the 27B stays as a recipe', () => {
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2']);
   expect(DEFAULT_MODEL).toBe('qwen');
   expect(g.file).toBe('gemma-4-12B-it-qat-UD-Q4_K_XL.gguf');
   expect(g.bytes).toBe(6_716_356_800);
@@ -180,5 +180,5 @@ test('the memory\'s matcher: BGE-M3, in the engine\'s embedding mode, beside the
   // none of the chat model's flags
   for (const f of ['--jinja', '--reasoning-budget', '-md', '--slot-save-path', '--spec-type']) expect(a).not.toContain(f);
   // and it is not one of the models /model offers
-  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen']);
+  expect(Object.keys(MODELS)).toEqual(['gemma', 'qwen', 'k2']);
 });

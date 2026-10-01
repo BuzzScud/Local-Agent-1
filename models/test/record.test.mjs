@@ -6,6 +6,7 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, pathOf, taskSteps, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
 import { RUN_TESTS } from '../evals/run-tests.mjs';
+import { MODELS } from '../registry.mjs';
 
 const scratch = () => { const dir = mkdtempSync(join(tmpdir(), 'agentic-record-')); return { dir, file: join(dir, 'tests', 'record.jsonl') }; };
 const quiet = (file) => ({ file, snapshot: false, quiet: true });
@@ -131,7 +132,7 @@ test('a run is filed under its model: the one it names, else its results folder,
 
 test('the side panel lists the models whose file is on this Mac, and the record data carries them', () => {
   const ids = installedModels().map((m) => m.id);
-  expect(ids.every((id) => ['gemma', 'qwen'].includes(id))).toBe(true);
+  expect(ids.every((id) => Object.keys(MODELS).includes(id))).toBe(true); // whichever of them are on this Mac
   const { file } = scratch();
   recordTest({ kind: 'tasks', name: 'a run', model: 'gemma', passed: 1, total: 1 }, quiet(file));
   expect(recordData(file).models).toEqual(installedModels());
