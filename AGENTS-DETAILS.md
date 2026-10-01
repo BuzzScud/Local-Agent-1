@@ -167,6 +167,28 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the click lands on the row under the prompt box's bottom edge. So that a click can arrive, `/mouse on` keeps
   the mouse with an empty prompt too (before, only while the box had text); fn held is Terminal's own highlight.
 
+## K2 Horizon, the third model
+
+- **K2 Horizon 7B** (MBZUAI IFM, added 30 Sep 2026; `models/k2-horizon-7b/`, id `k2`) is the third model in
+  /model; Qwen stays the default. Its design ("k2-horizon") runs only on IFM's llama.cpp so far, so it has an
+  engine of its own (`ENGINES.ifm`) and `engineOnly` keeps it there whatever `AGENTIC_ENGINE` says.
+  `coding setup --model k2` downloads it (6.5 GB) and builds that engine (about 2 minutes).
+- **Its chat template writes tags of its own:** thinking in `<ifm|think>` (High), `<ifm|think_fast>` (Medium) or
+  `<ifm|think_faster>`, tool calls as `<ifm|tool_call>` with `<ifm|arg_key>`/`<ifm|arg_value>`. llama.cpp's
+  autoparser reads them from the template (the New model check of 30 Sep: every call a real call, the thinking
+  apart at each level). Should a build ever leave them in the text, `terminal/src/agent/think-tags.mjs` sorts the
+  thinking from the answer (`thinkTags` in its model.mjs) and `toolCallInText` reads the call. `templateKwargs`
+  sends its `tool_call_format` with every request; its template errors on any effort but high, medium, low.
+- **It cannot look at pictures.** A picture sent while it is the model asks whether a model here that can (its
+  file and its add-on on this Mac) takes that one message: it loads in K2's place with its add-on, answers, and
+  K2 comes back after the reply (`switchBackRef` in App.jsx; your own /model pick cancels the return). Esc puts
+  the message back in the prompt, unsent.
+- **The New model check** (`models/evals/tools/model-check.mjs`, the Arena's `modelcheck`) runs any model in
+  /model through the app's real client: it loads (and the memory it takes), the template takes the app's request
+  at every level, a plain answer, a tool call off and at each level, the thinking cap really ending the thinking
+  (with the app's tools a model often acts after the cap, a Bash call, which counts), its other tool-call format,
+  and the speeds. Run it on any model added to /model before trusting it with real work.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:
