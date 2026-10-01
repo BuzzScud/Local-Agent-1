@@ -333,7 +333,7 @@ function Meters({ app }) {
   return (
     <Box paddingX={2} width={app.width}>
       <Text color={C.dim} wrap="truncate-end">
-        {modelName}{app.modelOff ? ' (off · /start)' : ''}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
+        {modelName}{app.modelOff ? ' (off · ctrl+t)' : ''}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
       </Text>
     </Box>
   );
@@ -574,6 +574,7 @@ const SHORTCUTS = [
   ['\\ + enter for a new line', 'ctrl+c twice to quit'],
   ['↑ ↓ for earlier prompts', 'shift+arrows to select and copy'],
   ['⌥+click to move the cursor', 'ctrl+z to undo · ctrl+y to redo'],
+  ['ctrl+t to start or stop the model', '/mouse on: click its label too'],
 ];
 
 // The footer's right side is the mode, as in Claude Code; a narrow window
@@ -583,31 +584,64 @@ export function footerRight(mode, room) {
   return { cycle: !m || m.length + CYCLE_HINT.length <= room };
 }
 
-function Footer({ app }) {
+// The model's label on the footer's right, longest first (a narrow window takes a shorter one).
+// modelState: { state: off · loading · on, name, gb }; null for a server given with --url or a
+// remote, where nothing of the Mac's is loaded. ctrl+t switches it, and so does a click on it (/mouse on).
+export function modelLabels(ms) {
+  if (!ms) return [];
+  if (ms.state === 'off') return ['○ model off · ctrl+t start', '○ model off · ctrl+t', '○ off'];
+  if (ms.state === 'loading') return [`◐ ${ms.name} loading · ctrl+t stop`, '◐ loading · ctrl+t stop', '◐ loading'];
+  const gb = ms.gb ? ` · ${ms.gb.toFixed(1)} GB` : '';
+  return [`● ${ms.name}${gb} · ctrl+t stop`, `● ${ms.name} · ctrl+t stop`, '● on · ctrl+t stop', '● on'];
+}
+
+// The footer's pieces, worked out once for the drawing and for a click on the model's label
+// (App.jsx). The right side ends two cells from the window's edge; a narrow window drops the
+// "(shift+tab to cycle)" hint first, then the label's detail, then the Mac's memory.
+// labelAt: the label's first and last cell on the footer's row, counted from 1.
+export function footerParts(app) {
   const { mode, notice, width } = app;
-  // An open menu takes the footer's place, as in Claude Code.
-  if (app.menu?.items?.length) return null;
   // Until your first message a tip sits here (start.jsx); while a first start reads its
   // instructions it says how long that takes.
   const tip = app.tip ? (app.starting && app.startPhase === 'reading' ? READING_TIP : app.tip) : null;
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : tip ? `※ Tip: ${tip}` : '? for shortcuts');
-  // The update and weights badges share the lower right with the mode label,
-  // which drops its "(shift+tab to cycle)" hint first when room runs short.
+  // The update and weights badges share the lower right with the mode label.
   const badges = [app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
-  // The Mac's memory, live: first on the right, so a narrow window cuts it first.
+  // The Mac's memory, live, after the model's label.
   const mac = app.mac ? footerLabel(app.mac) : '';
-  // The model off (it waits for /start): said first on the right, so you see it takes no memory.
-  const off = app.modelOff ? 'model off · /start' : '';
-  const pick = footerRight(mode, width - 4 - Math.min(left.length, 15) - 2 - (badges ? badges.length + 3 : 0) - (mac ? mac.length + 5 : 0) - (off ? off.length + 5 : 0));
-  const ml = modeLabel(mode, { cycle: pick.cycle });
-  const badge = badges ? <Text color={C.accent}>{badges}</Text> : null;
-  const macEl = mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {mac}</Text> : null;
+  const modeText = MODE_TEXT[mode] ?? '';
+  const room = width - 4 - Math.min(left.length, 15) - 2;
+  const labels = modelLabels(app.modelState);
+  const ls = labels.length ? labels : [''];
+  const tries = [
+    { label: ls[0], mac, cycle: true },
+    ...ls.map((label) => ({ label, mac, cycle: false })),
+    ...ls.map((label) => ({ label, mac: '', cycle: false })),
+  ];
+  const textOf = (t) => [t.label, t.mac && `● ${t.mac}`, badges, modeText && `${modeText}${t.cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
+  const pick = tries.find((t) => textOf(t).length <= room) ?? tries.at(-1);
+  const from = width - 2 - textOf(pick).length + 1;
+  return { left, label: pick.label, mac: pick.mac, badges, cycle: pick.cycle, labelAt: pick.label ? { from, to: from + pick.label.length - 1 } : null };
+}
+
+function Footer({ app }) {
+  const { mode, notice, width } = app;
+  // An open menu takes the footer's place, as in Claude Code.
+  if (app.menu?.items?.length) return null;
+  const p = footerParts(app);
+  const on = app.modelState?.state === 'on';
+  const pieces = [
+    p.label ? <Text color={C.dim}><Text color={on ? C.accent : C.dim}>{p.label[0]}</Text>{p.label.slice(1)}</Text> : null,
+    p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
+    p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
+    modeLabel(mode, { cycle: p.cycle }),
+  ].filter(Boolean);
   return (
     <Box flexDirection="column">
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
         {/* A long left side (a tip) is cut to what is left; the right side stays whole, two spaces clear of it. */}
-        <Box flexShrink={1} marginRight={2}><Text color={notice ? C.warn : C.dim} wrap="truncate-end">{left}</Text></Box>
-        <Box flexShrink={0}><Text wrap="truncate-start">{off ? <Text color={C.dim}>○ {off}{macEl || badge || ml ? ' · ' : ''}</Text> : null}{macEl}{macEl && (badge || ml) ? <Text color={C.dim}> · </Text> : null}{badge}{badge && ml ? <Text color={C.dim}> · </Text> : null}{ml}</Text></Box>
+        <Box flexShrink={1} marginRight={2}><Text color={notice ? C.warn : C.dim} wrap="truncate-end">{p.left}</Text></Box>
+        <Box flexShrink={0}><Text wrap="truncate-start">{pieces.map((el, i) => <React.Fragment key={i}>{i ? <Text color={C.dim}> · </Text> : null}{el}</React.Fragment>)}</Text></Box>
       </Box>
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>

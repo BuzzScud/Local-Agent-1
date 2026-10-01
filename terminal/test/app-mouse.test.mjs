@@ -75,7 +75,7 @@ const press = async ({ write, raw }, at, cursor) => {
   write(`\x1b[${c.row};${c.col}R`);
 };
 
-test('/mouse on: a drag in the prompt box highlights across rows and copies, delete removes it, a double click takes a word, a scroll hands the mouse back, an empty box gives it up', async () => {
+test('/mouse on: a drag in the prompt box highlights across rows and copies, delete removes it, a double click takes a word, a scroll hands the mouse back, an empty box keeps it (for the footer\'s model label)', async () => {
   const { cwd, env, base } = setup();
   const clip = join(base, 'clipboard.txt');
   const fake = await startFakeServer([]);
@@ -89,7 +89,7 @@ test('/mouse on: a drag in the prompt box highlights across rows and copies, del
     { type: 'x' }, { key: '\x1b[<0;9;9M' }, { sleep: 200 }, { snapshot: 'off' }, { fn: ({ raw }) => { seen.offAsked = raw().includes(MOUSE_ON); } },
     { key: 'backspace' }, { sleep: 100 },
     { type: '/mouse on' }, { key: 'enter' }, { wait: 'Mouse on' },
-    { fn: ({ raw }) => { seen.empty = last(raw(), MOUSE_ON, MOUSE_OFF); } }, // nothing in the box: the mouse is Terminal's
+    { fn: ({ raw }) => { seen.empty = last(raw(), MOUSE_ON, MOUSE_OFF); } }, // nothing in the box: still the app's (since 30 Sep), for a click on the footer's label
     { type: P }, { sleep: 400 },
     { fn: async (t) => {
       seen.typed = last(t.raw(), MOUSE_ON, MOUSE_OFF);
@@ -127,7 +127,7 @@ test('/mouse on: a drag in the prompt box highlights across rows and copies, del
   const prompt = (snap) => snap.split('\n').filter((l) => /^│ [> ] /.test(l)).map((l) => l.replace(/^│ [> ] /, '').replace(/\s*│\s*$/, '')).join('|');
   expect(seen.offAsked).toBe(false); // off: Terminal is never asked for the mouse
   expect(prompt(r.snapshots.off)).toBe('x');
-  expect(seen.empty).toBe(MOUSE_OFF);
+  expect(seen.empty).toBe(MOUSE_ON);
   expect(seen.typed).toBe(MOUSE_ON);
   expect(seen.rows[1]).toBe(seen.rows[0] + 1); // the drag crossed two rows
   expect(seen.dragClip).toBe(picked);
@@ -141,7 +141,7 @@ test('/mouse on: a drag in the prompt box highlights across rows and copies, del
   expect(seen.scrolled).toBe(MOUSE_OFF);
   expect(seen.after).toBe(MOUSE_ON);
   expect(prompt(r.snapshots.replaced)).toBe('alpha bravo november X papa');
-  expect(seen.cleared).toBe(MOUSE_OFF);
+  expect(seen.cleared).toBe(MOUSE_ON); // an empty box keeps it
   expect(r.snapshots.stray).not.toContain('[<0;9;9M');
   expect(r.raw.split(MOUSE_ON).length).toBe(r.raw.split(MOUSE_OFF).length); // handed back every time it was taken
   expect(JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).mouse).toBe(true); // kept for next time

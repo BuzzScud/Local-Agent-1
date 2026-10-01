@@ -160,6 +160,12 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `memory-jobs/` for the next `/start` in that folder (`AutoSave.runWaiting`), and a handed-over save whose
   model has gone waits the same way: nothing loads after a window has closed. The app tests set
   `AGENTIC_MODEL_AT_START=on` in `setup()` (app-setup.mjs); `app-model-start.test.mjs` tests it off.
+- **The footer's model label** (the user's pick, 30 Sep 2026): "○ model off · ctrl+t start", "◐ Qwen3.5 9B
+  loading · ctrl+t stop", "● Qwen3.5 9B · 6.9 GB · ctrl+t stop" (`modelLabels` in screen.jsx; none on --url
+  or a remote). ctrl+t switches it, and with `/mouse on` so does a click on it; in the middle of a reply the
+  first press only asks. `footerParts` works out the footer once, for the drawing and for where the label is:
+  the click lands on the row under the prompt box's bottom edge. So that a click can arrive, `/mouse on` keeps
+  the mouse with an empty prompt too (before, only while the box had text); fn held is Terminal's own highlight.
 
 ## The public repo
 

@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdBudget } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdBudget, footerParts } from './screen.jsx';
 import { startTip } from './start.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
@@ -466,7 +466,7 @@ export function App({ opts, win, onRestart }) {
       ] };
     }
     if (id === 'autostart') return { title: 'Model at start', blurb: `Whether ${model.name} loads as a window opens. Off, it waits for /start, so a window you only look around in takes none of the Mac's memory. Kept for next time.`, what: 'the model at start', current: settings.modelAtStart ? 'on' : 'off', options: [{ id: 'off', label: 'Off', note: 'the model loads when you type /start' }, { id: 'on', label: 'On', note: 'the model loads as soon as a window opens' }] };
-    if (id === 'mouse') return { title: 'Mouse in the prompt box', blurb: 'Drag over the text you are typing to highlight it: copied at once, delete removes it, typing replaces it. While the box has text the mouse is Agentic Coder’s; hold fn for Terminal’s own highlight. Kept for next time.', what: 'the mouse', current: S.current.mouse ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'click, drag to highlight, double click for a word' }, { id: 'off', label: 'Off', note: 'the mouse stays Terminal’s; option+click still works' }] };
+    if (id === 'mouse') return { title: 'Mouse in the prompt box', blurb: 'Drag over the text you are typing to highlight it: copied at once, delete removes it, typing replaces it. A click on the model’s label in the footer starts or stops it. While it is on the mouse is Agentic Coder’s; hold fn for Terminal’s own highlight. Kept for next time.', what: 'the mouse', current: S.current.mouse ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'click, drag to highlight, double click for a word, click the model’s label' }, { id: 'off', label: 'Off', note: 'the mouse stays Terminal’s; option+click and ctrl+t still work' }] };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
   };
   // The hub in the browser (/weights, /docs, /help): one small server per
@@ -898,7 +898,7 @@ export function App({ opts, win, onRestart }) {
       const on = value === 'on';
       setMouse(on);
       saveSettings({ mouse: on });
-      push({ type: 'note', text: on ? 'Mouse on: with text in the prompt box, a click puts the cursor there and a drag highlights (copied at once; delete removes it). Hold fn to highlight the way Terminal does.' : 'Mouse off: the mouse is Terminal’s again. option+click and shift+arrows still work.', tone: 'dim' });
+      push({ type: 'note', text: on ? 'Mouse on: a click in the prompt box puts the cursor there and a drag highlights (copied at once; delete removes it); a click on the model’s label in the footer starts or stops it. Hold fn to highlight the way Terminal does.' : 'Mouse off: the mouse is Terminal’s again. option+click, shift+arrows and ctrl+t still work.', tone: 'dim' });
     } else if (id === 'autostart') {
       const on = value === 'on';
       settings.modelAtStart = on;
@@ -974,7 +974,8 @@ export function App({ opts, win, onRestart }) {
 
   // Memory the model really uses (for the Live thinking meter line).
   useEffect(() => {
-    const read = () => { const s = serverRef.current; if (s?.child) setRamGb((s.footprintBytes() + model.bytes) / 1e9); };
+    // A copy shared with another window is measured too (its process is that window's).
+    const read = () => { const s = serverRef.current; if (s?.port && (s.child || s.shared)) setRamGb((s.footprintBytes() + model.bytes) / 1e9); };
     const id = setInterval(read, 5000);
     const first = setTimeout(read, 1500);
     return () => { clearInterval(id); clearTimeout(first); };
@@ -996,7 +997,7 @@ export function App({ opts, win, onRestart }) {
     if (modelOffNow()) {
       const had = queuedRef.current;
       queuedRef.current = value; setQueued(value);
-      if (!had) push({ type: 'note', text: 'The model is off. /start loads it (your message waits and goes out after).', tone: 'dim' });
+      if (!had) push({ type: 'note', text: 'The model is off. /start or ctrl+t loads it (your message waits and goes out after).', tone: 'dim' });
       return;
     }
     const { text, attached, images } = expandMentions(value, cwd, agent.maxResultChars, pastedRef.current.files);
@@ -1324,6 +1325,34 @@ export function App({ opts, win, onRestart }) {
   };
   const stopFnRef = useRef(null);
   stopFnRef.current = stopModel;
+  // /start: the model on this Mac loads (the window opens with it off, unless /autostart is on).
+  const startModel = () => {
+    if (opts.url) { push({ type: 'note', text: `This window uses the model server at ${opts.url} (--url); there is nothing to load.`, tone: 'dim' }); return; }
+    if (remoteRef.current.on) { push({ type: 'note', text: `On the remote model (${remoteLabel(settings.remote)}): nothing loads on this Mac. /remote off goes back to this Mac.`, tone: 'dim' }); return; }
+    if (S.current.starting) { push({ type: 'note', text: `${model.name} is already loading.`, tone: 'dim' }); return; }
+    if (serverRef.current?.port) { push({ type: 'note', text: `${model.name} is already loaded (port ${serverRef.current.port}). /stop unloads it.`, tone: 'dim' }); return; }
+    loadFnRef.current();
+  };
+  const startFnRef = useRef(null);
+  startFnRef.current = startModel;
+  // ctrl+t, or a click on the model's label in the footer (/mouse on): off → /start, loading or
+  // loaded → /stop. In the middle of a reply it asks first: the same again within 2 s stops the
+  // reply and unloads the model.
+  const toggleArmed = useRef(0);
+  const toggleModel = (how = 'ctrl+t') => {
+    if (opts.url) { flash('This window uses a model server given with --url: nothing here to start or stop', 3000); return; }
+    if (remoteRef.current.on) { flash('On the remote model: nothing loads on this Mac (/remote off goes back)', 3000); return; }
+    if (!wantRef.current) { startFnRef.current(); return; }
+    if ((S.current.live !== IDLE || agent.busy) && Date.now() - toggleArmed.current > 2000) {
+      toggleArmed.current = Date.now();
+      flash(`${how === 'click' ? 'Click it' : 'Press ctrl+t'} again to stop the reply and unload ${model.name}`, 2000);
+      return;
+    }
+    toggleArmed.current = 0;
+    stopFnRef.current();
+  };
+  const toggleFnRef = useRef(null);
+  toggleFnRef.current = toggleModel;
   // What the memory saved after the last window here had closed, said once.
   useEffect(() => {
     if (!agent.memory) return;
@@ -1832,15 +1861,9 @@ export function App({ opts, win, onRestart }) {
         remoteFnRef.current.openForm();
         break;
       }
-      case 'start': {
-        // /start: the model on this Mac loads (the window opens with it off, unless /autostart is on).
-        if (opts.url) { push({ type: 'note', text: `This window uses the model server at ${opts.url} (--url); there is nothing to load.`, tone: 'dim' }); break; }
-        if (remoteRef.current.on) { push({ type: 'note', text: `On the remote model (${remoteLabel(settings.remote)}): nothing loads on this Mac. /remote off goes back to this Mac.`, tone: 'dim' }); break; }
-        if (S.current.starting) { push({ type: 'note', text: `${model.name} is already loading.`, tone: 'dim' }); break; }
-        if (serverRef.current?.port) { push({ type: 'note', text: `${model.name} is already loaded (port ${serverRef.current.port}). /stop unloads it.`, tone: 'dim' }); break; }
-        loadFnRef.current();
+      case 'start':
+        startFnRef.current();
         break;
-      }
       case 'stop':
         await stopFnRef.current();
         break;
@@ -2026,16 +2049,18 @@ export function App({ opts, win, onRestart }) {
 
   // The prompt box's rows as it draws them (its width; the ! of shell mode is not drawn).
   const rowsOf = (s) => ({ width: promptTextWidth(width), skip: s.value.startsWith('!') ? 1 : 0 });
-  // The mouse in the prompt box (/mouse on). Terminal hands it over only
-  // while the box is on screen with text in it: then a press puts the cursor
-  // there, a drag highlights (the selection shift + arrows make: copied at
-  // once, delete removes it) and a double click takes the word. A scroll
-  // gives the mouse back for a moment, so the rest of it moves the
-  // conversation as it always did.
+  // The mouse in the prompt box (/mouse on). Terminal hands it over while
+  // the box is on screen (with or without text in it, since 30 Sep 2026, so a
+  // click on the model's label in the footer starts or stops the model): a
+  // press puts the cursor there, a drag highlights (the selection shift +
+  // arrows make: copied at once, delete removes it) and a double click takes
+  // the word. A scroll gives the mouse back for a moment, so the rest of it
+  // moves the conversation as it always did; fn held is Terminal's own highlight.
   const { internal_eventEmitter: rawKeys } = useStdin();
   const tty = win?.out ?? process.stdout;
-  const mouseArmed = mouse && Boolean(input.value) && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
+  const mouseArmed = mouse && !perm && !picker && !btwShown && !wheelPause && !leaving && !tooSmall;
   const mouseRef = useRef({ armed: false, asked: null, waiting: [], origin: null, down: false, last: null, wheel: null });
+  const footerRef = useRef(null);
   useEffect(() => {
     if (!mouseArmed) return undefined;
     const m = mouseRef.current;
@@ -2063,8 +2088,12 @@ export function App({ opts, win, onRestart }) {
       setInput((p) => withUndo(p, { value: p.value, cursor: to, anchor: p.anchor ?? p.cursor }));
       return;
     }
+    const boxRows = cursorCell(s, o).rows.length;
+    // The footer's row is the one under the box's bottom edge: a press on the model's label switches it.
+    const f = footerRef.current;
+    if (row === boxRows + 1 && f?.labelAt && ev.col >= f.labelAt.from && ev.col <= f.labelAt.to) { m.down = false; toggleFnRef.current('click'); return; }
     // a press counts only on one of the box's own rows
-    if (row < 0 || row >= cursorCell(s, o).rows.length) { m.down = false; return; }
+    if (row < 0 || row >= boxRows) { m.down = false; return; }
     const to = posAt(s, row, x, o);
     const again = Boolean(m.last) && m.last.to === to && Date.now() - m.last.t < DOUBLE_CLICK_MS;
     m.last = again ? null : { to, t: Date.now() };
@@ -2396,6 +2425,8 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     if (key.tab && key.shift) { const m = MODES[(MODES.indexOf(cur.mode) + 1) % MODES.length]; setMode(m); return; }
+    // ctrl+t: the model on this Mac on or off (the footer's label says which, and how much memory it holds).
+    if (key.ctrl && ch === 't') { toggleFnRef.current('ctrl+t'); return; }
     if (key.ctrl && ch === 'o') {
       const s = folds.current;
       if (!s.list.length) { flash('Nothing to expand yet'); return; }
@@ -2494,10 +2525,12 @@ export function App({ opts, win, onRestart }) {
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
+  // The model's label in the footer (screen.jsx modelLabels): off, loading, or on with the memory it holds.
+  const modelState = opts.url || model.remote ? null : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
   const app = {
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
-    modelName: model.name, modelOff, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle, onRemote: Boolean(model.remote),
     // The weights badge, lower right: edited weights saved and waiting, in
@@ -2508,5 +2541,7 @@ export function App({ opts, win, onRestart }) {
         : `✱ on edited weights (${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'})`)
       : (Object.keys(editedSaved).length ? '✱ edited weights ready · /model to switch' : null),
   };
+  // Where the footer drew the model's label, for a click on it (onMouse); an open menu takes the footer's place.
+  footerRef.current = app.menu?.items?.length ? null : footerParts(app);
   return <Screen app={app} />;
 }
