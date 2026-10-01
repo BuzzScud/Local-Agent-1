@@ -4,6 +4,11 @@ Agentic Coder: a coding agent for the terminal (`terminal/`) that runs local mod
 (`models/`). JavaScript modules (`.mjs`, Ink `.jsx`), run with Bun. README.md has the
 folder map; AGENTS-DETAILS.md has the background to every rule here.
 
+## Scope
+- Change only what the task needs: no drive-by refactors, renames or new dependencies.
+  Match the file you are in: style, names, how its neighbours are tested.
+- Do not edit AGENTS.md or AGENTS-DETAILS.md unless the task is those files.
+
 ## Commands
 - Run the app from here: `bun run start`. Installed, it is the `coding` command.
 - One test file: `bun run test ./terminal/test/<name>.test.mjs` (or `./models/test/…`;
@@ -18,7 +23,7 @@ folder map; AGENTS-DETAILS.md has the background to every rule here.
 ## Hard rules
 - `terminal/` imports only `models/index.mjs`, and `models/` imports only
   `terminal/index.mjs`. A name the other part needs is added to that file
-  (`terminal/test/two-parts.test.mjs` fails otherwise).
+  (`terminal/test/two-parts.test.mjs` fails otherwise). Never weaken a failing test.
 - The GitHub repo is public. Nothing secret is committed. A place the code connects to
   for the first time is added to `KNOWN_HOSTS` (`models/evals/tools/check.mjs`) on purpose.
 - Tests never touch the user's real memory: set `AGENTIC_HOME`, and
@@ -27,6 +32,7 @@ folder map; AGENTS-DETAILS.md has the background to every rule here.
   in the prompt).
 - A page that must not be public goes in `docs/private/`, never in a group. Never point
   `AGENTIC_DOCS` at a folder of private files.
+- The Arena's scoring changes only when the task is the Arena.
 
 ## Where things go
 - A page about Agentic Coder (report, diagram, test results, preview): one
@@ -46,6 +52,15 @@ folder map; AGENTS-DETAILS.md has the background to every rule here.
   `bun run test`, `bun run eval` and `bun run eval:words` add their own line; anything
   else calls `recordTest()` from `models/evals/record.mjs`.
 
+## Done
+A change is done when all of these hold:
+- A test that covers it was run and passes (the nearest file, with `./`). Claude Code and
+  Codex also run `bun run test` once at the end; it outlasts Agentic Coder's 2-minute limit.
+- Pages changed: `bun run docs` passed.
+- Before a push: `bun run check` passed. A failure blocks the push; `--fast` is no waiver.
+- No secret, home path, real memory path or cross-seam import was added. A test that
+  touched the real memory, or a driven app that hung, is a failed run.
+
 ## Before you change these, read AGENTS-DETAILS.md
 The memory, the Arena and the test record, the evals, and the `docs/` folder: it has
-how each works and why.
+how each works and why. Change the two files together.

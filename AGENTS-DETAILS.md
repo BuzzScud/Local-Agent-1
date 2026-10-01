@@ -196,3 +196,33 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the packages, where the code connects, the installed app, the unit tests); `--fast`
   leaves out the model files and the tests. A place the code names for the first time
   (`KNOWN_HOSTS` in `models/evals/tools/check.mjs`) is added there on purpose, never in passing.
+
+## The contract: Scope, Done and failures (1 Oct 2026)
+
+- **Where these came from.** The owner brought a longer AGENTS.md on 1 Oct 2026 with four
+  additions: Scope, a glossary, "When something fails" and a Done list. AGENTS.md took Scope,
+  Done and one hard rule (the Arena's scoring changes only when the task is the Arena); the rest
+  is kept here, because AGENTS.md stays under 4,000 characters (`terminal/test/agents-md.test.mjs`).
+  The draft repeated the `index.mjs` seam rule three times; AGENTS.md says it once.
+
+- **Why the full suite is for Claude Code and Codex only.** `bun run test` takes about 3 minutes.
+  Agentic Coder stops a command after 2 minutes (/effort's Command timeout, 120 s by default), and
+  its own Tool use line (`terminal/rules/TOOLS.md`) says to run only the test file that covers a
+  change, not the whole suite. A small model given both rules would have to guess, so for Agentic
+  Coder the covering test file is the check, and the recorded full run is the larger agents' job.
+
+- **When something fails** (the draft's steps):
+  - The seam test fails: the import skipped `index.mjs`. Export the name there, then rerun
+    `bun run test ./terminal/test/two-parts.test.mjs`. Do not weaken the test.
+  - `bun run docs` stops: a private path is tracked, or a page holds the home folder's path or
+    name. Untrack it, write `~`, and rerun. Do not commit `docs/private/`.
+  - A test read or wrote the real memory: stop; the run is invalid. Point `AGENTIC_HOME` at a
+    temporary folder, set `AGENTIC_MEMORY_SAVE=off` unless the test is about saving, and rerun.
+  - A driven app is still open: finish with quit (`quitTyped` when the prompt still has text).
+    A hung app is a failed test, not a passing one.
+  - `bun run check` fails: it blocks the push. Fix the finding or do not push. `--fast` is not a
+    waiver for a secrets failure.
+
+- **The names AGENTS.md uses.** The test record is `~/.agentic-coder/tests/record.jsonl` (what
+  ran, and whether it counted). The Arena is the eval comparison described above. The memory is
+  the owner's store under `AGENTIC_HOME`, never the real one in a test.
