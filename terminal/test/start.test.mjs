@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, botPixels, botRows, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
+import { StartPage, TrustPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit } from './app-setup.mjs';
@@ -36,7 +36,8 @@ test('the page: a titled line, the greeting, the bot, the model; recent activity
   expect(text).toMatch(/reads\s+AGENTS\.md \+ memory/);
   const turns = draw(h(StartPage, { start: { ...START, recent: [{ ...START.recent[0], turns: 4 }] }, width: 107 }), 107).join('\n');
   expect(turns).toContain('4 prompts'); // how many prompts each one had
-  expect(text.match(/Write a self-contained/g)).toHaveLength(1); // the same prompt run again shows once
+  expect(text.match(/In-app notification card/g)).toHaveLength(1); // the same prompt run again shows once, by its subject
+  expect(text).toContain('Small weather widget for a city');
   expect(text).toContain('w01 · Fix a futures roll that stays'); // one line, the separator run gone
   expect(text).not.toContain('┌');
   expect(text).not.toContain('╭'); // no box
@@ -86,13 +87,62 @@ test('the bot sleeps while the model is off, looks about while it loads, and is 
   for (const r of rows) expect(r.props.children).toHaveLength(22);
 });
 
-test('the bot fills every cell it uses: no █ or ▀, which leave a seam under each row in Terminal.app', () => {
-  // SF Mono's █ ▀ ▄ cover only the middle 84% of a line; a background colour fills all of it.
-  for (const state of ['off', 'trust', 'loading', 'ready']) {
-    const cells = botRows(state, 3).flatMap((r) => r.props.children);
-    expect(cells.map((c) => c.props.children).join('')).not.toMatch(/[█▀]/);
-    expect(cells.some((c) => c.props.backgroundColor && c.props.children === ' ')).toBe(true); // backgrounds carry the solid parts
+test('the bot leaves no line through it in Terminal: each cell takes the glyph whose sliver matches its neighbours', () => {
+  // SF Mono in Terminal: ▄ leaves 0.175 pt of the background under it, ▀ 2.145 pt over it.
+  expect(botGlyph(null, 250, 250, null)).toEqual({ ch: ' ', bg: 250 }); // one colour: a background, the whole cell
+  expect(botGlyph(255, 255, 233, 233)).toEqual({ ch: '▄', fg: 233, bg: 255 }); // the helmet over the glass: its own colour under ▄
+  expect(botGlyph(null, 255, 233, 233).ch).toBe('▀'); // with the window above, the glass's sliver goes there, dark on dark
+  expect(botGlyph(233, 157, 233, 233).ch).toBe('▀'); // a ^ eye's top on the glass: the glass shows over it, beside the glass
+  expect(botGlyph(null, 243, null, null).ch).toBe('▀'); // a pixel alone: the window shows over it
+  const apart = (a, b) => Math.abs(greyOf(a) - greyOf(b));
+  for (const [state, look] of [['off', null], ['trust', null], ['loading', null], ['ready', null], ['ready', 0.5]]) {
+    const px = botPixels(state, 3, look);
+    const cells = botCells(state, 3, look);
+    expect(cells.flat().some((c) => c.ch === '█')).toBe(false);
+    let longest = 0;
+    cells.forEach((row, r) => {
+      let run = 0;
+      row.forEach((c, x) => {
+        const [up, t, b, dn] = [px[2 * r - 1]?.[x] ?? null, px[2 * r][x], px[2 * r + 1]?.[x] ?? null, px[2 * r + 2]?.[x] ?? null];
+        const shows = c.ch === ' ' ? 0 : c.ch === '▀' ? 2.145 * Math.min(apart(b, up), apart(b, t)) : 0.175 * Math.min(apart(t, b), apart(t, dn));
+        run = shows > 5 ? run + 1 : 0;
+        longest = Math.max(longest, run);
+      });
+    });
+    expect(longest).toBeLessThanOrEqual(2); // the first bot drew lines 20 columns long
   }
+});
+
+test('while you type, the awake bot looks down at the prompt box, left or right with the cursor', () => {
+  const eyes = (state, look) => botPixels(state, 0, look).flatMap((row, y) => row.map((c, x) => (y >= 4 && y <= 9 && x >= 4 && x <= 17 && [120, 157, 194].includes(c) ? `${x},${y}` : null))).filter(Boolean);
+  expect(eyes('ready', 0.1)).toEqual(['6,8', '7,8', '12,8', '13,8', '6,9', '7,9', '12,9', '13,9']); // down and to the left
+  expect(eyes('ready', 0.9)).toEqual(['8,8', '9,8', '14,8', '15,8', '8,9', '9,9', '14,9', '15,9']); // down and to the right
+  expect(eyes('loading', 0.5)).toEqual(eyes('ready', 0.5).map((e) => e)); // loading too
+  expect(botPixels('off', 0, 0.5)).toEqual(botPixels('off', 0)); // asleep, it does not look
+  const page = (typing) => renderToString(h(StartPage, { start: START, width: 107, typing }), { columns: 107 });
+  expect(page(0.1)).not.toBe(page(null));
+});
+
+test('Recent activity names a conversation by its subject, not the opening most prompts share', () => {
+  const n = (title) => nameOf({ title });
+  expect(n('Create a self-contained HTML file for a compact media player card. Show album ar')).toBe('Compact media player card');
+  expect(n('Write a self-contained HTML file for an in-app notification card. Show an app ic')).toBe('In-app notification card');
+  expect(n('Make one HTML file that displays a social feed post. Include an author a')).toBe('Social feed post');
+  expect(n('Write a Python script that lists the 10 largest files in a folder and their sizes. Then sort')).toBe('Lists the 10 largest files in a folder and their sizes');
+  const saved = 'Create one self-contained HTML file called notes.html that works when I double-click it'.slice(0, 80); // titles are saved cut to 80
+  expect(n(saved)).toBe('notes.html that works when I double-c…'); // a file name keeps its case; still cut where it was saved
+  for (const t of ['what is two plus two', 'Create a file', 'rsync -a --delete src/ dst/', 'fix the login test']) expect(n(t)).toBe(t); // anything else as it is
+});
+
+test('the start is timed: a bar with the seconds left, "/start takes about" while off, "started in" once ready', () => {
+  const left = (est) => draw(h(StartPage, { start: START, width: 107, loading: { phase: 'reading', secs: 14.5, left: est } }), 107).join('\n');
+  expect(left({ left: 9.6, done: 0.6, over: false })).toMatch(/━+─+ about 10 s left/);
+  expect(left({ left: 0, done: 1, over: true })).toMatch(/━+ longer than usual/);
+  expect(left(null)).toContain('timing this start for next time'); // no start on record yet
+  expect(draw(h(StartPage, { start: START, width: 107, loading: { phase: 'waiting', secs: 3 } }), 107).join('\n')).toContain('starts once the memory is free');
+  expect(draw(h(StartPage, { start: { ...START, off: true, typical: 18.4 }, width: 107 }), 107).join('\n')).toContain('/start takes about 18 s');
+  expect(draw(h(StartPage, { start: { ...START, took: 31.2 }, width: 107 }), 107).join('\n')).toContain('started in 31 s');
+  for (const w of [80, 107]) for (const l of draw(h(StartPage, { start: START, width: w, loading: { phase: 'reading', secs: 3, left: { left: 120, done: 0.02, over: false } } }), w)) expect(l.length).toBeLessThanOrEqual(w);
 });
 
 test('a new folder: welcome, nothing here yet, and /init', () => {

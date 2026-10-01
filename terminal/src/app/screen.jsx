@@ -1188,9 +1188,9 @@ const heightOf = (it, app) => itemHeights.get(rowsKey(it, app));
 // under it in order. What came meanwhile shows under the live page; when that would not fit in the
 // window beside it the page is let go (printed as it is) and the Starting line takes over.
 export const heldRows = (items, ctx) => items.slice(1).reduce((n, it) => n + (itemHeights.get(rowsKey(it, ctx)) ?? Infinity), 0);
-// Rows the held page leaves under it: the window less the page (17 until it is measured), the
+// Rows the held page leaves under it: the window less the page (18 until it is measured), the
 // prompt box, the footer and the cursor's line.
-export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 17) - 5;
+export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(items[0], ctx)) ?? 18) - 5;
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.
@@ -1246,7 +1246,7 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.hold ? (
         <Box flexDirection="column">
-          <Box marginBottom={1}><StartPage start={app.start} width={width} loading={app.starting || app.battle || app.waiting ? { phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000) } : null} /></Box>
+          <Box marginBottom={1}><StartPage start={app.start} width={width} loading={app.starting || app.battle || app.waiting ? { phase: app.battle || app.waiting ? 'waiting' : app.startPhase, secs: Math.max(0, (app.now - app.startedAt) / 1000), left: app.startLeft } : null} typing={app.input?.value && !app.menu ? (4 + (app.input.cursor % promptTextWidth(width))) / width : null} /></Box>
           {items.slice(1).map((it) => <ItemFrame key={it.key} it={it} width={width} model={modelName} cwd={app.cwdShort} loaded={app.loaded} start={app.start} />)}
           {app.battle ? <Box marginBottom={1}><Text color={C.warn}>⏸ Waiting for {/^a test/.test(app.battle) ? 'a test run' : 'a battle'}: {app.battle}. Only one model fits, so {modelName} loads by itself when it is over; a message you send now waits for it.</Text></Box> : null}
           {app.waiting ? <Box marginBottom={1}><Text color={C.warn}>{app.waiting} has {modelName} loaded, and two copies do not fit. It starts by itself when that is done · <Text bold>esc</Text> starts anyway</Text></Box> : null}

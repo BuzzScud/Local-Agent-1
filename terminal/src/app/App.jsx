@@ -9,6 +9,7 @@ import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, r
 import { spawnSync } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, SHORTCUT_ROWS, footerParts } from './screen.jsx';
 import { startTip } from './start.jsx';
+import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
@@ -258,6 +259,33 @@ export function App({ opts, win, onRestart }) {
   const [starting, setStarting] = useState(!opts.url && !modelOff);
   // When the window opened, and then when the model last began to load (the "Starting …" seconds).
   const [startedAt, setStartedAt] = useState(Date.now());
+  // The start's timed parts (start-times.mjs) for the start page's "about N s left" and "started
+  // in N s": loading the model (when a new server starts), then reading or restoring its
+  // instructions. timing is null until a start begins loading (not while it waits for memory).
+  const timing = useRef(null);
+  const timesRef = useRef(null);
+  if (timesRef.current == null) timesRef.current = loadTimes();
+  const [startTook, setStartTook] = useState(null);
+  const modelKey = (m) => m.id ?? m.file ?? m.name;
+  const timeLoad = (m, cold) => { timing.current = { id: modelKey(m), loadAt: Date.now(), warmAt: null, cold }; };
+  const timeLoaded = (st) => {
+    const t = timing.current;
+    if (!t) return;
+    t.cold = !st?.shared;
+    if (t.cold) saveTime(t.id, 'load', (Date.now() - t.loadAt) / 1000);
+    t.warmAt = Date.now();
+  };
+  const timeWarmed = (res) => {
+    const t = timing.current;
+    if (t?.warmAt && res && !res.skipped && !res.remote && !res.fallback) saveTime(t.id, res.restored ? 'restore' : 'read', (Date.now() - t.warmAt) / 1000);
+  };
+  const timeDone = () => {
+    const t = timing.current;
+    if (!t) return;
+    setStartTook((Date.now() - t.loadAt) / 1000);
+    timesRef.current = loadTimes();
+    timing.current = null;
+  };
   const [now, setNow] = useState(Date.now());
   const [notice, setNotice] = useState(null);
   const [queued, setQueued] = useState(null);
@@ -544,6 +572,7 @@ export function App({ opts, win, onRestart }) {
         if (!chk.fits) push({ type: 'note', text: chk.note, tone: 'warn' });
       }
       memoryNote.current = c.reason ?? null;
+      timeLoad(next, true);
       const srv = new ModelServer(modelWithLimits(next, limitsRef.current));
       serverRef.current = srv;
       srv.on('crash', ({ code, signal }) => {
@@ -552,6 +581,7 @@ export function App({ opts, win, onRestart }) {
         restartRef.current = srv.restart().then(() => { push({ type: 'note', text: 'The model server is back.', tone: 'dim' }); }).catch((e) => push({ type: 'note', text: e.message, tone: 'error' })).finally(() => { restartRef.current = null; });
       });
       const st = await srv.start({ ctx: c.ctx, lingerSecs: LINGER_SECS, helper: c.helper });
+      timeLoaded(st);
       agent.url = srv.url;
       agent.canSee = Boolean(srv.vision);
       agent.model = modelWithLimits(next, limitsRef.current);
@@ -559,7 +589,8 @@ export function App({ opts, win, onRestart }) {
       agent.syncRules(); // rules that follow the Context are read again before the warm-up below
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       setStartPhase('reading');
-      await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase });
+      timeWarmed(await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase }));
+      timeDone();
       const n = next.edited?.edits.length ?? 0;
       if (done) push({ type: 'note', text: done(agent.ctx), tone: 'dim' });
       else push({ type: 'note', text: next.edited ? `Now on ${next.name} (${n} edit${n === 1 ? '' : 's'}). Pick ${MODELS[next.edited.base].name} in /model to go back.` : `Now on ${next.name}.`, tone: 'dim' });
@@ -1243,6 +1274,7 @@ export function App({ opts, win, onRestart }) {
     wantRef.current = true;
     setModelOff(false);
     setStarting(true); setStartPhase('loading'); setStartedAt(Date.now());
+    timing.current = null;
     await waitForBattle(stillOn);
     if (!stillOn()) return;
     // --ctx wins; then the context /effort saved; then what fits (chooseContext).
@@ -1284,6 +1316,7 @@ export function App({ opts, win, onRestart }) {
     agent.ctx = size;
     setCtx(size);
     agent.syncRules(); // rules that follow the Context, settled before the model reads them
+    timeLoad(model, !running);
     const srv = new ModelServer(modelWithLimits(model, limitsRef.current));
     serverRef.current = srv;
     srv.on('crash', ({ code, signal }) => {
@@ -1295,6 +1328,7 @@ export function App({ opts, win, onRestart }) {
     try {
       st = await srv.start({ ctx: size, lingerSecs: LINGER_SECS, helper });
       if (!stillOn()) return;
+      timeLoaded(st);
       const want = !opts.ctx && limitsRef.current.context;
       if (want && st.shared && st.ctx !== want) push({ type: 'note', text: `${model.name} was already loaded at ${Math.round(st.ctx / 1024)}k, so it runs at that. Your /effort context (${Math.round(want / 1024)}k) applies after /stop and /start, or save it again in /effort.`, tone: 'warn' });
       if (st.shared) {
@@ -1323,9 +1357,10 @@ export function App({ opts, win, onRestart }) {
     // this folder too (instant when nothing changed). Another window's is left alone.
     if (!st.shared || st.idle) try {
       agent.warmed = true; // this window's own reading of the instructions: a restart from notes restores it
-      await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (stillOn()) setStartPhase(p); } });
+      timeWarmed(await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (stillOn()) setStartPhase(p); } }));
     } catch {}
     if (!stillOn()) return;
+    timeDone();
     setStarting(false);
     const first = !loadedOnce.current;
     loadedOnce.current = true;
@@ -2624,7 +2659,7 @@ export function App({ opts, win, onRestart }) {
     return () => { on = false; };
   }, [items, width]);
   // What primeRows needs to measure items as they are printed.
-  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff };
+  const start = { model: model.name, effort: thinkingLevel(model, thinking, effort).label.toLowerCase(), ctx, cwd: short(cwd), git: opts.start?.git, notes: opts.start?.notes ?? [], also: opts.start?.also ?? [], recent: recentRef.current, now: startedAt, off: modelOff, took: startTook, typical: typicalStart(timesRef.current[modelKey(model)]) };
   measure.current = { width, modelName: model.name, cwdShort: short(cwd), loaded: opts.loaded ?? '', start };
   itemsRef.current = items;
   // Held until your first message (sendPrompt lets it go). Let go for good, printed as it is, when
@@ -2637,12 +2672,15 @@ export function App({ opts, win, onRestart }) {
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
   // The model's label in the footer (screen.jsx modelLabels): off, loading, or on with the memory it holds.
   const modelState = opts.url || model.remote ? null : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
+  // What the running start has left (start-times.mjs), from how long each part has run so far.
+  const tm = timing.current;
+  const startLeftNow = starting && tm ? startLeft(timesRef.current[tm.id], { phase: startPhase, cold: tm.cold, sinceLoad: (now - tm.loadAt) / 1000, sinceWarm: tm.warmAt ? (now - tm.warmAt) / 1000 : 0 }) : null;
   const app = {
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, waiting, battle, remoteSource: model.remote?.source ?? null,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

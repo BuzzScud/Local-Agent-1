@@ -166,3 +166,21 @@ test('the start page stays live until your first message: /start wakes the bot i
   expect(all.match(/This folder/g)).toHaveLength(1);
   expect(all.indexOf('This folder')).toBeLessThan(all.indexOf('Hello from the stand-in model.'));
 }, 100_000);
+
+test('each start is timed: the page says how long it took, and the next window how long /start takes', async () => {
+  const { cwd, env, home } = withStandInModel();
+  const run = () => runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: '? for shortcuts' }, { sleep: 800 }, { snapshot: 'off' },
+    { type: '/start' }, { key: 'enter' }, { wait: '● ready · effort', ms: 45_000 }, { sleep: 500 }, { snapshot: 'ready' },
+    ...quit,
+  ] });
+  const first = await run();
+  expect(first.snapshots.off).not.toContain('/start takes about'); // nothing on record yet
+  expect(first.snapshots.ready).toMatch(/● ready · effort .*\n.*started in \d+ s/s);
+  const second = await run();
+  expect(second.snapshots.off).toMatch(/\/start takes about \d+ s/);
+  const t = JSON.parse(readFileSync(join(home, 'start-times.json'), 'utf8'))[D.id];
+  expect(t.load).toHaveLength(2); // each window loaded the model itself
+  expect((t.read ?? []).length + (t.restore ?? []).length).toBe(2);
+}, 200_000);
+
