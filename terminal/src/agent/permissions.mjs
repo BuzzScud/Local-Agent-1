@@ -95,9 +95,24 @@ function pathCandidates(cmd) {
     const text = String(w);
     out.push(text);
     if (!w.quoted) continue;
-    for (const piece of text.split(/[\s;&|()<>=,`'"]+/)) if (piece.length > 1 && piece !== text) out.push(piece);
+    for (const m of text.matchAll(/[^\s;&|()<>=,`'"]+/g)) {
+      const piece = m[0];
+      if (piece.length > 1 && piece !== text && !codeNotPath(text, piece, m.index)) out.push(piece);
+    }
   }
   return out;
+}
+
+// Pieces of quoted code that only look like a path; each was a command turned away on 1 Oct
+// 2026 ("… is outside the project folder"): a comment's // (node -e "// Simulate…"), a method
+// on a regex (/<meta charset=/.test(txt) gives /.test), and an HTML closing tag in a string
+// ('<button …>Download</button>' gives /button). A tag is one name between < and >, so
+// "cat </Users/x/a" in an sh -c string is still read as the path it is.
+function codeNotPath(text, piece, at) {
+  const after = text[at + piece.length];
+  if (/^\/+$/.test(piece)) return true;
+  if (/^\/\.[A-Za-z_$][\w$]*$/.test(piece) && after === '(') return true;
+  return /^\/[A-Za-z][\w-]*$/.test(piece) && text[at - 1] === '<' && after === '>';
 }
 
 // Commands that only read: they run without asking (inside the fence), and

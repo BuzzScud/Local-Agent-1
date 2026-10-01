@@ -69,6 +69,22 @@ test('the story test: read-only checks run without asking, a quoted "/" is text,
   expect(outsidePath(`node -e "require('fs').readFileSync('/Users/x/a')"`, `${cwd}/p`)).toBe('/Users/x/a');
 });
 
+test('code in quotes that only looks like a path is not turned away (the three of 1 Oct)', () => {
+  const cwd = homedir();
+  const real = [
+    `cd ~/Desktop && node -e "\n// Simulate the countdown tick logic\nvar target = new Date('2026-10-15T18:00:00').getTime();\nconsole.log(target);\n"`,
+    `node -e "\nconst txt=require('fs').readFileSync('Desktop/countdown-card.html','utf8');\nconsole.log('Has charset meta:', /<meta charset=/.test(txt));\n"`,
+    `python3 - << 'PY'\ncontent = open('Desktop/invoice-snapshot.html').read()\nold = '<button id="download" type="button">Download</button>'\nnew = '<a id="download" href="#">Download</a>'\nopen('Desktop/invoice-snapshot.html', 'w').write(content.replace(old, new))\nPY`,
+  ];
+  for (const cmd of real) expect([cmd, outsidePath(cmd, cwd)]).toEqual([cmd, null]);
+  // A real path in the same places is still found.
+  const p = `${cwd}/p`;
+  expect(outsidePath(`sh -c "cat </Users/x/a"`, p)).toBe('/Users/x/a');
+  expect(outsidePath(`node -e "require('fs').readFileSync('//Users/x/a')"`, p)).toBe('//Users/x/a');
+  expect(outsidePath(`python3 -c "open('/.ssh/id')"`, p)).toBe('/.ssh/id');
+  expect(outsidePath(`python3 -c "print('<b>/Users/x</b>')"`, p)).toBe('/Users/x');
+});
+
 test('a git commit always asks, even after "don\'t ask again" or chained after an allowed command', () => {
   const allowed = new Set(['git commit', 'npm test']);
   for (const command of ['git commit -m "x"', 'npm test && git commit -am "x"', 'git add . && git commit -m x', 'git -C sub commit -m x', 'git -c user.name=me commit -m x', 'sh -c "git commit -m x"', 'git commit --amend --no-edit']) {
