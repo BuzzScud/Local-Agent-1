@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/footer-spacing-2026-10-01.html](design%20rounds/footer-spacing-2026-10-01.html) | page | Footer spacing, new design | 23 KB | 2026-10-01 |
 | [design rounds/live-run-screen-preview-2026-10-01.html](design%20rounds/live-run-screen-preview-2026-10-01.html) | page | Live Run Preview | 147 KB | 2026-10-01 |
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 369 KB | 2026-10-01 |
 | [older versions/agentic-coder-structure-2026-09-30.html](older%20versions/agentic-coder-structure-2026-09-30.html) | page | Agentic Coder folder structure | 614 KB | 2026-10-01 |
