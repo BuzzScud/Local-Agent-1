@@ -132,6 +132,36 @@ test('/model: the model list and the effort in one picker; the choice is used an
   expect(fake2.requests.find((q) => q.stream && q.tools).chat_template_kwargs).toEqual({ enable_thinking: true, reasoning_effort: 'high' });
 }, T);
 
+test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bonsai have Medium); the level you pick is kept while the cursor moves, and enter saves it', async () => {
+  const { cwd, env, base } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model and its effort' }, { sleep: 200 },
+    // the model list: Gemma, Qwen (in use), K2 Horizon, Bonsai
+    { key: 'down' }, { sleep: 150 }, { key: 'down' }, { sleep: 300 }, { snapshot: 'bonsai' },
+    { key: 'right' }, { sleep: 300 }, { snapshot: 'medium' },
+    { key: 'up' }, { sleep: 150 }, { key: 'up' }, { sleep: 300 }, { snapshot: 'qwen' },
+    { key: 'down' }, { sleep: 150 }, { key: 'down' }, { sleep: 300 }, { snapshot: 'back' },
+    { key: 'enter' }, { wait: 'not ready on this Mac yet' }, { sleep: 300 },
+    ...quit,
+  ] });
+  await fake.close();
+  const effort = (s) => /Effort\s+◀\s+(.*?)\s+▶/.exec(s)?.[1].replace(/\s+/g, ' ');
+  const note = (s) => /(?:Low|Medium|High): [^│\n]*/.exec(s.split('Effort')[1] ?? '')?.[0].trim();
+  expect(r.snapshots.bonsai).toMatch(/❯ Bonsai 2 27B/);
+  expect(effort(r.snapshots.bonsai)).toBe('Low · Medium · High'); // its own three levels, not Qwen's two
+  expect(note(r.snapshots.medium)).toMatch(/^Medium: thinks briefly first/);
+  // Qwen has no Medium: it shows its nearest, High…
+  expect(effort(r.snapshots.qwen)).toBe('Low · High');
+  expect(note(r.snapshots.qwen)).toMatch(/^High: /);
+  // …and back on Bonsai the pick is still Medium: moving the cursor changes nothing.
+  expect(note(r.snapshots.back)).toMatch(/^Medium: /);
+  // Enter: the effort is saved (Bonsai's file is not in this test's home, so it says how to get it and keeps Qwen).
+  expect(r.text).toContain('Bonsai 2 27B is not ready on this Mac yet: coding setup --model bonsai');
+  const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+  expect([saved.thinking, saved.effort]).toEqual([true, 'medium']);
+}, T);
+
 test('"/" menu like Claude Code: all 18 commands (the rest are in /settings), the footer makes room, tab fills in', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);

@@ -203,6 +203,12 @@ export function App({ opts, win, onRestart }) {
   const [live, setLive] = useState(IDLE);
   const [perm, setPerm] = useState(null);
   const [picker, setPicker] = useState(null);
+  // /model's Effort row is the highlighted model's own levels (1 Oct 2026: K2 Horizon and Bonsai have Medium, Gemma
+  // and Qwen do not). The level you chose is kept by name (levelId, on), so moving the cursor never changes it; a model
+  // without it shows its nearest (thinkingLevel: Medium is High there). A remote's row has no levels: the model in use's.
+  const pickModelOf = (pk) => { const m = pk.models[pk.index]; return m?.thinkingLevels ? m : model; };
+  const pickLevels = (pk) => pickModelOf(pk).thinkingLevels ?? [];
+  const pickLevel = (pk) => thinkingLevel(pickModelOf(pk), pk.on, pk.levelId);
   const [input, setInput] = useState({ value: '', cursor: 0 });
   const [menuIndex, setMenuIndex] = useState(0);
   const [mode, setModeState] = useState(MODES.includes(opts.mode ?? settings.mode) ? (opts.mode ?? settings.mode) : 'ask');
@@ -2011,11 +2017,10 @@ export function App({ opts, win, onRestart }) {
       case 'model': {
         // The model list and the thinking level in one picker. Each model's
         // edited copy, when one is saved, is one more row after the models.
-        const levels = model.thinkingLevels ?? [];
         const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
         // Each service set up in /remote is one more row (Claude API, the other computer, another service).
         const models = [...Object.values(MODELS), ...editedModels(), ...remoteChoices(settings)];
-        setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), level: Math.max(0, levels.findIndex((l) => l.id === lvNow.id)) });
+        setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), levelId: lvNow.id, on: Boolean(lvNow.effort) });
         break;
       }
       case 'stats':
@@ -2383,14 +2388,16 @@ export function App({ opts, win, onRestart }) {
     // Model picker: ↑↓ model, ←→ thinking, enter saves
     if (cur.picker?.kind === 'model') {
       const pk = cur.picker;
-      const levels = model.thinkingLevels ?? [];
-      if (key.leftArrow) setPicker({ ...pk, level: Math.max(0, pk.level - 1) });
-      else if (key.rightArrow || key.tab) setPicker({ ...pk, level: key.tab ? (pk.level + 1) % levels.length : Math.min(levels.length - 1, pk.level + 1) });
+      // ←→ step through the highlighted model's own levels, from the one it shows now.
+      const levels = pickLevels(pk), k = levels.findIndex((l) => l.id === pickLevel(pk).id);
+      const toLevel = (i) => (levels[i] ? { levelId: levels[i].id, on: Boolean(levels[i].effort) } : {});
+      if (key.leftArrow) setPicker({ ...pk, ...toLevel(Math.max(0, k - 1)) });
+      else if (key.rightArrow || key.tab) setPicker({ ...pk, ...toLevel(key.tab ? (k + 1) % levels.length : Math.min(levels.length - 1, k + 1)) });
       else if (key.upArrow) setPicker({ ...pk, index: Math.max(0, pk.index - 1) });
       else if (key.downArrow) setPicker({ ...pk, index: Math.min(pk.models.length - 1, pk.index + 1) });
       else if (key.escape || (key.ctrl && ch === 'c')) setPicker(null);
       else if (key.return) {
-        const lv = levels[pk.level];
+        const lv = pickLevel(pk);
         const on = !!lv?.effort;
         setThinking(on, on ? lv.id : undefined);
         setPicker(null);
@@ -2695,7 +2702,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

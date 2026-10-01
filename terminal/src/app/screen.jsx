@@ -1000,8 +1000,10 @@ function Popup({ app }) {
 // /model: the model list and the effort level in one picker.
 function ModelPicker({ app }) {
   const pk = app.picker;
-  const levels = app.thinkingLevels;
-  const lv = levels[pk.level];
+  // The highlighted model's own levels, and the one it shows (App.jsx pickLevels: the level you chose, or its nearest).
+  const levels = app.pickLevels ?? app.thinkingLevels;
+  const at = Math.max(0, levels.findIndex((l) => l.id === app.pickLevelId));
+  const lv = levels[at];
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Text bold>Model</Text>
@@ -1027,14 +1029,14 @@ function ModelPicker({ app }) {
       <Text> </Text>
       <Text>
         <Text bold>{'Effort     '}</Text>
-        <Text color={pk.level > 0 ? C.accent : C.faint}>◀  </Text>
+        <Text color={at > 0 ? C.accent : C.faint}>◀  </Text>
         {levels.map((l, i) => (
           <Text key={l.id}>
             {i ? <Text color={C.dim}>  ·  </Text> : null}
-            <Text color={i === pk.level ? C.accent : C.dim} bold={i === pk.level} underline={i === pk.level}>{l.label}</Text>
+            <Text color={i === at ? C.accent : C.dim} bold={i === at} underline={i === at}>{l.label}</Text>
           </Text>
         ))}
-        <Text color={pk.level < levels.length - 1 ? C.accent : C.faint}>  ▶</Text>
+        <Text color={at < levels.length - 1 ? C.accent : C.faint}>  ▶</Text>
       </Text>
       <Text color={C.dim}>{'           '}{lv ? `${lv.label}: ${lv.note}` : ''}</Text>
       <Text> </Text>
