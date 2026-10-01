@@ -36,7 +36,7 @@ import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { flowRoute } from './flow-hub.mjs';
-import { helpData, VERSION } from './help.mjs';
+import { helpData, VERSION, setupModels } from './help.mjs';
 import { MODELS, DEFAULT_MODEL, LINGER_SECS, MODELS_DIR, modelPath, readEdited, readEditedAll, writeEdited, removeEdited, editedFileName, recordData, startBattle } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { applyEdits } from './gguf-edit.mjs';
@@ -180,7 +180,7 @@ export function startWeightsServer({ path, models = Object.values(MODELS), docsD
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome, { onDesign });
       if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
       if (url.pathname === '/tests.json') return Response.json(recordData(), { headers: { 'cache-control': 'no-store' } });
-      if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60 }), { headers: { 'cache-control': 'no-store' } });
+      if (url.pathname === '/help.json') return Response.json(helpData({ version: VERSION, modelName: model?.name ?? '', effort: model?.thinkingLevels ?? [], lingerMins: LINGER_SECS / 60, models: setupModels(MODELS, DEFAULT_MODEL) }), { headers: { 'cache-control': 'no-store' } });
       if (url.pathname === '/model.json') return Response.json(missing ? { name, size: 0, missing: true } : { name, size });
       if (url.pathname === '/models.json') return Response.json(modelsData(), { headers: noStore });
       if (url.pathname.startsWith('/model/')) {

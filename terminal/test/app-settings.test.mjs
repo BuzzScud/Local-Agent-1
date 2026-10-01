@@ -7,10 +7,20 @@ import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
 import { COMMANDS, SETTINGS, IN_SETTINGS, matchCommands } from '../src/app/commands.mjs';
-import { helpData } from '../src/app/help.mjs';
+import { helpData, cliHelpText, setupModels } from '../src/app/help.mjs';
 
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const down = (n) => Array.from({ length: n }, () => [{ key: 'down' }, { sleep: 60 }]).flat();
+
+test('coding setup --model names every other model in /model, from the model list: none is left out when one is added', () => {
+  const all = { a: { id: 'a', name: 'Alpha 9B' }, q: { id: 'q', name: 'Qwen 9B' }, k: { id: 'k', name: 'K 7B' }, b: { id: 'b', name: 'B 27B' } };
+  const models = setupModels(all, 'q');
+  expect(models.map((m) => m.id)).toEqual(['q', 'a', 'k', 'b']); // the default first: it is plain `coding setup`
+  const row = helpData({ models }).cli.usage.find(([c]) => c.startsWith('coding setup --model'));
+  expect(row).toEqual(['coding setup --model a', 'the same for another model in /model (a: Alpha 9B, k: K 7B, b: B 27B)']);
+  expect(cliHelpText({ version: '0', modelName: 'Qwen 9B', lingerMins: 30, models })).toContain('a: Alpha 9B, k: K 7B, b: B 27B');
+  expect(helpData().cli.usage.find(([c]) => c.startsWith('coding setup --model'))).toEqual(['coding setup --model <id>', 'the same for another model in /model']);
+});
 
 test('the / menu holds 18 commands and /settings the other 18; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
