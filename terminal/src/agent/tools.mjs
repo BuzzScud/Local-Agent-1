@@ -13,6 +13,7 @@ import { runCommand } from '../tools/run.mjs';
 import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
 import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
+import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
 import { readSkillPath } from './prompt-files.mjs';
 
 const str = (description) => ({ type: 'string', description });
@@ -283,6 +284,7 @@ export function didYouMean(cwd, p) {
 // name at the start of a path: what each is called and where it really is.
 const MATH_SHELF = () => ({ name: 'MATH', root: mathDir(), what: "the user's math notes" });
 const DESIGN_SHELF = () => ({ name: 'DESIGN', root: designDir(), what: "the user's design examples" });
+const STUDIO_SHELF = () => ({ name: 'STUDIO', root: studioDir(), what: "the user's design studio" });
 
 export function resolvePath(cwd, p) {
   // "~" and "~/…" mean the home folder, as in the shell: a Write to
@@ -302,6 +304,11 @@ export function resolvePath(cwd, p) {
   if ((p === 'DESIGN' || p.startsWith('DESIGN/')) && !existsSync(resolve(cwd, p))) {
     const d = designPathFor(p);
     if (d) return { abs: d.abs, rel: p, inside: true, design: true, shelf: DESIGN_SHELF() };
+  }
+  // "STUDIO/…" is the user's design studio (src/agent/studio.mjs), read-only the same way.
+  if ((p === 'STUDIO' || p.startsWith('STUDIO/')) && !existsSync(resolve(cwd, p))) {
+    const d = studioPathFor(p);
+    if (d) return { abs: d.abs, rel: p, inside: true, design: true, shelf: STUDIO_SHELF() };
   }
   // The folder's own name used as a path ("project", "project/a.js") means the folder.
   const own = cwd.split(sep).pop();
@@ -343,6 +350,8 @@ export function resolvePath(cwd, p) {
   }
   const inDesign = !inside && existsSync(abs) ? inDesignDir(abs) : null;
   if (inDesign) return { abs, rel: inDesign, inside: true, design: true, shelf: DESIGN_SHELF() };
+  const inStudio = !inside && existsSync(abs) ? inStudioDir(abs) : null;
+  if (inStudio) return { abs, rel: inStudio, inside: true, design: true, shelf: STUDIO_SHELF() };
   return { abs, rel: rel || '.', inside, ...(realRel ? { realRel } : {}) };
 }
 
@@ -558,6 +567,9 @@ export function prepare(name, args, env) {
     if (name === 'Edit') {
       if (!exists) return { error: `${p.rel} does not exist. Use List or Search to find the file you mean.` };
       const before = readFileSync(p.abs, 'utf8');
+      // The design studio's built line is read folded (hideBuilt): the fold in an edit means the real line.
+      args.old_text = realBuilt(args.old_text, before);
+      args.new_text = realBuilt(args.new_text, before);
       const m = findEdit(before, args.old_text, args.new_text, { replaceAll: args.replace_all === true });
       if (!m.ok) return { error: m.error };
       if (m.after === before) return { error: 'old_text and new_text are the same, so nothing would change. new_text must be the corrected version: write the changed lines out in full.' };
@@ -689,7 +701,8 @@ export async function execute(name, args, prepared, env) {
       // at a time. A long one first comes back as an outline (its parts with
       // line ranges), then the model reads only the part it needs: reading is
       // the slow part (~60 tokens a second).
-      const full = readFileSync(p.abs, 'utf8');
+      // A page with the design studio's built styles: that one line folded (studio.mjs), never read or edited.
+      const full = hideBuilt(readFileSync(p.abs, 'utf8'));
       const total = full.split('\n').length;
       const whole = total <= WHOLE_MAX;
       // find: the lines around a word or name, so a long file is never walked
@@ -740,9 +753,9 @@ export async function execute(name, args, prepared, env) {
       // The model gets the plain text (small models copy line numbers into
       // their edits); the screen keeps the numbered view for ctrl+o.
       const from = whole ? 1 : args.offset ?? 1;
-      const plain = r.text.split('\n').slice(from - 1, from - 1 + r.shown).join('\n');
+      const plain = hideBuilt(r.text).split('\n').slice(from - 1, from - 1 + r.shown).join('\n');
       const head = whole || r.shown >= r.lineCount ? `${args.path} (${r.lineCount} lines):` : `${args.path} (lines ${from}-${from + r.shown - 1} of ${r.lineCount}; pass offset to read more):`;
-      return { text: `${note}${head}\n${cut(plain, max)}`, view: { kind: 'read', lines: r.shown, total: r.lineCount, content: r.numbered } };
+      return { text: `${note}${head}\n${cut(plain, max)}`, view: { kind: 'read', lines: r.shown, total: r.lineCount, content: hideBuilt(r.numbered) } };
     }
     case 'List': {
       const lp = resolvePath(env.cwd, args.path ?? '.');

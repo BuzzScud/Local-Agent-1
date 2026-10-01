@@ -13,3 +13,5 @@ process.env.AGENTIC_HELPERS ??= 'off';
 // would add steps and seconds to every test that writes a page.
 process.env.AGENTIC_DESIGN ??= 'off';
 process.env.AGENTIC_LAYOUT ??= 'off';
+// The design studio too (src/agent/studio.mjs): its pieces and its build.
+process.env.AGENTIC_STUDIO ??= 'off';

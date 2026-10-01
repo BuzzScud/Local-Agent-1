@@ -32,7 +32,8 @@
     "@anthropic-ai/sdk": "^0.130.0",
     "ink": "^7.1.1",
     "react": "^19.3.0",
-    "react-devtools-core": "file:terminal/scripts/shims/react-devtools-core"
+    "react-devtools-core": "file:terminal/scripts/shims/react-devtools-core",
+    "tailwindcss": "^4.3.3"
   },
   "bin": {
     "coding": "terminal/src/cli.jsx"

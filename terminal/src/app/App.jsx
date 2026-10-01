@@ -39,6 +39,7 @@ import { CLAUDE_RULES } from '../agent/claude-rules.mjs';
 import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_STYLES, styleWords } from '../agent/design.mjs';
+import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
@@ -1549,8 +1550,9 @@ export function App({ opts, win, onRestart }) {
       case 'design': {
         // Alone: the folder, set by set, and what is on. on|off: the cards with
         // page requests; check on|off: the browser check; sets all|a,b: which
-        // sets; style auto|opus|fable|mix: which set's cards win. Anything
-        // else is a request sent with the cards.
+        // sets; style auto|opus|fable|mix: which set's cards win; studio
+        // [on|off]: the design studio's pieces. Anything else is a request
+        // sent with the cards.
         const saved = { ...(settings.design ?? {}) };
         const keep = (patch) => {
           const next = { ...saved, ...patch };
@@ -1558,14 +1560,14 @@ export function App({ opts, win, onRestart }) {
           if (agent) agent.designSaved = next;
           saveSettings({ design: next });
           const now = designSettings(next);
-          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
+          push({ type: 'note', text: `Design examples ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · studio ${now.studio ? 'on' : 'off'} · sets: ${now.sets === 'all' ? 'all' : now.sets.join(', ')} · style: ${styleWords(now.style)}${process.env.AGENTIC_DESIGN || process.env.AGENTIC_LAYOUT || process.env.AGENTIC_DESIGN_SETS || process.env.AGENTIC_DESIGN_STYLE ? ' (an AGENTIC_DESIGN… setting in the environment decides over this)' : ''}.`, tone: 'dim' });
         };
         const a = arg.trim();
         if (!a) {
           const now = designSettings(saved);
           const sum = designSummary(now);
           if (!sum.dir) { push({ type: 'note', text: 'No design examples folder (make "design examples" in docs/private/, one subfolder per set of .md cards).', tone: 'warn' }); break; }
-          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
+          push({ type: 'panel', title: `Design examples · ${now.auto ? 'on' : 'off'} with page requests · layout check ${now.check ? 'on' : 'off'} · studio ${now.studio ? 'on' : 'off'} (/design studio) · style: ${styleWords(now.style)} · ${sum.dir.replace(homedir(), '~')}`, pad: 18, rows: sum.rows });
           break;
         }
         if (/^(on|off)$/i.test(a)) { keep({ auto: /^on$/i.test(a) }); break; }
@@ -1576,6 +1578,25 @@ export function App({ opts, win, onRestart }) {
           const want = sty[1]?.toLowerCase();
           if (!want || !DESIGN_STYLES.includes(want)) { push({ type: 'note', text: `The styles: ${DESIGN_STYLES.map((x) => `${x} (${styleWords(x)})`).join(' · ')}. Now: ${styleWords(designSettings(saved).style)}.`, tone: want ? 'warn' : 'dim' }); break; }
           keep({ style: want });
+          break;
+        }
+        // studio: the design studio's pieces (agent/studio.mjs), alone its list; on|off: switch.
+        const stu = /^studio(?:\s+(on|off))?$/i.exec(a);
+        if (stu) {
+          if (stu[1]) {
+            const on = /^on$/i.test(stu[1]);
+            const next = { ...saved, studio: on };
+            settings.design = next;
+            if (agent) agent.designSaved = next;
+            saveSettings({ design: next });
+            const now = designSettings(next);
+            push({ type: 'note', text: `Design studio ${now.studio ? 'on' : 'off'}: ${now.studio ? 'a page request gets the pieces that fit it, and the page its built styles' : 'page requests get the design cards only'}${now.auto ? '' : ' (the design examples are off: /design on)'}${process.env.AGENTIC_STUDIO ? ' (AGENTIC_STUDIO in the environment decides over this)' : ''}.`, tone: 'dim' });
+            break;
+          }
+          const sum = studioSummary();
+          if (!sum.dir) { push({ type: 'note', text: 'No design studio folder (make "design studio" in docs/private/: styles/theme.css and components/<kind>/<piece>.html).', tone: 'warn' }); break; }
+          const now = designSettings(saved);
+          push({ type: 'panel', title: `Design studio · ${now.studio && now.auto ? 'on' : 'off'} with page requests · ${sum.dir.replace(homedir(), '~')}`, pad: 12, rows: sum.rows.length ? sum.rows : [['(none)', 'no pieces in components/ yet']] });
           break;
         }
         const sets = /^sets?\s+(.+)$/i.exec(a);

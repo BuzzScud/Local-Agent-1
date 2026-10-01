@@ -42,6 +42,8 @@ export { weightsCore } from './src/app/weights-core.mjs';
 export { readLimits, modelWithLimits, testSettings, testLimits, testDefaults, TEST_CTX, panelData } from './src/app/limits.mjs';
 // pickCards, designNotes and scoreCard: which cards go along with a request, for the UI component battle's card pick (models/evals/bench/design/components.mjs).
 export { designDir, readCards, isDesignRequest, pickCards, designNotes, scoreCard } from './src/agent/design.mjs';
+// The design studio's pieces and its build, for the studio check and the UI component battle's studio part.
+export { studioDir, readPieces, pickPieces, studioNotes, buildStyles, readTheme, PIECE_CHARS } from './src/agent/studio.mjs';
 export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/layoutcheck.mjs';
 // Pictures and PDFs drawn for the Vision check (models/evals/tools/vision-check.mjs), and the
 // real app in a pseudo-terminal for its window check (loaded only when a check calls it).

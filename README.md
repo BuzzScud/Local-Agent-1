@@ -220,7 +220,7 @@ agentic-coder/
 
 Only on this Mac, not in git: each model's `results/`, `models/evals/dev/experiments/julia-recall/`
 (the memory-matcher experiment and its results), `docs/private/` (the owner's memory, design cards,
-morning briefs and Gemma run files; git keeps only docs/'s page groups), and `~/.agentic-coder`
+the design studio's UI pieces, morning briefs and Gemma run files; git keeps only docs/'s page groups), and `~/.agentic-coder`
 (the engines, the model files, settings, logs and the test record).
 
 ## Commands

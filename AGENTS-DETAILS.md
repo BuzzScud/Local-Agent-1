@@ -125,6 +125,28 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   what the app read for the model before its first step with " [app]", so a check counts only the model's
   own steps. Each runs end to end on a stand-in with `--url` (`terminal/test/arena-checks.test.mjs`).
 
+## The design studio
+
+- **The design studio** (`terminal/src/agent/studio.mjs`, since 30 Sep 2026; the user's ask: "a design studio
+  folder that contains designs and styles and ui components like preline.co") is a folder of ready-made UI pieces
+  in the user's look, on the Mac only: `docs/private/design studio/` (`AGENTIC_STUDIO_DIR` names another), with
+  `styles/theme.css` (the rules card's colours as Tailwind tokens, light and dark, and no other colours) and
+  `components/<kind>/<name>.html`, one piece each, headed by a comment with `# Name`, `- For:` and `- Words:`.
+  A page request that gets the design examples gets the pieces that fit it by their Words (the best one, and a
+  second only when it fits nearly as well) in the example card's place, as real code; the rules card still comes.
+  After every Write or Edit of a page the turn built from pieces (or a page built before), the CSS for its classes
+  is built into one `<style id="studio-css">` line before `</head>` with Tailwind's own compiler (the `tailwindcss`
+  package, offline, ~15 ms; a new compiler each build, because one keeps every class it was ever given). A stock
+  Tailwind colour draws nothing and is named back to the model in the same reply; a Tailwind CDN tag is taken out.
+  Read shows the built line folded (`hideBuilt`), and an Edit naming the fold means the real line (`realBuilt`).
+  The app built with `bun build --compile` finds the package through `AGENTIC_REPO`, which the launcher sets.
+  Switches: settings.json `design.studio`, `AGENTIC_STUDIO` (off in the tests, test-env.mjs), `/design studio on|off`;
+  `/design studio` alone lists the pieces (a /design word, not a command of its own: the / menu keeps 16 and
+  /settings 17, which is all that fits an 80 × 24 window). The Arena's **Design studio check** (`models/evals/bench/design/studio-check.mjs`,
+  no model) opens every piece in headless Chrome and writes a live gallery of them beside the pieces (private) and a
+  results page of names and results to `docs/tests/`; the **UI component battle** has a fourth part, Studio on,
+  with its own blind vote against the folder-on page.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

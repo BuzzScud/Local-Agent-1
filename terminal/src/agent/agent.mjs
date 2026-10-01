@@ -7,7 +7,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS } from './tools.mjs';
-import { existsSync, statSync, readFileSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
@@ -18,6 +18,7 @@ import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
 import { pickSkill, skillNote, readSkills, skillsList, toolUseText } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
+import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './studio.mjs';
 import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
 import { findProjects, projectsNamed } from './projects.mjs';
 import { homedir } from 'node:os';
@@ -489,6 +490,25 @@ export class Agent extends EventEmitter {
     return { moved: pick };
   }
 
+  // The design studio's build of a page this turn changed: the text for the
+  // model, or null (studio off, not a studio turn and never built, or a plain-CSS
+  // page). A stock colour it used is said in the same reply.
+  async buildStudio(prepared) {
+    const design = designSettings(this.designSaved);
+    let html = '';
+    try { html = readFileSync(prepared.abs, 'utf8'); } catch { return null; }
+    if (!isBuilt(html) && !(design.studio && this.turn?.studio)) return null;
+    let r;
+    try { r = await buildStyles(html); } catch (e) {
+      this.emit('note', { text: `Could not build the styles into ${prepared.rel}: ${e.message}.`, tone: 'warn' });
+      return null;
+    }
+    if (r.skipped) return null;
+    try { writeFileSync(prepared.abs, r.html); } catch (e) { this.emit('note', { text: `Could not save the built styles into ${prepared.rel}: ${e.code ?? e.message}.`, tone: 'warn' }); return null; }
+    this.emit('note', { text: `Built the styles into ${prepared.rel} (${r.classes} classes, ${(r.bytes / 1024).toFixed(1)} KB, ${(r.ms / 1000).toFixed(1)} s)${r.cdn ? ', in place of the Tailwind link' : ''}${r.stock.length ? `; not in your theme: ${r.stock.join(', ')}` : ''}.`, tone: r.stock.length ? 'warn' : 'dim' });
+    return buildNote(prepared.rel, r);
+  }
+
   // The layout check of the pages this message changed (flows/layoutcheck.mjs):
   // the text for the model when something is broken, else null. `again`: the
   // look after its fix, which only tells you what is left.
@@ -873,14 +893,20 @@ export class Agent extends EventEmitter {
     this.designForce = false;
     if ((forced || (design.auto && !['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text))) && request?.role === 'user' && typeof request.content === 'string') {
       try {
+        // The design studio's pieces (studio.mjs) that fit take the example
+        // card's place; the rules card still comes. No piece fits: the cards as before.
+        const studio = design.studio ? studioNotes(pickPieces(text)) : null;
         // mix: opus and fable take turns, one page request each.
-        const style = design.style === 'mix' ? mixTurn() : design.style;
-        const notes = designNotes(pickCards(text, { sets: design.sets, style }));
+        const style = !studio && design.style === 'mix' ? mixTurn() : design.style;
+        const pick = pickCards(text, { sets: design.sets, style });
+        const cards = designNotes(studio ? { ...pick, examples: [], more: [], look: null } : pick);
+        const notes = cards || studio ? { text: [cards?.text, studio?.text].filter(Boolean).join('\n\n'), names: [...(cards?.cards ?? []).map((c) => c.file.replace(/\.md$/i, '')), ...(studio?.pieces ?? []).map((p) => `studio/${p.file.replace(/^components\//, '').replace(/\.html?$/i, '')}`)] } : null;
         if (notes) {
-          this.turn.design = { request, notes: notes.text, cards: notes.cards.map((c) => c.file) };
+          this.turn.design = { request, notes: notes.text, cards: notes.names };
+          if (studio) this.turn.studio = { pieces: studio.pieces.map((p) => p.file) };
           this.ctxUsed += tokensOf(notes.text);
           // `design` names the cards for the screen (it folds them into the line under your message).
-          this.emit('note', { text: `Design examples${design.style === 'mix' ? ` (mix: ${style}'s turn)` : design.style !== 'auto' ? ` (${style})` : ''}: ${notes.cards.map((c) => c.file.replace(/\.md$/i, '')).join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.cards.map((c) => c.file.replace(/\.md$/i, '')) });
+          this.emit('note', { text: `Design ${studio ? 'studio' : 'examples'}${!studio && design.style === 'mix' ? ` (mix: ${style}'s turn)` : !studio && design.style !== 'auto' ? ` (${style})` : ''}: ${notes.names.join(' + ')} (≈${tokensOf(notes.text).toLocaleString('en-US')} tokens).`, tone: 'dim', design: notes.names });
         } else if (forced) this.emit('note', { text: 'No design examples found (the "design examples" folder is missing or has no cards in the sets that are on).', tone: 'warn' });
       } catch {}
     }
@@ -1869,6 +1895,13 @@ export class Agent extends EventEmitter {
       if (this.turn.diffs.length < 16000) this.turn.diffs += `${prepared.rel}:\n${piece}\n`;
     }
     if (this.turn && !out.error && call.name === 'Write' && prepared.created && !this.turn.created.includes(prepared.rel)) this.turn.created.push(prepared.rel);
+    // The design studio's build (studio.mjs): a page written from the studio's
+    // pieces, or one built before, gets the CSS for its Tailwind classes built
+    // into it, so it opens with a double-click and no internet.
+    if (!out.error && (call.name === 'Edit' || call.name === 'Write') && prepared.abs && /\.html?$/i.test(prepared.abs)) {
+      const note = await this.buildStudio(prepared);
+      if (note) out.text += `\n${note}`;
+    }
     // The lsp helper: a new file that does not parse is said in the same
     // reply, not found a few steps later by a test run or the browser.
     if (!out.error && call.name === 'Write' && prepared.abs && this.helpers.has('lsp')) {

@@ -108,7 +108,12 @@ export const PROBE = String.raw`(function () {
   function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
   function hex(c) { return '#' + c.slice(0, 3).map(function (v) { var h = Math.round(v).toString(16); return h.length < 2 ? '0' + h : h; }).join(''); }
   function shown(el) {
-    for (var e = el; e && e.nodeType === 1; e = e.parentElement) { var cs = getComputedStyle(e); if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) return false; }
+    for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
+      var cs = getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.05) return false;
+      // Text for screen readers only (Tailwind's sr-only, the usual visually-hidden CSS): never drawn.
+      if (cs.clipPath === 'inset(50%)' || cs.clip === 'rect(0px, 0px, 0px, 0px)' || (cs.position === 'absolute' && cs.overflow === 'hidden' && e.offsetWidth <= 1 && e.offsetHeight <= 1)) return false;
+    }
     return true;
   }
   function opacity(el) { var o = 1; for (var e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity); return o; }
@@ -232,7 +237,7 @@ export const PROBE = String.raw`(function () {
     function fill() {
       [].slice.call(document.querySelectorAll('input, textarea')).forEach(function (f) {
         var t = (f.getAttribute('type') || 'text').toLowerCase();
-        if (f.value || f.disabled || f.readOnly || !shown(f) || !/^(text|search|number|email|url|tel|textarea)$/.test(f.tagName === 'TEXTAREA' ? 'textarea' : t)) return;
+        if (f.value || f.disabled || f.readOnly || !shown(f) || !/^(text|search|number|email|url|tel|password|textarea)$/.test(f.tagName === 'TEXTAREA' ? 'textarea' : t)) return;
         f.value = t === 'number' ? '3' : t === 'email' ? 'test@localhost' : t === 'url' ? 'http://localhost/' : 'test';
         f.dispatchEvent(new Event('input', { bubbles: true }));
         f.dispatchEvent(new Event('change', { bubbles: true }));

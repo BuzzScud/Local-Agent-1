@@ -29,10 +29,11 @@
 //                 fable: the order below), opus, fable, or mix (opus and fable
 //                 take turns, one page request each; design-turn.json holds
 //                 whose turn it is)
-//   switches      settings.json "design": { auto, check, sets, style }; AGENTIC_DESIGN
-//                 (on|off), AGENTIC_DESIGN_SETS (all | set,set), AGENTIC_DESIGN_STYLE
-//                 and AGENTIC_LAYOUT (on|off, the browser check in
-//                 flows/layoutcheck.mjs) win over it
+//   switches      settings.json "design": { auto, check, sets, style, studio }; AGENTIC_DESIGN
+//                 (on|off), AGENTIC_DESIGN_SETS (all | set,set), AGENTIC_DESIGN_STYLE,
+//                 AGENTIC_LAYOUT (on|off, the browser check in flows/layoutcheck.mjs)
+//                 and AGENTIC_STUDIO (on|off, the design studio's pieces in
+//                 studio.mjs, which take the example card's place) win over it
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve, sep, relative, isAbsolute } from 'node:path';
 import { findPrivateDir } from '../app/docs-dir.mjs';
@@ -62,11 +63,14 @@ const onOff = (v) => (v === undefined || v === '' ? undefined : !/^(off|0|false|
 
 // What is switched on: the saved settings, with the environment on top.
 export function designSettings(saved = {}) {
-  const s = { auto: true, check: true, sets: 'all', style: 'auto', ...(saved && typeof saved === 'object' ? saved : {}) };
+  const s = { auto: true, check: true, sets: 'all', style: 'auto', studio: true, ...(saved && typeof saved === 'object' ? saved : {}) };
   const auto = onOff(process.env.AGENTIC_DESIGN);
   const check = onOff(process.env.AGENTIC_LAYOUT);
+  const studio = onOff(process.env.AGENTIC_STUDIO);
   if (auto !== undefined) s.auto = auto;
   if (check !== undefined) s.check = check;
+  if (studio !== undefined) s.studio = studio;
+  s.studio = s.studio !== false;
   const sets = process.env.AGENTIC_DESIGN_SETS?.trim();
   if (sets) s.sets = /^all$/i.test(sets) ? 'all' : sets.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
   if (s.sets !== 'all' && !Array.isArray(s.sets)) s.sets = 'all';

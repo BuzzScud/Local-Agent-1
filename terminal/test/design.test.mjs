@@ -193,18 +193,18 @@ test('DESIGN/ paths reach the folder read-only, as MATH/ does; climbing out does
 });
 
 test('the switches: saved settings, with AGENTIC_DESIGN, AGENTIC_LAYOUT and AGENTIC_DESIGN_SETS on top', () => {
-  const keep = { d: process.env.AGENTIC_DESIGN, l: process.env.AGENTIC_LAYOUT, s: process.env.AGENTIC_DESIGN_SETS, st: process.env.AGENTIC_DESIGN_STYLE };
+  const keep = { d: process.env.AGENTIC_DESIGN, l: process.env.AGENTIC_LAYOUT, s: process.env.AGENTIC_DESIGN_SETS, st: process.env.AGENTIC_DESIGN_STYLE, so: process.env.AGENTIC_STUDIO };
   try {
     delete process.env.AGENTIC_DESIGN; delete process.env.AGENTIC_LAYOUT; delete process.env.AGENTIC_DESIGN_SETS;
-    delete process.env.AGENTIC_DESIGN_STYLE;
-    expect(D.designSettings(undefined)).toEqual({ auto: true, check: true, sets: 'all', style: 'auto' });
-    expect(D.designSettings({ auto: false, sets: ['opus'] })).toEqual({ auto: false, check: true, sets: ['opus'], style: 'auto' });
+    delete process.env.AGENTIC_DESIGN_STYLE; delete process.env.AGENTIC_STUDIO;
+    expect(D.designSettings(undefined)).toEqual({ auto: true, check: true, sets: 'all', style: 'auto', studio: true });
+    expect(D.designSettings({ auto: false, sets: ['opus'] })).toEqual({ auto: false, check: true, sets: ['opus'], style: 'auto', studio: true });
     expect(D.designSettings({ style: 'fable' }).style).toBe('fable');
     expect(D.designSettings({ style: 'purple' }).style).toBe('auto'); // not a style: the usual order
     process.env.AGENTIC_DESIGN = 'on'; process.env.AGENTIC_LAYOUT = 'off'; process.env.AGENTIC_DESIGN_SETS = 'Fable, opus'; process.env.AGENTIC_DESIGN_STYLE = 'Mix';
-    expect(D.designSettings({ auto: false, style: 'opus' })).toEqual({ auto: true, check: false, sets: ['fable', 'opus'], style: 'mix' });
+    expect(D.designSettings({ auto: false, style: 'opus' })).toEqual({ auto: true, check: false, sets: ['fable', 'opus'], style: 'mix', studio: true });
   } finally {
-    for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_LAYOUT', keep.l], ['AGENTIC_DESIGN_SETS', keep.s], ['AGENTIC_DESIGN_STYLE', keep.st]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    for (const [k, v] of [['AGENTIC_DESIGN', keep.d], ['AGENTIC_LAYOUT', keep.l], ['AGENTIC_DESIGN_SETS', keep.s], ['AGENTIC_DESIGN_STYLE', keep.st], ['AGENTIC_STUDIO', keep.so]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
   }
 });
 
@@ -297,6 +297,21 @@ test.skipIf(!chrome)('in a real browser: the click pass finds the dead button an
   expect(L.layoutNote('weather.html', r.problems)).toMatch(/clicked its buttons/);
   const plain = await L.layoutCheck(join(dir, 'weather.html'), { chrome, clicks: false });
   expect(plain.problems.some((p) => /^Clicking /.test(p))).toBe(false);
+}, 60_000);
+
+// 30 Sep (the design studio's pieces): text for screen readers only is never drawn, so it
+// overlaps or is cut by nothing; and a sign-in button works once its password box is filled.
+const QUIET = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in</title>
+<style>.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border-width:0}.box{position:relative}.icon{position:absolute;left:0}</style></head>
+<body><div class="box"><label class="sr-only" for="q">Search the whole site for orders</label><span class="icon">⌕</span><input id="q"></div>
+<form id="f"><input type="email" required><input type="password" required><button>Sign in</button></form><p id="said"></p>
+<script>document.getElementById('f').onsubmit = function (e) { e.preventDefault(); document.getElementById('said').textContent = 'Signing in'; };</script></body></html>`;
+
+test.skipIf(!chrome)('in a real browser: screen-reader-only text is not "overlapping" or "cut", and a sign-in button counts once its password box is filled', async () => {
+  const dir = join(tmpdir(), `agentic-design-quiet-${process.pid}`); mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'signin.html'), QUIET);
+  const r = await L.layoutCheck(join(dir, 'signin.html'), { chrome });
+  expect(r.problems).toEqual([]);
 }, 60_000);
 
 test.skipIf(!chrome)('the agent: a page request brings the cards; the page it wrote is checked, sent back once, and checked again after the fix', async () => {
