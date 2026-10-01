@@ -13,6 +13,8 @@ import { MODELS, DEFAULT_MODEL, thinkingKwargs, Embedder, embedderReady, EMBEDDE
 import { loadSettings, saveSettings } from './store.mjs';
 import { readLimits } from './limits.mjs';
 import { howChosen } from '../agent/search.mjs';
+import { pickSkill, readSkills } from '../agent/prompt-files.mjs';
+import { FILES, filesData, saveFile, trySkill } from './prompt-files-hub.mjs';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 // What the model receives besides the system prompt, read from the same code the agent runs.
@@ -65,7 +67,8 @@ export function promptParts(prompt, sources) {
   add('general', 'General', 'yours', block, 'Tab 01, yours to edit', { edit: 'general', side: true });
   add('planning', 'Planning', 'yours', at('\n\nPlanning\n', block) + 2, 'Tab 02, yours to edit', { edit: 'planning', side: true });
   const end = at(INSTRUCTION_END);
-  add('tooluse', 'Tool use', 'built', at('\nTool use\n', end) + 1, 'Built in');
+  add('tooluse', 'Tool use', 'yours', at('\nTool use\n', end) + 1, 'terminal/rules/TOOLS.md, tab 07', { edit: 'tools' });
+  add('skills', 'Skills list', 'yours', at('\nSkills\n', end) > 0 ? at('\nSkills\n', end) + 1 : -1, 'terminal/rules/SKILLS.md, tab 08', { edit: 'skills' });
   add('habits', 'Work habits', 'built', at('\nWork habits\n', end) > 0 ? at('\nWork habits\n', end) + 1 : -1, 'Built in (new 30 Sep: how Opus and Fable work)');
   add('example', 'Worked example', 'built', at('\nExample of good work', end) > 0 ? at('\nExample of good work', end) + 1 : -1, 'Built in (AGENTIC_EXAMPLE=1)');
   add('bugs', 'Fixing a bug', 'built', at('\nFixing a bug\n', end) > 0 ? at('\nFixing a bug\n', end) + 1 : -1, 'terminal/rules/bug-fixing.md');
@@ -195,7 +198,13 @@ async function tryRequest(cwd, text) {
   const rows = off ? 'Embedder is Off in /effort, so by words.' : r.chosen && (r.chosen.order === 'hybrid' || r.chosen.reranked) ? `/effort's Search rows: chosen ${howChosen(r.chosen, r.how)}.` : null;
   const row = (f) => ({ kind: f.kind, text: f.text.replace(/\s+/g, ' ').slice(0, 240), close: f.close });
   return { request, how: r.how, ms: r.ms, note: [rows, r.note].filter(Boolean).join(' ') || null, cut: r.how === 'meaning' ? model.cut : null,
-    attached: r.facts.map(row), near: (r.near ?? []).map(row), goesAlong: recallNotes(r.facts), design: designTry(cwd, request) };
+    attached: r.facts.map(row), near: (r.near ?? []).map(row), goesAlong: recallNotes(r.facts), design: designTry(cwd, request), skill: skillTry(request) };
+}
+
+// "Try a request": the skill from SKILLS.md that would go along (App way; on Model only the list).
+function skillTry(request) {
+  const s = pickSkill(request, readSkills());
+  return s ? { name: s.name, slug: s.slug, matched: s.matched } : null;
 }
 
 // "Try a request": the design cards that would go along, found the way the
@@ -218,18 +227,30 @@ export async function instructionsRoute(req, url, cwd, home, { onDesign } = {}) 
   try {
     const folder = url.searchParams.get('folder') || undefined;
     if (url.pathname === '/instructions.json' && req.method === 'GET') return json(await withTokens(instructionsData(cwd, home, { folder })));
-    if (['/instructions/save', '/instructions/undo', '/instructions/recall', '/instructions/design-style'].includes(url.pathname) && req.method === 'POST') {
+    // The Prompt files tabs (prompt-files-hub.mjs): AGENTS.md of a known folder, TOOLS.md and SKILLS.md.
+    if (url.pathname === '/instructions/files.json' && req.method === 'GET') {
+      const at = folder && knownFolders(cwd).some((f) => f.path === folder) ? folder : cwd;
+      return json(filesData(at, { state: home }));
+    }
+    const filesPost = ['/instructions/files/save', '/instructions/files/undo', '/instructions/files/try'].includes(url.pathname);
+    if ((filesPost || ['/instructions/save', '/instructions/undo', '/instructions/recall', '/instructions/design-style'].includes(url.pathname)) && req.method === 'POST') {
       if (!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type') ?? '')) return json({ error: 'Send JSON.' }, 415);
       const reader = req.body?.getReader();
       if (!reader) return json({ error: 'Provide instructions and a revision.' }, 400);
       const chunks = []; let size = 0;
       for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength;
-        if (size > 80_000) { await reader.cancel(); return json({ error: 'Request is too large.' }, 413); } chunks.push(value); }
+        if (size > (filesPost ? 400_000 : 80_000)) { await reader.cancel(); return json({ error: 'Request is too large.' }, 413); } chunks.push(value); }
       let data;
       try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json({ error: 'The request body is not valid JSON.' }, 400); }
       if (!data || typeof data !== 'object') return json({ error: 'Provide instructions and a revision.' }, 400);
       const at = data.folder && knownFolders(cwd).some((f) => f.path === data.folder) ? data.folder : cwd;
       if (url.pathname === '/instructions/recall') return json(await tryRequest(at, data.request));
+      if (url.pathname === '/instructions/files/try') return json(trySkill(data.request, data.text));
+      if (filesPost) {
+        if (!FILES.includes(data.file)) return json({ error: 'Pick AGENTS.md, TOOLS.md or SKILLS.md.' }, 400);
+        const info = saveFile(data.file, at, data.text, data.revision, { state: home, undo: url.pathname.endsWith('/undo') });
+        return json({ ...filesData(at, { state: home }), saved: info.file });
+      }
       if (url.pathname === '/instructions/design-style') {
         if (!STYLES.includes(data.style)) return json({ error: `The styles: ${STYLES.join(', ')}.` }, 400);
         // Saved like /design style: in settings.json, and told to the running app.

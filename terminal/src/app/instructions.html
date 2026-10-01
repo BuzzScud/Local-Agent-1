@@ -18,9 +18,13 @@
 .rank{margin:0;font-size:12px;color:var(--muted);background:var(--soft);border-radius:10px;padding:9px 12px;line-height:1.6}.rank b{color:var(--ink);font-weight:600}
 .srclist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px}.src{border:1px solid var(--line);border-radius:10px;background:var(--surface)}.src summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:3px 14px;align-items:center;padding:11px 14px}.src summary::-webkit-details-marker{display:none}.src summary:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:10px}.src-name{font-weight:600;font-size:13px;overflow-wrap:anywhere}.src-name small{font-weight:400;color:var(--muted);font-size:12px;margin-left:8px}.src-size{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;min-width:90px}.src-path{grid-column:1/-1;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);overflow-wrap:anywhere}.src-path:before{content:'▸ ';color:var(--muted)}.src[open] .src-path:before{content:'▾ '}.src pre{margin:0 14px 14px;max-height:280px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border-radius:8px;padding:12px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
 .chip{font-size:11px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);white-space:nowrap;text-align:center;min-width:72px}.chip.whole{color:var(--green)}.chip.part{color:var(--amber)}.chip.left{color:var(--red)}
+.group-eyebrow{margin-top:14px}.filebar{display:flex;flex-direction:column;gap:8px}.file-note{margin:0;font-size:12px;color:var(--muted);line-height:1.55;background:var(--soft);border-radius:10px;padding:9px 12px}.file-note b{color:var(--ink);font-weight:600}.file-note.warn{color:var(--amber)}.file-note.warn b{color:var(--amber)}
+.skills-row{display:flex;gap:6px 8px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}.skill-chip{border:1px solid var(--line);border-radius:20px;padding:3px 10px;background:var(--surface);color:var(--ink);white-space:nowrap}.skill-chip small{color:var(--muted);margin-left:6px}.skill-chip.hit{border-color:var(--green);color:var(--green)}.skills-problems{color:var(--amber)}
+.try-row{display:flex;gap:8px;align-items:center}.try-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);padding:7px 12px;font-size:12px}.try-row input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--tint)}.try-row button{padding:7px 12px;font-size:12px}.try-out{font-size:12px;color:var(--muted);min-width:0;flex:1.2;overflow-wrap:anywhere}.try-out b{color:var(--ink);font-weight:600}
 .design-meta{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}.design-meta label{display:flex;gap:6px;align-items:center;color:var(--ink);font-weight:600}.design-meta span{flex:1;min-width:200px}
+@media(max-height:900px){.aside-note{display:none}.nav{padding:8px 12px}}
 @media(max-width:850px){.page{padding:20px 16px;gap:14px}.workspace{grid-template-columns:185px 1fr}.section-head,.body{padding:18px}.footer{padding:14px 18px;flex-wrap:wrap}.status{flex-basis:100%}.badge{display:none}.hint{gap:12px;font-size:11px}}
-@media(max-width:580px){.page{height:auto;min-height:100dvh}.workspace{display:flex;flex-direction:column}aside{display:grid;grid-template-columns:1fr 1fr;border-right:0;border-bottom:1px solid var(--line);padding:10px}.aside-note,aside>.eyebrow{display:none}.nav{font-size:12px;padding:8px}.nav small{font-size:10px}textarea{min-height:380px}.readview{max-height:440px}.hint{flex-direction:column;gap:7px}}
+@media(max-width:580px){.scope label{flex:1 1 100%;min-width:0}.scope select{flex:1;min-width:0;max-width:none;width:100%}.page{height:auto;min-height:100dvh}.workspace{display:flex;flex-direction:column}aside{display:grid;grid-template-columns:1fr 1fr;border-right:0;border-bottom:1px solid var(--line);padding:10px}.aside-note,aside>.eyebrow{display:none}.nav{font-size:12px;padding:8px}.nav small{font-size:10px}textarea{min-height:380px}.readview{max-height:440px}.hint{flex-direction:column;gap:7px}}
 
 .howto{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:22px}.howto-flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px}.howto-node{position:relative;text-align:left;padding:16px 12px;border-radius:12px;background:var(--soft)}.howto-node:not(:last-child):after{content:'→';position:absolute;right:-14px;top:40%;color:var(--muted);pointer-events:none}.howto-node:hover:not(:disabled),.howto-node:focus-visible{transform:translateY(-4px);box-shadow:0 8px 20px #0001}.howto-node[aria-pressed=true]{border-color:var(--blue);background:var(--tint)}.howto-node .step-number{display:block;font:11px ui-monospace,monospace;color:var(--blue);margin-bottom:12px}.howto-node strong{display:block;font-size:13px}.howto-node small{display:block;font-size:10px;color:var(--muted);margin-top:5px}.howto-loop{text-align:center;color:var(--muted);font-size:12px}.howto-loop span{color:var(--green)}.howto-detail{border:1px solid var(--line);border-radius:12px;padding:22px;display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:22px;background:var(--soft)}.howto-detail h3{font-size:21px;margin:7px 0 9px;letter-spacing:-.4px}.howto-detail p{color:var(--muted);font-size:12px;line-height:1.6;margin:0}.howto-detail .part{font-size:12px;margin-top:10px}.howto-detail .part span{display:block;color:var(--muted);font-size:11px}.howto-detail .tip+.tip{margin-top:16px}.howto-detail .tip strong{display:block;color:var(--green);font-size:10px;letter-spacing:.08em;margin-bottom:5px}.howto-detail .tip:last-child strong{color:var(--blue)}.howto-note{font-size:11px;color:var(--muted);text-align:center}.howto-detail.changing{animation:howto-in .18s ease-out}@keyframes howto-in{from{opacity:.5;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media(max-width:1050px){.howto{gap:14px}.howto-flow{gap:12px}.howto-node{padding:12px 8px}.howto-node strong{font-size:11px}.howto-node small{font-size:9px}.howto-node:not(:last-child):after{right:-12px}.howto-detail{padding:16px;gap:14px}.howto-detail h3{font-size:18px}}
@@ -38,13 +42,19 @@
 <button class="nav" role="tab" id="tab-context" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="context">03 &nbsp; Project context<small>Notes files · which wins</small></button>
 <button class="nav" role="tab" id="tab-preview" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="preview">04 &nbsp; Prompt preview<small>Every part and its cost</small></button>
 <button class="nav" role="tab" id="tab-howto" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="howto">05 &nbsp; How to<small>How it works · interactive guide</small></button>
+</div><div class="eyebrow group-eyebrow">Prompt files</div><div role="tablist" aria-label="Prompt files">
+<button class="nav" role="tab" id="tab-agents" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="agents">06 &nbsp; AGENTS.md<small>Rules · this project</small></button>
+<button class="nav" role="tab" id="tab-tools" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="tools">07 &nbsp; TOOLS.md<small>How to use the tools</small></button>
+<button class="nav" role="tab" id="tab-skills" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="skills">08 &nbsp; SKILLS.md<small>Steps picked by words</small></button>
 </div><div class="aside-note"><strong>One agent, a clearer plan.</strong>Planning uses the active model and existing task list. No separate planner model is added.<br><br>Project rules remain in their source files. Tool permissions are enforced by the app.</div></aside>
 <section class="editor" id="panel" role="tabpanel" aria-labelledby="tab-general">
 <div class="section-head"><h2 id="section-title">General instructions</h2><p id="description">Loading your instructions…</p></div>
 <div class="body">
+<div class="scope" id="scope" hidden><label id="view-label">View <select id="preview-kind"><option value="main">Main agent prompt</option><option value="cost">What each part costs</option><option value="focused">Focused coding calls</option><option value="tools">Tools sent with it</option><option value="added">Added to each request</option><option value="models">Gemma and Qwen settings</option></select></label><label>Folder <select id="folder" aria-label="Show the prompt for this folder"></select></label><span class="scope-info" id="scope-info"></span></div>
+<div class="filebar" id="filebar" hidden><p class="file-note" id="file-note"></p><p class="file-note warn" id="file-warn" hidden></p></div>
 <textarea id="text" aria-label="General instructions" spellcheck="false" disabled></textarea>
 <div class="meta" id="edit-meta"><button class="text-button" id="defaults" disabled>Use recommended defaults</button><span id="count"></span></div>
-<div class="scope" id="scope" hidden><label id="view-label">View <select id="preview-kind"><option value="main">Main agent prompt</option><option value="cost">What each part costs</option><option value="focused">Focused coding calls</option><option value="tools">Tools sent with it</option><option value="added">Added to each request</option><option value="models">Gemma and Qwen settings</option></select></label><label>Folder <select id="folder" aria-label="Show the prompt for this folder"></select></label><span class="scope-info" id="scope-info"></span></div>
+<div class="filebar" id="skills-bar" hidden><div class="skills-row" id="skills-row" aria-live="polite"></div><form class="try-row" id="skill-try"><input id="skill-try-input" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="Try a request, for example: add a test for the login page" aria-label="Try a request to see which skill it brings"><button type="submit" id="skill-try-run">Which skill?</button><span class="try-out" id="skill-try-out" aria-live="polite"></span></form></div>
 <p class="preview-note" id="preview-note" hidden></p>
 <p class="rank" id="rank" hidden><b>Which wins:</b> ① your words in the chat › ② these notes › ③ General and Planning (tabs 01–02) › ④ the built-in defaults. The app's own blocks (folders outside the project, rm -rf, git push…) hold whatever the notes say.</p>
 <section class="cost" id="cost" aria-label="What the prompt costs" hidden><div class="cost-head" id="cost-head"></div><div class="bar" id="bar" role="list" aria-label="The model's memory, by part"></div><div class="legend" id="legend"></div></section>
@@ -72,13 +82,22 @@
 'use strict';
 const $ = id => document.getElementById(id);
 let state, draft, section = 'general', busy = false, error = '';
+// The Prompt files tabs (06–08): the files as read (files.files[f]) and their drafts.
+let files = null, fileDraft = {};
+const FILE_TABS = ['agents', 'tools', 'skills'];
+const isFile = (s = section) => FILE_TABS.includes(s);
 const editable = () => section === 'general' || section === 'planning';
-const dirty = () => !!state && Object.keys(state.sections).some(k => draft[k] !== state.sections[k]);
+const sectionsDirty = () => !!state && Object.keys(state.sections).some(k => draft[k] !== state.sections[k]);
+const fileDirty = f => !!files && fileDraft[f] !== undefined && fileDraft[f] !== files.files[f].text;
+const dirty = () => sectionsDirty() || FILE_TABS.some(fileDirty);
 window.instructionsDirty = dirty;
-const titles = {general:'General instructions',planning:'Planning instructions',context:'Project context',preview:'Effective prompt preview',howto:'How to'};
-const descriptions = {general:'Ground changes in evidence, preserve scope, and report what was actually verified.',planning:'Use a short plan for complex work. Define success, update the plan, and check the result.',context:'The notes files and the memory the model reads in the chosen folder: what kind each is, how much of it arrives, and which wins. Edit the original files to change them.',preview:'The real prompt with your draft inserted, what each part costs, and the other things the model receives: its tools, what is added to each request, and each model’s settings.',howto:'How it works · Hover or select a step to see what powers it and how to improve it.'};
+const titles = {general:'General instructions',planning:'Planning instructions',context:'Project context',preview:'Effective prompt preview',howto:'How to',agents:'AGENTS.md',tools:'TOOLS.md',skills:'SKILLS.md'};
+const descriptions = {general:'Ground changes in evidence, preserve scope, and report what was actually verified.',planning:'Use a short plan for complex work. Define success, update the plan, and check the result.',context:'The notes files and the memory the model reads in the chosen folder: what kind each is, how much of it arrives, and which wins. Edit the original files to change them.',preview:'The real prompt with your draft inserted, what each part costs, and the other things the model receives: its tools, what is added to each request, and each model’s settings.',howto:'How it works · Hover or select a step to see what powers it and how to improve it.',
+ agents:'The rules file of the folder you pick. Agentic Coder reads it when it works in that folder or one below it, and Codex and Claude Code read it there too.',
+ tools:'The Tool use lines in every conversation. The tools themselves are built into the app; these lines say how to use them.',
+ skills:'Steps for kinds of task. A request that uses a skill’s Words brings its steps, and every skill is listed so the model can open one the words missed.'};
 // The parts of the prompt, grouped by where they come from (colours checked for colour-blind readers, light and dark).
-const GROUPS = {built:'Built in', yours:'Your General + Planning', session:'This session', notes:'Notes files', memory:'Memory', tools:'Tools'};
+const GROUPS = {built:'Built in', yours:'Yours: tabs 01–02 and 07–08', session:'This session', notes:'Notes files', memory:'Memory', tools:'Tools'};
 const KEPT = {disk:'On disk', folder:'This folder today', unknown:'With every request'};
 const counted = () => state.cost.tokenizer ? `Counted by ${state.cost.tokenizer}’s own tokenizer.` : state.cost.busy ? `≈ estimated: ${state.cost.busy} was busy and did not answer in time (Reload to try again).` : '≈ estimated at 3.6 characters a token; start a model for exact counts.';
 const approx = () => state.cost.tokenizer ? '' : '≈';
@@ -113,6 +132,7 @@ function recallText() {
   ...r.attached.map(line),
   ...(r.near.length ? ['  Next closest, not attached:', ...r.near.map(line)] : []),
   ...(r.goesAlong ? ['  The model would read this at the end of your message:', '    ' + r.goesAlong.replace(/\n/g, '\n    ')] : []),
+  r.skill ? `  Skill (tab 08): ${r.skill.name}, its words here: ${r.skill.matched.join(', ')}. Its steps would go with the request.` : '  Skill (tab 08): none. No skill’s words are in this request; the model still sees the list.',
   ...designLines(r.design),
   rule
  ].join('\n');
@@ -148,6 +168,8 @@ function addedText(s) {
   '',
   '5. After a fix path has run its check: what the check and the browser found.',
   '',
+  '6. A skill from SKILLS.md (tab 08) whose words the request uses: its steps, and the request goes step by step with them. When Who decides is Model (/effort), only the skills list is in the prompt and the model opens a skill itself.',
+  '',
   'A focused call also gets its workflow’s own instructions after the shared block: “Current subtask (follow its output format): …”.'
  ].join('\n');
 }
@@ -180,15 +202,26 @@ function viewNote(kind) {
  return 'Both models get the same prompt text. These settings are what differs.';
 }
 function controls() {
- const changed = dirty();
- $('save').disabled = busy || !state || !changed;
- $('undo').disabled = busy || !state || !state.undoCount;
+ const file = isFile(), f = file ? files?.files[section] : null;
+ const changed = file ? fileDirty(section) : sectionsDirty();
+ $('save').disabled = busy || (file ? !f || !f.path || !changed : !state || !changed);
+ $('undo').disabled = busy || (file ? !f || !f.undoCount : !state || !state.undoCount);
  $('reload').disabled = busy;
- $('defaults').disabled = busy || !state;
- $('text').disabled = busy || !state;
+ $('defaults').disabled = busy || (file ? !f : !state);
+ $('text').disabled = busy || (file ? !f : !state);
+ $('save').textContent = file ? 'Save ' + (f?.name ?? titles[section]) : 'Save instructions';
+ $('defaults').textContent = section === 'agents' ? 'Use the starter' : file ? 'Use the built-in copy' : 'Use recommended defaults';
  $('status').classList.toggle('error', !!error);
- $('status').textContent = error || (busy ? 'Saving…' : changed ? 'Unsaved changes · Save applies both sections to the next task.' : state ? (state.updatedAt ? 'Saved ' + new Date(state.updatedAt).toLocaleString() : 'Recommended defaults · no custom version saved') : 'Loading…');
+ $('status').textContent = error || (busy ? 'Saving…' : file ? fileStatus(f) : changed ? 'Unsaved changes · Save applies both sections to the next task.' : state ? (state.updatedAt ? 'Saved ' + new Date(state.updatedAt).toLocaleString() : 'Recommended defaults · no custom version saved') : 'Loading…');
  if (state && editable()) $('count').textContent = draft[section].length.toLocaleString() + ' / ' + state.limits[section].toLocaleString() + ' characters';
+ if (f) $('count').textContent = fileDraft[section].length.toLocaleString() + ' / ' + f.limit.toLocaleString() + ' characters' + (section === 'agents' ? ' · rules room ' + num(f.room) : '');
+}
+function fileStatus(f) {
+ if (!f) return 'Loading…';
+ if (!f.path) return `${f.name} is built into this copy of Agentic Coder: the repo is not on this Mac, so there is nowhere to save it.`;
+ if (fileDirty(section)) return `Unsaved changes · Save writes ${f.shown}; Agentic Coder reads it on your next message.`;
+ if (!f.exists) return section === 'agents' ? `No AGENTS.md in this folder yet · Save creates ${f.shown}.` : `No ${f.name} on disk: this is the copy built into the app · Save writes ${f.shown}.`;
+ return 'Saved on disk · Agentic Coder reads it on your next message.';
 }
 function show(id, on) { $(id).hidden = !on; }
 function render() {
@@ -196,14 +229,17 @@ function render() {
  $('panel').setAttribute('aria-labelledby', 'tab-' + section);
  $('section-title').textContent = titles[section]; $('description').textContent = descriptions[section];
  const kind = $('preview-kind').value, prev = section === 'preview', ctx = section === 'context';
- show('text', editable()); show('edit-meta', editable()); show('howto', section === 'howto');
- show('scope', prev || ctx); show('view-label', prev); show('preview-note', prev); show('rank', ctx); show('srclist', ctx);
+ const file = isFile();
+ show('text', editable() || file); show('edit-meta', editable() || file); show('howto', section === 'howto');
+ show('filebar', file); show('skills-bar', section === 'skills');
+ show('scope', prev || ctx || section === 'agents'); show('view-label', prev); show('preview-note', prev); show('rank', ctx); show('srclist', ctx);
  show('cost', prev && (kind === 'main' || kind === 'cost')); show('costview', prev && kind === 'cost');
  show('readview', prev && kind !== 'cost'); show('recall-box', prev && kind === 'added'); show('design-meta', prev && kind === 'added');
  $('tip').hidden = true;
  if (state) {
   if (editable()) { $('text').value = draft[section]; $('text').maxLength = state.limits[section]; $('text').setAttribute('aria-label', titles[section]); }
-  if (prev || ctx) renderScope();
+  if (file && files) { if ($('text').value !== fileDraft[section]) $('text').value = fileDraft[section]; $('text').maxLength = files.files[section].limit; $('text').setAttribute('aria-label', titles[section]); renderFile(); }
+  if (prev || ctx || section === 'agents') renderScope();
   if (prev) {
    $('preview-note').textContent = viewNote(kind);
    if (kind === 'main' || kind === 'cost') renderCost();
@@ -223,7 +259,7 @@ function renderScope() {
  sel.value = state.cwd;
  const used = state.notes.filter(n => n.kind !== 'memory').reduce((a, n) => a + n.text.length, 0);
  const left = state.notes.filter(n => n.status !== 'whole').length;
- $('scope-info').textContent = section === 'context'
+ $('scope-info').textContent = section === 'agents' ? 'Each folder has its own AGENTS.md.' : section === 'context'
   ? `Notes room ${num(used)} of ${num(state.notesRoom)} characters${left ? ` · ${left} file${left === 1 ? '' : 's'} cut or left out` : ' · every file whole'}${state.version === 'old' ? ' · AGENTIC_PROMPT=old' : ''}`
   : `${state.version === 'old' ? 'Old prompt (AGENTIC_PROMPT=old) · ' : ''}${['main', 'cost', 'focused'].includes($('preview-kind').value) ? 'Preview includes unsaved edits' : ''}`;
 }
@@ -282,7 +318,7 @@ function renderCostTable() {
  for (const p of parts) t.append(row([[p.name, '', `<i class="sw g-${p.group}"></i>`], [p.from + (p.status === 'part' ? ' · cut to fit' : ''), 'from'], [num(p.tokens), 'n'], [pct(p.tokens), 'n'], [KEPT[p.kept]], [p.side ? 'Yes' : '—'], [secs(p.tokens), 'n']]));
  const sum = (f) => parts.filter(f).reduce((a, p) => a + p.tokens, 0);
  const disk = sum(p => p.kept === 'disk'), again = sum(p => p.kept !== 'disk'), side = sum(p => p.side);
- t.append(row([['On disk'], ['restored at every start; changes when you save tabs 01–02'], [num(disk), 'n'], [pct(disk), 'n'], ['On disk'], [''], ['under 1 s', 'n']], 'sum'));
+ t.append(row([['On disk'], ['restored at every start; changes when you save tabs 01–02 or 07–08'], [num(disk), 'n'], [pct(disk), 'n'], ['On disk'], [''], ['under 1 s', 'n']], 'sum'));
  t.append(row([['Read again'], ['after a commit, a new day or a notes edit here'], [num(again), 'n'], [pct(again), 'n'], ['This folder today'], [''], [secs(again), 'n']], 'sum'));
  t.append(row([['Each side call'], ['General, Planning, the notes and the memory'], [num(side), 'n'], [pct(side), 'n'], [''], ['Yes'], [secs(side), 'n']], 'sum'));
  $('costview').replaceChildren(t);
@@ -309,6 +345,56 @@ function renderSources() {
   return d;
  }));
 }
+// A note made of plain text and bold parts: [text, ['b', text], …] (paths are never HTML).
+function put(el, parts) { el.replaceChildren(...parts.filter(x => x !== null && x !== '').map(x => Array.isArray(x) ? Object.assign(document.createElement(x[0]), {textContent: x[1]}) : document.createTextNode(x))); el.hidden = !parts.length; }
+// The drafts, read the way the agent reads them (agent/prompt-files.mjs): the Tool use section,
+// and each "## Name" skill with its Words and About lines.
+function sectionOf(text, heading) {
+ for (const part of text.split(/^## /m).slice(1)) { const nl = part.indexOf('\n'); if ((nl < 0 ? part : part.slice(0, nl)).trim().toLowerCase() === heading.toLowerCase()) return nl < 0 ? '' : part.slice(nl + 1).trim(); }
+ return null;
+}
+function draftSkills(text) {
+ return text.replace(/<!--[\s\S]*?-->/g, '').split(/^## /m).slice(1).map(part => {
+  const [head, ...lines] = part.split('\n'); const name = head.trim();
+  const field = k => (lines.find(l => l.toLowerCase().startsWith(`- ${k}:`)) ?? '').slice(k.length + 3).trim();
+  return {name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill', words: field('words').toLowerCase().split(',').map(w => w.trim()).filter(Boolean), about: field('about'), body: lines.filter(l => !/^- (words|about):/i.test(l)).join('\n').trim()};
+ }).filter(x => x.name);
+}
+let tried = null; // the last "Which skill?" answer
+function renderFile() {
+ const f = files.files[section], text = fileDraft[section], warn = [];
+ if (section === 'agents') {
+  const gets = !f.exists ? 'Not on disk yet: Save creates it, and Agentic Coder reads it on your next message here.'
+   : !f.gets ? 'Agentic Coder does not read it from here.'
+   : f.gets.status === 'whole' ? `Qwen gets it whole, in the ${num(f.room)}-character rules room it shares with the files around it.`
+   : f.gets.status === 'part' ? `Qwen gets part of it: the rules room (${num(f.room)} characters) left out ${f.gets.left.join(', ') || 'the rest'}.`
+   : `Left out: the rules room (${num(f.room)} characters) is full before it.`;
+  const others = f.others.length ? ` Also read here: ${f.others.map(o => o.name).join(', ')}.` : '';
+  put($('file-note'), [['b', f.shown], ' · ', gets, others]);
+  if (f.home) warn.push('This is your AGENTS.md for every folder under ~: every project gets it, and Codex and Claude Code (through ~/CLAUDE.md) read it too.');
+  if (f.claude?.read) warn.push('This folder’s rules are in CLAUDE.md today, and Agentic Coder reads that. Once AGENTS.md is saved here, it reads AGENTS.md and skips CLAUDE.md.');
+  if (text.length > f.room) warn.push(`Longer than the rules room (${num(f.room)} characters): Qwen gets the sections that fit, and is told which it did not get.`);
+ } else {
+  const where = [['b', f.shown ?? 'built into the app'], ' · in the repo: it ships with the app and is public on GitHub after a push.'];
+  if (section === 'tools') {
+   const lines = sectionOf(text, 'Tool use');
+   put($('file-note'), [...where, lines ? ` The ${lines.split('\n').filter(l => l.trim()).length} lines under ## Tool use go into every conversation (≈${num(Math.ceil(lines.length / 3.6))} tokens, read once and kept with the warm-up).` : '']);
+   if (!lines) warn.push('No "## Tool use" section with lines under it: Save needs one. Those lines are what the model gets.');
+   else if (!/Call one tool at a time/.test(lines)) warn.push('No “Call one tool at a time…” line: when Who decides is Model (/effort), the model’s own tool lines go at the end instead.');
+  } else {
+   const list = draftSkills(text);
+   put($('file-note'), [...where, list.length ? ` The list of skills (${list.length}) is in every conversation; a skill’s steps are read only with a request that uses its words.` : ' No skill is on, so nothing of this file is in the conversation yet.']);
+   const seen = new Map(), bad = [];
+   for (const k of list) { if (seen.has(k.slug)) bad.push(`“${k.name}” and “${seen.get(k.slug)}” both open as SKILLS/${k.slug}.`); seen.set(k.slug, k.name); if (!k.body) bad.push(`“${k.name}” has no steps.`); if (!k.words.length) bad.push(`“${k.name}” has no Words line, so no request brings it.`); }
+   warn.push(...bad);
+   const row = $('skills-row');
+   row.replaceChildren(...(list.length ? list.map(k => { const c = document.createElement('span'); c.className = 'skill-chip' + (tried?.skill?.slug === k.slug ? ' hit' : ''); c.title = `SKILLS/${k.slug}${k.about ? ': ' + k.about : ''}\nWords: ${k.words.join(', ') || 'none'}`; c.append(k.name, Object.assign(document.createElement('small'), {textContent: `${k.words.length} words · ≈${num(Math.ceil(k.body.length / 3.6))} tokens`})); return c; }) : [document.createTextNode(/<!--[\s\S]*##[\s\S]*-->/.test(text) ? 'No skills on yet. The example at the end turns on when you delete the <!-- and --> lines around it.' : 'No skills yet: add a “## Name” section with a “- Words:” line and its steps.')]));
+  }
+  if (!f.fromDisk && f.path) warn.push(`Showing the copy built into the app: there is no ${f.name} on disk.`);
+ }
+ put($('file-warn'), warn.length ? [warn.join(' ')] : []);
+}
+
 // The design style row (Added to each request): saved at once, like /design style.
 function renderDesign() {
  const d = state.design, sel = $('design-style');
@@ -318,29 +404,52 @@ function renderDesign() {
  $('design-info').textContent = !d.dir ? 'No design examples folder yet.' : `${d.on ? '' : 'Off (/design on) · '}${sets}. Words like “minimal”, “compact”, “playful” or “dark” in a request bring that look.${d.fromEnv ? ' AGENTIC_DESIGN_STYLE decides the style.' : ''}`;
 }
 function accept(value) { state = value; folder = state.cwd; draft = {...state.sections}; error = ''; render(); }
-// Another folder: the same instructions, so an unsaved draft stays.
+// The files as read; keep: the tabs whose unsaved drafts stay.
+function acceptFiles(value, keep = []) {
+ files = value;
+ for (const f of FILE_TABS) if (!keep.includes(f) || fileDraft[f] === undefined) fileDraft[f] = files.files[f].text;
+}
+// The instructions again (the preview and the notes follow the files), keeping the General and Planning drafts.
+async function refreshState() { const keep = draft, was = state?.revision; state = await api('/instructions.json'); folder = state.cwd; draft = state.revision === was ? keep : {...state.sections}; }
+// Another folder: the same instructions, so an unsaved draft stays. Its AGENTS.md is another file.
 async function switchFolder(path) {
+ if (fileDirty('agents') && !confirm('Discard your unsaved AGENTS.md edits for the other folder?')) { $('folder').value = folder; return; }
  folder = path; busy = true; controls();
- try { const keep = draft, was = state.revision; state = await api('/instructions.json'); folder = state.cwd; draft = state.revision === was ? keep : {...state.sections}; error = ''; }
+ try { await refreshState(); acceptFiles(await api('/instructions/files.json'), ['tools', 'skills']); error = ''; }
  catch (e) { error = e.message; }
  finally { busy = false; render(); }
 }
 async function reload() {
  if (dirty() && !confirm('Discard your unsaved edits and load the saved version?')) return;
  busy = true; controls();
- try { accept(await api('/instructions.json')); } catch (e) { error = e.message; }
+ try { accept(await api('/instructions.json')); acceptFiles(await api('/instructions/files.json')); } catch (e) { error = e.message; }
  finally { busy = false; render(); }
 }
 async function save(undo = false) {
- if (!state || busy || (!undo && !dirty())) return;
- if (undo && !confirm(dirty() ? 'Discard your unsaved edits and restore the previous saved version?' : 'Restore the previous saved version?')) return;
+ if (isFile()) return saveFile(undo);
+ if (!state || busy || (!undo && !sectionsDirty())) return;
+ if (undo && !confirm(sectionsDirty() ? 'Discard your unsaved edits and restore the previous saved version?' : 'Restore the previous saved version?')) return;
  busy = true; error = ''; controls();
  try { accept(await api('/instructions/' + (undo ? 'undo' : 'save'), {sections:draft,revision:state.revision})); }
  catch (e) { error = e.message + ' Your edits are still here.'; }
  finally { busy = false; render(); }
 }
+// A prompt file: written where the tab says, then read again with everything that follows it.
+async function saveFile(undo) {
+ const which = section, f = files?.files[which];
+ if (!f || busy || (!undo && !fileDirty(which))) return;
+ if (undo && !confirm(`${fileDirty(which) ? 'Discard your unsaved edits and put' : 'Put'} back ${f.name} as it was before the last save here?`)) return;
+ busy = true; error = ''; controls();
+ try {
+  const r = await api('/instructions/files/' + (undo ? 'undo' : 'save'), {file: which, text: fileDraft[which], revision: f.revision});
+  acceptFiles(r, FILE_TABS.filter(x => x !== which));
+  await refreshState();
+ }
+ catch (e) { error = e.message + (undo ? '' : ' Your edits are still here.'); }
+ finally { busy = false; render(); }
+}
 const tabs = [...document.querySelectorAll('[data-section]')];
-tabs.forEach((b, i) => { b.onclick = () => { section = b.dataset.section; render(); }; b.onkeydown = e => { let next;
+tabs.forEach((b, i) => { b.onclick = () => { section = b.dataset.section; tried = null; $('skill-try-out').textContent = ''; try { history.replaceState(null, '', '#' + section); } catch {} render(); }; b.onkeydown = e => { let next;
  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (i + 1) % tabs.length;
  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (i + tabs.length - 1) % tabs.length;
  if (e.key === 'Home') next = 0; if (e.key === 'End') next = tabs.length - 1;
@@ -378,8 +487,20 @@ howtoNodes.forEach((node, index) => {
 });
 selectStep(0, false);
 
-$('text').oninput = () => { draft[section] = $('text').value; controls(); };
-$('defaults').onclick = () => { if (!state || !editable()) return; draft[section] = state.defaults[section]; error = ''; render(); };
+$('text').oninput = () => { if (isFile()) { fileDraft[section] = $('text').value; renderFile(); } else draft[section] = $('text').value; controls(); };
+$('defaults').onclick = () => {
+ if (isFile()) { const f = files?.files[section]; if (!f) return; if (fileDraft[section] !== f.starter && fileDraft[section].trim() && !confirm(`Replace the text here with ${section === 'agents' ? 'the starter' : 'the copy built into the app'}? Nothing is saved until you press Save.`)) return; fileDraft[section] = f.starter; error = ''; render(); return; }
+ if (!state || !editable()) return; draft[section] = state.defaults[section]; error = ''; render();
+};
+$('skill-try').onsubmit = async e => {
+ e.preventDefault();
+ const request = $('skill-try-input').value.trim(); if (!request) return;
+ $('skill-try-run').disabled = true;
+ try { tried = await api('/instructions/files/try', {request, text: fileDraft.skills});
+  put($('skill-try-out'), tried.skill ? ['Brings ', ['b', tried.skill.name], ` (its words here: ${tried.skill.matched.join(', ')}; ≈${num(tried.skill.tokens)} tokens with the request).`] : ['No skill: none of their words are in it. The model still sees the list.']); }
+ catch (err) { tried = null; put($('skill-try-out'), [err.message]); }
+ $('skill-try-run').disabled = false; $('skill-try-out').hidden = false; renderFile();
+};
 $('preview-kind').onchange = render;
 $('folder').onchange = () => switchFolder($('folder').value);
 $('costview').onmouseleave = () => { $('tip').hidden = true; };
@@ -401,6 +522,9 @@ $('recall-box').onsubmit = async e => {
 $('save').onclick = () => save(); $('undo').onclick = () => save(true); $('reload').onclick = reload;
 window.addEventListener('beforeunload', e => { if (dirty() && !window.instructionsLeaving) { e.preventDefault(); e.returnValue = ''; } });
 window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); } });
+// A tab named in the address (#agents, #skills…) opens first, and a new one opens it.
+{ const want = location.hash.slice(1); if (tabs.some(b => b.dataset.section === want)) section = want; }
+window.addEventListener('hashchange', () => { const b = tabs.find(x => x.dataset.section === location.hash.slice(1)); if (b && b.dataset.section !== section) b.click(); });
 reload();
 })();
 </script></body></html>

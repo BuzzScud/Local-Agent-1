@@ -7,6 +7,7 @@ import { instructionBlock } from './instructions.mjs';
 import { RULES } from './rules.mjs';
 import { memoryNotes } from './facts.mjs';
 import { rulesRoomFor } from './room.mjs';
+import { toolUseText, TOOL_USE_OLD, readSkills, skillsList } from './prompt-files.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Agentic Coder answers from what it knows there, and goes into a
@@ -199,9 +200,13 @@ export const NOTES_RANK = "These are the user's and this project's own rules. Wh
 // The user's calendar day, not UTC's: after 8 pm in New York the UTC date is already tomorrow.
 export const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions }) {
+// toolUse and skills: terminal/rules/TOOLS.md and SKILLS.md as they are now
+// (prompt-files.mjs); the old prompt keeps the Tool use lines it had and no skills.
+export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions, toolUse, skills }) {
   const today = localDay(date);
   const now = promptVersion() !== 'old';
+  const tooling = toolUse ?? (now ? toolUseText() : TOOL_USE_OLD);
+  const list = now ? skillsList(skills ?? readSkills()) : '';
   return `You are Agentic Coder, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.
 
 You are inside the project's folder. Use paths relative to it, and "." for the folder itself. Never type a full path.
@@ -209,11 +214,9 @@ You are inside the project's folder. Use paths relative to it, and "." for the f
 ${instructionBlock(instructions)}
 
 Tool use
-- Use List, Search and Read to find the code; try a shorter search if needed.
-- To change an existing file, use Edit with old_text copied exactly from Read, without line numbers. Include enough context to match once. Use Write for new files.
-- Call one tool at a time and wait for its result.
+${tooling}
 
-${now ? `${WORK_HABITS}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
+${list ? `${list}\n\n` : ''}${now ? `${WORK_HABITS}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}${RULES.always ? `Fixing a bug\n${RULES.always}\n\n` : ''}Rules
 - Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; a vague request such as "fix the bug" means this folder only.
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.

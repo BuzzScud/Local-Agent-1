@@ -14,6 +14,8 @@
 // The technical recoveries stay on both ways: a reply that repeats itself, a call cut off at the
 // reply limit, thinking that ran out of room, the step limit, the same step three times.
 
+import { toolUseText } from './prompt-files.mjs';
+
 export const WAYS = ['app', 'model'];
 export const wayOf = (v) => (v === 'model' ? 'model' : 'app');
 export const wayEnv = (env = process.env) => env.AGENTIC_WAY ?? env.BONSAI_WAY;
@@ -97,11 +99,23 @@ export const MODEL_TOOL_LINES = `- You decide how to do the task. Map shows how 
 export const ANSWER_HABIT = '- When you answer a question, add the one thing that helps next, in a line: where it is used, or a short worked example.';
 
 // Either way, from a prompt of either way: switching the row mid-conversation turns it back too.
+// TOOLS.md (prompt-files.mjs) may leave out the one-at-a-time line: the model's lines then go at
+// the end of Tool use, and going back takes them out without adding that line.
 export function wayPrompt(system, way) {
   if (typeof system !== 'string') return system;
-  if (way !== 'model') return system.includes(MODEL_TOOL_LINES) ? system.replace(MODEL_TOOL_LINES, ONE_AT_A_TIME).replace(`\n${ANSWER_HABIT}`, '') : system;
+  if (way !== 'model') {
+    if (!system.includes(MODEL_TOOL_LINES)) return system;
+    const back = toolUseText().includes(ONE_AT_A_TIME) ? system.replace(MODEL_TOOL_LINES, ONE_AT_A_TIME) : system.replace(`\n${MODEL_TOOL_LINES}`, '');
+    return back.replace(`\n${ANSWER_HABIT}`, '');
+  }
   if (system.includes(MODEL_TOOL_LINES)) return system;
-  let s = system.includes(ONE_AT_A_TIME) ? system.replace(ONE_AT_A_TIME, MODEL_TOOL_LINES) : system;
+  let s = system;
+  if (s.includes(ONE_AT_A_TIME)) s = s.replace(ONE_AT_A_TIME, MODEL_TOOL_LINES);
+  else {
+    const tools = s.indexOf('\nTool use\n');
+    const end = tools >= 0 ? s.indexOf('\n\n', tools + 1) : -1;
+    if (end > 0) s = `${s.slice(0, end)}\n${MODEL_TOOL_LINES}${s.slice(end)}`;
+  }
   // After the Work habits' last line, when the prompt has them (AGENTIC_PROMPT=old does not).
   const habits = s.indexOf('Work habits\n');
   if (habits >= 0) {

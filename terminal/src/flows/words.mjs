@@ -62,8 +62,10 @@ export const isPageRequest = (t) => MAKE_PAGE.test(t) && !CODE_FILE.test(t) && !
 
 // The line under your request: which path was picked.
 const NAMES = { rename: 'rename', fix: 'fix', change: 'change', question: 'question', other: 'task', 'follow-up': 'follow-up' };
-export function sortLine(kind, { shortcut = false } = {}) {
+export function sortLine(kind, { shortcut = false, skill = null } = {}) {
   if (kind === 'follow-up') return 'Sorted as: follow-up · continues the conversation';
   const name = NAMES[kind] ?? 'task';
+  // A skill from SKILLS.md came with it (prompt-files.mjs): always step by step.
+  if (skill) return `Sorted as: ${name} · skill "${skill}" · step by step`;
   return `Sorted as: ${name} · ${shortcut && ['rename', 'fix', 'change'].includes(kind) ? 'shortcut' : 'step by step'}`;
 }

@@ -285,6 +285,29 @@ get; with a model running, the counts come from its own tokenizer. Its "Added to
 view also picks the design style (Auto, Opus, Fable or Mix) and shows the design cards a request
 would bring.
 
+**Prompt files** (tabs 06–08, since 30 Sep 2026) edit the three Markdown files the model is given,
+each saved as a real file and read again before your next message:
+- **06 AGENTS.md**: the rules file of the folder you pick (the same Folder menu). Saving creates
+  it when there is none; the tab says how much of it Qwen gets in the rules room, and when this
+  folder's CLAUDE.md is what is read today.
+- **07 TOOLS.md** (`terminal/rules/TOOLS.md`): its `## Tool use` lines are the Tool use part of
+  the prompt, word for word. As shipped they are the lines from before, so nothing changes until
+  you edit them.
+- **08 SKILLS.md** (`terminal/rules/SKILLS.md`): steps for kinds of task. Each `## Name` has a
+  `- Words:` line and an `- About:` line, then its steps. When a request uses a skill's Words
+  (the one with most wins, a phrase counting twice), its steps go with that request and the work
+  goes step by step with them instead of the focused fix and change paths. Every skill is listed
+  in the prompt as `SKILLS/<name>`, so the model can open one the words missed with Read; when
+  Who decides is Model, only the list is given. The tab's "Which skill?" box shows what a request
+  would bring. As shipped, the one skill in it is an example switched off (between `<!--` and `-->`).
+
+TOOLS.md and SKILLS.md are in the repo, so they ship with the app and are public after a push
+(the app reads them from the repo named by the launcher, `AGENTIC_REPO`, or its built-in copies).
+A save never overwrites a change made elsewhere since the tab read the file, and Undo puts back
+the text before each save (20 a file, kept in `~/.agentic-coder/prompt-files/`). ▶ Run a test →
+**Skills check** measures a skill on the real model: the example on three test-writing tasks,
+without and with it.
+
 Since 30 Sep 2026 the built-in prompt has a **Work habits** block (how Opus and Fable work: act
 once you know enough, pick one way, report failures plainly, Read and Search over cat and grep…),
 names each notes file's kind and says which notes win. `AGENTIC_PROMPT=old` gives the prompt from

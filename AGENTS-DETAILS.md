@@ -103,6 +103,17 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   skipped once is kept in `state.json` (`declined`) and not offered again; `/memory` ends with a 7-day health line.
   With `"memory": false` nothing is saved: the old `notes.md` writer is gone, and a leftover notes file is no longer read as rules (since 30 Sep 2026 only AGENTS.md and CLAUDE.md are, from the working folder up to your home folder).
 
+## The prompt files
+
+- **TOOLS.md and SKILLS.md** (`terminal/rules/`, since 30 Sep 2026) are read by `terminal/src/agent/prompt-files.mjs`
+  at each use: TOOLS.md's `## Tool use` lines are the Tool use part of the prompt, and SKILLS.md's skills
+  (`## Name`, `- Words:`, `- About:`, steps) are listed in the prompt as `SKILLS/<name>` and brought with a
+  request whose words they use. The hub's Instructions tabs 06–08 save them and a folder's AGENTS.md
+  (`terminal/src/app/prompt-files-hub.mjs`). As shipped they change nothing: the Tool use lines from before,
+  and the one skill is an example switched off. A test that reads the prompt sets `AGENTIC_RULES_DIR` to a
+  folder of its own, so the shipped files never decide what it sees (`terminal/test/prompt-files.test.mjs`).
+  The Arena's Skills check measures a skill on the real model.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

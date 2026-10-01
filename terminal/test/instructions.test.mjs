@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DEFAULT_INSTRUCTIONS, instructionFile, readInstructions, saveInstructions, validateInstructions, focusedInstructions } from '../src/agent/instructions.mjs';
@@ -18,9 +18,15 @@ import { planFiles } from '../src/flows/multi.mjs';
 import { startWeightsServer } from '../src/app/weights.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER } from '../../models/index.mjs';
-let home, oldHome;
-beforeEach(() => { oldHome = process.env.AGENTIC_HOME; home = mkdtempSync(join(tmpdir(), 'agentic-instructions-')); process.env.AGENTIC_HOME = home; });
-afterEach(() => { if (oldHome === undefined) delete process.env.AGENTIC_HOME; else process.env.AGENTIC_HOME = oldHome; });
+let home, oldHome, oldRules;
+// The prompt files as shipped, but no skills: these tests are about the rest of the prompt (prompt-files.test.mjs has the skills).
+beforeEach(() => {
+ oldHome = process.env.AGENTIC_HOME; home = mkdtempSync(join(tmpdir(), 'agentic-instructions-')); process.env.AGENTIC_HOME = home;
+ oldRules = process.env.AGENTIC_RULES_DIR; const rules = join(home, '.rules'); mkdirSync(rules);
+ for (const f of ['bug-fixing.md', 'TOOLS.md']) writeFileSync(join(rules, f), readFileSync(new URL(`../rules/${f}`, import.meta.url), 'utf8'));
+ writeFileSync(join(rules, 'SKILLS.md'), '# Skills\n'); process.env.AGENTIC_RULES_DIR = rules;
+});
+afterEach(() => { if (oldHome === undefined) delete process.env.AGENTIC_HOME; else process.env.AGENTIC_HOME = oldHome; if (oldRules === undefined) delete process.env.AGENTIC_RULES_DIR; else process.env.AGENTIC_RULES_DIR = oldRules; });
 const changed = { general: 'Read evidence first. Report verified outcomes.', planning: 'Inspect, plan, check, revise.' };
 
 test('defaults, atomic persistence, version conflicts and undo preserve both sections', () => {

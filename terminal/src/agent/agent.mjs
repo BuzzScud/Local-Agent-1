@@ -14,6 +14,7 @@ import { rankFiles } from './rank.mjs';
 import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
+import { pickSkill, skillNote, readSkills, skillsList, toolUseText } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
 import { layoutCheck, layoutNote, pagesToCheck, findChrome, needsServer } from '../flows/layoutcheck.mjs';
@@ -329,6 +330,7 @@ export class Agent extends EventEmitter {
     this.testCmd = verify ? testCommand(cwd) : null;
     this.messages = [{ role: 'system', content: wayPrompt(system, this.way) }];
     this.workingInstructions = readInstructions().sections;
+    this.promptStampUsed = this.promptStamp();
     this.allowedPrefixes = new Set();
     this.readFiles = new Set(); // files read (or written) in this conversation
     this.todos = null;
@@ -385,8 +387,21 @@ export class Agent extends EventEmitter {
   refreshNotes() {
     const before = tokensOf(this.messages[0].content);
     this.notesRoomUsed = this.notesRoomNow;
+    this.promptStampUsed = this.promptStamp();
     this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed).text, git: gitSummary(this.cwd), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
+  }
+  // The prompt files as they are now: the rules files (AGENTS.md or CLAUDE.md, whole, without
+  // the memory), TOOLS.md's Tool use lines and SKILLS.md's list (prompt-files.mjs). A change to
+  // any of them, saved in the hub or anywhere else, is read before the next message.
+  promptStamp() {
+    try { return `${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseText()}\u0000${skillsList(readSkills())}`; } catch { return null; }
+  }
+  promptFilesChanged() {
+    const now = this.promptStamp();
+    if (now === null || now === this.promptStampUsed) return false;
+    this.promptStampUsed = now;
+    return true;
   }
   // Work in another folder from now on: its tests, its AGENTS.md, and the fence
   // around commands, which is always the folder Agentic Coder works in.
@@ -398,6 +413,7 @@ export class Agent extends EventEmitter {
     this.notesRoomUsed = this.notesRoomNow;
     this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed).text, git: gitSummary(dir), instructions: this.workingInstructions }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
+    this.promptStampUsed = this.promptStamp();
     this.readFiles = new Set();
     this.mapGiven = false;
     this.lastRoute = null;
@@ -511,7 +527,7 @@ export class Agent extends EventEmitter {
   // the design examples with a request to make or restyle a page.
   withTurnNotes(messages) {
     const t = this.turn;
-    const extras = [t?.bug, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
     if (!extras.length) return messages;
     return messages.map((m) => (extras.some((x) => m === x.request) ? { ...m, content: `${m.content}${extras.filter((x) => m === x.request).map((x) => `\n\n(${x.steps ?? x.notes})`).join('')}` } : m));
   }
@@ -669,6 +685,11 @@ export class Agent extends EventEmitter {
       this.ctxUsed += tokensOf(after) - tokensOf(before);
       this.emit('note', { text: 'Updated working instructions loaded.', tone: 'dim' });
     }
+    // A save of AGENTS.md, TOOLS.md or SKILLS.md (the hub's Prompt files) applies between tasks too.
+    if (this.promptFilesChanged()) {
+      this.refreshNotes();
+      this.emit('note', { text: 'Updated prompt files loaded (AGENTS.md, TOOLS.md, SKILLS.md).', tone: 'dim' });
+    }
     this.busy = true;
     const started = Date.now();
     const turnStart = this.messages.length;
@@ -726,10 +747,15 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `Could not check the request first (${e.message}); starting anyway.`, tone: 'dim' });
       }
     }
+    // A skill from SKILLS.md whose words the request uses (prompt-files.mjs): its steps go with
+    // the request, and the work goes step by step with them, not down a focused path. The model
+    // that decides gets only the list, and opens a skill itself (Read SKILLS/<name>).
+    let skill = null;
+    if (!decides && !follow) { try { skill = pickSkill(text); } catch {} }
     // First the focused paths (rename / fix / change); the loop handles the rest.
     // (The model that decides calls them itself: Rename and TestFirst.)
     this.carried = null;
-    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length) {
+    if (!decides && !follow && this.flows && this.mode !== 'plan' && !images?.length && !skill) {
       // Every focused call's tokens, for the done line (the loop counts its own).
       const counted = { steps: 0, tokens: 0, thinkTokens: 0 };
       const tally = ({ tokens, thought }) => { counted.steps++; counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
@@ -762,7 +788,7 @@ export class Agent extends EventEmitter {
       }
     }
     const kind = follow || decides ? undefined : this.lastRoute?.kind ?? routeByRules(text)?.kind;
-    this.sorted(kind); // no focused path ran (or none exists here): step by step
+    this.sorted(kind, skill ? { skill: skill.name } : undefined); // no focused path ran (or none exists here): step by step
     // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
     // go with this turn's requests to the model, not into the conversation.
     const bug = kind === 'fix' ? sortBug(text) : null;
@@ -800,6 +826,11 @@ export class Agent extends EventEmitter {
       // (the bug steps, step 7); for a kind the suite cannot see, with no
       // check named, the suite is not run at all — it would only mislead.
       this.turn.check = checkInText(text);
+    }
+    if (skill && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.skill = { request, notes: skillNote(skill), name: skill.name };
+      this.ctxUsed += tokensOf(this.turn.skill.notes);
+      this.emit('note', { text: `Skill: ${skill.name} (SKILLS.md; its words here: ${skill.matched.join(', ')}; ≈${tokensOf(this.turn.skill.notes).toLocaleString('en-US')} tokens).`, tone: 'dim', skill: skill.name });
     }
     // A check the fix path made and what the browser found (flows/pagecheck.mjs).
     if (this.carried && request?.role === 'user' && typeof request.content === 'string') {
@@ -2282,7 +2313,7 @@ export class Agent extends EventEmitter {
     const facts = this.turn?.findings?.length ? `\n\nWhat I have already worked out (I keep these):\n${this.turn.findings.map((f) => `- ${f}`).join('\n')}` : '';
     // The notes that go with the request (the steps for its kind of bug, a
     // check the fix path made) follow the request into the new conversation.
-    for (const x of [this.turn?.bug, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
+    for (const x of [this.turn?.bug, this.turn?.skill, this.turn?.math, this.turn?.design, this.turn?.carried].filter(Boolean)) {
       const i = (this.turn?.opening ?? []).filter((m) => this.messages.includes(m)).indexOf(x.request);
       if (i >= 0) x.request = opening[i];
     }
