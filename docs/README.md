@@ -8,9 +8,11 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [design rounds/live-run-screen-preview-2026-10-01.html](design%20rounds/live-run-screen-preview-2026-10-01.html) | page | Live Run Preview | 147 KB | 2026-10-01 |
+| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 369 KB | 2026-10-01 |
+| [older versions/agentic-coder-structure-2026-09-30.html](older%20versions/agentic-coder-structure-2026-09-30.html) | page | Agentic Coder folder structure | 614 KB | 2026-10-01 |
 | [diagrams/agentic-coder-structure-2026-10-01.html](diagrams/agentic-coder-structure-2026-10-01.html) | page | Agentic Coder folder structure | 673 KB | 2026-10-01 |
 | [design rounds/agentic-coder-start-page-upgrades-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-upgrades-2-designs-2026-10-01.html) | page | Start page upgrades | 641 KB | 2026-10-01 |
-| [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 355 KB | 2026-10-01 |
 | [tests/agentic-coder-model-check-k2-2026-10-01-0000.html](tests/agentic-coder-model-check-k2-2026-10-01-0000.html) | page | New model check · K2 Horizon 7B | 9 KB | 2026-10-01 |
 | [design rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html](design%20rounds/agentic-coder-start-page-agent-detailed-2-designs-2026-10-01.html) | page | Start page agents | 1.4 MB | 2026-10-01 |
 | [design rounds/agentic-coder-start-page-icons-3-designs-2026-09-30.html](design%20rounds/agentic-coder-start-page-icons-3-designs-2026-09-30.html) | page | Start page icons | 1.4 MB | 2026-10-01 |
@@ -102,7 +104,6 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [older versions/agentic-coder-question-walkthrough-2026-09-30.html](older%20versions/agentic-coder-question-walkthrough-2026-09-30.html) | page | Question Walkthrough | 43 KB | 2026-09-30 |
 | [diagrams/agentic-coder-question-walkthrough-2026-09-30-v2.html](diagrams/agentic-coder-question-walkthrough-2026-09-30-v2.html) | page | Question Walkthrough | 47 KB | 2026-09-30 |
 | [older versions/agentic-coder-structure-2026-09-29.html](older%20versions/agentic-coder-structure-2026-09-29.html) | page | Agentic Coder folder structure | 199 KB | 2026-09-30 |
-| [older versions/agentic-coder-structure-2026-09-30.html](older%20versions/agentic-coder-structure-2026-09-30.html) | page | Agentic Coder folder structure | 614 KB | 2026-09-30 |
 | [tests/agentic-coder-weights-reader-check-2026-09-30-1506.html](tests/agentic-coder-weights-reader-check-2026-09-30-1506.html) | page | Weights reader check | 10 KB | 2026-09-30 |
 | [tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html](tests/agentic-coder-remote-check-gemma-2026-09-30-1502.html) | page | Remote check · Gemma 4 12B QAT | 12 KB | 2026-09-30 |
 | [older versions/agentic-coder-weights-reader-check-2026-09-30-1303.html](older%20versions/agentic-coder-weights-reader-check-2026-09-30-1303.html) | page | Weights reader check | 10 KB | 2026-09-30 |
