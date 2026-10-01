@@ -91,6 +91,10 @@ export default {
     { id: 'medium', label: 'Medium', effort: 'medium', note: 'thinks briefly first (about 200 tokens on a small task)' },
     { id: 'high', label: 'High', effort: 'xhigh', note: 'thinks carefully first; can take minutes (stopped at 2,048 tokens)' },
   ],
+  // The template writes "Reasoning effort is set to xhigh…" as the first line of the prompt
+  // (Medium writes nothing there), so a turn keeps one effort from step to step: a change reads
+  // the whole conversation again (agent.mjs stepEffort; 1 Oct, three 3-minute reads in one turn).
+  effortAtTop: true,
   thinkingBudget: 2048, // ~3 min at 10 tokens/s; the server ends thinking there
   // PrismML's instruct settings without its presence penalty (which would
   // push code away from repeating names and brackets); these are the

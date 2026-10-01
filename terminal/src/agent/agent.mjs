@@ -694,6 +694,16 @@ export class Agent extends EventEmitter {
     return true;
   }
 
+  // The effort of this turn's next reply. High is for working the problem out: once this turn
+  // has changed a file, the steps left (run the tests, report) think at Medium. Not for a model
+  // whose template writes the effort at the very top of the prompt (effortAtTop, Bonsai): there
+  // a new effort is a new prompt from its first word, so the server reads the whole conversation
+  // again (1 Oct 2026, Bonsai at 16k: 3 minutes each time, three times in one turn). The notes
+  // call takes the same, so the conversation it reads is the one already read.
+  stepEffort() {
+    return this.effort === 'high' && this.turn?.changed && !this.model?.effortAtTop ? 'medium' : this.effort;
+  }
+
   // What the conversation holds now, the two newest messages counted (they
   // may not be in ctxUsed yet).
   estNow() {
@@ -1806,9 +1816,7 @@ export class Agent extends EventEmitter {
     // memory the thinking shrinks (thinkRoom), not the answer.
     const think = this.thinkRoom();
     const thinkCap = this.thinking && think < (this.model?.thinkingBudget ?? 2048) ? think : undefined;
-    // High effort is for working the problem out. Once this turn has changed a
-    // file, the steps left (run the tests, report) think briefly instead.
-    const effort = this.effort === 'high' && this.turn?.changed ? 'medium' : this.effort;
+    const effort = this.stepEffort();
     const t0 = Date.now();
     let firstToken = null;
     let thinkEnd = null;
@@ -2585,7 +2593,7 @@ export class Agent extends EventEmitter {
       const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
       // Thinking stays on (turning it off would change the prompt and read it all
       // again) but is capped at NOTES_THINK, so the 700 tokens go to the notes.
-      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.effort, model: this.model, sampling, maxTokens: NOTES_ROOM + (this.thinking ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal })) {
+      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.stepEffort(), model: this.model, sampling, maxTokens: NOTES_ROOM + (this.thinking ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal })) {
         if (ev.type === 'text') summary += ev.text;
       }
     } catch (e) {
