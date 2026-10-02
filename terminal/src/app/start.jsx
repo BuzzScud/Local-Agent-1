@@ -282,10 +282,10 @@ function timeLine(s, loading, room) {
 const Labelled = ({ label, children, color = PATH }) => <Text wrap="truncate-end"><Text color={C.dim}>{label.padEnd(8)}</Text><Text color={color}>{children}</Text></Text>;
 // The keys worth knowing on the first day, as many as fit.
 const TRY = [['@', 'a file'], ['!', 'a command'], ['/', 'every command'], ['shift+tab', 'switch mode'], ['esc esc', 'rewind']];
-function tryLine(room) {
+function keysLine(keys, room) {
   const fit = [];
   let used = 0;
-  for (const [key, words] of TRY) {
+  for (const [key, words] of keys) {
     const n = (fit.length ? 3 : 0) + key.length + 1 + words.length;
     if (used + n > room) break;
     used += n;
@@ -333,7 +333,7 @@ export function StartPage({ start, width, loading = null, typing = null }) {
     ...(s.also ?? []).map((l) => <Labelled label="" color={C.dim}>{l}</Labelled>),
     rule,
     <Heading>Try</Heading>,
-    tryLine(RW - 2),
+    keysLine(TRY, RW - 2),
   ];
   return (
     <Box flexDirection="column" width={width}>
@@ -377,9 +377,39 @@ export function TrustPage({ width, cwd, model, selected = 0 }) {
 }
 
 // Where to start, in the same columns: `coding` typed in the home folder asks which folder to
-// work in before anything is read (start-folder.mjs; options: its folderOption rows).
-export const FOLDER_TEXT = 'Agentic Coder works in one folder: it reads, searches and runs things there. Pick the project you are working on; the home folder suits general questions and files on the Desktop.';
-export function FolderPage({ width, options, model, selected = 0 }) {
+// work in before anything is read (start-folder.mjs). Each folder is a card (2 Oct 2026, the
+// owner's pick "1 · Cards"): the folder and what it is, what it suits, then what the app already
+// knows of it (folderFacts): its conversations and whether a yes covers it. The card picked has
+// its border lit in the choice colour. The right column is as tall as the bot's, so both end together.
+export const FOLDER_TEXT = 'It reads, searches and runs things in one folder. You typed coding in your home folder, so it asks which one first.';
+const FOLDER_KEYS = [['↑↓', 'choose'], ['enter', 'start here'], ['esc', 'exit']];
+const CARD_EDGE = 'ansi256(238)';
+const span = (segs) => segs.reduce((n, [t]) => n + t.length, 0);
+// Pieces [text, colour, bold] on the left and on the right, spaces between: `w` columns in all.
+const spread = (left, right, w) => [...left, [' '.repeat(Math.max(1, w - span(left) - span(right)))], ...right];
+const pieces = (segs) => segs.map(([t, c, b], i) => <Text key={i} color={c} bold={Boolean(b)}>{t}</Text>);
+// A card, drawn a row at a time (Split lines its columns up row by row), `w` columns wide.
+export function folderCard(f, i, on, w, now = Date.now()) {
+  const edge = on ? C.ask : CARD_EDGE;
+  const inner = w - 4;
+  const row = (segs) => <Text><Text color={edge}>│ </Text>{pieces(segs)}<Text color={edge}> │</Text></Text>;
+  const title = spread(
+    [[on ? '❯ ' : '  ', C.ask], [`${i + 1}  `, on ? C.ask : C.faint], [fitPath(f.shown, inner - 6 - f.what.length), on ? WHITE : PATH, true]],
+    [[f.what, on ? PATH : C.dim]], inner);
+  const trust = f.trusted ? ['✓ trusted', on ? C.accent : C.accentDim] : ['safety check next', C.warn];
+  const convs = f.convs ? plural(f.convs, 'conversation') : 'no conversations yet';
+  const long = f.convs && f.last ? `${convs} · last ${ago(f.last, now)}` : convs;
+  const known = 5 + long.length + 1 + trust[0].length <= inner ? long : convs;
+  return [
+    <Text color={edge}>╭{'─'.repeat(w - 2)}╮</Text>,
+    row(title),
+    row(spread([['     '], [cut(f.good ?? '', inner - 5), on ? PATH : C.dim]], [], inner)),
+    row(spread([['     '], [known, C.dim]], [trust], inner)),
+    <Text color={edge}>╰{'─'.repeat(w - 2)}╯</Text>,
+  ];
+}
+// folders: startFolders' rows with folderFacts' (convs, last, trusted).
+export function FolderPage({ width, folders, model, selected = 0, now = Date.now() }) {
   const L = leftWidth(width);
   const RW = Math.max(10, width - L - 3);
   const left = [
@@ -389,13 +419,11 @@ export function FolderPage({ width, options, model, selected = 0 }) {
     <Text color={C.dim}>wakes up where you pick</Text>, null,
   ];
   const right = [
-    <Heading>Where to start</Heading>,
-    <Labelled label="started">{where('~')}</Labelled>,
+    <Heading>Where should it work?</Heading>,
+    ...wrap(FOLDER_TEXT, RW - 2).map((l) => <Text color={C.dim}>{l}</Text>),
     <Text> </Text>,
-    ...wrap(FOLDER_TEXT, RW - 1).map((l) => <Text>{l}</Text>),
-    <Text> </Text>,
-    ...options.map((o, i) => <Text color={i === selected ? C.ask : undefined}>{i === selected ? '❯' : ' '} {i + 1}. {fitPath(o, RW - 5)}</Text>),
-    <Text color={C.dim}>Enter to confirm · Esc to exit</Text>,
+    ...folders.flatMap((f, i) => folderCard(f, i, i === selected, RW - 1, now)),
+    keysLine(FOLDER_KEYS, RW - 2),
   ];
   return (
     <Box flexDirection="column" width={width}>

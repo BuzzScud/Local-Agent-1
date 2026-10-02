@@ -5,14 +5,15 @@ import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, FolderPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
+import { StartPage, TrustPage, FolderPage, folderCard, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit } from './app-setup.mjs';
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { startFolders, folderOption } from '../src/app/start-folder.mjs';
+import { startFolders, folderOption, folderFacts } from '../src/app/start-folder.mjs';
+import { C } from '../src/ui/theme.mjs';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const draw = (el, cols) => strip(renderToString(el, { columns: cols })).split('\n');
@@ -189,13 +190,35 @@ test('the safety check in the same columns: nothing read, the question, the answ
   }
 });
 
-test('where to start in the same columns: the two folders, the first marked, nothing past the edge', () => {
+const FOLDERS = [
+  { shown: '~', what: 'your home folder', good: 'general questions, Desktop files', convs: 8, last: at(1), trusted: true },
+  { shown: '~/agentic-coder', what: 'Agentic Coder', good: 'its code, tests and docs', convs: 0, last: null, trusted: false },
+];
+test('where to start in the same columns: each folder a card, the one picked lit, both columns ending together, nothing past the edge', () => {
   for (const w of [80, 107]) {
-    const lines = draw(h(FolderPage, { width: w, options: ['~ · your home folder', '~/agentic-coder · Agentic Coder'], model: 'Qwen3.5 9B', selected: 0 }), w);
+    const lines = draw(h(FolderPage, { width: w, folders: FOLDERS, model: 'Qwen3.5 9B', selected: 0, now: NOW }), w);
     const text = lines.join('\n');
-    for (const s of ['Where to start', 'started ~ · your home folder', '❯ 1. ~ · your home folder', '  2. ~/agentic-coder · Agentic Coder', 'wakes up where you pick', 'Enter to confirm · Esc to exit']) expect(text).toContain(s);
+    for (const s of ['Where should it work?', 'so it asks which one first', 'general questions, Desktop files', 'its code, tests and docs', '8 conversations', '✓ trusted', 'no conversations yet', 'safety check next', 'wakes up where you pick', '↑↓ choose   enter start here   esc exit']) expect(text).toContain(s);
+    expect(text).toMatch(/│ ❯ 1  ~ +your home folder │/);
+    expect(text).toMatch(/│   2  ~\/agentic-coder +Agentic Coder │/);
+    expect(text).not.toContain('started ~'); // the old line that repeated the first folder
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(w);
+    // the right column ends on the bot side's last row: the model's state line, or the row under it
+    const keys = lines.findIndex((l) => l.includes('↑↓ choose')), state = lines.findIndex((l) => l.includes('wakes up where you pick'));
+    expect(keys - state).toBeGreaterThanOrEqual(0);
+    expect(keys - state).toBeLessThanOrEqual(1);
   }
+  expect(draw(h(FolderPage, { width: 107, folders: FOLDERS, model: 'Qwen3.5 9B', now: NOW }), 107).join('\n')).toContain('8 conversations · last 1h ago'); // when it fits
+  // the card picked has its border in the choice colour (C.ask), the other a dark one
+  expect(folderCard(FOLDERS[0], 0, true, 60, NOW)[0].props.color).toBe(C.ask);
+  expect(folderCard(FOLDERS[1], 1, false, 60, NOW)[0].props.color).not.toBe(C.ask);
+});
+
+test('a folder\'s card says what the app already knows: its conversations, the last one\'s time, and whether a yes covers it', () => {
+  const sessions = (p) => (p === '/h' ? [{ updated: at(1) }, { updated: at(30) }] : []);
+  const trusted = (p) => p === '/h';
+  expect(folderFacts({ path: '/h', shown: '~' }, { sessions, trusted })).toEqual({ path: '/h', shown: '~', convs: 2, last: at(1), trusted: true });
+  expect(folderFacts({ path: '/h/x', shown: '~/x' }, { sessions, trusted })).toEqual({ path: '/h/x', shown: '~/x', convs: 0, last: null, trusted: false });
 });
 
 test('where to start is asked only in the home folder, with Agentic Coder\'s folder found; not elsewhere, and not when continuing', () => {
