@@ -1,0 +1,1 @@
+Implement transition in status.mjs exactly as SPEC.md describes, with tests that cover every rule in it.

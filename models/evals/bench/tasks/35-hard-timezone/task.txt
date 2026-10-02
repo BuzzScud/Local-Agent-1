@@ -1,0 +1,1 @@
+Daily totals (totals.mjs) put evening trades on the next day. Days should follow the desk's time zone in config.mjs, including on the days the clocks change. Fix it and add a test.

@@ -1,0 +1,1 @@
+When does a checkout NOT get a fee, and where does the fee rate come from, in the order they are tried? Answer only; don't change any files.

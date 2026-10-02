@@ -1,0 +1,1 @@
+A checkout gets no fee when order.kind is 'internal', or when its subtotal is 0 (checkout.mjs). The rate comes from feeRate() in fees.mjs: first the FEE_BPS setting (environment variable), then config.feeBps in config.mjs (30), and 25 basis points when neither is set.

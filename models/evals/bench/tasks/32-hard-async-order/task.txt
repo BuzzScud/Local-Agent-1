@@ -1,0 +1,1 @@
+fetchAll in fetch-all.mjs sometimes returns the results in the wrong order. Also, the server allows at most 2 requests at once and we send them all together. Make it return results in the same order as ids, with never more than 2 requests in flight (but still 2 at a time, not one by one), make a failed request reject fetchAll, and add tests for all of this.

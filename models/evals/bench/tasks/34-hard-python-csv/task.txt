@@ -1,0 +1,1 @@
+Exporting trades to CSV (report.py) breaks when a note has a comma, a double quote or a line break in it. Fix the export so any spreadsheet reads it back exactly, keep the header line as it is, and add tests.

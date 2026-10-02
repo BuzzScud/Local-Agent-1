@@ -1,0 +1,1 @@
+The same email check is copied into the three handlers in handlers/. Move it into one shared function in validate.mjs, use it in all three, and keep every test passing. Don't change what any handler returns for any input.
