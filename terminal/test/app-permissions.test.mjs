@@ -47,7 +47,7 @@ test('Auto-edit: a protected file asks with only yes and no, and says why; no le
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.env).toContain('Protected: .env always asks before a change, even in Auto-edit.');
+  expect(r.snapshots.env).toContain('Protected: .env always asks before a change, even in Accept edits and Auto.');
   expect(r.snapshots.env).toMatch(/1\. Yes\s/);
   expect(r.snapshots.env).toMatch(/2\. No, and tell Agentic Coder/);
   expect(r.snapshots.env).not.toContain('allow all edits');
@@ -60,7 +60,7 @@ test('a start-up mode saved with /permissions: the next window starts in it and 
   saveRules(base, { folders: { [realpathSync(cwd)]: { mode: 'edits' } } });
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: '? for shortcuts' }, { sleep: 400 }, { snapshot: 'start' }, ...quit] });
-  expect(r.snapshots.start).toContain('auto-edit (/permissions)');
+  expect(r.snapshots.start).toContain('accept edits (/permissions)');
   expect(r.snapshots.start).toContain('⏵⏵ accept edits on');
   writeFileSync(join(base, 'home', 'permissions.json'), '{ "folders": ');
   const r2 = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [{ wait: '? for shortcuts' }, { wait: 'cannot be read' }, { sleep: 300 }, { snapshot: 'start' }, ...quit] });
@@ -70,7 +70,7 @@ test('a start-up mode saved with /permissions: the next window starts in it and 
   expect(readFileSync(join(base, 'home', 'permissions.json'), 'utf8')).toBe('{ "folders": ');
 }, T * 2);
 
-test('/permissions: five rows with what they hold, enter opens a list, test says why without running it, mode switches now and is kept', async () => {
+test('/permissions: six rows with what they hold, enter opens a list, test says why without running it, mode switches now and is kept', async () => {
   const { cwd, env, base } = setup();
   saveRules(base, { everywhere: { never: ['npm publish'] }, folders: { [realpathSync(cwd)]: { allow: ['node --test'] } } });
   const fake = await startFakeServer([]);
@@ -78,20 +78,21 @@ test('/permissions: five rows with what they hold, enter opens a list, test says
     { wait: '? for shortcuts' }, { type: '/permissions' }, { key: 'enter' }, { wait: 'Each row opens' }, { sleep: 200 }, { snapshot: 'picker' },
     { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Runs without asking ·' }, { sleep: 200 }, { snapshot: 'allow' },
     { type: '/permissions test npm publish --tag beta' }, { key: 'enter' }, { wait: 'Nothing was run.' }, { sleep: 200 }, { snapshot: 'test' },
-    { type: '/permissions mode' }, { key: 'enter' }, { wait: 'saved for this folder' }, { sleep: 200 }, { snapshot: 'modes' }, { type: '3' },
+    { type: '/permissions mode' }, { key: 'enter' }, { wait: 'saved for this folder' }, { sleep: 200 }, { snapshot: 'modes' }, { type: '4' },
     { wait: 'Start-up mode: plan' }, { sleep: 300 }, { snapshot: 'plan' },
     ...quit,
   ] });
   await fake.close();
   const p = r.snapshots.picker;
-  expect(p).toMatch(/❯ Start-up mode\s+ask first · not saved\s/);
+  expect(p).toMatch(/❯ Start-up mode\s+manual · not saved\s/);
   expect(p).toMatch(/Runs without asking\s+1 saved\s/);
   expect(p).toMatch(/Never runs\s+12 fixed · 1 yours\s/);
   expect(p).toMatch(/Protected files\s+11 built in · 0 yours\s/);
   expect(p).toMatch(/Trusted folders\s+1 trusted\s/);
+  expect(p).toMatch(/Screen\s+(allowed|not allowed yet) · model is blind\s+the model may look at an app or the whole screen/); // a --url server shows no vision
   expect(r.snapshots.allow).toMatch(/1\s+node --test\s+this folder/);
   expect(r.snapshots.test).toContain('REFUSED blocked by your rule "npm publish" (/permissions)');
-  expect(r.snapshots.modes).toMatch(/4\. Not saved.*✔ in use/);
+  expect(r.snapshots.modes).toMatch(/❯ Not saved\s+✓ 6/); // the five modes, then Not saved, the one in use
   expect(r.snapshots.plan).toContain('⏸ plan mode on');
   const saved = JSON.parse(readFileSync(join(base, 'home', 'permissions.json'), 'utf8'));
   expect(saved.folders[realpathSync(cwd)].mode).toBe('plan');

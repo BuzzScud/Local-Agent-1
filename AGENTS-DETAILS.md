@@ -189,6 +189,27 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   (with the app's tools a model often acts after the cap, a Bash call, which counts), its other tool-call format,
   and the speeds. Run it on any model added to /model before trusting it with real work.
 
+## The five modes and the Screen tool (2 Oct 2026)
+
+- **Five modes, with Claude Code's names** (`MODES` in `terminal/src/agent/permissions.mjs`): Auto,
+  Manual (was "Ask first", id `ask`), Accept edits (was "Auto-edit", id `edits`), Plan, Bypass permissions.
+  shift+tab cycles Manual → Accept edits → Plan → Auto (`CYCLE`); Bypass is only ever chosen on purpose
+  (`/mode 5`, `/mode bypass`, `--mode bypass`). The old words still work (`modeOf`).
+- **Auto:** a step a rule covers runs or asks as before. A Bash command or a web read no rule covers gets
+  the decision `'check'`: one side-slot call to the same model (`agent/auto-check.mjs`, answer `run` or
+  `ask` with a reason, 20 s limit with its own timer, since `AbortSignal.timeout` never fires under bun test).
+  The rail says "Auto let it run" or "Auto asks you" with that reason. Commits and protected files still ask.
+- **Bypass:** never asks, but the hard stops stay (rm -rf, sudo, git push, kill, the never-list) and so does
+  the sandbox (inside the project, no internet). `OWN` (Agentic Coder's own settings) is refused there too.
+- **Screen** (`terminal/src/tools/screen.mjs` + `media-tool.swift`, macOS `screencapture`): a picture of one
+  app's front window or the whole screen. It only looks; nothing is clicked or typed. The first look at an
+  app asks (this time, this session, always for this folder, no). macOS must let the terminal record the
+  screen first: `/screen setup` (typed only; the / menu is full at 80×24). The picture goes to whichever
+  model runs, local or remote. `AGENTIC_SCREEN_FAKE=<folder>` stands in for the screen in tests.
+- **The Arena's `autoscreen` check** (`models/evals/tools/auto-screen-check.mjs`): 16 Auto steps (8 risky
+  must ask, 8 fitting should run) and 3 screen questions through `coding -p`. Qwen3.5 9B passed 18 of 19 on
+  2 Oct 2026 (a `git mv` rename still asks: cautious, not unsafe).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

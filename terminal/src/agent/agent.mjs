@@ -12,7 +12,7 @@ import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
-import { decide, isReadOnly, offerFor, protectedBy } from './permissions.mjs';
+import { decide, isReadOnly, offerFor, protectedBy, ownBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
@@ -36,6 +36,8 @@ import { upFrontFor } from './room.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
+import { autoCheck } from './auto-check.mjs';
+import { screenAccess } from '../tools/screen.mjs';
 import { isMemoryRequest } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { changeTrust } from './facts.mjs';
@@ -474,12 +476,16 @@ export class Agent extends EventEmitter {
   setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
   tools() {
-    const all = toolSchemas(this.way, this.webTools(), { agents: this.agentsOn() });
+    const all = toolSchemas(this.way, this.webTools(), { agents: this.agentsOn(), screen: this.screenOn() });
     return this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all;
   }
   // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, and on the
   // Claude API; never inside a helper; "subagents": false in settings.json leaves it out.
   agentsOn() { return !this.isHelper && this.subagents !== false && (this.way === 'model' || endpointOf(this.url)?.kind === 'claude'); }
+  // The Screen tool (tools/screen.mjs): on a Mac, for a model that can look at pictures now or
+  // once its vision is turned on (visionOn); "screen": false in settings.json leaves it out.
+  // mayLook: the app says whether this model can turn its vision on (App.jsx).
+  screenOn() { return process.platform === 'darwin' && this.screen !== false && !this.isHelper && Boolean(this.canSee || this.mayLook?.()); }
   // The web tools on offer (/web): WebSearch with a search service, WebFetch with reading pages.
   // On the Claude API both are Anthropic's own (claude.mjs), unless /web's Claude row is off.
   webTools() {
@@ -902,11 +908,14 @@ export class Agent extends EventEmitter {
         this.emit(name, ev);
       },
       ask: (req) => this.ask(req),
-      confirm: (plan) => (this.confirmPlan ? this.confirm(plan, signal) : { ok: true }),
-      mode: () => this.mode,
+      confirm: (plan) => (this.confirmPlan && this.mode !== 'bypass' ? this.confirm(plan, signal) : { ok: true }),
+      // The focused paths know two ways (flows/apply.mjs): edits asked about, or on auto-accept.
+      // Auto and Bypass let edits inside the project through, as Accept edits does.
+      mode: () => (this.mode === 'auto' || this.mode === 'bypass' ? 'edits' : this.mode),
       setMode: (m) => this.setMode(m),
-      // A protected file always asks (permissions.mjs), even on auto-accept.
-      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return protectedBy([rel, at.realRel], this.savedRules()?.protect); },
+      // A protected file always asks (permissions.mjs), even on auto-accept; in Bypass only the
+      // app's own settings still do (the tool loop refuses those; here the path asks).
+      protectedBy: (rel) => { const at = resolvePath(this.cwd, rel); return this.mode === 'bypass' ? ownBy([rel, at.realRel]) : protectedBy([rel, at.realRel], this.savedRules()?.protect); },
       tool,
       note: (text, tone = 'dim') => this.emit('note', { text, tone }),
       // What a path found before handing over to the step-by-step way: a check
@@ -2177,8 +2186,9 @@ export class Agent extends EventEmitter {
     // its vision is turned on first where it can be (visionOn: the window's reload, or coding -p's),
     // as when you attach one. Without it, Read says to ask you to attach it.
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
+    if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -2206,13 +2216,25 @@ export class Agent extends EventEmitter {
     const at = args.path ? resolvePath(this.cwd, args.path) : null;
     const inside = at ? at.inside : true;
     const rules = this.savedRules();
-    const d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel });
+    let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel });
+    // Auto (/mode): the rules left this step open, so the model checks it against your
+    // request first (auto-check.mjs): it runs, or it asks you with the check's reason.
+    if (d.decision === 'check') {
+      this.emit('auto-check', { id, name: call.name, ...shown });
+      const r = await autoCheck({ url: this.url, model: this.model, slot: this.slots?.side, request: this.turn?.request ?? '', name: call.name, args, cwd: this.cwd, signal });
+      if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+      this.emit('note', { text: `Auto ${r.run ? 'let it run' : 'asks you'}: ${r.reason} (${(r.ms / 1000).toFixed(1)} s)`, tone: 'dim', auto: { run: r.run, failed: Boolean(r.failed) } });
+      d = r.run ? { decision: 'allow' } : { ...d, decision: 'ask', autoReason: r.reason };
+    }
+    // The screen while macOS does not allow pictures yet: no question first, straight to the
+    // tool, which takes nothing and says how to set it up (/screen setup).
+    if (call.name === 'Screen' && d.decision === 'ask' && !screenAccess()) d = { decision: 'allow' };
     if (d.decision === 'deny') {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: d.reason }, error: true });
       return { text: `Not allowed: ${d.reason}. ${this.claudeCame ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
     }
-    // Edits on auto-accept: the first one of a message is shown as a plan first.
-    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan && this.hook('plan')) {
+    // Edits on auto-accept: the first one of a message is shown as a plan first (not in Bypass, where nothing asks).
+    if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan && this.mode !== 'bypass' && this.hook('plan')) {
       const plan = planLine(call.name, args, prepared);
       const r = await this.confirm(plan, signal);
       if (r.stop) return { text: 'Interrupted.', stop: r.stop };
@@ -2223,7 +2245,7 @@ export class Agent extends EventEmitter {
     }
     if (d.decision === 'ask') {
       this.emit('tool-ask', { id, name: call.name, ...shown });
-      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}), ...(d.protectedBy ? { protectedBy: d.protectedBy } : {}), ...(d.rule ? { rule: d.rule } : {}), ...(call.name === 'WebSearch' ? { service: PROVIDER_NAMES[this.web?.search] } : {}) });
+      const answer = await this.ask({ id, name: call.name, args, prepared, ...shown, ...(d.once ? { once: true } : {}), ...(d.protectedBy ? { protectedBy: d.protectedBy } : {}), ...(d.rule ? { rule: d.rule } : {}), ...(d.autoReason ? { autoReason: d.autoReason } : {}), ...(call.name === 'WebSearch' ? { service: PROVIDER_NAMES[this.web?.search] } : {}) });
       if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
       if (answer.choice === 'no') {
         this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });

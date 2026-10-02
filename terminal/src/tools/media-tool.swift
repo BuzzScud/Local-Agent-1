@@ -7,6 +7,9 @@
 //   clipboard <out.png>                       → the clipboard's image as a PNG (exit 3: none there)
 //   text-image <out.png> <w> <h> <text>       → black text on white (the tests' pictures)
 //   text-pdf <out.pdf> <page> [<page> …]      → a PDF with one page of text per argument (the tests' PDFs)
+//   screen-access                             → "yes" when this terminal may take pictures of the screen (Screen Recording), else "no"
+//   screen-ask                                → asks macOS for it (its dialog, shown once), then as screen-access
+//   windows                                   → JSON {"front": app, "windows": [{id, app, title, x, y, w, h}]}, front to back
 import AppKit
 import Foundation
 import ImageIO
@@ -105,6 +108,30 @@ case "text-pdf":
     pdf.endPDFPage()
   }
   pdf.closePDF()
+
+case "screen-access":
+  print(CGPreflightScreenCaptureAccess() ? "yes" : "no")
+
+case "screen-ask":
+  print(CGRequestScreenCaptureAccess() ? "yes" : "no")
+
+case "windows":
+  // The windows on screen, front to back: apps' own windows only (layer 0), none too small to
+  // read. Without Screen Recording macOS leaves the titles out; the apps and sizes are there.
+  let opts = CGWindowListOption(arrayLiteral: .optionOnScreenOnly, .excludeDesktopElements)
+  let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] ?? []
+  var list: [[String: Any]] = []
+  for w in info {
+    guard (w[kCGWindowLayer as String] as? Int) == 0, let id = w[kCGWindowNumber as String] as? Int,
+          let b = w[kCGWindowBounds as String] as? [String: Any] else { continue }
+    let width = (b["Width"] as? Double) ?? 0, height = (b["Height"] as? Double) ?? 0
+    if width < 60 || height < 40 { continue }
+    list.append(["id": id, "app": (w[kCGWindowOwnerName as String] as? String) ?? "", "title": (w[kCGWindowName as String] as? String) ?? "",
+                 "x": (b["X"] as? Double) ?? 0, "y": (b["Y"] as? Double) ?? 0, "w": width, "h": height])
+  }
+  let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? ""
+  let data = try! JSONSerialization.data(withJSONObject: ["front": front, "windows": list])
+  print(String(data: data, encoding: .utf8)!)
 
 default:
   fail("unknown command \(args[1])")

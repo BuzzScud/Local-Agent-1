@@ -2,8 +2,22 @@ import { homedir } from 'node:os';
 import { resolve, relative, isAbsolute } from 'node:path';
 
 // Which tool calls run straight away, which ask you first, and which are
-// never allowed. Modes: ask (default), edits (file changes go through), plan
-// (read-only: it may look but not change anything).
+// never allowed. Modes, as /mode lists them (Claude Code's five):
+//   auto    the rules decide the clear cases; the model checks the rest
+//           (agent/auto-check.mjs): fits the request and can be undone → runs, else asks
+//   ask     Manual: asks before every change (the default)
+//   edits   Accept edits: file changes go through; commands still ask
+//   plan    read-only: it may look but not change anything
+//   bypass  never asks; the blocked commands, the folder fence, your never-list
+//           and the app's own settings still hold, and commands keep the sandbox
+export const MODES = ['auto', 'ask', 'edits', 'plan', 'bypass'];
+// shift+tab walks these. Bypass is picked on purpose (/mode 5, /mode bypass, --mode
+// bypass), never by cycling into it; from Bypass, shift+tab goes back to Manual.
+export const CYCLE = ['ask', 'edits', 'plan', 'auto'];
+export const nextMode = (mode) => CYCLE[(CYCLE.indexOf(mode) + 1) % CYCLE.length];
+// The words a mode is typed as: Claude Code's names, and the ones this app used before.
+const MODE_ALIASES = { manual: 'ask', default: 'ask', accept: 'edits', 'accept-edits': 'edits', acceptedits: 'edits', 'auto-edit': 'edits', bypasspermissions: 'bypass', 'bypass-permissions': 'bypass' };
+export const modeOf = (word) => { const w = String(word ?? '').trim().toLowerCase(); return MODES.includes(w) ? w : MODE_ALIASES[w] ?? null; };
 
 // Commands that are blocked in every mode, because they destroy work or stop
 // things running on this Mac.
@@ -285,18 +299,24 @@ export function neverRule(command, never = []) {
 // folder, .agentic-coder/ with the saved rules is inside the project). Yours
 // come on top. Names match whatever their case: on a Mac .ENV is .env.
 export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.bonsai/settings.json', '.agentic-coder/**'];
+// The app's own settings and rules: in Bypass, where nothing asks, a change to one is
+// refused instead (a model that could write them could change its own mode or rules).
+export const OWN = ['.agentic/settings.json', '.bonsai/settings.json', '.agentic-coder/**'];
 // * is any run of characters within one name, ** any run across folders, ? one character.
 const globText = (g) => g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*').replace(/\?/g, '[^/]');
 const globRe = (g) => new RegExp(`(?:^|/)${globText(g)}$`, 'i');
 // rel: a path from the project folder, or several (a link and where it points).
-export function protectedBy(rel, extra = []) {
+export function protectedBy(rel, extra = [], list = PROTECTED) {
   for (const one of [].concat(rel ?? [])) {
     if (!one) continue;
     const p = String(one).replace(/\\/g, '/').replace(/^\.\//, '');
-    for (const g of [...PROTECTED, ...(extra ?? [])]) if (globRe(String(g).replace(/^\.\//, '')).test(p)) return g;
+    for (const g of [...list, ...(extra ?? [])]) if (globRe(String(g).replace(/^\.\//, '')).test(p)) return g;
   }
   return null;
 }
+// One of the app's own files (OWN), by path or named in a command's words.
+export const ownBy = (rel) => protectedBy(rel, [], OWN);
+const namesOwn = (command) => { for (const w of shellWords(String(command ?? ''))) { const g = ownBy(String(w)); if (g) return g; } return null; };
 
 // What a typed rule may be, for /permissions allow | never | protect:
 // { rule, note? } to save, or { error } to say why not.
@@ -309,6 +329,9 @@ export function checkRule(kind, text, { protect = [] } = {}) {
     if (!/[^*?/]/.test(t)) return { error: 'That would match every file. Name the file: .env.local, config/prod.*' };
     return { rule: t };
   }
+  // A screen rule: Screen(TextEdit), or Screen(whole screen).
+  const scr = SCREEN_RULE.exec(t);
+  if (scr) return { rule: `Screen(${scr[1].trim()})` };
   // A web rule: WebSearch, or WebFetch(site).
   const web = WEB_RULE.exec(t);
   if (web) return { rule: web[2] ? `WebFetch(${web[2].toLowerCase()})` : 'WebSearch' };
@@ -339,10 +362,19 @@ export const siteOf = (url) => {
 export const webRule = (name, args) => (name === 'WebSearch' ? 'WebSearch' : siteOf(args?.url) ? `WebFetch(${siteOf(args.url)})` : null);
 const WEB_RULE = /^(WebSearch|WebFetch\((?:www\.)?([a-z0-9.-]+\.[a-z0-9-]+)\))$/i;
 
+// The screen (the Screen tool, tools/screen.mjs): what the model may look at, by app,
+// as /permissions keeps it: "Screen(TextEdit)", or "Screen(whole screen)" for all of it.
+// It only looks (a picture), so it is asked once per app in every mode but Bypass.
+export const screenTarget = (args) => String(args?.app ?? '').trim().replace(/\s+/g, ' ').slice(0, 60) || 'whole screen';
+export const screenRule = (args) => `Screen(${screenTarget(args)})`;
+const SCREEN_RULE = /^Screen\(([^()]{1,60})\)$/i;
+const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerCase() === rule.toLowerCase());
+
 // The decision for one tool call, with the reason (the /permissions test
 // panel prints it). decide() below is the same without the reason.
 //   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
 export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel } = {}) {
+  const bypass = mode === 'bypass';
   if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
   // and two run a focused path, whose every change asks as your mode says (so plan mode refuses them).
@@ -351,26 +383,45 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
   if (name === 'Agent') return { decision: 'allow', why: args?.kind === 'general' ? 'each change the helper makes asks as your mode says' : 'the helper only reads' };
   if (name === 'Remember') return { decision: 'allow', why: 'it writes to the memory, not to the project' };
   if (name === 'Rename' || name === 'TestFirst') return mode === 'plan' ? { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' } : { decision: 'allow', why: 'each change it makes asks as your mode says' };
+  // The screen: a picture of one app's window, or of all of it. It changes nothing, but it can
+  // show anything that is open, so each app asks once (this time, this session, always, no),
+  // in every mode but Bypass; your never-list holds even there.
+  if (name === 'Screen') {
+    const rule = screenRule(args);
+    if (hasRule(rules?.never, rule)) return { decision: 'deny', reason: `blocked by your rule "${rule}" (/permissions)` };
+    const saved = hasRule(rules?.allow, rule);
+    if (saved || hasRule(allowedPrefixes, rule)) return { decision: 'allow', why: `"${rule}" is allowed (${saved ? 'saved' : 'this session'})` };
+    if (bypass) return { decision: 'allow', why: 'Bypass permissions is on' };
+    return { decision: 'ask', rule, why: `the model has not been allowed to look at ${screenTarget(args) === 'whole screen' ? 'the whole screen' : screenTarget(args)} yet` };
+  }
   // The web: a search sends its words to the search service, a page is read from a site. Each asks
-  // first, in every mode (it changes nothing here, so plan mode asks too), until a rule allows it:
-  // "don't ask again" for this session, or one saved with /permissions.
+  // first (it changes nothing here, so plan mode asks too), until a rule allows it: "don't ask
+  // again" for this session, or one saved with /permissions. Auto: the model checks it first.
   if (name === 'WebSearch' || name === 'WebFetch') {
     const rule = webRule(name, args);
     if (!rule) return { decision: 'deny', reason: 'that is not a web address (http or https)' };
     if ((rules?.never ?? []).includes(rule)) return { decision: 'deny', reason: `blocked by your rule "${rule}" (/permissions)` };
     const saved = (rules?.allow ?? []).includes(rule);
     if (saved || [...(allowedPrefixes ?? [])].includes(rule)) return { decision: 'allow', why: `"${rule}" is allowed (${saved ? 'saved' : 'this session'})` };
+    if (bypass) return { decision: 'allow', why: 'Bypass permissions is on' };
+    if (mode === 'auto') return { decision: 'check', rule, why: 'Auto: the model checks that it fits your request' };
     return { decision: 'ask', rule, why: name === 'WebSearch' ? 'a search sends its words to the search service' : `no rule allows reading ${siteOf(args.url)} yet` };
   }
   if (name === 'Read' || name === 'List' || name === 'Search') return inside ? { decision: 'allow', why: 'reading inside the project never asks' } : { decision: 'deny', reason: 'that is outside the project folder; only files inside it may be read' };
   if (name === 'Edit' || name === 'Write') {
     if (!inside) return { decision: 'deny', reason: 'that file is outside the project folder' };
     if (mode === 'plan') return { decision: 'deny', reason: 'plan mode is on, so nothing may be changed yet' };
-    // A protected file always asks, even in Auto-edit, and has no "allow all edits" choice (once).
+    // A protected file always asks, even in Accept edits and Auto, and has no "allow all edits"
+    // choice (once). In Bypass nothing asks: it goes through, but the app's own settings never do.
     const guard = protectedBy(rel ?? args?.path, rules?.protect);
+    if (bypass) {
+      const own = ownBy(rel ?? args?.path);
+      return own ? { decision: 'deny', reason: `${own} holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on' };
+    }
     if (guard) return { decision: 'ask', once: true, protectedBy: guard, why: `it is a protected file (${guard}); protected files always ask` };
-    if (mode === 'edits') return { decision: 'allow', why: 'Auto-edit is on' };
-    return { decision: 'ask', why: 'Ask first is on' };
+    if (mode === 'edits') return { decision: 'allow', why: 'Accept edits is on' };
+    if (mode === 'auto') return { decision: 'allow', why: 'Auto: edits inside the project go through' };
+    return { decision: 'ask', why: 'Manual is on' };
   }
   if (name === 'Bash') {
     const command = args?.command ?? '';
@@ -382,6 +433,10 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     const mine = neverRule(command, rules?.never);
     if (mine) return { decision: 'deny', reason: `blocked by your rule "${mine}" (/permissions)` };
     if (mode === 'plan') return isReadOnly(command) ? { decision: 'allow', why: 'it only reads' } : { decision: 'deny', reason: 'plan mode is on, so only read-only commands may run' };
+    if (bypass) {
+      const own = isReadOnly(command) ? null : namesOwn(command);
+      return own ? { decision: 'deny', reason: `it names ${own}, Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions` } : { decision: 'allow', why: 'Bypass permissions is on (the sandbox still keeps it in the project, offline)' };
+    }
     // once: no "don't ask again" for it.
     if (runsGitCommit(command)) return { decision: 'ask', once: true, why: 'a commit always asks' };
     if (isReadOnly(command)) return { decision: 'allow', why: 'it only reads' };
@@ -394,6 +449,9 @@ export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, r
     // A command that names a protected file: asked every time, with no "don't ask again".
     const guarded = c.parts.find((p) => p.protectedBy);
     if (guarded) return { decision: 'ask', once: true, protectedBy: guarded.protectedBy, why: `"${guarded.part}" names a protected file (${guarded.protectedBy}), so it asks` };
+    // Auto: what no rule covers, the model checks against your request (agent/auto-check.mjs);
+    // runs when it fits and can be undone, else it asks you as Manual would.
+    if (mode === 'auto') return { decision: 'check', why: 'Auto: no rule covers it, so the model checks it first' };
     return { decision: 'ask', why: !c.plain ? 'its words cannot be trusted for a rule ($(…), a file written with >, or a job left running), so it asks' : c.parts.length > 1 ? `"${open.part}" is not covered by any rule` : 'it can change things and no rule covers it' };
   }
   return { decision: 'deny', reason: 'unknown tool' };

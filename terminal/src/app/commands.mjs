@@ -6,7 +6,7 @@ export const COMMANDS = [
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
   { name: 'effort', desc: 'Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, steps', arg: '[low|medium|high]', picker: true },
-  { name: 'mode', desc: 'Pick the mode: ask first, auto-edit or plan (shift+tab)', arg: '[ask|edits|plan]', picker: true },
+  { name: 'mode', desc: 'Pick the mode: auto, manual, accept edits, plan or bypass permissions (shift+tab)', arg: '[auto|manual|edits|plan|bypass]', picker: true },
   { name: 'permissions', desc: 'What runs without asking, what never runs, which files always ask, and the start-up mode', arg: '[allow|never|protect|remove|mode|forget|test]' },
   { name: 'math', desc: 'Ask with the math notes (~/Desktop/MATH); alone: list its topics', arg: '[question]' },
   { name: 'design', desc: 'Ask with the design examples; alone: the folder and what is on · on|off, check on|off, ask on|off (look before it checks), sets all|<set,set>, style auto|opus|fable|mix, studio [on|off] (the UI pieces)', arg: '[request|on|off|check|ask|sets|style|studio]' },

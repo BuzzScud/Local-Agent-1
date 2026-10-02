@@ -7,13 +7,13 @@
 //   { open: 'panel' | 'mode' }   the picker to open
 //   { mode }              switch to this mode now (the start-up mode was saved)
 import { homedir } from 'node:os';
-import { BLOCKED, PROTECTED, checkRule, judge, coverage, runsGitCommit, ruleFor } from '../agent/permissions.mjs';
+import { BLOCKED, PROTECTED, checkRule, judge, coverage, runsGitCommit, ruleFor, modeOf } from '../agent/permissions.mjs';
 import { MAX_RULES, entries, addRule, removeRule, promoteRule, setStartMode, startModeFor, readState, permissionsFile } from './perm-store.mjs';
 import { trustedFolders, forgetTrust, realFolder } from './trust.mjs';
 
 const tilde = (p) => (String(p).startsWith(homedir()) ? `~${String(p).slice(homedir().length)}` : p);
-const MODE_WORDS = { ask: 'ask first', edits: 'auto-edit', plan: 'plan' };
-export const modeWord = (m) => MODE_WORDS[m] ?? 'ask first';
+const MODE_WORDS = { auto: 'auto', ask: 'manual', edits: 'accept edits', plan: 'plan', bypass: 'bypass permissions' };
+export const modeWord = (m) => MODE_WORDS[m] ?? 'manual';
 const KIND_WORDS = { allow: 'allow', runs: 'allow', never: 'never', protect: 'protect', protected: 'protect' };
 const HEAD = { allow: 'Runs without asking', never: 'Never runs', protect: 'Protected files' };
 const FIXED = [...new Set(BLOCKED.map((b) => b.why))];
@@ -28,7 +28,7 @@ export function summary(cwd, { session } = {}) {
   const start = startModeFor(cwd, s);
   const now = session?.size ?? 0;
   return {
-    mode: start ? `${modeWord(start.mode)} · ${start.where === 'everywhere' ? 'every folder' : 'this folder'}` : 'ask first · not saved',
+    mode: start ? `${modeWord(start.mode)} · ${start.where === 'everywhere' ? 'every folder' : 'this folder'}` : 'manual · not saved',
     allow: `${n('allow')} saved${now ? ` · ${now} this session` : ''}`,
     never: `${FIXED.length} fixed · ${n('never')} yours`,
     protect: `${PROTECTED.length} built in · ${n('protect')} yours`,
@@ -41,7 +41,7 @@ export function settingsValue(cwd) {
   const s = readState();
   const saved = ['allow', 'never', 'protect'].reduce((t, k) => t + entries(cwd, k, s).length, 0);
   const start = startModeFor(cwd, s);
-  return `${saved} saved · ${start ? modeWord(start.mode) : 'ask first'}`;
+  return `${saved} saved · ${start ? modeWord(start.mode) : 'manual'}`;
 }
 
 function listRows(kind, cwd) {
@@ -84,7 +84,7 @@ export function section(what, cwd, { session } = {}) {
     const list = listRows('protect', cwd);
     return { title: `${HEAD.protect} · ${PROTECTED.length} built in · ${list.length} yours`, pad: 4, rows: [
       ...broken,
-      ['They always ask before a change, even in Auto-edit, with no "allow all edits"; so does a command that names one (cp x .env), whatever rule you saved. Reading them is unchanged.'],
+      ['They always ask before a change, even in Accept edits and Auto, with no "allow all edits"; so does a command that names one (cp x .env), whatever rule you saved. Reading them is unchanged.'],
       [`Built in: ${PROTECTED.join('  ')}`],
       ...(list.length ? list : [['', 'none of yours yet: /permissions protect config/prod.*']]),
       ['/permissions protect <file> · /permissions remove protect <n> · /permissions everywhere protect <n>'],
@@ -129,7 +129,7 @@ function tryIt(cwd, text, { mode, session }) {
   return { panel: { title: 'Try a command', pad: 8, rows } };
 }
 
-const saved = { allow: (r, w) => `Saved for ${w}: "${r}" runs without asking${r.endsWith('*') ? '' : ', with any options'}.`, never: (r, w) => `Saved for ${w}: "${r}" never runs, in any mode.`, protect: (r, w) => `Saved for ${w}: "${r}" always asks before a change, even in Auto-edit.` };
+const saved = { allow: (r, w) => `Saved for ${w}: "${r}" runs without asking${r.endsWith('*') ? '' : ', with any options'}.`, never: (r, w) => `Saved for ${w}: "${r}" never runs, in any mode.`, protect: (r, w) => `Saved for ${w}: "${r}" always asks before a change, even in Accept edits and Auto.` };
 
 // "/permissions <what> <rest>" → the answer for App.jsx.
 export function changePermissions(cwd, arg, { mode, session } = {}) {
@@ -169,17 +169,17 @@ export function changePermissions(cwd, arg, { mode, session } = {}) {
   }
   if (what === 'mode') {
     const [m = '', ...more] = rest;
-    const id = m.toLowerCase();
+    const id = m.toLowerCase() === 'reset' ? 'reset' : modeOf(m) ?? m.toLowerCase();
     if (!id) return { open: 'mode' };
     const where = more.join(' ').toLowerCase().includes('every') ? 'everywhere' : 'folder';
     if (id === 'reset') {
       const r = setStartMode(cwd, null, { where });
-      return r.error ? warn(r.error) : { text: `The saved start-up mode for ${where === 'everywhere' ? 'every folder' : 'this folder'} is gone: it starts in ask first unless another one is saved.`, changed: true };
+      return r.error ? warn(r.error) : { text: `The saved start-up mode for ${where === 'everywhere' ? 'every folder' : 'this folder'} is gone: it starts in manual unless another one is saved.`, changed: true };
     }
-    if (!MODE_WORDS[id]) return warn('The modes are ask, edits and plan: /permissions mode edits (add "everywhere" for every folder, or use "reset").');
+    if (!MODE_WORDS[id]) return warn('The modes are auto, manual, edits, plan and bypass: /permissions mode edits (add "everywhere" for every folder, or use "reset").');
     const r = setStartMode(cwd, id, { where });
     if (r.error) return warn(r.error);
-    const extra = id === 'edits' ? ' Auto-edit still asks before commands, and protected files still ask.' : id === 'plan' ? ' It starts read-only.' : '';
+    const extra = id === 'edits' ? ' Accept edits still asks before commands, and protected files still ask.' : id === 'plan' ? ' It starts read-only.' : id === 'auto' ? ' The model checks what no rule covers; commits and protected files still ask.' : id === 'bypass' ? ' Nothing asks; blocked commands, the project fence and your never-list still hold.' : '';
     return { text: `Start-up mode: ${modeWord(id)} for ${where === 'everywhere' ? 'every folder' : 'this folder'}, and on now.${extra}`, mode: id, changed: true };
   }
   if (what === 'forget') {

@@ -73,8 +73,8 @@ test('/mode and /meters alone open the same kind of menu: the one in use marked,
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/mode' }, { key: 'enter' }, // the start page is drawn before the app takes keys
     { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode' },
-    { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is auto-edit' }, { wait: 'accept edits on' },
-    { type: '/mo' }, { key: 'enter' }, { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as auto-edit' },
+    { key: 'down' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Mode is accept edits' }, { wait: 'accept edits on' },
+    { type: '/mo' }, { key: 'enter' }, { wait: 'How Agentic Coder asks before it changes things' }, { sleep: 200 }, { snapshot: 'mode2' }, { key: 'esc' }, { wait: 'Kept mode as accept edits' },
     { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { sleep: 200 }, { snapshot: 'meters' },
     { type: '1' }, { wait: 'Status bar on' },
     { type: '/meters' }, { key: 'enter' }, { wait: 'on one line under the prompt' }, { key: 'esc' }, { wait: 'Kept the status bar as on' },
@@ -82,11 +82,19 @@ test('/mode and /meters alone open the same kind of menu: the one in use marked,
     ...quit,
   ] });
   await fake.close();
-  expect(r.snapshots.mode).toMatch(/❯ 1\. Ask first\s+asks before every edit and before commands that change things\s+✔ in use/);
-  expect(r.snapshots.mode).toMatch(/ 2\. Auto-edit\s+edits files without asking; still asks before commands/);
-  expect(r.snapshots.mode).toMatch(/ 3\. Plan\s+only reads and searches, then replies with a plan/);
-  expect(r.snapshots.mode).toContain('↑↓ to choose · enter to select · esc to go back');
-  expect(r.snapshots.mode2).toMatch(/❯ 2\. Auto-edit[^\n]*✔ in use/); // "/mo" opened it, on the mode in use
+  // Claude Code's five, as its menu draws them: the name over what it does, the number on the right, ✓ by the one in use.
+  const lines = r.snapshots.mode.split('\n');
+  const row = (name) => lines.findIndex((l) => l.includes(` ${name} `) || l.includes(` ${name}  `));
+  expect(lines[row("Auto")]).toMatch(/ {3}Auto {3}Recommended\s+1 │$/); // the tag is " Recommended " on grey
+  expect(lines[row('Auto') + 1]).toContain('Agentic Coder decides: clear steps run, the model checks the rest, risky ones ask');
+  expect(lines[row('Manual')]).toMatch(/❯ Manual\s+✓ 2 │$/); // it opens on the one in use
+  expect(lines[row('Manual') + 1]).toContain('Always asks before making changes');
+  expect(lines[row('Accept edits')]).toMatch(/ {3}Accept edits\s+3 │$/);
+  expect(lines[row('Plan')]).toMatch(/ {3}Plan\s+4 │$/);
+  expect(lines[row('Bypass permissions')]).toMatch(/ {3}Bypass permissions\s+5 │$/);
+  expect(lines[row('Bypass permissions') + 1]).toContain('Never asks; blocked commands and the project fence still hold');
+  expect(r.snapshots.mode).toContain('↑↓ to choose · a number or enter to select · esc to go back');
+  expect(r.snapshots.mode2).toMatch(/❯ Accept edits\s+✓ 3/); // "/mo" opened it, on the mode in use
   expect(r.snapshots.meters).toMatch(/ 1\. On\s+show it under the prompt/);
   expect(r.snapshots.meters).toMatch(/❯ 2\. Off\s+hide it; \/stats has the numbers\s+✔ in use/); // off by default
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));

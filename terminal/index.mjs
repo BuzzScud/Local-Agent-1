@@ -18,6 +18,8 @@ export { Agent, claimsAlreadyThere, claimsDone, asksForWork, THINK_BUDGET_SECS, 
 export { systemPrompt, projectNotes, gitSummary, SESSION_MARK, WORK_HABITS, NOTES_RANK } from './src/agent/prompt.mjs';
 export { toolSchemas } from './src/agent/tools.mjs';
 export { outsidePath } from './src/agent/permissions.mjs';
+// Auto mode's check, for the Auto & Screen check (models/evals/tools/auto-screen-check.mjs).
+export { autoCheck, AUTO_SYSTEM } from './src/agent/auto-check.mjs';
 export { streamChat } from './src/agent/client.mjs';
 export { complete, decide, SETUP_THINK_CAP } from './src/flows/llm.mjs';
 // The request sorter and the lines of its test, for the sorting check (models/evals/tools/sort-check.mjs).

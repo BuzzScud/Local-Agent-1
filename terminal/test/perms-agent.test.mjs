@@ -15,19 +15,29 @@ const project = () => { const d = mkdtempSync(join(tmpdir(), 'agentic-perms-'));
 const bash = (command) => ({ tool: { name: 'Bash', args: { command, description: 'x' } } });
 const write = (path, content = 'x\n') => ({ tool: { name: 'Write', args: { path, content } } });
 
-async function run(replies, { mode = 'ask', rules = null, answers = [], setup } = {}) {
+// check: Auto's check (auto-check.mjs) answered by the stand-in: (step text) => { verdict, reason }.
+async function run(replies, { mode = 'ask', rules = null, answers = [], setup, check = null, request = 'do the thing', confirmPlan = false } = {}) {
   const cwd = project();
   setup?.(cwd);
-  const fake = await startFakeServer(replies);
+  const checks = [];
+  const route = check ? (json) => {
+    if (!String(json.messages?.[0]?.content ?? '').startsWith('You check one step')) return null;
+    const step = String(json.messages.at(-1).content);
+    checks.push(step);
+    return { text: JSON.stringify(check(step)) };
+  } : null;
+  const fake = await startFakeServer(replies, { route });
   const asked = [];
-  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode, flows: false, verify: false, confirmPlan: false,
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode, flows: false, verify: false, confirmPlan,
     permissions: rules ? () => rules : null,
-    ask: async (req) => { asked.push({ name: req.name, command: req.args?.command, path: req.args?.path, once: !!req.once, protectedBy: req.protectedBy ?? null }); return { choice: answers.shift() ?? 'no' }; } });
+    ask: async (req) => { asked.push({ name: req.name, command: req.args?.command, path: req.args?.path, once: !!req.once, protectedBy: req.protectedBy ?? null, ...(req.autoReason ? { autoReason: req.autoReason } : {}) }); return { choice: answers.shift() ?? 'no' }; } });
   const tools = [];
+  const notes = [];
   agent.on('tool', (e) => tools.push(e));
-  await agent.send('do the thing');
+  agent.on('note', (e) => { if (e.auto) notes.push(e.text.replace(/ \([\d.]+ s\)$/, '')); });
+  await agent.send(request);
   await fake.close();
-  return { agent, asked, tools, cwd };
+  return { agent, asked, tools, cwd, checks, notes };
 }
 
 test('a saved rule runs its command without asking; a chain with an uncovered part asks, and "don\'t ask again" remembers that part only', async () => {
@@ -136,4 +146,54 @@ test('a rename on auto-accept that reaches a protected file asks, with no "allow
   expect(r.declined).toBe(true);
   expect(readFileSync(join(cwd, 'config', 'prod.js'), 'utf8')).toContain('oldName');
   expect(readFileSync(join(cwd, 'use.js'), 'utf8')).toContain('oldName');
+});
+
+test('Auto: a step the check finds fitting runs unasked; one it does not is asked about with its reason; a commit is asked without a check', async () => {
+  const pad = 'node -e "require(\'fs\').writeFileSync(\'pad.txt\', \'x\')"';
+  const check = (step) => (step.includes('pad.txt') ? { verdict: 'run', reason: 'Writing the pad file is what you asked for.' } : { verdict: 'ask', reason: 'Deleting the dist folder was not asked for.' });
+  const { asked, checks, notes, cwd } = await run([bash(pad), bash('find dist -delete'), bash('git commit -m "add pad"'), { text: 'Done.' }], { mode: 'auto', check, request: 'write the pad file', answers: ['yes', 'no'] }); // a no would end the turn before the commit
+  expect(checks.length).toBe(2); // the commit never reached the check
+  expect(checks[0]).toContain("The user's request:\nwrite the pad file");
+  expect(notes).toEqual(['Auto let it run: Writing the pad file is what you asked for', 'Auto asks you: Deleting the dist folder was not asked for']);
+  expect(asked).toEqual([
+    { name: 'Bash', command: 'find dist -delete', path: undefined, once: false, protectedBy: null, autoReason: 'Deleting the dist folder was not asked for' },
+    { name: 'Bash', command: 'git commit -m "add pad"', path: undefined, once: true, protectedBy: null },
+  ]);
+  expect(readFileSync(join(cwd, 'pad.txt'), 'utf8')).toBe('x'); // it ran
+});
+
+test('Auto: a check that does not answer clearly asks you', async () => {
+  const { asked, notes } = await run([bash('find dist -delete'), { text: 'Done.' }], { mode: 'auto', check: () => ({ verdict: 'perhaps', reason: 'x' }) });
+  expect(notes).toEqual(['Auto asks you: the check gave no clear answer']);
+  expect(asked.map((a) => a.autoReason)).toEqual(['the check gave no clear answer']);
+});
+
+test('Bypass permissions: commands and edits go through unasked (a commit and .env too); rm -rf and the app\'s own settings are refused', async () => {
+  const { asked, tools, cwd } = await run([bash('node -e "require(\'fs\').writeFileSync(\'made.txt\', \'ok\')"'), write('.env', 'A=1\n'), bash('rm -rf build'), write('.agentic/settings.json', '{"mode":"bypass"}'), { text: 'Done.' }], { mode: 'bypass', confirmPlan: true }); // the app's plan question too
+  expect(asked).toEqual([]);
+  expect(readFileSync(join(cwd, 'made.txt'), 'utf8')).toBe('ok');
+  expect(readFileSync(join(cwd, '.env'), 'utf8')).toBe('A=1\n');
+  expect(existsSync(join(cwd, '.agentic', 'settings.json'))).toBe(false);
+  expect(tools.filter((t) => t.view?.kind === 'denied').map((t) => t.view.message)).toEqual(['blocked: rm -rf deletes files for good', ".agentic/settings.json holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions"]);
+});
+
+test('the focused paths in Auto and Bypass: edits go through as on auto-accept, with no plan question in Bypass; protected files ask in Auto, only the app\'s own in Bypass', async () => {
+  const { applyChange } = await import('../src/flows/apply.mjs');
+  const cwd = project();
+  const asked = [];
+  const agent = new Agent({ url: 'http://127.0.0.1:9', model, cwd, system: 'x', thinking: false, mode: 'auto', flows: false, verify: false,
+    ask: async (req) => { asked.push(req.name === 'Ask' ? 'plan question' : req.args.path); return { choice: 'yes', text: 'yes' }; } });
+  const ctx = agent.flowContext();
+  expect(ctx.mode()).toBe('edits');
+  expect(ctx.protectedBy('.env')).toBe('.env');
+  expect((await applyChange(ctx, [{ rel: 'a.md', before: null, after: 'a\n' }, { rel: '.env', before: null, after: 'A=1\n' }])).ok).toBe(true);
+  expect(asked).toEqual(['plan question', '.env']); // Auto keeps the plan question and the protected file's
+  asked.length = 0;
+  agent.mode = 'bypass';
+  expect(ctx.mode()).toBe('edits');
+  expect(ctx.protectedBy('.env')).toBe(null);
+  expect(ctx.protectedBy('.agentic/settings.json')).toBe('.agentic/settings.json');
+  expect((await applyChange(ctx, [{ rel: 'b.md', before: null, after: 'b\n' }, { rel: '.env.local', before: null, after: 'B=1\n' }])).ok).toBe(true);
+  expect(asked).toEqual([]);
+  expect(readFileSync(join(cwd, '.env.local'), 'utf8')).toBe('B=1\n');
 });

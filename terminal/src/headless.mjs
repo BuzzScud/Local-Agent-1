@@ -104,7 +104,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   const t0 = Date.now();
   agent.canSee = canSee;
   // A picture the model reads by itself: its vision turned on then (coding -p reloads the model).
-  if (visionOn) agent.visionOn = () => visionOn(agent);
+  // It can look at the screen then too (the Screen tool, offered to a model that can see).
+  if (visionOn) { agent.visionOn = () => visionOn(agent); agent.mayLook = () => true; }
   const reason = await agent.send(canSee || !images.length ? prompt : `${prompt}\n\n(Pictures were named, but this model is not looking at pictures.)`, { signal, images: canSee && images.length ? images : undefined });
   const secs = (Date.now() - t0) / 1000;
   // What the run taught goes into the memory before it ends.
