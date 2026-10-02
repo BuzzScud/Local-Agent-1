@@ -69,7 +69,7 @@ const fitPath = (p, max) => (p.length <= max ? p : `…${p.slice(p.length - max 
 // no AGENTS.md always gets /init first). What the start waits for is on the page (stepsLine).
 export const TIPS = [
   '@ attaches a file to your message',
-  'shift+tab switches between ask first, auto-edit and plan',
+  'shift+tab switches between manual, accept edits, plan and auto',
   '/resume picks up an earlier conversation',
   'esc twice rewinds the files and the conversation',
   '! runs a shell command yourself',
@@ -281,7 +281,7 @@ function timeLine(s, loading, room) {
 // A row on the right: a label, then its value.
 const Labelled = ({ label, children, color = PATH }) => <Text wrap="truncate-end"><Text color={C.dim}>{label.padEnd(8)}</Text><Text color={color}>{children}</Text></Text>;
 // The keys worth knowing on the first day, as many as fit.
-const TRY = [['@', 'a file'], ['!', 'a command'], ['/', 'every command'], ['shift+tab', 'ask · edit · plan'], ['esc esc', 'rewind']];
+const TRY = [['@', 'a file'], ['!', 'a command'], ['/', 'every command'], ['shift+tab', 'switch mode'], ['esc esc', 'rewind']];
 function tryLine(room) {
   const fit = [];
   let used = 0;

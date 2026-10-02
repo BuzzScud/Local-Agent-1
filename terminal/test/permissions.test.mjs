@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { blockedReason, decide, outsidePath, isReadOnly, splitCommand, ruleCovers, ruleFor, coverage, offerFor, neverRule, protectedBy, PROTECTED, checkRule, judge } from '../src/agent/permissions.mjs';
+import { blockedReason, decide, outsidePath, isReadOnly, splitCommand, ruleCovers, ruleFor, coverage, offerFor, neverRule, protectedBy, PROTECTED, checkRule, judge, MODES, CYCLE, nextMode, modeOf } from '../src/agent/permissions.mjs';
 import { homedir } from 'node:os';
 
 const cases = {
@@ -258,8 +258,8 @@ test('judge says why: the /permissions test panel prints it; decide() is the sam
   expect(why('npm test > out.txt').why).toMatch(/cannot be trusted/);
   expect(why('git push').reason).toBe('blocked: git push sends your code off this Mac');
   for (const c of ['npm test', 'git commit -m x', 'make deploy', 'git status', 'git push']) expect('why' in decide('Bash', { command: c }, ctx)).toBe(false);
-  expect(judge('Edit', { path: 'src/a.js' }, { mode: 'edits' }).why).toBe('Auto-edit is on');
-  expect(judge('Edit', { path: 'src/a.js' }, { mode: 'ask' }).why).toBe('Ask first is on');
+  expect(judge('Edit', { path: 'src/a.js' }, { mode: 'edits' }).why).toBe('Accept edits is on');
+  expect(judge('Edit', { path: 'src/a.js' }, { mode: 'ask' }).why).toBe('Manual is on');
   expect(judge('Edit', { path: '.env' }, { mode: 'edits' }).why).toBe('it is a protected file (.env); protected files always ask');
 });
 
@@ -291,4 +291,63 @@ test('the question: four choices with "always allow … in this folder"; a prote
   expect(permissionOptions({ name: 'Bash', once: true, protectedBy: '.env' }, 'cp', 'cp').map((o) => o.choice)).toEqual(['yes', 'no']);
   for (const name of ['Edit', 'Write', 'Rename']) expect([name, permissionOptions({ name, once: true, protectedBy: '.env' }, null).map((o) => o.choice)]).toEqual([name, ['yes', 'no']]);
   expect(permissionOptions({ name: 'Edit' }, null).map((o) => o.choice)).toEqual(['yes', 'always', 'no']);
+});
+
+// The five modes (1 Oct 2026, Claude Code's): Auto and Bypass permissions join Manual, Accept edits and Plan.
+const ctx5 = (mode, extra = {}) => ({ mode, cwd: '/p', inside: true, ...extra });
+const d5 = (name, args, mode, extra) => decide(name, args, ctx5(mode, extra)).decision;
+
+test('the five modes by name: Claude Code\'s words and the old ones; shift+tab walks four and never lands on Bypass', () => {
+  expect(MODES).toEqual(['auto', 'ask', 'edits', 'plan', 'bypass']);
+  expect(['Manual', 'accept', 'auto-edit', 'AUTO', 'bypass-permissions', 'plan', 'yolo'].map(modeOf)).toEqual(['ask', 'edits', 'edits', 'auto', 'bypass', 'plan', null]);
+  expect(CYCLE).toEqual(['ask', 'edits', 'plan', 'auto']);
+  expect(['ask', 'edits', 'plan', 'auto', 'bypass'].map(nextMode)).toEqual(['edits', 'plan', 'auto', 'ask', 'ask']);
+});
+
+test('Auto: reading and edits go through; what no rule covers goes to the check; the hard lines never reach it', () => {
+  expect(d5('Edit', { path: 'src/a.js' }, 'auto')).toBe('allow');
+  expect(d5('Bash', { command: 'git status' }, 'auto')).toBe('allow'); // only reads
+  expect(d5('Bash', { command: 'npm install left-pad' }, 'auto')).toBe('check');
+  expect(d5('Bash', { command: 'node build.mjs > out.txt' }, 'auto')).toBe('check'); // words a rule cannot trust: still checked
+  expect(d5('Bash', { command: 'node --test' }, 'auto', { rules: { allow: ['node --test'] } })).toBe('allow'); // a rule covers it
+  expect(decide('Bash', { command: 'git commit -m x' }, ctx5('auto'))).toEqual({ decision: 'ask', once: true }); // a commit always asks
+  expect(decide('Write', { path: '.env' }, ctx5('auto', { rel: '.env' }))).toMatchObject({ decision: 'ask', once: true, protectedBy: '.env' });
+  expect(decide('Bash', { command: 'cp x .env' }, ctx5('auto'))).toMatchObject({ decision: 'ask', once: true, protectedBy: '.env' });
+  expect(d5('Bash', { command: 'rm -rf build' }, 'auto')).toBe('deny');
+  expect(d5('Bash', { command: 'cat ~/.ssh/id_rsa' }, 'auto')).toBe('deny'); // outside the project
+  expect(d5('Bash', { command: 'npm publish' }, 'auto', { rules: { never: ['npm publish'] } })).toBe('deny');
+  expect(d5('WebSearch', { query: 'x' }, 'auto')).toBe('check');
+  expect(d5('WebFetch', { url: 'https://example.org/' }, 'auto', { rules: { allow: ['WebFetch(example.org)'] } })).toBe('allow');
+  expect(judge('Bash', { command: 'npm install left-pad' }, ctx5('auto')).why).toBe('Auto: no rule covers it, so the model checks it first');
+});
+
+test('Bypass permissions: nothing asks, but the blocked commands, the folder fence, your never-list and the app\'s own settings hold', () => {
+  for (const c of ['npm install left-pad', 'git commit -m x', 'cp x .env', 'node build.mjs > out.txt']) expect(d5('Bash', { command: c }, 'bypass')).toBe('allow');
+  expect(d5('Write', { path: '.env' }, 'bypass', { rel: '.env' })).toBe('allow');
+  expect(d5('Edit', { path: 'src/a.js' }, 'bypass')).toBe('allow');
+  for (const c of ['rm -rf build', 'sudo ls', 'git push', 'pkill node', 'cat ~/.ssh/id_rsa']) expect(d5('Bash', { command: c }, 'bypass')).toBe('deny');
+  expect(d5('Bash', { command: 'npm publish' }, 'bypass', { rules: { never: ['npm publish'] } })).toBe('deny');
+  expect(decide('Write', { path: '.agentic/settings.json' }, ctx5('bypass', { rel: '.agentic/settings.json' }))).toEqual({ decision: 'deny', reason: ".agentic/settings.json holds Agentic Coder's own settings and rules, which the model never changes, even in Bypass permissions" });
+  expect(d5('Bash', { command: 'cp x .agentic-coder/permissions.json' }, 'bypass')).toBe('deny');
+  expect(d5('Bash', { command: 'cat .agentic/settings.json' }, 'bypass')).toBe('allow'); // reading one is fine
+  expect(d5('Edit', { path: '../x.js' }, 'bypass', { inside: false })).toBe('deny');
+  expect(d5('WebFetch', { url: 'https://example.org/' }, 'bypass')).toBe('allow');
+  expect(d5('Edit', { path: 'a.js' }, 'plan')).toBe('deny'); // plan is unchanged
+});
+
+test('Screen: each app asks once in every mode but Bypass; this session or a saved rule lets it look; never holds everywhere', () => {
+  for (const m of ['auto', 'ask', 'edits', 'plan']) expect(decide('Screen', { app: 'TextEdit' }, ctx5(m))).toEqual({ decision: 'ask', rule: 'Screen(TextEdit)' });
+  expect(decide('Screen', {}, ctx5('ask'))).toEqual({ decision: 'ask', rule: 'Screen(whole screen)' });
+  expect(d5('Screen', { app: 'TextEdit' }, 'bypass')).toBe('allow');
+  expect(d5('Screen', { app: 'textedit' }, 'ask', { allowedPrefixes: new Set(['Screen(TextEdit)']) })).toBe('allow'); // its name in any case
+  expect(d5('Screen', { app: 'Safari' }, 'ask', { allowedPrefixes: new Set(['Screen(TextEdit)']) })).toBe('ask'); // another app asks
+  expect(d5('Screen', { app: 'Mail' }, 'auto', { rules: { allow: ['Screen(Mail)'] } })).toBe('allow');
+  expect(d5('Screen', { app: 'Mail' }, 'bypass', { rules: { never: ['Screen(Mail)'] } })).toBe('deny');
+  expect(checkRule('allow', 'Screen(Safari)')).toEqual({ rule: 'Screen(Safari)' });
+  expect(checkRule('never', 'screen(whole screen)')).toEqual({ rule: 'Screen(whole screen)' });
+});
+
+test('the screen question: this time, for this session, always (saved), no', async () => {
+  const { permissionOptions } = await import('../src/app/screen.jsx');
+  expect(permissionOptions({ name: 'Screen', rule: 'Screen(Mail)' }, 'Screen(Mail)').map((o) => [o.label, o.choice])).toEqual([['This time', 'yes'], ['For this session', 'always'], ['Always (saved for this folder)', 'save'], ['No (esc)', 'no']]);
 });

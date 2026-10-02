@@ -30,7 +30,7 @@ test('the page: a titled line, the greeting, the bot, the model; recent activity
   expect(lines[0]).toMatch(/^── Agentic Coder v\d+\.\d+\.\d+ ─+$/);
   const text = lines.join('\n');
   for (const s of ['Welcome back!', 'Qwen3.5 9B', '● ready · effort high · 64k context', 'Recent activity', '1h ago', '6h ago', '1d ago', '1 prompt', '/resume for more', 'This folder', 'Try', '@ a file   ! a command   / every command']) expect(text).toContain(s);
-  expect(draw(h(StartPage, { start: START, width: 127 }), 127).join('\n')).toContain('/ every command   shift+tab ask · edit · plan'); // as many keys as fit
+  expect(draw(h(StartPage, { start: START, width: 127 }), 127).join('\n')).toContain('/ every command   shift+tab switch mode'); // as many keys as fit
   expect(text).toMatch(/where\s+~ · your home folder/); // this folder as labelled rows
   expect(text).toMatch(/git\s+none here/);
   expect(text).toMatch(/reads\s+AGENTS\.md \+ memory/);

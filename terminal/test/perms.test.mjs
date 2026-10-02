@@ -37,7 +37,7 @@ test('a rule is saved for this folder, listed, refused when it cannot be one, an
     expect([cmd, say(proj, cmd).text]).toEqual([cmd, expect.stringMatching(why)]);
   expect(say(proj, 'allow make').text).toContain('"make *" would cover anything after it.');
   expect(say(proj, 'never npm publish').text).toBe('Saved for this folder: "npm publish" never runs, in any mode.');
-  expect(say(proj, 'protect config/prod.*').text).toContain('always asks before a change, even in Auto-edit');
+  expect(say(proj, 'protect config/prod.*').text).toContain('always asks before a change, even in Accept edits and Auto');
   expect(store.rulesFor(proj)).toEqual({ allow: ['npm test', 'make'], never: ['npm publish'], protect: ['config/prod.*'], broken: null });
   expect(say(proj, 'remove allow 1').text).toBe('Removed "npm test" (this folder).');
   expect(say(proj, 'remove allow 9').text).toBe('There is no allow rule 9: /permissions allow shows them.');
@@ -99,7 +99,7 @@ test('rules for a folder never reach a folder whose name only starts the same (p
 
 test('the start-up mode is saved for a folder or everywhere, the folder wins, reset takes it away, and loadSettings reads it', () => {
   const r = say(proj, 'mode edits', { mode: 'ask' });
-  expect(r).toEqual({ text: 'Start-up mode: auto-edit for this folder, and on now. Auto-edit still asks before commands, and protected files still ask.', mode: 'edits', changed: true });
+  expect(r).toEqual({ text: 'Start-up mode: accept edits for this folder, and on now. Accept edits still asks before commands, and protected files still ask.', mode: 'edits', changed: true });
   expect(store.startModeFor(proj)).toMatchObject({ mode: 'edits', where: 'folder', here: true });
   expect(loadSettings(proj).mode).toBe('edits');
   expect(loadSettings(other).mode).toBeUndefined();
@@ -107,7 +107,7 @@ test('the start-up mode is saved for a folder or everywhere, the folder wins, re
   expect(loadSettings(other).mode).toBe('plan');
   expect(loadSettings(proj).mode).toBe('edits');                    // its own folder's wins
   expect(loadSettings(stranger).mode).toBe('plan');                 // everywhere reaches it
-  expect(say(proj, 'mode reset').text).toMatch(/is gone: it starts in ask first/);
+  expect(say(proj, 'mode reset').text).toMatch(/is gone: it starts in manual/);
   expect(loadSettings(proj).mode).toBe('plan');                     // back to the everywhere one
   expect(say(proj, 'mode sideways').tone).toBe('warn');
   expect(say(proj, 'mode')).toEqual({ open: 'mode' });
@@ -129,9 +129,9 @@ test('the panels number the lists, say where each rule applies, and the picker r
   const folders = perms.section('folders', proj);
   expect(folders.title).toBe('Trusted folders · 2');
   expect(folders.rows.some((r) => r[1]?.includes('← you are in it'))).toBe(true);
-  expect(perms.summary(proj, { session: new Set(['a b']) })).toEqual({ mode: 'ask first · not saved', allow: '2 saved · 1 this session', never: '12 fixed · 1 yours', protect: '11 built in · 1 yours', folders: '2 trusted' });
-  expect(perms.settingsValue(proj)).toBe('4 saved · ask first');
-  expect(perms.settingsValue(other)).toBe('1 saved · ask first');
+  expect(perms.summary(proj, { session: new Set(['a b']) })).toEqual({ mode: 'manual · not saved', allow: '2 saved · 1 this session', never: '12 fixed · 1 yours', protect: '11 built in · 1 yours', folders: '2 trusted' });
+  expect(perms.settingsValue(proj)).toBe('4 saved · manual');
+  expect(perms.settingsValue(other)).toBe('1 saved · manual');
 });
 
 test('a trusted folder can be forgotten by number; its rules stop applying until it is trusted again', () => {
@@ -152,7 +152,7 @@ test('/permissions test runs the real check and says why, part by part, and runs
   const run = (arg, mode = 'ask', session = new Set()) => say(proj, `test ${arg}`, { mode, session }).panel;
   let p = run('npm test && ./scripts/deploy.sh');
   expect(p.title).toBe('Try a command');
-  expect(p.rows).toEqual([['', 'npm test && ./scripts/deploy.sh'], ['ASKS', '"./scripts/deploy.sh" is not covered by any rule'], ['part 1', 'npm test   runs · your saved rule "npm test"'], ['part 2', './scripts/deploy.sh   asks · no rule covers it'], ['in ask first mode, this folder\'s rules and this session\'s. Nothing was run.']]);
+  expect(p.rows).toEqual([['', 'npm test && ./scripts/deploy.sh'], ['ASKS', '"./scripts/deploy.sh" is not covered by any rule'], ['part 1', 'npm test   runs · your saved rule "npm test"'], ['part 2', './scripts/deploy.sh   asks · no rule covers it'], ['in manual mode, this folder\'s rules and this session\'s. Nothing was run.']]);
   expect(run('npm test -- foo').rows.slice(0, 2)).toEqual([['', 'npm test -- foo'], ['RUNS', 'every part is covered: "npm test" (saved)']]);
   expect(run('git commit -m x').rows[1]).toEqual(['ASKS', 'a commit always asks']);
   expect(run('git push').rows[1]).toEqual(['REFUSED', 'blocked: git push sends your code off this Mac']);
@@ -163,8 +163,8 @@ test('/permissions test runs the real check and says why, part by part, and runs
   expect(run('npm test', 'plan').rows[1]).toEqual(['REFUSED', 'plan mode is on, so only read-only commands may run']);
   expect(run('edit .env', 'edits').rows.slice(0, 2)).toEqual([['', 'edit .env'], ['ASKS', 'it is a protected file (.env); protected files always ask']]);
   expect(run('edit config/prod.json', 'edits').rows[1][0]).toBe('ASKS');
-  expect(run('edit src/app.js', 'edits').rows[1]).toEqual(['RUNS', 'Auto-edit is on']);
-  expect(run('edit src/app.js', 'ask').rows[1]).toEqual(['ASKS', 'Ask first is on']);
+  expect(run('edit src/app.js', 'edits').rows[1]).toEqual(['RUNS', 'Accept edits is on']);
+  expect(run('edit src/app.js', 'ask').rows[1]).toEqual(['ASKS', 'Manual is on']);
   expect(run('edit ../secrets.txt', 'edits').rows[1]).toEqual(['REFUSED', 'that file is outside the project folder']);
   expect(say(proj, 'test').tone).toBe('warn');
 });

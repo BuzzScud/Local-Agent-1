@@ -31,7 +31,7 @@ export function Tips() {
       <Text color={C.dim}> Tips for getting started:</Text>
       <Text color={C.dim}>  1. Run /init to write an AGENTS.md with notes about this project</Text>
       <Text color={C.dim}>  2. Ask for a change: Agentic Coder reads, edits and tests, and asks before it touches anything</Text>
-      <Text color={C.dim}>  3. shift+tab switches between ask first, auto-edit and plan</Text>
+      <Text color={C.dim}>  3. shift+tab switches between manual, accept edits, plan and auto</Text>
     </Box>
   );
 }
@@ -148,12 +148,13 @@ export function InputBox({ text, width, placeholder = 'Try "write a test for mai
   );
 }
 
-export const MODE_TEXT = { edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on' };
+export const MODE_TEXT = { auto: '⏵⏵ auto mode on', edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on', bypass: '⏵⏵ bypass permissions on' };
+const MODE_COLOR = { auto: C.auto, edits: C.edits, plan: C.plan, bypass: C.bypass };
 export const CYCLE_HINT = ' (shift+tab to cycle)';
 // cycle: false leaves out the hint, for a narrow footer.
 export function modeLabel(mode, { cycle = true } = {}) {
   if (!MODE_TEXT[mode]) return null;
-  return <Text color={mode === 'edits' ? C.edits : C.plan}>{MODE_TEXT[mode]}{cycle ? <Text color={C.dim}>{CYCLE_HINT}</Text> : null}</Text>;
+  return <Text color={MODE_COLOR[mode]}>{MODE_TEXT[mode]}{cycle ? <Text color={C.dim}>{CYCLE_HINT}</Text> : null}</Text>;
 }
 
 export function Footer({ width, right }) {

@@ -12,7 +12,7 @@ import { realFolder, isTrusted } from './trust.mjs';
 
 export const KINDS = ['allow', 'never', 'protect'];
 export const MAX_RULES = 40;
-const MODES = ['ask', 'edits', 'plan'];
+import { MODES } from '../agent/permissions.mjs';
 
 // Read when used, not at import (as trust.json is), so tests can point it at their own home.
 const home = () => (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');

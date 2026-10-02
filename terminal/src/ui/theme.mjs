@@ -9,6 +9,8 @@ export const C = {
   ask: 'ansi256(147)',      // permission prompts #afafff
   edits: 'ansi256(141)',    // accept-edits mode #af87ff
   plan: 'ansi256(73)',      // plan mode #5fafaf
+  auto: 'ansi256(179)',     // auto mode #d7af5f
+  bypass: 'ansi256(203)',   // bypass permissions #ff5f5f
   ok: 'ansi256(114)',
   bad: 'ansi256(203)',
   warn: 'ansi256(215)',

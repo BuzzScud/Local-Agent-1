@@ -15,7 +15,8 @@ import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
 import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.mjs';
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHomeFolder } from '../agent/prompt.mjs';
-import { offerFor } from '../agent/permissions.mjs';
+import { offerFor, nextMode, modeOf } from '../agent/permissions.mjs';
+import { screenAccess, askScreenAccess, terminalApp } from '../tools/screen.mjs';
 import { resolvePath } from '../agent/tools.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama, isOutOfMemory, setEndpoint, endpointOf } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
@@ -65,7 +66,6 @@ const VERBS = [['Baking', 'Baked'], ['Brewing', 'Brewed'], ['Cogitating', 'Cogit
 // A turn's end line when it did not finish its job (rail.jsx); the note before it says why.
 const END_WORDS = { stuck: 'Stopped: it was stuck', limit: 'Stopped at the step limit', error: 'Stopped by an error', declined: 'Stopped: you said no' };
 const PLACEHOLDERS = ['Try "explain what this project does"', 'Try "add a test for …"', 'Try "fix the failing tests"', 'Try "find where … is set"'];
-const MODES = ['ask', 'edits', 'plan'];
 const IDLE = { phase: 'idle' };
 const INIT_PROMPT = 'Look through this project and write an AGENTS.md at its root for a coding assistant: what the project is, how to run it and its tests, the main folders and files, and conventions you notice in the code. Keep it under 60 lines. If an AGENTS.md already exists, improve it instead.';
 const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
@@ -220,7 +220,7 @@ export function App({ opts, win, onRestart }) {
   const pickLevel = (pk) => thinkingLevel(pickModelOf(pk), pk.on, pk.levelId);
   const [input, setInput] = useState({ value: '', cursor: 0 });
   const [menuIndex, setMenuIndex] = useState(0);
-  const [mode, setModeState] = useState(MODES.includes(opts.mode ?? settings.mode) ? (opts.mode ?? settings.mode) : 'ask');
+  const [mode, setModeState] = useState(modeOf(opts.mode ?? settings.mode) ?? 'ask');
   const [thinking, setThinkingState] = useState(opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true);
   const [effort, setEffortState] = useState(opts.effort ?? settings.effort ?? model.thinkingEffort);
   const [startPhase, setStartPhase] = useState('loading');
@@ -554,7 +554,7 @@ export function App({ opts, win, onRestart }) {
     if (id === 'startmode') {
       const st = startModeFor(agent.cwd);
       const now = st && !st.here ? ` Now it starts in ${modeWord(st.mode)}, saved ${st.where === 'everywhere' ? 'for every folder' : `for ${st.key.replace(homedir(), '~')}`}.` : '';
-      return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else ask first' }] };
+      return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else manual' }] };
     }
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
     if (id === 'vision-get') {
@@ -1198,8 +1198,11 @@ export function App({ opts, win, onRestart }) {
   // The model read a picture (or a scanned page) by itself while not looking at pictures:
   // the same reload, in the middle of its reply, when the add-on is here (else Read says
   // to ask you to attach it, which offers the download).
+  // Whether this model on this Mac can turn its vision on (the Screen tool is offered then too).
+  agent.mayLook = () => !model.remote && !opts.url && Boolean(model.vision) && existsSync(visionPath(model));
+  agent.screen = settings.screen !== false;
   agent.visionOn = async () => {
-    if (model.remote || opts.url || !model.vision || !existsSync(visionPath(model))) return false;
+    if (!agent.mayLook()) return false;
     push({ type: 'note', text: `${model.name} wants to look at a picture: turning on its vision (a reload of about 20 s, the conversation stays).`, tone: 'dim' });
     await switchModel(withVision(model), () => `${model.name} can look at pictures now: it stays on for this window.`, { midTurn: true });
     return Boolean(agentRef.current?.canSee);
@@ -1300,8 +1303,10 @@ export function App({ opts, win, onRestart }) {
       { name: 'permissions mode', label: 'Start-up mode', value: v.mode, note: 'what it starts in; /mode changes one conversation' },
       { name: 'permissions allow', label: 'Runs without asking', value: v.allow, note: 'on top of commands that only read' },
       { name: 'permissions never', label: 'Never runs', value: v.never, note: 'every mode; a commit always asks' },
-      { name: 'permissions protect', label: 'Protected files', value: v.protect, note: 'always ask before a change, even in Auto-edit' },
+      { name: 'permissions protect', label: 'Protected files', value: v.protect, note: 'always ask before a change, even in Accept edits and Auto' },
       { name: 'permissions folders', label: 'Trusted folders', value: v.folders, note: 'folders you said yes to in the safety check' },
+      // The Screen tool (tools/screen.mjs): /screen, typed in full, is the same.
+      { name: 'screen', label: 'Screen', value: process.platform !== 'darwin' ? 'Mac only' : `${screenAccess() ? 'allowed' : 'not allowed yet'} · ${agent.canSee || agent.mayLook?.() ? 'model sees' : 'model is blind'}`, note: 'the model may look at an app or the whole screen; each app asks once' },
     ];
     setPicker({ kind: 'settings', title: 'Permissions', blurb: `Saved for ${at.replace(homedir(), '~')}. Each row opens; /permissions test <command> tries one.`, groups: [{ group: 'What Agentic Coder may do here', rows }], rows, index: 0 });
   };
@@ -1398,7 +1403,14 @@ export function App({ opts, win, onRestart }) {
     if (id === 'mode') {
       const o = MODE_OPTIONS.find((x) => x.id === value); if (!o) return;
       setMode(o.id);
-      push({ type: 'note', text: `Mode is ${o.label.toLowerCase()}: Agentic Coder ${o.note}.`, tone: 'dim' });
+      const MODE_SAYS = {
+        auto: 'Mode is auto: reading, searching and edits inside the project go through; a command or web page no rule covers is checked by the model against your request first, and runs only when it fits and can be undone. Commits and protected files still ask.',
+        ask: 'Mode is manual: Agentic Coder asks before every change and every command that can change things.',
+        edits: 'Mode is accept edits: file edits go through without asking; commands still ask.',
+        plan: 'Mode is plan: it only reads and searches, then replies with a plan.',
+        bypass: 'Bypass permissions is on: nothing asks. Still never: rm -rf, sudo, git push, stopping processes, a change to Agentic Coder’s own settings, your never-list; commands stay in the project with no internet (the sandbox). shift+tab goes back to manual.',
+      };
+      push({ type: 'note', text: MODE_SAYS[o.id], tone: o.id === 'bypass' ? 'warn' : 'dim' });
     } else if (id === 'meters') {
       const on = value === 'on';
       setMeters(on);
@@ -1630,6 +1642,7 @@ export function App({ opts, win, onRestart }) {
       on('flow-step', (st) => setLive((l) => ({ ...l, flowStep: st }))),
       on('stats', (st) => setStats(st)),
       on('mode', (m) => setModeState(m)),
+      on('screen-setup', () => push({ type: 'note', text: `The model tried to look at the screen, but macOS has not let ${terminalApp()} take pictures of it yet: type /screen setup (once).`, tone: 'warn' })),
       on('settled', () => autoRef.current.schedule()),
       on('compacted', ({ summary, inPlace, n }) => { push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
       on('turn-end', ({ reason, secs, steps, reads, thinkTokens }) => {
@@ -2195,7 +2208,8 @@ export function App({ opts, win, onRestart }) {
       }
       case 'mode': {
         if (!arg.trim()) { openChoice('mode'); break; }
-        const m = MODES.includes(arg) ? arg : MODES[(MODES.indexOf(agent.mode) + 1) % MODES.length];
+        const m = modeOf(arg) ?? (/^[1-5]$/.test(arg.trim()) ? MODE_OPTIONS[Number(arg) - 1].id : null);
+        if (!m) { push({ type: 'note', text: `There is no mode "${arg.trim()}": auto, manual, edits, plan or bypass (or 1–5, as /mode lists them).`, tone: 'warn' }); break; }
         applyChoice('mode', m);
         break;
       }
@@ -2418,6 +2432,26 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'web': openWebPicker(); break;
+      case 'screen': {
+        // /screen: whether the model can look (macOS's Screen Recording, a model that sees
+        // pictures) and the apps it may; /screen setup asks macOS, then opens its Settings page.
+        if (process.platform !== 'darwin') { push({ type: 'note', text: 'Looking at the screen works on a Mac only.', tone: 'dim' }); break; }
+        const sees = agent.canSee || agent.mayLook?.();
+        if (arg.trim().toLowerCase() === 'setup') {
+          if (screenAccess()) { push({ type: 'note', text: `${terminalApp()} may already take pictures of the screen: nothing to set up.`, tone: 'dim' }); break; }
+          const ok = askScreenAccess();
+          push({ type: 'note', text: ok ? `${terminalApp()} may take pictures of the screen now.` : `macOS keeps Screen Recording for itself to switch on: in System Settings (open now) → Privacy & Security → Screen & System Audio Recording, turn on ${terminalApp()}, then quit ${terminalApp()} and open it again (macOS asks that once). /screen says when it is allowed.`, tone: ok ? 'dim' : 'warn' });
+          break;
+        }
+        const saved = agent.savedRules?.()?.allow?.filter((r) => /^Screen\(/i.test(r)) ?? [];
+        const now = [...(agent.allowedPrefixes ?? [])].filter((r) => /^Screen\(/i.test(r));
+        push({ type: 'note', text: [
+          `Screen: ${screenAccess() ? `${terminalApp()} may take pictures of the screen` : `${terminalApp()} may not take pictures of the screen yet: /screen setup`}.`,
+          `${model.name} ${sees ? 'can look at pictures, so it has the Screen tool: it asks before it looks at an app the first time (this time, for this session, or always).' : 'cannot look at pictures, so it has no Screen tool. A model that sees: on this Mac Qwen3.5 9B or Gemma, on Ollama one marked "vision" in /model.'}`,
+          `It only looks: nothing is clicked or typed.${saved.length || now.length ? ` Allowed: ${[...saved.map((r) => `${r} (saved)`), ...now.map((r) => `${r} (this session)`)].join(', ')}.` : ''}`,
+        ].join('\n'), tone: 'dim' });
+        break;
+      }
       case 'remote': {
         // /remote alone: the form. claude / computer / service: straight to that
         // service (the form, asking for its first row, when it is not set up);
@@ -3065,7 +3099,7 @@ export function App({ opts, win, onRestart }) {
       if (rewindRef.current?.points.length) flash('Press esc again to rewind', 1500);
       return;
     }
-    if (key.tab && key.shift) { const m = MODES[(MODES.indexOf(cur.mode) + 1) % MODES.length]; setMode(m); return; }
+    if (key.tab && key.shift) { setMode(nextMode(cur.mode)); return; }
     // ctrl+t: the model on this Mac on or off (the footer's label says which, and how much memory it holds).
     if (key.ctrl && ch === 't') { toggleFnRef.current('ctrl+t'); return; }
     if (key.ctrl && ch === 'o') {

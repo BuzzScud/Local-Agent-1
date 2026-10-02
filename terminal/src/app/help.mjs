@@ -8,9 +8,11 @@ export const VERSION = '0.1.0';
 // What each mode does (the /mode menu, its note, and the Help page).
 // permissions.mjs is what actually decides.
 export const MODE_OPTIONS = [
-  { id: 'ask', label: 'Ask first', note: 'asks before every edit and before commands that change things' },
-  { id: 'edits', label: 'Auto-edit', note: 'edits files without asking; still asks before commands' },
-  { id: 'plan', label: 'Plan', note: 'only reads and searches, then replies with a plan' },
+  { id: 'auto', label: 'Auto', recommended: true, note: 'Agentic Coder decides: clear steps run, the model checks the rest, risky ones ask' },
+  { id: 'ask', label: 'Manual', note: 'Always asks before making changes' },
+  { id: 'edits', label: 'Accept edits', note: 'Automatically accepts file edits; commands still ask' },
+  { id: 'plan', label: 'Plan', note: 'Reads and searches, then replies with a plan' },
+  { id: 'bypass', label: 'Bypass permissions', note: 'Never asks; blocked commands and the project fence still hold' },
 ];
 
 // Keys, grouped the way you meet them. [keys, what they do]
@@ -65,7 +67,7 @@ export const KEYS = [
     ['shift+tab', 'in an edit question: yes, and don’t ask again for edits'],
   ] },
   { group: 'Everywhere', rows: [
-    ['shift+tab', 'switch mode: ask first → auto-edit → plan'],
+    ['shift+tab', 'switch mode: manual → accept edits → plan → auto (bypass only from /mode)'],
     ['ctrl+c twice · ctrl+d', 'quit (ctrl+d on an empty prompt)'],
   ] },
 ];
@@ -96,7 +98,7 @@ export function cliRows(lingerMins = 30, models = []) {
       ['--effort low|medium|high', 'how much the model thinks before it acts (default: low = answers straight away)'],
       ['--think / --no-think', 'the old names: --effort medium / --effort low'],
       ['--ctx 16k|32k|64k|128k', 'memory size (default: 32k, or 16k when memory is short; /effort saves one)'],
-      ['--mode ask|edits|plan', 'start in this permission mode'],
+      ['--mode auto|manual|edits|plan|bypass', 'start in this permission mode'],
       ['--yes', 'with -p: allow edits and commands without asking (your /permissions never-list still holds)'],
       ['--url http://host:port', 'use a llama-server that is already running'],
       ['--local', 'use the model on this Mac even when /remote is on'],
@@ -139,7 +141,7 @@ export const SAFETY = [
   'The first time you start Agentic Coder in a folder it asks whether you trust it. Nothing there is read before you say yes.',
   'It asks before every edit and before commands that change things, unless you switch the mode. A git commit always asks.',
   'Some commands are always refused: deleting folders wholesale, sudo, git push, resetting git, stopping other programs or services.',
-  'Files like .env, keys and .git always ask before a change, even in Auto-edit.',
+  'Files like .env, keys and .git always ask before a change, even in Accept edits and Auto.',
   '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, reach services already running, or open a connection off this Mac.',
   'Everything runs on this Mac. Nothing you type is sent anywhere, unless you turn on /remote: then your prompts, your code and the files it reads go to the machine you named, and it says so when it switches.',

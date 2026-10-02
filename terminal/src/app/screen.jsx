@@ -472,7 +472,7 @@ function LiveRail({ app, maxLines }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen' };
 
 // prefix: the rule "don't ask again" would remember (null: none can, the
 // command's words cannot be trusted); saveRule: what "always allow" would save
@@ -489,11 +489,16 @@ export function permissionOptions(req, prefix, saveRule = null) {
     const what = req.name === 'WebSearch' ? 'web searches' : String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1');
     return req.rule ? [yes, { label: `Yes, and don't ask again for ${what} this session`, choice: 'always' }, { label: `Yes, and always allow ${what} in this folder`, choice: 'save' }, no] : [yes, no];
   }
+  // The screen: once per app (the user's pick, 1 Oct 2026): this time, this session, or saved.
+  if (req.name === 'Screen') return [{ label: 'This time', choice: 'yes' }, { label: 'For this session', choice: 'always' }, { label: 'Always (saved for this folder)', choice: 'save' }, { label: 'No (esc)', choice: 'no' }];
   // A protected file asks every time (permissions.mjs), so it has no "allow all edits".
   if (req.once) return [yes, no];
   if (req.name === 'Rename') return [yes, { label: 'Yes, and allow all edits this session (shift+tab)', choice: 'always' }, no];
   return [yes, { label: 'Yes, allow all edits this session (shift+tab)', choice: 'always' }, no];
 }
+
+// What a Screen question shows: the app's window, or all of it.
+const screenWhat = (args) => (String(args?.app ?? '').trim() ? `${String(args.app).trim()}'s front window` : 'the whole screen: every window that is open on it');
 
 function PermissionPrompt({ app }) {
   const { perm, width } = app;
@@ -502,7 +507,7 @@ function PermissionPrompt({ app }) {
   const hunk = req.prepared?.hunk ?? [];
   // The whole prompt fits the window with a line to spare: a live area as
   // tall as the window makes Ink clear and redraw the screen on every frame.
-  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1 + (req.protectedBy ? 1 : 0); // …, the status line, a spare line, the protected-file line
+  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1 + (req.protectedBy ? 1 : 0) + (req.autoReason ? 1 : 0); // …, the status line, a spare line, the protected-file and Auto lines
   const room = Math.max(3, app.rows - fixed);
   const cap = Math.max(2, room - 4); // the diff box: its border, file name and "more lines"
   const files = req.prepared?.files ?? [];
@@ -521,6 +526,11 @@ function PermissionPrompt({ app }) {
         <Box flexDirection="column" paddingX={2} marginY={1}>
           <Text>{cmdLines.length > room - 3 ? `${cmdLines.slice(0, room - 4).join('\n')}\n… +${cmdLines.length - (room - 4)} lines` : req.args.command}</Text>
           <Text color={C.dim} wrap="truncate-end">{req.args.description ? `${req.args.description} · ` : ''}in {fitPath(app.cwdShort, Math.max(20, width - 12 - (req.args.description ? req.args.description.length + 3 : 0)))}</Text>
+        </Box>
+      ) : req.name === 'Screen' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text wrap="truncate-end">{screenWhat(req.args)}</Text>
+          <Text color={C.dim} wrap="truncate-end">a picture, sent to {app.modelState?.remote ? `${app.modelState.name} on ${app.modelState.where}` : 'the model on this Mac'} · it only looks: nothing is clicked or typed</Text>
         </Box>
       ) : req.name === 'WebSearch' || req.name === 'WebFetch' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
@@ -544,11 +554,13 @@ function PermissionPrompt({ app }) {
           {hunk.length > cap ? <Text color={C.dim}>… +{hunk.length - cap} more lines</Text> : null}
         </Box>
       )}
-      {req.protectedBy ? <Text color={C.warn}>Protected: {req.protectedBy} always asks before a change, even in Auto-edit.</Text> : null}
+      {req.protectedBy ? <Text color={C.warn}>Protected: {req.protectedBy} always asks before a change, even in Accept edits and Auto.</Text> : null}
+      {req.autoReason ? <Text color={C.auto} wrap="truncate-end">Auto asks you: {req.autoReason}</Text> : null}
       {req.name === 'Ask' ? null
         : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
         : req.name === 'WebSearch' ? <Text>Search the web for this?</Text>
         : req.name === 'WebFetch' ? <Text>Read this page from <Text bold>{String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1')}</Text>?</Text>
+        : req.name === 'Screen' ? <Text>Let the model look at <Text bold>{String(req.args?.app ?? '').trim() || 'the whole screen'}</Text>?</Text>
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}
@@ -758,10 +770,45 @@ const START_PHASE = {
   connecting: 'connecting to it ',
 };
 
+// /mode (and /permissions' start-up mode): the five modes as Claude Code's menu draws
+// them: the name (Auto with its Recommended tag) over what it does, the number on the
+// right, ✓ by the one in use. Bypass is red: nothing asks in it.
+function ModePicker({ app }) {
+  const pk = app.picker;
+  const inner = app.width - 4; // the border and one space each side
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>{pk.title}</Text>
+      <Text color={C.dim} wrap="truncate-end">{pk.blurb}</Text>
+      <Text> </Text>
+      {pk.options.map((o, i) => {
+        const on = i === pk.index;
+        const cur = o.id === pk.current;
+        return (
+          <Box key={o.id} flexDirection="column">
+            <Box width={inner} justifyContent="space-between">
+              <Text>
+                <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} </Text>
+                <Text color={o.id === 'bypass' ? C.bypass : on ? C.accent : undefined} bold={on}>{o.label}</Text>
+                {o.recommended ? <Text>  <Text backgroundColor="ansi256(238)" color="ansi256(252)"> Recommended </Text></Text> : null}
+              </Text>
+              <Text>{cur ? <Text color={C.ok}>✓ </Text> : null}<Text color={C.dim}>{i + 1}</Text></Text>
+            </Box>
+            <Text color={C.dim} wrap="truncate-end">  {o.note}</Text>
+          </Box>
+        );
+      })}
+      <Text> </Text>
+      <Text color={C.dim}>↑↓ to choose · a number or enter to select · esc to go back</Text>
+    </Box>
+  );
+}
+
 // /mode and /meters alone: their choices as a menu, like Claude Code's.
 // The ❯ starts on the one in use; ↑↓ or a number, enter picks, esc goes back.
 function ChoicePicker({ app }) {
   const pk = app.picker;
+  if (pk.id === 'mode' || pk.id === 'startmode') return <ModePicker app={app} />;
   const w = Math.max(...pk.options.map((o) => o.label.length)) + 2;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
