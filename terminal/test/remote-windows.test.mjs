@@ -41,6 +41,7 @@ test('own service: what a window keeps for its save never holds a typed key', ()
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-rw-home-'));
 const { costOf, recordSpend, todaySpend, spendLabel, windowSpend, money, dayOf } = await import('../src/agent/spend.mjs');
 const { footerParts } = await import('../src/app/screen.jsx');
+const { meterWords } = await import('../src/app/remote-footer.mjs');
 
 test('cost: the service\'s own figure first, else its prices ($ a million; cached input a tenth), else not known', () => {
   expect(costOf({ prompt_tokens: 1000, completion_tokens: 100, cost: 0.0123 }, { in: 4, out: 20 })).toBe(0.0123);
@@ -76,12 +77,11 @@ test('cost: the footer words — dollars, tokens when the price is not known, no
   expect(spendLabel({ usd: 0, unpriced: 0 }, { usd: 1, windows: 2 })).toBe('');
 });
 
-test('cost: the footer leads with the meter while it fits, drops it first when narrow, and the label\'s click cells move with it', () => {
+test('cost: on a remote the meter is in /meters, not the footer (design 2, 2 Oct 2026), and the label keeps its click cells', () => {
   const base = { mode: 'default', width: 113, modelState: { remote: true, state: 'on', name: 'qwen3-coder', where: 'openrouter' } };
-  const wide = footerParts({ ...base, spend: '$0.03 this window · $0.31 today, 3 windows' });
-  expect(wide.spend).toBe('$0.03 this window · $0.31 today, 3 windows');
-  const plain = footerParts(base);
-  expect(wide.labelAt.from).toBe(plain.labelAt.from); // right-aligned: the label keeps its cells
-  const narrow = footerParts({ ...base, width: 60, spend: '$0.03 this window · $0.31 today, 3 windows' });
-  expect(narrow.spend).toBe('');
+  const meter = '$0.03 this window · $0.31 today, 3 windows';
+  const wide = footerParts({ ...base, spend: meter });
+  expect(wide.spend).toBe('');
+  expect(wide.labelAt).toEqual(footerParts(base).labelAt);
+  expect(meterWords({ spend: meter })).toEqual([meter]);
 });

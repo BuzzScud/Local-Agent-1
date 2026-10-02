@@ -66,7 +66,8 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
     const details = (x) => ({ family: x.family, parameter_size: x.params, quantization_level: 'Q4_K_M' });
     if (req.url === '/api/version') return json(200, { version: '0.32.12' });
     if (req.url === '/api/tags') return json(200, { models: FAKE_MODELS.map((x) => ({ name: x.name, size: x.size, digest: `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: details(x) })) });
-    if (req.url === '/api/ps') return json(200, { models: [...loaded].map(([name, ctx]) => ({ name, size: FAKE_MODELS.find((x) => x.name === name).size, context_length: ctx })) });
+    // opts.gpu: the share of each loaded model in GPU memory (the footer's GPU gauge; under 1 it spills onto the CPU).
+    if (req.url === '/api/ps') return json(200, { models: [...loaded].map(([name, ctx]) => { const size = FAKE_MODELS.find((x) => x.name === name).size; return { name, size, size_vram: Math.round(size * (opts.gpu ?? 1)), context_length: ctx }; }) });
     if (req.url === '/api/show') return m ? json(200, { details: details(m), model_info: { [`${m.family}.context_length`]: m.ctx }, capabilities: m.caps }) : json(404, { error: 'not found' });
     if (req.url === '/v1/models') return json(200, { object: 'list', data: FAKE_MODELS.map((x) => ({ id: x.name, object: 'model' })) });
     if (req.url === '/api/generate') {

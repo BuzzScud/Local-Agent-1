@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, bigHarness, paramsB, HOME } = await import('../index.mjs');
+const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, bigHarness, paramsB, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
@@ -25,7 +25,8 @@ const MODELS = [
   { name: 'embed:latest', family: 'gemma3', params: '307.58M', quant: 'BF16', size: 0.6e9, caps: ['embedding'], ctx: 2048, at: '2026-06-16' },
 ];
 // seen: every request's method and path (and the model a POST names); bodies: the POSTs' bodies.
-function fakeOllama({ caps = true } = {}) {
+// gpu: the share of each loaded model in GPU memory (/api/ps size_vram).
+function fakeOllama({ caps = true, gpu = 1 } = {}) {
   const seen = [];
   const bodies = [];
   const server = createServer(async (req, res) => {
@@ -37,7 +38,7 @@ function fakeOllama({ caps = true } = {}) {
     const m = MODELS.find((x) => x.name === body.model);
     if (req.url === '/api/version') return json(200, { version: '0.32.12' });
     if (req.url === '/api/tags') return json(200, { models: MODELS.map((x) => ({ name: x.name, model: x.name, size: x.size, digest: x.digest ?? `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: { family: x.family, parameter_size: x.params, quantization_level: x.quant } })) });
-    if (req.url === '/api/ps') return json(200, { models: MODELS.filter((x) => x.loaded).map((x) => ({ name: x.name, model: x.name, size: x.size, digest: `d-${x.name}`, context_length: x.loaded })) });
+    if (req.url === '/api/ps') return json(200, { models: MODELS.filter((x) => x.loaded).map((x) => ({ name: x.name, model: x.name, size: x.size, size_vram: Math.round(x.size * gpu), digest: `d-${x.name}`, context_length: x.loaded, expires_at: '2318-06-11T12:00:00Z' })) });
     if (req.url === '/api/show') return m ? json(200, { details: { family: m.family, parameter_size: m.params, quantization_level: m.quant }, model_info: { [`${m.family}.context_length`]: m.ctx }, ...(caps ? { capabilities: m.caps } : {}) }) : json(404, { error: `model '${body.model}' not found` });
     if (req.url === '/api/generate') return m ? json(200, { model: m.name, response: '', done: true, done_reason: 'load' }) : json(404, { error: `model "${body.model}" not found, try pulling it first` });
     if (req.url === '/api/chat') return json(200, { model: body.model, message: { role: 'assistant', content: 'ready' }, done: true });
@@ -78,6 +79,22 @@ test('a server that is not Ollama has no list (one GET, answered 404); an Ollama
     expect(m).toMatchObject({ known: false, chat: true, tools: true, thinking: false, vision: false });
     expect(remoteLevels(m)).toBe(GENERIC_REMOTE.thinkingLevels);
   } finally { await old.close(); }
+});
+
+test('the footer’s GPU gauge: /api/ps alone gives a loaded model’s share in GPU memory, its context and the call’s time; a model not loaded says so; not Ollama is null', async () => {
+  const s = await fakeOllama();
+  const spill = await fakeOllama({ gpu: 0.62 });
+  const other = createServer((req, res) => { res.writeHead(404); res.end('{}'); });
+  await new Promise((r) => other.listen(0, '127.0.0.1', r));
+  try {
+    const on = await ollamaPs({ url: s.url, key: null, model: 'tiny:3b' });
+    expect(on).toMatchObject({ loaded: true, size: 2.0e9, vram: 2.0e9, gpuPct: 100, ctx: 131072, until: '2318-06-11T12:00:00Z' });
+    expect(on.ms).toBeGreaterThanOrEqual(0);
+    expect((await ollamaPs({ url: spill.url, key: null, model: 'tiny:3b' })).gpuPct).toBe(62);
+    expect(await ollamaPs({ url: s.url, key: null, model: 'coder:30b' })).toMatchObject({ loaded: false });
+    expect(s.seen.map((x) => x.path)).toEqual(['/api/ps', '/api/ps']); // one call each, nothing else
+    expect(await ollamaPs({ url: `http://127.0.0.1:${other.address().port}`, key: null, model: 'tiny:3b' })).toBe(null);
+  } finally { await s.close(); await spill.close(); other.close(); }
 });
 
 test('the context planned for: a loaded model’s own; a cold one no more than 32k until it is loaded (Ollama cuts a longer prompt without a word)', () => {

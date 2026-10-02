@@ -106,6 +106,24 @@ export async function ollamaModel({ url, key, model, signal, timeoutMs = 5000 } 
   return { version, ...entryOf(model, { shown: s ? shownOf(s) : null, ps: p }) };
 }
 
+// Where one model stands on the service now, from /api/ps alone (one light call, for the
+// footer's GPU gauge every 30 s): its size, how much of it is in GPU memory (gpuPct under
+// 100: the rest runs on the CPU, much slower), its context, when it unloads, and how long
+// the call took (ms). { loaded: false, ms } when it is not loaded; null when the service
+// does not answer or is not Ollama.
+export async function ollamaPs({ url, key, model, signal, timeoutMs = 5000 } = {}) {
+  const t0 = Date.now();
+  let ps;
+  try { ps = await call(url, '/api/ps', { key, signal, timeoutMs }); } catch { return null; }
+  if (!Array.isArray(ps?.models)) return null;
+  const ms = Date.now() - t0;
+  const p = ps.models.find((m) => m.name === model || m.model === model);
+  if (!p) return { loaded: false, ms };
+  const size = p.size ?? 0;
+  const vram = Number.isFinite(p.size_vram) ? p.size_vram : null;
+  return { loaded: true, ms, size, vram, gpuPct: size && vram !== null ? Math.round(Math.min(1, vram / size) * 100) : null, ctx: p.context_length ?? null, until: p.expires_at ?? null };
+}
+
 // The words a service uses when a model does not fit in its GPU memory: llama.cpp's
 // (CUDA, ROCm and Metal builds: "cudaMalloc failed: out of memory", "unable to allocate
 // ROCm0 buffer") and Ollama's own check ("requires more system memory").

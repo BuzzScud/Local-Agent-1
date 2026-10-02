@@ -17,7 +17,7 @@ export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes,
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
 export { REMOTE_KINDS, REMOTE_SOURCES, sourceOf, keyIdOf, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, pickRemoteModel, GENERIC_REMOTE, remoteLevels, BIG_PARAMS, BIG_HARNESS, paramsB, bigHarness, remoteModel, ollamaCtxOf, connectRemote } from './runtime/remote.mjs';
 // An Ollama service's own list: what each model can do, which are loaded, loading one ahead of a reply.
-export { ollamaVersion, ollamaCatalog, ollamaModel, ollamaDetail, ollamaCtx, preloadOllama, unloadOllama, isOutOfMemory, COLD_CTX } from './runtime/ollama.mjs';
+export { ollamaVersion, ollamaCatalog, ollamaModel, ollamaDetail, ollamaPs, ollamaCtx, preloadOllama, unloadOllama, isOutOfMemory, COLD_CTX } from './runtime/ollama.mjs';
 export { serve, serveArgs, serveKey, lanAddresses, SERVE_KEY_FILE } from './runtime/serve.mjs';
 export { CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, claudeSdk, claudeClient, claudeCaps, claudeProbe } from './runtime/claude.mjs';
 export { setup, getVision, RUNTIME } from './runtime/setup.mjs';

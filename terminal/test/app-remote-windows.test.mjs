@@ -33,13 +33,14 @@ function paidService() {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, chats, close: () => new Promise((r) => server.close(r)) })));
 }
 
-test('a busy paid service: the window waits and asks again, nothing is summarized, and the cost shows on the end line and in the footer', async () => {
+test('a busy paid service: the window waits and asks again, nothing is summarized, and the cost shows on the end line and in /meters (the footer has the gauges since 2 Oct 2026)', async () => {
   const { base, cwd, env } = setup();
   const svc = await paidService();
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { use: true, source: 'openai', address: '127.0.0.1', port: svc.port, connect: 'http', kind: 'openai', model: MODEL, context: 0, key: false, keyEnd: '' } }));
   const r = await runInPty({ cwd, cols: 140, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_BUSY_WAITS: '0.3,0.3,0.3,0.3' }, args: ['--no-flows'], steps: [
     { wait: '? for shortcuts' }, { sleep: 300 },
     { type: 'what does export.mjs do?' }, { key: 'enter' }, { wait: 'one line per trade' }, { wait: 'for this request' }, { sleep: 400 }, { snapshot: 'done' },
+    { type: '/meters on' }, { key: 'enter' }, { wait: 'this window ·' }, { sleep: 300 }, { snapshot: 'meters' },
     ...quit,
   ] });
   await svc.close();
@@ -51,7 +52,7 @@ test('a busy paid service: the window waits and asks again, nothing is summarize
   expect(svc.chats[1].usage).toEqual({ include: true }); // a service with prices is asked what each answer cost
   // 12,450 in at $1 and 380 out at $2 a million: $0.0132
   expect(scr).toMatch(/done \d+:\d\d [AP]M · \$0\.01 for this request/);
-  expect(scr).toContain('$0.01 this window · $0.01 today');
+  expect(r.snapshots.meters.replace(/\s+/g, ' ')).toContain('$0.01 this window · $0.01 today');
   const day = readdirSync(join(base, 'home', 'spend'));
   expect(day).toHaveLength(1);
 }, T);

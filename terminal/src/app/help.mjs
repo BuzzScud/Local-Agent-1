@@ -40,7 +40,7 @@ export const KEYS = [
     ['shift + ← →', 'select, a character at a time (with option: a word at a time)'],
     ['shift + ↑ ↓', 'select a line up or down; past the first or last line it reaches the start or end, so from the end shift+↑ selects everything'],
     ['click · drag · double click', 'with /mouse on: put the cursor there · highlight · take the word (hold fn for Terminal’s own highlight); a click on the model’s label in the footer starts or stops it'],
-    ['ctrl+t', 'start or stop the model on this Mac: the footer’s label says which, and how much memory it holds'],
+    ['ctrl+t', 'start or stop the model on this Mac: the footer’s label says which, and how much memory it holds; on a remote model, open the model list'],
     ['(selecting)', 'selected text is copied to the clipboard at once: “copied N chars to clipboard”'],
     ['delete · typing · paste', 'with text selected: remove it · replace it · replace it'],
     ['← → · esc', 'with text selected: jump to its start or end · keep the text, drop the selection'],
@@ -69,6 +69,8 @@ export const KEYS = [
   { group: 'Everywhere', rows: [
     ['shift+tab', 'switch mode: manual → accept edits → plan → auto (bypass only from /mode)'],
     ['ctrl+c twice · ctrl+d', 'quit (ctrl+d on an empty prompt)'],
+    ['ctrl+p', 'compact now: summarize the conversation to free context, as /compact'],
+    ['ctrl+r', 'a second opinion on the last change now: the review model on an Ollama service (/subagents) reads it, and what it finds goes into the prompt'],
   ] },
 ];
 
