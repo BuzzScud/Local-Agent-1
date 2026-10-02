@@ -79,14 +79,15 @@ export const specialtiesOf = (m) => ({ note: familyNote(m), tags: workedOut(m) }
 // The Remote tab's card groups (2 Oct 2026, their pick: categories in place of
 // loaded / not loaded, biggest first). Each model goes in the first that fits:
 // a helper (search, or under a billion parameters), one whose abilities the
-// service does not list, coding, thinking, pictures, else general chat.
+// service does not list, coding, thinking, pictures, else general chat. None
+// starts folded: the list is wide enough to show every model (their ask, 2 Oct).
 export const CATEGORIES = [
   { id: 'coding', text: 'Coding', note: 'trained for code' },
   { id: 'thinking', text: 'Thinking', note: 'reasons before answering' },
   { id: 'pictures', text: 'Pictures', note: 'can look at images' },
-  { id: 'general', text: 'General chat', note: 'everyday questions and writing', fold: true },
-  { id: 'helpers', text: 'Helpers', note: 'search and small jobs', fold: true },
-  { id: 'unlisted', text: 'Not listed', note: 'the service does not say what these can do', fold: true },
+  { id: 'general', text: 'General chat', note: 'everyday questions and writing' },
+  { id: 'helpers', text: 'Helpers', note: 'search and small jobs' },
+  { id: 'unlisted', text: 'Not listed', note: 'the service does not say what these can do' },
 ];
 export function categoryOf(m) {
   const b = paramsB(m?.params ?? '');

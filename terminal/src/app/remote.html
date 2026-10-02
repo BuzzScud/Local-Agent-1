@@ -20,7 +20,7 @@ html, body { margin: 0; }
 body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color-scheme: light dark; }
 /* One container that fits the window: the service row on top, the cards down the left, the picked model's tabs on the right.
    A list or a long text scrolls inside its own box; the page itself never scrolls (a phone does). */
-main { max-width: 1480px; margin: 0 auto; padding: 14px 18px; display: flex; flex-direction: column; min-height: 100vh; gap: 12px; }
+main { max-width: 1920px; margin: 0 auto; padding: 14px 18px; display: flex; flex-direction: column; min-height: 100vh; gap: 12px; }
 @media (min-width: 900px) and (min-height: 560px) { html, body { height: 100%; overflow: hidden; } main { height: 100vh; min-height: 0; } }
 button { font: inherit; color: inherit; }
 .top { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; flex-wrap: wrap; }
@@ -43,25 +43,30 @@ button { font: inherit; color: inherit; }
 .banner { flex: none; border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; background: var(--surface); font-size: 13.5px; color: var(--ink2); }
 .banner.down { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); }
 .banner b { color: var(--ink); }
-.split { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 14px; }
+/* The list takes the larger share so every model shows at once: its cards flow in as many columns as fit, each group's heading across them. */
+.split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(480px, 1fr); gap: 14px; }
 .box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 /* The cards */
 .find { flex: none; padding: 10px; border-bottom: 1px solid var(--line); }
 .find input { width: 100%; border: 1px solid var(--line); background: var(--page); color: var(--ink); border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13px; }
 .find input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--tint); }
-.list { flex: 1; min-height: 0; overflow: auto; padding: 4px 10px 10px; scrollbar-width: thin; }
-.gh { display: flex; align-items: baseline; gap: 8px; margin: 12px 2px 6px; white-space: nowrap; min-width: 0; overflow: hidden; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; }
+.list { flex: 1; min-height: 0; overflow: auto; padding: 2px 10px 10px; scrollbar-width: thin; display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 5px; align-content: start; }
+.list > .gh, .list > .empty { grid-column: 1 / -1; }
+.gh { display: flex; align-items: baseline; gap: 8px; margin: 8px 2px 0; white-space: nowrap; min-width: 0; overflow: hidden; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; }
 .gh button { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .gh > :first-child { flex: none; }
 .gh span { min-width: 0; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--page); border-radius: 11px; padding: 8px 11px; margin: 0 0 6px; cursor: pointer; }
+.card { display: block; width: 100%; min-width: 0; text-align: left; border: 1px solid var(--line); background: var(--page); border-radius: 10px; padding: 6px 10px; margin: 0; cursor: pointer; }
 .card:hover { border-color: var(--ink3); }
 .card[aria-current="true"] { border-color: var(--accent); background: var(--tint); }
-.card .n { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; min-width: 0; }
-.card .n .rk { flex: none; font-style: normal; font-size: 11px; font-weight: 600; color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; min-width: 20px; height: 20px; display: inline-grid; place-items: center; padding: 0 5px; font-variant-numeric: tabular-nums; }
+.card .n { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; min-width: 0; }
+.card .n .rk { flex: none; font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 5px; font-variant-numeric: tabular-nums; }
 .card .n span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.card .n .mk { margin-left: auto; flex: none; font-weight: 500; font-size: 12px; display: flex; gap: 6px; align-items: center; }
-.card .s { color: var(--ink3); font-size: 12px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .n .mk { margin-left: auto; flex: none; font-weight: 500; font-size: 11.5px; display: flex; gap: 6px; align-items: center; }
+.card .l2 { display: flex; align-items: center; gap: 6px; margin-top: 3px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.card .s { color: var(--ink3); font-size: 11.5px; font-family: var(--mono); flex: none; }
+.card .chips { margin: 0; flex-wrap: wrap; min-width: 0; height: 19px; overflow: hidden; } /* a chip that does not fit whole drops to a hidden second line */
+@media (max-width: 1600px) { .list { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); } }
 .chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .chip { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink2); background: var(--surface); white-space: nowrap; }
 .ok { color: var(--up); } .no { color: var(--down); } .warnc { color: var(--warn); }
@@ -74,12 +79,13 @@ button { font: inherit; color: inherit; }
 .dh .acts { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .dh .note { color: var(--ink3); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52ch; }
 .dh .note.ok { color: var(--up); } .dh .note.no { color: var(--down); } .dh .note.warnc { color: var(--warn); }
-.tabs { flex: none; display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 10px; border-bottom: 1px solid var(--line); }
-.tabs button { font-size: 12.5px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink2); cursor: pointer; }
+.tabs { flex: none; display: flex; gap: 5px; flex-wrap: wrap; padding: 0 16px 10px; border-bottom: 1px solid var(--line); }
+.tabs button { font-size: 12px; padding: 4px 9px; white-space: nowrap; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink2); cursor: pointer; }
 .tabs button:hover { color: var(--ink); border-color: var(--ink3); }
 .tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--ink); font-weight: 600; }
 .pane { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 16px; scrollbar-width: thin; }
-.cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.cols > .sect + .sect, .cols > div + .sect { margin-top: 0; }
 .sect { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--page); min-width: 0; }
 .sect + .sect { margin-top: 12px; }
 .sect h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
@@ -131,7 +137,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
 (() => {
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const TABS = [['overview', 'Overview'], ['abilities', 'Abilities'], ['memory', 'Memory & context'], ['settings', 'Settings'], ['inside', 'Inside'], ['results', 'Our results'], ['license', 'License']];
+  const TABS = [['overview', 'Overview'], ['abilities', 'Abilities'], ['memory', 'Memory'], ['settings', 'Settings'], ['inside', 'Inside'], ['results', 'Results'], ['license', 'License']];
   const S = { data: null, service: null, pick: null, tab: 'overview', q: '', open: {}, detail: {}, at: 0, loading: false };
   try { const k = JSON.parse(localStorage.getItem('remote-tab') || '{}'); if (k.service) S.service = k.service; if (k.tab) S.tab = k.tab; if (k.pick) S.pick = k.pick; } catch {}
   const keep = () => { try { localStorage.setItem('remote-tab', JSON.stringify({ service: S.service, tab: S.tab, pick: S.pick })); } catch {} };
@@ -200,11 +206,11 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
 
   function cardHtml(m, rank) {
     const t = m.tried, busy = m.busy;
-    const marks = [busy ? `<span class="warnc">${busy.what === 'try' ? 'trying…' : busy.what === 'load' ? 'loading…' : 'unloading…'}</span>` : '', m.loaded && S.data.ollama ? '<span class="ok" title="loaded in the service\'s memory now">● loaded</span>' : '', t ? (t.ok ? '<span class="ok" title="counted to 20 right when tried">✔</span>' : '<span class="no" title="did not count to 20 right when tried">✗</span>') : ''].filter(Boolean).join('');
-    const sub = S.data.ollama ? sizeOf(m) : [m.ctx && `${ctxWord(m.ctx)} context`, m.price && `$${+m.price.in.toFixed(2)} / $${+m.price.out.toFixed(2)}`, m.file].filter(Boolean).join(' · ');
+    const marks = [busy ? `<span class="warnc">${busy.what === 'try' ? 'trying…' : busy.what === 'load' ? 'loading…' : 'unloading…'}</span>` : '', m.loaded && S.data.ollama ? '<span class="ok" title="loaded in the service\'s memory now">●</span>' : '', t ? (t.ok ? '<span class="ok" title="counted to 20 right when tried">✔</span>' : '<span class="no" title="did not count to 20 right when tried">✗</span>') : ''].filter(Boolean).join('');
+    const sub = S.data.ollama ? [m.params && `${m.params}${/moe/i.test(m.family || '') ? ' MoE' : ''}`, gb(m.bytes)].filter(Boolean).join(' · ') : [m.ctx && `${ctxWord(m.ctx)} context`, m.price && `$${+m.price.in.toFixed(2)} / $${+m.price.out.toFixed(2)}`, m.file].filter(Boolean).join(' · ');
     const sure = m.known !== false;
-    const chips = [sure && m.tools && 'tools', sure && m.thinking && 'thinks', sure && m.vision && 'pictures', m.embedding && 'search', !sure && S.data.ollama && 'abilities not listed', ...(m.specialties?.tags ?? []).filter((x) => ['Coding', 'Big', 'Long context', 'Tiny'].includes(x.tag)).map((x) => x.tag.toLowerCase())].filter(Boolean);
-    return `<button type="button" class="card" role="listitem" data-id="${esc(m.id)}" aria-current="${m.id === S.pick}"><div class="n">${rank ? `<i class="rk">${rank}</i>` : ''}<span>${esc(m.name && m.name !== m.id ? m.name : m.id)}</span><span class="mk">${marks}</span></div>${sub ? `<div class="s">${esc(sub)}</div>` : ''}${chips.length ? `<div class="chips">${[...new Set(chips)].slice(0, 5).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>` : ''}</button>`;
+    const chips = [sure && m.tools && 'tools', sure && m.thinking && 'thinks', sure && m.vision && 'pictures', m.embedding && 'search', !sure && S.data.ollama && 'abilities not listed', ...(m.specialties?.tags ?? []).filter((x) => ['Big', 'Long context'].includes(x.tag)).map((x) => x.tag.toLowerCase())].filter(Boolean);
+    return `<button type="button" class="card" role="listitem" data-id="${esc(m.id)}" aria-current="${m.id === S.pick}"><div class="n">${rank ? `<i class="rk">${rank}</i>` : ''}<span>${esc(m.name && m.name !== m.id ? m.name : m.id)}</span><span class="mk">${marks}</span></div><div class="l2">${sub ? `<span class="s">${esc(sub)}</span>` : ''}${chips.length ? `<span class="chips">${[...new Set(chips)].slice(0, 4).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</span>` : ''}</div></button>`;
   }
   function drawList() {
     const groups = S.data?.groups ?? [];
