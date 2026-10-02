@@ -293,14 +293,22 @@ export function display(name, args = {}) {
   }
 }
 
-// A path that does not exist, but whose file name appears exactly once in the
-// project, most likely means that file ("src/stats.mjs" for "stats.mjs").
-export function didYouMean(cwd, p) {
+// A path that does not exist, but whose file name appears exactly once near the
+// project's top, most likely means that file ("src/stats.mjs" for "stats.mjs").
+// Only NEAR folders down, and never from the home folder (or a folder above it):
+// from the home folder a guessed notes.txt was taken for one seven folders down
+// in another project's test files ("nothing here"), and the model read it over
+// and over (2 Oct). Nothing found: Read says File not found, use List or Search.
+const NEAR = 3;
+export function didYouMean(cwd, p, { home = homedir() } = {}) {
   const name = p.split('/').pop();
   if (!name) return [];
+  const real = (d) => { try { return realpathSync(d); } catch { return resolve(d); } };
+  const at = real(cwd), h = real(home);
+  if (at === h || h.startsWith(at === sep ? sep : `${at}${sep}`)) return [];
   const hits = [];
   let n = 0;
-  for (const f of walk(cwd)) {
+  for (const f of walk(cwd, cwd, 0, NEAR)) {
     if (!f.dir && f.path.split('/').pop() === name) hits.push(f.path);
     if (++n > 20000 || hits.length > 5) break;
   }

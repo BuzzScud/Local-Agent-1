@@ -2,7 +2,7 @@ import { test, expect, beforeAll } from 'bun:test';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { findEdit, parseArgs, prepare, execute, display, resolvePath } from '../src/agent/tools.mjs';
+import { findEdit, parseArgs, prepare, execute, display, resolvePath, didYouMean } from '../src/agent/tools.mjs';
 import { diffLines } from '../src/tools/edit.mjs';
 
 let dir;
@@ -148,6 +148,24 @@ test('a wrong folder in a path finds the file by name; Write will not replace a 
   writeFileSync(join(dir, 'long.txt'), long);
   expect(prepare('Write', { path: 'long.txt', content: 'x' }, env).error).toContain('Use Edit');
   expect(prepare('Edit', { path: 'lib/b.js', old_text: '8790', new_text: '8791' }, env).rel).toBe('src/b.js');
+});
+
+// 2 Oct: from the home folder, a guessed notes.txt was taken for one seven folders down in another
+// project's test files. A file is guessed only near the top, and never from the home folder.
+test('a wrong path finds the file by name only up to three folders down, and never from the home folder', async () => {
+  const top = mkdtempSync(join(tmpdir(), 'agentic-near-'));
+  mkdirSync(join(top, 'a/b/c/d'), { recursive: true });
+  writeFileSync(join(top, 'a/b/c/near.txt'), 'near\n');
+  writeFileSync(join(top, 'a/b/c/d/deep.txt'), 'deep\n');
+  const env = { cwd: top };
+  expect((await execute('Read', { path: 'near.txt' }, {}, env)).text).toContain('(near.txt does not exist; this is a/b/c/near.txt)');
+  const deep = await execute('Read', { path: 'deep.txt' }, {}, env);
+  expect(deep.error).toBe(true);
+  expect(deep.text).toBe('File not found: deep.txt. Use List or Search to find the right path.');
+  // The home folder, or a folder above it: nothing is guessed, however near.
+  expect(didYouMean(top, 'near.txt', { home: top })).toEqual([]);
+  expect(didYouMean(top, 'near.txt', { home: join(top, 'a') })).toEqual([]);
+  expect(didYouMean(top, 'near.txt', { home: join(tmpdir(), 'someone-else') })).toEqual(['a/b/c/near.txt']);
 });
 
 test('a *.js filter also finds .mjs files', async () => {
