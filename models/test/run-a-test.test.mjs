@@ -28,11 +28,22 @@ test('--set 28 plays the 28 that grade a model; 29, the notes page, only when na
   expect(set).toHaveLength(28);
   expect(set.some((t) => t.startsWith('29-'))).toBe(false);
   expect(set.slice(0, 3)).toEqual(['1-json-flag', '10-fix-off-by-one', '11-fix-sort-text']); // the order runs have always had
-  expect(pickTasks(folders)).toHaveLength(folders.filter((f) => /^\d+-/.test(f)).length);
+  // No --set: every task below the hard ones (1–29), as before the hard set came.
+  expect(pickTasks(folders)).toHaveLength(folders.filter((f) => /^\d+-/.test(f) && Number(f.split('-')[0]) < 30).length);
+  expect(pickTasks(folders).some((t) => t.startsWith('29-'))).toBe(true);
   expect(pickTasks(folders, { only: ['29'] })).toEqual(['29-notes-page']);
   expect(pickTasks(folders, { set: 28, only: ['12', '29'] })).toEqual(['12-feature-currency']);
   expect(pickTasks([...folders, '.DS_Store'], { set: 28 })).toHaveLength(28);
   expect(() => pickTasks(folders, { set: 30 })).toThrow('no set "30"');
+});
+
+test('--set hard plays the 10 hard tasks (30–39), each with its project, a reference and a check', () => {
+  const folders = readdirSync(join(REPO, 'models', 'evals', 'bench', 'tasks'));
+  const hard = pickTasks(folders, { set: 'hard' });
+  expect(hard).toHaveLength(10);
+  expect(hard.every((t) => /^3\d-hard-/.test(t))).toBe(true);
+  for (const t of hard) for (const f of ['task.txt', 'check.sh', 'project', 'reference']) expect(existsSync(join(REPO, 'models', 'evals', 'bench', 'tasks', t, f))).toBe(true);
+  expect(pickTasks(folders, { set: 'hard', only: ['31', '12'] })).toEqual(['31-hard-refactor-dedupe']);
 });
 
 test('each test the tab can run: its script is there, its command names the model, one without a model takes none', () => {

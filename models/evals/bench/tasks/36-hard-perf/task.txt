@@ -1,0 +1,1 @@
+Importing 50,000 trades takes minutes, and the time goes in uniqueBy and topN (collections.mjs). Make both fast enough for 200,000 items (well under a second each) without changing their results, including the order of what they return. Add a test with a big input.

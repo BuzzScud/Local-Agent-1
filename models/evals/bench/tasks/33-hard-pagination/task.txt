@@ -1,0 +1,1 @@
+Add cursor pagination to the items API: handle({ limit, after }) in api.mjs returns at most limit items (default 20, at most 100) whose id is greater than after, plus nextCursor: the last id returned, or null when there are no more items after it. Push the limit down to the store, so a page never walks the whole list. Add tests.

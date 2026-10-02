@@ -1,0 +1,1 @@
+After converting an amount to EUR, converting the same amount to GBP still gives the EUR figure. Fix it, keep the cache (the rates service is slow), and add a test that would have caught it.

@@ -1,7 +1,11 @@
 // Plays the practice tasks against the real model and checks each result.
 //   node models/evals/bench/run.mjs [--think on|off|both] [--effort medium|high] [--set 28 | --only 1,3] [--ctx 32768] [--reps 3] [--out dir] [--stop-at HH:MM] [--memory] [--no-rank] [--prompt old|new] [--thinking old|new] [--no-record]
 // --set 28: the 28 practice tasks that grade a model (29, the notes page, is an extra); its line in
-// the test record is a full run of the 28. --only picks tasks by number (a part of the set).
+// the test record is a full run of the 28. --set hard: the 10 hard ones (30–39, 2 Oct 2026) for the
+// bigger models on a service. --only picks tasks by number (a part of the set).
+// --instructions local|remote|auto: which set of prompt files the model gets (agent/prompt-files.mjs;
+// auto, the default, is remote for a --remote model). Instructions local vs remote
+// (models/evals/tools/remote-rules-ab.mjs) runs both.
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
 // and records what ran, as stopped.
 //     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
@@ -87,6 +91,11 @@ if (promptArg && !['old', 'new'].includes(promptArg)) { console.error(`--prompt 
 if (promptArg === 'old') process.env.AGENTIC_PROMPT = 'old';
 else if (promptArg === 'new') delete process.env.AGENTIC_PROMPT;
 const promptUsed = process.env.AGENTIC_PROMPT === 'old' ? 'old' : 'new';
+const instructionsArg = opt('instructions', null);
+if (instructionsArg && !['local', 'remote', 'auto'].includes(instructionsArg)) { console.error(`--instructions local, remote or auto, not "${instructionsArg}"`); process.exit(1); }
+// Auto unless named, so the choice saved in settings.json never changes what a run measures.
+process.env.AGENTIC_INSTRUCTIONS = instructionsArg ?? 'auto';
+const setArg = opt('set', null);
 const thinkingArg = opt('thinking', null);
 if (thinkingArg && !['old', 'new'].includes(thinkingArg)) { console.error(`--thinking old or new, not "${thinkingArg}"`); process.exit(1); }
 if (thinkingArg === 'old') process.env.AGENTIC_THINK = 'old';
@@ -195,12 +204,12 @@ try {
 }
 const file = join(tdir, 'summary.json');
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
-writeFileSync(file, JSON.stringify({ remote: conn ? { address: remoteAt, model: conn.info.model, big: Boolean(runOn.harness) } : null, memory: withMemory, helpers: [...helpers], flows: flowsOn, way: limitsUsed?.way ?? wayUsed, prompt: promptUsed, thinkingWay: thinkingUsed, ctx: ctxUsed, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
+writeFileSync(file, JSON.stringify({ remote: conn ? { address: remoteAt, model: conn.info.model, big: Boolean(runOn.harness) } : null, memory: withMemory, helpers: [...helpers], flows: flowsOn, way: limitsUsed?.way ?? wayUsed, prompt: promptUsed, instructions: instructionsArg ?? 'auto', set: setArg, thinkingWay: thinkingUsed, ctx: ctxUsed, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: conn ? `remote:${conn.info.model}` : base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${conn ? ` on ${conn.info.model} (remote), big-model mode ${runOn.harness ? 'on' : 'off'}` : ''}${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx: ctxUsed,
+  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: conn ? `remote:${conn.info.model}` : base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length}${setArg === 'hard' ? ' hard' : ''} practice tasks${conn ? ` on ${conn.info.model} (remote), big-model mode ${runOn.harness ? 'on' : 'off'}` : ''}${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}${instructionsArg && instructionsArg !== 'auto' ? `, ${instructionsArg} instructions` : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx: ctxUsed,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);
