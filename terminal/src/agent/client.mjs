@@ -1,11 +1,14 @@
 // Streams one chat completion from llama-server (OpenAI format) and turns the
 // SSE chunks into simple events: reasoning, text, tool-call pieces, done.
 // A remote (/remote) is asked the same way, with its API key; an
-// OpenAI-compatible one (not llama.cpp) gets only the standard fields, and
-// the Claude API goes through Anthropic's own Messages API (claude.mjs).
-import { thinkingKwargs, endpointOf, authHeaders } from '../../../models/index.mjs';
+// OpenAI-compatible one (not llama.cpp) gets only the standard fields, an
+// Ollama service its own chat (streamOllama: the only one that takes a context
+// size), and the Claude API goes through Anthropic's own Messages API (claude.mjs).
+// A server that answers with an error throws one carrying its status: it is up,
+// it said no (the agent connects again only when the connection itself broke).
+import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory } from '../../../models/index.mjs';
 import { streamClaude } from './claude.mjs';
-import { openAIMessages } from './images.mjs';
+import { openAIMessages, ollamaMessages } from './images.mjs';
 import { splitThink } from './think-tags.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
@@ -22,6 +25,9 @@ const ABILITY = { thinking: 'reasoning_effort', tools: 'tools' };
 // (Ollama), and one that cannot think says nothing about the next.
 const refused = new Map(); // `${url} ${model}` → the fields that model refused
 const refusedKey = (url, model) => `${url ?? ''}\u0000${model ?? ''}`;
+// An error the server answered with (its status kept), and the one for a model that does not fit.
+const serverError = (text, status) => Object.assign(new Error(text), { status });
+const roomError = (ep, status) => serverError(`the service has no room to load ${ep.model} (out of GPU memory): /model picks another, or /effort a smaller Context`, status);
 
 // The body as an OpenAI-compatible server takes it (exported for the tests).
 export function openaiBody(body, { model, effort, thinking, url } = {}) {
@@ -60,6 +66,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
   const ep = endpointOf(url);
   // The Claude API speaks its own Messages API (claude.mjs).
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
+  if (ep?.ollama) { yield* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
   let body = {
     model: 'coding',
     // Pictures beside the text go in as the server takes them (images.mjs).
@@ -94,8 +101,9 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
       body = openaiBody(body, { model: ep.model, url });
       continue;
     }
-    if (ep && (res.status === 401 || res.status === 403)) throw new Error(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`);
-    throw new Error(`${ep ? `remote model server (${ep.label ?? url})` : 'model server'} ${res.status}: ${text.slice(0, 300)}`);
+    if (ep && isOutOfMemory(text)) throw roomError(ep, res.status);
+    if (ep && (res.status === 401 || res.status === 403)) throw serverError(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`, res.status);
+    throw serverError(`${ep ? `remote model server (${ep.label ?? url})` : 'model server'} ${res.status}: ${text.slice(0, 300)}`, res.status);
   }
   const decoder = new TextDecoder();
   let buf = '';
@@ -113,7 +121,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
       if (data === '[DONE]') continue;
       let j;
       try { j = JSON.parse(data); } catch { continue; }
-      if (j.error) throw new Error(`model server: ${j.error.message ?? JSON.stringify(j.error)}`);
+      if (j.error) throw serverError(`model server: ${j.error.message ?? JSON.stringify(j.error)}`, res.status);
       if (j.usage) usage = j.usage;
       if (j.timings) timings = j.timings;
       const ch = j.choices?.[0];
@@ -129,5 +137,81 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
       if (ch.finish_reason) finish = ch.finish_reason;
     }
   }
+  yield { type: 'done', finish, usage, timings };
+}
+
+// An Ollama service (ep.ollama, set by connectRemote): its own /api/chat, the only
+// one that takes a context size. num_ctx goes with every request (the model would
+// otherwise be loaded again at the service's own), the thinking as `think` (true or
+// false; gpt-oss its level, as it cannot turn it off), the tools only for a model
+// that can use them. Its stream is one JSON object a line, and a tool call comes
+// whole, so it becomes one tool event with all of its arguments.
+const SAMPLING = ['temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty', 'presence_penalty', 'frequency_penalty', 'seed'];
+async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }) {
+  const lv = thinkingLevel(model ?? {}, Boolean(thinking), effort);
+  const gptoss = /gpt-?oss/i.test(`${ep.family ?? ''} ${ep.model}`);
+  const think = gptoss ? (lv.effort ?? 'low') : lv.effort ? true : ep.thinks ? false : undefined;
+  const options = {};
+  for (const k of SAMPLING) if (sampling?.[k] !== undefined) options[k] = sampling[k];
+  if (maxTokens) options.num_predict = maxTokens;
+  if (ep.numCtx) options.num_ctx = ep.numCtx;
+  if (extra?.stop) options.stop = extra.stop;
+  const body = {
+    model: ep.model, messages: ollamaMessages(messages), stream: true, options,
+    ...(think !== undefined ? { think } : {}),
+    ...(tools?.length && toolChoice !== 'none' && ep.tools !== false ? { tools } : {}),
+    ...(extra?.response_format?.json_schema?.schema ? { format: extra.response_format.json_schema.schema } : {}),
+  };
+  // What this model refused before (an Ollama too old to list its abilities says so at the first ask).
+  const k = refusedKey(url, ep.model);
+  const drop = () => { for (const f of refused.get(k) ?? []) { if (f === 'tools') delete body.tools; if (f === 'reasoning_effort') delete body.think; } };
+  drop();
+  let res;
+  for (let tries = 0; ; tries++) {
+    res = await fetch(`${url}/api/chat`, { method: 'POST', signal, headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body) });
+    if (res.ok) break;
+    const text = await res.text().catch(() => '');
+    const field = tries < 2 ? refusedField(res.status, text, { reasoning_effort: body.think, tools: body.tools }) : null;
+    if (field) { refused.set(k, new Set([...(refused.get(k) ?? []), field])); drop(); continue; }
+    if (isOutOfMemory(text)) throw roomError(ep, res.status);
+    if (res.status === 401 || res.status === 403) throw serverError(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`, res.status);
+    throw serverError(`remote model server (${ep.label ?? url}) ${res.status}: ${text.slice(0, 300)}`, res.status);
+  }
+  const decoder = new TextDecoder();
+  let buf = '';
+  let finish = null, usage = null, timings = null, calls = 0;
+  const per = (n, ns) => (n && ns ? n / (ns / 1e9) : undefined);
+  // One line of the stream as events (the last one also says how it ended and what it cost).
+  const read = (line) => {
+    if (!line.trim()) return [];
+    let j;
+    try { j = JSON.parse(line); } catch { return []; }
+    if (j.error) { const why = typeof j.error === 'string' ? j.error : j.error.message ?? JSON.stringify(j.error); throw isOutOfMemory(why) ? roomError(ep, res.status) : serverError(`model server: ${why}`, res.status); }
+    const evs = [];
+    const m = j.message ?? {};
+    if (m.thinking) evs.push({ type: 'reasoning', text: m.thinking });
+    if (m.content) evs.push({ type: 'text', text: m.content });
+    for (const tc of m.tool_calls ?? []) {
+      const a = tc.function?.arguments;
+      evs.push({ type: 'tool', index: calls, id: tc.id ?? `call_${Date.now().toString(36)}_${calls}`, name: tc.function?.name, args: typeof a === 'string' ? a : JSON.stringify(a ?? {}) });
+      calls++;
+    }
+    if (j.done) {
+      finish = j.done_reason === 'length' ? 'length' : calls ? 'tool_calls' : 'stop';
+      usage = { prompt_tokens: j.prompt_eval_count ?? 0, completion_tokens: j.eval_count ?? 0 };
+      timings = { prompt_n: j.prompt_eval_count, prompt_per_second: per(j.prompt_eval_count, j.prompt_eval_duration), predicted_n: j.eval_count, predicted_per_second: per(j.eval_count, j.eval_duration) };
+    }
+    return evs;
+  };
+  for await (const chunk of res.body) {
+    buf += decoder.decode(chunk, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      yield* read(line);
+    }
+  }
+  yield* read(buf);
   yield { type: 'done', finish, usage, timings };
 }

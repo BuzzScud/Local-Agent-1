@@ -49,6 +49,36 @@ export function openAIMessages(messages) {
   return out;
 }
 
+// The conversation as Ollama's own chat takes it (/api/chat, client.mjs): text
+// content, pictures as base64 beside it (a tool result's go in a user message
+// after it, as above), a tool call's arguments as an object, a tool result named
+// by its tool, the thinking as `thinking`. Nothing else of a message goes.
+export function ollamaMessages(messages) {
+  const kept = keptImages(messages);
+  const names = new Map(); // a tool call's id → its tool, for the result that answers it
+  const out = [];
+  for (const m of messages) {
+    if (!m) continue;
+    const imgs = m.images ?? [];
+    const live = imgs.filter((i) => kept.has(i));
+    const msg = { role: m.role, content: [textOf(m.content), ...imgs.filter((i) => !kept.has(i)).map(imageLabel)].filter(Boolean).join('\n') };
+    if (m.role === 'assistant' && m.reasoning_content) msg.thinking = m.reasoning_content;
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      msg.tool_calls = m.tool_calls.map((tc) => { names.set(tc.id, tc.function?.name); return { function: { name: tc.function?.name, arguments: argsOf(tc.function?.arguments) } }; });
+    }
+    if (m.role === 'tool' && (m.name ?? names.get(m.tool_call_id))) msg.tool_name = m.name ?? names.get(m.tool_call_id);
+    if (live.length && m.role === 'user') msg.images = live.map((i) => i.data);
+    out.push(msg);
+    if (live.length && m.role !== 'user') out.push({ role: 'user', content: `(The picture${live.length > 1 ? 's' : ''} that result showed.)`, images: live.map((i) => i.data) });
+  }
+  return out;
+}
+const textOf = (c) => (typeof c === 'string' ? c : Array.isArray(c) ? c.filter((p) => p?.type === 'text').map((p) => p.text).join('\n') : '');
+const argsOf = (a) => {
+  if (a && typeof a === 'object') return a;
+  try { const v = JSON.parse(a || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+};
+
 // Pictures and PDFs named in what you typed. A file dragged into Terminal
 // arrives as its path, with spaces and brackets escaped by \ (or in quotes);
 // a macOS screenshot's name has a narrow space before AM/PM (U+202F).

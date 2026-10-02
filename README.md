@@ -174,6 +174,11 @@ context and what it can do (tools, thinking, pictures). Type to filter. Enter sw
 chat stays, and the model is loaded on the service first. The chat-only models (no tools) fold into
 one row and ask before you switch to one. The footer names the model and where it runs
 (`● qwen3-coder:30b on gpu-box:11434`), and a click on it opens `/model` (`/mouse on`).
+Requests go through Ollama's own chat, the one that takes a context size: `/effort`'s Context row
+sets each model's (8k up to its longest; auto is the size it is loaded at), and the model loads
+again at that size. A model that does not fit in the service's GPU memory is tried again at half
+the context, down to 32k, and the size it fits at is kept for it; one that never fits goes back to
+the model before, and a message sent meanwhile waits for it.
 
 **Claude:** `/remote claude`, paste an API key, enter, enter. It goes through Anthropic's own
 Messages API and official SDK: High effort thinks first and shows its summarized thinking, Low

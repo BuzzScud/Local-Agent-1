@@ -272,41 +272,58 @@ test('/remote Another service: Connect lists the models, a coder is highlighted,
   expect(settingsOf(base).remote).toMatchObject({ use: true, source: 'openai', kind: 'openai', model: 'tiny:3b', key: false });
 }, T);
 
-// A fuller Ollama: its own API too (/api/version, /api/tags, /api/ps, /api/show, /api/generate),
-// and a chat that streams, saying which model answered. A model without tools refuses them as
-// Ollama 0.32 does; one loaded by /api/generate then runs at 64k (as /api/ps says).
-const fullOllama = () => new Promise((ok) => {
-  const MODELS = [
-    { name: 'tiny:3b', family: 'llama', params: '3.2B', caps: ['completion', 'tools'], ctx: 131072, size: 2.0e9, at: '2026-07-01' },
-    { name: 'coder:30b', family: 'qwen3moe', params: '30.5B', caps: ['completion', 'tools'], ctx: 262144, size: 18.6e9, at: '2025-12-20' },
-    { name: 'oldchat:14b', family: 'phi3', params: '14.7B', caps: ['completion'], ctx: 16384, size: 9.1e9, at: '2025-12-24' },
-    { name: 'embed:latest', family: 'gemma3', params: '307.58M', caps: ['embedding'], ctx: 2048, size: 0.6e9, at: '2026-06-16' },
-  ];
+// A fuller Ollama: its own API too (/api/version, /api/tags, /api/ps, /api/show, /api/generate,
+// /api/chat streamed a JSON object a line, saying which model answered and how many replies so far).
+// A model loads at the num_ctx asked for, else at the service's own (serviceCtx, at most its longest);
+// one asked to load at more than it fits (fits) answers 500 out of memory, as a GPU service does.
+const OLLAMA_MODELS = [
+  { name: 'tiny:3b', family: 'llama', params: '3.2B', caps: ['completion', 'tools'], ctx: 131072, size: 2.0e9, at: '2026-07-01' },
+  { name: 'coder:30b', family: 'qwen3moe', params: '30.5B', caps: ['completion', 'tools'], ctx: 262144, size: 18.6e9, at: '2025-12-20' },
+  { name: 'oldchat:14b', family: 'phi3', params: '14.7B', caps: ['completion'], ctx: 16384, size: 9.1e9, at: '2025-12-24' },
+  { name: 'embed:latest', family: 'gemma3', params: '307.58M', caps: ['embedding'], ctx: 2048, size: 0.6e9, at: '2026-06-16' },
+  { name: 'huge:120b', family: 'laguna', params: '117.6B', caps: ['completion', 'tools'], ctx: 262144, size: 75.2e9, at: '2026-07-23', fits: 65536 },
+  { name: 'giant:400b', family: 'laguna', params: '400B', caps: ['completion', 'tools'], ctx: 262144, size: 240.0e9, at: '2026-07-24', fits: 0 },
+];
+const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
   const loaded = new Map([['tiny:3b', 131072]]);
   const chats = [];
+  const loads = [];
+  const OOM = 'llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory\nalloc_tensor_range: failed to allocate ROCm0 buffer of size 74995960832\nerror loading model: unable to allocate ROCm0 buffer';
+  // What a request with these options loads the model at, or null when it does not fit.
+  const loadAt = (m, options) => { const at = options?.num_ctx ?? Math.min(m.ctx, serviceCtx); return m.fits !== undefined && at > m.fits ? null : at; };
   const srv = createServer(async (req, res) => {
     let b = ''; for await (const c of req) b += c;
     const body = b ? JSON.parse(b) : {};
     const json = (code, j) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
-    const m = MODELS.find((x) => x.name === body.model);
+    const m = OLLAMA_MODELS.find((x) => x.name === body.model);
     if (req.url === '/api/version') return json(200, { version: '0.32.12' });
-    if (req.url === '/api/tags') return json(200, { models: MODELS.map((x) => ({ name: x.name, size: x.size, digest: `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: { family: x.family, parameter_size: x.params, quantization_level: 'Q4_K_M' } })) });
-    if (req.url === '/api/ps') return json(200, { models: [...loaded].map(([name, ctx]) => ({ name, size: MODELS.find((x) => x.name === name).size, context_length: ctx })) });
+    if (req.url === '/api/tags') return json(200, { models: OLLAMA_MODELS.map((x) => ({ name: x.name, size: x.size, digest: `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: { family: x.family, parameter_size: x.params, quantization_level: 'Q4_K_M' } })) });
+    if (req.url === '/api/ps') return json(200, { models: [...loaded].map(([name, ctx]) => ({ name, size: OLLAMA_MODELS.find((x) => x.name === name).size, context_length: ctx })) });
     if (req.url === '/api/show') return m ? json(200, { details: { family: m.family, parameter_size: m.params, quantization_level: 'Q4_K_M' }, model_info: { [`${m.family}.context_length`]: m.ctx }, capabilities: m.caps }) : json(404, { error: 'not found' });
-    if (req.url === '/api/generate') { await new Promise((r) => setTimeout(r, 300)); loaded.set(body.model, Math.min(m.ctx, 65536)); return json(200, { model: body.model, response: '', done: true, done_reason: 'load' }); }
-    if (req.url === '/v1/models') return json(200, { object: 'list', data: MODELS.map((x) => ({ id: x.name, object: 'model', owned_by: 'library' })) });
-    if (req.url === '/v1/chat/completions') {
-      chats.push({ model: body.model, tools: 'tools' in body, stream: Boolean(body.stream) });
-      if (body.tools && !m.caps.includes('tools')) return json(400, { error: { message: `registry.ollama.ai/library/${body.model} does not support tools`, type: 'invalid_request_error' } });
-      if (!body.stream) return json(200, { choices: [{ message: { content: '' } }] });
-      res.writeHead(200, { 'content-type': 'text/event-stream' });
-      res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: `From ${body.model}.` } }] })}\n\n`);
-      res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
+    if (req.url === '/api/generate') {
+      await new Promise((r) => setTimeout(r, 300));
+      const at = loadAt(m, body.options);
+      loads.push({ model: body.model, numCtx: body.options?.num_ctx ?? null, ok: at !== null });
+      if (at === null) return json(500, { error: OOM });
+      loaded.set(body.model, at);
+      return json(200, { model: body.model, response: '', done: true, done_reason: 'load' });
+    }
+    if (req.url === '/v1/models') return json(200, { object: 'list', data: OLLAMA_MODELS.map((x) => ({ id: x.name, object: 'model', owned_by: 'library' })) });
+    if (req.url === '/api/chat') {
+      if (!body.stream) return json(200, { model: body.model, message: { role: 'assistant', content: 'ready' }, done: true });
+      chats.push({ model: body.model, tools: 'tools' in body, numCtx: body.options?.num_ctx ?? null });
+      if (body.tools && !m.caps.includes('tools')) return json(400, { error: `registry.ollama.ai/library/${body.model} does not support tools` });
+      const at = loadAt(m, body.options);
+      if (at === null) return json(500, { error: OOM });
+      loaded.set(body.model, at);
+      res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+      res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: `From ${body.model}, reply ${chats.length}.` }, done: false })}\n`);
+      res.write(`${JSON.stringify({ model: body.model, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 900, prompt_eval_duration: 1e9, eval_count: 6, eval_duration: 1e8 })}\n`);
       return res.end();
     }
     json(404, { error: 'not found' });
   });
-  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, port: srv.address().port, chats, loaded, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
+  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, port: srv.address().port, chats, loads, loaded, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
 });
 
 test('on an Ollama service: the footer names the model and where it runs; /model is the service’s list; another model is switched to in place (loaded first, the chat kept); one without tools asks, then answers in words', async () => {
@@ -317,15 +334,15 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   const where = `127.0.0.1:${srv.port}`;
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'start' },
-    { type: 'one' }, { key: 'enter' }, { wait: 'From tiny:3b.' }, { sleep: 200 },
+    { type: 'one' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 1.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
     { type: 'coder' }, { sleep: 200 }, { snapshot: 'filtered' },
     { key: 'enter' }, { wait: 'Now on coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
-    { type: 'two' }, { key: 'enter' }, { wait: 'From coder:30b.' }, { sleep: 200 },
+    { type: 'two' }, { key: 'enter' }, { wait: 'From coder:30b, reply 2.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
     { type: 'oldchat' }, { sleep: 200 }, { key: 'enter' }, { wait: 'cannot use tools' }, { sleep: 150 }, { snapshot: 'ask' },
     { key: 'down' }, { sleep: 80 }, { key: 'enter' }, { wait: 'Now on oldchat:14b' }, { sleep: 200 },
-    { type: 'three' }, { key: 'enter' }, { wait: 'From oldchat:14b.' }, { sleep: 200 }, { snapshot: 'words' },
+    { type: 'three' }, { key: 'enter' }, { wait: 'From oldchat:14b, reply 3.' }, { sleep: 200 }, { snapshot: 'words' },
     ...quit,
   ] });
   await srv.close();
@@ -348,14 +365,61 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   expect(s.switched).toMatch(/coder:30b is loaded on the service \(\d+ s\) · 64k context/);
   expect(s.switched).toMatch(new RegExp(`● coder:30b on ${where.replace('.', '\\.')}`));
   expect(srv.loaded.get('coder:30b')).toBe(65536);
-  // a model without tools asks first, then answers in words: its first ask with tools is refused, the next goes without
+  // a model without tools asks first, then answers in words: it is never sent the tools (the service said it cannot use them)
   expect(s.ask).toMatch(/oldchat:14b cannot use tools/);
   expect(s.ask).toMatch(/Switch to oldchat:14b anyway/);
-  const old = srv.chats.filter((c) => c.model === 'oldchat:14b' && c.stream);
-  expect(old.map((c) => c.tools)).toEqual([true, false]);
-  // the chat was kept across both switches: one model answered each message
-  expect(srv.chats.filter((c) => c.stream).map((c) => c.model)).toEqual(['tiny:3b', 'coder:30b', 'oldchat:14b', 'oldchat:14b']);
+  // the chat was kept across both switches, in Ollama's own chat: one model answered each message
+  expect(srv.chats.map((c) => [c.model, c.tools])).toEqual([['tiny:3b', true], ['coder:30b', true], ['oldchat:14b', false]]);
   const saved = settingsOf(base);
   expect(saved.remote).toMatchObject({ use: true, source: 'openai', model: 'oldchat:14b' });
   expect(saved.remotes.openai.model).toBe('oldchat:14b');
+}, T);
+
+test('a model that does not fit on the service: tried again at half the context until it does (that size kept for it); one that never fits goes back, a message sent meanwhile waits for it; /effort’s Context is the model’s own', async () => {
+  const { cwd, env, base } = setup();
+  const srv = await fullOllama({ serviceCtx: 262144 });
+  const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
+  const where = `127.0.0.1:${srv.port}`.replace('.', '\\.');
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 55_000, steps: [
+    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    // huge: 256k and 128k do not fit, 64k does
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
+    { type: 'huge' }, { sleep: 150 }, { key: 'enter' }, { wait: 'huge:120b is loaded on the service' }, { sleep: 300 }, { snapshot: 'fitted' },
+    { type: 'one' }, { key: 'enter' }, { wait: 'From huge:120b, reply 1.' }, { sleep: 200 },
+    // giant: never fits; "two" is sent while it is loading, waits, and goes to huge once it is back
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
+    { type: 'giant' }, { sleep: 150 }, { key: 'enter' }, { sleep: 250 },
+    { type: 'two' }, { key: 'enter' }, { sleep: 150 }, { snapshot: 'waiting' },
+    { wait: 'Back on huge:120b' }, { wait: 'From huge:120b, reply 2.' }, { sleep: 300 }, { snapshot: 'back' },
+    // /effort: the Context row is huge's own 64k, no memory sum of this Mac; ← 32k, enter: it loads again at 32k
+    { type: '/effort' }, { key: 'enter' }, { wait: 'Effort and limits' }, { sleep: 200 },
+    ...down(5), { sleep: 100 }, { snapshot: 'panel' },
+    { key: 'left' }, { sleep: 100 }, { key: 'enter' }, { wait: '· 32k context.' }, { sleep: 300 }, { snapshot: 'smaller' },
+    ...quit,
+  ] });
+  await srv.close();
+  const s = r.snapshots;
+  expect(s.fitted).toMatch(/huge:120b did not fit on the service at 256k context: trying 128k…/);
+  expect(s.fitted).toMatch(/huge:120b did not fit on the service at 128k context: trying 64k…/);
+  expect(s.fitted).toMatch(/huge:120b is loaded on the service \(\d+ s\) · 64k context\. Kept at that size for it; \/effort’s Context row changes it\./);
+  expect(srv.loads.filter((l) => l.model === 'huge:120b').slice(0, 3).map((l) => [l.numCtx, l.ok])).toEqual([[null, false], [131072, false], [65536, true]]);
+  expect(srv.chats[0]).toEqual({ model: 'huge:120b', tools: true, numCtx: 65536 });
+  // giant: every size down to 32k, then back on huge; the message waited, and went to huge, never to giant
+  expect(s.waiting).toMatch(/⏵ Queued: two\s+· sends once the model has loaded on the service/);
+  expect(s.waiting).toMatch(/◐ giant:400b loading on the service · 240\.0 GB/);
+  expect(srv.loads.filter((l) => l.model === 'giant:400b').map((l) => l.numCtx)).toEqual([null, 131072, 65536, 32768]);
+  expect(s.back.replace(/\s+/g, ' ')).toContain('giant:400b did not load on the service: the service has no room for it (its weights alone are 240.0 GB), even at 32k context, next to the models it keeps loaded. Back on huge:120b.');
+  expect(s.back).toMatch(new RegExp(`● huge:120b on ${where}`));
+  expect(srv.chats.map((c) => c.model)).toEqual(['huge:120b', 'huge:120b']);
+  expect(s.back).not.toMatch(/stopped answering|connecting again/);
+  // /effort on the service: the model's own context, said in its words, never NaN
+  expect(s.panel).toMatch(/❯ Context\s+◀ 64k\s+▶\s+↻? ?64k on the service · huge:120b loads again at this size/);
+  expect(s.panel).not.toContain('NaN');
+  expect(s.smaller).toMatch(/Context 64k → 32k for huge:120b, kept for it/);
+  expect(srv.loads.at(-1)).toEqual({ model: 'huge:120b', numCtx: 32768, ok: true });
+  const saved = settingsOf(base);
+  expect(saved.remote.contexts).toEqual({ 'huge:120b': 32768 });
+  expect(saved.remotes.openai.contexts).toEqual({ 'huge:120b': 32768 });
+  expect(saved.remote.model).toBe('huge:120b');
 }, T);

@@ -106,14 +106,20 @@ export async function ollamaModel({ url, key, model, signal, timeoutMs = 5000 } 
   return { version, ...entryOf(model, { shown: s ? shownOf(s) : null, ps: p }) };
 }
 
+// The words a service uses when a model does not fit in its GPU memory: llama.cpp's
+// (CUDA, ROCm and Metal builds: "cudaMalloc failed: out of memory", "unable to allocate
+// ROCm0 buffer") and Ollama's own check ("requires more system memory").
+export const isOutOfMemory = (text) => /out of memory|failed to allocate|unable to allocate|cudaMalloc failed|requires more (?:system |gpu )?memory|insufficient memory|not enough memory/i.test(String(text ?? ''));
+
 // Loads a model on the service without asking it anything (an empty prompt),
-// so a switch is not first felt on the next reply. Resolves once it is loaded;
-// throws with the service's words when it cannot be.
-export async function preloadOllama({ url, key, model, signal, timeoutMs = 15 * 60_000 }) {
+// so a switch is not first felt on the next reply; numCtx: at that context (its
+// cache is part of what has to fit), else at the service's own. Resolves once it
+// is loaded; throws with the service's words when it cannot be.
+export async function preloadOllama({ url, key, model, numCtx = null, signal, timeoutMs = 15 * 60_000 }) {
   const t = AbortSignal.timeout(timeoutMs);
   const res = await fetch(`${norm(url)}/api/generate`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...headersOf(url, key) },
-    body: JSON.stringify({ model, prompt: '', stream: false }),
+    body: JSON.stringify({ model, prompt: '', stream: false, ...(numCtx ? { options: { num_ctx: numCtx } } : {}) }),
     signal: signal ? AbortSignal.any([signal, t]) : t,
   });
   const j = await res.json().catch(() => null);

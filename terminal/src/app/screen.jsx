@@ -1413,7 +1413,7 @@ export function Screen({ app }) {
       ) : null}
       <LiveArea app={app} />
       {app.btwWaiting ? <Box marginBottom={1}><Text color={C.dim}>⏵ Your /btw answer is kept: it shows again once you have answered</Text></Box> : null}
-      {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : app.modelOff ? '  · sends once /start has loaded the model' : ''}</Text></Box> : null}
+      {app.queued ? <Box marginBottom={1}><Text color={C.dim}>⏵ Queued: {app.queued.length > 80 ? `${app.queued.slice(0, 79)}…` : app.queued}{app.starting ? '  · sends as soon as the model is ready' : app.modelState?.remote && app.modelState.state === 'loading' ? '  · sends once the model has loaded on the service' : app.modelOff ? '  · sends once /start has loaded the model' : ''}</Text></Box> : null}
       </Box>
       <Box flexGrow={1} />
       {app.popup ? <><Popup app={app} /><Box flexGrow={1} /></> : null}

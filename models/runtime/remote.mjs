@@ -20,7 +20,7 @@ import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS } from '../registry.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, claudeProbe } from './claude.mjs';
-import { ollamaModel, ollamaCtx } from './ollama.mjs';
+import { ollamaModel, ollamaCtx, isOutOfMemory } from './ollama.mjs';
 
 export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 // The address used: what was typed, or Anthropic's for a Claude API remote left blank.
@@ -290,7 +290,9 @@ export function pickRemoteModel(ids) {
 // whole way works (a hosted model may charge a fraction of a cent for it).
 // autoPick: when several models are listed and none named, pick a text/coder
 // one (the CLI, connectRemote). The form passes false so you can pick from the list.
-export async function probe({ url, kind = 'llama', key = null, model = '', reply = false, autoPick = true, signal, timeoutMs = 8000 }) {
+// numCtx: on an Ollama service, the context the model is to run at (the word is asked
+// for at it, so the model is not loaded at the service's own just for the check).
+export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000 }) {
   const steps = [];
   const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, needModel: false, vision: kind !== 'llama' };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
@@ -338,7 +340,7 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
       if (o) {
         out.ollama = o;
         if (o.known) out.vision = o.vision;
-        out.ctx ??= ollamaCtx(o);
+        out.ctx ??= numCtx || ollamaCtx(o);
       }
       steps.push({ ok: true, text: `model ${out.model}${out.ctx ? ` · ${Math.round(out.ctx / 1024)}k context` : ''}` });
     }
@@ -346,17 +348,34 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
       const t1 = Date.now();
       // An OpenAI-compatible service may first load the model (Ollama: tens of GB from its disk).
       const t = AbortSignal.timeout(Math.max(timeoutMs, kind === 'openai' ? 180_000 : 60_000));
-      const ask = (limit) => fetch(`${norm(url)}/v1/chat/completions`, {
-        method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t,
-        headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ model: out.model ?? 'coding', messages: [{ role: 'user', content: 'Reply with the single word: ready' }], ...limit, stream: false, ...(kind === 'llama' ? { chat_template_kwargs: { enable_thinking: false } } : {}) }),
-      });
-      let res = await ask({ max_tokens: 8 });
-      let j = await res.json().catch(() => null);
-      // A server that wants max_completion_tokens (OpenAI's reasoning models) is asked that way, with room to think.
-      if (res.status === 400 && /max_completion_tokens/.test(j?.error?.message ?? '')) { res = await ask({ max_completion_tokens: 512 }); j = await res.json().catch(() => null); }
-      if (!res.ok) return fail(`it would not answer: ${res.status} ${(j?.error?.message ?? '').slice(0, 140)}`.trim());
-      const said = String(j?.choices?.[0]?.message?.content ?? '').trim().replace(/\s+/g, ' ').slice(0, 24);
+      const headers = { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) };
+      const words = [{ role: 'user', content: 'Reply with the single word: ready' }];
+      let res, j, said;
+      if (out.ollama) {
+        // Ollama's own chat, the one that takes a context (the agent's requests go the same way):
+        // no thinking first (gpt-oss cannot turn it off, so its least), a few words back.
+        const gptoss = /gpt-?oss/i.test(`${out.ollama.family} ${out.model}`);
+        res = await fetch(`${norm(url)}/api/chat`, {
+          method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t, headers,
+          body: JSON.stringify({ model: out.model, messages: words, stream: false, ...(gptoss ? { think: 'low' } : out.ollama.thinking ? { think: false } : {}), options: { num_predict: gptoss ? 512 : 8, ...(numCtx ? { num_ctx: numCtx } : {}) } }),
+        });
+        j = await res.json().catch(() => null);
+        const why = typeof j?.error === 'string' ? j.error : j?.error?.message ?? '';
+        if (!res.ok) return fail(isOutOfMemory(why) ? `the service has no room to load ${out.model} (out of GPU memory): pick a smaller model or a smaller context` : `it would not answer: ${res.status} ${why.slice(0, 140)}`.trim());
+        said = j?.message?.content;
+      } else {
+        const ask = (limit) => fetch(`${norm(url)}/v1/chat/completions`, {
+          method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t, headers,
+          body: JSON.stringify({ model: out.model ?? 'coding', messages: words, ...limit, stream: false, ...(kind === 'llama' ? { chat_template_kwargs: { enable_thinking: false } } : {}) }),
+        });
+        res = await ask({ max_tokens: 8 });
+        j = await res.json().catch(() => null);
+        // A server that wants max_completion_tokens (OpenAI's reasoning models) is asked that way, with room to think.
+        if (res.status === 400 && /max_completion_tokens/.test(j?.error?.message ?? '')) { res = await ask({ max_completion_tokens: 512 }); j = await res.json().catch(() => null); }
+        if (!res.ok) return fail(`it would not answer: ${res.status} ${(j?.error?.message ?? '').slice(0, 140)}`.trim());
+        said = j?.choices?.[0]?.message?.content;
+      }
+      said = String(said ?? '').trim().replace(/\s+/g, ' ').slice(0, 24);
       steps.push({ ok: true, text: `answered "${said || '…'}" in ${((Date.now() - t1) / 1000).toFixed(1)} s` });
     }
     out.ok = true;
@@ -412,13 +431,20 @@ export function remoteModel(r, info = {}) {
   const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null }, bytes: 0, draft: null, slots: info.slots ?? 1 };
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
   const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? 'high' : 'low' } : {};
-  return { ...GENERIC_REMOTE, ...levels, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: ctx ?? GENERIC_REMOTE.maxCtx };
+  // An Ollama model's longest context is its own (/effort's Context row goes up to it).
+  return { ...GENERIC_REMOTE, ...levels, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 
 // ---- connecting ---------------------------------------------------------------------------------
 
+// The context an Ollama model is asked to run at (num_ctx): its own from /effort
+// (r.contexts, by model), else /remote's Context row, else null: the service's own.
+export const ollamaCtxOf = (r, model) => Number(r?.contexts?.[model]) || Number(r?.context) || null;
+
 // Opens the remote for use: the tunnel when it goes by SSH, the key from the
 // Keychain, the check; registers the endpoint so every call carries the key.
+// On an Ollama service it is talked to in Ollama's own chat (its OpenAI-style one
+// cannot name a context), with the context it is to run at.
 // Answers { url, ctx, slots, model (the settings), info, stop() }, or throws
 // with the reason in plain words. The context used: the one typed in the form,
 // else the server's, else 32k.
@@ -434,15 +460,19 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
     url = tunnel.url;
   } else url = directUrl(r);
   try {
-    const info = await probe({ url, kind: r.kind, key: secret, model: r.model, signal });
+    const info = await probe({ url, kind: r.kind, key: secret, model: r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, signal });
     if (!info.ok) throw new Error(info.error);
     const model = remoteModel(r, info);
+    const o = info.ollama ?? null;
+    // Every request names the context, so the model is never loaded again behind the agent's back:
+    // its own (or /remote's), else the size it is loaded at now; a cold one's is pinned once loaded.
+    const numCtx = o ? ollamaCtxOf(r, info.model) || (o.loaded ? o.loadedCtx : null) : null;
     // Claude: the server's own (1M today), kept to CLAUDE_CTX unless the form asks for more.
-    const ctx = r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
-    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r) });
+    const ctx = numCtx || r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
+    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family } : {}) });
     return {
       // vision: it can take a picture (a llama.cpp server says so; OpenAI-compatible and Claude: yes)
-      url, ctx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,
+      url, ctx, numCtx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,
       stop: () => { dropEndpoint(url); tunnel?.stop(); },
     };
   } catch (e) {

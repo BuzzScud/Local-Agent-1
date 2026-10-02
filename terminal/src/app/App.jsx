@@ -17,7 +17,7 @@ import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama, isOutOfMemory, setEndpoint, endpointOf } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, commitPick, closePick, modelChoices } from './remote-form.mjs';
@@ -461,7 +461,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -680,12 +680,14 @@ export function App({ opts, win, onRestart }) {
     setStarting(false);
     push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · ${Math.round(conn.ctx / 1024)}k context. Your prompts, your code and the files it reads now go to ${remoteLabel(r)}; /remote switches back.`, tone: 'dim' });
     setRemoteState('on');
-    preloadRemote(conn);
+    // A model still loading on the service: a waiting message goes once it has (preloadRemote).
+    const loading = preloadRemote(conn);
     refreshCatalog(conn);
     const risk = remoteRisk(r);
     if (risk) push({ type: 'note', text: `⚠ ${risk}.`, tone: 'warn' });
     const q = queuedRef.current;
-    if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => remoteFnRef.current.send?.(q), 50); }
+    if (q && loading) { /* sent by preloadRemote */ }
+    else if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => remoteFnRef.current.send?.(q), 50); }
     // At the start, as after a start here: the last window's second look is asked about, then (first use here) what is written is read.
     else if (atStart) setTimeout(() => { autoRef.current.atStart(); }, 3000).unref?.();
     return true;
@@ -811,51 +813,104 @@ export function App({ opts, win, onRestart }) {
     if (!conn?.info?.ollama) return;
     ollamaCatalog({ url: conn.url }).then((c) => { if (c && remoteRef.current.conn === conn) setCatalog(c); }).catch(() => {});
   };
-  // A model not loaded on the service is loaded now (an empty prompt), so a switch is not first felt
-  // on the next reply; the footer says so meanwhile. Then the context it really runs at is read and
-  // used (until then no more than 32k is planned for: Ollama cuts a longer prompt without a word),
-  // unless /remote's Context names one.
-  const preloadRemote = (conn) => {
+  // An Ollama model's own context (/effort's Context row; 0: the service's own), kept by model in
+  // the service's set-up ("contexts"), so `coding -p` and the next start ask for it too.
+  const serviceCtx = (name = model.remote?.model) => Number(settings.remote?.contexts?.[name]) || 0;
+  // On an Ollama service now (connected): its models' context is theirs, not this Mac's.
+  const onService = () => Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama);
+  const setServiceCtx = (name, v) => {
+    const src = sourceOf(settings.remote);
+    const put = (p) => { const contexts = { ...(p?.contexts ?? {}) }; if (v) contexts[name] = v; else delete contexts[name]; return { ...p, contexts }; };
+    const saved = saveSettings({ remote: put(settings.remote), ...(settings.remotes?.[src] ? { remotes: { ...settings.remotes, [src]: put(settings.remotes[src]) } } : {}) });
+    settings.remote = saved.remote;
+    settings.remotes = saved.remotes;
+  };
+  // A message that waited while a model loaded on the service goes now.
+  const flushQueued = () => {
+    const q = queuedRef.current;
+    if (q) { queuedRef.current = null; setQueued(null); setTimeout(() => remoteFnRef.current.send?.(q), 50); }
+  };
+  // A model not loaded on the service (or loaded at another context than it is to run at) is loaded
+  // now, with an empty prompt, so a switch is not first felt on the next reply: the footer says so,
+  // and a message sent meanwhile waits for it. Then the context it really runs at is read and used
+  // (until then no more than 32k is planned for: Ollama cuts a longer prompt without a word).
+  // One that does not fit in the service's GPU memory is tried again at half the context, down to
+  // 32k, and the size it fitted at is kept for that model; one that never loads gives way to `back`,
+  // the model in use before, and says why (the user's pick, 1 Oct 2026). Answers whether it loads.
+  const preloadRemote = (conn, { back = null } = {}) => {
     const o = conn?.info?.ollama;
-    if (!o || o.loaded) return;
+    if (!o || (o.loaded && (!conn.numCtx || o.loadedCtx === conn.numCtx))) return false;
     const my = (remoteRef.current.loads = (remoteRef.current.loads ?? 0) + 1);
     const mine = () => remoteRef.current.loads === my && remoteRef.current.conn === conn;
     const name = conn.info.model;
+    const asked = conn.numCtx ?? null;
     const t0 = Date.now();
     setRemoteState('loading');
-    preloadOllama({ url: conn.url, model: name }).then(async () => {
-      const now = mine() ? await ollamaModel({ url: conn.url, model: name }).catch(() => null) : null;
+    (async () => {
+      let numCtx = asked;
+      // The service's own is at most the model's longest (256k here for most).
+      let at = numCtx || Math.min(o.ctx || 262_144, 262_144);
+      let err = null;
+      for (;;) {
+        try { await preloadOllama({ url: conn.url, model: name, numCtx }); err = null; break; } catch (e) { err = e; }
+        if (!mine() || !isOutOfMemory(err.message) || at / 2 < 32_768) break;
+        push({ type: 'note', text: `${name} did not fit on the service at ${ctxWord(at)} context: trying ${ctxWord(at / 2)}…`, tone: 'warn' });
+        at /= 2;
+        numCtx = at;
+        conn.numCtx = numCtx;
+        setEndpoint(conn.url, { ...endpointOf(conn.url), numCtx });
+      }
       if (!mine()) return;
+      if (!err) {
+        const now = await ollamaModel({ url: conn.url, model: name }).catch(() => null);
+        if (!mine()) return;
+        const real = now?.loadedCtx || numCtx;
+        if (real && real !== agent.ctx) { conn.ctx = real; agent.ctx = real; setCtx(real); agent.syncRules(); }
+        // Loaded at the service's own: that size is named from now on (the model is not loaded again for a request).
+        if (!numCtx && real) { conn.numCtx = real; setEndpoint(conn.url, { ...endpointOf(conn.url), numCtx: real }); }
+        // It fitted only smaller: that size is kept for it, so the next switch loads it at once.
+        if (numCtx !== asked) setServiceCtx(name, numCtx);
+        setRemoteState('on');
+        push({ type: 'note', text: `${name} is loaded on the service (${Math.max(1, Math.round((Date.now() - t0) / 1000))} s)${real ? ` · ${ctxWord(agent.ctx)} context` : ''}.${numCtx !== asked ? ' Kept at that size for it; /effort’s Context row changes it.' : ''}`, tone: 'dim' });
+        refreshCatalog(conn);
+        flushQueued();
+        return;
+      }
+      const gb = catalog?.models.find((m) => m.id === name)?.bytes;
+      const why = isOutOfMemory(err.message)
+        ? `the service has no room for it${gb ? ` (its weights alone are ${(gb / 1e9).toFixed(1)} GB)` : ''}, even at ${ctxWord(at)} context, next to the models it keeps loaded`
+        : err.message;
+      if (back && back !== name) {
+        push({ type: 'note', text: `${name} did not load on the service: ${why}. Back on ${back}.`, tone: 'warn' });
+        try {
+          const c2 = await useServiceModel(back);
+          setRemoteState('on');
+          refreshCatalog(c2);
+          if (!preloadRemote(c2)) flushQueued();
+        } catch (e) {
+          setRemoteState('down');
+          push({ type: 'note', text: `${back} did not answer either: ${e.message}. /model or /remote to pick another.`, tone: 'error' });
+        }
+        return;
+      }
       setRemoteState('on');
-      if (now?.loadedCtx && !settings.remote?.context && now.loadedCtx !== agent.ctx) { conn.ctx = now.loadedCtx; agent.ctx = now.loadedCtx; setCtx(now.loadedCtx); agent.syncRules(); }
-      push({ type: 'note', text: `${name} is loaded on the service (${Math.max(1, Math.round((Date.now() - t0) / 1000))} s)${now?.loadedCtx ? ` · ${ctxWord(agent.ctx)} context` : ''}.`, tone: 'dim' });
-      refreshCatalog(conn);
-    }).catch((e) => {
-      if (!mine()) return;
-      setRemoteState('on');
-      push({ type: 'note', text: `${name} did not load on the service: ${e.message}. The next reply asks for it again.`, tone: 'warn' });
-    });
+      push({ type: 'note', text: `${name} did not load on the service: ${why}. /model picks another.`, tone: 'warn' });
+      flushQueued();
+    })();
+    return true;
   };
-  // /model on an Ollama service: another of its models, in place. The chat stays (one longer than
-  // the new model's context is summed up before the next reply, as when a chat fills), and /remote's
-  // set-up keeps the pick. One that does not answer changes nothing.
-  const switchService = async (entry) => {
-    if (busyNow()) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+  // Points this window at another model on the same service: it is checked (it answers, what it can
+  // do), the pick is kept for next time, and the agent goes on with it. Throws when it does not answer.
+  const useServiceModel = async (id) => {
     const before = remoteRef.current.conn;
-    const r = { ...settings.remote, model: entry.id };
-    setRemoteState('connecting');
-    let conn;
-    try { conn = await connectRemote(r); } catch (e) {
-      setRemoteState(before ? 'on' : 'down');
-      push({ type: 'note', text: `Could not switch to ${entry.id}: ${e.message}. Still on ${model.remote?.model ?? model.name}.`, tone: 'error' });
-      return;
-    }
+    const r = { ...settings.remote, model: id };
+    const conn = await connectRemote(r);
     // The same address (http): its endpoint now names the new model. A tunnel of its own (ssh): the old one closes.
     if (before && before.url !== conn.url) before.stop();
     remoteRef.current.conn = conn;
     remoteRef.current.why = null;
     const src = sourceOf(r);
-    const saved = saveSettings({ remote: r, ...(settings.remotes?.[src] ? { remotes: { ...settings.remotes, [src]: { ...settings.remotes[src], model: entry.id } } } : {}) });
+    const saved = saveSettings({ remote: r, ...(settings.remotes?.[src] ? { remotes: { ...settings.remotes, [src]: { ...settings.remotes[src], model: id } } } : {}) });
     settings.remote = saved.remote;
     settings.remotes = saved.remotes;
     const m = conn.model;
@@ -865,13 +920,28 @@ export function App({ opts, win, onRestart }) {
     agent.model = modelWithLimits(m, limitsRef.current);
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.syncRules();
+    return conn;
+  };
+  // /model on an Ollama service: another of its models, in place. The chat stays (one longer than
+  // the new model's context is summed up before the next reply, as when a chat fills). One that does
+  // not answer changes nothing; one that does not load goes back to this one (preloadRemote).
+  const switchService = async (entry) => {
+    if (busyNow()) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+    const back = model.remote?.model ?? null;
+    setRemoteState('connecting');
+    let conn;
+    try { conn = await useServiceModel(entry.id); } catch (e) {
+      setRemoteState(remoteRef.current.conn ? 'on' : 'down');
+      push({ type: 'note', text: `Could not switch to ${entry.id}: ${e.message}. Still on ${back ?? model.name}.`, tone: 'error' });
+      return;
+    }
     setRemoteState('on');
-    // What it will run at once loaded (the 32k planned for until then is raised then); a cold
-    // model's context is said by the note once it has loaded.
-    const room = entry.loadedCtx || entry.ctx || conn.ctx;
+    // What it runs at: the size kept for it, else (loaded) the one it has; a cold model's own is
+    // said by the note once it has loaded (until then no more than 32k is planned for).
+    const room = conn.numCtx || entry.loadedCtx || entry.ctx || conn.ctx;
     const used = agent.ctxUsed ?? 0;
-    push({ type: 'note', text: `Now on ${entry.id} on ${remoteLabel(r)}${entry.loaded ? ` · ${ctxWord(room)} context` : ''}. The chat stays${used > room * 0.85 ? `; at about ${ctxWord(used)} it is more than fits, so the oldest part is summed up before the next reply` : ''}.${entry.tools ? '' : ' It cannot use tools: it answers in words only.'}`, tone: 'dim' });
-    preloadRemote(conn);
+    push({ type: 'note', text: `Now on ${entry.id} on ${remoteLabel(settings.remote)}${conn.numCtx || entry.loaded ? ` · ${ctxWord(room)} context` : ''}. The chat stays${used > room * 0.85 ? `; at about ${ctxWord(used)} it is more than fits, so the oldest part is summed up before the next reply` : ''}.${entry.tools ? '' : ' It cannot use tools: it answers in words only.'}`, tone: 'dim' });
+    preloadRemote(conn, { back });
     refreshCatalog(conn);
   };
   // /model: the model list and the thinking level in one picker. Each model's edited copy, when
@@ -1092,7 +1162,9 @@ export function App({ opts, win, onRestart }) {
     const mem = memoryForRestart();
     const levels = model.thinkingLevels ?? [];
     const level = Math.max(0, levels.findIndex((l) => l.id === thinkingLevel(model, agent.thinking, agent.effort).id));
-    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values: { ...limitsRef.current }, saved: { ...limitsRef.current }, model, env: { model, freeBytes: mem.free, searchBytes: mem.search, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
+    // On an Ollama service the Context row is the model's own (serviceCtx), not this Mac's.
+    const values = onService() ? { ...limitsRef.current, context: serviceCtx() } : { ...limitsRef.current };
+    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model, env: { model, freeBytes: mem.free, searchBytes: mem.search, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
   };
   askRef.current = (p) => new Promise((resolve) => {
     // Not over something you are doing: typing, or another menu open. Asked
@@ -1178,8 +1250,15 @@ export function App({ opts, win, onRestart }) {
   const saveEffortLimits = (levelId, next) => {
     const lv = levelId ? (model.thinkingLevels ?? []).find((l) => l.id === levelId) : null;
     const effortChanged = !!lv && lv.id !== thinkingLevel(model, agent.thinking, agent.effort).id;
+    // On an Ollama service the Context row is the model's own: kept by model, and the model loads
+    // again on the service at that size (the conversation stays); this Mac's Context is left as it was.
+    const svc = onService();
+    const svcCtx = svc ? next.context ?? 0 : 0;
+    const ctxChanged = svc && svcCtx !== serviceCtx();
+    if (svc) next = { ...next, context: limitsRef.current.context };
     const changes = limitChanges(limitsRef.current, next);
-    if (!effortChanged && !changes.length) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
+    if (!effortChanged && !changes.length && !ctxChanged) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
+    if (ctxChanged && busyNow()) { push({ type: 'note', text: 'Agentic Coder is busy (a reply, or a model loading). Save the Context again in /effort when it is done. Nothing was changed.', tone: 'warn' }); return; }
     const restart = changes.some((c) => c.restart);
     if (restart && !opts.url && !model.remote) {
       // A restart needs a quiet model: no reply running, and no start still going
@@ -1188,6 +1267,19 @@ export function App({ opts, win, onRestart }) {
       if (why) { push({ type: 'note', text: `Agentic Coder is ${why}, then save again in /effort. Nothing was changed.`, tone: 'warn' }); return; }
     }
     if (effortChanged) { setThinking(!!lv.effort, lv.effort ? lv.id : undefined); sayEffort(lv, next.thinking); }
+    if (ctxChanged) {
+      const conn = remoteRef.current.conn;
+      const name = model.remote.model;
+      const from = serviceCtx();
+      setServiceCtx(name, svcCtx);
+      conn.numCtx = svcCtx || null;
+      setEndpoint(conn.url, { ...endpointOf(conn.url), numCtx: conn.numCtx });
+      if (svcCtx) { conn.ctx = svcCtx; agent.ctx = svcCtx; setCtx(svcCtx); agent.syncRules(); }
+      push({ type: 'note', text: `Context ${from ? ctxWord(from) : 'auto'} → ${svcCtx ? ctxWord(svcCtx) : 'auto (the service’s own)'} for ${name}, kept for it: it loads again on the service at that size; the chat stays.`, tone: 'dim' });
+      // Loaded again even when it is loaded: at the new size (or the service's own).
+      conn.info.ollama = { ...conn.info.ollama, loaded: false };
+      preloadRemote(conn);
+    }
     if (!changes.length) return;
     limitsRef.current = next;
     applyLimits(agent, next);
@@ -2285,7 +2377,8 @@ export function App({ opts, win, onRestart }) {
     addHistory(cwd, value);
     historyRef.current.push(value);
     setTip(null);
-    if (agent.busy || S.current.starting) { queuedRef.current = value; setQueued(value); return; }
+    // A model loading on the service: the message waits for it (preloadRemote sends it).
+    if (agent.busy || S.current.starting || S.current.remoteState === 'loading') { queuedRef.current = value; setQueued(value); return; }
     sendPrompt(value);
   }, [agent, cwd, push, quit, runShell, runSlash, sendPrompt]);
 

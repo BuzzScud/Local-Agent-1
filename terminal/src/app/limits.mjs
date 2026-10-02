@@ -67,11 +67,15 @@ export const LIMITS = [
   },
   {
     id: 'context', label: 'Context', restart: true,
-    // 0 = auto: 32k, or 16k when memory is short (chooseContext).
-    steps: (m) => [0, 16384, 32768, 65536, 131072, 262144].filter((v) => !v || v <= (m.maxCtx ?? 32768)),
+    // 0 = auto: 32k, or 16k when memory is short (chooseContext). On an Ollama service it is
+    // each model's own (App.jsx keeps it by model): 8k up to the model's longest, auto the service's.
+    steps: (m) => (m.remote?.ollama ? [0, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576] : [0, 16384, 32768, 65536, 131072, 262144]).filter((v) => !v || v <= (m.maxCtx ?? 32768)),
     def: () => 0,
     show: (v) => (v ? k(v) : 'auto'),
     note: (v, e) => {
+      // A remote holds nothing of this Mac's memory: what this Mac would need says nothing there.
+      if (e.model?.remote?.ollama) return v ? `${k(v)} on the service · ${e.model.remote.model} loads again at this size; the chat stays` : `the service's own${e.ctxNow ? ` · ${k(e.ctxNow)} now` : ''}`;
+      if (e.model?.remote) return 'set where it runs: /remote’s Context row, or coding serve --ctx there';
       if (!v) return '32k, or 16k when memory is short';
       // With the speed helper when it comes along, as the start checks (a test says which).
       // The search models still to load count too, as the start's check counts them.

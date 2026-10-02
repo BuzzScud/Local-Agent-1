@@ -2062,7 +2062,9 @@ export class Agent extends EventEmitter {
         turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
         return { ...turn, aborted: true };
       }
-      else if (retry && /fetch failed|ECONNREFUSED|socket|terminated/i.test(`${e.message} ${e.cause?.message ?? ''}`) && this.waitForServer) {
+      // The connection broke (not an answer from the server: one that says no carries its status,
+      // and a service's "llama-server process has terminated" is such an answer).
+      else if (retry && !e.status && /fetch failed|ECONNREFUSED|socket|terminated/i.test(`${e.message} ${e.cause?.message ?? ''}`) && this.waitForServer) {
         this.emit('note', { text: this.model?.remote ? 'The remote model stopped answering; connecting again…' : 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });

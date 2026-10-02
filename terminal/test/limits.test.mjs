@@ -230,3 +230,17 @@ test('applySearch: Embedder Off takes it from every search, back on makes one; t
   applySearch(withRag, d, opts(true));
   expect(withRag.embedder?.kind).toBe('embedder');
 });
+
+test('the Context row on a remote: no memory sum of this Mac (it said NaN GB); on an Ollama service 8k up to the model’s longest, auto the service’s own', () => {
+  const plain = { thinkingLevels: [], maxCtx: 131072 }; // a remote model's settings, as remoteModel gives them
+  const ollama = { ...plain, maxCtx: 262144, remote: { kind: 'openai', label: 'gpu-box:11434', model: 'coder:30b', ollama: '0.32.12' } };
+  const ctx = LIMITS.find((l) => l.id === 'context');
+  expect(ctx.steps(ollama)).toEqual([0, 8192, 16384, 32768, 65536, 131072, 262144]);
+  expect(ctx.steps({ ...ollama, maxCtx: 10485760 }).at(-1)).toBe(1048576);
+  const note = (m, v, o = {}) => limitNote('context', { model: m, values: { context: v }, freeBytes: 3.2e9, ...o });
+  expect(note(ollama, 65536)).toBe('64k on the service · coder:30b loads again at this size; the chat stays');
+  expect(note(ollama, 0, { ctxNow: 262144 })).toBe('the service\'s own · 256k now');
+  const other = { ...plain, remote: { kind: 'openai', label: 'api.example.com', model: 'x' } };
+  expect(note(other, 32768)).toBe('set where it runs: /remote’s Context row, or coding serve --ctx there');
+  for (const v of ctx.steps(ollama)) expect(note(ollama, v)).not.toContain('NaN');
+});

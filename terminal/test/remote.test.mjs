@@ -142,6 +142,108 @@ test('a model whose only level is Low (it cannot think) is sent no reasoning_eff
   } finally { dropEndpoint(url); s.close(); }
 });
 
+// An Ollama service's own chat (/api/chat), as Ollama 0.32 streams it: one JSON object a line,
+// the thinking and the text in `message`, a tool call whole, the counts in the last line.
+// reply(body) → { lines } (each an object), or { status, error } for a refusal.
+function fakeOllamaChat(reply) {
+  const bodies = [];
+  const s = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    const body = JSON.parse(b);
+    bodies.push(body);
+    const r = reply(body, bodies.length);
+    if (r.status) { res.writeHead(r.status, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: r.error })); return; }
+    res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+    res.end(r.lines.map((l) => JSON.stringify(l)).join('\n'));
+  });
+  return new Promise((ok) => s.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${s.address().port}`, bodies, close: () => new Promise((d) => s.close(d)) })));
+}
+const done = (o = {}) => ({ message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 900, prompt_eval_duration: 2e9, eval_count: 40, eval_duration: 1e9, ...o });
+
+test('an Ollama service is asked in its own chat: the context with every request, thinking as think, its tools only, the counts and speeds from the last line', async () => {
+  const f = await fakeOllamaChat(() => ({ lines: [
+    { message: { role: 'assistant', content: '', thinking: 'Look at the file.' }, done: false },
+    { message: { role: 'assistant', content: '', tool_calls: [{ function: { name: 'Read', arguments: { path: 'a.mjs' } } }] }, done: false },
+    done(),
+  ] }));
+  const tools = [{ type: 'function', function: { name: 'Read', parameters: {} } }];
+  const thinker = { ...GENERIC_REMOTE }; // Low and High
+  try {
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: 'test-svc-0123456789', model: 'thinker:35b', label: 'svc', ollama: true, numCtx: 65536, thinks: true, tools: true, family: 'qwen35moe' });
+    const evs = await drain(streamChat({ url: f.url, messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'read a.mjs' }], tools, model: thinker, sampling: { temperature: 0.6, top_k: 20, other: 1 }, thinking: true, effort: 'high', maxTokens: 2048, extra: { stop: ['</x>'] } }));
+    expect(evs.map((e) => e.type)).toEqual(['reasoning', 'tool', 'done']);
+    expect(evs[1]).toMatchObject({ index: 0, name: 'Read', args: '{"path":"a.mjs"}' });
+    expect(evs[2]).toMatchObject({ finish: 'tool_calls', usage: { prompt_tokens: 900, completion_tokens: 40 }, timings: { prompt_n: 900, prompt_per_second: 450, predicted_n: 40, predicted_per_second: 40 } });
+    const b = f.bodies[0];
+    expect(b).toMatchObject({ model: 'thinker:35b', stream: true, think: true, tools, options: { num_ctx: 65536, num_predict: 2048, temperature: 0.6, top_k: 20, stop: ['</x>'] } });
+    expect('other' in b.options).toBe(false);
+    // Low on a model that thinks: told not to (else Qwen thinks anyway)
+    await drain(streamChat({ url: f.url, messages: [], model: thinker, sampling: {}, thinking: false, maxTokens: 9 }));
+    expect(f.bodies.at(-1).think).toBe(false);
+    // a model that cannot think is not told either way; one that cannot use tools gets none; toolChoice none: none
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model: 'oldchat:14b', label: 'svc', ollama: true, numCtx: null, thinks: false, tools: false, family: 'phi3' });
+    await drain(streamChat({ url: f.url, messages: [], tools, model: { ...GENERIC_REMOTE, thinkingLevels: [GENERIC_REMOTE.thinkingLevels[0]], thinkingEffort: 'low' }, sampling: {}, thinking: true, effort: 'high', maxTokens: 9 }));
+    const plain = f.bodies.at(-1);
+    expect(['think' in plain, 'tools' in plain, 'num_ctx' in plain.options]).toEqual([false, false, false]);
+    // gpt-oss cannot turn its thinking off: Low is its least, the others its own level
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model: 'gpt-oss:120b', label: 'svc', ollama: true, numCtx: null, thinks: true, tools: true, family: 'gptoss' });
+    const oss = { ...GENERIC_REMOTE, thinkingLevels: [{ id: 'low', effort: null }, { id: 'medium', effort: 'medium' }, { id: 'high', effort: 'high' }], thinkingEffort: 'high' };
+    await drain(streamChat({ url: f.url, messages: [], model: oss, sampling: {}, thinking: true, effort: 'medium', maxTokens: 9 }));
+    await drain(streamChat({ url: f.url, messages: [], model: oss, sampling: {}, thinking: false, maxTokens: 9 }));
+    expect(f.bodies.slice(-2).map((x) => x.think)).toEqual(['medium', 'low']);
+    // a JSON answer asked for: Ollama's format
+    await drain(streamChat({ url: f.url, messages: [], model: oss, sampling: {}, thinking: false, maxTokens: 9, extra: { response_format: { type: 'json_schema', json_schema: { name: 'answer', schema: { type: 'object' } } } } }));
+    expect(f.bodies.at(-1).format).toEqual({ type: 'object' });
+  } finally { dropEndpoint(f.url); await f.close(); }
+});
+
+test('the conversation in Ollama’s form: a tool call’s arguments as an object, its result named by its tool, the thinking kept, pictures as base64 (a tool result’s after it)', async () => {
+  const { ollamaMessages } = await import('../src/agent/images.mjs');
+  const pic = { path: '/tmp/a.png', mime: 'image/png', data: 'AAAA', w: 10, h: 10 };
+  const out = ollamaMessages([
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'look', images: [pic] },
+    { role: 'assistant', content: '', reasoning_content: 'hmm', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'Read', arguments: '{"path":"b.png"}' } }], keep: true },
+    { role: 'tool', tool_call_id: 'c1', content: 'a picture', images: [{ ...pic, data: 'BBBB' }] },
+    { role: 'assistant', content: 'done', tool_calls: [{ id: 'c2', function: { name: 'Bash', arguments: 'not json' } }] },
+  ]);
+  expect(out).toEqual([
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'look', images: ['AAAA'] },
+    { role: 'assistant', content: '', thinking: 'hmm', tool_calls: [{ function: { name: 'Read', arguments: { path: 'b.png' } } }] },
+    { role: 'tool', content: 'a picture', tool_name: 'Read' },
+    { role: 'user', content: '(The picture that result showed.)', images: ['BBBB'] },
+    { role: 'assistant', content: 'done', tool_calls: [{ function: { name: 'Bash', arguments: {} } }] },
+  ]);
+});
+
+test('Ollama’s refusals: a model too old to list its abilities is asked again without tools; out of GPU memory is said plainly; an error answer carries its status', async () => {
+  const f = await fakeOllamaChat((body, n) => {
+    if (body.model === 'old:7b' && body.tools) return { status: 400, error: 'registry.ollama.ai/library/old:7b does not support tools' };
+    if (body.model === 'huge:120b') return { status: 500, error: 'llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory\nalloc_tensor_range: failed to allocate ROCm0 buffer of size 74995960832' };
+    if (body.model === 'down:1b') return { status: 500, error: 'llama-server process has terminated: exit status 2' };
+    return { lines: [{ message: { role: 'assistant', content: `ok ${n}` }, done: false }, done()] };
+  });
+  const tools = [{ type: 'function', function: { name: 'Read', parameters: {} } }];
+  const ask = (model) => {
+    setEndpoint(f.url, { remote: true, kind: 'openai', key: null, model, label: 'svc', ollama: true, numCtx: null, thinks: false, tools: true, family: 'llama' });
+    return drain(streamChat({ url: f.url, messages: [], tools, model: GENERIC_REMOTE, sampling: {}, thinking: false, maxTokens: 9 }));
+  };
+  try {
+    expect((await ask('old:7b')).find((e) => e.type === 'text').text).toBe('ok 2');
+    expect(f.bodies.slice(-2).map((b) => 'tools' in b)).toEqual([true, false]);
+    await ask('old:7b');
+    expect('tools' in f.bodies.at(-1)).toBe(false); // remembered for that model
+    const oom = await ask('huge:120b').catch((e) => e);
+    expect(oom.message).toBe('the service has no room to load huge:120b (out of GPU memory): /model picks another, or /effort a smaller Context');
+    expect(oom.status).toBe(500);
+    // "terminated" in a server's answer is an answer, not a dropped connection: it carries its status
+    const down = await ask('down:1b').catch((e) => e);
+    expect(down.message).toMatch(/^remote model server \(svc\) 500: /);
+    expect(down.status).toBe(500);
+  } finally { dropEndpoint(f.url); await f.close(); }
+});
+
 test('a key the remote does not take: the error says so and points to /remote', async () => {
   const fake = await startFakeServer([], { key: 'test-right-0123456789' });
   setEndpoint(fake.url, { remote: true, kind: 'llama', key: 'test-wrong-0123456789', label: 'box' });
@@ -329,4 +431,34 @@ test('the warning under the form: a key with a space; Claude needs no address; o
   expect(formWarning(on({ address: '203.0.113.9', key: true }))).toBe(null);
   expect(formWarning(on({ address: '192.168.1.40' }))).toBe(null);
   expect(formWarning({ ...on({ address: '10.0.0.5' }), keys: { claude: null, machine: 'has space', openai: null } }).tone).toBe('error');
+});
+
+test('the agent connects again only when the connection broke: a server that answers with an error (its words saying "terminated") is not reconnected to', async () => {
+  const { Agent } = await import('../src/agent/agent.mjs');
+  const { systemPrompt } = await import('../src/agent/prompt.mjs');
+  const { cpSync } = await import('node:fs');
+  let mode = 'answer';
+  const s = createServer(async (req, res) => {
+    for await (const _ of req);
+    if (mode === 'drop') { req.socket.destroy(); return; }
+    res.writeHead(500, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory', type: 'api_error' } }));
+  });
+  await new Promise((r) => s.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${s.address().port}`;
+  const cwd = mkdtempSync(join(tmpdir(), 'agentic-reconnect-'));
+  cpSync(join(import.meta.dir, '..', 'demo-project'), cwd, { recursive: true });
+  let waits = 0;
+  const agent = new Agent({ url, model: MODELS.gemma, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, ctx: 32768, mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }), waitForServer: async () => { waits++; } });
+  const notes = [];
+  agent.on('note', (n) => notes.push(n));
+  try {
+    expect(await agent.send('hello')).toBe('error');
+    expect(notes.find((n) => n.tone === 'error')?.text).toMatch(/^model server 500: .*out of memory/);
+    expect(notes.some((n) => /stopped answering|restarting it/.test(n.text))).toBe(false);
+    expect(waits).toBe(0);
+    mode = 'drop';
+    await agent.send('hello again');
+    expect(waits).toBe(1); // a dropped connection: once, as before
+  } finally { s.close(); }
 });

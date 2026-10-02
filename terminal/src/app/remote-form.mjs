@@ -8,7 +8,7 @@
 // the list (a coder highlighted); enter picks one and the check runs again.
 // ←→ moves a choice row; enter (or typing) on a text row edits it in place.
 // A key never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore } from '../../../models/index.mjs';
+import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf } from '../../../models/index.mjs';
 
 export const SOURCES = ['here', ...REMOTE_SOURCES];
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
@@ -229,6 +229,7 @@ export function rowChanged(form, id) {
 }
 
 // A service's set-up as settings.json keeps it (the key itself goes to the Keychain).
+// contexts: an Ollama service's context by model, set in /effort, kept as it was.
 export function toProfile(form, source = form.source) {
   const v = form.profiles[source];
   const k = form.keys[source];
@@ -239,6 +240,7 @@ export function toProfile(form, source = form.source) {
     model: String(v.model ?? '').trim(), context: v.context ?? 0,
     key: hasKey, keyEnd: k === null ? (hasKey ? v.keyEnd ?? '' : '') : keyEnd(k),
     keyId: k || !hasKey ? source : keyIdOf(v),
+    ...(v.contexts ? { contexts: v.contexts } : {}),
   };
 }
 
@@ -370,7 +372,7 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, 
       tunnel = await openTunnel({ dest: r.address, remotePort: r.port ?? SERVE_PORT, ssh });
       url = tunnel.url;
     } else url = directUrl(r);
-    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, reply: true, autoPick, signal, timeoutMs });
+    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, reply: true, autoPick, signal, timeoutMs });
     if (tunnel) res.steps.unshift({ ok: true, text: 'ssh tunnel open' });
     return res;
   } catch (e) {

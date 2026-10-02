@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, COLD_CTX, probe, remoteModel, remoteLevels, GENERIC_REMOTE, HOME } = await import('../index.mjs');
+const { ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
@@ -24,13 +24,15 @@ const MODELS = [
   { name: 'oldchat:latest', family: 'phi3', params: '14.7B', quant: 'Q4_K_M', size: 9.1e9, caps: ['completion'], ctx: 16384, at: '2025-12-24', digest: 'same' },
   { name: 'embed:latest', family: 'gemma3', params: '307.58M', quant: 'BF16', size: 0.6e9, caps: ['embedding'], ctx: 2048, at: '2026-06-16' },
 ];
-// seen: every request's method and path (and the model a POST names).
+// seen: every request's method and path (and the model a POST names); bodies: the POSTs' bodies.
 function fakeOllama({ caps = true } = {}) {
   const seen = [];
+  const bodies = [];
   const server = createServer(async (req, res) => {
     let b = ''; for await (const c of req) b += c;
     const body = b ? JSON.parse(b) : {};
     seen.push({ method: req.method, path: req.url, model: body.model ?? null });
+    if (req.method === 'POST') bodies.push({ path: req.url, ...body });
     const json = (code, j) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
     const m = MODELS.find((x) => x.name === body.model);
     if (req.url === '/api/version') return json(200, { version: '0.32.12' });
@@ -38,10 +40,11 @@ function fakeOllama({ caps = true } = {}) {
     if (req.url === '/api/ps') return json(200, { models: MODELS.filter((x) => x.loaded).map((x) => ({ name: x.name, model: x.name, size: x.size, digest: `d-${x.name}`, context_length: x.loaded })) });
     if (req.url === '/api/show') return m ? json(200, { details: { family: m.family, parameter_size: m.params, quantization_level: m.quant }, model_info: { [`${m.family}.context_length`]: m.ctx }, ...(caps ? { capabilities: m.caps } : {}) }) : json(404, { error: `model '${body.model}' not found` });
     if (req.url === '/api/generate') return m ? json(200, { model: m.name, response: '', done: true, done_reason: 'load' }) : json(404, { error: `model "${body.model}" not found, try pulling it first` });
+    if (req.url === '/api/chat') return json(200, { model: body.model, message: { role: 'assistant', content: 'ready' }, done: true });
     if (req.url === '/v1/models') return json(200, { object: 'list', data: MODELS.map((x) => ({ id: x.name, object: 'model', owned_by: 'library' })) });
     json(404, { error: 'not found' });
   });
-  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${server.address().port}`, seen, close: () => new Promise((d) => server.close(d)) })));
+  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${server.address().port}`, port: server.address().port, seen, bodies, close: () => new Promise((d) => server.close(d)) })));
 }
 
 test('the list: each model with its size, family, quantization, abilities, longest context and whether it is loaded; the same weights under two names are told', async () => {
@@ -124,5 +127,50 @@ test('loading a model ahead of a reply: an empty prompt to /api/generate; one th
     expect(j.done_reason).toBe('load');
     expect(s.seen.at(-1)).toEqual({ method: 'POST', path: '/api/generate', model: 'coder:30b' });
     await expect(preloadOllama({ url: s.url, key: null, model: 'gone:1b' })).rejects.toThrow('model "gone:1b" not found, try pulling it first');
+  } finally { await s.close(); }
+});
+
+test('out of GPU memory, in the words a service uses (llama.cpp’s CUDA and ROCm builds, Ollama’s own check)', () => {
+  expect(isOutOfMemory('llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory\nalloc_tensor_range: failed to allocate ROCm0 buffer of size 74995960832')).toBe(true);
+  expect(isOutOfMemory('error loading model: unable to allocate ROCm0 buffer')).toBe(true);
+  expect(isOutOfMemory('model requires more system memory (75.0 GiB) than is available (40.2 GiB)')).toBe(true);
+  expect(isOutOfMemory('llama-server process has terminated: exit status 2')).toBe(false);
+  expect(isOutOfMemory('model "x" not found, try pulling it first')).toBe(false);
+});
+
+test('the context a model runs at: its own from /effort, else /remote’s Context row, else the service’s (null); loading one ahead at it', async () => {
+  const r = { context: 0, contexts: { 'coder:30b': 65536 } };
+  expect([ollamaCtxOf(r, 'coder:30b'), ollamaCtxOf(r, 'tiny:3b'), ollamaCtxOf({ ...r, context: 16384 }, 'tiny:3b'), ollamaCtxOf(null, 'x')]).toEqual([65536, null, 16384, null]);
+  const s = await fakeOllama();
+  try {
+    await preloadOllama({ url: s.url, key: null, model: 'coder:30b', numCtx: 65536 });
+    await preloadOllama({ url: s.url, key: null, model: 'tiny:3b' });
+    expect(s.bodies.slice(-2).map((b) => b.options ?? null)).toEqual([{ num_ctx: 65536 }, null]);
+  } finally { await s.close(); }
+});
+
+test('connecting to an Ollama service: its own chat with the model’s context, and the address registered as Ollama with what the model can do', async () => {
+  const s = await fakeOllama();
+  try {
+    const r = { source: 'openai', kind: 'openai', connect: 'http', address: s.url, model: 'gpt-oss:120b', context: 0, contexts: { 'gpt-oss:120b': 65536 }, key: false };
+    const res = await probe({ url: s.url, kind: 'openai', model: 'gpt-oss:120b', numCtx: 65536, reply: true });
+    expect(res.ok).toBe(true);
+    expect(res.steps.at(-1).text).toMatch(/^answered "ready"/);
+    // the word asked for in Ollama's chat, at that context (gpt-oss at its least thinking, room for it)
+    expect(s.bodies.at(-1)).toMatchObject({ path: '/api/chat', model: 'gpt-oss:120b', stream: false, think: 'low', options: { num_predict: 512, num_ctx: 65536 } });
+    expect(s.seen.some((x) => x.path === '/v1/chat/completions')).toBe(false);
+    const c = await connectRemote(r);
+    expect([c.numCtx, c.ctx, c.model.maxCtx]).toEqual([65536, 65536, 131072]);
+    expect(endpointOf(c.url)).toMatchObject({ ollama: true, numCtx: 65536, thinks: true, tools: true, family: 'gptoss', model: 'gpt-oss:120b' });
+    c.stop();
+    // one with no context of its own, loaded: the size it is loaded at is named (so it is not loaded again)
+    const t = await connectRemote({ ...r, model: 'tiny:3b' });
+    expect([t.numCtx, t.ctx]).toEqual([131072, 131072]);
+    expect(endpointOf(t.url)).toMatchObject({ ollama: true, numCtx: 131072, thinks: false });
+    t.stop();
+    // a cold one: none until it is loaded (the service's own), 32k planned for meanwhile
+    const cold = await connectRemote({ ...r, model: 'coder:30b' });
+    expect([cold.numCtx, cold.ctx]).toEqual([null, 32768]);
+    cold.stop();
   } finally { await s.close(); }
 });
