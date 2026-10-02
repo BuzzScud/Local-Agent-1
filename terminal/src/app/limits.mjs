@@ -74,7 +74,8 @@ export const LIMITS = [
     show: (v) => (v ? k(v) : 'auto'),
     note: (v, e) => {
       // A remote holds nothing of this Mac's memory: what this Mac would need says nothing there.
-      if (e.model?.remote?.ollama) return v ? `${k(v)} on the service · ${e.model.remote.model} loads again at this size; the chat stays` : `the service's own${e.ctxNow ? ` · ${k(e.ctxNow)} now` : ''}`;
+      // (switching: /model's menu for a model not in use yet, which loads at it as you switch.)
+      if (e.model?.remote?.ollama) return v ? `${k(v)} on the service · ${e.model.remote.model} ${e.switching ? 'loads at this size as you switch' : 'loads again at this size; the chat stays'}` : `the service's own${e.ctxNow ? ` · ${k(e.ctxNow)} ${e.switching ? 'loaded now' : 'now'}` : ''}`;
       if (e.model?.remote) return 'set where it runs: /remote’s Context row, or coding serve --ctx there';
       if (!v) return '32k, or 16k when memory is short';
       // With the speed helper when it comes along, as the start checks (a test says which).
@@ -99,6 +100,43 @@ export const LIMITS = [
       if (low) return 'High only: not used while Effort is Low';
       return `up to ~${mins(v / (e.tps || WRITE_TPS))} per think (High only)`;
     },
+  },
+  // The model on an Ollama service (2 Oct 2026, the user's ask: "add limits to the model we load"):
+  // sent with each request, kept by model (OWN_ROWS), shown only on a service (shownLimits).
+  {
+    // num_predict: Ollama's only stop for a reply, thinking and answer together. auto: the app's
+    // own, 2,048 (and the Thinking cap on top while it thinks). Never more than the context has left.
+    id: 'replyTokens', label: 'Reply length', model: true,
+    steps: (m) => [0, 4096, 8192, 16384, 32768, 65536].filter((v) => !v || v <= (m.maxCtx ?? 32768)),
+    def: () => 0,
+    show: (v) => (v ? `${k(v)} tokens` : 'auto'),
+    note: (v, e) => {
+      const ctx = e.values.context || e.ctxNow || 32768;
+      if (!v) return `${(2048 + (e.effortOn ? e.values.thinking ?? 0 : 0)).toLocaleString()} tokens a reply${e.effortOn ? `, its thinking in it: a model that thinks longer answers nothing` : ''}`;
+      return `${v > ctx / 2 ? '⚠ over half the context: raise Context first · ' : ''}up to ${k(v)} a reply, thinking and answer together, never past the context`;
+    },
+  },
+  {
+    id: 'temperature', label: 'Temperature', model: true, choice: true,
+    steps: () => ['own', 0, 0.2, 0.4, 0.7, 1],
+    def: () => 'own',
+    show: (v) => (v === 'own' ? 'its own' : String(v)),
+    note: (v) => (v === 'own' ? 'the model’s own on the service' : v <= 0.2 ? 'steadier: much the same answer each time' : 'more varied: other wordings and ideas'),
+  },
+  {
+    id: 'presence', label: 'Presence penalty', model: true, choice: true,
+    steps: () => ['own', 0.5, 1, 1.5, 2],
+    def: () => 'own',
+    show: (v) => (v === 'own' ? 'its own' : String(v)),
+    note: (v) => (v === 'own' ? 'the model’s own · raise it if it repeats itself or loops' : 'steers it off words it has used · too high and it drifts'),
+  },
+  {
+    // keep_alive: how long the service keeps it loaded after a request (open: until this window closes).
+    id: 'keepLoaded', label: 'Keep loaded', model: true, choice: true,
+    steps: () => [300, 1800, 'open'],
+    def: () => 'open',
+    show: (v) => (v === 'open' ? 'while open' : mins(v)),
+    note: (v) => (v === 'open' ? 'on the service until this window closes: every reply starts at once' : `let go after ${mins(v)} without a request; the next reply waits while it loads`),
   },
   {
     id: 'tries', label: 'Tries per fix',
@@ -176,7 +214,8 @@ export const LIMITS = [
     show: showLook,
     note: (v, e) => {
       const secs = lookSecs(v, { thinking: e.effortOn !== false, effort: e.effortLevel ?? null });
-      const auto = v === 'auto' ? `follows Effort: ${secs ? `${secs} s` : 'none on Low'} · ` : '';
+      // (On a service the Effort row is Thinking: Off · On…)
+      const auto = v === 'auto' ? (e.effortWord === 'Thinking' ? `follows Thinking: ${secs ? `${secs} s` : 'none while it is off'} · ` : `follows Effort: ${secs ? `${secs} s` : 'none on Low'} · `) : '';
       if (!secs) return `${auto}answers as soon as it is ready`;
       return `${auto}searches and reads at least ${secs} s before it answers; sent back up to ${LOOK_BACKS}×`;
     },
@@ -195,18 +234,40 @@ export function defaultLimits(model) {
   return Object.fromEntries(LIMITS.map((l) => [l.id, l.def(model)]));
 }
 
-// The values in use: the defaults, with what settings.json holds on top.
-// A value that is not a number (or is out of range) is left out.
-export function readLimits(settings, model) {
+// A model on an Ollama service keeps its own settings (/model's menu, the user's pick 2 Oct 2026):
+// its Effort and these rows, kept by model in the service's set-up ("tuned", beside "contexts",
+// which holds its Context). The rest (Who decides, the search's, this Mac's Context and Thinking
+// cap) every model shares. A row it has not set follows the shared value, as before.
+export const OWN_ROWS = ['replyTokens', 'temperature', 'presence', 'keepLoaded', 'tries', 'steps', 'rulesRoom', 'upFront', 'outputLines', 'timeoutSecs', 'trimAt', 'summarizeAt', 'look'];
+// { level, limits } kept for a remote model (by the name the service knows it by), or null.
+export const ownOf = (settings, name) => (name ? settings?.remote?.tuned?.[name] ?? null : null);
+
+// The values in use: the defaults, with what settings.json holds on top, and a
+// remote model's own rows on top of that (own: false leaves them out: what it
+// would have without them). A value that is not a number (or is out of range) is left out.
+export function readLimits(settings, model, { own = true } = {}) {
   const out = defaultLimits(model);
-  const saved = settings?.limits ?? {};
-  for (const l of LIMITS) {
-    const v = saved[l.id];
+  const fits = (l, v) => {
     const steps = l.steps(model);
-    if (l.choice ? steps.includes(v) : typeof v === 'number' && Number.isFinite(v) && v >= steps[0] && v <= steps.at(-1)) out[l.id] = v;
-  }
+    return l.choice ? steps.includes(v) : typeof v === 'number' && Number.isFinite(v) && v >= steps[0] && v <= steps.at(-1);
+  };
+  const saved = settings?.limits ?? {};
+  for (const l of LIMITS) if (fits(l, saved[l.id])) out[l.id] = saved[l.id];
+  const mine = own ? ownOf(settings, model?.remote?.model)?.limits ?? {} : {};
+  for (const l of LIMITS) if (OWN_ROWS.includes(l.id) && fits(l, mine[l.id])) out[l.id] = mine[l.id];
   if (out.trimAt >= out.summarizeAt) { out.trimAt = defaultLimits(model).trimAt; out.summarizeAt = defaultLimits(model).summarizeAt; }
   return out;
+}
+
+// The rows /effort shows for a model. On an Ollama service the Thinking cap is left out: Ollama has
+// no thinking limit (Reply length holds the thinking there; the panel says so in its place); and so
+// are the search's rows (the user's ask, 2 Oct 2026: the service's models have their own: /subagents
+// gives one the code search). This Mac's search stays as saved, in /effort on This Mac. The model's
+// own rows (Reply length, Temperature…) are only on a service.
+// own: /model's menu for one model, its own rows only (and its Context).
+export function shownLimits(model, { own = false } = {}) {
+  const svc = Boolean(model?.remote?.ollama);
+  return LIMITS.filter((l) => (svc ? !(l.id === 'thinking' || l.group === 'Search') : !l.model) && (!own || l.id === 'context' || OWN_ROWS.includes(l.id)));
 }
 
 // ---------- The Tests page's control panel (its Run tab) ----------
@@ -238,7 +299,7 @@ export function panelData(models, { freeBytes = null } = {}) {
     const defs = testDefaults(model);
     const env = (values) => ({ model, values, freeBytes, effortOn: true, searchBytes: (v) => searchBytes([EMBEDDERS[v.embedder], RERANKERS[v.reranker]].filter(Boolean), () => false) });
     const pairs = ['off', ...Object.keys(EMBEDDERS)].flatMap((em) => ['off', ...Object.keys(RERANKERS)].map((rr) => [em, rr]));
-    const rows = LIMITS.map((l) => ({ id: l.id, label: l.label, group: l.group ?? 'Limits', def: defs[l.id],
+    const rows = LIMITS.filter((l) => !l.model).map((l) => ({ id: l.id, label: l.label, group: l.group ?? 'Limits', def: defs[l.id],
       steps: l.steps(model).filter((v) => !(l.id === 'context' && v === 0)).map((v) => ({ v, show: showLimit(l.id, v), note: limitNote(l.id, env({ ...defs, [l.id]: v })),
         ...(l.id === 'context' ? { bySearch: Object.fromEntries(pairs.map(([em, rr]) => [`${em}|${rr}`, limitNote('context', env({ ...defs, context: v, embedder: em, reranker: rr }))])) } : {}) })) }));
     const levels = (model.thinkingLevels ?? []).map((lv) => ({ id: lv.id, show: lv.label ?? lv.id, note: effortNote(lv, defs.thinking) }));
@@ -257,7 +318,7 @@ export function limitsToSave(values, model, keep = {}) {
 }
 
 // The rows big-model mode moves (models/runtime/remote.mjs BIG_HARNESS): App.jsx
-// reads them again when the model in use changes.
+// reads them again when the model in use changes, with the rest of a model's own (OWN_ROWS).
 export const HARNESS_LIMITS = ['steps', 'tries', 'outputLines'];
 
 // One step down (dir -1) or up (+1). A value between steps (typed into
@@ -289,10 +350,18 @@ export function limitChanges(before, after) {
 // the flows' token room and the agent's reply room all read thinkingBudget.
 // `model` is always the registry's (its budget is the default); the copy goes
 // to the agent and the server only.
+// A model on a service also takes its own Reply length (replyTokens: the agent's num_predict) and
+// sampling (Temperature, Presence penalty) from here; 'own' leaves the service's.
 export function modelWithLimits(model, values) {
+  let out = model;
   const want = values?.thinking;
-  if (!want || want === model.thinkingBudget) return model;
-  return { ...model, thinkingBudget: want };
+  if (want && want !== model.thinkingBudget) out = { ...out, thinkingBudget: want };
+  const s = {};
+  if (typeof values?.temperature === 'number') s.temperature = values.temperature;
+  if (typeof values?.presence === 'number') s.presence_penalty = values.presence;
+  if (Object.keys(s).length) out = { ...out, sampling: { ...out.sampling, ...s }, thinkingSampling: { ...out.thinkingSampling, ...s } };
+  if (values?.replyTokens) out = { ...out, replyTokens: values.replyTokens };
+  return out;
 }
 
 // The search's rows (they take effect with the next message; no restart): the

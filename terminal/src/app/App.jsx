@@ -24,7 +24,8 @@ import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
 import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, modelsInUseOn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, moveCopy, commitPick, closePick, modelChoices } from './remote-form.mjs';
-import { openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, ctxWord, suggestModel } from './remote-models.mjs';
+import { openService, serviceRows, atRow, moveService, filterService, toggleFold, ctxWord, suggestModel } from './remote-models.mjs';
+import { suggestedFor } from './remote-suggested.mjs';
 import { jobsOf, openSubagents, moveJob, stepModel, toggleJob, savedOf, MAIN } from './subagents.mjs';
 import { RemoteEmbedder, HELPER_CTX, HELPER_KEEP } from '../agent/helper-models.mjs';
 import { tryOut } from '../agent/tryout.mjs';
@@ -61,7 +62,7 @@ import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
-import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, defaultLimits, showLimit, effortNote, defaultLevelId, HARNESS_LIMITS } from './limits.mjs';
+import { readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, defaultLimits, showLimit, effortNote, defaultLevelId, OWN_ROWS, ownOf, shownLimits } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -618,7 +619,7 @@ export function App({ opts, win, onRestart }) {
       const m = chatOnlyRef.current?.m;
       return { title: `${m?.id ?? 'This model'} cannot use tools`, blurb: 'On it Agentic Coder can only answer in words: no file reads, edits, commands or searches. The chat stays, and /model switches back.', what: 'the model', current: 'stay', options: [
         { id: 'stay', label: `Stay on ${model.remote?.model ?? model.name}`, note: 'nothing changes' },
-        { id: 'switch', label: `Switch to ${m?.id ?? 'it'} anyway`, note: 'it answers in words only' },
+        { id: 'switch', label: `Switch to ${m?.id ?? 'it'} anyway`, note: 'it answers in words only; its settings come next' },
       ] };
     }
     if (id === 'autostart') return { title: 'Model at start', blurb: `Whether ${model.name} loads as a window opens. Off, it waits for /start, so a window you only look around in takes none of the Mac's memory. Kept for next time.`, what: 'the model at start', current: settings.modelAtStart ? 'on' : 'off', options: [{ id: 'off', label: 'Off', note: 'the model loads when you type /start' }, { id: 'on', label: 'On', note: 'the model loads as soon as a window opens' }] };
@@ -773,19 +774,47 @@ export function App({ opts, win, onRestart }) {
   // at the start (none running) it asks what to do (remote-down).
   // Big-model mode (models/runtime/remote.mjs): /effort's Steps, Tries and Command output start
   // from the model in use, so a switch to or from a big model on a service moves them; what /effort
-  // saved still wins. Called before agent.model is set; says so when the mode comes or goes.
+  // saved still wins. A model on a service with its own settings (/model's menu) has its own rows
+  // and its own Effort; the next model has its own, or the shared ones again. Called before
+  // agent.model is set; says so when the mode or the settings come or go.
   const relimit = (m) => {
     const was = limitsRef.current;
-    const fresh = readLimits(loadSettings(opts.cwd), m);
-    const next = { ...was, ...Object.fromEntries(HARNESS_LIMITS.map((id) => [id, fresh[id]])) };
+    const fresh = readLimits({ ...loadSettings(opts.cwd), remote: settings.remote }, m);
+    const next = { ...was, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])) };
+    const name = m.remote?.model ?? m.name;
+    const own = m.remote ? ownOf(settings, m.remote.model) : null;
+    ownLevel(m, own);
     const moved = limitChanges(was, next);
     if (!moved.length) return;
     limitsRef.current = next;
     applyLimits(agent, next);
     const list = moved.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
     push({ type: 'note', text: m.harness
-      ? `Big-model mode for ${m.remote?.model ?? m.name}: ${list}, and it reads files ${m.harness.read.whole} lines at a time. /effort changes any of it.`
-      : `Big-model mode off: ${list}.`, tone: 'dim' });
+      ? `Big-model mode for ${name}${own?.limits ? ' and its own settings' : ''}: ${list}, and it reads files ${m.harness.read.whole} lines at a time. /effort changes any of it.`
+      : own?.limits ? `${name}’s own settings: ${list}. /effort changes them.`
+        : agent.model?.harness ? `Big-model mode off: ${list}.` : `The shared settings again: ${list}.`, tone: 'dim' });
+  };
+  // Keep loaded (/effort's Model rows): how long the service keeps the model after each request
+  // (open: until this window closes, as before), carried by every request to it.
+  const applyKeep = (values = limitsRef.current) => {
+    const conn = remoteRef.current.conn;
+    if (!conn?.info?.ollama) return;
+    setEndpoint(conn.url, { ...endpointOf(conn.url), keepAlive: typeof values.keepLoaded === 'number' ? values.keepLoaded : -1 });
+  };
+  // A model's own Effort (/model's menu), when it has more than one: in use from its next reply.
+  const ownLevel = (m, own) => {
+    const levels = m.thinkingLevels ?? [];
+    const lv = own?.level && levels.length > 1 ? levels.find((l) => l.id === own.level) : null;
+    if (lv && lv.id !== thinkingLevel(m, agent.thinking, agent.effort).id) setThinking(Boolean(lv.effort), lv.effort ? lv.id : undefined);
+  };
+  // A model's own settings on the service (null: none, it follows the shared ones), kept by model
+  // in the service's set-up ("tuned"), as its Context is ("contexts", setServiceCtx).
+  const setOwn = (name, own) => {
+    const src = sourceOf(settings.remote);
+    const put = (p) => { const tuned = { ...(p?.tuned ?? {}) }; if (own) tuned[name] = own; else delete tuned[name]; return { ...p, tuned }; };
+    const saved = saveSettings({ remote: put(settings.remote), ...(settings.remotes?.[src] ? { remotes: { ...settings.remotes, [src]: put(settings.remotes[src]) } } : {}) });
+    settings.remote = saved.remote;
+    settings.remotes = saved.remotes;
   };
   const useRemote = async (r, { atStart = false } = {}) => {
     if (!atStart && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return false; }
@@ -833,6 +862,7 @@ export function App({ opts, win, onRestart }) {
     agent.canSee = Boolean(conn.vision);
     relimit(m);
     agent.model = modelWithLimits(m, limitsRef.current);
+    applyKeep();
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.slots = conn.slots > 1 ? { main: 0, side: 1 } : null;
     setStartPhase('reading');
@@ -1148,6 +1178,7 @@ export function App({ opts, win, onRestart }) {
     agent.canSee = Boolean(conn.vision);
     relimit(m);
     agent.model = modelWithLimits(m, limitsRef.current);
+    applyKeep();
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.syncRules();
     return conn;
@@ -1178,14 +1209,15 @@ export function App({ opts, win, onRestart }) {
   // one is saved, is one more row after the models, and each service set up in /remote one more
   // (Claude API, the other computer, another service). On an Ollama service it is the service's
   // own list instead (remote-models.mjs), read again as it opens; this Mac's models and the other
-  // services follow it. Its Effort starts from the one you chose, whatever the model in use allows.
+  // services follow it, and enter on one of its models opens that model's own settings first
+  // (openOwnSettings). Elsewhere its Effort starts from the one you chose, whatever the model in use allows.
   const openModelPicker = () => {
     const conn = remoteRef.current.conn;
     if (model.remote && conn?.info?.ollama) {
       refreshCatalog(conn);
       const last = localModelRef.current ?? modelById(settings.model);
       const sv = { title: sourceWord(model.remote.source), where: model.remote.label, ms: conn.info.ms ?? null, mac: [...Object.values(MODELS), ...editedModels()], services: remoteChoices(settings).filter((x) => x.source !== model.remote.source), lastLocal: last?.name ?? null };
-      setPicker({ ...openService({ inUse: model.remote.model, levelId: agent.thinking ? agent.effort ?? 'high' : 'low', on: Boolean(agent.thinking) }), sv });
+      setPicker({ ...openService({ inUse: model.remote.model }), sv });
       return;
     }
     const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
@@ -1236,12 +1268,8 @@ export function App({ opts, win, onRestart }) {
   };
   // What the service's /model draws from: what was set as it opened, and what moves (the list, the chat).
   const serviceOf = (pk) => ({ ...pk.sv, catalog, version: catalog?.version ?? model.remote?.ollama ?? null, inUse: model.remote?.model ?? null, used: agent.ctxUsed ?? 0, tried: readTryouts(settings.remote?.address) });
-  // The screen's part of it: the list, and the highlighted model's levels with the one shown.
-  const serviceProps = (pk) => {
-    const sv = serviceOf(pk);
-    const lm = levelModelOf(atRow(pk, serviceRows(pk, sv)), model);
-    return { service: sv, pickLevels: lm.thinkingLevels ?? [], pickLevelId: thinkingLevel(lm, pk.on, pk.levelId).id };
-  };
+  // The screen's part of it: the list.
+  const serviceProps = (pk) => ({ service: serviceOf(pk) });
   // A model on this Mac picked while on a remote: back to this Mac with it (the remote stays saved, off).
   const pickHere = (picked) => {
     localModelRef.current = picked;
@@ -1441,9 +1469,60 @@ export function App({ opts, win, onRestart }) {
     const mem = memoryForRestart();
     const levels = model.thinkingLevels ?? [];
     const level = Math.max(0, levels.findIndex((l) => l.id === thinkingLevel(model, agent.thinking, agent.effort).id));
-    // On an Ollama service the Context row is the model's own (serviceCtx), not this Mac's.
-    const values = onService() ? { ...limitsRef.current, context: serviceCtx() } : { ...limitsRef.current };
-    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model, env: { model, freeBytes: mem.free, searchBytes: mem.search, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
+    // On an Ollama service the Context row is the model's own (serviceCtx), not this Mac's, and the
+    // ranks page's values for it are suggested beside its rows (remote-suggested.mjs).
+    const svc = onService();
+    const values = svc ? { ...limitsRef.current, context: serviceCtx() } : { ...limitsRef.current };
+    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model, ...(svc ? { suggested: suggestedFor(model.remote.model, model) } : {}), env: { model, freeBytes: mem.free, searchBytes: mem.search, tps: stats.tps, pps: stats.pps, ctxNow: agent.ctx, lastRerank: agent.reranker?.last ?? null } });
+  };
+  // /model's menu for one model on the service (the user's pick, 2 Oct 2026): its own Effort and
+  // rows, with the ranks page's values suggested beside them, before anything loads; enter switches
+  // to it with them, esc goes back to the list (back). On the model in use it is saved at once.
+  // A model not in use is read from the service's entry for it (what it can do, its longest context).
+  const openOwnSettings = (entry, { back = null } = {}) => {
+    const inUse = entry.id === model.remote?.model;
+    const m = inUse ? model : remoteModel(settings.remote, { model: entry.id, ollama: { version: catalog?.version ?? model.remote?.ollama ?? '?', ...entry }, ctx: entry.loadedCtx || entry.ctx || null });
+    const levels = m.thinkingLevels ?? [];
+    const own = ownOf(settings, entry.id);
+    const lvNow = (levels.length > 1 && levels.find((l) => l.id === own?.level)) || thinkingLevel(m, agent.thinking, agent.effort);
+    const level = Math.max(0, levels.findIndex((l) => l.id === lvNow.id));
+    const mine = readLimits({ ...loadSettings(opts.cwd), remote: settings.remote }, m);
+    const values = { ...limitsRef.current, ...Object.fromEntries(OWN_ROWS.map((id) => [id, mine[id]])), context: serviceCtx(entry.id) };
+    setPicker({ kind: 'limits', index: 0, level, savedLevel: level, values, saved: { ...values }, model: m, suggested: suggestedFor(entry.id, m),
+      own: { id: entry.id, entry, inUse, back },
+      env: { model: m, switching: !inUse, freeBytes: null, searchBytes: null, tps: stats.tps, pps: stats.pps, ctxNow: inUse ? agent.ctx : entry.loadedCtx || null, lastRerank: null } });
+  };
+  // The menu's values with every suggested one filled in (s).
+  const fillSuggested = (pk) => {
+    const sg = pk.suggested;
+    const li = sg?.level ? (pk.model.thinkingLevels ?? []).findIndex((l) => l.id === sg.level) : -1;
+    return { ...pk, values: { ...pk.values, ...(sg?.limits ?? {}) }, ...(li >= 0 ? { level: li } : {}) };
+  };
+  // A model on the service back to the shared settings: its own rows as every model has them, its Context the service's own.
+  const sharedValues = (pk) => {
+    const shared = readLimits(loadSettings(opts.cwd), pk.model, { own: false });
+    return { ...pk.values, ...Object.fromEntries(OWN_ROWS.map((id) => [id, shared[id]])), context: 0 };
+  };
+  // The menu saved: on the model in use, as /effort saves; on another, its own set (the rows you
+  // moved, with the ones it had, and its Effort when it has more than one) and its Context are
+  // kept for it, then the switch to it, which puts them in use (relimit). Reset: back to the shared ones.
+  const saveOwnSettings = (pk, { reset = false } = {}) => {
+    const { id, entry, inUse } = pk.own;
+    const levels = pk.model.thinkingLevels ?? [];
+    const lv = levels[pk.level] ?? null;
+    if (inUse) { setPicker(null); saveEffortLimits(lv?.id ?? null, reset ? sharedValues(pk) : pk.values, { reset }); return; }
+    if (busyNow()) { push({ type: 'note', text: `Agentic Coder is busy (a reply, or a model loading). Press enter again when it is done; nothing was saved and ${model.remote?.model ?? model.name} is still in use.`, tone: 'warn' }); return; }
+    setPicker(null);
+    const prev = ownOf(settings, id);
+    const moved = OWN_ROWS.filter((r) => pk.values[r] !== pk.saved[r]);
+    const limits = reset ? {} : { ...(prev?.limits ?? {}), ...Object.fromEntries(moved.map((r) => [r, pk.values[r]])) };
+    const level = reset ? null : levels.length > 1 && lv && pk.level !== pk.savedLevel ? lv.id : prev?.level ?? null;
+    const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}) };
+    if (Object.keys(own).length || prev) setOwn(id, Object.keys(own).length ? own : null);
+    const ctx = reset ? 0 : pk.values.context ?? 0;
+    if (ctx !== serviceCtx(id)) setServiceCtx(id, ctx);
+    // Its Effort goes in use once the switch has worked (relimit's ownLevel): one that fails leaves the model in use as it was.
+    switchService(entry);
   };
   askRef.current = (p) => new Promise((resolve) => {
     // Not over something you are doing: typing, or another menu open. Asked
@@ -1484,8 +1563,7 @@ export function App({ opts, win, onRestart }) {
       const pick = chatOnlyRef.current;
       chatOnlyRef.current = null;
       if (value !== 'switch' || !pick) return;
-      if (pick.lv) setThinking(Boolean(pick.lv.effort), pick.lv.effort ? pick.lv.id : undefined);
-      switchService(pick.m);
+      openOwnSettings(pick.m, { back: pick.back });
       return;
     }
     if (id === 'same-folder') {
@@ -1554,7 +1632,9 @@ export function App({ opts, win, onRestart }) {
   // levels): the effort and the agent's limits change at once; a new context or
   // thinking cap restarts the model server (the window and conversation stay).
   // All of it or none: a restart is refused in the middle of a reply and while the model is still starting.
-  const saveEffortLimits = (levelId, next) => {
+  // On an Ollama service the model's own rows and Effort are kept for it alone (/model's menu, 2 Oct
+  // 2026); reset: it goes back to the shared ones (its own set and its Context dropped).
+  const saveEffortLimits = (levelId, next, { reset = false } = {}) => {
     const lv = levelId ? (model.thinkingLevels ?? []).find((l) => l.id === levelId) : null;
     const effortChanged = !!lv && lv.id !== thinkingLevel(model, agent.thinking, agent.effort).id;
     // On an Ollama service the Context row is the model's own: kept by model, and the model loads
@@ -1564,7 +1644,8 @@ export function App({ opts, win, onRestart }) {
     const ctxChanged = svc && svcCtx !== serviceCtx();
     if (svc) next = { ...next, context: limitsRef.current.context };
     const changes = limitChanges(limitsRef.current, next);
-    if (!effortChanged && !changes.length && !ctxChanged) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
+    const prevOwn = svc ? ownOf(settings, model.remote.model) : null;
+    if (!effortChanged && !changes.length && !ctxChanged && !(reset && prevOwn)) { push({ type: 'note', text: 'Effort and limits unchanged.', tone: 'dim' }); return; }
     if (ctxChanged && busyNow()) { push({ type: 'note', text: 'Agentic Coder is busy (a reply, or a model loading). Save the Context again in /effort when it is done. Nothing was changed.', tone: 'warn' }); return; }
     const restart = changes.some((c) => c.restart);
     if (restart && !opts.url && !model.remote) {
@@ -1574,6 +1655,16 @@ export function App({ opts, win, onRestart }) {
       if (why) { push({ type: 'note', text: `Agentic Coder is ${why}, then save again in /effort. Nothing was changed.`, tone: 'warn' }); return; }
     }
     if (effortChanged) { setThinking(!!lv.effort, lv.effort ? lv.id : undefined); sayEffort(lv, next.thinking); }
+    // The model's own set on the service: the rows moved here (with the ones it had), and its
+    // Effort when it has more than one; the shared rows are saved below as before.
+    const ownMoved = svc ? changes.filter((c) => OWN_ROWS.includes(c.id)).map((c) => c.id) : [];
+    if (svc && (ownMoved.length || effortChanged || reset)) {
+      const limits = reset ? {} : { ...(prevOwn?.limits ?? {}), ...Object.fromEntries(ownMoved.map((id) => [id, next[id]])) };
+      const level = reset ? null : effortChanged && model.thinkingLevels.length > 1 ? lv.id : prevOwn?.level ?? null;
+      const own = { ...(level ? { level } : {}), ...(Object.keys(limits).length ? { limits } : {}) };
+      if (Object.keys(own).length || prevOwn) setOwn(model.remote.model, Object.keys(own).length ? own : null);
+      if (reset && prevOwn && !changes.length) push({ type: 'note', text: `${model.remote.model} follows the shared settings again.`, tone: 'dim' });
+    }
     if (ctxChanged) {
       const conn = remoteRef.current.conn;
       const name = model.remote.model;
@@ -1590,16 +1681,20 @@ export function App({ opts, win, onRestart }) {
     if (!changes.length) return;
     limitsRef.current = next;
     applyLimits(agent, next);
+    // A model on a service: its Reply length and sampling from the next step, Keep loaded from the next request.
+    if (svc) { agent.model = modelWithLimits(model, next); applyKeep(next); }
     const searchNote = applySearch(agent, next);
     if (searchNote) push({ type: 'note', text: searchNote, tone: 'warn' });
-    // A row this save left alone stays saved as it was (limitsToSave's keep).
-    const touched = new Set(changes.map((c) => c.id));
+    // A row this save left alone stays saved as it was (limitsToSave's keep). On a service only the
+    // shared rows go there, laid over what every model shares (its own rows are kept above).
+    const touched = new Set(changes.map((c) => c.id).filter((id) => !ownMoved.includes(id)));
     const kept = Object.fromEntries(Object.entries(loadSettings(opts.cwd).limits ?? {}).filter(([id]) => !touched.has(id)));
-    saveSettings({ limits: limitsToSave(next, model, kept) });
+    if (touched.size) saveSettings({ limits: limitsToSave(svc ? { ...readLimits(loadSettings(opts.cwd), model, { own: false }), ...Object.fromEntries([...touched].map((id) => [id, next[id]])) } : next, model, kept) });
     const list = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
     // Who decides changes the prompt and the tools: the next reply reads the instructions again, once.
     const way = changes.some((c) => c.id === 'way') ? ` ${next.way === 'model' ? 'The model decides from the next message: no sorting, no reading ahead, the checks only as /hooks switches them' : 'The app decides again from the next message'}; that reply reads the instructions again, once.` : '';
-    if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.${way}`, tone: 'dim' }); return; }
+    const forIt = svc && ownMoved.length ? (reset ? ` ${model.remote.model} follows the shared settings again.` : ` Kept for ${model.remote.model} alone${touched.size ? ' (Who decides and the search for every model)' : ''}.`) : '';
+    if (!restart) { push({ type: 'note', text: `Saved: ${list}. In use from the next step; kept for next time.${forIt}${way}`, tone: 'dim' }); return; }
     if (opts.url) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model server was given with --url, so restart it yourself for the context or thinking cap to take effect.`, tone: 'warn' }); return; }
     if (model.remote) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model runs on the remote: its context is set there (coding serve --ctx, or /remote's Context row), and the new cap is asked for with each reply.`, tone: 'dim' }); return; }
     if (modelOffNow()) { agent.model = modelWithLimits(model, next); push({ type: 'note', text: `Saved: ${list}. The model is off, so it applies when you type /start; kept for next time.${way}`, tone: 'dim' }); return; }
@@ -2996,29 +3091,20 @@ export function App({ opts, win, onRestart }) {
       const sv = serviceOf(pk);
       const rows = serviceRows(pk, sv);
       const row = atRow(pk, rows);
-      const lm = levelModelOf(row, model);
-      const levels = lm.thinkingLevels ?? [];
-      const lv = thinkingLevel(lm, pk.on, pk.levelId);
-      const k = levels.findIndex((l) => l.id === lv.id);
-      // A model with one level (it cannot think) leaves the effort you chose for the others as it was.
-      const toLevel = (i) => (levels.length > 1 && levels[i] ? { levelId: levels[i].id, on: Boolean(levels[i].effort) } : {});
       const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab ? ch.replace(/[\x00-\x1f\x7f]/g, '') : '';
-      if (key.leftArrow) setPicker({ ...pk, ...toLevel(Math.max(0, k - 1)) });
-      else if (key.rightArrow || key.tab) setPicker({ ...pk, ...toLevel(key.tab ? (k + 1) % levels.length : Math.min(levels.length - 1, k + 1)) });
-      else if (key.upArrow) setPicker(moveService(pk, rows, -1));
+      if (key.upArrow) setPicker(moveService(pk, rows, -1));
       else if (key.downArrow) setPicker(moveService(pk, rows, 1));
       else if (key.escape) setPicker(pk.filter ? filterService(pk, sv, '') : null);
       else if (key.ctrl && ch === 'c') setPicker(null);
       else if (key.backspace || key.delete) { if (pk.filter) setPicker(filterService(pk, sv, pk.filter.slice(0, -1))); }
       else if (key.return && row) {
         if (row.kind === 'fold') { setPicker(toggleFold(pk, row.id)); return; }
-        setPicker(null);
-        if (row.kind === 'model' && !row.m.tools && row.m.id !== sv.inUse) { chatOnlyRef.current = { m: row.m, lv: levels.length > 1 ? lv : null }; openChoice('service-chat-only'); return; }
-        if (levels.length > 1) setThinking(Boolean(lv.effort), lv.effort ? lv.id : undefined);
-        if (row.kind === 'service') { remoteTo(row.s.source); return; }
-        if (row.kind === 'local') { pickHere(row.m); return; }
-        if (row.m.id === sv.inUse) { push({ type: 'note', text: `${row.m.id} · effort ${lv.label.toLowerCase()}.`, tone: 'dim' }); return; }
-        switchService(row.m);
+        if (row.kind === 'service') { setPicker(null); remoteTo(row.s.source); return; }
+        if (row.kind === 'local') { setPicker(null); pickHere(row.m); return; }
+        // A model on the service: its own settings first, and nothing loads until enter there (the
+        // user's pick, 2 Oct 2026). One without tools is asked about before that.
+        if (!row.m.tools && row.m.id !== sv.inUse) { setPicker(null); chatOnlyRef.current = { m: row.m, back: pk }; openChoice('service-chat-only'); return; }
+        openOwnSettings(row.m, { back: pk });
       } else if (typed) setPicker(filterService(pk, sv, pk.filter + typed));
       return;
     }
@@ -3104,23 +3190,33 @@ export function App({ opts, win, onRestart }) {
       else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: kept, tone: 'dim' }); }
       return;
     }
-    // /effort: ↑↓ a row (Effort first, then the limits), ←→ lower / raise it, enter saves all of it (on the last row: everything back to its default), esc keeps them
+    // /effort: ↑↓ a row (Effort first, then the limits), ←→ lower / raise it, enter saves all of it (on the last row: everything back to its default), esc keeps them.
+    // /model's menu for a model on the service is the same panel with its own rows (pk.own): enter switches to it, esc goes back to the list.
+    // On a service, s fills in the suggested values, and the last row puts the model back on the shared settings.
     if (cur.picker?.kind === 'limits') {
       const pk = cur.picker;
-      const levels = model.thinkingLevels ?? [];
+      const m = pk.model;
+      const levels = m.thinkingLevels ?? [];
       const off = levels.length ? 1 : 0; // the Effort row, when the model has levels
-      const rows = off + LIMITS.length + 1;
+      const shown = shownLimits(m, { own: Boolean(pk.own) });
+      const rows = off + shown.length + 1;
       const step = key.rightArrow ? 1 : -1;
+      const svc = Boolean(pk.own) || onService();
       if (key.upArrow) setPicker({ ...pk, index: (pk.index + rows - 1) % rows });
       else if (key.downArrow || key.tab) setPicker({ ...pk, index: (pk.index + 1) % rows });
       else if ((key.leftArrow || key.rightArrow) && off && pk.index === 0) setPicker({ ...pk, level: Math.max(0, Math.min(levels.length - 1, pk.level + step)) });
-      else if ((key.leftArrow || key.rightArrow) && pk.index >= off && pk.index < rows - 1) setPicker({ ...pk, values: moveLimit(pk.values, LIMITS[pk.index - off].id, step, model) });
+      else if ((key.leftArrow || key.rightArrow) && pk.index >= off && pk.index < rows - 1) setPicker({ ...pk, values: moveLimit(pk.values, shown[pk.index - off].id, step, m) });
+      else if (ch === 's' && !key.ctrl && !key.meta && pk.suggested) setPicker(fillSuggested(pk));
       else if (key.return) {
+        const reset = pk.index === rows - 1;
+        if (pk.own) { saveOwnSettings(pk, { reset }); return; }
         setPicker(null);
-        if (pk.index === rows - 1) saveEffortLimits(off ? defaultLevelId(model) : null, defaultLimits(model));
+        if (reset && svc) saveEffortLimits(off ? levels[pk.level]?.id : null, sharedValues(pk), { reset: true });
+        else if (reset) saveEffortLimits(off ? defaultLevelId(m) : null, defaultLimits(m));
         else saveEffortLimits(off ? levels[pk.level]?.id : null, pk.values);
       }
-      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: 'Effort and limits kept as they were.', tone: 'dim' }); }
+      else if (key.escape && pk.own?.back) setPicker(pk.own.back);
+      else if (key.escape || (key.ctrl && ch === 'c')) { setPicker(null); push({ type: 'note', text: pk.own && !pk.own.inUse ? `Not switched: still on ${model.remote?.model ?? model.name}.` : 'Effort and limits kept as they were.', tone: 'dim' }); }
       return;
     }
     // A choice menu (/mode, /meters, /mouse): ↑↓ or a number, enter picks, esc goes back unchanged

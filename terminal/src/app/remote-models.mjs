@@ -4,9 +4,10 @@
 // tools), each group a coder first, then the newest. The chat-only ones (no
 // tools: no file reads, edits or commands; picking one asks first) fold into one
 // row, and so do this Mac's models; the other saved services follow. Typing
-// filters the service's models by name; ←→ is Effort, as in the other /model.
+// filters the service's models by name; enter on a model opens its own settings
+// (App.jsx openOwnSettings, 2 Oct 2026), and it loads only from there.
 // The list itself is ollama.mjs's (models/); this file only lays it out.
-import { remoteLevels, bigHarness, paramsB } from '../../../models/index.mjs';
+import { bigHarness, paramsB } from '../../../models/index.mjs';
 
 // "262144" → "256k" (as the rest of the app writes a context), "10485760" → "10M".
 export const ctxWord = (n) => (!n ? '' : n >= 1_048_576 ? `${Math.round(n / 1_048_576)}M` : `${Math.round(n / 1024)}k`);
@@ -73,8 +74,8 @@ export function suggestModel(models = [], tried = {}) {
 }
 
 // The picker as it opens: on the model in use, no filter, the folds shut.
-export function openService({ inUse, levelId, on }) {
-  return { kind: 'service', at: inUse ? `m:${inUse}` : null, filter: '', open: { chat: false, mac: false, helpers: false }, levelId, on };
+export function openService({ inUse }) {
+  return { kind: 'service', at: inUse ? `m:${inUse}` : null, filter: '', open: { chat: false, mac: false, helpers: false } };
 }
 
 // The rows, top to bottom. sv: { catalog, inUse, mac (this Mac's models),
@@ -140,14 +141,6 @@ export function filterService(pk, sv, filter) {
 }
 // enter on a fold: open or shut it.
 export const toggleFold = (pk, id) => ({ ...pk, open: { ...pk.open, [id.slice(5)]: !pk.open[id.slice(5)] } });
-
-// The model whose effort levels the Effort row shows: the highlighted one's
-// (remoteLevels: Low only when it cannot think), else the one in use.
-export function levelModelOf(row, current) {
-  if (row?.kind === 'model') return { thinkingLevels: remoteLevels(row.m), thinkingEffort: row.m.known && !row.m.thinking ? 'low' : 'high' };
-  if (row?.kind === 'local') return row.m;
-  return current;
-}
 
 // The line under the list about the highlighted model: why picking it asks
 // first, when the chat will not fit it, or that it loads first. used: the chat's

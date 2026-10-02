@@ -6,7 +6,7 @@ import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath } from '../../models/index.mjs';
-import { readLimits, modelWithLimits, HARNESS_LIMITS } from './app/limits.mjs';
+import { readLimits, modelWithLimits, OWN_ROWS, ownOf } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
@@ -293,9 +293,13 @@ if (opts.print) {
     process.stderr.write(`· On the remote model: ${remote.model.name}${risk ? ` · ⚠ ${risk}` : ''}\n`);
     url = remote.url;
     ctx = opts.ctx ?? remote.ctx;
-    // Big-model mode (models/runtime/remote.mjs): the rows it moves start from the remote model, as in the app.
+    // Big-model mode (models/runtime/remote.mjs): the rows it moves start from the remote model, as in the app,
+    // and so do the ones /model's menu kept for that model, with its Effort (unless --effort or --think says).
     const own = readLimits(settings, remote.model);
-    limits = { ...limits, ...Object.fromEntries(HARNESS_LIMITS.map((id) => [id, own[id]])) };
+    limits = { ...limits, ...Object.fromEntries(OWN_ROWS.map((id) => [id, own[id]])) };
+    const levels = remote.model.thinkingLevels ?? [];
+    const lv = levels.length > 1 ? levels.find((l) => l.id === ownOf(settings, remote.model.remote?.model)?.level) : null;
+    if (lv && opts.thinking === undefined) { opts.thinking = Boolean(lv.effort); if (lv.effort) opts.effort = lv.id; }
     runModel = modelWithLimits(remote.model, limits);
     canSee = Boolean(remote.vision);
     if (remote.slots > 1) slots = { main: 0, side: 1 };

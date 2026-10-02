@@ -9,9 +9,10 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-models-home-'));
-const { groupsOf, openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, rowDetail, ctxWord, gbWord, sizeWord, canWord, isBig } = await import('../src/app/remote-models.mjs');
+const { groupsOf, openService, serviceRows, atRow, moveService, filterService, toggleFold, rowDetail, ctxWord, gbWord, sizeWord, canWord, isBig } = await import('../src/app/remote-models.mjs');
+const { suggestedFor } = await import('../src/app/remote-suggested.mjs');
 const { modelLabels, footerParts } = await import('../src/app/screen.jsx');
-const { HOME, thinkingLevel } = await import('../../models/index.mjs');
+const { HOME, thinkingLevel, remoteModel } = await import('../../models/index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // As ollama.mjs gives them (the real service's models, cut down).
@@ -75,15 +76,37 @@ test('↑↓ skip the headings and stop at the ends; typing filters by name (cha
   expect(filterService(none, SV, '').filter).toBe('');
 });
 
-test('the Effort row follows the highlighted model: Low only when it cannot think, three levels for gpt-oss, the one you chose kept by name', () => {
-  const row = (id) => ({ kind: 'model', m: MODELS.find((m) => m.id === id) });
-  const lv = (id, on, levelId) => thinkingLevel(levelModelOf(row(id), null), on, levelId);
-  expect(lv('llama3.2:3b', true, 'high').id).toBe('low');
-  expect(lv('Qwen3.6:35B-A3B', true, 'high').id).toBe('high');
-  expect(lv('Qwen3.6:35B-A3B', true, 'medium').id).toBe('high'); // its nearest
-  expect(lv('gpt-oss:120b', true, 'medium').id).toBe('medium');
-  expect(levelModelOf({ kind: 'local', m: SV.mac[0] }, null)).toBe(SV.mac[0]);
-  expect(levelModelOf({ kind: 'fold' }, 'in use')).toBe('in use');
+// The model /model's menu is for, as App.jsx makes it from the service's entry (openOwnSettings).
+const asModel = (id) => { const m = MODELS.find((x) => x.id === id); return remoteModel({ kind: 'openai', source: 'openai', address: 'http://203.0.113.7:60009' }, { model: id, ollama: { version: '0.32.12', ...m }, ctx: m.loadedCtx || m.ctx }); };
+
+test('the menu’s Thinking row is the model’s own choices: None when it cannot think, Off · On, Off · Max on Laguna, Low · Medium · High on gpt-oss; the one you chose is kept by name', () => {
+  const labels = (id) => asModel(id).thinkingLevels.map((l) => l.label);
+  expect(labels('llama3.2:3b')).toEqual(['None']);
+  expect(labels('Qwen3.6:35B-A3B')).toEqual(['Off', 'On']);
+  expect(labels('laguna-s-2.1:latest')).toEqual(['Off', 'Max']);
+  expect(labels('gpt-oss:120b')).toEqual(['Low', 'Medium', 'High']);
+  const lv = (id, on, levelId) => thinkingLevel(asModel(id), on, levelId);
+  expect(lv('llama3.2:3b', true, 'high').label).toBe('None');
+  expect(lv('Qwen3.6:35B-A3B', true, 'medium').label).toBe('On'); // its nearest
+  expect(lv('laguna-s-2.1:latest', true, 'high').label).toBe('Max');
+  expect(lv('gpt-oss:120b', true, 'medium').label).toBe('Medium');
+  expect(lv('gpt-oss:120b', false).note).toMatch(/always thinks/); // its Low still thinks
+});
+
+test('the suggested values come from the ranks page by name, only ones the model’s rows can take; a model not on it has none', () => {
+  expect(suggestedFor('laguna-s-2.1:latest', asModel('laguna-s-2.1:latest'))).toMatchObject({ level: 'high', limits: { context: 131072, steps: 80, outputLines: 160, timeoutSecs: 600 } });
+  expect(suggestedFor('Qwen3.6:35B-A3B', asModel('Qwen3.6:35B-A3B'))).toMatchObject({ level: 'high', limits: { context: 131072, steps: 80 } });
+  expect(suggestedFor('qwen3-coder:30b', asModel('qwen3-coder:30b'))).toMatchObject({ level: null, limits: { context: 65536, steps: 80, tries: 12, outputLines: 160 } });
+  expect(suggestedFor('gpt-oss:120b', asModel('gpt-oss:120b'))).toMatchObject({ level: 'medium', limits: {} });
+  // its window is 32k: nothing to raise, and the line says why
+  expect(suggestedFor('qwen2.5-coder:14b', asModel('qwen2.5-coder:14b'))).toMatchObject({ level: null, limits: {}, why: 'its window is 32k: the shared settings fit it' });
+  // a context longer than the model's own is left out (deepseek-coder-v2 here at 16k)
+  const small = { ...asModel('qwen2.5-coder:14b'), maxCtx: 16384 };
+  expect(suggestedFor('deepseek-coder-v2:16b', small).limits).toEqual({});
+  // a level the model does not have (it cannot think) is left out
+  expect(suggestedFor('laguna-s-2.1:latest', asModel('llama3.2:3b')).level).toBe(null);
+  expect(suggestedFor('mystery:7b', asModel('llama3.2:3b'))).toBe(null);
+  expect(suggestedFor('laguna-s-2.1:latest', asModel('laguna-s-2.1:latest')).source).toMatch(/not measured here/);
 });
 
 test('the line about the highlighted model: none for one loaded or in use; one that loads first; a chat-only one asks; a chat too long for it is summed up', () => {
