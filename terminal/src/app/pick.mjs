@@ -3,7 +3,10 @@
 // dialogs inside the app: ❯ marks the row, up/down move it, enter picks
 // it. Typing a number picks that row at once, as in the app. Esc or
 // ctrl+c gives null. Answers the index of the row picked.
-import { emitKeypressEvents } from 'node:readline';
+//
+// Keys are read here, not with readline's emitKeypressEvents: that one leaves its own listener on
+// stdin after the menu closes, and the app's prompt box reads the same stdin right after (2 Oct
+// 2026, "it won't let me type" after the Where to start menu). The menu takes off all it put on.
 
 const MARK = '\x1b[38;5;147m'; // the app's C.ask (#afafff)
 const OFF = '\x1b[0m';
@@ -20,23 +23,45 @@ export function pickOnTerminal(options, { input = process.stdin, output = proces
   draw(index);
   return new Promise((resolve) => {
     let i = index;
-    emitKeypressEvents(input);
+    let over = false;
     const raw = input.isTTY;
     if (raw) input.setRawMode(true);
     input.resume();
     const done = (v) => {
-      input.off('keypress', onKey);
+      over = true;
+      input.off('data', onData);
       if (raw) input.setRawMode(false);
       input.pause();
       resolve(v);
     };
-    const onKey = (ch, key = {}) => {
-      if (key.name === 'up' || key.name === 'k') redraw(i = (i + n - 1) % n);
-      else if (key.name === 'down' || key.name === 'j' || key.name === 'tab') redraw(i = (i + 1) % n);
-      else if (key.name === 'return' || key.name === 'enter') done(i);
-      else if (key.name === 'escape' || (key.ctrl && key.name === 'c')) done(null);
-      else if (/^[1-9]$/.test(ch ?? '') && Number(ch) <= n) { redraw(i = Number(ch) - 1); done(i); }
+    const onKey = (k) => {
+      if (k === 'up' || k === 'k') redraw(i = (i + n - 1) % n);
+      else if (k === 'down' || k === 'j' || k === '\t') redraw(i = (i + 1) % n);
+      else if (k === '\r' || k === '\n') done(i);
+      else if (k === 'esc' || k === '\x03') done(null);
+      else if (/^[1-9]$/.test(k) && Number(k) <= n) { redraw(i = Number(k) - 1); done(i); }
     };
-    input.on('keypress', onKey);
+    // One chunk can hold several keys (typed fast, or pasted): taken one at a time, and
+    // nothing after the key that closes the menu.
+    const onData = (chunk) => {
+      for (const k of keysOf(String(chunk))) { if (over) break; onKey(k); }
+    };
+    input.on('data', onData);
   });
+}
+
+// The keys in a chunk of terminal input: arrows (ESC [ A or ESC O A) as 'up' / 'down', a lone
+// ESC as 'esc', any other escape sequence skipped, and every other character as itself.
+export function keysOf(s) {
+  const keys = [];
+  for (let j = 0; j < s.length; j++) {
+    if (s[j] !== '\x1b') { keys.push(s[j]); continue; }
+    const m = /^\x1b(?:\[[0-9;?]*[ -\/]*[@-~]|O[A-Z])/.exec(s.slice(j));
+    if (!m) { keys.push('esc'); continue; }
+    const last = m[0].at(-1);
+    if (last === 'A') keys.push('up');
+    else if (last === 'B') keys.push('down');
+    j += m[0].length - 1;
+  }
+  return keys;
 }
