@@ -1,6 +1,6 @@
 // The Agentic Coder hub: `/weights`, `/docs`, `coding weights` and `coding docs`
 // all start this one small local server (127.0.0.1 only). It hands out
-//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure (its two pages: Structure and Flow) · Arena · Memory · Instructions · All docs · Help
+//   /                 the hub page (hub.html, built in): tabs Weights · Harness · Structure (its two pages: Structure and Flow) · Arena · Remote · Memory · Instructions · All docs · Help
 //   /weights          the weights viewer (weights.html, built in): every model in /model, one alone or side by side
 //   /models.json      those models: each one's file, size, tags (default, in use now, not on this Mac) and edited copy
 //   /model/<id>       with a Range header, that model's bytes
@@ -19,6 +19,8 @@
 //     (Easy, Medium, Hard): paste a list of prompts, checks suggested from each prompt's words, try them with
 //     no model (builder-hub.mjs). The tests are the Arena's "My tests", on this Mac only
 //   /memory, /memory.json the memory: what Agentic Coder remembers about you and this project (memory-hub.mjs)
+//   /remote, /remote.json, /remote/…   the Remote tab: the models on the services saved with /remote, a card each,
+//                     one model in full, and Try it · Load · Unload (remote-hub.mjs)
 //   /favicon.ico      the tab icon every page asks for: the Visor bot (favicon.mjs)
 // The DOCS folder is the repo's docs/ (the main folder's, from a worktree),
 // with the owner's own things in docs/private/: see docs-dir.mjs.
@@ -31,9 +33,11 @@ import testsHtml from './tests.html' with { type: 'text' };
 import memoryHtml from './memory.html' with { type: 'text' };
 import instructionsHtml from './instructions.html' with { type: 'text' };
 import builderHtml from './builder.html' with { type: 'text' };
+import remoteHtml from './remote.html' with { type: 'text' };
 import { builderRoute } from './builder-hub.mjs';
 import { instructionsRoute } from './instructions-hub.mjs';
 import { memoryRoute } from './memory-hub.mjs';
+import { remoteHub } from './remote-hub.mjs';
 import { harnessRoute } from './harness-hub.mjs';
 import { flowRoute } from './flow-hub.mjs';
 import { helpData, VERSION, setupModels } from './help.mjs';
@@ -103,6 +107,7 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
   const name = path ? basename(path) : '';
   const model = MODELS[DEFAULT_MODEL];
   const noStore = { 'cache-control': 'no-store' };
+  const remote = remoteHub({ cwd });
   // The models as the Weights tab shows them, read each time: the tags are the Harness
   // tab's (the model /model saved last is the one in use), and a file can arrive or go.
   const modelsData = () => {
@@ -177,6 +182,8 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
         catch (e) { return page(`<!doctype html><meta charset="utf-8"><body style="font:14px -apple-system,sans-serif;padding:24px"><h3>The Arena did not start</h3><p>${String(e.message).replace(/[<>&]/g, '')}</p><p>Open the Arena tab again to try once more.</p>`); }
       }
       if (url.pathname === '/memory') return page(memoryHtml);
+      if (url.pathname === '/remote') return page(remoteHtml);
+      if (url.pathname.startsWith('/remote')) { const r = await remote.route(req, url); if (r) return r; }
       if (url.pathname === '/instructions') return page(instructionsHtml);
       if (url.pathname.startsWith('/instructions')) return instructionsRoute(req, url, cwd, instructionsHome, { onDesign });
       if (url.pathname.startsWith('/memory')) { const r = await memoryRoute(req, url, cwd); if (r) return r; }
@@ -212,5 +219,5 @@ export function startWeightsServer({ path, models = Object.values(MODELS).filter
   });
   let server;
   try { server = serve(port); } catch (e) { if (!port) throw e; server = serve(0); }
-  return { url: `http://127.0.0.1:${server.port}/`, port: server.port, size, name, missing, docsDir, stop: () => server.stop(true) };
+  return { url: `http://127.0.0.1:${server.port}/`, port: server.port, size, name, missing, docsDir, stop: () => { remote.stop(); server.stop(true); } };
 }
