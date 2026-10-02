@@ -120,16 +120,18 @@ test('typed in the home folder: where to start comes first; 2 starts in Agentic 
   const a = mk();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd: a.home, env: a.env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Where to start' }, { sleep: 200 }, { snapshot: 'menu' }, { type: '2' }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' },
+    { wait: 'Where should it work?' }, { sleep: 200 }, { snapshot: 'menu' }, { type: '2' }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' },
     { type: 'hello there' }, { wait: '> hello there' }, ...quitTyped, // typing reaches the prompt box after the menu
   ] });
   await fake.close();
-  expect(r.snapshots.menu).toContain('❯ 1. ~ · your home folder');
-  expect(r.snapshots.menu).toContain('  2. ~/agentic-coder · Agentic Coder');
+  expect(r.snapshots.menu.split('\n')[0]).toMatch(/^── Agentic Coder/); // the window cleared: the page on its top line
+  expect(r.snapshots.menu).toMatch(/❯ 1  ~ +your home folder/);
+  expect(r.snapshots.menu).toMatch(/ {3}2  ~\/agentic-coder +Agentic Coder/);
+  expect(r.snapshots.menu.match(/✓ trusted/g)).toHaveLength(2); // the home folder's yes covers both
   expect(r.text).not.toContain('Quick safety check'); // the home folder's yes covers the folder inside it
   expect(r.snapshots.start).toMatch(/where\s+~\/agentic-coder/); // the start page: working in the folder picked
   const b = mk();
-  const esc = await runInPty({ cwd: b.home, env: b.env, args: ['--no-flows'], steps: [{ wait: 'Where to start' }, { sleep: 200 }, { key: 'esc' }, { sleep: 800 }] });
+  const esc = await runInPty({ cwd: b.home, env: b.env, args: ['--no-flows'], steps: [{ wait: 'Where should it work?' }, { sleep: 200 }, { key: 'esc' }, { sleep: 800 }] });
   expect(esc.code).toBe(0);
   expect(esc.text).not.toContain('Recent activity');
 }, T * 2);

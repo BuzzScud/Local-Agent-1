@@ -4,7 +4,7 @@ import React from 'react';
 import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
-import { TerminalWindow, MIN_COLS } from './app/window.mjs';
+import { TerminalWindow, MIN_COLS, CLEAR } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath } from '../../models/index.mjs';
 import { readLimits, modelWithLimits, OWN_ROWS, ownOf } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
@@ -12,7 +12,7 @@ import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { pickOnTerminal } from './app/pick.mjs';
 import { TrustPage, TRUST_OPTIONS, FolderPage } from './app/start.jsx';
-import { startFolders, folderOption } from './app/start-folder.mjs';
+import { startFolders, folderOption, folderFacts } from './app/start-folder.mjs';
 
 // coding -p: a question from Agentic Coder is printed and answered on the same
 // terminal. Its choices are a menu like the app's (arrows, enter, or the
@@ -68,12 +68,15 @@ async function ensureTrusted(cwd) {
 }
 
 // Typed in the home folder: which folder to work in, before the safety check (app/start-folder.mjs).
-// The folder picked, or null (esc: nothing started).
+// The folder picked, or null (esc: nothing started). The window is cleared first, so the page starts
+// on its top line, not under the "Last login" and prompt lines a new Terminal window opens with.
 async function pickStartFolder(folders) {
   const width = Math.max(MIN_COLS, process.stdout.columns || 100);
   const model = (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name;
   const options = folders.map(folderOption);
-  const page = (i) => `\n${renderToString(<FolderPage width={width} options={options} model={model} selected={i} />, { columns: width })}\n\n`;
+  const cards = folders.map((f) => folderFacts(f));
+  const page = (i) => `${renderToString(<FolderPage width={width} folders={cards} model={model} selected={i} />, { columns: width })}\n\n`;
+  if (process.stderr.isTTY) process.stderr.write(CLEAR);
   const pick = await pickOnTerminal(options, { page });
   return pick === null ? null : folders[pick].path;
 }
