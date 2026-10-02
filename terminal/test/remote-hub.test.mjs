@@ -125,37 +125,41 @@ test('one model in full: its settings, template, license and build facts (no tok
   expect(o.none.error).toContain('no such model');
 });
 
-test('Try it counts to 20 in the background: ✔ kept for the model; a wrong count is ✗; Load and Unload change what is loaded; another site cannot press them', () => {
+test('Try it runs the app\'s own try-out in the background and keeps it where /model reads it; Load and Unload change what is loaded; another site cannot press them', () => {
   const o = inChild(`
+    const { fakeOllama } = await import(${JSON.stringify(join(import.meta.dir, 'fake-ollama.mjs'))});
+    const pf = await fakeOllama();
+    const svc = { source: 'openai', kind: 'openai', address: pf.url, connect: 'http', model: 'coder:30b', key: false };
+    writeFileSync(home + '/settings.json', JSON.stringify({ remote: { ...svc, use: true }, remotes: { openai: svc } }));
+    const { readTryouts } = await import(${JSON.stringify(join(import.meta.dir, '../src/app/tryouts.mjs'))});
+    const { endpointOf } = await import(${JSON.stringify(join(import.meta.dir, '../../models/index.mjs'))});
     await get('/remote.json');
-    out.start = await post('/remote/try', { service: 'openai', id: 'gpt-oss:120b' });
-    out.again = await post('/remote/try', { service: 'openai', id: 'gpt-oss:120b' });
-    await until(async () => !(await get('/remote.json')).models.find((m) => m.id === 'gpt-oss:120b').busy);
-    out.after = (await get('/remote.json')).models.find((m) => m.id === 'gpt-oss:120b');
-    out.chat = seen.find((x) => x.path === '/api/chat').body;
-    await post('/remote/try', { service: 'openai', id: 'deepseek-coder-v2:latest' });
-    await until(async () => !(await get('/remote.json')).models.find((m) => m.id === 'deepseek-coder-v2:latest').busy);
-    out.wrong = (await get('/remote.json')).models.find((m) => m.id === 'deepseek-coder-v2:latest').tried;
-    out.kept = JSON.parse(readFileSync(home + '/remote-tried.json', 'utf8'));
-    await post('/remote/unload', { service: 'openai', id: 'qwen3-coder-next:latest' });
-    await until(async () => !(await get('/remote.json')).models.find((m) => m.id === 'qwen3-coder-next:latest').loaded);
-    await post('/remote/load', { service: 'openai', id: 'laguna-xs-2.1:latest' });
-    await until(async () => (await get('/remote.json')).models.find((m) => m.id === 'laguna-xs-2.1:latest').loaded);
+    const tryOne = async (id) => { const r = await post('/remote/try', { service: 'openai', id }); await until(async () => !(await get('/remote.json')).models.find((m) => m.id === id).busy); return r; };
+    out.start = await tryOne('coder:30b');
+    out.again = await Promise.all([post('/remote/try', { service: 'openai', id: 'words:7b' }), post('/remote/try', { service: 'openai', id: 'words:7b' })]);
+    await until(async () => !(await get('/remote.json')).models.find((m) => m.id === 'words:7b').busy);
+    await tryOne('jsontext:14b');
     const now = await get('/remote.json');
-    out.loaded = now.models.filter((m) => m.loaded).map((m) => m.id).sort();
-    out.foreign = await post('/remote/load', { service: 'openai', id: 'gpt-oss:120b' }, { origin: 'https://example.com' });
+    out.cards = Object.fromEntries(now.models.filter((m) => m.tried).map((m) => [m.id, [m.tried.ok, m.tried.why]]));
+    out.kept = readTryouts(pf.url);
+    out.steps = out.kept['coder:30b'].steps.map((x) => x.text);
+    out.endpointLeft = Boolean(endpointOf(pf.url));
+    await post('/remote/unload', { service: 'openai', id: 'coder:30b' });
+    await until(async () => !(await get('/remote.json')).models.find((m) => m.id === 'coder:30b').loaded);
+    await post('/remote/load', { service: 'openai', id: 'tiny:3b' });
+    await until(async () => (await get('/remote.json')).models.find((m) => m.id === 'tiny:3b').loaded);
+    out.loaded = (await get('/remote.json')).models.filter((m) => m.loaded).map((m) => m.id).sort();
+    out.foreign = await post('/remote/load', { service: 'openai', id: 'tiny:3b' }, { origin: 'https://example.com' });
     out.unknown = await post('/remote/try', { service: 'openai', id: 'not-there' });
+    await pf.close();
   `, { settings: SAVED });
   expect(o.start).toEqual({ status: 200, ok: true, started: 'try' });
-  expect(o.again.status).toBe(409);
-  expect(o.after.tried.ok).toBe(true);
-  expect(o.after.tried.said).toBe('1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20');
-  expect(o.after.tried.tokSecs).toBe(80);
-  expect(o.after.tried.loadSecs).toBe(1);
-  expect(o.chat.think).toBe('low'); // gpt-oss cannot turn thinking off: its least
-  expect(o.wrong.ok).toBe(false);
-  expect(Object.keys(o.kept.openai).sort()).toEqual(['deepseek-coder-v2:latest', 'gpt-oss:120b']);
-  expect(o.loaded).toEqual(['deepseek-coder-v2:latest', 'gpt-oss:120b', 'laguna-xs-2.1:latest']); // the tries loaded two; qwen was unloaded
+  expect(o.again.map((r) => r.status).sort()).toEqual([200, 409]); // a second press while it runs
+  expect(o.cards).toEqual({ 'coder:30b': [true, null], 'jsontext:14b': [true, null], 'words:7b': [false, 'answered in words, no call'] });
+  expect(Object.keys(o.kept).sort()).toEqual(['coder:30b', 'jsontext:14b', 'words:7b']); // the store /remote and /model read
+  expect(o.steps).toEqual(['read a file', 'fixed one line', 'ran a command']);
+  expect(o.endpointLeft).toBe(false); // the address it registered for the try is taken back
+  expect(o.loaded).toEqual(['jsontext:14b', 'tiny:3b', 'words:7b']); // the tries loaded theirs; coder was unloaded
   expect(o.foreign.status).toBe(403);
   expect(o.unknown.status).toBe(404);
 });
