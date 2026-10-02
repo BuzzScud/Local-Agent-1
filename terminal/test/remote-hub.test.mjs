@@ -209,5 +209,5 @@ test('the categories: helpers and unlisted first, then coding, thinking, picture
     { id: 'qwen3-coder-next:latest', known: true, params: '79.7B' }, { id: 'laguna-s', known: false, bytes: 14e9 }, { id: 'laguna-xs', known: false, bytes: 4e9 },
   ]);
   expect(g.map((x) => [x.id, x.ids])).toEqual([['coding', ['qwen3-coder-next:latest', 'qwen2.5-coder:32b', 'qwen2.5-coder:14b']], ['unlisted', ['laguna-s', 'laguna-xs']]]);
-  expect(g.find((x) => x.id === 'unlisted').fold).toBe(true);
+  expect(g.some((x) => x.fold)).toBe(false); // none folded: every model shows
 });
