@@ -8,6 +8,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html](tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html) | page | Big-model mode: off vs on · qwen3-coder-next:latest | 22 KB | 2026-10-01 |
 | [design rounds/agentic-coder-arena-wizard-2-designs-2026-10-01.html](design%20rounds/agentic-coder-arena-wizard-2-designs-2026-10-01.html) | page | Arena wizard · 2 designs | 151 KB | 2026-10-01 |
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-10-01 |
 | [tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html](tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html) | page | Who decides: App vs Model · Qwen3.5 9B | 14 KB | 2026-10-01 |

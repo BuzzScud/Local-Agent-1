@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big-model mode: off vs on · qwen3-coder-next:latest</title>
+<style>
+:root{--bg:#f7f6f2;--card:#ffffff;--ink:#1c1b18;--mute:#6b675e;--line:#e3dfd5;--soft:#efece4;--best:#f3d9cc;--bestInk:#8a3a1c;--up:#1d7a46;--down:#b3261e}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80}}
+:root[data-theme="dark"]{--bg:#15161a;--card:#1d1f24;--ink:#ecebe6;--mute:#a4a19a;--line:#2e3037;--soft:#24262c;--best:#4a2b1f;--bestInk:#ffb899;--up:#5fd08f;--down:#ff8a80}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;padding:14px 16px;gap:10px;overflow:hidden}
+header{flex:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}.date{color:var(--mute);font-size:13px}
+.tabs{flex:none;display:flex;flex-wrap:wrap;gap:6px}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{flex:1;min-height:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.verdict{font-size:17px;margin:0;max-width:1100px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--soft);color:var(--mute)}
+.chip.ok{color:var(--up)}.chip.no{color:var(--down)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px 14px}.card .k{color:var(--mute);font-size:12.5px}.card .v{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.card .s{color:var(--mute);font-size:12.5px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12.5px;color:var(--mute);font-weight:600}th small,td small{display:block;color:var(--mute);font-weight:400;font-size:11.5px}
+td.num,th.num{text-align:right}
+td.best{background:var(--best);color:var(--bestInk);font-weight:700}
+.ok{color:var(--up)}.no{color:var(--down)}.dim{color:var(--mute)}
+.pager{display:flex;align-items:center;gap:10px;margin-top:auto}.pager button{font:inherit;font-size:13px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);color:var(--ink);cursor:pointer}
+.pager button:disabled{background:var(--soft);color:var(--mute);cursor:default}.pager span{font-size:13px;color:var(--mute)}
+.fill{flex:1;min-height:0;overflow:hidden}
+ul.how{margin:0;padding-left:20px;max-width:1100px}ul.how li{margin:0 0 6px}ul.how code,pre{overflow-wrap:anywhere}
+code{font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:5px}
+pre{margin:4px 0 0;white-space:pre-wrap;background:var(--soft);border-radius:8px;padding:8px 10px;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (max-height:820px){body{padding:10px 14px;gap:8px}.panel{padding:12px 16px;gap:9px}.verdict{font-size:15px}.card{padding:7px 12px}.card .v{font-size:20px}th,td{padding:5px 10px}}
+@media (max-width:760px),(max-height:520px){body{overflow:auto;height:auto}.panel{overflow:visible}.fill{overflow:visible}td.task{white-space:normal}.table-wrap{overflow-x:auto}}
+</style>
+</head>
+<body>
+<header><h1>Big-model mode: off vs on · qwen3-coder-next:latest</h1><span class="date">On a service · Effort Low · Oct 1, 2026</span></header>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main class="panel" id="panel"><noscript>This page draws its tables with JavaScript.</noscript></main>
+<script id="data" type="application/json">{"rows":[{"task":"1-json-flag","old":{"pass":true,"secs":34,"steps":6,"ownSteps":0,"modelCalls":8,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":32,"steps":9,"ownSteps":9,"modelCalls":10,"toolErrors":2,"thinkTokens":0,"route":"model decides","why":""}},{"task":"10-fix-off-by-one","old":{"pass":true,"secs":8,"steps":6,"ownSteps":0,"modelCalls":3,"toolErrors":1,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":true,"secs":20,"steps":7,"ownSteps":7,"modelCalls":6,"toolErrors":1,"thinkTokens":0,"route":"model decides","why":""}},{"task":"11-fix-sort-text","old":{"pass":true,"secs":4,"steps":6,"ownSteps":0,"modelCalls":2,"toolErrors":1,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":true,"secs":15,"steps":6,"ownSteps":6,"modelCalls":6,"toolErrors":1,"thinkTokens":0,"route":"model decides","why":""}},{"task":"12-feature-currency","old":{"pass":true,"secs":12,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":false,"secs":15,"steps":5,"ownSteps":4,"modelCalls":5,"toolErrors":1,"thinkTokens":0,"route":"model decides","why":"no new test"}},{"task":"13-feature-python","old":{"pass":true,"secs":11,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":28,"steps":6,"ownSteps":6,"modelCalls":7,"toolErrors":1,"thinkTokens":0,"route":"model decides","why":""}},{"task":"14-notests-perimeter","old":{"pass":true,"secs":10,"steps":5,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":27,"steps":2,"ownSteps":2,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"15-notests-fahrenheit","old":{"pass":true,"secs":10,"steps":5,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":true,"secs":14,"steps":2,"ownSteps":2,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"16-writing-story","old":{"pass":true,"secs":13,"steps":3,"ownSteps":1,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"other","why":""},"new":{"pass":true,"secs":13,"steps":2,"ownSteps":1,"modelCalls":2,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"17-writing-notes-api","old":{"pass":true,"secs":16,"steps":3,"ownSteps":2,"modelCalls":4,"toolErrors":0,"thinkTokens":0,"route":"other","why":""},"new":{"pass":true,"secs":35,"steps":7,"ownSteps":7,"modelCalls":8,"toolErrors":3,"thinkTokens":0,"route":"model decides","why":""}},{"task":"18-writing-noncode-folder","old":{"pass":true,"secs":9,"steps":3,"ownSteps":1,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"step by step","why":""},"new":{"pass":true,"secs":15,"steps":1,"ownSteps":1,"modelCalls":2,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"19-multifile-symbol","old":{"pass":true,"secs":28,"steps":10,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":false,"secs":401,"steps":81,"ownSteps":81,"modelCalls":80,"toolErrors":37,"thinkTokens":0,"route":"model decides","why":"no new test"}},{"task":"2-fix-bug","old":{"pass":true,"secs":6,"steps":6,"ownSteps":0,"modelCalls":2,"toolErrors":1,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":true,"secs":19,"steps":10,"ownSteps":10,"modelCalls":6,"toolErrors":4,"thinkTokens":0,"route":"model decides","why":""}},{"task":"20-multifile-signature","old":{"pass":true,"secs":24,"steps":10,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":46,"steps":14,"ownSteps":14,"modelCalls":12,"toolErrors":3,"thinkTokens":0,"route":"model decides","why":""}},{"task":"21-bigfile-two-places","old":{"pass":true,"secs":145,"steps":12,"ownSteps":7,"modelCalls":21,"toolErrors":1,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":true,"secs":54,"steps":15,"ownSteps":15,"modelCalls":14,"toolErrors":6,"thinkTokens":0,"route":"model decides","why":""}},{"task":"22-vague-fix-the-bug","old":{"pass":true,"secs":10,"steps":9,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":false,"secs":57,"steps":20,"ownSteps":20,"modelCalls":17,"toolErrors":9,"thinkTokens":0,"route":"model decides","why":"did not ask what the bug is"}},{"task":"23-oneword-api","old":{"pass":true,"secs":18,"steps":7,"ownSteps":0,"modelCalls":6,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":false,"secs":3,"steps":0,"ownSteps":0,"modelCalls":1,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":"did not ask what 'api' means"}},{"task":"24-fix-test-passing","old":{"pass":true,"secs":34,"steps":13,"ownSteps":9,"modelCalls":11,"toolErrors":0,"thinkTokens":0,"route":"fix","why":""},"new":{"pass":false,"secs":73,"steps":20,"ownSteps":20,"modelCalls":21,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":"did not ask which test / what is wrong"}},{"task":"25-bigproject-question","old":{"pass":true,"secs":22,"steps":6,"ownSteps":3,"modelCalls":4,"toolErrors":1,"thinkTokens":0,"route":"question","why":""},"new":{"pass":false,"secs":12,"steps":2,"ownSteps":2,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":"answer does not name testCommand / prompt.mjs"}},{"task":"26-bigproject-change","old":{"pass":false,"secs":258,"steps":10,"ownSteps":3,"modelCalls":14,"toolErrors":1,"thinkTokens":0,"route":"change","why":"no new test"},"new":{"pass":true,"secs":306,"steps":23,"ownSteps":23,"modelCalls":19,"toolErrors":5,"thinkTokens":0,"route":"model decides","why":""}},{"task":"27-negative-money","old":{"pass":true,"secs":15,"steps":6,"ownSteps":0,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":32,"steps":8,"ownSteps":8,"modelCalls":8,"toolErrors":2,"thinkTokens":0,"route":"model decides","why":""}},{"task":"28-python-multifile","old":{"pass":true,"secs":75,"steps":8,"ownSteps":0,"modelCalls":14,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":42,"steps":13,"ownSteps":13,"modelCalls":12,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"3-add-function","old":{"pass":true,"secs":22,"steps":6,"ownSteps":0,"modelCalls":8,"toolErrors":0,"thinkTokens":0,"route":"change","why":""},"new":{"pass":true,"secs":22,"steps":5,"ownSteps":5,"modelCalls":5,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"4-rename","old":{"pass":true,"secs":0,"steps":5,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"route":"rename","why":""},"new":{"pass":true,"secs":16,"steps":8,"ownSteps":8,"modelCalls":6,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"5-question","old":{"pass":true,"secs":7,"steps":2,"ownSteps":0,"modelCalls":1,"toolErrors":0,"thinkTokens":0,"route":"question","why":""},"new":{"pass":true,"secs":12,"steps":5,"ownSteps":5,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"6-question-page-size","old":{"pass":true,"secs":8,"steps":4,"ownSteps":1,"modelCalls":2,"toolErrors":0,"thinkTokens":0,"route":"question","why":""},"new":{"pass":true,"secs":8,"steps":3,"ownSteps":3,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"7-question-tax","old":{"pass":false,"secs":7,"steps":7,"ownSteps":5,"modelCalls":5,"toolErrors":5,"thinkTokens":0,"route":"question","why":"answer lacks addTax"},"new":{"pass":true,"secs":8,"steps":4,"ownSteps":4,"modelCalls":3,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"8-rename-method","old":{"pass":true,"secs":0,"steps":6,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"route":"rename","why":""},"new":{"pass":true,"secs":32,"steps":13,"ownSteps":13,"modelCalls":12,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}},{"task":"9-rename-constant","old":{"pass":true,"secs":0,"steps":6,"ownSteps":0,"modelCalls":0,"toolErrors":0,"thinkTokens":0,"route":"rename","why":""},"new":{"pass":true,"secs":35,"steps":15,"ownSteps":15,"modelCalls":14,"toolErrors":0,"thinkTokens":0,"route":"model decides","why":""}}],"old":{"tasks":28,"passed":26,"secs":806,"median":11.5,"modelCalls":151,"ownSteps":32,"toolErrors":11,"thinkTokens":0},"new":{"tasks":28,"passed":22,"secs":1392,"median":24.5,"modelCalls":291,"ownSteps":304,"toolErrors":75,"thinkTokens":0},"flips":{"fixed":["26-bigproject-change","7-question-tax"],"broke":["12-feature-currency","19-multifile-symbol","22-vague-fix-the-bug","23-oneword-api","24-fix-test-passing","25-bigproject-question"]}}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const VERDICT = "<b>Big-model mode does not hold.</b> qwen3-coder-next:latest passed 22 of 28 with it, against 26 with the small-model settings, in 73% more time: fewer passes.", CHIPS = "<span class=\"chip no\">✗ passes: on 22 ≥ off 26</span><span class=\"chip no\">✗ time: on at most 25% more (+73%)</span><span class=\"chip ok\">✓ every task run both ways (28)</span><span class=\"chip \">· model calls: off 151 · on 291</span>";
+const CHANGED = ["<b>Who decides.</b> Off: the app sorts each task, runs a focused path for a fix, a change or a rename, and reads the files ahead. On: the model decides (no sorting, nothing read ahead, several calls a reply), with its helpers (the Agent tool) and the four checks Model starts with (next-step, tests, stuck, said-done).","<b>Reading.</b> Off: Read gives a file whole up to 150 lines, a part 150 lines at a time (400 at most). On: whole up to 400 lines, a part 400 at a time (1,000 at most).","<b>Room.</b> Off: 40 steps a request, 8 tries a fix, 80 lines of command output. On: 80 steps, 12 tries, 160 lines.","<b>The same both ways.</b> The model, its context (the size it is loaded at on the service), Effort Low, the tasks and their checks."], METHOD = ["Model: qwen3-coder-next:latest on http://134.199.192.90:60009, 256k context, Effort Low. The Practice 28 both ways, off first, one after the other.","Each side is <code>bench/run.mjs --remote … --big off|on --no-record</code>: the same tasks, checks and context; only big-model mode differs. A service shared with other work may be slower at times, for both sides.","The rule, written before the first run: big-model mode holds when it passes at least as many tasks as off and takes at most 25% more time in all (the seconds of the tasks both ran).","A task’s seconds run from its first request to its last reply; loading the model is not in them.","Code: <code>46e8a5c+</code>. Run Oct 1, 2026 at 10:59 PM."], RAW = ["models/remote/results/big-ab-2026-10-01-2259"];
+const N = {"old":"Off","new":"Big-model mode","oldSub":"small-model settings","newSub":"decides, reads more","thing":"mode"};
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const TABS = [['result', 'Result'], ['tasks', 'Task by task'], ['changed', 'What changed'], ['how', 'How it was measured']];
+let tab = Math.max(0, TABS.findIndex(([id]) => '#' + id === location.hash)), page = 0;
+const num = (n) => (n == null ? '—' : Math.round(n).toLocaleString('en-US'));
+const pct = (a, b) => (a && b != null ? (b >= a ? '+' : '−') + Math.abs(Math.round(100 * (b - a) / a)) + '%' : '');
+// Old and new side by side; the better cell marked (higher or lower is better, said on the row).
+function row(name, sub, a, b, better, show = num) {
+  const best = a != null && b != null && a !== b && better ? ((better === 'low') === (b < a) ? 'b' : 'a') : null;
+  return '<tr><td><b>' + name + '</b><small>' + sub + '</small></td><td class="num' + (best === 'a' ? ' best' : '') + '">' + show(a) + '</td><td class="num' + (best === 'b' ? ' best' : '') + '">' + show(b) + '</td><td class="num dim">' + (better ? pct(a, b) : '') + '</td></tr>';
+}
+const cell = (x) => x ? '<span class="' + (x.pass ? 'ok' : 'no') + '">' + (x.pass ? 'PASS' : 'FAIL') + '</span> <span class="dim">· ' + num(x.secs) + ' s · ' + num(x.ownSteps ?? x.steps) + ' steps</span>' : '<span class="dim">— not run</span>';
+function draw() {
+  document.getElementById('tabs').innerHTML = TABS.map(([id, name], i) => '<button type="button" role="tab" aria-selected="' + (i === tab) + '" data-i="' + i + '">' + (i + 1) + ' · ' + name + '</button>').join('');
+  const p = document.getElementById('panel'), id = TABS[tab][0], o = D.old, n = D.new, f = D.flips;
+  if (id === 'result') {
+    const cards = '<div class="card"><div class="k">' + N.old + ' · passed · higher is better</div><div class="v">' + o.passed + ' of ' + o.tasks + '</div><div class="s">' + num(o.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">' + N.new + ' · passed · higher is better</div><div class="v">' + n.passed + ' of ' + n.tasks + '</div><div class="s">' + num(n.secs) + ' s in all</div></div>'
+      + '<div class="card"><div class="k">Time in all · lower is better</div><div class="v">' + (pct(o.secs, n.secs) || '—') + '</div><div class="s">new against old</div></div>'
+      + '<div class="card"><div class="k">Tasks that moved</div><div class="v">' + f.fixed.length + ' fixed · ' + f.broke.length + ' broke</div><div class="s">' + (f.fixed.length + f.broke.length ? esc([...f.fixed.map((t) => '+' + t), ...f.broke.map((t) => '−' + t)].join(', ')) : 'none') + '</div></div>';
+    p.innerHTML = '<p class="verdict">' + VERDICT + '</p><div class="chips">' + CHIPS + '</div><div class="cards">' + cards + '</div><div class="table-wrap"><table><thead><tr><th>Measure</th><th class="num">' + N.old + '<small>' + N.oldSub + '</small></th><th class="num">' + N.new + '<small>' + N.newSub + '</small></th><th class="num">Change</th></tr></thead><tbody>'
+      + row('Tasks passed', 'each task’s own check · higher is better', o.passed, n.passed, 'high')
+      + row('Seconds in all', 'the tasks both ran · lower is better', o.secs, n.secs, 'low')
+      + row('Seconds a task', 'the median · lower is better', o.median, n.median, 'low')
+      + row('Model calls', 'in all · lower is better', o.modelCalls, n.modelCalls, 'low')
+      + row('Its own steps', 'tool calls the model made · lower is better', o.ownSteps, n.ownSteps, 'low')
+      + row('Tool errors', 'calls that came back as an error · lower is better', o.toolErrors, n.toolErrors, 'low')
+      + row('Thinking', 'tokens, about · lower is better when the passes hold', o.thinkTokens, n.thinkTokens, 'low')
+      + '</tbody></table></div>';
+  } else if (id === 'tasks') {
+    p.innerHTML = '<p class="verdict">Each practice task with the old ' + N.thing + ' and the new one: its check, its seconds and the model’s own steps. A task that moved is named in the last column.</p><div class="fill" id="fill"><div class="table-wrap"><table><thead><tr><th>Task</th><th>' + N.old + '</th><th>' + N.new + '</th><th>Moved</th></tr></thead><tbody></tbody></table></div></div><div class="pager"><button type="button" id="prev">‹ Back</button><button type="button" id="next">Next ›</button><span id="at"></span></div>';
+    const fill = document.getElementById('fill'), body = p.querySelector('tbody'), list = D.rows;
+    const moved = (r) => !r.old || !r.new ? '' : !r.old.pass && r.new.pass ? '<span class="ok">fixed</span>' : r.old.pass && !r.new.pass ? '<span class="no">broke</span>' : '<span class="dim">same</span>';
+    const rowHtml = (r) => '<tr><td class="task">' + esc(r.task) + '</td><td>' + cell(r.old) + '</td><td>' + cell(r.new) + '</td><td>' + moved(r) + '</td></tr>';
+    body.innerHTML = list.length ? rowHtml(list[0]) : '<tr><td colspan="4" class="dim">No tasks ran.</td></tr>';
+    const small = matchMedia('(max-width:760px),(max-height:520px)').matches;
+    const rh = body.firstElementChild?.getBoundingClientRect().height || 36, th = p.querySelector('thead').getBoundingClientRect().height;
+    const per = small ? list.length || 1 : Math.max(1, Math.floor((fill.clientHeight - th) / rh));
+    const pages = Math.max(1, Math.ceil(list.length / per)); page = Math.min(page, pages - 1);
+    if (list.length) body.innerHTML = list.slice(page * per, page * per + per).map(rowHtml).join('');
+    document.getElementById('at').textContent = list.length ? 'Page ' + (page + 1) + ' of ' + pages + ' · tasks ' + (page * per + 1) + '–' + Math.min(list.length, page * per + per) + ' of ' + list.length : '';
+    document.getElementById('prev').disabled = page === 0; document.getElementById('next').disabled = page >= pages - 1;
+    document.getElementById('prev').onclick = () => { page--; draw(); }; document.getElementById('next').onclick = () => { page++; draw(); };
+  } else if (id === 'changed') {
+    p.innerHTML = '<ul class="how">' + CHANGED.map((m) => '<li>' + m + '</li>').join('') + '</ul>';
+  } else {
+    p.innerHTML = '<ul class="how">' + METHOD.map((m) => '<li>' + m + '</li>').join('') + (RAW.length ? '<li>Raw results, on this Mac: ' + RAW.map((r) => '<code>' + r + '</code>').join(', ') + '</li>' : '') + '<li>Nothing on this page loads from the internet.</li></ul>';
+  }
+}
+document.getElementById('tabs').onclick = (e) => { const b = e.target.closest('button'); if (b) { tab = Number(b.dataset.i); page = 0; try { history.replaceState(null, '', '#' + TABS[tab][0]); } catch {} draw(); } };
+addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = Number(e.key);
+  if (k >= 1 && k <= TABS.length) { tab = k - 1; page = 0; draw(); }
+  else if (e.key === 'ArrowRight') { tab = (tab + 1) % TABS.length; page = 0; draw(); }
+  else if (e.key === 'ArrowLeft') { tab = (tab + TABS.length - 1) % TABS.length; page = 0; draw(); }
+});
+addEventListener('resize', () => draw());
+draw();
+</script>
+</body>
+</html>
