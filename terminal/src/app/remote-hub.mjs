@@ -5,7 +5,9 @@
 // a key never reaches the page.
 //   GET  /remote.json?service=<id>          the saved services, and that one's models (its cards, by category, biggest first)
 //   GET  /remote/model.json?service=&id=    one model in full: the service's details, what it is good at, our results
-//   POST /remote/try     { service, id }    asks it to count to 20: the answer, ✔ or ✗, the time and the speed (kept)
+//   POST /remote/try     { service, id }    the try-out: on an Ollama service the app's own (read a file, fix one line,
+//                                           run a command; agent/tryout.mjs), elsewhere a count to 20; kept in the
+//                                           app's try-outs (tryouts.mjs), so /remote and /model show the same ✔ or ✗
 //   POST /remote/load    { service, id }    loads it on an Ollama service now, at the context the app would ask for
 //   POST /remote/unload  { service, id }    takes it out of the service's memory
 // A try, a load and an unload run in the background (a big model takes minutes
@@ -16,11 +18,13 @@ import { join } from 'node:path';
 import {
   HOME, REMOTE_SOURCES, sourceOf, keyIdOf, readKey, directUrl, remoteLabel, remoteProblem, openTunnel, SERVE_PORT, probe,
   ollamaCatalog, ollamaDetail, preloadOllama, unloadOllama, ollamaCtxOf, COLD_CTX, isOutOfMemory,
-  remoteLevels, bigHarness, CLAUDE_MODELS, CLAUDE_HOST, claudeClient, claudeCaps, claudeName, readRecord,
+  remoteLevels, bigHarness, CLAUDE_MODELS, CLAUDE_HOST, claudeClient, claudeCaps, claudeName, readRecord, setEndpoint, endpointOf, dropEndpoint,
 } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { remotesOf, readyRemote, sourceWord } from './remote-form.mjs';
 import { specialtiesOf, categoryGroups } from './remote-specialties.mjs';
+import { readTryouts, saveTryout } from './tryouts.mjs';
+import { tryOut } from '../agent/tryout.mjs';
 
 const noStore = { 'cache-control': 'no-store' };
 const json = (body, status = 200) => Response.json(body, { status, headers: noStore });
@@ -44,7 +48,6 @@ export const countedRight = (said) => /\b1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 
 
 export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
   const seenDir = join(home, 'remote-seen');
-  const triedFile = join(home, 'remote-tried.json');
   const conns = new Map(); // service → { url, key, tunnel, sig }
   const lists = new Map(); // service → the last list read, for /remote/model.json
   const busy = new Map(); // `${service}\0${id}` → { what, since }
@@ -52,7 +55,6 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
 
   const readJson = (f, d) => { try { return JSON.parse(readFileSync(f, 'utf8')); } catch { return d; } };
   const writeJson = (f, v) => { try { mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(`${f}.tmp`, JSON.stringify(v, null, 1)); renameSync(`${f}.tmp`, f); } catch { /* shown, not kept */ } };
-  const tried = () => readJson(triedFile, {});
 
   const settings = () => loadSettings(cwd);
   function services() {
@@ -84,8 +86,10 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     return c;
   }
 
+  // Where a service's try-outs are kept (tryouts.mjs, by address): the Claude API by its host.
+  const triedOf = (sv) => readTryouts(sv.profile.address || (sv.profile.kind === 'claude' ? CLAUDE_HOST : ''));
   // One card's facts, the same shape whatever the service is.
-  const card = (sv, m, t) => ({ ...m, tried: t[sv.id]?.[m.id] ?? null, busy: busy.get(`${sv.id}\0${m.id}`) ?? null, last: last.get(`${sv.id}\0${m.id}`) ?? null, specialties: sv.ollama !== false ? specialtiesOf(m) : null });
+  const card = (sv, m, t) => ({ ...m, tried: t[m.id] ?? null, busy: busy.get(`${sv.id}\0${m.id}`) ?? null, last: last.get(`${sv.id}\0${m.id}`) ?? null, specialties: sv.ollama !== false ? specialtiesOf(m) : null });
 
   // The list a service gives now: { server, models, groups }. Throws when it cannot be read.
   async function readList(sv) {
@@ -135,7 +139,7 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     const head = all.map(({ profile: _p, ...s }) => s);
     if (!sv) return { services: head, service: null, state: 'none' };
     if (!sv.ready) return { services: head, service: sv.id, state: 'setup', why: sv.problem ?? 'it is not set up yet' };
-    const t = tried();
+    const t = triedOf(sv);
     try {
       const l = await readList(sv);
       lists.set(sv.id, l);
@@ -157,7 +161,7 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     const l = lists.get(id) ?? readJson(join(seenDir, `${id}.json`), null);
     const m = l?.models?.find((x) => x.id === mid);
     if (!m) return bad('no such model on it', 404);
-    const t = tried();
+    const t = triedOf(sv);
     const base = card({ ...sv, ollama: Boolean(l.ollama) }, m, t);
     const runs = readRecord().filter((x) => x?.model === `remote:${mid}`).slice(-12).reverse()
       .map((x) => ({ at: x.at, name: x.name, passed: x.passed, total: x.total, secs: x.secs, result: x.result, note: x.note, page: x.page }));
@@ -187,23 +191,23 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     const c = await connOf(sv);
     const l = lists.get(sv.id);
     const m = l?.models?.find((x) => x.id === mid) ?? {};
-    const t0 = Date.now();
-    let said = '', loadSecs = null, replySecs = null, tokens = null, tokSecs = null;
+    const where = sv.profile.address || (sv.profile.kind === 'claude' ? CLAUDE_HOST : '');
     if (l?.ollama) {
-      const gptoss = /gpt-?oss/i.test(`${m.family ?? ''} ${mid}`);
-      const numCtx = ollamaCtxOf(sv.profile, mid) || (m.loaded ? m.loadedCtx : null);
-      const res = await fetch(`${c.url.replace(/\/+$/, '')}/api/chat`, {
-        method: 'POST', headers: { 'content-type': 'application/json', ...(c.key ? { authorization: `Bearer ${c.key}` } : {}) }, signal: AbortSignal.timeout(15 * 60_000),
-        body: JSON.stringify({ model: mid, messages: [{ role: 'user', content: COUNT_ASK }], stream: false, ...(gptoss ? { think: 'low' } : m.thinking ? { think: false } : {}), options: { num_predict: gptoss ? 800 : 160, ...(numCtx ? { num_ctx: numCtx } : {}) } }),
-      });
-      const j = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(typeof j?.error === 'string' ? j.error : j?.error?.message ?? `it answered ${res.status}`);
-      said = j?.message?.content ?? '';
-      loadSecs = j?.load_duration ? j.load_duration / 1e9 : null;
-      replySecs = j?.total_duration ? (j.total_duration - (j.load_duration ?? 0)) / 1e9 : null;
-      tokens = j?.eval_count ?? null;
-      tokSecs = j?.eval_count && j?.eval_duration ? j.eval_count / (j.eval_duration / 1e9) : null;
-    } else if (sv.profile.kind === 'claude') {
+      // The app's own try-out, through its own client. The address is registered for it only when
+      // no window in this process has it (a hub opened from the app shares that window's), and
+      // taken back after, so an open window's connection is never changed.
+      const mine = !endpointOf(c.url);
+      if (mine) setEndpoint(c.url, { remote: true, kind: 'openai', key: c.key, model: mid, label: remoteLabel(sv.profile), free: true, ollama: true, hub: true });
+      try {
+        const numCtx = ollamaCtxOf(sv.profile, mid) || (m.loaded ? m.loadedCtx : null) || undefined;
+        const r = await tryOut({ url: c.url, model: mid, entry: m, numCtx, keepAlive: '10m', signal: AbortSignal.timeout(15 * 60_000) });
+        return { result: saveTryout(where, mid, { ok: r.ok, tokS: r.tokS ?? null, why: r.why, steps: r.steps, secs: r.secs }) };
+      } finally { if (mine && endpointOf(c.url)?.hub) dropEndpoint(c.url); }
+    }
+    // Claude, an OpenAI-style service, a llama.cpp server: no tool round here, a count to 20.
+    const t0 = Date.now();
+    let said = '', tokens = null;
+    if (sv.profile.kind === 'claude') {
       const client = await claudeClient(c.url, c.key);
       const r = await client.messages.create({ model: mid, max_tokens: 1024, messages: [{ role: 'user', content: COUNT_ASK }], ...(claudeCaps(mid).effort ? { output_config: { effort: 'low' } } : {}) }, { timeout: 120_000 });
       said = r.content.filter((b) => b.type === 'text').map((b) => b.text).join(' ');
@@ -219,13 +223,9 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
       tokens = j?.usage?.completion_tokens ?? null;
     }
     const secs = (Date.now() - t0) / 1000;
-    replySecs ??= secs;
-    tokSecs ??= tokens && replySecs ? tokens / replySecs : null;
-    const result = { ok: countedRight(said), said: String(said).trim().replace(/\s+/g, ' ').slice(0, 160), secs, loadSecs, replySecs, tokens, tokSecs, at: new Date().toISOString() };
-    const all = tried();
-    all[sv.id] = { ...(all[sv.id] ?? {}), [mid]: result };
-    writeJson(triedFile, all);
-    return { result };
+    const ok = countedRight(said);
+    const text = `counted to 20: "${String(said).trim().replace(/\s+/g, ' ').slice(0, 60)}"`;
+    return { result: saveTryout(where, mid, { ok, tokS: tokens && secs ? tokens / secs : null, why: ok ? null : 'counted wrong', steps: [{ ok, text }], secs }) };
   }
 
   async function route(req, url) {
@@ -244,7 +244,7 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     if (url.pathname === '/remote/try') return startJob(sv.id, mid, 'try', () => tryModel(sv, mid));
     if (!l.ollama) return bad('only an Ollama service loads and unloads models on request', 400);
     if (url.pathname === '/remote/load') return startJob(sv.id, mid, 'load', async () => { const c = await connOf(sv); await preloadOllama({ url: c.url, key: c.key, model: mid, numCtx: ollamaCtxOf(sv.profile, mid) }); return {}; });
-    if (url.pathname === '/remote/unload') return startJob(sv.id, mid, 'unload', async () => { const c = await connOf(sv); await unloadOllama({ url: c.url, key: c.key, model: mid }); return {}; });
+    if (url.pathname === '/remote/unload') return startJob(sv.id, mid, 'unload', async () => { const c = await connOf(sv); if (!(await unloadOllama({ url: c.url, key: c.key, model: mid }))) throw new Error('the service did not let it go'); return {}; });
     return bad('not found', 404);
   }
 
