@@ -113,5 +113,5 @@ export function rowDetail(row, { inUse, used = 0 } = {}) {
 export const isBig = (m) => Boolean(bigHarness(m));
 export const bigWords = (m) => {
   const h = bigHarness(m);
-  return `Big model: it decides its own steps (helpers on), reads ${h.read.whole} lines at a time, up to ${h.steps} steps.`;
+  return `Big model: it reads ${h.read.whole} lines at a time, up to ${h.steps} steps and ${h.tries} tries a fix.`;
 };

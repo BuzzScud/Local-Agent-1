@@ -181,10 +181,11 @@ the context, down to 32k, and the size it fits at is kept for it; one that never
 the model before, and a message sent meanwhile waits for it.
 
 **Big-model mode:** a model on the service with 30B parameters or more (by its total) that can call
-tools runs the way Claude Code does, not the way a small model on this Mac needs. `/effort` starts
-it on Who decides Model (with its helpers and the four checks Model starts with), 80 steps a request,
+tools gets more room than a small model on this Mac: `/effort` starts it on 80 steps a request,
 12 tries a fix and 160 lines of command output, and Read gives a file whole up to 400 lines (a part
-400 at a time, 1,000 at most). What you saved in `/effort` still wins. `/model` marks these models
+400 at a time, 1,000 at most). The app still decides (Who decides: App): with the model deciding,
+qwen3-coder-next passed 22 of the 28 practice tasks against 26, in 73% more time. What you saved
+in `/effort` still wins. `/model` marks these models
 "big", and a note says when a switch turns the mode on or off. `models/evals/tools/big-ab.mjs`
 runs the practice tasks on a service with it off and on (`/test big`).
 

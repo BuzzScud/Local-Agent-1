@@ -1,12 +1,14 @@
 // Big-model mode: off vs on (the Arena → Big-model mode, `/test big`): the Practice 28 twice on a
 // big model on a service (/remote's Another service, an Ollama), first with the settings a small
-// model gets (Who decides App, 40 steps, 8 tries, 80 lines of output, Read 150 lines whole), then
-// in big-model mode (models/runtime/remote.mjs BIG_HARNESS: Who decides Model with its helpers and
+// model gets (40 steps, 8 tries, 80 lines of output, Read 150 lines whole), then in big-model mode
+// (models/runtime/remote.mjs BIG_HARNESS: before 2 Oct also Who decides Model with its helpers and
 // four checks, 80 steps, 12 tries, 160 lines, Read 400 lines whole), each through
-// bench/run.mjs --remote; then one results page and one line in the test record.
+// bench/run.mjs --remote; then one results page and one line in the test record. Since the first
+// run (1 Oct 2026: with the model deciding, 22 of 28 against 26 in 73% more time) the mode leaves Who decides
+// on App, so both sides are steered by the app and differ in reading and room only.
 // The rule, written before the first run (1 Oct 2026): big-model mode holds when it passes at
-// least as many tasks as off AND takes at most 25% more time in all (it reads more and decides
-// for itself, so some more time is expected; fewer passes is not taken).
+// least as many tasks as off AND takes at most 25% more time in all (it reads more, so some more
+// time is expected; fewer passes is not taken).
 //   node models/evals/tools/big-ab.mjs [--remote <address>] [--remote-model <name>] [--only 1,7] [--order off,on] [--out dir]
 //   --remote / --remote-model: the service and its model; else the remote /remote saved (its key from the Keychain)
 //   --no-record: a look only; no line in the test record and no results page
@@ -111,7 +113,7 @@ const chips = [
 ];
 const h = BIG_HARNESS;
 const changed = [
-  `<b>Who decides.</b> Off: the app sorts each task, runs a focused path for a fix, a change or a rename, and reads the files ahead. On: the model decides (no sorting, nothing read ahead, several calls a reply), with its helpers (the Agent tool) and the four checks Model starts with (next-step, tests, stuck, said-done).`,
+  `<b>Who decides.</b> ${(sides.on?.way ?? 'app') === 'model' ? 'Off: the app sorts each task, runs a focused path for a fix, a change or a rename, and reads the files ahead. On: the model decided (no sorting, nothing read ahead, several calls a reply), with its helpers and the four checks Model starts with; this run is why the mode no longer does.' : 'The app on both sides: it sorts each task, runs a focused path for a fix, a change or a rename, and reads the files ahead.'}`,
   `<b>Reading.</b> Off: Read gives a file whole up to 150 lines, a part 150 lines at a time (400 at most). On: whole up to ${h.read.whole} lines, a part ${h.read.part} at a time (${h.read.max.toLocaleString()} at most).`,
   `<b>Room.</b> Off: 40 steps a request, 8 tries a fix, 80 lines of command output. On: ${h.steps} steps, ${h.tries} tries, ${h.outputLines} lines.`,
   '<b>The same both ways.</b> The model, its context (the size it is loaded at on the service), Effort Low, the tasks and their checks.',

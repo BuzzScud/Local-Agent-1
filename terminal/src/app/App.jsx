@@ -633,14 +633,13 @@ export function App({ opts, win, onRestart }) {
   // the Keychain, the check), and only then let the model on this Mac go.
   // One that does not answer changes nothing when this Mac's model is running;
   // at the start (none running) it asks what to do (remote-down).
-  // Big-model mode (models/runtime/remote.mjs): /effort's Who decides, Steps, Tries and Command
-  // output start from the model in use, so a switch to or from a big model on a service moves them;
-  // what /effort saved still wins, and so does --way. Called before agent.model is set (the prompt
-  // and the tools follow Who decides); says so when the mode comes or goes.
+  // Big-model mode (models/runtime/remote.mjs): /effort's Steps, Tries and Command output start
+  // from the model in use, so a switch to or from a big model on a service moves them; what /effort
+  // saved still wins. Called before agent.model is set; says so when the mode comes or goes.
   const relimit = (m) => {
     const was = limitsRef.current;
     const fresh = readLimits(loadSettings(opts.cwd), m);
-    const next = { ...was, ...Object.fromEntries(HARNESS_LIMITS.filter((id) => !(id === 'way' && limitsRef.wayGiven)).map((id) => [id, fresh[id]])) };
+    const next = { ...was, ...Object.fromEntries(HARNESS_LIMITS.map((id) => [id, fresh[id]])) };
     const moved = limitChanges(was, next);
     if (!moved.length) return;
     limitsRef.current = next;

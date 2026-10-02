@@ -377,7 +377,7 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   expect(saved.remotes.openai.model).toBe('oldchat:14b');
 }, T);
 
-test('big-model mode: switching to a 30B+ model that calls tools turns it on (Who decides Model, helpers, more steps, tries and output, said in a note and in /effort); back to a small one turns it off; nothing is saved', async () => {
+test('big-model mode: switching to a 30B+ model that calls tools turns it on (more steps, tries and output, the app still deciding, said in a note and in /effort); back to a small one turns it off; nothing is saved', async () => {
   const { cwd, env, base } = setup();
   const srv = await fullOllama();
   const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
@@ -401,16 +401,16 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (Wh
   expect(s.list).toMatch(/huge:120b.*\s+big/);
   expect(s.list).not.toMatch(/tiny:3b.*\bbig\b/);
   // on: said in a note, from → to
-  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: Who decides App → Model · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines, and it reads files 400 lines at a time. /effort changes any of it.');
+  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines, and it reads files 400 lines at a time. /effort changes any of it.');
   // /effort shows the new defaults as the defaults
-  expect(s.panel).toMatch(/Who decides\s+◀ Model\s+▶\s+default · it sorts, looks and saves for itself/);
+  expect(s.panel).toMatch(/Who decides\s+◀ App\s+▶\s+default · the app sorts, reads ahead and checks, as before/);
   expect(s.panel).toMatch(/Steps per request\s+◀ 80\s+▶\s+default/);
-  // the request went the model's way, with the Agent tool (helpers); the small one before and after has neither
+  // the app still decides: no Agent tool (helpers) on either
   expect(srv.chats.map((c) => c.model)).toEqual(['coder:30b', 'tiny:3b']);
-  expect(srv.named[0]).toContain('Agent');
+  expect(srv.named[0]).not.toContain('Agent');
   expect(srv.named[1]).not.toContain('Agent');
   // off again: from → to back
-  expect(flat(s.back)).toContain('Big-model mode off: Who decides Model → App · Tries per fix 12 → 8 · Steps per request 80 → 40 · Command output 160 lines → 80 lines.');
+  expect(flat(s.back)).toContain('Big-model mode off: Tries per fix 12 → 8 · Steps per request 80 → 40 · Command output 160 lines → 80 lines.');
   // defaults only: nothing written to the saved limits
   expect(settingsOf(base).limits ?? {}).toEqual({});
 }, T);

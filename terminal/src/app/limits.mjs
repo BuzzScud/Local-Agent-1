@@ -25,10 +25,9 @@ export const LIMITS = [
   {
     id: 'way', label: 'Who decides', group: 'Effort', choice: true,
     steps: () => ['app', 'model'],
-    // A big model on a service (big-model mode, models/runtime/remote.mjs) starts on Model.
-    def: (m) => m?.harness?.way ?? 'app',
+    def: () => 'app',
     show: (v) => (v === 'model' ? 'Model' : 'App'),
-    note: (v, e) => `${v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · next-step, tests, stuck and said-done start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'}${e?.model?.harness ? ' · big-model mode starts on Model' : ''}`,
+    note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · next-step, tests, stuck and said-done start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'),
   },
   // The search (group 'Search', shown first): which models find what goes
   // along with a request. Measured 29 Sep (models/qwen3-reranker-0.6b/README.md).
@@ -259,7 +258,7 @@ export function limitsToSave(values, model, keep = {}) {
 
 // The rows big-model mode moves (models/runtime/remote.mjs BIG_HARNESS): App.jsx
 // reads them again when the model in use changes.
-export const HARNESS_LIMITS = ['way', 'steps', 'tries', 'outputLines'];
+export const HARNESS_LIMITS = ['steps', 'tries', 'outputLines'];
 
 // One step down (dir -1) or up (+1). A value between steps (typed into
 // settings.json by hand) goes to the next step that way. Trim stays below

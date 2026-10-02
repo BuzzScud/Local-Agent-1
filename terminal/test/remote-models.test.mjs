@@ -96,7 +96,7 @@ test('the line about the highlighted model: none for one loaded or in use; one t
 test('big-model mode in the list: the 30B+ models that call tools are marked big; a loaded one not in use says what that means', () => {
   expect(MODELS.filter(isBig).map((m) => m.id)).toEqual(['Qwen3.6:35B-A3B', 'gpt-oss:120b', 'laguna-s-2.1:latest', 'qwen3-coder:30b']);
   const row = (id) => ({ kind: 'model', m: MODELS.find((m) => m.id === id) });
-  expect(rowDetail(row('Qwen3.6:35B-A3B'), { inUse: 'x' })).toEqual({ tone: 'dim', text: 'Big model: it decides its own steps (helpers on), reads 400 lines at a time, up to 80 steps.' });
+  expect(rowDetail(row('Qwen3.6:35B-A3B'), { inUse: 'x' })).toEqual({ tone: 'dim', text: 'Big model: it reads 400 lines at a time, up to 80 steps and 12 tries a fix.' });
   // not loaded: the wait is the line (the mark beside its name says big)
   expect(rowDetail(row('qwen3-coder:30b'), { inUse: 'x' }).text).toMatch(/^Not loaded yet/);
 });
