@@ -1,12 +1,13 @@
 // End-to-end, the real app in a pseudo-terminal (see app.test.mjs).
-// Here: the start, the safety check of a new folder, and coding -p.
+// Here: the start, where to start (typed in the home folder), the safety check of a new folder,
+// and coding -p.
 import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync, existsSync, mkdirSync, symlinkSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit } from './app-setup.mjs';
+import { T, setup, quit, seedTrust } from './app-setup.mjs';
 import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
 // The stand-in plays the default model (its file name and its name on screen).
@@ -101,6 +102,35 @@ test('safety check: typing 2 picks No at once and nothing is read; 1 still says 
   await fake.close();
   expect(yes.text).toContain('Recent activity');
   expect(existsSync(join(b.base, 'home', 'trust.json'))).toBe(true);
+}, T * 2);
+
+// Where to start (start-folder.mjs): typed in the home folder (a stand-in one, HOME), it asks
+// first; 2 is Agentic Coder's folder (AGENTIC_REPO, a stand-in with the file findRepo looks for).
+test('typed in the home folder: where to start comes first; 2 starts in Agentic Coder\'s folder, esc starts nothing', async () => {
+  const mk = () => {
+    const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
+    const home = join(base, 'home-folder');
+    const repo = join(home, 'agentic-coder');
+    cpSync(join(import.meta.dir, '..', 'demo-project'), repo, { recursive: true });
+    mkdirSync(join(repo, 'terminal', 'src'), { recursive: true });
+    writeFileSync(join(repo, 'terminal', 'src', 'cli.jsx'), '');
+    seedTrust(base, home); // the home folder trusted, and with it everything inside it
+    return { base, home, env: { HOME: home, AGENTIC_HOME: join(base, 'home'), AGENTIC_REPO: repo, AGENTIC_MODEL_AT_START: 'on' } };
+  };
+  const a = mk();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd: a.home, env: a.env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'Where to start' }, { sleep: 200 }, { snapshot: 'menu' }, { type: '2' }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.menu).toContain('❯ 1. ~ · your home folder');
+  expect(r.snapshots.menu).toContain('  2. ~/agentic-coder · Agentic Coder');
+  expect(r.text).not.toContain('Quick safety check'); // the home folder's yes covers the folder inside it
+  expect(r.snapshots.start).toMatch(/where\s+~\/agentic-coder/); // the start page: working in the folder picked
+  const b = mk();
+  const esc = await runInPty({ cwd: b.home, env: b.env, args: ['--no-flows'], steps: [{ wait: 'Where to start' }, { sleep: 200 }, { key: 'esc' }, { sleep: 800 }] });
+  expect(esc.code).toBe(0);
+  expect(esc.text).not.toContain('Recent activity');
 }, T * 2);
 
 test('coding -p: a question with choices is an arrow menu, "Type an answer" takes a line, a bare question takes a line', async () => {

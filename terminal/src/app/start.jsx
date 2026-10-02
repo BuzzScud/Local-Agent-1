@@ -375,3 +375,33 @@ export function TrustPage({ width, cwd, model, selected = 0 }) {
     </Box>
   );
 }
+
+// Where to start, in the same columns: `coding` typed in the home folder asks which folder to
+// work in before anything is read (start-folder.mjs; options: its folderOption rows).
+export const FOLDER_TEXT = 'Agentic Coder works in one folder: it reads, searches and runs things there. Pick the project you are working on; the home folder suits general questions and files on the Desktop.';
+export function FolderPage({ width, options, model, selected = 0 }) {
+  const L = leftWidth(width);
+  const RW = Math.max(10, width - L - 3);
+  const left = [
+    <Text bold color={WHITE}>Welcome!</Text>, null,
+    ...botRows('trust'), null,
+    <Text bold color={WHITE} wrap="truncate-end">{model}</Text>,
+    <Text color={C.dim}>wakes up where you pick</Text>, null,
+  ];
+  const right = [
+    <Heading>Where to start</Heading>,
+    <Labelled label="started">{where('~')}</Labelled>,
+    <Text> </Text>,
+    ...wrap(FOLDER_TEXT, RW - 1).map((l) => <Text>{l}</Text>),
+    <Text> </Text>,
+    ...options.map((o, i) => <Text color={i === selected ? C.ask : undefined}>{i === selected ? '❯' : ' '} {i + 1}. {fitPath(o, RW - 5)}</Text>),
+    <Text color={C.dim}>Enter to confirm · Esc to exit</Text>,
+  ];
+  return (
+    <Box flexDirection="column" width={width}>
+      <TitleLine width={width} />
+      <Text> </Text>
+      <Split width={width} left={keyed(left)} right={keyed(right)} />
+    </Box>
+  );
+}
