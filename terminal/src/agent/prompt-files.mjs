@@ -3,7 +3,7 @@
 // SKILLS.md holds steps for kinds of task, each brought by its words.
 // Read from disk at each use, so a save in the hub applies on the next
 // message; the copy built into the app is used when the repo is not here.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOME } from '../../../models/index.mjs';
@@ -265,22 +265,89 @@ export function guidePath(cwd) {
   return 'RULES';
 }
 
-// A set's guides: each one's name, what the list says about it (the line under its title,
-// "Read this for …" shortened to "for …") and what a Read gives (its ## sections; the lines
-// above them are for the person editing it). None on the local set; SUBAGENTS only when the
-// Agent tool is offered.
-export function readGuides(set = 'local', { dir = rulesDir(), agents = false } = {}) {
+// A guide's or helper's name: letters, digits and hyphens (it opens at RULES/<NAME>.md).
+export const FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+
+// The .md files of a folder as { file, name }: the name is the file's in capitals, each name
+// once, by name. [] when the folder is not there.
+function mdFiles(folder) {
+  let names;
+  try { names = readdirSync(folder, { withFileTypes: true }); } catch { return []; }
+  const seen = new Map();
+  for (const e of names) {
+    if (!e.isFile() || !/\.md$/i.test(e.name)) continue;
+    const name = e.name.slice(0, -3).toUpperCase();
+    if (FILE_NAME.test(name) && !seen.has(name)) seen.set(name, { file: e.name, name });
+  }
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Your own guides and helper agents (2 Oct 2026, the .md maker on the Desktop) live in the app's
+// home, not in the repo: the repo is public, and its tests must not see them. A guide is NAME.md
+// there, listed after the shipped ones (GUIDES) by name; a helper agent is agents/NAME.md.
+// AGENTIC_HOME's in a test, so a test never sees yours.
+export const ownDir = (home = HOME) => join(home, 'rules', REMOTE_DIR);
+// Your guides: any NAME.md in your folder that is not HARNESS, TOOLS, SKILLS or a shipped guide.
+export function extraGuides(own = ownDir()) {
+  const known = new Set(['HARNESS', ...Object.values(PROMPT_FILES).map((f) => f.replace(/\.md$/, '')), ...GUIDES]);
+  return mdFiles(own).filter((g) => !known.has(g.name));
+}
+
+// A guide as listed and read: the first sentence of the first paragraph under the title (a
+// sentence may wrap), "Read this for …" shortened to "for …", and its ## sections.
+function guideOf(name, text) {
+  if (!text.trim()) return null;
+  const head = text.replace(/^# .*\n/, '').trimStart();
+  const para = head.startsWith('## ') ? '' : head.split(/\n\s*\n|\n## /)[0].replace(/\s*\n\s*/g, ' ');
+  const about = (/^.*?[.!?](?=\s|$)/.exec(para)?.[0] ?? para).trim().replace(/^Read this\s+/i, '').replace(/\.$/, '');
+  const at = text.search(/^## /m);
+  return { name, about, body: (at >= 0 ? text.slice(at) : text).trim() };
+}
+
+// A set's guides: each one's name, what the list says about it and what a Read gives (its ##
+// sections; the lines above them are for the person editing it). None on the local set;
+// SUBAGENTS only when the Agent tool is offered. The shipped ones first, then the ones you added.
+export function readGuides(set = 'local', { dir = rulesDir(), agents = false, own = ownDir() } = {}) {
   if (set !== 'remote') return [];
-  return GUIDES.filter((g) => agents || g !== AGENTS_GUIDE).map((name) => {
-    const text = readPromptFile(name, dir, 'remote').text;
-    if (!text.trim()) return null;
-    // The first sentence of the first paragraph under the title (a sentence may wrap).
-    const head = text.replace(/^# .*\n/, '').trimStart();
-    const para = head.startsWith('## ') ? '' : head.split(/\n\s*\n|\n## /)[0].replace(/\s*\n\s*/g, ' ');
-    const about = (/^.*?[.!?](?=\s|$)/.exec(para)?.[0] ?? para).trim().replace(/^Read this\s+/i, '').replace(/\.$/, '');
-    const at = text.search(/^## /m);
-    return { name, about, body: (at >= 0 ? text.slice(at) : text).trim() };
-  }).filter(Boolean);
+  const shipped = GUIDES.filter((g) => agents || g !== AGENTS_GUIDE).map((name) => guideOf(name, readPromptFile(name, dir, 'remote').text));
+  const added = extraGuides(own).map((g) => {
+    try { return guideOf(g.name, readFileSync(join(own, g.file), 'utf8')); } catch { return null; }
+  });
+  return [...shipped, ...added].filter(Boolean);
+}
+
+// ---- helper agents (the remote set) ------------------------------------------------------------
+
+// Helper agent files (2 Oct 2026, the .md maker): <your folder>/agents/<NAME>.md (ownDir), each a
+// helper the main model can hand work to with the Agent tool, as kind <name> in small letters.
+//   # Test writer                       the title, for you
+//   Use it to add one test for …        what the Agent tool says about it (the first sentence)
+//   - Tools: all                        all (the default), look (it only reads), or a list
+//   - Model: main                       main (the default), or a model on the same Ollama service
+//   ## Instructions …                   what the helper is given, from the first ## on
+export const AGENTS_FOLDER = 'agents';
+// Kinds the Agent tool already has: a file of that name is left out.
+export const BUILT_IN_KINDS = ['explore', 'general'];
+
+export function parseHelperAgent(name, text) {
+  const t = String(text ?? '').replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*\n/, '').trimStart();
+  const at = t.search(/^## /m);
+  const top = (at >= 0 ? t.slice(0, at) : t).split('\n');
+  const field = (key) => top.find((l) => l.toLowerCase().startsWith(`- ${key}:`))?.slice(key.length + 3).trim() ?? '';
+  const para = top.filter((l) => !/^- [a-z]+:/i.test(l)).join('\n').trim().split(/\n\s*\n/)[0].replace(/\s*\n\s*/g, ' ');
+  const about = (/^.*?[.!?](?=\s|$)/.exec(para)?.[0] ?? para).trim().replace(/\.$/, '');
+  const raw = field('tools').toLowerCase();
+  const tools = !raw || raw === 'all' ? 'all' : /^(look|look only|read only)$/.test(raw) ? 'look' : field('tools').split(/[\s,]+/).filter(Boolean);
+  return { name, kind: name.toLowerCase(), about, tools, model: field('model') || 'main', body: at >= 0 ? t.slice(at).trim() : '' };
+}
+
+// Your helper agents: none on the local set, none without a folder of them.
+export function readHelperAgents(set = 'local', { own = ownDir() } = {}) {
+  if (set !== 'remote') return [];
+  const folder = join(own, AGENTS_FOLDER);
+  return mdFiles(folder).map((f) => {
+    try { return parseHelperAgent(f.name, readFileSync(join(folder, f.file), 'utf8')); } catch { return null; }
+  }).filter((a) => a && a.body && !BUILT_IN_KINDS.includes(a.kind));
 }
 
 // The list in the instructions: every guide by the path that opens it.
@@ -296,7 +363,7 @@ ${guides.map((g) => `- ${path}/${g.name}.md${g.about ? `: ${g.about}` : ''}`).jo
 export function readGuidePath(cwd, p, guides) {
   if (!guides?.length) return null;
   const raw = String(p ?? '').trim();
-  const m = /^(?:\.\/)?(?:Rules\/)?RULES(?:\/([A-Za-z-]+?)(?:\.md)?)?\/?$/.exec(raw);
+  const m = /^(?:\.\/)?(?:Rules\/)?RULES(?:\/([A-Za-z0-9-]+?)(?:\.md)?)?\/?$/.exec(raw);
   if (!m) return null;
   const path = guidePath(cwd);
   if (path === 'Rules/RULES' && !/^(?:\.\/)?Rules\/RULES(?:\/|$)/.test(raw)) return null;

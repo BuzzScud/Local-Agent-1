@@ -128,13 +128,26 @@ const webDefs = (web) => WEB_TOOL_DEFS.filter((d) => (d.name === 'WebSearch' ? w
 // reads only (files, the code search, the web); general: it may also edit and run commands,
 // each change asked about as your mode says. On this Mac one runs at a time, on the server's
 // side slot, so the conversation's place on the main slot is kept; on the Claude API several
-// in one reply run side by side. Offered when the model decides (/effort's Who decides) and
-// on the Claude API; a helper has no Agent of its own.
+// in one reply run side by side. Offered when the model decides (/effort's Who decides), on
+// the Claude API, and on the remote set once you have a helper agent file; a helper has no
+// Agent of its own.
 export const AGENT_TOOL_DEF = {
   name: 'Agent',
   description: 'Hand one self-contained piece of work to a helper that starts fresh and reports back. kind explore: it only reads (files, code search, the web) and reports what it found, with file:line; for a search that would take many reads, so only its findings come back to you. kind general: it may also edit files and run commands. It sees none of this conversation: put the whole task, and what to report, in prompt.',
   parameters: { type: 'object', properties: { description: str('A few words on what it does'), prompt: str('The whole task, and what to report back'), kind: { type: 'string', enum: ['explore', 'general'], description: 'explore (read only, the default) or general' } }, required: ['prompt'] },
 };
+// The Agent tool with your own helpers (prompt-files.mjs readHelperAgents, in your folder's agents/):
+// each is a kind of its own, named with what its file says it is for.
+export function agentToolDef(helpers = []) {
+  if (!helpers.length) return AGENT_TOOL_DEF;
+  const kinds = ['explore', 'general', ...helpers.map((h) => h.kind)];
+  const own = helpers.map((h) => `- ${h.kind}${h.about ? `: ${h.about}` : ''}`).join('\n');
+  return {
+    ...AGENT_TOOL_DEF,
+    description: `${AGENT_TOOL_DEF.description}\nThe user's own helpers, each a kind of its own with its own instructions; when one fits the work, use its kind:\n${own}`,
+    parameters: { ...AGENT_TOOL_DEF.parameters, properties: { ...AGENT_TOOL_DEF.parameters.properties, kind: { type: 'string', enum: kinds, description: `explore (read only, the default), general, or one of the user's own helpers (${helpers.map((h) => h.kind).join(', ')})` } } },
+  };
+}
 // The screen (tools/screen.mjs): a picture of one app's window, or of the whole screen, for a
 // model that can look at pictures. It only looks; each app asks once (permissions.mjs).
 export const SCREEN_TOOL_DEF = {
@@ -153,9 +166,9 @@ const READ_MANY = {
 };
 // The tools of a way: 'app' (the default, as before) or 'model' (the tools above join them).
 // web: { search, fetch } (/web): the web tools join them.
-// agents: the Agent tool joins them (a helper's own list never has it).
+// agents: the Agent tool joins them (a helper's own list never has it); helpers: your own helper agents in it.
 // screen: the Screen tool joins them (a model that can look at pictures, on a Mac).
-export const toolDefs = (way = 'app', web = null, { agents = false, screen = false } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [AGENT_TOOL_DEF] : [])];
+export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [] } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : [])];
 export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way, web, opts).map((d) => ({ type: 'function', function: d }));
 
 // Small models reach for other common argument names; accept them.
@@ -275,7 +288,7 @@ export function display(name, args = {}) {
     case 'WebSearch': return { label: 'Web Search', arg: `"${String(args.query ?? '').replace(/\s+/g, ' ').trim()}"` };
     case 'WebFetch': return { label: 'Fetch', arg: String(args.url ?? '') };
     case 'Screen': return { label: 'Screen', arg: String(args.app ?? '').trim() || 'whole screen' };
-    case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); return { label: args.kind === 'general' ? 'Agent' : 'Explore', arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
+    case 'Agent': { const d = String(args.description || args.prompt || '').replace(/\s+/g, ' ').trim(); const k = String(args.kind ?? '').toLowerCase(); return { label: k === 'general' ? 'Agent' : !k || k === 'explore' ? 'Explore' : k, arg: d.length > 70 ? `${d.slice(0, 69)}…` : d }; }
     default: return { label: name, arg: '' };
   }
 }

@@ -128,6 +128,20 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `models/evals/tools/remote-rules-ab.mjs` (the Arena's `remote-rules` and `hard`); the hard tasks (30–39) are
   `bench/run.mjs --set hard` and never run without `--set` or `--only`.
 
+- **Files you add to the remote set** (2 Oct 2026, the owner's ask: "make .md files for agents im running", made
+  with a Desktop page of theirs, not the hub). They live in the app's home, not the repo (`ownDir`:
+  `~/.agentic-coder/rules/remote`, AGENTIC_HOME's in a test), because the repo is public and its tests must not see
+  them. A `NAME.md` there is a guide, listed after the shipped ones by name (`extraGuides`, `readGuides`); letters,
+  digits and hyphens only, and a shipped name is ignored. A file in its `agents/` is a **helper agent**
+  (`readHelperAgents`, `parseHelperAgent`): its first sentence is what the Agent tool says about it, `- Tools:` (all,
+  look, or a list) and `- Model:` (main, or another model on the same Ollama service, run with the client's `use` at
+  32k and with a 32k room; the main model by its own name stays the main model), and from its first `##` on, the
+  instructions the helper gets after the helper part (`helperPrompt`). The Agent tool names each as a kind of its own
+  (`agentToolDef`), and on the remote set one such file is enough to offer the Agent tool on App too (`agentsOn`), so
+  the helpers guide is listed with it; "subagents": false still turns it off. The local set has neither. A loose file
+  in the repo's `terminal/rules/remote/` is still not read. With none of yours, the instructions and tools are the same
+  letter for letter (`terminal/test/agent-files.test.mjs`).
+
 - **Look first** (`terminal/src/agent/look.mjs`, the last /effort row, since 30 Sep 2026): auto follows
   Effort (Low none, Medium 15 s, High 30 s). It is the last row so the rows above keep their places for
   the app tests that move with the arrow keys; the panel keeps 22 lines because the keys' hint sits on

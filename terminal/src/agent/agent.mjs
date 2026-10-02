@@ -16,7 +16,7 @@ import { decide, isReadOnly, offerFor, protectedBy, ownBy } from './permissions.
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom, promptSetOf } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
-import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseFor, rulesSetOf, readGuides, guidesList, guidePath, harnessOf } from './prompt-files.mjs';
+import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseFor, rulesSetOf, readGuides, guidesList, guidePath, harnessOf, readHelperAgents } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
 import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './studio.mjs';
@@ -414,9 +414,24 @@ const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash']);
 // A helper's steps at most (its own limit, under the conversation's).
 const HELPER_STEPS = 30;
 // A helper's instructions: the conversation's (the project, its rules), then what a helper is.
-export function helperPrompt(system, kind) {
-  return `${system}\n\n# You are a helper\nThe main agent handed you one task. You see only this task, not its conversation, and you cannot ask the user anything. Work it out with your tools, then end with a short report for the main agent: ${kind === 'explore' ? 'what you found, with file:line or the page it came from. You only read: do not change anything; say what should change instead.' : 'what you changed (files and lines) and what you checked, or what stopped you.'}`;
+// own: one of your helper agent files (prompt-files.mjs parseHelperAgent): its instructions follow,
+// and it reports as an explore helper does when it only reads.
+export function helperPrompt(system, kind, own = null) {
+  const looks = own ? own.tools === 'look' : kind === 'explore';
+  const base = `${system}\n\n# You are a helper\nThe main agent handed you one task. You see only this task, not its conversation, and you cannot ask the user anything. Work it out with your tools, then end with a short report for the main agent: ${looks ? 'what you found, with file:line or the page it came from. You only read: do not change anything; say what should change instead.' : 'what you changed (files and lines) and what you checked, or what stopped you.'}`;
+  return own ? `${base}\n\n# Your job: ${own.kind}\nThe user wrote these instructions for you (${own.name}.md):\n${own.body}` : base;
 }
+
+// The tools one of your helper agents is given: look = an explore helper's; all = a general
+// helper's (null: no filter); a list = those of the app's tools, in any case (others are left out).
+export function helperToolFilter(tools, names) {
+  if (tools === 'look') return EXPLORE_TOOLS;
+  if (!Array.isArray(tools)) return null;
+  const want = new Set(tools.map((t) => t.toLowerCase()));
+  return new Set(names.filter((n) => want.has(n.toLowerCase())));
+}
+// The context a helper agent on another model of the service is loaded at (as /subagents' helpers).
+const OWN_HELPER_CTX = 32_768;
 
 // The web addresses (http or https) a request names, each once.
 export const webAddresses = (text) => [...new Set(String(text ?? '').match(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi) ?? [])].map((u) => u.replace(/[.,;:!?]+$/, ''));
@@ -520,12 +535,17 @@ export class Agent extends EventEmitter {
   setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
   tools() {
-    const all = toolSchemas(this.way, this.webTools(), { agents: this.agentsOn(), screen: this.screenOn() });
+    const agents = this.agentsOn();
+    const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [] });
     return this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all;
   }
-  // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, and on the
-  // Claude API; never inside a helper; "subagents": false in settings.json leaves it out.
-  agentsOn() { return !this.isHelper && this.subagents !== false && (this.way === 'model' || endpointOf(this.url)?.kind === 'claude'); }
+  // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, on the Claude
+  // API, and on the remote set once you have a helper agent file (prompt-files.mjs ownDir);
+  // never inside a helper; "subagents": false in settings.json leaves it out.
+  agentsOn() { return !this.isHelper && this.subagents !== false && (this.way === 'model' || endpointOf(this.url)?.kind === 'claude' || this.helperAgents().length > 0); }
+  // Your helper agents (prompt-files.mjs readHelperAgents): read from their folder each time, so a
+  // new file is offered at the next step. None inside a helper, none on the local set.
+  helperAgents() { return this.isHelper ? [] : readHelperAgents(this.rulesSetUsed ?? this.rulesSet()); }
   // The Screen tool (tools/screen.mjs): on a Mac, for a model that can look at pictures now or
   // once its vision is turned on (visionOn); "screen": false in settings.json leaves it out.
   // mayLook: the app says whether this model can turn its vision on (App.jsx).
@@ -1227,7 +1247,9 @@ export class Agent extends EventEmitter {
       requestMsg: request,
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
-      fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map() };
+      fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map(),
+      // A helper agent of yours with a model of its own (runHelper): every step on that model.
+      ...(this.ownUse ? { use: this.ownUse } : {}) };
     // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
     // by step here; not a follow-up (it continues a turn that already looked), not in the home
     // folder (a general question there needs no files), not for a helper (it is part of the looking).
@@ -2269,8 +2291,10 @@ export class Agent extends EventEmitter {
     const args = parsed.args;
     // A helper refuses a tool it was not given (an explore helper does not change anything).
     if (this.toolFilter && !this.toolFilter.has(call.name)) {
-      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: 'this helper only reads' }, error: true });
-      return { text: `${call.name} is not one of this helper's tools: it only reads. Report what should change instead.`, error: true };
+      // A helper agent file's own list of tools: say which it has.
+      const reads = this.toolFilter === EXPLORE_TOOLS;
+      this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: reads ? 'this helper only reads' : `not one of this helper's tools` }, error: true });
+      return { text: reads ? `${call.name} is not one of this helper's tools: it only reads. Report what should change instead.` : `${call.name} is not one of this helper's tools (it has ${[...this.toolFilter].join(', ') || 'none'}). Do the work with those, or report what should be done instead.`, error: true };
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
@@ -2487,18 +2511,29 @@ export class Agent extends EventEmitter {
   // permissions and web, on the side slot when the server has one (the conversation's place
   // on the main slot stays), and no Agent of its own. Its steps show on one line as it goes;
   // only its report comes back. esc stops it with the rest.
+  // One of your helper agents (kind = its name) gets its file's instructions, tools and model.
   async runHelper(id, args, shown, signal) {
-    const kind = args.kind === 'general' ? 'general' : 'explore';
+    const asked = String(args.kind ?? '').toLowerCase();
+    const own = this.helperAgents().find((h) => h.kind === asked) ?? null;
+    const kind = own ? own.kind : asked === 'general' ? 'general' : 'explore';
+    if (!own && shown.label !== 'Agent') shown = { ...shown, label: 'Explore' };
+    // Its Model line: another model on the same Ollama service; anywhere else it runs on this one.
+    // The main model by its own name is the main model (another size would load it again).
+    const bare = (m) => String(m ?? '').toLowerCase().replace(/:latest$/, '');
+    const otherModel = own && ![bare('main'), bare(endpointOf(this.url)?.model)].includes(bare(own.model)) ? own.model : null;
+    const ownUse = otherModel && endpointOf(this.url)?.ollama ? { model: otherModel, numCtx: OWN_HELPER_CTX, keepAlive: '30m' } : undefined;
     const t0 = Date.now();
     const slot = this.slots ? { main: this.slots.side ?? this.slots.main } : undefined;
     const helper = new Agent({
-      url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind), thinking: this.thinking, effort: this.effort, ctx: this.ctx,
+      // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
+      url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
       mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash,
       way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
     });
-    Object.assign(helper, { isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter: kind === 'explore' ? EXPLORE_TOOLS : null, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    const toolFilter = own ? helperToolFilter(own.tools, this.tools().map((t) => t.function.name)) : kind === 'explore' ? EXPLORE_TOOLS : null;
+    Object.assign(helper, { isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
     if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn) };
     const steps = [];
@@ -2525,7 +2560,8 @@ export class Agent extends EventEmitter {
     // You said no to one of its changes (with nothing more to say): the turn ends there, as it does for the conversation's own.
     if (reason === 'declined') { this.emit('tool', { id, name: 'Agent', ...shown, view: { ...view, reason: 'you said no' }, error: true }); return { text: 'The user said no to a change the helper wanted to make. Wait for their next message.', error: true, stop: 'declined' }; }
     this.emit('tool', { id, name: 'Agent', ...shown, view, error: !done && !report.trim() });
-    return { text: `The ${kind} helper's report (${steps.length} step${steps.length === 1 ? '' : 's'}, ${Math.round(secs)} s${done ? '' : `, it stopped: ${reason}`}):\n${body}`, error: !done && !report.trim() };
+    const where = ownUse ? `, on ${ownUse.model}` : otherModel ? `, on this model: its Model line (${otherModel}) works on an Ollama service only` : '';
+    return { text: `The ${kind} helper's report (${steps.length} step${steps.length === 1 ? '' : 's'}, ${Math.round(secs)} s${where}${done ? '' : `, it stopped: ${reason}`}):\n${body}`, error: !done && !report.trim() };
   }
 
   // The model's own tools (tools.mjs MODEL_TOOL_DEFS): what the app did for it before its
