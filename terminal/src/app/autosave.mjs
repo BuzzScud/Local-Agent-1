@@ -156,10 +156,11 @@ export class AutoSave {
       // ask: with the window gone there is no one to ask, so what it would
       // save is kept for the next start (askPending).
       // On a remote (/remote) the job connects again itself (its tunnel ends with this window); its key is never written here.
-      const remote = Boolean(a.model?.remote);
+      // The window's own service (App.jsx remoteConf), so the save goes where the window worked.
+      const remote = a.model?.remote ? (a.remoteConf ?? true) : false;
       writeFileSync(file, JSON.stringify({ cwd: a.cwd, home: a.memory.home ?? null, url: remote ? null : a.url, remote, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter, given, review: true, ask: Boolean(this.ask), lessons: a.lessons.filter((l) => !l.practice), messages: slim(a.messages) }));
       const [cmd, ...args] = self();
-      spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
+      spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1', AGENTIC_SPEND_PID: String(process.pid) } }).unref();
       return true;
     } catch { return false; }
   }
@@ -176,7 +177,7 @@ export class AutoSave {
         writeFileSync(file, JSON.stringify({ ...w.job, url: a.url, remote: false, model: a.model.id, slot: a.slots?.side ?? null, ctx: a.ctx, stopAfter: false }));
         rmSync(w.file, { force: true });
         const [cmd, ...args] = self();
-        spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1' } }).unref();
+        spawn(cmd, [...args, 'memory-save', file], { detached: true, stdio: 'ignore', env: { ...process.env, AGENTIC_NO_UPDATE: '1', AGENTIC_SPEND_PID: String(process.pid) } }).unref();
         n++;
       } catch { /* tried again at the next load */ }
     }
@@ -199,6 +200,12 @@ export function waitingFor(cwd) {
   return out;
 }
 
+// The service a handed-over save connects to: the one its window used (a job written before
+// 2 Oct 2026 says only `true`, and then gets the one saved in settings.json, as before).
+export function jobRemote(job) {
+  return job.remote && typeof job.remote === 'object' ? job.remote : loadSettings(job.cwd).remote ?? {};
+}
+
 // `coding memory-save <job>`: the save handed over by a window that closed.
 // It keeps the model loaded while it works, leaves what it saved for the
 // next start to show, and never prints: nobody is watching.
@@ -209,7 +216,7 @@ export async function runJob(file) {
   let url = job.url;
   let remote = null;
   if (job.remote) {
-    try { remote = await connectRemote(loadSettings(job.cwd).remote ?? {}); } catch { rmSync(file, { force: true }); return null; }
+    try { remote = await connectRemote(jobRemote(job)); } catch { rmSync(file, { force: true }); return null; }
     url = remote.url;
     model = remote.model;
     if (remote.slots < 2) job.slot = null;

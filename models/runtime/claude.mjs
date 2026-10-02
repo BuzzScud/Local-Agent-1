@@ -14,10 +14,10 @@ export const CLAUDE_CTX = 200_000;
 // used first; a Test or a connect adds any other the key lists. Prices are per
 // million tokens in / out, as Anthropic lists them (Sep 2026).
 export const CLAUDE_MODELS = [
-  { id: 'claude-opus-5-5', name: 'Opus 5.5', note: 'the default, strong at code · $4 / $20' },
-  { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5', note: 'quicker, half the price · $2 / $10' },
-  { id: 'claude-fable-5-1', name: 'Fable 5.1', note: 'the most capable, the dearest · $10 / $50' },
-  { id: 'claude-haiku-4-5', name: 'Haiku 4.5', note: 'the quickest and cheapest · $1 / $5' },
+  { id: 'claude-opus-5-5', name: 'Opus 5.5', note: 'the default, strong at code · $4 / $20', price: { in: 4, out: 20 } },
+  { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5', note: 'quicker, half the price · $2 / $10', price: { in: 2, out: 10 } },
+  { id: 'claude-fable-5-1', name: 'Fable 5.1', note: 'the most capable, the dearest · $10 / $50', price: { in: 10, out: 50 } },
+  { id: 'claude-haiku-4-5', name: 'Haiku 4.5', note: 'the quickest and cheapest · $1 / $5', price: { in: 1, out: 5 } },
 ];
 // A model's short name (Opus 5.5), else its id as the API gives it.
 export const claudeName = (id) => CLAUDE_MODELS.find((m) => m.id === id)?.name ?? id;

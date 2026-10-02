@@ -10,6 +10,7 @@ import { Box, Text } from 'ink';
 import { C, MARK, fmtSecs } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
+import { money } from '../agent/spend.mjs';
 
 export const RAIL = 'ansi256(243)'; // #767676: C.faint (#585858) all but vanishes as a thin line on a dark window
 export const STRIP = 'ansi256(236)'; // #303030, the grey strip under your message
@@ -198,11 +199,13 @@ export const NoteNode = ({ it }) => {
 const clock = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 export function EndLine({ it, counts = '' }) {
   const lead = <Text color={RAIL}>{'  ╰─ '}</Text>;
-  if (it.reason === 'interrupted') return <Text>{lead}<Text color={C.warn}>■ {it.text ?? 'Interrupted · What should Agentic Coder do instead?'}</Text></Text>;
-  if (it.reason && it.reason !== 'done') return <Text>{lead}<Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''} · {clock(it.at)}</Text></Text>;
+  // What the request cost on a paid service (/remote, spend.mjs).
+  const cost = it.usd > 0 ? <Text color={C.dim}> · {money(it.usd)} for this request</Text> : null;
+  if (it.reason === 'interrupted') return <Text>{lead}<Text color={C.warn}>■ {it.text ?? 'Interrupted · What should Agentic Coder do instead?'}</Text>{cost}</Text>;
+  if (it.reason && it.reason !== 'done') return <Text>{lead}<Text color={it.left ? C.warn : C.dim}>{it.text ?? `Stopped (${it.reason})`}{it.left ? ` · ${plural(it.left, 'layout problem')} left` : ''}</Text><Text color={C.dim}>{it.secs >= 1 ? ` · ${fmtSecs(it.secs)}` : ''} · {clock(it.at)}</Text>{cost}</Text>;
   const left = it.left ? <Text color={C.warn}>✗ Ended with {plural(it.left, 'layout problem')} left · </Text> : null;
   const time = it.secs >= 1 ? `${it.past} for ${fmtSecs(it.secs)}${counts} · done ${clock(it.at)}` : `done ${clock(it.at)}`;
-  return <Text>{lead}{left}<Text color={it.left ? C.warn : C.accent}>{it.left ? '' : `${MARK} `}</Text><Text color={C.dim}>{time}</Text></Text>;
+  return <Text>{lead}{left}<Text color={it.left ? C.warn : C.accent}>{it.left ? '' : `${MARK} `}</Text><Text color={C.dim}>{time}</Text>{cost}</Text>;
 }
 
 // While a tool call is being written: the file and how many lines so far, read from what has

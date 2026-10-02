@@ -14,11 +14,13 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { Agent } from '../agent/agent.mjs';
 import { helpersFrom, helpersEnv, changeHelpers, helperRows } from './helpers.mjs';
 import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.mjs';
-import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
+import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHomeFolder } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath } from '../agent/tools.mjs';
 import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama, isOutOfMemory, setEndpoint, endpointOf } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
+import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
+import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, commitPick, closePick, modelChoices } from './remote-form.mjs';
 import { openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, ctxWord } from './remote-models.mjs';
@@ -70,6 +72,8 @@ const pick = (xs) => xs[Math.floor(Math.random() * xs.length)];
 let seq = 0;
 
 const home = homedir();
+// A path as you would write it: ~ for your home folder.
+const tildeOf = (p) => (p === home ? '~' : p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p);
 const short = (p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
 // A stopped server's process really gone (false after `ms`): two copies of the model never fit side by side.
 async function exited(pid, ms = 15000) {
@@ -92,6 +96,10 @@ function letGo(srv) {
   if (joined) stopServer(joined);
   return { others, done: stopped.then(() => (joined ? exited(joined.pid) : true)) };
 }
+
+// A remote's settings as a window keeps them for its after-close memory save: everything but a key
+// typed in (the key itself stays in the Keychain; `key` says only whether there is one).
+export const remoteConfOf = (r) => (r ? { ...r, key: Boolean(r.key) } : null);
 
 // "@path" in a prompt attaches that file for the model.
 // @picture.png and @doc.pdf too: a picture is attached as a picture (images), a
@@ -327,6 +335,59 @@ export function App({ opts, win, onRestart }) {
   // request (the notes, the design cards, how it was sorted) is held until the turn's first step,
   // then printed as one line; the turn's last layout check is kept for its end line.
   const railOn = useRef(false);
+  // The cost meter (/remote, spend.mjs): the footer's words, after each answer and every 15 s
+  // (today's total counts the other windows too); turnSpend: the window's dollars as a request began.
+  const turnSpend = useRef(0);
+  const [spend, setSpend] = useState('');
+  useEffect(() => {
+    const show = () => setSpend(spendLabel());
+    spendEvents.on('change', show);
+    const t = setInterval(() => { if (windowSpend().requests) show(); }, 15_000);
+    t.unref?.();
+    return () => { spendEvents.off('change', show); clearInterval(t); };
+  }, []);
+  // Several windows in one project (copies.mjs): this window's own copy (null: the folder itself),
+  // the other windows found there as it opened, and the changes last asked about.
+  const copyRef = useRef(null);
+  const [inCopy, setInCopy] = useState(false);
+  const othersRef = useRef([]);
+  const copyAsk = useRef({ key: null, changes: [], conflicts: [] });
+  useEffect(() => {
+    if (process.env.AGENTIC_WINDOWS === 'off') return undefined;
+    // A moment after the window opens (git is asked which project this is): nothing typed meanwhile waits on it.
+    const t = setTimeout(() => {
+      let kept = [];
+      try {
+        const m = copyAt(opts.cwd);
+        if (m) { copyRef.current = m; setInCopy(true); registerWindow(opts.cwd, { copyOf: m.original }); }
+        else {
+          const p = projectOf(opts.cwd);
+          registerWindow(opts.cwd);
+          othersRef.current = othersIn(p.root);
+          kept = keptCopies(p.root);
+        }
+      } catch {}
+      if (othersRef.current.length && !isHomeFolder(opts.cwd)) {
+        // Already answering a message typed at once: said in a line instead of asked.
+        if (agent.busy) push({ type: 'note', text: 'Another window is also working in this folder. /copy gives this window its own copy.', tone: 'warn' });
+        else openChoice('same-folder');
+      }
+      else if (kept.length) push({ type: 'note', text: `A window that closed earlier left changes in its own copy, not yet put back: open a window in ${tildeOf(kept[0].work)} and type /copy.`, tone: 'warn' });
+    }, 300);
+    // The window closes: its file goes, and so does its copy when nothing is left to put back.
+    let tidied = false;
+    const tidy = () => {
+      if (tidied) return;
+      tidied = true;
+      unregisterWindow();
+      const m = copyRef.current;
+      if (!m) return;
+      try { if (!copyChanges(m).changes.length) removeCopy(m); } catch {}
+    };
+    process.once('exit', tidy);
+    // The app closes (quit) before the process ends: tidy then.
+    return () => { clearTimeout(t); process.off('exit', tidy); tidy(); };
+  }, []);
   const pre = useRef(null);
   const lastCheck = useRef(null);
   const push = useCallback((...its) => {
@@ -509,6 +570,35 @@ export function App({ opts, win, onRestart }) {
         { id: 'skip', label: 'Send without the picture', note: `${model.name} answers, with a line saying a picture was attached` },
       ] };
     }
+    // Two windows in one project (copies.mjs): asked as a window opens there, and when its copy changed files.
+    if (id === 'same-folder') {
+      const o = othersRef.current[0];
+      const when = o?.at ?? o?.started;
+      const mins = when ? Math.max(1, Math.round((Date.now() - Date.parse(when)) / 60_000)) : null;
+      return { title: othersRef.current.length > 1 ? `${othersRef.current.length} other windows are already working in this folder` : 'Another window is already working in this folder',
+        blurb: o?.task ? `It is working on "${o.task}"${mins ? ` (${mins} min ago)` : ''}.` : 'It has not been given a task yet.', what: 'this folder', current: null, options: [
+          { id: 'copy', label: 'Work in my own copy', note: 'both windows can change files safely; I ask before putting my changes back' },
+          { id: 'share', label: 'Share this folder', note: 'both change the same files, so one window can overwrite the other\'s work' },
+        ] };
+    }
+    if (id === 'copy-back') {
+      const list = copyAsk.current.lines ?? [];
+      const word = list.length === 1 ? 'file' : 'files';
+      return { title: `This window worked in its own copy and changed ${list.length} ${word}`,
+        blurb: `${list.slice(0, 6).map((l) => `${l.path} ${l.status === 'D' ? 'removed' : `+${l.add} −${l.del}${l.status === 'A' ? ' new file' : ''}`}`).join(' · ')}${list.length > 6 ? ` · and ${list.length - 6} more` : ''}`, what: 'the changes', current: null, options: [
+          { id: 'back', label: 'Put them back into the real folder', note: `into ${tildeOf(copyRef.current?.original ?? '')}; a file the other window also changed is merged` },
+          { id: 'show', label: 'Show me the changes first', note: 'the lines that changed, then this question again' },
+          { id: 'later', label: 'Not now', note: 'the copy stays; /copy brings this question back' },
+        ] };
+    }
+    if (id === 'copy-conflict') {
+      const c = copyAsk.current.conflicts ?? [];
+      return { title: `${c.length === 1 ? '1 file was' : `${c.length} files were`} changed in both windows: ${c.slice(0, 3).join(', ')}${c.length > 3 ? '…' : ''}`,
+        blurb: 'The same lines changed here and in the real folder, so these were not put back. The rest went back.', what: 'those files', current: null, options: [
+          { id: 'leave', label: 'Leave those as they are', note: 'the real folder keeps its version; /copy asks again later' },
+          { id: 'mine', label: 'Use this window\'s version for those', note: 'overwrites the other window\'s change in those files' },
+        ] };
+    }
     if (id === 'remote-down') {
       const local = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
       const why = remoteRef.current.why ?? 'it did not answer';
@@ -628,6 +718,49 @@ export function App({ opts, win, onRestart }) {
   };
   const openChoice = (id) => { const c = choiceMenu(id); setPicker({ kind: 'choice', id, ...c, index: Math.max(0, c.options.findIndex((o) => o.id === c.current)) }); };
 
+  // ---- Several windows in one project (copies.mjs) ----
+  // Makes this window's own copy and moves it there (its tests, its AGENTS.md, its commands).
+  const startCopy = () => {
+    push({ type: 'note', text: 'Making your own copy of this folder…', tone: 'dim' });
+    setTimeout(async () => {
+      try {
+        const m = makeCopy(agent.cwd);
+        agent.moveTo(m.work);
+        try { await agent.rewind?.whenMoved(); } catch {}
+        copyRef.current = m;
+        setInCopy(true);
+        registerWindow(m.work, { copyOf: m.original });
+        push({ type: 'note', text: `Working in your own copy now (${m.kind === 'worktree' ? 'a git worktree' : 'a copy of the folder'} at ${tildeOf(m.work)}). When a request changes files, I ask before putting them back into ${tildeOf(m.original)}.`, tone: 'dim' });
+      } catch (e) {
+        push({ type: 'note', text: `Could not make a copy: ${e.message}. This window shares the folder.`, tone: 'warn' });
+      }
+    }, 30);
+  };
+  // After a request (or /copy): the copy's changes not yet put back, asked about once per set.
+  // force: ask even about changes already answered with "Not now".
+  const askCopyBack = ({ force = false } = {}) => {
+    const m = copyRef.current;
+    if (!m) return false;
+    let changes;
+    try { changes = copyChanges(m).changes; } catch (e) { push({ type: 'note', text: `Could not look at the copy: ${e.message}.`, tone: 'warn' }); return false; }
+    if (!changes.length) return false;
+    const key = changes.map((c) => `${c.path}:${c.to}`).join('|');
+    if (!force && key === copyAsk.current.key) return false;
+    copyAsk.current = { ...copyAsk.current, key, changes, lines: changeLines(m, changes) };
+    openChoice('copy-back');
+    return true;
+  };
+  const doPutBack = (opts2 = {}) => {
+    const m = copyRef.current;
+    if (!m) return;
+    let r;
+    try { r = putBack(m, opts2); } catch (e) { push({ type: 'note', text: `Could not put the changes back: ${e.message}. They stay in the copy.`, tone: 'error' }); return; }
+    const n = r.applied.length;
+    if (n) push({ type: 'note', text: `Put ${n === 1 ? '1 file' : `${n} files`} back into ${tildeOf(m.original)}${r.merged.length ? ` (${r.merged.length} merged with the other window's changes)` : ''}.`, tone: 'dim' });
+    copyAsk.current.key = null;
+    if (r.conflicts.length) { copyAsk.current.conflicts = r.conflicts; setTimeout(() => openChoice('copy-conflict'), 60); }
+  };
+
   // ---- /remote: the model on another machine (remote-form.mjs, models/runtime/remote.mjs) ----
   // To the remote: connect first (the tunnel when it goes by SSH, the key from
   // the Keychain, the check), and only then let the model on this Mac go.
@@ -679,6 +812,9 @@ export function App({ opts, win, onRestart }) {
     }
     remoteRef.current.conn = conn;
     remoteRef.current.why = null;
+    // The service this window connected with (never its key): its memory save after you close it goes
+    // there too, not to whichever service another window saved since (autosave.mjs).
+    agent.remoteConf = remoteConfOf(r);
     serverRef.current = null;
     // The Mac's own model is let go: back on this Mac, it is off until /start.
     wantRef.current = false;
@@ -722,6 +858,7 @@ export function App({ opts, win, onRestart }) {
     const back = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
     localModelRef.current = null;
     agent.slots = null;
+    agent.remoteConf = null;
     if (!load && !wantRef.current && !loadsAtOpen()) {
       agent.url = 'http://127.0.0.1:0';
       setModel(back);
@@ -929,6 +1066,7 @@ export function App({ opts, win, onRestart }) {
     if (before && before.url !== conn.url) before.stop();
     remoteRef.current.conn = conn;
     remoteRef.current.why = null;
+    agent.remoteConf = remoteConfOf(r);
     const src = sourceOf(r);
     const saved = saveSettings({ remote: r, ...(settings.remotes?.[src] ? { remotes: { ...settings.remotes, [src]: { ...settings.remotes[src], model: id } } } : {}) });
     settings.remote = saved.remote;
@@ -1230,6 +1368,27 @@ export function App({ opts, win, onRestart }) {
       switchService(pick.m);
       return;
     }
+    if (id === 'same-folder') {
+      if (value !== 'copy') { push({ type: 'note', text: 'Sharing this folder with the other window: both can change the same files.', tone: 'dim' }); return; }
+      if (agent.busy) { push({ type: 'note', text: 'Wait for the reply to finish, then type /copy to work in your own copy.', tone: 'warn' }); return; }
+      startCopy();
+      return;
+    }
+    if (id === 'copy-back') {
+      if (value === 'show') {
+        let diff = '';
+        try { diff = copyDiff(copyRef.current); } catch (e) { diff = `Could not show them: ${e.message}`; }
+        push({ type: 'note', text: diff || 'Nothing changed in the copy.', tone: 'dim' });
+        setTimeout(() => openChoice('copy-back'), 60);
+      } else if (value === 'back') doPutBack();
+      else push({ type: 'note', text: 'Your changes stay in the copy for now. /copy brings the question back.', tone: 'dim' });
+      return;
+    }
+    if (id === 'copy-conflict') {
+      if (value === 'mine') doPutBack({ only: copyAsk.current.conflicts, force: true });
+      else push({ type: 'note', text: `Left ${copyAsk.current.conflicts.join(', ')} as they are in the real folder; /copy asks again later.`, tone: 'dim' });
+      return;
+    }
     if (id === 'remote-down') {
       if (value === 'retry') useRemote(settings.remote);
       else if (value === 'local') useLocal({ note: 'This window uses the model on this Mac for now; /remote is still on for the next start.', load: true });
@@ -1423,7 +1582,9 @@ export function App({ opts, win, onRestart }) {
     };
     const addPre = (patch) => { pre.current = { ...(pre.current ?? {}), ...patch }; setLive((l) => ({ ...l, pre: pre.current })); };
     const offs = [
-      on('turn-start', () => { railOn.current = true; pre.current = null; lastCheck.current = null; const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
+      // A busy service (busy.mjs): the spinner counts down to the next try.
+      on('busy', ({ until }) => setLive((l) => (l.phase ? { ...l, busyUntil: until } : l))),
+      on('turn-start', () => { try { const u = [...agent.messages].reverse().find((x) => x.role === 'user'); updateWindow({ task: String(typeof u?.content === 'string' ? u.content : u?.content?.find?.((c) => c.type === 'text')?.text ?? '').replace(/\s+/g, ' ').slice(0, 80), at: new Date().toISOString() }); } catch {} turnSpend.current = windowSpend().usd; railOn.current = true; pre.current = null; lastCheck.current = null; const [verb, past] = pick(VERBS); setLive({ phase: 'working', turnStart: Date.now(), verb, past, tokens: 0, waiting: true, rail: true }); }),
       // A new reply: its step clock starts, and its room and thinking cap feed the meters.
       on('waiting', ({ room, thinkCap } = {}) => setLive((l) => ({ ...l, waiting: true, thinking: null, text: null, writing: null, firstTokenAt: null, streamTokens: 0, liveTps: null, stepStart: Date.now(), room, thinkCap, task: null }))),
       // A reply that will not run as it was (cut off, repeating itself): its live lines go.
@@ -1481,11 +1642,16 @@ export function App({ opts, win, onRestart }) {
         // 41s · 5 steps · done 12:58 PM"), and the layout problems its last check left.
         const left = lastCheck.current?.problems?.length ?? 0;
         const at = Date.now();
-        if (reason === 'interrupted') { push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at }); setPlaceholder('Tell Agentic Coder what to do instead'); }
-        else if (reason === 'done') push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left });
-        else push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left });
+        // What this request cost on a paid service (spend.mjs), for its end line.
+        const spent = windowSpend().usd - (turnSpend.current ?? 0);
+        const usd = spent > 0 ? spent : undefined;
+        if (reason === 'interrupted') { push({ type: 'done', reason, text: 'Interrupted · What should Agentic Coder do instead?', secs, at, usd }); setPlaceholder('Tell Agentic Coder what to do instead'); }
+        else if (reason === 'done') push({ type: 'done', reason, past, secs, at, steps, reads, thinkTokens, left, usd });
+        else push({ type: 'done', reason, text: END_WORDS[reason] ?? `Stopped (${reason})`, secs, at, left, usd });
         railOn.current = false;
         pre.current = null;
+        // In its own copy: changed files are offered back to the real folder (copies.mjs).
+        if (copyRef.current && !queuedRef.current) setTimeout(() => askCopyBack(), 60);
         if (reason === 'declined') setPlaceholder('Tell Agentic Coder what to do instead');
         saveNow();
         const q = queuedRef.current;
@@ -1944,7 +2110,7 @@ export function App({ opts, win, onRestart }) {
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         {
           // Back in the folder Agentic Coder was started in, if a "Work in <project>?" moved it.
-          const back = agent.startOver(opts.cwd);
+          const back = agent.startOver(copyRef.current?.work ?? opts.cwd); // a window in its own copy stays there
           sessionRef.current = { id: newSessionId(), title: null, items: [] };
           // Like Claude Code's /clear: nothing of the old conversation is left on
           // the screen, in the scrollback, behind ctrl+o or in the status line;
@@ -1954,7 +2120,7 @@ export function App({ opts, win, onRestart }) {
           setStats({});
           closeBtw();
           // The start page again, listing the conversation just cleared (a new key: its rows are measured afresh).
-          try { recentRef.current = listSessions(opts.cwd); } catch {}
+          try { recentRef.current = listSessions(copyRef.current?.work ?? opts.cwd); } catch {}
           itemsRef.current = [{ key: `welcome${++seq}`, type: 'welcome' }];
           holdRef.current = !opts.url && !remoteRef.current?.on; // live again until the next message
           setItems(itemsRef.current);
@@ -2231,6 +2397,15 @@ export function App({ opts, win, onRestart }) {
         if (r.mode) setMode(r.mode);
         if (r.panel) push({ type: 'panel', ...r.panel });
         if (r.text) push({ type: 'note', text: r.text, tone: r.tone ?? 'dim' });
+        break;
+      }
+      // Not in the / menu (it holds what fits 80 × 24): the question a copy asks after a request,
+      // again; outside a copy, the copy question for this folder.
+      case 'copy': {
+        if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
+        if (copyRef.current) { if (!askCopyBack({ force: true })) push({ type: 'note', text: 'Nothing in your copy waits to be put back.', tone: 'dim' }); break; }
+        othersRef.current = (() => { try { return othersIn(projectOf(agent.cwd).root); } catch { return []; } })();
+        openChoice('same-folder');
         break;
       }
       case 'rewind':
@@ -3011,6 +3186,8 @@ export function App({ opts, win, onRestart }) {
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),
+    // The footer's right side starts with these (screen.jsx footerParts): this window's own copy, the cost meter.
+    spend: [inCopy ? 'own copy' : '', spend].filter(Boolean).join(' · '),
     weightsBadge: model.edited
       ? (editedSaved[model.edited.base] && editedSaved[model.edited.base].saved !== model.edited.saved ? '✱ newer edits saved · /model to reload'
         : `✱ on edited weights (${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'})`)
