@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'n
 import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS } from '../registry.mjs';
-import { CLAUDE_HOST, CLAUDE_CTX, claudeProbe } from './claude.mjs';
+import { CLAUDE_HOST, CLAUDE_CTX, CLAUDE_MODELS, claudeProbe } from './claude.mjs';
 import { ollamaModel, ollamaCtx, isOutOfMemory } from './ollama.mjs';
 
 export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
@@ -334,6 +334,9 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
       if (!named && out.models.length > 1) steps.push({ ok: true, text: `using ${out.model} of ${out.models.length}` });
       const picked = r.body.data.find((m) => m.id === out.model);
       out.ctx = ctxOf(picked);
+      // What it costs, when the list says (OpenRouter: dollars a token, as text): the cost meter's price.
+      const pin = Number(picked?.pricing?.prompt), pout = Number(picked?.pricing?.completion);
+      if (Number.isFinite(pin) && Number.isFinite(pout)) out.price = { in: pin * 1e6, out: pout * 1e6 };
       // An Ollama service says more than its model list: what the model can do
       // (pictures, thinking, tools) and the context it runs at (ollama.mjs).
       const o = await ollamaModel({ url, key, model: out.model, signal, timeoutMs: Math.min(timeoutMs, 5000) }).catch(() => null);
@@ -489,7 +492,10 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
     const numCtx = o ? ollamaCtxOf(r, info.model) || (o.loaded ? o.loadedCtx : null) : null;
     // Claude: the server's own (1M today), kept to CLAUDE_CTX unless the form asks for more.
     const ctx = numCtx || r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
-    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family } : {}) });
+    // price: dollars a million tokens, in and out (the cost meter, terminal spend.mjs); free: a service of your own.
+    const price = r.kind === 'claude' ? CLAUDE_MODELS.find((m) => m.id === info.model)?.price ?? null : info.price ?? null;
+    const free = !price && (Boolean(o) || r.kind === 'llama' || isPrivateHost(parseAddress(r.address ?? '')?.host ?? ''));
+    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family } : {}) });
     return {
       // vision: it can take a picture (a llama.cpp server says so; OpenAI-compatible and Claude: yes)
       url, ctx, numCtx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,

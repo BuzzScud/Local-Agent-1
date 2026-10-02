@@ -8,6 +8,7 @@ import React, { useRef, useLayoutEffect, useState } from 'react';
 import { Box, Text, Static, renderToString, measureElement, useCursor } from 'ink';
 import { cursorCell, rowText, selection, promptTextWidth } from './edit-input.mjs';
 import { C, MARK, spinFrame, fmtSecs, fmtTok } from '../ui/theme.mjs';
+import { money } from '../agent/spend.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
@@ -222,7 +223,7 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     case 'machine': return <MachineLine it={it} />;
     case 'thinking': return it.rail ? <ThoughtNode it={it} /> : <Text color={C.think} italic>∴ Thought for {fmtSecs(Math.max(1, it.secs))} <Text color={C.faint}>(ctrl+o to show thinking)</Text></Text>;
     // The line a finished turn leaves behind: "⠿ Worked for 41s · done 12:58 PM".
-    case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}</Text></Text>;
+    case 'done': return it.rail ? <EndLine it={it} counts={doneCounts(it)} /> : <Text><Text color={C.accent}>{MARK}</Text><Text color={C.dim}> {it.past} for {fmtSecs(it.secs)}{doneCounts(it)} · done {clock(it.at)}{it.usd > 0 ? ` · ${money(it.usd)} for this request` : ''}</Text></Text>;
     case 'text': return it.rail ? <ReplyNode text={it.text} /> : <Row><Markdown text={it.text} /></Row>;
     case 'tool': return it.rail ? <ToolNode it={it} /> : <ToolView it={it} width={width} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
@@ -358,7 +359,9 @@ export function Spinner({ app }) {
   // On the rail the step above already says what it does (writing a file, thinking): the
   // line says this step's time and speed instead; between replies, what the app does itself.
   const step = live.rail && live.stepStart ? Math.max(0, (now - live.stepStart) / 1000) : null;
-  const pace = !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
+  // A busy service (busy.mjs): the seconds to its next try.
+  const busy = live.busyUntil > now ? ` · waiting for the service, trying again in ${Math.ceil((live.busyUntil - now) / 1000)} s` : '';
+  const pace = busy ? busy : !live.rail ? '' : live.task ? ` · ${live.task}` : live.waiting ? ' · reading' : live.liveTps ? ` · ↓ ${live.liveTps.toFixed(1)} tok/s` : '';
   const doing = live.rail ? '' : doingWords(live);
   const note = `${step !== null ? ` · this step ${fmtSecs(step)}` : ` · ↓ ${fmtTok(live.tokens)} tokens`}${pace}${doing ? ` · ${doing}` : ''}${live.flowStep ? ` · step ${live.flowStep.index + 1} of ${live.flowStep.count}: ${live.flowStep.text}` : ''}`;
   const icon = spinFrame(app.spinner, secs, { tokens: live.tokens, sinceToken: live.lastTokenAt ? (now - live.lastTokenAt) / 1000 : Infinity });
@@ -645,10 +648,14 @@ export function footerParts(app) {
     ...(app.modelState?.remote ? ls.slice(0, 2) : ls).map((label) => ({ label, mac, cycle: false })),
     ...ls.map((label) => ({ label, mac: '', cycle: false })),
   ];
-  const textOf = (t) => [t.label, t.mac && `● ${t.mac}`, badges, modeText && `${modeText}${t.cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
-  const pick = tries.find((t) => textOf(t).length <= room) ?? tries.at(-1);
+  // The cost meter (/remote, spend.mjs) leads the right side while it fits, and goes first when it does not.
+  const spend = app.spend ?? '';
+  const all = spend ? [...tries.map((t) => ({ ...t, spend })), ...tries] : tries;
+  const textOf = (t) => [t.spend, t.label, t.mac && `● ${t.mac}`, badges, modeText && `${modeText}${t.cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
+  const pick = all.find((t) => textOf(t).length <= room) ?? all.at(-1);
   const from = width - 2 - textOf(pick).length + 1;
-  return { left, label: pick.label, mac: pick.mac, badges, cycle: pick.cycle, labelAt: pick.label ? { from, to: from + pick.label.length - 1 } : null };
+  const lead = pick.spend ? pick.spend.length + 3 : 0; // the label starts after the cost meter and its " · "
+  return { left, spend: pick.spend ?? '', label: pick.label, mac: pick.mac, badges, cycle: pick.cycle, labelAt: pick.label ? { from: from + lead, to: from + lead + pick.label.length - 1 } : null };
 }
 
 const WHITE = 'ansi256(255)'; // the start page's white (start.jsx)
@@ -665,6 +672,7 @@ function Footer({ app }) {
   const dot = on ? C.accent : !ms?.remote ? C.dim : ms.state === 'down' ? C.bad : C.warn;
   const named = ms?.remote && on && p.label.startsWith(`● ${ms.name}`);
   const pieces = [
+    p.spend ? <Text color={C.dim}>{p.spend}</Text> : null,
     p.label ? <Text color={C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
     p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,

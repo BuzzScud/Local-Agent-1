@@ -10,13 +10,15 @@ import { thinkingKwargs, thinkingLevel, endpointOf, authHeaders, isOutOfMemory }
 import { streamClaude } from './claude.mjs';
 import { openAIMessages, ollamaMessages } from './images.mjs';
 import { splitThink } from './think-tags.mjs';
+import { withBusyRetry, retryAfterHeader } from './busy.mjs';
+import { recordSpend } from './spend.mjs';
 
 // What only llama.cpp's server reads: the slot, its prompt cache, the
 // thinking switch and cap, its extra sampling. Not sent to another kind.
 const LLAMA_ONLY = ['cache_prompt', 'id_slot', 'chat_template_kwargs', 'thinking_budget_tokens', 'top_k', 'min_p', 'repeat_penalty', 'typical_p', 'n_probs'];
 // Standard fields a server may still refuse (an older one, or a model that
 // cannot think): named in its error, they are left out of the next call to it.
-const OPTIONAL = ['reasoning_effort', 'parallel_tool_calls', 'stream_options', 'presence_penalty', 'frequency_penalty', 'top_p', 'temperature', 'seed'];
+const OPTIONAL = ['usage', 'reasoning_effort', 'parallel_tool_calls', 'stream_options', 'presence_penalty', 'frequency_penalty', 'top_p', 'temperature', 'seed'];
 // Ollama names the ability, not the field: "\"llama3.2:3b\" does not support thinking".
 // Only those words leave the tools out (a 400 about one tool's name must not):
 // the model is then asked without them, and answers in words.
@@ -25,8 +27,9 @@ const ABILITY = { thinking: 'reasoning_effort', tools: 'tools' };
 // (Ollama), and one that cannot think says nothing about the next.
 const refused = new Map(); // `${url} ${model}` → the fields that model refused
 const refusedKey = (url, model) => `${url ?? ''}\u0000${model ?? ''}`;
-// An error the server answered with (its status kept), and the one for a model that does not fit.
-const serverError = (text, status) => Object.assign(new Error(text), { status });
+// An error the server answered with (its status kept, and how long it asked to wait: busy.mjs),
+// and the one for a model that does not fit.
+const serverError = (text, status, res) => Object.assign(new Error(text), { status, ...(res?.headers?.get?.('retry-after') ? { retryAfter: retryAfterHeader(res.headers.get('retry-after')) } : {}) });
 const roomError = (ep, status) => serverError(`the service has no room to load ${ep.model} (out of GPU memory): /model picks another, or /effort a smaller Context`, status);
 
 // The body as an OpenAI-compatible server takes it (exported for the tests).
@@ -56,10 +59,21 @@ export function refusedField(status, text, body) {
 // parallel: the model may send several calls in one reply (when the model decides, agent/way.mjs).
 // A model whose thinking comes between tags of its own (thinkTags: K2 Horizon)
 // has it sorted from its answer on the way (think-tags.mjs).
+// A remote that says it is busy is asked again after a wait (busy.mjs): { type: 'busy' } events
+// come meanwhile. The wait is shared by every window on the same service (its label).
 export async function* streamChat(args) {
-  const tags = args.model?.thinkTags;
-  if (!tags?.length || endpointOf(args.url)?.kind === 'claude') { yield* streamRaw(args); return; }
-  yield* splitThink(streamRaw(args), tags, { thinking: Boolean(args.thinking) });
+  const ep = endpointOf(args.url);
+  const once = () => {
+    const tags = args.model?.thinkTags;
+    if (!tags?.length || ep?.kind === 'claude') return streamRaw(args);
+    return splitThink(streamRaw(args), tags, { thinking: Boolean(args.thinking) });
+  };
+  if (!ep?.remote) { yield* once(); return; }
+  // Each answer's cost goes on the meter (spend.mjs), whoever asked: the conversation, a flow, a side job.
+  for await (const ev of withBusyRetry(once, { key: ep.label ?? args.url, signal: args.signal })) {
+    if (ev.type === 'done' && ev.usage) { const usd = recordSpend(ep, ev.usage); yield usd == null ? ev : { ...ev, usd }; continue; }
+    yield ev;
+  }
 }
 
 async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false }) {
@@ -87,6 +101,9 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
   if (extra) Object.assign(body, extra);
   // The effort the model's level carries; a level without one (a model that cannot think) sends none.
   if (ep?.kind === 'openai') body = openaiBody(body, { model: ep.model, effort: body.chat_template_kwargs?.reasoning_effort ?? (thinking && !model?.thinkingLevels?.length ? effort : null), thinking, url });
+  // A service whose model list carries prices (OpenRouter) says what each answer cost when asked
+  // (its usage accounting): the cost meter's own figure (spend.mjs).
+  if (ep?.kind === 'openai' && ep.price) body.usage = { include: true };
   let res;
   for (let tries = 0; ; tries++) {
     res = await fetch(`${url}/v1/chat/completions`, {
@@ -103,7 +120,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
     }
     if (ep && isOutOfMemory(text)) throw roomError(ep, res.status);
     if (ep && (res.status === 401 || res.status === 403)) throw serverError(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`, res.status);
-    throw serverError(`${ep ? `remote model server (${ep.label ?? url})` : 'model server'} ${res.status}: ${text.slice(0, 300)}`, res.status);
+    throw serverError(`${ep ? `remote model server (${ep.label ?? url})` : 'model server'} ${res.status}: ${text.slice(0, 300)}`, res.status, res);
   }
   const decoder = new TextDecoder();
   let buf = '';
@@ -175,7 +192,7 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
     if (field) { refused.set(k, new Set([...(refused.get(k) ?? []), field])); drop(); continue; }
     if (isOutOfMemory(text)) throw roomError(ep, res.status);
     if (res.status === 401 || res.status === 403) throw serverError(`the remote model (${ep.label ?? url}) did not accept the API key (${res.status}); change it in /remote`, res.status);
-    throw serverError(`remote model server (${ep.label ?? url}) ${res.status}: ${text.slice(0, 300)}`, res.status);
+    throw serverError(`remote model server (${ep.label ?? url}) ${res.status}: ${text.slice(0, 300)}`, res.status, res);
   }
   const decoder = new TextDecoder();
   let buf = '';

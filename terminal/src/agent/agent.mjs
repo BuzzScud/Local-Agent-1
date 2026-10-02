@@ -6,6 +6,7 @@ import { endpointOf } from '../../../models/index.mjs';
 import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
+import { isBusy } from './busy.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
@@ -2042,6 +2043,13 @@ export class Agent extends EventEmitter {
           c.args += ev.args;
           this.emit('tool-writing', { name: c.name, args: c.args, tokens: tokensOf(c.args) });
           if (isLooping(c.args)) { turn.looping = true; local.abort(); break; }
+        } else if (ev.type === 'busy') {
+          // The service said "too many requests": the client waits and asks again (busy.mjs).
+          const secs = Math.max(1, Math.round(ev.waitMs / 1000));
+          this.emit('note', { text: ev.shared
+            ? `Another window was told the service is busy: waiting ${secs} s with it, then asking (try ${ev.next} of ${ev.of}).`
+            : `The service is busy: too many requests right now. Trying again in ${secs} s (try ${ev.next} of ${ev.of}). Your conversation stays as it is.`, tone: 'warn' });
+          this.emit('busy', { waitMs: ev.waitMs, until: Date.now() + ev.waitMs, next: ev.next, of: ev.of });
         } else if (ev.type === 'server') {
           // A web search or page done on the server's side (the Claude API): shown as a finished step.
           this.emit('tool', { id: ev.id, name: ev.name, ...display(ev.name, ev.args), view: ev.view, error: ev.error });
@@ -2068,7 +2076,9 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: this.model?.remote ? 'The remote model stopped answering; connecting again…' : 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
-      } else if (retry && /context|exceed/i.test(e.message)) {
+      // A conversation too long for the model. Not a busy service: "Rate limit exceeded" is a 429,
+      // already waited for and asked again (busy.mjs); summarizing would only lose the conversation.
+      } else if (retry && !e.busy && !isBusy(e) && /context|exceed/i.test(e.message)) {
         this.emit('note', { text: 'The conversation outgrew the model’s memory; summarizing it and trying again…', tone: 'warn' });
         await this.compact(signal);
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });

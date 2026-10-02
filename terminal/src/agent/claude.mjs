@@ -14,6 +14,7 @@
 //     model where that is offered (fallbacks: 'default').
 import { claudeSdk, claudeClient, claudeCaps } from '../../../models/index.mjs';
 import { keptImages, imageLabel } from './images.mjs';
+import { retryAfterHeader } from './busy.mjs';
 
 // A picture as Claude takes it (a still-kept one), or a line of text for an older one.
 const imageBlock = (img, kept) => (kept.has(img) ? { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } } : { type: 'text', text: imageLabel(img) });
@@ -177,7 +178,10 @@ function refusedField(message, params) {
 // server: a connection lost is retried (reconnect), a full context is summarized.
 function friendly(e, Anthropic) {
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return new Error(`the remote model (Claude API) did not accept the API key (${e.status}); change it in /remote`);
-  if (e instanceof Anthropic.RateLimitError) return new Error('the Claude API is rate limiting this key (429): wait a moment, then ask again');
+  // Busy (a rate limit, or 529 overloaded) keeps its status and the wait it asked for: the client waits and asks again (busy.mjs).
+  const after = retryAfterHeader(typeof e?.headers?.get === 'function' ? e.headers.get('retry-after') : e?.headers?.['retry-after']);
+  if (e instanceof Anthropic.RateLimitError) return Object.assign(new Error('the Claude API is rate limiting this key (429): wait a moment, then ask again'), { status: 429, ...(after != null ? { retryAfter: after } : {}) });
+  if (e instanceof Anthropic.APIError && e.status === 529) return Object.assign(new Error(`Claude API 529: overloaded (${String(e.message).slice(0, 200)})`), { status: 529, ...(after != null ? { retryAfter: after } : {}) });
   if (e instanceof Anthropic.APIConnectionError) return new Error(`fetch failed: the Claude API could not be reached (${e.message})`);
   if (e instanceof Anthropic.BadRequestError && /too long|too many tokens|context/i.test(e.message)) return new Error(`the conversation exceeds the model's context window (${e.message.slice(0, 200)})`);
   if (e instanceof Anthropic.APIError) return new Error(`Claude API ${e.status ?? ''}: ${String(e.message).slice(0, 300)}`);
@@ -240,7 +244,8 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
       const final = await stream.finalMessage();
       const u = final.usage ?? {};
       const inTok = (u.input_tokens ?? usageIn?.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-      usedTotal = { in: inTok, out: usedTotal.out + (u.output_tokens ?? usageOut) };
+      // cached: the part of the input read from the prompt cache, which costs a tenth (the cost meter, spend.mjs).
+      usedTotal = { in: inTok, out: usedTotal.out + (u.output_tokens ?? usageOut), cached: u.cache_read_input_tokens ?? 0 };
       parts.push(final.content);
       // Paused in the middle of its web searches: send it back and let it go on.
       if (final.stop_reason === 'pause_turn' && parts.length <= PAUSES) { tries = -1; continue; }
@@ -252,7 +257,7 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
       remember(replyKey(ids, text), thoughts);
       if (content.some((b) => SERVER_BLOCK.test(b.type))) remember(replyKey(ids, text), content, WHOLE);
       if (final.stop_reason === 'refusal' && !wrote) yield { type: 'text', text: `(Claude declined this request${final.stop_details?.category ? `: ${final.stop_details.category}` : ''}. Say it another way, or pick another model in /remote.)` };
-      yield { type: 'done', finish: FINISH[final.stop_reason ?? finish] ?? 'stop', usage: { prompt_tokens: usedTotal.in, completion_tokens: usedTotal.out }, timings: null };
+      yield { type: 'done', finish: FINISH[final.stop_reason ?? finish] ?? 'stop', usage: { prompt_tokens: usedTotal.in, completion_tokens: usedTotal.out, cached_tokens: usedTotal.cached ?? 0 }, timings: null };
       return;
     } catch (e) {
       if (signal?.aborted) throw e;
