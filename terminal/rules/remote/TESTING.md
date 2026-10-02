@@ -1,6 +1,6 @@
 # Testing
 
-Read this before you check a change, or when the user asks you to test something.
+Read this before you check a change, run the tests, or say that something works.
 
 ## Check a change
 
@@ -12,3 +12,11 @@ Read this before you check a change, or when the user asks you to test something
 6. A test that failed before your change: say so, and do not fix it unless asked.
 7. Never weaken or delete a test to make it pass. Never say a check passed that you did not run.
 8. In the answer: the command you ran and its result line.
+
+## Prove the claim
+
+A passing suite is not proof that the request works. Before you say it works:
+
+1. Run the exact thing the user asked about: the bug's reproducing command, the new flag, the page. Show its output or exit code, not "should work".
+2. For a bug: show it failing before your fix and passing after, with the same command.
+3. Say what you did not check (another platform, a slow network, real data you do not have).

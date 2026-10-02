@@ -116,9 +116,9 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   The Arena's Skills check measures a skill on the real model.
 
 - **The remote set** (`terminal/rules/remote/`, 2 Oct 2026, the owner's ask: "make a separate one for remote
-  models to follow, since they have more capabilities"): HARNESS.md, its own TOOLS.md and SKILLS.md, and nine guides
+  models to follow, since they have more capabilities"): HARNESS.md, its own TOOLS.md and SKILLS.md, and fourteen guides
   the model opens with Read at `RULES/<NAME>.md` (prompt-files.mjs `readGuides`, `readGuidePath`; prompt.mjs
-  `remotePrompt`). The owner's picks: every remote model gets it (auto), all twelve files, the guides as a list the
+  `remotePrompt`). The owner's picks: every remote model gets it (auto), all twelve files (seventeen since the same day's second round: CONTEXT, PERMISSIONS with a live table, DEBUGGING, RECOVERY, SECURITY; verification, handoff, style and packages merged into TESTING, REVIEW, ANSWERS and HARNESS), the guides as a list the
   model opens (like Claude Code's skills), and the app still decides. The agent picks the set each message
   (`rulesSet()`: settings.json `"instructions"`, saved from the hub's tab 09, and `AGENTIC_INSTRUCTIONS`
   over it; not an /effort row, since that panel is as tall as 80×24 allows); a prompt built for the other set is built

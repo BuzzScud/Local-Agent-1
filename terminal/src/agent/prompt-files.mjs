@@ -36,7 +36,7 @@ export const BUILT_IN = Object.freeze({ tools: await load('tools'), skills: awai
 // The remote set (2 Oct 2026): terminal/rules/remote/ holds the instructions for a model on
 // another machine (/remote), which can take more than the 9B on this Mac. HARNESS.md is its
 // opening, how it works and the rules (in place of the built-in ones), TOOLS.md its Tool use
-// lines, SKILLS.md its skills, and nine guides it is shown by name and opens with Read at
+// lines, SKILLS.md its skills, and fourteen guides it is shown by name and opens with Read at
 // RULES/<NAME>.md when one fits. A file missing from that folder: the local one of the same
 // name (TOOLS, SKILLS), the copy built into the app (HARNESS), or left out (a guide).
 // Which set: settings.json "instructions" (auto, local or remote; the hub's Instructions → 09 saves
@@ -45,7 +45,8 @@ export const BUILT_IN = Object.freeze({ tools: await load('tools'), skills: awai
 // panel is as tall as an 80×24 window allows.
 export const RULE_SETS = ['auto', 'local', 'remote'];
 export const REMOTE_DIR = 'remote';
-export const GUIDES = Object.freeze(['PLANNING', 'TESTING', 'REVIEW', 'BUG-FIXING', 'DESIGN', 'SUBAGENTS', 'MEMORY', 'GIT', 'ANSWERS']);
+// Listed in this order, roughly as a task goes: plan, look, change, check, recover, report.
+export const GUIDES = Object.freeze(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MEMORY', 'GIT', 'ANSWERS']);
 // Listed only when the Agent tool is offered (agent.mjs agentsOn).
 export const AGENTS_GUIDE = 'SUBAGENTS';
 export const instructionsEnv = (env = process.env) => env.AGENTIC_INSTRUCTIONS;
@@ -64,16 +65,21 @@ async function loadRemote() {
   const text = async (m) => { const t = (await m).default; return t.startsWith('/$bunfs/') ? readFileSync(t, 'utf8') : t; };
   try {
     if (typeof Bun !== 'undefined') {
-      // Literal paths, so the one-file app carries all twelve inside it.
+      // Literal paths, so the one-file app carries all seventeen inside it (in GUIDES' order after the first three).
       const all = await Promise.all([
         text(import('../../rules/remote/HARNESS.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/TOOLS.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/SKILLS.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/PLANNING.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/CONTEXT.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/PERMISSIONS.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/TESTING.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/REVIEW.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/DEBUGGING.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/BUG-FIXING.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/RECOVERY.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/DESIGN.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/SECURITY.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/SUBAGENTS.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/MEMORY.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/GIT.md', { with: { type: 'text' } })),
@@ -297,7 +303,7 @@ export function readGuidePath(cwd, p, guides) {
   if (!m[1]) return { text: guidesList(guides, { path }) };
   const g = guides.find((x) => x.name === m[1].toUpperCase());
   if (!g) return { error: `No guide ${path}/${m[1]}. The guides: ${guides.map((x) => `${path}/${x.name}.md`).join(', ')}.` };
-  return { text: `${path}/${g.name}.md:\n${g.body}` };
+  return { name: g.name, text: `${path}/${g.name}.md:\n${g.body}` };
 }
 
 // HARNESS.md's four parts, each from the built-in copy when the file on disk lacks it.

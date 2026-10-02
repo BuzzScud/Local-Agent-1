@@ -353,10 +353,15 @@ a model on another machine (/remote), which can take more than the 9–12B model
   habits and Rules (each `##` part keeps its heading: the app builds the instructions from them).
 - **TOOLS.md** and **SKILLS.md**: its own Tool use lines and four skills (Write a test, Review
   code, Refactor, Flaky test), in the same formats as the local files.
-- **Nine guides** (PLANNING, TESTING, REVIEW, BUG-FIXING, DESIGN, SUBAGENTS, MEMORY, GIT, ANSWERS):
-  each is one line in the prompt's Guides list (the first sentence under its title) and the model
-  opens it with Read at `RULES/<NAME>.md` when the task fits (`Rules/RULES/…` when the project has
-  a RULES folder of its own). SUBAGENTS is listed only when the Agent tool is offered.
+- **Fourteen guides** (PLANNING, CONTEXT, PERMISSIONS, TESTING, REVIEW, DEBUGGING, BUG-FIXING,
+  RECOVERY, DESIGN, SECURITY, SUBAGENTS, MEMORY, GIT, ANSWERS): each is one line in the prompt's
+  Guides list (the first sentence under its title) and the model opens it with Read at
+  `RULES/<NAME>.md` when the task fits (`Rules/RULES/…` when the project has a RULES folder of its
+  own). SUBAGENTS is listed only when the Agent tool is offered. PERMISSIONS comes with a
+  **Right now** table the app adds as it is read: what runs, asks or is refused in your current
+  mode, and your /permissions rules. TESTING has a "Prove the claim" part, ANSWERS a "Hand off"
+  part, and HARNESS's How you work says to match the project's style and to use the packages
+  already installed (commands have no internet).
 
 Tab 09's **The model gets** menu picks the set, saved in settings.json as `"instructions"`: Auto
 (the default: remote for a model on /remote, local here), Local or Remote. The app reads it before

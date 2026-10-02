@@ -4,7 +4,7 @@
 //   TOOLS.md   terminal/rules/TOOLS.md: the "Tool use" part of the instructions
 //   SKILLS.md  terminal/rules/SKILLS.md: steps a request's words bring
 // and the remote set (2 Oct 2026, terminal/rules/remote/, prompt-files.mjs): its TOOLS.md and
-// SKILLS.md behind tabs 07–08's Local | Remote switch, and HARNESS.md and the nine guides on
+// SKILLS.md behind tabs 07–08's Local | Remote switch, and HARNESS.md and the fourteen guides on
 // tab 09 ("remote:<name>": remote:tools, remote:skills, remote:harness, remote:PLANNING …).
 // A save never overwrites a newer change made elsewhere (another window, an
 // editor, another session): the file's revision must match. The text before
