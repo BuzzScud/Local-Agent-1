@@ -156,6 +156,8 @@ export function isLooping(text) {
 export const AUTO = '[Automatic note from Agentic Coder, not from the user]';
 const CUT_MARK = '[… cut here by Agentic Coder for this check; the rest is in the file]';
 const auto = (text) => `${AUTO} ${text}`;
+// The same call again: after the second, and with "Keep going" to the stuck question.
+const SAME_STEP = 'You already did exactly this step. Do something different, or finish.';
 
 // A question put to the user: a sentence ending in "?" that speaks to them
 // ("Are you seeing it in TextEdit?", "Should I…?"), or a request for input.
@@ -1247,7 +1249,7 @@ export class Agent extends EventEmitter {
       requestMsg: request,
       // The request (and a question and answer before it): kept word for word when the conversation is summarized.
       opening: this.messages.slice(turnStart).filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.tool_calls)),
-      fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map(),
+      fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map(), stuckSteps: new Set(),
       // A helper agent of yours with a model of its own (runHelper): every step on that model.
       ...(this.ownUse ? { use: this.ownUse } : {}) };
     // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
@@ -1669,15 +1671,21 @@ export class Agent extends EventEmitter {
         }
         // Stuck, sooner: the same step twice, or three errors in a row, and it
         // asks you for a hint instead of going round again. "Keep going"
-        // starts the counts over; with no one to answer (coding -p, the
-        // practice bench) it carries on and the old limits above still stop it.
-        if ((repeats === 1 || errorsInRow === 3) && this.checkIns && !checkedIn && this.hook('stuck')) {
-          const s2 = await this.stuckAsk(repeats === 1 ? 'repeat' : 'errors', call, out, signal);
+        // starts the counts over and tells it to do something different; a
+        // step asked about once is not asked about again in this message (Read
+        // of one file six times asked three times in a minute, 2 Oct). With no
+        // one to answer (coding -p, the practice bench) it carries on and the
+        // old limits above still stop it.
+        const repeatAsk = repeats === 1 && !this.turn.stuckSteps.has(key);
+        if ((repeatAsk || errorsInRow === 3) && this.checkIns && !checkedIn && this.hook('stuck')) {
+          const s2 = await this.stuckAsk(repeatAsk ? 'repeat' : 'errors', call, out, signal);
           if (s2?.stop) { reason = s2.stop; break; }
           if (s2?.text) this.messages.push({ role: 'user', content: s2.text });
+          if (s2?.keepGoing && repeatAsk) this.messages.push({ role: 'user', content: auto(SAME_STEP) });
+          if (repeatAsk && (s2?.text || s2?.keepGoing)) this.turn.stuckSteps.add(key);
           if (s2?.text || s2?.keepGoing) { repeats = 0; repeatKey = null; errorsInRow = 0; }
         }
-        if (repeats === 2) this.messages.push({ role: 'user', content: auto('You already did exactly this step. Do something different, or finish.') });
+        if (repeats === 2) this.messages.push({ role: 'user', content: auto(SAME_STEP) });
         if (step === this.maxSteps - 1) { reason = 'limit'; this.emit('note', { text: `Stopped after ${this.maxSteps} steps (/effort moves this).`, tone: 'warn' }); }
       }
     } catch (e) {
@@ -2918,17 +2926,20 @@ export class Agent extends EventEmitter {
     return `You wrote: "${line}" If that is the cause, stop looking and make the smallest change that fixes it now (Read the exact lines first if they are not above). If one thing is still unclear, check only that.`;
   }
 
-  // A check-in while it explores: after CHECK_INS.steps looks (Read, Search,
-  // List, Bash) or CHECK_INS.secs seconds with no change made, it says what
-  // it has looked at and asks where to look. The answer steers the next step.
+  // A check-in while it explores: after CHECK_INS.steps different looks (Read,
+  // Search, List, Bash) or CHECK_INS.secs seconds with no change made, it says
+  // what it has looked at and asks where to look. The answer steers the next
+  // step. The same look again does not count: one file read six times is a
+  // loop, which the stuck question handles (and an answer to that one starts
+  // this count over, stuckAsk).
   async checkIn(call, signal) {
     const t = this.turn;
     if (!t || !this.checkIns || t.changed || !LOOKS.has(call.name)) return null;
     const shown = display(call.name, parseArgs(call.name, call.args).args ?? {});
     t.looked.push(`${call.name} ${shown.arg ?? ''}`.trim());
     const secs = (Date.now() - t.since) / 1000;
-    if (t.looked.length < this.checkIns.steps && secs < this.checkIns.secs) return null;
     const seen = [...new Set(t.looked)];
+    if (seen.length < this.checkIns.steps && secs < this.checkIns.secs) return null;
     const list = seen.slice(-8).join('; ');
     const question = `I have looked at ${seen.length} thing${seen.length === 1 ? '' : 's'} (${Math.round(secs / 60)} min) and not changed anything yet. Latest: ${list}. Am I on the right track? Tell me where to look, or say "keep going".`;
     t.looked = [];
@@ -2963,6 +2974,8 @@ export class Agent extends EventEmitter {
     if (signal?.aborted) return { stop: 'interrupted' };
     if (answer.choice === 'skip') return null; // no one to ask: carry on as before
     if (answer.choice === 'no' && !answer.feedback) return { stop: 'declined' }; // "Stop here"
+    // You were just asked: the check-in counts from here, so the two never ask about one loop.
+    if (t) { t.looked = []; t.since = Date.now(); }
     const text = (answer.text ?? answer.feedback ?? '').trim();
     if (!text) return null;
     t?.asked.push(question);

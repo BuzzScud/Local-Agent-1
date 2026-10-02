@@ -18,15 +18,16 @@ export function byPath(a, b) {
   return x.length - y.length;
 }
 
-export function* walk(root, dir = root, depth = 0) {
-  if (depth > 12) return;
+// max: how many folders down it goes (files in root are at 0).
+export function* walk(root, dir = root, depth = 0, max = 12) {
+  if (depth > max) return;
   let entries;
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const e of entries) {
     if (skipName(e.name)) continue;
     const p = join(dir, e.name);
-    if (e.isDirectory()) { yield { path: relative(root, p), dir: true }; yield* walk(root, p, depth + 1); }
+    if (e.isDirectory()) { yield { path: relative(root, p), dir: true }; yield* walk(root, p, depth + 1, max); }
     else if (e.isFile()) yield { path: relative(root, p), dir: false };
   }
 }

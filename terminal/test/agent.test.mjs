@@ -418,16 +418,18 @@ async function steered(replies, ask, { mode = 'edits' } = {}) {
   await fake.close();
   return { reason, events, cwd, fake };
 }
-const looks = (n) => Array.from({ length: n }, (_, i) => ({ tool: { name: 'Read', args: { path: i % 2 ? 'export.test.mjs' : 'export.mjs' } } }));
+// Six different looks (the check-in counts different ones since 2 Oct), round and round.
+const SIX = [['Read', { path: 'export.mjs' }], ['Read', { path: 'export.test.mjs' }], ['Read', { path: 'trades.json' }], ['List', { path: '.' }], ['Search', { pattern: 'json' }], ['Search', { pattern: 'toCsv' }]];
+const looks = (n) => Array.from({ length: n }, (_, i) => ({ tool: { name: SIX[i % SIX.length][0], args: SIX[i % SIX.length][1] } }));
 const lastUser = (req) => [...req.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
 
-test('after 8 looks with no change it checks in, and the answer steers the next step', async () => {
+test('after 6 different looks with no change it checks in, and the answer steers the next step', async () => {
   const { reason, events, fake } = await steered([...looks(8), { text: 'I will look at trades.json next.' }],
     (req) => (req.kind === 'checkin' ? { choice: 'answer', text: 'look at trades.json' } : { choice: 'yes' }));
   expect(reason).toBe('done');
   const checkins = events.filter((e) => e.type === 'ask' && e.kind === 'checkin');
   expect(checkins.length).toBe(1);
-  expect(checkins[0].question).toMatch(/looked at 2 things .* Read export\.mjs; Read export\.test\.mjs\. Am I on the right track\?/);
+  expect(checkins[0].question).toMatch(/looked at 6 things .* Read export\.mjs; Read export\.test\.mjs; Read trades\.json; List \.; Search json; Search toCsv\. Am I on the right track\?/);
   expect(lastUser(fake.requests[8])).toMatch(/\[Check-in\].*The user answered: look at trades\.json/);
 });
 
@@ -438,6 +440,25 @@ test('a check-in answered "keep going" adds nothing; "Stop here" ends the turn',
   const stop = await steered([...looks(8), { text: 'never reached' }], (req) => (req.kind === 'checkin' ? { choice: 'no' } : { choice: 'yes' }));
   expect(stop.reason).toBe('declined');
   expect(stop.fake.requests.length).toBe(CHECK_INS.steps); // it stops at the check-in (after six looks since 28 Sep)
+});
+
+// 2 Oct, Read of one file six times in a minute: two stuck questions and a check-in ("looked at 1
+// thing"), each "Keep going" sending the model nothing. Now: one question about that step, the note
+// to do something different with the answer, and no check-in for one file read again and again.
+test('the same step again and again: one stuck question, "Keep going" tells the model to do something different, no check-in', async () => {
+  const same = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
+  const { reason, events, fake } = await steered([same, same, same, same, same, { text: 'Done looking.' }], (req) => (req.kind === 'stuck' ? { choice: 'answer', text: 'Keep going' } : { choice: 'yes' }));
+  expect(reason).toBe('done');
+  expect(events.filter((e) => e.type === 'ask' && e.kind === 'stuck').length).toBe(1);
+  expect(events.filter((e) => e.type === 'ask' && e.kind === 'checkin').length).toBe(0);
+  expect(lastUser(fake.requests[2])).toBe('[Automatic note from Agentic Coder, not from the user] You already did exactly this step. Do something different, or finish.');
+});
+
+test('a stuck question answered starts the check-in count over: the two never ask about one loop', async () => {
+  const [l1, l2, l3, l4, l5, l6] = looks(6);
+  const { events } = await steered([l1, l2, l3, l4, l5, l5, l6, { text: 'Done looking.' }], (req) => ({ choice: req.kind === 'stuck' ? 'answer' : 'yes', text: 'Keep going' }));
+  expect(events.filter((e) => e.type === 'ask' && e.kind === 'stuck').length).toBe(1);
+  expect(events.filter((e) => e.type === 'ask' && e.kind === 'checkin').length).toBe(0); // six different looks, but only one since the question
 });
 
 test('on auto-accept the first edit is a plan question; an answer other than yes steers instead', async () => {
