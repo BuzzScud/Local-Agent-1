@@ -115,14 +115,24 @@ export const isOutOfMemory = (text) => /out of memory|failed to allocate|unable 
 // so a switch is not first felt on the next reply; numCtx: at that context (its
 // cache is part of what has to fit), else at the service's own. Resolves once it
 // is loaded; throws with the service's words when it cannot be.
-export async function preloadOllama({ url, key, model, numCtx = null, signal, timeoutMs = 15 * 60_000 }) {
+// keepAlive: how long the service keeps it after (Ollama's keep_alive: -1 = until told, '30m').
+export async function preloadOllama({ url, key, model, numCtx = null, keepAlive, signal, timeoutMs = 15 * 60_000 }) {
   const t = AbortSignal.timeout(timeoutMs);
   const res = await fetch(`${norm(url)}/api/generate`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...headersOf(url, key) },
-    body: JSON.stringify({ model, prompt: '', stream: false, ...(numCtx ? { options: { num_ctx: numCtx } } : {}) }),
+    body: JSON.stringify({ model, prompt: '', stream: false, ...(numCtx ? { options: { num_ctx: numCtx } } : {}), ...(keepAlive !== undefined ? { keep_alive: keepAlive } : {}) }),
     signal: signal ? AbortSignal.any([signal, t]) : t,
   });
   const j = await res.json().catch(() => null);
   if (!res.ok) throw new Error(j?.error?.message ?? j?.error ?? `${res.status}`);
   return j;
+}
+
+// Lets a model go on the service now (keep_alive 0), so its memory is free for another.
+// Best-effort: answers whether the service said yes.
+export async function unloadOllama({ url, key, model, timeoutMs = 10_000 }) {
+  try {
+    const res = await fetch(`${norm(url)}/api/generate`, { method: 'POST', headers: { 'content-type': 'application/json', ...headersOf(url, key) }, body: JSON.stringify({ model, keep_alive: 0 }), signal: AbortSignal.timeout(timeoutMs) });
+    return res.ok;
+  } catch { return false; }
 }

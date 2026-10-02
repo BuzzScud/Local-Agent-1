@@ -162,8 +162,8 @@ export function worthSaving(lessons, { again = false } = {}) {
 //   messages  the conversation (for the digest)
 //   declined  facts you said no to in this conversation: never offered again
 // A declined save answers declined: the texts said no to, for the next one.
-export async function saveLessons({ url, model, slot, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, why = 'save', request = null, review = false, confirm = null, declined = [] }) {
-  const p = await proposeSave({ url, model, slot, cwd, home, lessons, messages, signal, today, embedder, seeding, request, review, declined });
+export async function saveLessons({ url, model, slot, use, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, why = 'save', request = null, review = false, confirm = null, declined = [] }) {
+  const p = await proposeSave({ url, model, slot, use, cwd, home, lessons, messages, signal, today, embedder, seeding, request, review, declined });
   const out = { added: [], replaced: [], retired: [], refused: p.refused, secs: p.secs, tokens: p.tokens };
   if (p.none) return out;
   // Asked first (the user's pick, 28 Sep 2026): what would change is shown and
@@ -194,7 +194,7 @@ export const SAVE_SEEN = 15;
 // What the model would save, checked, and nothing written.
 // Answers { none } when there was nothing to read, else { fresh (the turns
 // read), adds, drops, refused, secs, tokens }.
-export async function proposeSave({ url, model, slot, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, request = null, review = false, declined = [] }) {
+export async function proposeSave({ url, model, slot, use, cwd, home = homedir(), lessons, messages = [], signal, today = new Date().toISOString().slice(0, 10), embedder = null, seeding = false, request = null, review = false, declined = [] }) {
   // The review reads every turn again, saved or not; repeats are refused below.
   const unsaved = review ? lessons : lessons.filter((l) => !l.saved);
   const practice = (l) => l.practice || practiceWork(l, cwd);
@@ -210,7 +210,7 @@ export async function proposeSave({ url, model, slot, cwd, home = homedir(), les
   const about = [request ?? '', ...fresh.map((l, i) => lessonText(l, i)), conversation.slice(-2000)].join('\n');
   const seen = await closest(saved, about, { embedder, n: SAVE_SEEN, signal });
   const p = savePrompt({ lessons: fresh, conversation, saved: seen, today, seeding, request, review, declined });
-  const r = await complete({ url, model, slot, signal, temperature: 0, maxTokens: 600, schema: SAVE_SCHEMA, system: p.system, user: p.user });
+  const r = await complete({ url, model, slot, use, signal, temperature: 0, maxTokens: 600, schema: SAVE_SCHEMA, system: p.system, user: p.user });
   if (signal?.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
   const refused = [];
   const answer = r.json ?? { add: [], drop: [] };

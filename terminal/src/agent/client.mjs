@@ -61,8 +61,12 @@ export function refusedField(status, text, body) {
 // has it sorted from its answer on the way (think-tags.mjs).
 // A remote that says it is busy is asked again after a wait (busy.mjs): { type: 'busy' } events
 // come meanwhile. The wait is shared by every window on the same service (its label).
+// use: another model on the same Ollama service for this one call (a /subagents helper):
+// { model, numCtx, thinks, tools, family, keepAlive }, laid over the service's endpoint.
+const endpointFor = (url, use) => { const ep = endpointOf(url); return ep && use && ep.ollama ? { ...ep, ...use } : ep; };
+
 export async function* streamChat(args) {
-  const ep = endpointOf(args.url);
+  const ep = endpointFor(args.url, args.use);
   const once = () => {
     const tags = args.model?.thinkTags;
     if (!tags?.length || ep?.kind === 'claude') return streamRaw(args);
@@ -76,8 +80,8 @@ export async function* streamChat(args) {
   }
 }
 
-async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false }) {
-  const ep = endpointOf(url);
+async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false, use }) {
+  const ep = endpointFor(url, use);
   // The Claude API speaks its own Messages API (claude.mjs).
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
   if (ep?.ollama) { yield* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
@@ -167,7 +171,8 @@ const SAMPLING = ['temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty', 'p
 async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }) {
   const lv = thinkingLevel(model ?? {}, Boolean(thinking), effort);
   const gptoss = /gpt-?oss/i.test(`${ep.family ?? ''} ${ep.model}`);
-  const think = gptoss ? (lv.effort ?? 'low') : lv.effort ? true : ep.thinks ? false : undefined;
+  // A helper may say for itself whether it thinks (use.think: the second opinion does).
+  const think = ep.think !== undefined ? ep.think : gptoss ? (lv.effort ?? 'low') : lv.effort ? true : ep.thinks ? false : undefined;
   const options = {};
   for (const k of SAMPLING) if (sampling?.[k] !== undefined) options[k] = sampling[k];
   if (maxTokens) options.num_predict = maxTokens;
@@ -175,6 +180,9 @@ async function* streamOllama({ url, ep, messages, tools, toolChoice, thinking, e
   if (extra?.stop) options.stop = extra.stop;
   const body = {
     model: ep.model, messages: ollamaMessages(messages), stream: true, options,
+    // How long the service keeps it loaded after this request (connectRemote: the main model for
+    // as long as the window is open; a helper half an hour). Ollama's own is 5 minutes.
+    ...(ep.keepAlive !== undefined ? { keep_alive: ep.keepAlive } : {}),
     ...(think !== undefined ? { think } : {}),
     ...(tools?.length && toolChoice !== 'none' && ep.tools !== false ? { tools } : {}),
     ...(extra?.response_format?.json_schema?.schema ? { format: extra.response_format.json_schema.schema } : {}),

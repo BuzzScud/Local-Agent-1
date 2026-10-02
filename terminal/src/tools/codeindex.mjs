@@ -126,7 +126,9 @@ const known = new Map();
 export class CodeIndex {
   constructor(cwd, embedder, { maxFiles = MAX_FILES, maxParts = MAX_PARTS, dir = MAP_DIR(), paused = null } = {}) {
     Object.assign(this, { cwd, embedder, maxFiles, maxParts, paused });
-    this.file = join(dir, `${sha(cwd).slice(0, 16)}.code.json`);
+    // A service's embedder (/subagents) keeps its own file, so switching it on and off does not rebuild this Mac's.
+    const tag = embedder?.model?.remote ? `.${sha(embedder.model.file).slice(0, 8)}` : '';
+    this.file = join(dir, `${sha(cwd).slice(0, 16)}${tag}.code.json`);
     this.dir = dir;
     this.parts = []; // { rel, name, line, end, stamp, vec }: one for each wording, so a long part has several
     this.state = 'new'; // 'building' → 'ready', or 'off' (the small model did not answer)

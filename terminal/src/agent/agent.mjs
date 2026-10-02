@@ -48,6 +48,7 @@ import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksA
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
+import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
 
 const MAX_STEPS = 40;
 // How many times what the layout check finds goes back to the model in one
@@ -357,6 +358,35 @@ export function toolCallInText(text) {
   } catch { return null; }
 }
 
+// A tool call written as bare JSON, with no tags: what older models on an Ollama
+// service write when their template does not turn it into a real call (Qwen 2.5
+// Coder: {"name": "Read", "arguments": {…}}; Llama 3.1: {"name": …, "parameters": …}),
+// alone or in a ```json fence, as the whole reply or its last part. Only a name of
+// one of the tools it was given counts, so a JSON example in an answer is not run.
+// names: the tools' names. Returns { name, args, before } or null.
+export function bareCallInText(text, names = []) {
+  const t = String(text ?? '').trim();
+  if (!t.endsWith('}') && !t.endsWith('```')) return null;
+  const fenced = /```(?:json)?\s*(\{[\s\S]*\})\s*```\s*$/.exec(t);
+  let at = fenced ? fenced.index : -1;
+  let body = fenced?.[1];
+  if (!body) {
+    // The last top-level { … } of the text: from each { back from the end, the first that parses.
+    // (at most 40 tries, from the end; the outermost that parses wins)
+    for (let i = t.lastIndexOf('{'), n = 0; i >= 0 && n < 40; i = i ? t.lastIndexOf('{', i - 1) : -1, n++) {
+      try { JSON.parse(t.slice(i)); body = t.slice(i); at = i; } catch { /* not this one */ }
+    }
+  }
+  if (!body) return null;
+  let j;
+  try { j = JSON.parse(body); } catch { return null; }
+  const fn = j?.function && typeof j.function === 'object' ? j.function : j;
+  const name = fn?.name;
+  const a = fn?.arguments ?? fn?.parameters;
+  if (typeof name !== 'string' || !names.includes(name) || (a !== undefined && typeof a !== 'object' && typeof a !== 'string')) return null;
+  return { name, args: typeof a === 'string' ? a : JSON.stringify(a ?? {}), before: t.slice(0, at).trim() };
+}
+
 // A parameter value is text unless it is clearly JSON (a number, true/false,
 // null, an object or a list).
 function paramValue(v) {
@@ -496,6 +526,11 @@ export class Agent extends EventEmitter {
   }
   // Whether one of the app's checks runs (way.mjs HOOKS): always on App, when switched on on Model.
   hook(id) { return this.way !== 'model' || this.hooks.has(id); }
+  // /subagents (helper-models.mjs): the helper model for a job on an Ollama service, as
+  // the endpoint override a call takes, or undefined (the job is off, its model is the
+  // main one, or this is not an Ollama service). helperJobs is set by the app.
+  helperUse(id) { return !this.isHelper && endpointOf(this.url)?.ollama ? useOf(this.helperJobs?.[id], id) : undefined; }
+  sideUse() { return this.helperUse('side'); }
   // /effort's Who decides row: the next message goes the new way. The prompt and the tools
   // change with it, so the next reply reads the instructions again (the app warms them up).
   setWay(way, hooks) {
@@ -571,10 +606,15 @@ export class Agent extends EventEmitter {
 
   // The code search for this folder (tools/codeindex.mjs, the rag helper),
   // built in the background from the first request on; none in the home folder.
+  // The model that compares meanings for the code search: the service's Code search helper
+  // (/subagents, helper-models.mjs RemoteEmbedder) when the app set one, else this Mac's.
+  searchModel() { return this.searchEmbedder ?? this.embedder; }
   codeSearch() {
-    if (!this.helpers.has('rag') || !this.embedder || isHomeFolder(this.cwd)) return null;
-    // It waits while the model answers (a step here, or a focused path's call).
-    if (this.codeIndex?.cwd !== this.cwd) this.codeIndex = new CodeIndex(this.cwd, this.embedder, { ...(this.indexDir ? { dir: this.indexDir } : {}), paused: () => this.answering > 0 || llmCalls.now > 0 });
+    const embedder = this.searchModel();
+    if (!this.helpers.has('rag') || !embedder || isHomeFolder(this.cwd)) return null;
+    // It waits while the model answers (a step here, or a focused path's call). Another
+    // embedder (the helper switched on or off) starts a new index: their numbers differ.
+    if (this.codeIndex?.cwd !== this.cwd || this.codeIndex.embedder !== embedder) this.codeIndex = new CodeIndex(this.cwd, embedder, { ...(this.indexDir ? { dir: this.indexDir } : {}), paused: () => this.answering > 0 || llmCalls.now > 0 });
     return this.codeIndex;
   }
 
@@ -901,7 +941,7 @@ export class Agent extends EventEmitter {
       get thinking() { return agent.thinking && !agent.steppedDown(); },
       effort: this.effort,
       // The memory's small model, which also ranks files by meaning (rank.mjs).
-      embedder: this.ranker ?? this.memory?.embedder ?? null,
+      embedder: this.searchEmbedder ?? this.ranker ?? this.memory?.embedder ?? null,
       emit: (name, ev) => {
         if (name === 'route') { this.lastRoute = ev; this.sorted(ev.kind, { shortcut: true }); }
         if (name === 'tries-done') this.happened?.tries.push({ label: ev.label, marks: (ev.marks ?? []).join(''), summary: ev.summary, failed: Boolean(ev.failed) });
@@ -1011,6 +1051,22 @@ export class Agent extends EventEmitter {
     this.busy = true;
     const started = Date.now();
     const turnStart = this.messages.length;
+    // A picture this model cannot see, and a Pictures helper on the service: it describes
+    // the picture first, and the words go in its place (/subagents, 2 Oct 2026).
+    const lookUse = images?.length && !this.canSee ? this.helperUse('pictures') : undefined;
+    if (lookUse) {
+      this.emit('note', { text: `Pictures: ${lookUse.model} looks at ${images.length === 1 ? 'the picture' : `the ${images.length} pictures`} first…`, tone: 'dim' });
+      try {
+        const d = await describePictures({ url: this.url, use: lookUse, images, question: text, signal });
+        this.emit('note', { text: `Pictures: ${lookUse.model} described ${images.length === 1 ? 'it' : 'them'} (${d.secs.toFixed(0)} s): ${d.text.replace(/\s+/g, ' ').slice(0, 160)}${d.text.length > 160 ? '…' : ''}`, tone: 'dim' });
+        text = `${text}\n\n${describedNote(images, lookUse.model, d.text)}`;
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        this.emit('note', { text: `Pictures: ${lookUse.model} could not look (${e.message}); the message goes with a line saying a picture was attached.`, tone: 'warn' });
+        text = `${text}\n\n(The user attached ${images.length === 1 ? 'a picture' : `${images.length} pictures`} (${images.map((i) => i.path).join(', ')}), but this model is not looking at pictures now.)`;
+      }
+      images = undefined;
+    }
     this.messages.push({ role: 'user', content: text, ...(images?.length ? { images } : {}) });
     if (images?.length) this.ctxUsed += images.length * IMAGE_TOKENS;
     if (this.happened) this.happened.message = this.messages.at(-1);
@@ -1187,6 +1243,11 @@ export class Agent extends EventEmitter {
     const design = designSettings(this.designSaved);
     const forced = this.designForce;
     this.designForce = false;
+    // UI design · writes (/subagents): a page request runs on that helper, when it is not the main model.
+    if (this.turn && (forced || (!['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text)))) {
+      const writer = this.helperUse('designWrite');
+      if (writer) { this.turn.use = { ...writer, keepAlive: undefined }; this.emit('note', { text: `UI design: ${writer.model} writes this page.`, tone: 'dim' }); }
+    }
     if ((forced || (design.auto && !['question', 'fix', 'rename'].includes(kind) && isDesignRequest(text))) && request?.role === 'user' && typeof request.content === 'string') {
       try {
         // The design studio's pieces (studio.mjs) that fit take the example
@@ -1225,6 +1286,8 @@ export class Agent extends EventEmitter {
     let lostChecked = false;
     let layoutSends = 0; // what the layout check found, sent back at most LAYOUT_ROUNDS times
     let layoutDone = false;
+    let looked = false; // UI design · checks: a picture of the page looked at once (/subagents)
+    let reviewed = false; // the second opinion: once per message (/subagents)
     let desktopSent = false; // sent back once to move a page asked for on the Desktop
     let correctedAlready = false;
     let blankRetry = false;
@@ -1258,7 +1321,8 @@ export class Agent extends EventEmitter {
         let text = turn.text;
         if (!calls.length) {
           // A call written as text, or (thinking mode) written inside the thinking.
-          const inText = toolCallInText(turn.text) ?? (!turn.text.trim() ? toolCallInText(turn.reasoning) : null);
+          // Bare JSON naming one of its tools (older models on an Ollama service) counts too.
+          const inText = toolCallInText(turn.text) ?? (!turn.text.trim() ? toolCallInText(turn.reasoning) : null) ?? bareCallInText(turn.text, (this.tools() ?? []).map((t) => t.function?.name ?? t.name));
           if (inText) { calls = [{ id: `call_${Date.now()}`, name: inText.name, args: inText.args }]; text = turn.text.trim() ? inText.before : ''; }
         }
         // Only the first call runs, so only the first is kept in the history
@@ -1459,6 +1523,13 @@ export class Agent extends EventEmitter {
               layoutDone = true;
             }
           }
+          // UI design · checks (/subagents): a picture of a page it built, looked at by a
+          // helper that sees; what looks off goes back once (after the measured layout check).
+          if (this.turn.changed && !looked && !signal?.aborted && !this.turn.pageAsked && this.helperUse('designCheck')) {
+            looked = true;
+            const found = await this.lookAtPages(signal);
+            if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
+          }
           // It changed files and says it is done: does the work cover every
           // part of the request? Once per message; a miss sends it back. Not
           // after you were asked to look at the page yourself (askPage).
@@ -1470,6 +1541,13 @@ export class Agent extends EventEmitter {
               this.messages.push({ role: 'user', content: auto(`A quick check (it can be wrong) thinks this may be missing: ${miss}. Look once. If it is actually fine, say so in one sentence and stop; otherwise fix it with the tools, run the tests if there are any, then report.`) });
               continue;
             }
+          }
+          // Second opinion (/subagents): another model on the service reads the request and
+          // the diff; what it finds goes back once. It can be wrong, and the model is told so.
+          if (this.turn.changed && !reviewed && !signal?.aborted && this.turn.diffs && this.helperUse('review')) {
+            reviewed = true;
+            const found = await this.secondOpinion(signal);
+            if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
           }
           break;
         }
@@ -1753,7 +1831,7 @@ export class Agent extends EventEmitter {
     const want = [];
     if (on.named) for (const f of filesNamed(this.cwd, text, { skip: createdNames(text) })) want.push(f);
     let ranked = { files: [], how: 'none', ms: 0 };
-    if (on.ranked) { try { ranked = await rankFiles(this.cwd, text, { embedder: this.ranker ?? this.memory?.embedder ?? null, entries, signal, retriever: this.search.retriever, reranker: this.reranker }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; } }
+    if (on.ranked) { try { ranked = await rankFiles(this.cwd, text, { embedder: this.searchEmbedder ?? this.ranker ?? this.memory?.embedder ?? null, entries, signal, retriever: this.search.retriever, reranker: this.reranker }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; } }
     for (const r of ranked.files) {
       const abs = resolvePath(this.cwd, r.rel).abs;
       if (!want.some((w) => w.abs === abs)) want.push({ rel: r.rel, abs, ranked: true });
@@ -1973,7 +2051,7 @@ export class Agent extends EventEmitter {
     let reason = 'done';
     try {
       this.emit('flow-step', { index: 0, count: 1, text: 'Updating memory' });
-      const out = await saveLessons({ url: this.url, model: this.model, slot: this.slots?.side, cwd: this.cwd, home: this.memory.home, lessons: this.lessons, messages: this.messages.slice(0, -1), signal, embedder: this.memory.embedder, why: 'update memory', request });
+      const out = await saveLessons({ url: this.url, model: this.model, slot: this.slots?.side, use: this.sideUse(), cwd: this.cwd, home: this.memory.home, lessons: this.lessons, messages: this.messages.slice(0, -1), signal, embedder: this.memory.embedder, why: 'update memory', request });
       const lines = [...out.added.map((f) => `- ${f.text}`), ...out.replaced.map((x) => `- ${x.fact.text} (in place of: ${x.old.text})`)];
       const text = lines.length || out.retired.length
         ? `Saved to memory:\n${lines.join('\n')}${out.retired.length ? `${lines.length ? '\n\n' : ''}Taken out of use:\n${out.retired.map((f) => `- ${f.text}`).join('\n')}` : ''}`
@@ -2032,7 +2110,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly });
+      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -2435,7 +2513,7 @@ export class Agent extends EventEmitter {
       return { text: `Code files in the project (lines: top-level names):\n${map.text}` };
     }
     if (name === 'CodeSearch') {
-      const off = !this.helpers.has('rag') ? 'the code search helper (Oracle) is off in /helpers' : !this.embedder ? "the small model that compares meanings is off (/effort's Embedder)" : isHomeFolder(this.cwd) ? 'there is no code search of the home folder' : null;
+      const off = !this.helpers.has('rag') ? 'the code search helper (Oracle) is off in /helpers' : !this.searchModel() ? "the small model that compares meanings is off (/effort's Embedder)" : isHomeFolder(this.cwd) ? 'there is no code search of the home folder' : null;
       if (off) { seen({ kind: 'error', message: 'The code search is off' }, true); return { text: `The code search is off here: ${off}. Use Search with a word or name instead.`, error: true }; }
       let found = null;
       try { found = await this.findCode(args.query, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') return { text: 'Interrupted.', stop: 'interrupted' }; }
@@ -2674,6 +2752,55 @@ export class Agent extends EventEmitter {
 
   // A forced-JSON check of the finished work against the request: null when
   // covered, otherwise what is missing (one short sentence). Best effort.
+  // Second opinion (/subagents): the request and this message's diff to the review
+  // helper. Answers the message that goes back, or null (nothing real found, or it
+  // could not answer: a note says so and the turn ends as it would have).
+  async secondOpinion(signal) {
+    const use = this.helperUse('review');
+    if (!use) return null;
+    this.emit('note', { text: `Second opinion: ${use.model} reads the change…`, tone: 'dim' });
+    this.emit('busy', { task: 'second opinion' });
+    try {
+      const r = await reviewChange({ url: this.url, use, request: this.turn.request, diff: this.turn.diffs, signal });
+      if (r.ok) { this.emit('note', { text: `Second opinion: ${use.model} found nothing wrong (${r.secs.toFixed(0)} s).`, tone: 'dim' }); return null; }
+      this.emit('note', { text: `Second opinion: ${use.model} found ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} (${r.secs.toFixed(0)} s): ${r.findings.join(' · ')}`, tone: 'warn' });
+      return `Another model read your change and thinks ${r.findings.length === 1 ? 'this is' : 'these are'} wrong (it can be wrong itself):\n${r.findings.map((f) => `- ${f}`).join('\n')}\nCheck each one with the tools. Fix what is real; for what is not, say why in one sentence. Then report.`;
+    } catch (e) {
+      if (signal?.aborted) throw e;
+      this.emit('note', { text: `Second opinion skipped: ${use.model} did not answer (${e.message}).`, tone: 'dim' });
+      return null;
+    }
+  }
+
+  // UI design · checks (/subagents): each page this message changed, as a picture,
+  // looked at by a helper that sees. Answers the message that goes back, or null.
+  async lookAtPages(signal) {
+    const use = this.helperUse('designCheck');
+    if (!use || !this.turn?.startTexts?.size) return null;
+    const pages = pagesToCheck(this.cwd, [...this.turn.startTexts.keys()]);
+    if (!pages.length) return null;
+    const chrome = findChrome();
+    if (!chrome) return null;
+    const notes = [];
+    for (const rel of pages) {
+      const abs = resolvePath(this.cwd, rel).abs;
+      const image = screenshotPage(abs, chrome);
+      if (!image) continue;
+      this.emit('note', { text: `UI design: ${use.model} looks at ${rel}…`, tone: 'dim' });
+      try {
+        const r = await checkPagePicture({ url: this.url, use, image, page: rel, request: this.turn.request, signal });
+        if (r.ok) { this.emit('note', { text: `UI design: ${use.model} says ${rel} looks right (${r.secs.toFixed(0)} s).`, tone: 'dim' }); continue; }
+        this.emit('note', { text: `UI design: ${use.model} sees ${r.findings.length} thing${r.findings.length === 1 ? '' : 's'} off in ${rel}: ${r.findings.join(' · ')}`, tone: 'warn' });
+        notes.push(`${rel}:\n${r.findings.map((f) => `- ${f}`).join('\n')}`);
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        this.emit('note', { text: `UI design check skipped: ${use.model} did not answer (${e.message}).`, tone: 'dim' });
+        return null;
+      }
+    }
+    return notes.length ? `A model that can see looked at a screenshot of the page (1440 px wide) and thinks this looks off (it can be wrong):\n${notes.join('\n')}\nFix what is real with Edit; then say what you changed in one sentence.` : null;
+  }
+
   async verifyDone(answer, signal) {
     const request = [...this.messages].reverse().find((m) => m.role === 'user' && !/^\[|^Not done yet|^Go ahead|^The tests fail|^You created|^Reply to the user|^You ran out/.test(m.content))?.content ?? '';
     if (!request.trim() || !this.turn.diffs.trim()) return null;
@@ -2990,8 +3117,13 @@ export class Agent extends EventEmitter {
       { role: 'user', content: `${history}\n\nWrite a summary under 200 words: what has been done, the files and line numbers that matter, any cause already worked out (word for word), and the single next step.${instructions ? ` ${instructions}` : ''}` },
     ];
     let summary = '';
-    for await (const ev of streamChat({ url: this.url, messages: ask, thinking: false, sampling: this.model.sampling, maxTokens: 600, slot: this.slots?.side, signal })) {
-      if (ev.type === 'text') summary += ev.text;
+    // On a service with a Side jobs helper (/subagents) it writes the summary; if it cannot, the main model does.
+    const side = this.sideUse();
+    const sum = async (use) => { summary = ''; for await (const ev of streamChat({ url: this.url, messages: ask, thinking: false, sampling: this.model.sampling, maxTokens: 600, slot: this.slots?.side, signal, use })) if (ev.type === 'text') summary += ev.text; };
+    try { await sum(side); } catch (e) {
+      if (!side || signal?.aborted) throw e;
+      this.emit('note', { text: `Side jobs: ${side.model} could not write the summary (${e.message}); the main model does.`, tone: 'dim' });
+      await sum(undefined);
     }
     if (this.restartFrom(summary)) this.emit('compacted', { summary: summary.trim(), n: this.turn ? (this.turn.summaries = (this.turn.summaries ?? 0) + 1) : 1 });
   }

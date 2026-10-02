@@ -86,6 +86,21 @@ export function othersIn(root, { pid = process.pid } = {}) {
   return out;
 }
 
+// The models other open windows use on a service (updateWindow's `service` and `models`), so a
+// window never unloads one another is using (/subagents, 2 Oct 2026).
+export function modelsInUseOn(service, { pid = process.pid } = {}) {
+  let files = [];
+  try { files = readdirSync(WINDOWS()).filter((f) => f.endsWith('.json')); } catch { return new Set(); }
+  const out = new Set();
+  for (const f of files) {
+    let e;
+    try { e = JSON.parse(readFileSync(join(WINDOWS(), f), 'utf8')); } catch { continue; }
+    if (e.pid === pid || !alive(e.pid) || e.service !== service) continue;
+    for (const m of e.models ?? []) out.add(m);
+  }
+  return out;
+}
+
 // ---- the copy ------------------------------------------------------------------------------------
 
 const metaFile = (id) => join(COPIES(), id, 'meta.json');

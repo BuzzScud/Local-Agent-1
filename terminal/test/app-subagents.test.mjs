@@ -1,0 +1,77 @@
+// /subagents in the app (2 Oct 2026) on a pretend Ollama service (fake-ollama.mjs): the
+// first-pick try-out and its ✔ in /model, the panel (a job switched off and saved), a
+// picture described by the pictures helper for a main model that cannot see, the second
+// opinion after a change, the summary on the side model, the main model kept loaded
+// (keep_alive -1), and what the window used let go as it closes.
+import { test, expect } from 'bun:test';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { runInPty } from './pty.mjs';
+import { T, setup, quit } from './app-setup.mjs';
+import { fakeOllama } from './fake-ollama.mjs';
+
+const { textImage } = await import('../src/tools/media.mjs');
+const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
+const onService = (base, url, model = 'coder:30b') => {
+  const r0 = { source: 'openai', address: url, port: null, connect: 'http', kind: 'openai', model, context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
+};
+const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
+
+test('on an Ollama service: the try-out on first use, /subagents (one switched off, saved), a picture described by llava, the second opinion after a change, the summary on the small model, and the models let go at quit', async () => {
+  const { cwd, env, base } = setup();
+  const svc = await fakeOllama({ review: '- notes.txt: check the second line', describe: 'A login form; the Save button is cut off.' });
+  onService(base, svc.url);
+  writeFileSync(join(cwd, 'notes.txt'), 'Shopping list\nHello wrold, buy milk\n');
+  textImage(join(cwd, 'shot.png'), 'SAVE');
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS, AGENTIC_UNLOAD: 'on', AGENTIC_TRYOUT: 'on' }, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: 'On the remote:', ms: 25_000 }, { wait: 'It works with the agent', ms: 15_000 }, { sleep: 300 }, { snapshot: 'tried' },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'model' }, { key: 'esc' }, { sleep: 150 },
+    { type: '/subagents' }, { key: 'enter' }, { wait: 'Subagents · helpers on the service' }, { sleep: 300 }, { snapshot: 'panel' },
+    { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 }, { key: 'down' }, { sleep: 60 },
+    { type: ' ' }, { sleep: 200 }, { snapshot: 'off' }, { key: 'esc' }, { sleep: 200 },
+    { type: 'what is in @shot.png please' }, { key: 'enter' }, { wait: 'From coder:30b.', ms: 20_000 }, { sleep: 300 }, { snapshot: 'picture' },
+    { type: 'fix the typo in notes.txt' }, { key: 'enter' }, { wait: 'Do you want to make this edit', ms: 20_000 }, { sleep: 150 }, { key: 'enter' },
+    { wait: 'Do you want to proceed', ms: 20_000 }, { sleep: 150 }, { key: 'enter' }, // the project's tests after the change
+    { wait: 'Checked: the second line', ms: 40_000 }, { sleep: 400 }, { snapshot: 'review' },
+    { type: '/compact' }, { key: 'enter' }, { wait: 'Summarized', ms: 20_000 }, { sleep: 300 }, { snapshot: 'compact' },
+    ...quit,
+  ] });
+  await new Promise((d) => setTimeout(d, 1500)); // the curls that let the models go outlive the app
+  const s = r.snapshots;
+  const chats = svc.chats();
+  // the try-out: three steps on the main model at its own size, kept, and ✔ in /model
+  expect(s.tried).toMatch(/✔ coder:30b: ✔ read a file · ✔ fixed one line · ✔ ran a command · 40 tok\/s/);
+  expect(s.model).toMatch(/coder:30b .*✔ 40 tok\/s/);
+  expect(Object.values(JSON.parse(readFileSync(join(base, 'home', 'tryouts.json'), 'utf8')))[0]['coder:30b']).toMatchObject({ ok: true });
+  // the panel: a model for each job; UI design · checks switched off and saved by service
+  expect(s.panel).toMatch(/● Pictures\s+◀ llava:latest/);
+  expect(s.panel).toMatch(/● Side jobs\s+◀ tiny:3b/);
+  expect(s.panel).toMatch(/● Second opinion\s+thinker:35b/); // the only one here that thinks and is 30B+: no ◀ ▶
+  expect(s.off).toMatch(/○ UI design · checks/);
+  const saved = Object.values(settingsOf(base).helperModels)[0];
+  expect(saved.designCheck).toEqual({ on: false, model: 'thinker:35b' });
+  expect(saved.review).toEqual({ on: true, model: 'thinker:35b' });
+  // the picture: llava looked first; the main model got its words, not the picture
+  expect(s.picture).toMatch(/Pictures: llava:latest described it/);
+  const look = chats.find((b) => b.model === 'llava:latest');
+  expect(look.messages.at(-1).images).toHaveLength(1);
+  const toMain = chats.filter((b) => b.model === 'coder:30b' && b.stream && JSON.stringify(b.messages).includes('which can, describes it'));
+  expect(toMain.length).toBeGreaterThan(0);
+  expect(JSON.stringify(toMain[0].messages)).toContain('A login form; the Save button is cut off.');
+  expect(toMain.every((b) => b.messages.every((m) => !m.images))).toBe(true);
+  // the change: edited, then the second opinion on thinker:35b, sent back once
+  expect(readFileSync(join(cwd, 'notes.txt'), 'utf8')).toContain('Hello world');
+  expect(s.review).toMatch(/Second opinion: thinker:35b found 1 thing/);
+  expect(chats.some((b) => b.model === 'thinker:35b' && /review a code change/.test(b.messages[0].content) && b.messages[1].content.includes('Hello world'))).toBe(true);
+  // the summary on the side model
+  expect(chats.some((b) => b.model === 'tiny:3b' && /summarize a coding session/.test(b.messages[0].content))).toBe(true);
+  expect(chats.some((b) => b.model === 'coder:30b' && /summarize a coding session/.test(b.messages[0]?.content ?? ''))).toBe(false);
+  // the main model kept loaded while the window is open; helpers half an hour
+  expect(chats.filter((b) => b.model === 'coder:30b' && b.stream).every((b) => b.keep_alive === -1)).toBe(true);
+  expect(chats.filter((b) => b.model === 'tiny:3b').every((b) => b.keep_alive === '30m')).toBe(true);
+  // at quit: what it used let go (keep_alive 0)
+  const gone = svc.seen.filter((x) => x.path === '/api/generate' && x.body.keep_alive === 0).map((x) => x.body.model);
+  expect(gone).toEqual(expect.arrayContaining(['coder:30b', 'llava:latest', 'tiny:3b']));
+  await svc.close();
+}, T * 2);

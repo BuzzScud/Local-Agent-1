@@ -142,7 +142,7 @@ export async function askAside({ agent, question, live, signal, onText, now = Da
   if (!messages) return { noRoom: true, room };
   let all = '';
   try {
-    for await (const ev of streamChat({ url: agent.url, messages, model: agent.model, thinking: false, sampling: agent.model.sampling, maxTokens: ANSWER_TOKENS, slot: agent.slots?.side, signal })) {
+    for await (const ev of streamChat({ url: agent.url, messages, model: agent.model, thinking: false, sampling: agent.model.sampling, maxTokens: ANSWER_TOKENS, slot: agent.slots?.side, signal, use: agent.sideUse?.() })) {
       if (ev.type === 'text') { all += ev.text; onText?.(all); }
     }
   } catch (e) {

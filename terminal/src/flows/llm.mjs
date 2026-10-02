@@ -29,11 +29,11 @@ export const oldThinking = () => ((process.env.AGENTIC_THINK ?? process.env.BONS
 
 // thinkCap: a smaller thinking cap for this one call (the server's
 // --reasoning-budget stays the model's thinkingBudget).
-export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap }) {
+export async function complete({ url, model, slot, system, user, instructions = '', temperature, maxTokens = 1500, schema, signal, onToken, thinking = false, effort, thinkCap, use }) {
   system = withInstructions(system, instructions);
   llmCalls.n++;
   llmCalls.now++;
-  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }); } finally { llmCalls.now--; }
+  try { return await ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap, use }); } finally { llmCalls.now--; }
 }
 
 const withInstructions = (system, instructions) => (instructions ? `${instructions}\n\nCurrent subtask (follow its output format):\n${system}` : system);
@@ -88,7 +88,7 @@ export async function decide({ url, model, slot, system, user, instructions = ''
   } finally { llmCalls.now--; }
 }
 
-async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap }) {
+async function ask({ url, model, slot, system, user, temperature, maxTokens, schema, signal, onToken, thinking, effort, thinkCap, use }) {
   const t0 = Date.now();
   const think = Boolean(thinking) && !schema;
   const base = think ? model.thinkingSampling ?? model.sampling : model.sampling;
@@ -99,7 +99,7 @@ async function ask({ url, model, slot, system, user, temperature, maxTokens, sch
   let thought = 0;
   const full = model.thinkingBudget ?? 2048;
   const budget = think ? Math.min(full, thinkCap ?? full) : 0;
-  for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, thinkCap: think && budget < full ? budget : undefined, slot, signal, extra })) {
+  for await (const ev of streamChat({ url, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], thinking: think, effort, model, sampling, maxTokens: maxTokens + budget, thinkCap: think && budget < full ? budget : undefined, slot, signal, extra, use })) {
     if (ev.type === 'text') { text += ev.text; tokens++; onToken?.(tokens + thought); }
     if (ev.type === 'reasoning') { thought++; onToken?.(tokens + thought); }
   }

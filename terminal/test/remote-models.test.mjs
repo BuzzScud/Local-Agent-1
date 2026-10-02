@@ -32,26 +32,29 @@ const SV = { catalog: { version: '0.32.12', models: MODELS }, inUse: 'Qwen3.6:35
 const ids = (rows) => rows.filter((r) => r.id).map((r) => r.id);
 const text = (rows) => rows.map((r) => (r.kind === 'blank' ? '' : r.kind === 'head' || r.kind === 'note' || r.kind === 'fold' ? r.text : r.id));
 
-test('the groups: loaded ones first (the one in use at the top), then those that can run the agent (a coder first, then the newest), then chat only; embeddings left out', () => {
+test('the groups: loaded ones first (the one in use at the top), then those that can run the agent (a coder first, then the newest), then chat only; the helpers (embeddings, under 1B) apart', () => {
   const g = groupsOf(MODELS, 'Qwen3.6:35B-A3B');
-  expect(g.loaded.map((m) => m.id)).toEqual(['Qwen3.6:35B-A3B', 'llama3.2:3b', 'functiongemma:latest']);
+  expect(g.loaded.map((m) => m.id)).toEqual(['Qwen3.6:35B-A3B', 'llama3.2:3b']);
+  expect(g.helpers.map((m) => m.id)).toEqual(['functiongemma:latest', 'embeddinggemma:latest']);
   expect(g.agent.map((m) => m.id)).toEqual(['qwen2.5-coder:14b', 'qwen3-coder:30b', 'laguna-s-2.1:latest', 'gpt-oss:120b']);
   expect(g.chatOnly.map((m) => m.id)).toEqual(['deepseek-coder-v2:16b', 'phi4:latest']);
 });
 
-test('the rows: two sections, then a fold for the chat-only models, a fold for this Mac, the other services; the folds open with enter', () => {
+test('the rows: two sections, then a fold for the chat-only models, one for the helpers, a fold for this Mac, the other services; the folds open with enter', () => {
   const pk = openService({ inUse: 'Qwen3.6:35B-A3B', levelId: 'high', on: true });
   const rows = serviceRows(pk, SV);
   expect(text(rows)).toEqual([
-    'Loaded on the service', 'm:Qwen3.6:35B-A3B', 'm:llama3.2:3b', 'm:functiongemma:latest', '',
+    'Loaded on the service', 'm:Qwen3.6:35B-A3B', 'm:llama3.2:3b', '',
     'Can run the agent', 'm:qwen2.5-coder:14b', 'm:qwen3-coder:30b', 'm:laguna-s-2.1:latest', 'm:gpt-oss:120b', '',
-    'Chat only', 'This Mac', 'svc:claude',
+    'Chat only', 'Helpers', 'This Mac', 'svc:claude',
   ]);
+  expect(rows.find((r) => r.id === 'fold:helpers').note).toBe('2 on the service · pictures, search, small jobs · /subagents gives them a job');
   expect(rows.find((r) => r.id === 'fold:chat').note).toBe('2 on the service · no tools, so no file reads, edits or commands');
   expect(rows.find((r) => r.id === 'fold:mac').note).toBe('2 models · Qwen3.5 9B was in use last');
   expect(atRow(pk, rows).id).toBe('m:Qwen3.6:35B-A3B'); // it opens on the model in use
   const open = toggleFold(toggleFold(pk, 'fold:chat'), 'fold:mac');
-  expect(ids(serviceRows(open, SV)).slice(-7)).toEqual(['fold:chat', 'm:deepseek-coder-v2:16b', 'm:phi4:latest', 'fold:mac', 'local:gemma', 'local:qwen', 'svc:claude']);
+  expect(ids(serviceRows(open, SV)).slice(-8)).toEqual(['fold:chat', 'm:deepseek-coder-v2:16b', 'm:phi4:latest', 'fold:helpers', 'fold:mac', 'local:gemma', 'local:qwen', 'svc:claude']);
+  expect(ids(serviceRows(toggleFold(pk, 'fold:helpers'), SV))).toEqual(expect.arrayContaining(['m:functiongemma:latest', 'm:embeddinggemma:latest']));
   expect(serviceRows(toggleFold(open, 'fold:chat'), SV).some((r) => r.id === 'm:phi4:latest')).toBe(false);
 });
 
@@ -59,7 +62,7 @@ test('↑↓ skip the headings and stop at the ends; typing filters by name (cha
   let pk = openService({ inUse: 'Qwen3.6:35B-A3B', levelId: 'high', on: true });
   const rows = serviceRows(pk, SV);
   expect(moveService(pk, rows, -1).at).toBe('m:Qwen3.6:35B-A3B');
-  pk = moveService(moveService(moveService(pk, rows, 1), rows, 1), rows, 1);
+  pk = moveService(moveService(pk, rows, 1), rows, 1);
   expect(pk.at).toBe('m:qwen2.5-coder:14b'); // over the blank row and the heading
   pk = filterService(pk, SV, 'coder');
   expect(text(serviceRows(pk, SV))).toEqual(['Can run the agent', 'm:qwen2.5-coder:14b', 'm:qwen3-coder:30b', '', 'Chat only', 'm:deepseek-coder-v2:16b']);

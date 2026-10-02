@@ -15,7 +15,9 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
-import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig } from './remote-models.mjs';
+import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig, isHelper as isHelperModel } from './remote-models.mjs';
+import { triedWord } from './tryouts.mjs';
+import { statusOf as statusOfJob, roomLine as subRoomLine, MAIN } from './subagents.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
@@ -1068,10 +1070,78 @@ function RemotePicker({ app }) {
   );
 }
 
+// The list Connect opens on an Ollama service (remote-form.mjs openModelPick):
+// /model's groups, each model with its size, what it can do, its weight and its
+// try-out; the copies of one model on one row (←→ picks the copy). 2 Oct 2026.
+function RemoteCatalogPick({ app }) {
+  const p = app.picker.pick;
+  const W = app.width - 4;
+  const rows = [];
+  p.groups.forEach((g, gi) => {
+    if (gi) rows.push({ kind: 'blank' });
+    rows.push({ kind: 'head', g });
+    for (const id of g.ids) rows.push({ kind: 'model', id, i: p.models.indexOf(id), m: p.entries[id] });
+  });
+  const at = rows.findIndex((r) => r.i === p.index);
+  const view = Math.max(8, (app.rows ?? 24) - 15);
+  const top = Math.max(0, Math.min(at - Math.floor(view / 2), rows.length - view));
+  const shown = rows.slice(top, top + view);
+  const above = rows.slice(0, top).filter((r) => r.kind === 'model').length;
+  const below = rows.slice(top + view).filter((r) => r.kind === 'model').length;
+  const nameW = Math.min(32, Math.max(18, ...p.models.map((id) => id.length + (p.entries[id]?.copies?.length ? 5 : 2))));
+  const cols = [['size', 11], ['can', 26], ['gb', 9], ['tried', 16]];
+  const fit = cols.filter((_, i) => 2 + nameW + 11 + cols.slice(0, i + 1).reduce((n, [, w]) => n + w, 0) <= W);
+  const cell = (m, k, w) => {
+    if (k === 'size') return (m.params ? sizeWord(m) : '?').padEnd(w);
+    if (k === 'can') return (!m.known ? 'not said' : m.embedding ? 'search' : !m.tools ? (m.vision ? 'images · no tools' : '— chat only') : canWord(m)).padEnd(w);
+    if (k === 'gb') return (gbWord(m.bytes) || '?').padStart(w - 2).padEnd(w);
+    return (m.tools && !isHelperModel(m) ? triedWord(p.tried?.[m.id]) : '').padEnd(w);
+  };
+  const cur = rows[at];
+  const copyOf = (r) => p.copy?.[r.id] ?? r.id;
+  const detail = !cur?.m ? null
+    : cur.m.copies?.length ? `${cur.m.copies.length + 1} copies of one model: ←→ picks one (${[cur.id, ...cur.m.copies].map((x) => x.split(':')[1] ?? x).join(' · ')}).`
+    : !cur.m.known ? 'The service does not say what this one can do: a try-out the first time you pick it will.'
+    : cur.m.embedding ? 'It compares meanings (code search). /subagents can give it that job; it cannot be the main model.'
+    : !cur.m.tools ? 'No tools: it can only answer in words. As the main model it reads, edits and runs nothing.'
+    : isBig(cur.m) ? 'Big model: it reads 400 lines at a time, up to 80 steps.' : null;
+  const row = (r, k) => {
+    if (r.kind === 'blank') return <Text key={k}> </Text>;
+    if (r.kind === 'head') return <Text key={k} wrap="truncate-end"><Text bold>{r.g.text}</Text><Text color={C.dim}>  {r.g.note}</Text></Text>;
+    const on = r.i === p.index;
+    const m = r.m;
+    const main = m.tools && !m.embedding;
+    const name = copyOf(r) + (m.copies?.length ? ` +${m.copies.length}` : '');
+    const t = p.tried?.[m.id];
+    return (
+      <Text key={k} wrap="truncate-end">
+        <Text color={C.accent}>{on ? '❯ ' : '  '}</Text>
+        <Text color={on ? C.accent : main ? undefined : C.dim} bold={on}>{name.padEnd(nameW)}</Text>
+        {fit.map(([c, w]) => <Text key={c} color={c === 'tried' && t ? (t.ok ? C.ok : C.warn) : C.dim}>{cell(m, c, w)}</Text>)}
+        {r.id === p.suggested ? <Text color={C.ok}> suggested</Text> : null}
+      </Text>
+    );
+  };
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>Remote model</Text>
+      <Text color={C.dim} wrap="truncate-end">{showValue(app.picker, 'address')} has {p.total} models; {p.groups.filter((g) => g.text !== 'Chat only' && g.text !== 'Helpers').reduce((n, g) => n + g.ids.length, 0)} can run the agent. Pick one; Connect then checks it.</Text>
+      <Text> </Text>
+      {above ? <Text color={C.dim}>  ↑ {above} more</Text> : null}
+      {shown.map((r, k) => row(r, top + k))}
+      {below ? <Text color={C.dim}>  ↓ {below} more</Text> : null}
+      <Text> </Text>
+      <Text color={C.dim} wrap="truncate-end">{detail ? `  ${detail}` : ' '}</Text>
+      <Text color={C.dim}>↑↓ choose · ←→ the copy · enter picks it and connects · esc back to the form</Text>
+    </Box>
+  );
+}
+
 // The names an OpenAI-compatible server listed, after Connect (or enter on the
 // Model row). A coder is marked suggested when none was named yet.
 function RemoteModelPick({ app }) {
   const pk = app.picker;
+  if (pk.pick.groups) return <RemoteCatalogPick app={app} />;
   const ids = pk.pick.models;
   const view = Math.max(3, Math.min(ids.length, Math.max(8, (app.rows ?? 24) - 16)));
   const top = Math.max(0, Math.min(pk.pick.index - Math.floor(view / 2), Math.max(0, ids.length - view)));
@@ -1178,7 +1248,49 @@ function EffortRows({ levels, at }) {
 // models in columns (name, size, quantization, context, what it can do, on disk),
 // a window of rows around the cursor, the line about the highlighted model, Effort.
 // A narrow window drops the quantization, then the size, then the GB.
-const SVC_COLS = [['size', 11], ['quant', 8], ['ctx', 8], ['can', 25], ['gb', 8]];
+const SVC_COLS = [['size', 11], ['quant', 8], ['ctx', 8], ['can', 25], ['gb', 8], ['tried', 15]];
+// /subagents (subagents.mjs): one row per job, its model between ◀ ▶ and where it stands.
+function SubagentsPanel({ app }) {
+  const pk = app.picker;
+  const sa = app.subagents ?? { models: [], main: null, where: '' };
+  const labelW = Math.max(...pk.jobs.map((j) => j.label.length)) + 2;
+  const modelW = Math.min(28, Math.max(16, ...pk.jobs.map((j) => (j.model === MAIN ? 14 : (j.model ?? '').length) + 4)));
+  const cur = pk.jobs[pk.at];
+  const shown = (j) => (j.model === MAIN ? 'same as main' : j.model ?? '—');
+  const tone = { ok: C.ok, warn: C.warn, dim: C.dim };
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Box justifyContent="space-between">
+        <Text bold>Subagents · helpers on the service</Text>
+        <Text color={C.dim} wrap="truncate-start">{`  ${sa.where}`}</Text>
+      </Box>
+      <Text color={C.dim} wrap="truncate-end">Each job has a model on the service. A helper loads the first time its job needs it.</Text>
+      <Text> </Text>
+      {pk.jobs.map((j, k) => {
+        const on = k === pk.at;
+        const st = statusOfJob(j, sa.models, sa.main);
+        const can = j.choices.length > 1;
+        return (
+          <Text key={j.id} wrap="truncate-end">
+            <Text color={C.accent}>{on ? '❯ ' : '  '}</Text>
+            <Text color={j.on && j.model ? C.ok : C.dim}>{j.on && j.model ? '● ' : '○ '}</Text>
+            <Text bold={on} color={on ? C.accent : j.on ? undefined : C.dim}>{j.label.padEnd(labelW)}</Text>
+            <Text color={C.dim}>{can ? '◀ ' : '  '}</Text>
+            <Text color={j.on ? undefined : C.dim}>{shown(j).padEnd(modelW - 4)}</Text>
+            <Text color={C.dim}>{can ? ' ▶  ' : '    '}</Text>
+            <Text color={tone[st.tone]}>{st.text}</Text>
+          </Text>
+        );
+      })}
+      <Text> </Text>
+      <Text color={C.dim} wrap="truncate-end">{`  ${cur ? `${cur.label}: ${cur.note}.` : ''}${cur?.missing ? ' Its saved model is no longer on the service.' : ''}`}</Text>
+      <Text color={C.dim} wrap="truncate-end">{`  ${subRoomLine(pk.jobs, sa.models, sa.main)}`}</Text>
+      <Text> </Text>
+      <Text color={C.dim} wrap="truncate-end">↑↓ job · space on/off · ←→ model · enter loads it now · esc closes (changes are kept)</Text>
+    </Box>
+  );
+}
+
 function ServicePicker({ app }) {
   const pk = app.picker;
   const sv = app.service;
@@ -1190,7 +1302,7 @@ function ServicePicker({ app }) {
   const models = rows.filter((r) => r.kind === 'model');
   const nameW = Math.min(32, Math.max(16, ...models.map((r) => r.m.id.length + 2)));
   const status = 11; // "   ✔ in use", or "   big" (big-model mode)
-  const drop = ['quant', 'size', 'gb'];
+  const drop = ['quant', 'tried', 'size', 'gb'];
   let cols = SVC_COLS;
   while (2 + nameW + cols.reduce((n, [, w]) => n + w, 0) + status > W && drop.length) { const d = drop.shift(); cols = cols.filter(([k]) => k !== d); }
   const cell = (m, k, w) => {
@@ -1198,6 +1310,7 @@ function ServicePicker({ app }) {
     if (k === 'quant') return m.quant.padEnd(w);
     if (k === 'ctx') return `${ctxWord(m.loadedCtx || m.ctx).padStart(5)}   `;
     if (k === 'can') return (m.tools ? canWord(m) : '— chat only').padEnd(w);
+    if (k === 'tried') return `  ${m.tools && !isHelperModel(m) ? triedWord(sv.tried?.[m.id]) : ''}`.padEnd(w);
     return gbWord(m.bytes).padStart(w);
   };
   // The rows that fit, the cursor's always among them.
@@ -1224,7 +1337,7 @@ function ServicePicker({ app }) {
       <Text key={k} wrap="truncate-end">
         {mark}
         <Text color={on ? C.accent : m.tools ? undefined : C.dim} bold={on}>{m.id.padEnd(nameW)}</Text>
-        {cols.map(([c, w]) => <Text key={c} color={c === 'can' && !m.tools ? C.warn : C.dim}>{cell(m, c, w)}</Text>)}
+        {cols.map(([c, w]) => <Text key={c} color={(c === 'can' && !m.tools) || (c === 'tried' && sv.tried?.[m.id]?.ok === false) ? C.warn : c === 'tried' && sv.tried?.[m.id]?.ok ? C.ok : C.dim}>{cell(m, c, w)}</Text>)}
         {m.id === sv.inUse ? <Text color={C.ok}>   ✔ in use</Text> : isBig(m) ? <Text color={C.dim}>   big</Text> : null}
       </Text>
     );
@@ -1477,6 +1590,8 @@ export function Screen({ app }) {
         <ModelPicker app={app} />
       ) : app.picker?.kind === 'service' ? (
         <ServicePicker app={app} />
+      ) : app.picker?.kind === 'subagents' ? (
+        <SubagentsPanel app={app} />
       ) : app.picker?.kind === 'choice' ? (
         <ChoicePicker app={app} />
       ) : app.picker?.kind === 'limits' ? (
