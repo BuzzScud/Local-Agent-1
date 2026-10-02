@@ -8,13 +8,10 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
-| [tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 17 KB | 2026-10-02 |
-| [tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
-| [tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
-| [design rounds/agentic-coder-modes-and-screen-preview-2026-10-01.html](design%20rounds/agentic-coder-modes-and-screen-preview-2026-10-01.html) | page | Modes and Screen preview | 90 KB | 2026-10-02 |
-| [tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html](tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html) | page | Big-model mode: off vs on · qwen3-coder-next:latest | 22 KB | 2026-10-02 |
-| [design rounds/remote-three-windows-preview-2026-10-01.html](design%20rounds/remote-three-windows-preview-2026-10-01.html) | page | Three windows, one service | 39 KB | 2026-10-02 |
+| [design rounds/agentic-coder-hub-remote-list-2-designs-2026-10-02.html](design%20rounds/agentic-coder-hub-remote-list-2-designs-2026-10-02.html) | page | Remote list designs | 1.5 MB | 2026-10-02 |
+| [design rounds/agentic-coder-hub-remote-tab-preview-2026-10-02.html](design%20rounds/agentic-coder-hub-remote-tab-preview-2026-10-02.html) | page | Hub Remote tab preview | 6.3 MB | 2026-10-02 |
+| [design rounds/agentic-coder-remote-instructions-preview-2026-10-02.html](design%20rounds/agentic-coder-remote-instructions-preview-2026-10-02.html) | page | Remote instructions | 54 KB | 2026-10-02 |
+| [design rounds/agentic-coder-remote-models-subagents-preview-2026-10-02.html](design%20rounds/agentic-coder-remote-models-subagents-preview-2026-10-02.html) | page | Remote models and subagents | 43 KB | 2026-10-02 |
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-10-02 |
 | [tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html](tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html) | page | Who decides: App vs Model · Qwen3.5 9B | 14 KB | 2026-10-02 |
 | [tests/agentic-coder-who-decides-app-vs-model-gemma-2026-09-30-1619.html](tests/agentic-coder-who-decides-app-vs-model-gemma-2026-09-30-1619.html) | page | Who decides: App vs Model · Gemma 4 12B QAT | 14 KB | 2026-10-02 |
@@ -45,6 +42,11 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [tests/agentic-coder-model-check-k2-2026-09-30-2341.html](tests/agentic-coder-model-check-k2-2026-09-30-2341.html) | page | New model check · K2 Horizon 7B | 8 KB | 2026-10-02 |
 | [tests/agentic-coder-done-check-qwen-2026-09-30-1627.html](tests/agentic-coder-done-check-qwen-2026-09-30-1627.html) | page | Done check · Qwen3.5 9B | 33 KB | 2026-10-02 |
 | [tests/agentic-coder-design-studio-check-2026-09-30-2122.html](tests/agentic-coder-design-studio-check-2026-09-30-2122.html) | page | Design studio check | 19 KB | 2026-10-02 |
+| [tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html](tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html) | page | Big-model mode: off vs on · qwen3-coder-next:latest | 22 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 17 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
 | [reports/where-qwen-lands-2026-09-30-v5.html](reports/where-qwen-lands-2026-09-30-v5.html) | page | Where Qwen Lands | 43 KB | 2026-10-02 |
 | [reports/agentic-coder-mac-memory-built-2026-09-28.html](reports/agentic-coder-mac-memory-built-2026-09-28.html) | page | Mac memory · built | 14 KB | 2026-10-02 |
 | [other/agentic-coder-move-to-bay2-plan-2026-09-29.html](other/agentic-coder-move-to-bay2-plan-2026-09-29.html) | page | Move Agentic Coder to BAY2 | 25 KB | 2026-10-02 |
@@ -127,6 +129,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [design rounds/tests-tab-run-a-test-3-designs-2026-09-29.html](design%20rounds/tests-tab-run-a-test-3-designs-2026-09-29.html) | page | Run a test · 3 designs | 77 KB | 2026-10-02 |
 | [design rounds/settings-command-preview-2026-09-29.html](design%20rounds/settings-command-preview-2026-09-29.html) | page | Settings Command Preview | 47 KB | 2026-10-02 |
 | [design rounds/rules-command-2-designs-2026-09-28.html](design%20rounds/rules-command-2-designs-2026-09-28.html) | page | Rules Command Designs | 13 KB | 2026-10-02 |
+| [design rounds/remote-three-windows-preview-2026-10-01.html](design%20rounds/remote-three-windows-preview-2026-10-01.html) | page | Three windows, one service | 39 KB | 2026-10-02 |
 | [design rounds/permissions-command-preview-2026-09-29.html](design%20rounds/permissions-command-preview-2026-09-29.html) | page | Permissions Command Preview | 79 KB | 2026-10-02 |
 | [design rounds/memory-panel-new-design-2026-09-30.html](design%20rounds/memory-panel-new-design-2026-09-30.html) | page | Memory panel, new design | 26 KB | 2026-10-02 |
 | [design rounds/memory-before-after-2026-09-30.html](design%20rounds/memory-before-after-2026-09-30.html) | page | Memory, before and after | 74 KB | 2026-10-02 |
@@ -142,6 +145,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 | [design rounds/agentic-coder-start-page-4-designs-2026-09-29.html](design%20rounds/agentic-coder-start-page-4-designs-2026-09-29.html) | page | Start page designs | 342 KB | 2026-10-02 |
 | [design rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html](design%20rounds/agentic-coder-start-page-2-designs-v2-2026-09-29.html) | page | Start page designs | 917 KB | 2026-10-02 |
 | [design rounds/agentic-coder-run-tests-3-designs-2026-09-30.html](design%20rounds/agentic-coder-run-tests-3-designs-2026-09-30.html) | page | Run tests designs | 69 KB | 2026-10-02 |
+| [design rounds/agentic-coder-modes-and-screen-preview-2026-10-01.html](design%20rounds/agentic-coder-modes-and-screen-preview-2026-10-01.html) | page | Modes and Screen preview | 90 KB | 2026-10-02 |
 | [design rounds/agentic-coder-mac-memory-3-designs-2026-09-28.html](design%20rounds/agentic-coder-mac-memory-3-designs-2026-09-28.html) | page | Mac memory · 3 designs | 54 KB | 2026-10-02 |
 | [design rounds/agentic-coder-how-much-it-reads-before-after-2026-09-30.html](design%20rounds/agentic-coder-how-much-it-reads-before-after-2026-09-30.html) | page | How Much It Reads | 16 KB | 2026-10-02 |
 | [design rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html](design%20rounds/agentic-coder-flow-tab-2-designs-2026-09-30.html) | page | Flow tab for both models: 2 designs | 250 KB | 2026-10-02 |
