@@ -75,3 +75,30 @@ export function workedOut(m) {
 }
 
 export const specialtiesOf = (m) => ({ note: familyNote(m), tags: workedOut(m) });
+
+// The Remote tab's card groups (2 Oct 2026, their pick: categories in place of
+// loaded / not loaded, biggest first). Each model goes in the first that fits:
+// a helper (search, or under a billion parameters), one whose abilities the
+// service does not list, coding, thinking, pictures, else general chat.
+export const CATEGORIES = [
+  { id: 'coding', text: 'Coding', note: 'trained for code' },
+  { id: 'thinking', text: 'Thinking', note: 'reasons before answering' },
+  { id: 'pictures', text: 'Pictures', note: 'can look at images' },
+  { id: 'general', text: 'General chat', note: 'everyday questions and writing', fold: true },
+  { id: 'helpers', text: 'Helpers', note: 'search and small jobs', fold: true },
+  { id: 'unlisted', text: 'Not listed', note: 'the service does not say what these can do', fold: true },
+];
+export function categoryOf(m) {
+  const b = paramsB(m?.params ?? '');
+  if (m?.embedding || (b && b < 1)) return 'helpers';
+  if (m?.known === false) return 'unlisted';
+  if (/coder|code|devstral|codestral/i.test(nameOf(m?.id))) return 'coding';
+  if (m?.thinking) return 'thinking';
+  if (m?.vision) return 'pictures';
+  return 'general';
+}
+// Biggest first: by parameters, else by file size, then by name.
+export const bySize = (a, b) => (paramsB(b.params ?? '') - paramsB(a.params ?? '')) || ((b.bytes ?? 0) - (a.bytes ?? 0)) || String(a.id).localeCompare(String(b.id));
+export function categoryGroups(models = []) {
+  return CATEGORIES.map((c) => ({ ...c, ranked: true, ids: models.filter((m) => categoryOf(m) === c.id).sort(bySize).map((m) => m.id) })).filter((g) => g.ids.length);
+}
