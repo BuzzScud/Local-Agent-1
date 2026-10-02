@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Remote footer designs</title>
+<style>
+/* Layout: one column. The controls, today's footer, the two designs as live terminals, then every width at once.
+   One dark look on purpose, like the other design rounds: the subject is a dark terminal. */
+:root{
+  color-scheme:dark;
+  --bg:#0f1113; --panel:#161a1d; --raise:#1c2125; --line:#2a3036; --text:#e6e8ea; --dim:#9aa3ad; --accent:#87d787; --ink:#0b0d0e;
+  --term:#1d1f21; --bar:#26292c;
+  /* the app's xterm-256 colours (terminal/src/ui/theme.mjs, rail.jsx) */
+  --t-fg:#d0d0d0; --t-white:#eeeeee; --t-accent:#87d787; --t-accentDim:#5faf5f; --t-dim:#8a8a8a; --t-faint:#585858;
+  --t-border:#6c6c6c; --t-rail:#767676; --t-strip:#303030; --t-path:#bcbcbc; --t-warn:#ffaf5f; --t-bad:#ff5f5f;
+  --t-edits:#af87ff; --t-plan:#5fafaf; --t-auto:#d7af5f; --t-bypass:#ff5f5f; --t-wait:#5f875f;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:14px/1.5 var(--ui);padding-block:20px 40px;padding-inline:16px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-direction:column;gap:4px}
+header .top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0;font-weight:650;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:16px;margin:0;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+.date{color:var(--dim);font-size:13px}
+.lede{color:var(--dim);margin:0;max-width:72ch}
+kbd{background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px var(--mono);color:var(--text)}
+code{font:12.5px var(--mono);color:#cfe3d5}
+
+/* controls */
+.controls{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center}
+.controls .k{color:var(--dim);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.chip{background:var(--raise);color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font:inherit;font-size:13px;cursor:pointer;line-height:1.35}
+.chip:hover{color:var(--text);border-color:#3a434b}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:600}
+.chip:disabled{opacity:.4;cursor:not-allowed}
+.chip:focus-visible,.term:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chip kbd{background:transparent;border-color:currentColor;margin-right:5px;font-size:11px}
+.chip.do{color:var(--text)}
+input[type=range]{width:min(320px,100%);accent-color:var(--accent)}
+.cols{font:13px var(--mono);color:var(--text);min-width:9ch}
+.hint{grid-column:1/-1;color:var(--dim);font-size:12.5px;margin:2px 0 0}
+@media (min-width:900px) and (min-height:820px){.controls{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 8px 24px #0009}}
+@media (max-width:640px){.controls{grid-template-columns:1fr}.controls .k{margin-top:6px}}
+
+/* a design */
+.design{display:flex;flex-direction:column;gap:10px}
+.design .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.design .num{font:600 13px var(--mono);color:var(--ink);background:var(--accent);border-radius:6px;padding:1px 7px}
+.design .num.today{background:var(--raise);color:var(--dim);border:1px solid var(--line)}
+.design p{margin:0;color:var(--dim);max-width:80ch}
+.notes{margin:0;padding-left:18px;color:var(--dim);font-size:13.5px;max-width:90ch;display:flex;flex-direction:column;gap:3px}
+.notes b{color:var(--text);font-weight:600}
+
+/* the terminal */
+.termwrap{min-width:0;overflow-x:auto}
+.term{background:var(--term);border:1px solid var(--line);border-radius:10px;width:max-content;max-width:none;cursor:text}
+.term .bar{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid #2b2e31;background:var(--bar);border-radius:10px 10px 0 0;font:11.5px var(--ui);color:#8d949b}
+.term .bar i{width:10px;height:10px;border-radius:50%;background:#3c4044;display:inline-block}
+.term .bar span{flex:1;text-align:center;margin-right:46px}
+.screen{font-family:var(--mono);line-height:1.34;color:var(--t-fg);padding:6px 0 4px;white-space:pre}
+.ln{min-height:1.34em;overflow:hidden}
+.ln.row{display:flex;justify-content:space-between;gap:2ch;padding:0 2ch}
+.ln.row .l{overflow:hidden;min-width:0}
+.ln.row .r{flex-shrink:0}
+.strip{background:var(--t-strip)}
+.c-fg{color:var(--t-fg)}.c-white{color:var(--t-white)}.c-accent{color:var(--t-accent)}.c-accentDim{color:var(--t-accentDim)}
+.c-dim{color:var(--t-dim)}.c-faint{color:var(--t-faint)}.c-border{color:var(--t-border)}.c-rail{color:var(--t-rail)}
+.c-path{color:var(--t-path)}.c-warn{color:var(--t-warn)}.c-bad{color:var(--t-bad)}.c-wait{color:var(--t-wait)}
+.c-edits{color:var(--t-edits)}.c-plan{color:var(--t-plan)}.c-auto{color:var(--t-auto)}.c-bypass{color:var(--t-bypass)}
+.inv{background:var(--t-fg);color:var(--term)}
+.focushint{font-size:12px;color:var(--dim);margin:0}
+
+/* every width at once */
+.widths{display:flex;flex-direction:column;gap:14px}
+.wgroup{display:flex;flex-direction:column;gap:6px}
+.wgroup h3{margin:0;font-size:13.5px;font-weight:600;color:var(--text)}
+.wrow{display:grid;grid-template-columns:5ch 1fr;gap:10px;align-items:center;min-width:0}
+.wrow .w{font:12px var(--mono);color:var(--dim);text-align:right}
+.wrow .termwrap .term{border-radius:6px}
+.wrow .screen{padding:3px 0}
+.foot{color:var(--dim);font-size:13.5px;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top"><h1>Remote footer</h1><span class="date">2 Oct 2026 · two designs on a pretend service · picked: 2 · Gauges on the left</span></div>
+    <p class="lede">When the model runs on another machine, the footer stops showing this Mac's memory and shows the server instead. Both designs run from the same live state. Change the width, the service and the connection, send a message, and press the keys.</p>
+  </header>
+
+  <section class="controls" aria-label="Controls">
+    <span class="k">Window</span>
+    <div class="chips">
+      <input type="range" id="cols" min="80" max="160" step="1" value="100" aria-label="Window width in columns">
+      <span class="cols" id="colsOut">100 cols</span>
+      <button class="chip" data-cols="80" id="w80">80</button><button class="chip" data-cols="100" id="w100">100</button><button class="chip" data-cols="120" id="w120">120</button><button class="chip" data-cols="160" id="w160">160</button>
+    </div>
+    <span class="k">Service</span>
+    <div class="chips" id="svcChips">
+      <button class="chip" data-svc="ollama" id="s-ollama">Ollama at 203.0.113.7</button>
+      <button class="chip" data-svc="claude" id="s-claude">Claude API</button>
+      <button class="chip" data-svc="llama" id="s-llama">llama.cpp over SSH</button>
+    </div>
+    <span class="k">Connection</span>
+    <div class="chips" id="connChips">
+      <button class="chip" data-conn="on" id="c-on">Connected</button>
+      <button class="chip" data-conn="connecting" id="c-connecting">Connecting</button>
+      <button class="chip" data-conn="loading" id="c-loading">Loading on the service</button>
+      <button class="chip" data-conn="reconnecting" id="c-reconnecting">Reconnecting</button>
+      <button class="chip" data-conn="down" id="c-down">Not answering</button>
+      <button class="chip" id="spill" aria-pressed="false">GPU spill</button>
+    </div>
+    <span class="k">Mode</span>
+    <div class="chips" id="modeChips">
+      <button class="chip" data-mode="ask" id="m-ask">Manual</button>
+      <button class="chip" data-mode="edits" id="m-edits">Accept edits</button>
+      <button class="chip" data-mode="plan" id="m-plan">Plan</button>
+      <button class="chip" data-mode="auto" id="m-auto">Auto</button>
+      <button class="chip" data-mode="bypass" id="m-bypass">Bypass</button>
+    </div>
+    <span class="k">Do</span>
+    <div class="chips">
+      <button class="chip do" data-act="send" id="a-send"><kbd>enter</kbd>Send a message</button>
+      <button class="chip do" data-act="?" id="a-help"><kbd>?</kbd>Shortcuts</button>
+      <button class="chip do" data-act="ctrl+t" id="a-t"><kbd>ctrl+t</kbd>Switch model</button>
+      <button class="chip do" data-act="ctrl+r" id="a-r"><kbd>ctrl+r</kbd>Second opinion</button>
+      <button class="chip do" data-act="ctrl+p" id="a-p"><kbd>ctrl+p</kbd>Compact</button>
+      <button class="chip do" data-act="meters" id="a-meters" aria-pressed="false">/meters</button>
+      <button class="chip do" data-act="esc" id="a-esc"><kbd>esc</kbd>Close or stop</button>
+    </div>
+    <p class="hint">Click a terminal to type in it: <kbd>enter</kbd> sends, <kbd>?</kbd> shortcuts, <kbd>shift+tab</kbd> mode, <kbd>ctrl+t</kbd> <kbd>ctrl+r</kbd> <kbd>ctrl+p</kbd>, <kbd>↑</kbd><kbd>↓</kbd> in the model list, <kbd>esc</kbd> closes or stops. A browser that keeps ctrl+t for itself can use the buttons.</p>
+  </section>
+
+  <section class="design" aria-label="Today's footer">
+    <div class="head"><span class="num today">today</span><h2>The footer as it is</h2></div>
+    <p>For comparison: the same moment with today's code. On a remote it still shows this Mac's memory.</p>
+    <div class="termwrap"><div class="term" id="tToday"><div class="screen"></div></div></div>
+  </section>
+
+  <section class="design" aria-label="Design 1">
+    <div class="head"><span class="num">1</span><h2>Words on the right</h2></div>
+    <p>Today's footer with the Mac's memory swapped for the server's numbers, written out in words. The left keeps "? for shortcuts". The right reads from the model to the mode, and pieces leave from the least needed as the window narrows.</p>
+    <div class="termwrap"><div class="term" id="t1" tabindex="0" aria-label="Design 1, a live terminal"><div class="bar"><i></i><i></i><i></i><span class="title">coding</span></div><div class="screen"></div></div></div>
+    <ul class="notes">
+      <li><b>First to go:</b> the shift+tab hint, the cost, where it runs, the time to the first token, "of 128k", GPU, then context. The model's name, its speed and the mode stay.</li>
+      <li><b>A GPU spill</b> turns GPU amber with "rest on CPU", moves it to the last piece to go, and is drawn at once. Other new figures wait for the next redraw.</li>
+      <li><b>The cost</b> shows only on a paid service (Claude API here), as the first piece to go. The click target with /mouse on stays the model's name.</li>
+    </ul>
+  </section>
+
+  <section class="design" aria-label="Design 2">
+    <div class="head"><span class="num">2</span><h2>Gauges on the left</h2></div>
+    <p>The left side, which only says "? for shortcuts" after your first message, becomes an instrument strip: speed with the last eight replies, context and GPU as bars. The right keeps the model, where it runs and the mode.</p>
+    <div class="termwrap"><div class="term" id="t2" tabindex="0" aria-label="Design 2, a live terminal"><div class="bar"><i></i><i></i><i></i><span class="title">coding</span></div><div class="screen"></div></div></div>
+    <ul class="notes">
+      <li><b>More fits at 80 columns,</b> because both halves of the row carry numbers instead of the right half alone.</li>
+      <li><b>"? for shortcuts"</b> shows while there is nothing to measure (connecting, not answering). A note such as "copied" takes the gauges' place for a moment, as it takes the hint's place today.</li>
+      <li><b>The bars</b> turn amber at 70% context and red at 85%, the same points as today's memory warning. In a spill, the GPU bar's amber part is the share running on the CPU. The cost moves to /meters.</li>
+    </ul>
+  </section>
+
+  <section class="design" aria-label="Every width at once">
+    <div class="head"><h2>Every width at once</h2></div>
+    <p>The same moment at 80, 100, 120 and 160 columns. 80 is the smallest window the app lays out.</p>
+    <div class="widths" id="widths"></div>
+  </section>
+
+  <p class="foot">Pick 1 or 2 in the chat, or a mix, such as design 2's gauges in design 1's order.</p>
+</div>
+
+<script>
+// ---------- the pretend services ----------
+const SERVICES = {
+  ollama: { where: '203.0.113.7:60009', model: 'gpt-oss:120b', ctxMax: 131072, gpu: true, price: null, helper: 'gpt-oss:20b', speed: [38, 47], ttft: [0.9, 1.6], pps: 1900,
+    models: [['gpt-oss:120b', 65.4, 131072], ['qwen3.6:35b-a3b', 23.9, 262144], ['qwen2.5-coder:32b', 19.9, 32768], ['gpt-oss:20b', 13.8, 131072]], hist: [41, 44, 39, 47, 43, 45, 40, 41] },
+  claude: { where: 'api.anthropic.com', model: 'claude-opus-5-5', ctxMax: 200000, gpu: false, price: 0.05, helper: null, speed: [58, 76], ttft: [0.6, 1.1], pps: null,
+    models: [['claude-opus-5-5', 'Opus 5.5', '$4 / $20'], ['claude-sonnet-5-5', 'Sonnet 5.5', '$2 / $10'], ['claude-fable-5-1', 'Fable 5.1', '$10 / $50'], ['claude-haiku-4-5', 'Haiku 4.5', '$1 / $5']], hist: [66, 71, 69, 74, 63, 70, 72, 68] },
+  llama: { where: 'studio.local (ssh)', model: 'Qwen3.6-35B-A3B', ctxMax: 65536, gpu: false, price: null, helper: null, speed: [62, 74], ttft: [0.4, 0.9], pps: 2400,
+    models: [['Qwen3.6-35B-A3B', 'coding serve', 65536]], hist: [70, 66, 72, 69, 71, 68, 73, 70] },
+};
+const PROMPTS = ['add a test for the retry limit', 'make the backoff cap at 30 seconds', 'explain why the second upload hangs'];
+const MODE_TEXT = { auto: '⏵⏵ auto mode on', edits: '⏵⏵ accept edits on', plan: '⏸ plan mode on', bypass: '⏵⏵ bypass permissions on' };
+const MODE_CLS = { auto: 'c-auto', edits: 'c-edits', plan: 'c-plan', bypass: 'c-bypass' };
+const CYCLE = ['ask', 'edits', 'plan', 'auto'];
+const CYCLE_HINT = ' (shift+tab to cycle)';
+const ORBIT = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const SPARK = '▁▂▃▄▅▆▇█';
+
+// ---------- small helpers ----------
+const now = () => performance.now() / 1000;
+const rand = ([a, b]) => a + Math.random() * (b - a);
+const money = (u) => (u > 0 && u < 0.01 ? `$${u.toFixed(3)}` : `$${u.toFixed(2)}`);
+const ctxWord = (n) => (n % 1024 === 0 ? `${n / 1024}k` : `${Math.round(n / 1000)}k`);
+const kTok = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)));
+const fmtSecs = (s) => (s < 60 ? `${Math.floor(s)}s` : `${Math.floor(s / 60)}m ${String(Math.floor(s % 60)).padStart(2, '0')}s`);
+const clock = () => new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const escHTML = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// A piece of a line: its text and its colour class.
+const g = (text, c = '') => ({ text: String(text), c });
+const cells = (s) => [...s].length;
+const width = (segs) => segs.reduce((n, s) => n + cells(s.text), 0);
+const joinDot = (groups) => groups.filter((x) => x.length).flatMap((x, i) => (i ? [g(' · ', 'c-dim'), ...x] : x));
+const joinGap = (groups) => groups.filter((x) => x.length).flatMap((x, i) => (i ? [g('  '), ...x] : x));
+// Cut to n cells, ending in … as Ink's truncate-end does.
+function cut(segs, n) {
+  if (width(segs) <= n) return segs;
+  if (n <= 0) return [];
+  const out = [];
+  let left = n - 1, last = 'c-dim';
+  for (const s of segs) {
+    const ch = [...s.text];
+    if (ch.length <= left) { out.push(s); left -= ch.length; continue; }
+    if (left > 0) out.push(g(ch.slice(0, left).join(''), s.c));
+    last = s.c || last;
+    break;
+  }
+  out.push(g('…', last));
+  return out;
+}
+const bar = (frac, n) => { const k = Math.min(n, Math.max(frac > 0 ? 1 : 0, Math.round(frac * n))); return '▰'.repeat(k) + '▱'.repeat(n - k); };
+// The last eight replies' speeds, scaled from a little under the slowest so small changes show.
+const spark = (hist) => { const h = hist.slice(-8); const max = Math.max(...h, 1); const lo = Math.min(...h) * 0.6; return h.map((v) => SPARK[Math.max(0, Math.min(7, Math.round(((v - lo) / Math.max(1, max - lo)) * 7)))]).join(''); };
+const ctxNumCls = (p) => (p >= 85 ? 'c-bad' : p >= 70 ? 'c-warn' : 'c-white');
+const ctxBarCls = (p) => (p >= 85 ? 'c-bad' : p >= 70 ? 'c-warn' : 'c-accentDim');
+
+// ---------- the live state ----------
+const S = {
+  cols: 100, svc: 'ollama', conn: 'on', spill: false, mode: 'edits', meters: false,
+  overlay: null, menuIdx: 0, notice: null, draft: '', pi: 0,
+  phase: 'idle', turnT0: 0, stepT0: 0, tokens: 0, liveTps: 0,
+  hist: [...SERVICES.ollama.hist], ttft: 1.2, ctxUsed: 49800, usd: 0, lastChanged: true,
+  ping: 24, model: { ollama: 'gpt-oss:120b', claude: 'claude-opus-5-5', llama: 'Qwen3.6-35B-A3B' },
+  conv: [],
+};
+const sv = () => SERVICES[S.svc];
+const nameOf = () => S.model[S.svc];
+const entryOf = () => sv().models.find((m) => m[0] === nameOf());
+const ctxMaxOf = () => (S.svc === 'claude' ? 200000 : entryOf()?.[2] ?? sv().ctxMax);
+const busy = () => S.phase !== 'idle';
+
+function metrics() {
+  const writing = S.phase === 'writing';
+  const tps = writing ? S.liveTps : S.hist.at(-1);
+  const max = ctxMaxOf();
+  return {
+    tps: tps ? Math.round(tps) : null, live: writing, ttft: S.ttft,
+    ctxPct: Math.min(100, Math.max(1, Math.round((S.ctxUsed / max) * 100))), ctxOf: ctxWord(max),
+    gpu: sv().gpu, gpuPct: S.spill ? 62 : 100, cost: sv().price != null ? money(S.usd) : null,
+  };
+}
+
+// ---------- the footer, three ways ----------
+const leftSegs = () => [g(S.notice ?? '? for shortcuts', S.notice ? 'c-warn' : 'c-dim')];
+const modeSegs = (cycle) => (MODE_TEXT[S.mode] ? [g(MODE_TEXT[S.mode], MODE_CLS[S.mode]), ...(cycle ? [g(CYCLE_HINT, 'c-dim')] : [])] : []);
+const named = (where) => [g('●', 'c-accent'), g(' '), g(nameOf(), 'c-white'), ...(where ? [g(` on ${sv().where}`, 'c-dim')] : [])];
+
+// The label while not connected: longest first (screen.jsx modelLabels). loud: the new designs say a dead service in red.
+function stateLabels(loud) {
+  const where = sv().where, name = nameOf();
+  const gb = S.svc === 'ollama' ? entryOf()?.[1] : null;
+  const d = (glyph, c, text) => [g(glyph, c), g(text, loud && c === 'c-bad' ? 'c-bad' : 'c-dim')];
+  if (S.conn === 'connecting') return [d('◐', 'c-warn', ` connecting to ${where}…`), d('◐', 'c-warn', ' connecting…'), d('◐', 'c-warn', '')];
+  if (S.conn === 'reconnecting') return [d('◐', 'c-warn', ` reconnecting to ${where}…`), d('◐', 'c-warn', ' reconnecting…'), d('◐', 'c-warn', '')];
+  if (S.conn === 'down') return [d('✗', 'c-bad', ` ${where} is not answering`), d('✗', 'c-bad', ' not answering'), d('✗', 'c-bad', '')];
+  return [d('◐', 'c-warn', ` ${name} loading on the service${gb ? ` · ${gb.toFixed(1)} GB` : ''}`), d('◐', 'c-warn', ` ${name} loading`), d('◐', 'c-warn', ' loading')];
+}
+// Not connected: the state's label and the mode, the longest that fits.
+function stateRow(cols, loud) {
+  const left = leftSegs();
+  const room = cols - 4 - Math.min(width(left), 15) - 2;
+  const labs = stateLabels(loud);
+  const tries = [[labs[0], true], [labs[0], false], [labs[1], false], [labs[2], false]].map(([l, c]) => joinDot([l, modeSegs(c)]));
+  const right = tries.find((r) => width(r) <= room) ?? tries.at(-1);
+  return { left: cut(left, cols - 4 - width(right) - 2), right };
+}
+
+// Today: screen.jsx footerParts as it is, with this Mac's memory.
+function todayRow(cols) {
+  const left = leftSegs();
+  const room = cols - 4 - Math.min(width(left), 15) - 2;
+  const labels = S.conn === 'on'
+    ? [named(true), [...named(false), g(' · remote', 'c-dim')], [g('●', 'c-accent'), g(' remote', 'c-dim')]]
+    : stateLabels(false);
+  const mac = [g('●', 'c-accent'), g(' Mac 11.2/16 GB', 'c-dim')];
+  const spend = sv().price != null && S.usd > 0 ? [g(`${money(S.usd)} this window · ${money(S.usd + 0.19)} today, 2 windows`, 'c-dim')] : [];
+  const tries = [{ l: labels[0], mac: true, cyc: true }, ...labels.slice(0, 2).map((l) => ({ l, mac: true, cyc: false })), ...labels.map((l) => ({ l, mac: false, cyc: false }))];
+  const all = spend.length ? [...tries.map((t) => ({ ...t, sp: true })), ...tries] : tries;
+  const build = (t) => joinDot([t.sp ? spend : [], t.l, t.mac ? mac : [], modeSegs(t.cyc)]);
+  const right = all.map(build).find((r) => width(r) <= room) ?? build(all.at(-1));
+  return { left: cut(left, cols - 4 - width(right) - 2), right };
+}
+
+// Design 1: the pieces in words on the right; `drop` names those left out.
+function d1Right(m, drop) {
+  const parts = [named(!drop.has('where'))];
+  if (m.tps != null && !drop.has('speed')) parts.push([g(`↓${m.tps} tok/s`, m.live ? 'c-accent' : 'c-dim')]);
+  if (m.ttft && !drop.has('ttft')) parts.push([g(`${m.ttft.toFixed(1)} s to first`, 'c-dim')]);
+  if (!drop.has('ctx')) parts.push([g(`ctx ${m.ctxPct}%`, m.ctxPct >= 70 ? ctxNumCls(m.ctxPct) : 'c-dim'), ...(drop.has('ctxOf') ? [] : [g(` of ${m.ctxOf}`, 'c-dim')])]);
+  if (m.gpu && !drop.has('gpu')) parts.push([g(`GPU ${m.gpuPct}%`, S.spill ? 'c-warn' : 'c-dim'), ...(S.spill && !drop.has('spillWords') ? [g(', rest on CPU', 'c-warn')] : [])]);
+  if (m.cost && !drop.has('cost')) parts.push([g(`${m.cost} this window`, 'c-dim')]);
+  parts.push(modeSegs(!drop.has('cycle')));
+  return joinDot(parts);
+}
+function design1Row(cols) {
+  if (S.conn !== 'on') return stateRow(cols, true);
+  const left = leftSegs();
+  const room = cols - 4 - Math.min(width(left), 15) - 2;
+  const m = metrics();
+  const order = S.spill
+    ? ['cycle', 'cost', 'where', 'ttft', 'ctxOf', 'spillWords', 'ctx', 'speed', 'gpu']
+    : ['cycle', 'cost', 'where', 'ttft', 'ctxOf', 'gpu', 'ctx', 'speed'];
+  let right;
+  for (let k = 0; k <= order.length; k++) { right = d1Right(m, new Set(order.slice(0, k))); if (width(right) <= room) break; }
+  return { left: cut(left, cols - 4 - width(right) - 2), right };
+}
+
+// Design 2: gauges on the left, the model and the mode on the right.
+function d2Left(m, drop) {
+  const parts = [];
+  const n = drop.has('short') ? 4 : 8;
+  if (m.tps != null && !drop.has('speed')) parts.push([g('↓', 'c-dim'), g(String(m.tps), m.live ? 'c-accent' : 'c-white'), g(' tok/s', 'c-dim'), ...(drop.has('spark') ? [] : [g(' '), g(spark(S.hist), S.spill ? 'c-warn' : 'c-accentDim')])]);
+  if (m.ttft && !drop.has('ttft')) parts.push([g(`${m.ttft.toFixed(1)} s`, 'c-white'), g(' to first', 'c-dim')]);
+  if (!drop.has('ctx')) parts.push([g('ctx ', 'c-dim'), ...(drop.has('bars') ? [] : [g(bar(m.ctxPct / 100, n), ctxBarCls(m.ctxPct)), g(' ')]), g(`${m.ctxPct}%`, ctxNumCls(m.ctxPct)), ...(drop.has('ctxOf') ? [] : [g(` of ${m.ctxOf}`, 'c-dim')])]);
+  if (m.gpu && !drop.has('gpu')) {
+    const k = Math.round((m.gpuPct / 100) * n);
+    parts.push([g('GPU ', 'c-dim'), ...(drop.has('bars') ? [] : [g('▰'.repeat(k), 'c-accentDim'), g('▰'.repeat(n - k), 'c-warn'), g(' ')]), g(`${m.gpuPct}%`, S.spill ? 'c-warn' : 'c-white'), ...(S.spill && !drop.has('short') ? [g(' rest on CPU', 'c-warn')] : [])]);
+  }
+  return joinGap(parts);
+}
+function design2Row(cols) {
+  if (S.conn !== 'on') return stateRow(cols, true);
+  const avail = cols - 4;
+  if (S.notice) {
+    const left = leftSegs();
+    const tries = [[true, true], [false, true], [false, false]].map(([c, w]) => joinDot([named(w), modeSegs(c)]));
+    const right = tries.find((r) => width(r) <= avail - 2 - Math.min(width(left), 15)) ?? tries.at(-1);
+    return { left: cut(left, avail - width(right) - 2), right };
+  }
+  const m = metrics();
+  const order = S.spill
+    ? ['cycle', 'where', 'ttft', 'ctxOf', 'spark', 'short', 'bars', 'ctx', 'speed', 'gpu']
+    : ['cycle', 'where', 'ttft', 'ctxOf', 'spark', 'short', 'bars', 'gpu', 'ctx', 'speed'];
+  let left, right;
+  for (let k = 0; k <= order.length; k++) {
+    const drop = new Set(order.slice(0, k));
+    right = joinDot([named(!drop.has('where')), modeSegs(!drop.has('cycle'))]);
+    left = d2Left(m, drop);
+    if (width(left) + 2 + width(right) <= avail) break;
+  }
+  return { left: cut(left, avail - width(right) - 2), right };
+}
+const footerRow = (design, cols) => (design === 'today' ? todayRow(cols) : design === 1 ? design1Row(cols) : design2Row(cols));
+
+// ---------- the rest of the window ----------
+const strip = (t) => [{ segs: [], cls: 'strip' }, { segs: [g(' '), g('›', 'c-accent'), g(' '), g(t, 'c-white')], cls: 'strip' }, { segs: [], cls: 'strip' }];
+const note = (t, c = 'c-dim') => ({ segs: [g('  ※ ', 'c-faint'), g(t, c)] });
+S.conv = [
+  ...strip('make the upload client retry on 5xx, with a backoff'),
+  { segs: [] },
+  { segs: [g('  ● ', 'c-accent'), g('Read ', 'c-white'), g('src/upload.mjs', 'c-path'), g(' · 212 lines', 'c-dim')] },
+  { segs: [g('  │', 'c-rail')] },
+  { segs: [g('  ✎ ', 'c-edits'), g('Updated ', 'c-edits'), g('src/upload.mjs', 'c-path'), g(' · 14 additions, 3 removals', 'c-dim')] },
+  { segs: [g('  │', 'c-rail')] },
+  { segs: [g('  ✓ ', 'c-accent'), g('Ran ', 'c-white'), g('bun test ./test/upload.test.mjs', 'c-path'), g(' · 9 passed', 'c-dim')] },
+  { segs: [g('  ╰─ ', 'c-rail'), g('⠿ ', 'c-accent'), g('Baked for 41s · done 3:41 PM', 'c-dim')] },
+  { segs: [] },
+];
+
+function promptBox(cols) {
+  const inner = cols - 4;
+  const ph = 'Try "write a test for main()"';
+  const mid = S.draft ? [g('> '), g(S.draft.slice(-(inner - 4)), 'c-fg'), g(' ', 'inv')] : [g('> '), g(ph[0], 'inv'), g(ph.slice(1), 'c-dim')];
+  return [
+    { segs: [g(`╭${'─'.repeat(cols - 2)}╮`, 'c-border')] },
+    { segs: [g('│ ', 'c-border'), ...mid, g(' '.repeat(Math.max(0, inner - width(mid)))), g(' │', 'c-border')] },
+    { segs: [g(`╰${'─'.repeat(cols - 2)}╯`, 'c-border')] },
+  ];
+}
+
+function spinnerLine() {
+  const t = now(), secs = t - S.turnT0, step = t - S.stepT0;
+  const writing = S.phase === 'writing';
+  const glyph = ORBIT[(Math.floor(S.tokens) + Math.floor(secs * 3)) % ORBIT.length];
+  const verb = { compacting: 'Compacting', review: 'Checking' }[S.phase] ?? 'Baking';
+  const pace = writing ? ` · ↓ ${S.liveTps.toFixed(1)} tok/s` : S.phase === 'reading' ? ' · reading' : S.phase === 'review' ? ' · second opinion' : '';
+  return { segs: [g('  ╰─ ', 'c-rail'), g(glyph, writing ? 'c-accent' : 'c-wait'), g(` ${verb}…`, 'c-accent'), g(` (${fmtSecs(secs)} · this step ${fmtSecs(step)}${pace} · esc to interrupt)`, 'c-dim')] };
+}
+
+// /meters on a remote: the whole server line under the footer.
+function metersLine() {
+  const parts = [[g(nameOf(), 'c-dim')]];
+  if (S.conn !== 'on') parts.push([g(S.conn === 'down' ? 'not answering' : S.conn, S.conn === 'down' ? 'c-bad' : 'c-dim')]);
+  else {
+    const m = metrics();
+    parts.push([g(`↓${m.tps}${sv().pps ? ` ↑${kTok(sv().pps * (S.spill ? 0.3 : 1))}` : ''} tok/s`, 'c-dim')]);
+    parts.push([g(`1st token ${S.ttft.toFixed(1)} s`, 'c-dim')]);
+    parts.push([g('ctx ', 'c-dim'), g(bar(m.ctxPct / 100, 10), ctxBarCls(m.ctxPct)), g(` ${m.ctxPct}% of ${m.ctxOf}`, 'c-dim')]);
+    if (sv().gpu) { const gb = entryOf()?.[1] ?? 0; parts.push([g(`GPU ${(gb * m.gpuPct / 100).toFixed(1)}/${gb.toFixed(1)} GB · kept loaded`, S.spill ? 'c-warn' : 'c-dim')]); }
+    if (m.cost) parts.push([g(`${m.cost} this window`, 'c-dim')]);
+    parts.push([g(`ping ${S.ping} ms`, 'c-dim')]);
+    parts.push([g('effort high', 'c-dim')]);
+  }
+  return [g('  '), ...joinGap(parts)];
+}
+
+const SHORTCUTS = [
+  ['/ for commands', 'shift+tab to switch mode'],
+  ['@ to attach a file', 'ctrl+o to expand the last output'],
+  ['! to run a shell command', 'esc to interrupt Agentic Coder'],
+  ['\\ + enter for a new line', 'ctrl+c twice to quit'],
+  ['↑ ↓ for earlier prompts', 'shift+arrows to select and copy'],
+  ['⌥+click to move the cursor', 'ctrl+z to undo · ctrl+y to redo'],
+];
+// On a remote these two rows take the place of the ctrl+t start/stop row (drawn green here to show they are new).
+const SHORTCUTS_REMOTE = [
+  ['ctrl+t to switch the model', 'ctrl+r for a second opinion now'],
+  ['ctrl+p to compact now', '/meters for the whole server line'],
+];
+const shortcutLines = () => [
+  ...SHORTCUTS.map(([a, b]) => ({ segs: [g(`  ${a.padEnd(36)}${b}`, 'c-dim')] })),
+  ...SHORTCUTS_REMOTE.map(([a, b]) => ({ segs: [g(`  ${a.padEnd(36)}${b}`, 'c-accentDim')] })),
+];
+
+function menuLines() {
+  const head = S.svc === 'claude' ? 'Claude models · api.anthropic.com' : `Models on ${sv().where}`;
+  const rows = sv().models.map((it, i) => {
+    const sel = i === S.menuIdx, inUse = it[0] === nameOf();
+    const detail = S.svc === 'claude' ? `${it[1]} · ${it[2]}` : S.svc === 'ollama' ? `${it[1].toFixed(1)} GB · ${ctxWord(it[2])}` : `${it[1]} · ${ctxWord(it[2])}`;
+    return { segs: [g(sel ? '  › ' : '    ', 'c-accent'), g(it[0].padEnd(22), sel ? 'c-accent' : 'c-fg'), g(`${detail}${inUse ? ' · in use' : ''}`, 'c-dim')] };
+  });
+  return [{ segs: [g('  '), g(head, 'c-white')] }, ...rows, { segs: [g('  ↑↓ to pick · enter to switch · esc to close', 'c-dim')] }];
+}
+
+function screen(design, cols) {
+  const L = [...S.conv.slice(-9)];
+  if (busy()) L.push(spinnerLine(), { segs: [] });
+  L.push(...promptBox(cols), { segs: [] });
+  if (S.overlay === 'models') L.push(...menuLines());
+  else {
+    L.push({ row: footerRow(design, cols) });
+    if (S.meters) L.push({ segs: metersLine() });
+    if (S.overlay === 'shortcuts') L.push({ segs: [] }, ...shortcutLines());
+  }
+  L.push({ segs: [] });
+  return L;
+}
+
+// ---------- drawing ----------
+const spanHTML = (segs) => segs.map((s) => (s.c ? `<span class="${s.c}">${escHTML(s.text)}</span>` : escHTML(s.text))).join('');
+function lineHTML(L, cols) {
+  if (L.row) return `<div class="ln row"><span class="l">${spanHTML(L.row.left)}</span><span class="r">${spanHTML(L.row.right)}</span></div>`;
+  return `<div class="ln${L.cls ? ` ${L.cls}` : ''}">${spanHTML(cut(L.segs ?? [], cols))}</div>`;
+}
+// Font size so the whole window fits its column, never under 9px (narrower screens scroll it).
+function fit(el, cols, max = 13, min = 9) {
+  const w = el.closest('.termwrap')?.clientWidth || 1000;
+  el.style.fontSize = `${Math.max(min, Math.min(max, (w - 4) / (cols * 0.61)))}px`;
+}
+function drawTerm(id, design) {
+  const term = document.getElementById(id);
+  const scr = term.querySelector('.screen');
+  const cols = S.cols;
+  if (design === 'today') scr.innerHTML = lineHTML({ row: footerRow('today', cols) }, cols);
+  else scr.innerHTML = screen(design, cols).map((L) => lineHTML(L, cols)).join('');
+  scr.style.width = `${cols}ch`;
+  const t = term.querySelector('.title');
+  if (t) t.textContent = `coding — ${cols}×24`;
+  fit(term, cols);
+}
+function drawWidths() {
+  const box = document.getElementById('widths');
+  const groups = [['today', 'Today'], [1, '1 · Words on the right'], [2, '2 · Gauges on the left']];
+  box.innerHTML = groups.map(([d, name]) => `<div class="wgroup"><h3>${name}</h3>${[80, 100, 120, 160].map((c) =>
+    `<div class="wrow"><span class="w">${c}</span><div class="termwrap"><div class="term" data-cols="${c}"><div class="screen" style="width:${c}ch">${lineHTML({ row: footerRow(d, c) }, c)}</div></div></div></div>`).join('')}</div>`).join('');
+  box.querySelectorAll('.term').forEach((t) => fit(t, Number(t.dataset.cols), 12, 7));
+}
+function syncControls() {
+  document.getElementById('cols').value = S.cols;
+  document.getElementById('colsOut').textContent = `${S.cols} cols`;
+  document.querySelectorAll('[data-cols]').forEach((b) => b.tagName === 'BUTTON' && b.setAttribute('aria-pressed', String(Number(b.dataset.cols) === S.cols)));
+  document.querySelectorAll('[data-svc]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.svc === S.svc)));
+  document.querySelectorAll('[data-conn]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.conn === S.conn)));
+  document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === S.mode)));
+  const spill = document.getElementById('spill');
+  spill.disabled = !sv().gpu;
+  spill.setAttribute('aria-pressed', String(S.spill));
+  document.getElementById('a-meters').setAttribute('aria-pressed', String(S.meters));
+}
+function render() {
+  syncControls();
+  drawTerm('tToday', 'today');
+  drawTerm('t1', 1);
+  drawTerm('t2', 2);
+  drawWidths();
+}
+
+// ---------- what the keys do ----------
+let RUN = null, TICK = null, NOTICE_T = null;
+function ensureTick() { if (!TICK) TICK = setInterval(() => { if (busy()) render(); else { clearInterval(TICK); TICK = null; } }, 100); }
+function setNotice(text, ms = 2200) {
+  S.notice = text;
+  clearTimeout(NOTICE_T);
+  NOTICE_T = setTimeout(() => { S.notice = null; render(); }, ms);
+  render();
+}
+function pushLines(lines) { S.conv.push(...lines); if (S.conv.length > 60) S.conv.splice(0, S.conv.length - 60); }
+function startRun(phase) { RUN = { stop: false }; S.phase = phase; S.turnT0 = S.stepT0 = now(); S.tokens = 0; ensureTick(); return RUN; }
+const wait = (run, secs) => new Promise((res) => { const end = now() + secs; const id = setInterval(() => { if (run.stop || now() >= end) { clearInterval(id); res(); } }, 50); });
+async function readPhase(run, secs) { S.phase = 'reading'; S.stepT0 = now(); await wait(run, secs); }
+async function writePhase(run, tps, n) {
+  S.phase = 'writing'; S.stepT0 = now();
+  let done = 0;
+  while (!run.stop && done < n) {
+    await wait(run, 0.1);
+    if (run.stop) break;
+    S.liveTps = tps * (0.88 + Math.random() * 0.24);
+    const add = S.liveTps * 0.1;
+    done += add; S.tokens += add; S.ctxUsed += add;
+  }
+}
+function notReady() {
+  if (S.conn === 'on') return false;
+  setNotice(S.conn === 'down' ? `${sv().where} is not answering: /remote to fix it` : 'Wait for the model to be ready', 2600);
+  return true;
+}
+
+async function send() {
+  if (busy()) { setNotice('Agentic Coder is working: esc to interrupt'); return; }
+  if (notReady()) return;
+  const text = S.draft.trim() || PROMPTS[S.pi++ % PROMPTS.length];
+  S.draft = '';
+  if (S.overlay === 'shortcuts') S.overlay = null;
+  pushLines(strip(text));
+  pushLines([{ segs: [] }]);
+  const s = sv();
+  const tps = rand(s.speed) * (S.spill ? 0.22 : 1);
+  const ttft = rand(s.ttft) * (S.spill ? 3 : 1);
+  const run = startRun('reading');
+  render();
+  await readPhase(run, ttft);
+  if (run.stop) return;
+  S.ttft = ttft;
+  await writePhase(run, tps, Math.min(160, tps * 3.2));
+  if (run.stop) return;
+  const asks = /explain/.test(text);
+  pushLines(asks
+    ? [{ segs: [g('  ● ', 'c-accent'), g('Read ', 'c-white'), g('src/upload.mjs', 'c-path'), g(' · 212 lines', 'c-dim')] }, { segs: [g('  │', 'c-rail')] }]
+    : [{ segs: [g('  ✎ ', 'c-edits'), g('Updated ', 'c-edits'), g('test/upload.test.mjs', 'c-path'), g(' · 9 additions', 'c-dim')] }, { segs: [g('  │', 'c-rail')] }]);
+  S.ctxUsed += 1800;
+  await readPhase(run, 0.5 * (S.spill ? 3 : 1));
+  if (run.stop) return;
+  await writePhase(run, tps, Math.min(90, tps * 2));
+  if (run.stop) return;
+  S.hist = [...S.hist, tps].slice(-8);
+  S.lastChanged = !asks;
+  const secs = now() - S.turnT0;
+  const cost = s.price != null ? s.price * (0.8 + Math.random() * 0.5) : 0;
+  S.usd += cost;
+  pushLines([{ segs: [g('  ╰─ ', 'c-rail'), g('⠿ ', 'c-accent'), g(`Baked for ${fmtSecs(secs)} · done ${clock()}`, 'c-dim'), ...(cost ? [g(` · ${money(cost)} for this request`, 'c-dim')] : [])] }, { segs: [] }]);
+  S.phase = 'idle'; RUN = null;
+  render();
+}
+function interrupt() {
+  if (!RUN) return;
+  RUN.stop = true; RUN = null;
+  S.phase = 'idle';
+  pushLines([{ segs: [g('  ╰─ ', 'c-rail'), g('■ Interrupted · What should Agentic Coder do instead?', 'c-warn')] }, { segs: [] }]);
+}
+async function review() {
+  if (busy()) { setNotice('Wait for the reply to finish, or press esc first'); return; }
+  if (notReady()) return;
+  const helper = sv().helper;
+  if (!helper) { setNotice('No review model here: /subagents picks one on an Ollama service', 2800); return; }
+  if (!S.lastChanged) { setNotice('Nothing changed in the last message, so there is nothing to review'); return; }
+  pushLines([note(`Second opinion: ${helper} reads the change…`)]);
+  const run = startRun('review');
+  render();
+  await wait(run, 2.6);
+  if (run.stop) return;
+  pushLines([note(`Second opinion: ${helper} found nothing wrong (3 s).`), { segs: [] }]);
+  S.phase = 'idle'; RUN = null;
+  render();
+}
+async function compact() {
+  if (busy()) { setNotice('Wait for Agentic Coder to finish, or press esc first'); return; }
+  if (notReady()) return;
+  const run = startRun('compacting');
+  render();
+  await wait(run, 2.2);
+  if (run.stop) return;
+  const before = S.ctxUsed;
+  S.ctxUsed = Math.min(before, 11200);
+  pushLines([note(`Compacted: ${kTok(before)} → ${kTok(S.ctxUsed)} tokens of ${ctxWord(ctxMaxOf())}.`), { segs: [] }]);
+  S.phase = 'idle'; RUN = null;
+  render();
+}
+function openModels() {
+  if (S.conn === 'down' || S.conn === 'connecting' || S.conn === 'reconnecting') { setNotice(`${sv().where} is not answering yet: the list opens once it does`, 2600); return; }
+  S.overlay = 'models';
+  S.menuIdx = Math.max(0, sv().models.findIndex((m) => m[0] === nameOf()));
+}
+function pickModel() {
+  const it = sv().models[S.menuIdx];
+  S.overlay = null;
+  if (!it || it[0] === nameOf()) return;
+  if (busy()) { setNotice('Wait for the reply to finish, then switch'); return; }
+  S.model[S.svc] = it[0];
+  if (S.svc === 'claude') { pushLines([note(`Now on ${it[0]} on api.anthropic.com. The chat stays.`), { segs: [] }]); return; }
+  S.conn = 'loading';
+  pushLines([note(`Now on ${it[0]} on ${sv().where} · ${ctxWord(it[2])} context. The chat stays.`), { segs: [] }]);
+  setTimeout(() => { if (S.conn === 'loading') { S.conn = 'on'; render(); } }, 2800);
+}
+function act(k) {
+  switch (k) {
+    case '?': S.overlay = S.overlay === 'shortcuts' ? null : 'shortcuts'; break;
+    case 'shift+tab': S.mode = CYCLE[(CYCLE.indexOf(S.mode) + 1) % CYCLE.length]; break;
+    case 'ctrl+t': openModels(); break;
+    case 'ctrl+r': review(); return;
+    case 'ctrl+p': compact(); return;
+    case 'meters': S.meters = !S.meters; break;
+    case 'send': send(); return;
+    case 'esc': if (S.overlay) S.overlay = null; else if (busy()) interrupt(); break;
+  }
+  render();
+}
+
+// Keys reach a terminal once it is clicked (or tabbed to).
+document.addEventListener('keydown', (e) => {
+  if (!e.target.closest || !e.target.closest('.term[tabindex]')) return;
+  const k = e.key;
+  if (e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (['t', 'r', 'p'].includes(k.toLowerCase())) { e.preventDefault(); act(`ctrl+${k.toLowerCase()}`); }
+    return;
+  }
+  if (e.metaKey || e.altKey) return;
+  if (S.overlay === 'models') {
+    e.preventDefault();
+    const n = sv().models.length;
+    if (k === 'ArrowDown') S.menuIdx = (S.menuIdx + 1) % n;
+    else if (k === 'ArrowUp') S.menuIdx = (S.menuIdx - 1 + n) % n;
+    else if (k === 'Enter') pickModel();
+    else if (k === 'Escape') S.overlay = null;
+    render();
+    return;
+  }
+  if (k === 'Tab' && e.shiftKey) { e.preventDefault(); act('shift+tab'); return; }
+  if (k === 'Escape') { e.preventDefault(); act('esc'); return; }
+  if (k === 'Enter') { e.preventDefault(); act('send'); return; }
+  if (k === '?' && !S.draft) { e.preventDefault(); act('?'); return; }
+  if (k === 'Backspace') { e.preventDefault(); S.draft = S.draft.slice(0, -1); render(); return; }
+  if (k.length === 1) { e.preventDefault(); S.draft += k; render(); }
+});
+
+// ---------- the controls ----------
+document.getElementById('cols').addEventListener('input', (e) => { S.cols = Number(e.target.value); render(); });
+document.querySelectorAll('button[data-cols]').forEach((b) => b.addEventListener('click', () => { S.cols = Number(b.dataset.cols); render(); }));
+document.querySelectorAll('[data-svc]').forEach((b) => b.addEventListener('click', () => {
+  if (S.svc === b.dataset.svc) return;
+  if (RUN) interrupt();
+  S.svc = b.dataset.svc;
+  const s = sv();
+  S.hist = [...s.hist]; S.ttft = (s.ttft[0] + s.ttft[1]) / 2; S.ctxUsed = Math.round(s.ctxMax * 0.38);
+  S.usd = s.price != null ? 0.12 : 0; S.spill = false; S.overlay = null; S.conn = 'on'; S.lastChanged = true;
+  render();
+}));
+document.querySelectorAll('[data-conn]').forEach((b) => b.addEventListener('click', () => { if (RUN && b.dataset.conn !== 'on') interrupt(); S.conn = b.dataset.conn; if (S.overlay === 'models') S.overlay = null; render(); }));
+document.getElementById('spill').addEventListener('click', () => {
+  S.spill = !S.spill;
+  // A spill is drawn at once; its slower replies show in the speed and the sparkline.
+  S.hist = S.spill ? [...S.hist.slice(-6), 11, 9] : [...sv().hist];
+  S.ttft = S.spill ? 4.1 : 1.2;
+  render();
+});
+document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => { S.mode = b.dataset.mode; render(); }));
+document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
+document.querySelectorAll('.term[tabindex]').forEach((t) => t.addEventListener('mousedown', () => setTimeout(() => t.focus(), 0)));
+
+// The server read every 30 s (Ollama /api/ps): new figures wait for the next redraw, as the app will do.
+setInterval(() => { S.ping = Math.round(18 + Math.random() * 14); }, 30000);
+let RESIZE = null;
+window.addEventListener('resize', () => { clearTimeout(RESIZE); RESIZE = setTimeout(render, 80); });
+S.ctxUsed = Math.round(SERVICES.ollama.ctxMax * 0.38);
+render();
+</script>
+</body>
+</html>
