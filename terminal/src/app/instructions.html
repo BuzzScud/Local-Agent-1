@@ -19,6 +19,7 @@
 .srclist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px}.src{border:1px solid var(--line);border-radius:10px;background:var(--surface)}.src summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:3px 14px;align-items:center;padding:11px 14px}.src summary::-webkit-details-marker{display:none}.src summary:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:10px}.src-name{font-weight:600;font-size:13px;overflow-wrap:anywhere}.src-name small{font-weight:400;color:var(--muted);font-size:12px;margin-left:8px}.src-size{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right;min-width:90px}.src-path{grid-column:1/-1;font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);overflow-wrap:anywhere}.src-path:before{content:'▸ ';color:var(--muted)}.src[open] .src-path:before{content:'▾ '}.src pre{margin:0 14px 14px;max-height:280px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);border-radius:8px;padding:12px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace}
 .chip{font-size:11px;padding:2px 9px;border-radius:20px;border:1px solid var(--line);white-space:nowrap;text-align:center;min-width:72px}.chip.whole{color:var(--green)}.chip.part{color:var(--amber)}.chip.left{color:var(--red)}
 .group-eyebrow{margin-top:14px}.filebar{display:flex;flex-direction:column;gap:8px}.file-note{margin:0;font-size:12px;color:var(--muted);line-height:1.55;background:var(--soft);border-radius:10px;padding:9px 12px}.file-note b{color:var(--ink);font-weight:600}.file-note.warn{color:var(--amber)}.file-note.warn b{color:var(--amber)}
+.setrow{display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:0 0 6px}.set-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:20px;padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}.set-btn[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}.set-btn:focus-visible{outline:3px solid var(--blue);outline-offset:2px}.setrow select{font:inherit;font-size:12px}
 .skills-row{display:flex;gap:6px 8px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}.skill-chip{border:1px solid var(--line);border-radius:20px;padding:3px 10px;background:var(--surface);color:var(--ink);white-space:nowrap}.skill-chip small{color:var(--muted);margin-left:6px}.skill-chip.hit{border-color:var(--green);color:var(--green)}.skills-problems{color:var(--amber)}
 .try-row{display:flex;gap:8px;align-items:center}.try-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);padding:7px 12px;font-size:12px}.try-row input:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 2px var(--tint)}.try-row button{padding:7px 12px;font-size:12px}.try-out{font-size:12px;color:var(--muted);min-width:0;flex:1.2;overflow-wrap:anywhere}.try-out b{color:var(--ink);font-weight:600}
 .design-meta{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}.design-meta label{display:flex;gap:6px;align-items:center;color:var(--ink);font-weight:600}.design-meta span{flex:1;min-width:200px}
@@ -46,12 +47,13 @@
 <button class="nav" role="tab" id="tab-agents" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="agents">06 &nbsp; AGENTS.md<small>Rules · this project</small></button>
 <button class="nav" role="tab" id="tab-tools" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="tools">07 &nbsp; TOOLS.md<small>How to use the tools</small></button>
 <button class="nav" role="tab" id="tab-skills" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="skills">08 &nbsp; SKILLS.md<small>Steps picked by words</small></button>
+<button class="nav" role="tab" id="tab-remote" aria-selected="false" aria-controls="panel" tabindex="-1" data-section="remote">09 &nbsp; Remote: HARNESS &amp; guides<small>For models on another machine</small></button>
 </div><div class="aside-note"><strong>One agent, a clearer plan.</strong>Planning uses the active model and existing task list. No separate planner model is added.<br><br>Project rules remain in their source files. Tool permissions are enforced by the app.</div></aside>
 <section class="editor" id="panel" role="tabpanel" aria-labelledby="tab-general">
 <div class="section-head"><h2 id="section-title">General instructions</h2><p id="description">Loading your instructions…</p></div>
 <div class="body">
 <div class="scope" id="scope" hidden><label id="view-label">View <select id="preview-kind"><option value="main">Main agent prompt</option><option value="cost">What each part costs</option><option value="focused">Focused coding calls</option><option value="tools">Tools sent with it</option><option value="added">Added to each request</option><option value="models">Gemma and Qwen settings</option></select></label><label>Folder <select id="folder" aria-label="Show the prompt for this folder"></select></label><span class="scope-info" id="scope-info"></span></div>
-<div class="filebar" id="filebar" hidden><p class="file-note" id="file-note"></p><p class="file-note warn" id="file-warn" hidden></p></div>
+<div class="filebar" id="filebar" hidden><div class="setrow" id="setrow" hidden><span id="set-label">Which set</span><span role="group" aria-labelledby="set-label" id="set-btns"><button type="button" class="set-btn" data-set="local" aria-pressed="true">Local · models on this Mac</button> <button type="button" class="set-btn" data-set="remote" aria-pressed="false">Remote · models on /remote</button></span><label id="remote-pick-label" hidden>File <select id="remote-pick" aria-label="Which remote file"></select></label><label id="set-choice-label" hidden>The model gets <select id="set-choice" aria-label="Which set the model gets"><option value="auto">Auto: remote on /remote, local here</option><option value="local">Local, always</option><option value="remote">Remote, always</option></select></label><span id="set-choice-note"></span></div><p class="file-note" id="file-note"></p><p class="file-note warn" id="file-warn" hidden></p></div>
 <textarea id="text" aria-label="General instructions" spellcheck="false" disabled></textarea>
 <div class="meta" id="edit-meta"><button class="text-button" id="defaults" disabled>Use recommended defaults</button><span id="count"></span></div>
 <div class="filebar" id="skills-bar" hidden><div class="skills-row" id="skills-row" aria-live="polite"></div><form class="try-row" id="skill-try"><input id="skill-try-input" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="Try a request, for example: add a test for the login page" aria-label="Try a request to see which skill it brings"><button type="submit" id="skill-try-run">Which skill?</button><span class="try-out" id="skill-try-out" aria-live="polite"></span></form></div>
@@ -84,18 +86,23 @@ const $ = id => document.getElementById(id);
 let state, draft, section = 'general', busy = false, error = '';
 // The Prompt files tabs (06–08): the files as read (files.files[f]) and their drafts.
 let files = null, fileDraft = {};
-const FILE_TABS = ['agents', 'tools', 'skills'];
+const FILE_TABS = ['agents', 'tools', 'skills', 'remote'];
+// Tabs 07–08 show the local or the remote set's file (the Local | Remote switch); tab 09 one of
+// the remote set's HARNESS.md and guides. fk(): the file the tab shows now, as files.json keys it.
+let fileSet = 'local', remotePick = 'remote:harness';
+const fk = () => section === 'remote' ? remotePick : (fileSet === 'remote' && (section === 'tools' || section === 'skills')) ? 'remote:' + section : section;
 const isFile = (s = section) => FILE_TABS.includes(s);
 const editable = () => section === 'general' || section === 'planning';
 const sectionsDirty = () => !!state && Object.keys(state.sections).some(k => draft[k] !== state.sections[k]);
 const fileDirty = f => !!files && fileDraft[f] !== undefined && fileDraft[f] !== files.files[f].text;
-const dirty = () => sectionsDirty() || FILE_TABS.some(fileDirty);
+const dirty = () => sectionsDirty() || Object.keys(fileDraft).some(fileDirty);
 window.instructionsDirty = dirty;
-const titles = {general:'General instructions',planning:'Planning instructions',context:'Project context',preview:'Effective prompt preview',howto:'How to',agents:'AGENTS.md',tools:'TOOLS.md',skills:'SKILLS.md'};
+const titles = {general:'General instructions',planning:'Planning instructions',context:'Project context',preview:'Effective prompt preview',howto:'How to',agents:'AGENTS.md',tools:'TOOLS.md',skills:'SKILLS.md',remote:'Remote: HARNESS & guides'};
 const descriptions = {general:'Ground changes in evidence, preserve scope, and report what was actually verified.',planning:'Use a short plan for complex work. Define success, update the plan, and check the result.',context:'The notes files and the memory the model reads in the chosen folder: what kind each is, how much of it arrives, and which wins. Edit the original files to change them.',preview:'The real prompt with your draft inserted, what each part costs, and the other things the model receives: its tools, what is added to each request, and each model’s settings.',howto:'How it works · Hover or select a step to see what powers it and how to improve it.',
  agents:'The rules file of the folder you pick. Agentic Coder reads it when it works in that folder or one below it, and Codex and Claude Code read it there too.',
  tools:'The Tool use lines in every conversation. The tools themselves are built into the app; these lines say how to use them.',
- skills:'Steps for kinds of task. A request that uses a skill’s Words brings its steps, and every skill is listed so the model can open one the words missed.'};
+ skills:'Steps for kinds of task. A request that uses a skill’s Words brings its steps, and every skill is listed so the model can open one the words missed.',
+ remote:'For a model on another machine (/remote). HARNESS.md is its opening, how it works and its rules, in every conversation. Each guide is one line in its list, and the model reads the guide when the task fits.'};
 // The parts of the prompt, grouped by where they come from (colours checked for colour-blind readers, light and dark).
 const GROUPS = {built:'Built in', yours:'Yours: tabs 01–02 and 07–08', session:'This session', notes:'Notes files', memory:'Memory', tools:'Tools'};
 const KEPT = {disk:'On disk', folder:'This folder today', unknown:'With every request'};
@@ -202,8 +209,8 @@ function viewNote(kind) {
  return 'Both models get the same prompt text. These settings are what differs.';
 }
 function controls() {
- const file = isFile(), f = file ? files?.files[section] : null;
- const changed = file ? fileDirty(section) : sectionsDirty();
+ const file = isFile(), f = file ? files?.files[fk()] : null;
+ const changed = file ? fileDirty(fk()) : sectionsDirty();
  $('save').disabled = busy || (file ? !f || !f.path || !changed : !state || !changed);
  $('undo').disabled = busy || (file ? !f || !f.undoCount : !state || !state.undoCount);
  $('reload').disabled = busy;
@@ -214,12 +221,12 @@ function controls() {
  $('status').classList.toggle('error', !!error);
  $('status').textContent = error || (busy ? 'Saving…' : file ? fileStatus(f) : changed ? 'Unsaved changes · Save applies both sections to the next task.' : state ? (state.updatedAt ? 'Saved ' + new Date(state.updatedAt).toLocaleString() : 'Recommended defaults · no custom version saved') : 'Loading…');
  if (state && editable()) $('count').textContent = draft[section].length.toLocaleString() + ' / ' + state.limits[section].toLocaleString() + ' characters';
- if (f) $('count').textContent = fileDraft[section].length.toLocaleString() + ' / ' + f.limit.toLocaleString() + ' characters' + (section === 'agents' ? ' · rules room ' + num(f.room) : '');
+ if (f) $('count').textContent = fileDraft[fk()].length.toLocaleString() + ' / ' + f.limit.toLocaleString() + ' characters' + (section === 'agents' ? ' · rules room ' + num(f.room) : '');
 }
 function fileStatus(f) {
  if (!f) return 'Loading…';
  if (!f.path) return `${f.name} is built into this copy of Agentic Coder: the repo is not on this Mac, so there is nowhere to save it.`;
- if (fileDirty(section)) return `Unsaved changes · Save writes ${f.shown}; Agentic Coder reads it on your next message.`;
+ if (fileDirty(fk())) return `Unsaved changes · Save writes ${f.shown}; Agentic Coder reads it on your next message.`;
  if (!f.exists) return section === 'agents' ? `No AGENTS.md in this folder yet · Save creates ${f.shown}.` : `No ${f.name} on disk: this is the copy built into the app · Save writes ${f.shown}.`;
  return 'Saved on disk · Agentic Coder reads it on your next message.';
 }
@@ -232,13 +239,16 @@ function render() {
  const file = isFile();
  show('text', editable() || file); show('edit-meta', editable() || file); show('howto', section === 'howto');
  show('filebar', file); show('skills-bar', section === 'skills');
+ show('setrow', section === 'tools' || section === 'skills' || section === 'remote'); show('set-btns', section !== 'remote'); show('set-label', section !== 'remote'); show('remote-pick-label', section === 'remote'); show('set-choice-label', section === 'remote'); show('set-choice-note', section === 'remote');
+ document.querySelectorAll('.set-btn').forEach(b => b.setAttribute('aria-pressed', b.dataset.set === fileSet));
+ if (fileSet === 'remote' && (section === 'tools' || section === 'skills')) $('description').textContent = 'The remote set’s ' + titles[section] + ', for a model on another machine (/remote). ' + descriptions[section];
  show('scope', prev || ctx || section === 'agents'); show('view-label', prev); show('preview-note', prev); show('rank', ctx); show('srclist', ctx);
  show('cost', prev && (kind === 'main' || kind === 'cost')); show('costview', prev && kind === 'cost');
  show('readview', prev && kind !== 'cost'); show('recall-box', prev && kind === 'added'); show('design-meta', prev && kind === 'added');
  $('tip').hidden = true;
  if (state) {
   if (editable()) { $('text').value = draft[section]; $('text').maxLength = state.limits[section]; $('text').setAttribute('aria-label', titles[section]); }
-  if (file && files) { if ($('text').value !== fileDraft[section]) $('text').value = fileDraft[section]; $('text').maxLength = files.files[section].limit; $('text').setAttribute('aria-label', titles[section]); renderFile(); }
+  if (file && files) { const k = fk(); if ($('text').value !== fileDraft[k]) $('text').value = fileDraft[k]; $('text').maxLength = files.files[k].limit; $('text').setAttribute('aria-label', files.files[k].name); renderPick(); renderFile(); }
   if (prev || ctx || section === 'agents') renderScope();
   if (prev) {
    $('preview-note').textContent = viewNote(kind);
@@ -362,8 +372,20 @@ function draftSkills(text) {
 }
 let tried = null; // the last "Which skill?" answer
 function renderFile() {
- const f = files.files[section], text = fileDraft[section], warn = [];
- if (section === 'agents') {
+ const f = files.files[fk()], text = fileDraft[fk()], warn = [];
+ if (section === 'remote') {
+  const where = [['b', f.shown ?? 'built into the app'], ' · in the repo: it ships with the app and is public on GitHub after a push.'];
+  if (f.file === 'remote:harness') {
+   const missing = ['Who you are', 'How you work', 'Rules the app enforces'].filter(h => sectionOf(text, h) === null);
+   put($('file-note'), [...where, ' Its parts go into every conversation with a model on another machine, in place of the local opening, Work habits and Rules. “Guides” is the line above the list of guides.']);
+   if (missing.length) warn.push(`Missing ${missing.map(h => '“## ' + h + '”').join(', ')}: Save needs them; the remote instructions are built from them.`);
+  } else {
+   const line = (text.replace(/^# .*\n/, '').trimStart().split(/\n\s*\n|\n## /)[0] || '').replace(/\s*\n\s*/g, ' ');
+   put($('file-note'), [...where, ` In the list as ${f.guide === 'SUBAGENTS' ? '(only when the Agent tool is offered) ' : ''}`, ['b', 'RULES/' + f.guide + '.md'], line && !line.startsWith('## ') ? `: ${(/^.*?[.!?](?=\s|$)/.exec(line)?.[0] ?? line).replace(/^Read this\s+/i, '').replace(/\.$/, '')}.` : '.', ' The first sentence under the title is that line; the ## parts are what the model reads.']);
+   if (!/^## \S/m.test(text)) warn.push('No “## ” part: Save needs one. That is what the model reads when it opens the guide.');
+  }
+  if (!f.fromDisk && f.path) warn.push(`Showing the copy built into the app: there is no ${f.name} on disk.`);
+ } else if (section === 'agents') {
   const gets = !f.exists ? 'Not on disk yet: Save creates it, and Agentic Coder reads it on your next message here.'
    : !f.gets ? 'Agentic Coder does not read it from here.'
    : f.gets.status === 'whole' ? `Qwen gets it whole, in the ${num(f.room)}-character rules room it shares with the files around it.`
@@ -375,7 +397,7 @@ function renderFile() {
   if (f.claude?.read) warn.push('This folder’s rules are in CLAUDE.md today, and Agentic Coder reads that. Once AGENTS.md is saved here, it reads AGENTS.md and skips CLAUDE.md.');
   if (text.length > f.room) warn.push(`Longer than the rules room (${num(f.room)} characters): Qwen gets the sections that fit, and is told which it did not get.`);
  } else {
-  const where = [['b', f.shown ?? 'built into the app'], ' · in the repo: it ships with the app and is public on GitHub after a push.'];
+  const where = [['b', f.shown ?? 'built into the app'], ' · in the repo: it ships with the app and is public on GitHub after a push.', f.set === 'remote' ? ' Remote set: for a model on another machine; with no file here, the local one stands in.' : ''];
   if (section === 'tools') {
    const lines = sectionOf(text, 'Tool use');
    put($('file-note'), [...where, lines ? ` The ${lines.split('\n').filter(l => l.trim()).length} lines under ## Tool use go into every conversation (≈${num(Math.ceil(lines.length / 3.6))} tokens, read once and kept with the warm-up).` : '']);
@@ -407,7 +429,7 @@ function accept(value) { state = value; folder = state.cwd; draft = {...state.se
 // The files as read; keep: the tabs whose unsaved drafts stay.
 function acceptFiles(value, keep = []) {
  files = value;
- for (const f of FILE_TABS) if (!keep.includes(f) || fileDraft[f] === undefined) fileDraft[f] = files.files[f].text;
+ for (const f of Object.keys(files.files)) if (!keep.includes(f) || fileDraft[f] === undefined) fileDraft[f] = files.files[f].text;
 }
 // The instructions again (the preview and the notes follow the files), keeping the General and Planning drafts.
 async function refreshState() { const keep = draft, was = state?.revision; state = await api('/instructions.json'); folder = state.cwd; draft = state.revision === was ? keep : {...state.sections}; }
@@ -415,7 +437,7 @@ async function refreshState() { const keep = draft, was = state?.revision; state
 async function switchFolder(path) {
  if (fileDirty('agents') && !confirm('Discard your unsaved AGENTS.md edits for the other folder?')) { $('folder').value = folder; return; }
  folder = path; busy = true; controls();
- try { await refreshState(); acceptFiles(await api('/instructions/files.json'), ['tools', 'skills']); error = ''; }
+ try { await refreshState(); acceptFiles(await api('/instructions/files.json'), Object.keys(fileDraft).filter(k => k !== 'agents')); error = ''; }
  catch (e) { error = e.message; }
  finally { busy = false; render(); }
 }
@@ -436,13 +458,13 @@ async function save(undo = false) {
 }
 // A prompt file: written where the tab says, then read again with everything that follows it.
 async function saveFile(undo) {
- const which = section, f = files?.files[which];
+ const which = fk(), f = files?.files[which];
  if (!f || busy || (!undo && !fileDirty(which))) return;
  if (undo && !confirm(`${fileDirty(which) ? 'Discard your unsaved edits and put' : 'Put'} back ${f.name} as it was before the last save here?`)) return;
  busy = true; error = ''; controls();
  try {
   const r = await api('/instructions/files/' + (undo ? 'undo' : 'save'), {file: which, text: fileDraft[which], revision: f.revision});
-  acceptFiles(r, FILE_TABS.filter(x => x !== which));
+  acceptFiles(r, Object.keys(fileDraft).filter(x => x !== which));
   await refreshState();
  }
  catch (e) { error = e.message + (undo ? '' : ' Your edits are still here.'); }
@@ -487,21 +509,42 @@ howtoNodes.forEach((node, index) => {
 });
 selectStep(0, false);
 
-$('text').oninput = () => { if (isFile()) { fileDraft[section] = $('text').value; renderFile(); } else draft[section] = $('text').value; controls(); };
+$('text').oninput = () => { if (isFile()) { fileDraft[fk()] = $('text').value; renderPick(); renderFile(); } else draft[section] = $('text').value; controls(); };
 $('defaults').onclick = () => {
- if (isFile()) { const f = files?.files[section]; if (!f) return; if (fileDraft[section] !== f.starter && fileDraft[section].trim() && !confirm(`Replace the text here with ${section === 'agents' ? 'the starter' : 'the copy built into the app'}? Nothing is saved until you press Save.`)) return; fileDraft[section] = f.starter; error = ''; render(); return; }
+ if (isFile()) { const k = fk(), f = files?.files[k]; if (!f) return; if (fileDraft[k] !== f.starter && fileDraft[k].trim() && !confirm(`Replace the text here with ${section === 'agents' ? 'the starter' : 'the copy built into the app'}? Nothing is saved until you press Save.`)) return; fileDraft[k] = f.starter; error = ''; render(); return; }
  if (!state || !editable()) return; draft[section] = state.defaults[section]; error = ''; render();
 };
 $('skill-try').onsubmit = async e => {
  e.preventDefault();
  const request = $('skill-try-input').value.trim(); if (!request) return;
  $('skill-try-run').disabled = true;
- try { tried = await api('/instructions/files/try', {request, text: fileDraft.skills});
+ try { tried = await api('/instructions/files/try', {request, text: fileDraft[fk()]});
   put($('skill-try-out'), tried.skill ? ['Brings ', ['b', tried.skill.name], ` (its words here: ${tried.skill.matched.join(', ')}; ≈${num(tried.skill.tokens)} tokens with the request).`] : ['No skill: none of their words are in it. The model still sees the list.']); }
  catch (err) { tried = null; put($('skill-try-out'), [err.message]); }
  $('skill-try-run').disabled = false; $('skill-try-out').hidden = false; renderFile();
 };
 $('preview-kind').onchange = render;
+document.querySelectorAll('.set-btn').forEach(b => { b.onclick = () => { fileSet = b.dataset.set; tried = null; $('skill-try-out').textContent = ''; render(); }; });
+$('remote-pick').onchange = () => { remotePick = $('remote-pick').value; render(); };
+$('set-choice').onchange = async () => {
+ busy = true; controls();
+ try { const r = await api('/instructions/set', {set: $('set-choice').value}); files.instructions = r.instructions; error = ''; }
+ catch (e) { error = e.message; }
+ finally { busy = false; render(); }
+};
+// Tab 09's file menu: HARNESS.md, then the guides, each marked when it has unsaved edits.
+function renderPick() {
+ if (section !== 'remote' || !files) return;
+ const ch = files.instructions ?? {saved: 'auto', env: null};
+ $('set-choice').value = ch.saved; $('set-choice').disabled = busy || !!ch.env;
+ $('set-choice-note').textContent = ch.env ? `AGENTIC_INSTRUCTIONS=${ch.env} decides where the app was started.` : 'Saved in settings.json; the app reads it before your next message.';
+ const keys = Object.keys(files.files).filter(k => k.startsWith('remote:') && k !== 'remote:tools' && k !== 'remote:skills');
+ const sel = $('remote-pick');
+ const label = k => files.files[k].name.replace(/^remote\//, '') + (k === 'remote:harness' ? ' · every message' : ' · guide') + (fileDirty(k) ? ' · edited' : '');
+ if (sel.options.length !== keys.length) sel.replaceChildren(...keys.map(k => Object.assign(document.createElement('option'), {value: k})));
+ [...sel.options].forEach(o => { o.textContent = label(o.value); });
+ sel.value = remotePick;
+}
 $('folder').onchange = () => switchFolder($('folder').value);
 $('costview').onmouseleave = () => { $('tip').hidden = true; };
 $('design-style').onchange = async () => {

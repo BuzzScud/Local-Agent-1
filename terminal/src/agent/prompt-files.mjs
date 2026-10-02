@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HOME } from '../../../models/index.mjs';
 
 export const PROMPT_FILES = Object.freeze({ tools: 'TOOLS.md', skills: 'SKILLS.md' });
 
@@ -32,6 +33,63 @@ async function load(which) {
 }
 export const BUILT_IN = Object.freeze({ tools: await load('tools'), skills: await load('skills') });
 
+// The remote set (2 Oct 2026): terminal/rules/remote/ holds the instructions for a model on
+// another machine (/remote), which can take more than the 9B on this Mac. HARNESS.md is its
+// opening, how it works and the rules (in place of the built-in ones), TOOLS.md its Tool use
+// lines, SKILLS.md its skills, and nine guides it is shown by name and opens with Read at
+// RULES/<NAME>.md when one fits. A file missing from that folder: the local one of the same
+// name (TOOLS, SKILLS), the copy built into the app (HARNESS), or left out (a guide).
+// Which set: settings.json "instructions" (auto, local or remote; the hub's Instructions → 09 saves
+// it; auto, the default, is remote for a /remote model), read before each message;
+// AGENTIC_INSTRUCTIONS wins over it (the practice runs' --instructions). Not an /effort row: that
+// panel is as tall as an 80×24 window allows.
+export const RULE_SETS = ['auto', 'local', 'remote'];
+export const REMOTE_DIR = 'remote';
+export const GUIDES = Object.freeze(['PLANNING', 'TESTING', 'REVIEW', 'BUG-FIXING', 'DESIGN', 'SUBAGENTS', 'MEMORY', 'GIT', 'ANSWERS']);
+// Listed only when the Agent tool is offered (agent.mjs agentsOn).
+export const AGENTS_GUIDE = 'SUBAGENTS';
+export const instructionsEnv = (env = process.env) => env.AGENTIC_INSTRUCTIONS;
+// The saved choice (settings.json "instructions", the file the app's settings live in), 'auto'
+// when there is none or it cannot be read.
+export function savedInstructions(home = HOME) {
+  try { const v = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')).instructions; return RULE_SETS.includes(v) ? v : 'auto'; } catch { return 'auto'; }
+}
+export function rulesSetOf(choice, model, env = process.env) {
+  const c = instructionsEnv(env) ?? choice ?? savedInstructions();
+  if (c === 'local' || c === 'remote') return c;
+  return model?.remote ? 'remote' : 'local';
+}
+const fileOf = (which) => PROMPT_FILES[which] ?? (which === 'harness' ? 'HARNESS.md' : `${which}.md`);
+async function loadRemote() {
+  const text = async (m) => { const t = (await m).default; return t.startsWith('/$bunfs/') ? readFileSync(t, 'utf8') : t; };
+  try {
+    if (typeof Bun !== 'undefined') {
+      // Literal paths, so the one-file app carries all twelve inside it.
+      const all = await Promise.all([
+        text(import('../../rules/remote/HARNESS.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/TOOLS.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/SKILLS.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/PLANNING.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/TESTING.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/REVIEW.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/BUG-FIXING.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/DESIGN.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/SUBAGENTS.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/MEMORY.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/GIT.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/ANSWERS.md', { with: { type: 'text' } })),
+      ]);
+      return Object.fromEntries(['harness', 'tools', 'skills', ...GUIDES].map((w, i) => [w, all[i]]));
+    }
+    return Object.fromEntries(['harness', 'tools', 'skills', ...GUIDES].map((w) => {
+      try { return [w, readFileSync(new URL(`../../rules/${REMOTE_DIR}/${fileOf(w)}`, import.meta.url), 'utf8')]; } catch { return [w, '']; }
+    }));
+  } catch {
+    return {};
+  }
+}
+export const BUILT_IN_REMOTE = Object.freeze(await loadRemote());
+
 // Where the files are kept on this Mac: the repo's terminal/rules (the
 // launcher passes AGENTIC_REPO; run from the source, the folder beside this
 // one); AGENTIC_RULES_DIR for tests. null: the built-in copies only.
@@ -48,7 +106,21 @@ export function rulesDir() {
 }
 
 // A file as it is now: from the disk when it is there, else the built-in copy.
-export function readPromptFile(which, dir = rulesDir()) {
+// set 'remote': terminal/rules/remote/ first. Missing there while the folder is on this Mac:
+// TOOLS and SKILLS fall back to the local file, HARNESS to its built-in copy, and a guide is
+// left out (from 'none', text ''), so deleting a remote file never breaks a conversation.
+// With no folder at all (the app without its repo), the built-in remote copies.
+export function readPromptFile(which, dir = rulesDir(), set = 'local') {
+  if (set === 'remote') {
+    const path = dir ? join(dir, REMOTE_DIR, fileOf(which)) : null;
+    if (path) {
+      try { return { text: readFileSync(path, 'utf8'), path, from: 'disk', set: 'remote' }; } catch {}
+      if (PROMPT_FILES[which]) return { ...readPromptFile(which, dir), set: 'local' };
+      if (which !== 'harness') return { text: '', path, from: 'none', set: 'remote' };
+    }
+    if (BUILT_IN_REMOTE[which]) return { text: BUILT_IN_REMOTE[which], path, from: 'built-in', set: 'remote' };
+    return PROMPT_FILES[which] ? { ...readPromptFile(which, null), set: 'local' } : { text: '', path, from: 'none', set: 'remote' };
+  }
   const path = dir ? join(dir, PROMPT_FILES[which]) : null;
   if (path) {
     try { return { text: readFileSync(path, 'utf8'), path, from: 'disk' }; } catch {}
@@ -69,6 +141,8 @@ export function sectionOf(text, heading) {
 export function toolUseText(text = readPromptFile('tools').text) {
   return sectionOf(text, 'Tool use') || sectionOf(BUILT_IN.tools, 'Tool use') || TOOL_USE_OLD;
 }
+// The Tool use lines of a set (the remote TOOLS.md, or the local one standing in for it).
+export const toolUseFor = (set = 'local', dir = rulesDir()) => toolUseText(readPromptFile('tools', dir, set).text);
 
 const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill';
 
@@ -102,7 +176,7 @@ export function parseSkills(text) {
   }
   return skills;
 }
-export const readSkills = (dir = rulesDir()) => parseSkills(readPromptFile('skills', dir).text);
+export const readSkills = (dir = rulesDir(), set = 'local') => parseSkills(readPromptFile('skills', dir, set).text);
 
 // What stops a save (errors) and what is only worth saying (warnings).
 export function skillProblems(skills) {
@@ -174,4 +248,61 @@ export function readSkillPath(cwd, p, skills) {
   const s = all.find((x) => x.slug === want);
   if (!s) return { error: `No skill ${shown}/${m[1]}. The skills: ${all.map((x) => `${shown}/${x.slug}`).join(', ')}.` };
   return { text: `${shown}/${s.slug} (${s.name}):\n${s.body}` };
+}
+
+// ---- the guides (the remote set) ---------------------------------------------------------------
+
+// The path that opens a guide: RULES/<NAME>.md, or Rules/RULES/<NAME>.md when the project has a
+// RULES folder of its own (on a Mac also a "rules" one), so the read cannot land in it.
+export function guidePath(cwd) {
+  try { if (cwd && existsSync(join(cwd, 'RULES'))) return 'Rules/RULES'; } catch {}
+  return 'RULES';
+}
+
+// A set's guides: each one's name, what the list says about it (the line under its title,
+// "Read this for …" shortened to "for …") and what a Read gives (its ## sections; the lines
+// above them are for the person editing it). None on the local set; SUBAGENTS only when the
+// Agent tool is offered.
+export function readGuides(set = 'local', { dir = rulesDir(), agents = false } = {}) {
+  if (set !== 'remote') return [];
+  return GUIDES.filter((g) => agents || g !== AGENTS_GUIDE).map((name) => {
+    const text = readPromptFile(name, dir, 'remote').text;
+    if (!text.trim()) return null;
+    // The first sentence of the first paragraph under the title (a sentence may wrap).
+    const head = text.replace(/^# .*\n/, '').trimStart();
+    const para = head.startsWith('## ') ? '' : head.split(/\n\s*\n|\n## /)[0].replace(/\s*\n\s*/g, ' ');
+    const about = (/^.*?[.!?](?=\s|$)/.exec(para)?.[0] ?? para).trim().replace(/^Read this\s+/i, '').replace(/\.$/, '');
+    const at = text.search(/^## /m);
+    return { name, about, body: (at >= 0 ? text.slice(at) : text).trim() };
+  }).filter(Boolean);
+}
+
+// The list in the instructions: every guide by the path that opens it.
+export function guidesList(guides, { path = 'RULES', intro = '' } = {}) {
+  if (!guides.length) return '';
+  return `Guides
+${intro || 'Longer guides for some kinds of work. When one fits the task and you have not read it in this conversation, Read it first:'}
+${guides.map((g) => `- ${path}/${g.name}.md${g.about ? `: ${g.about}` : ''}`).join('\n')}`;
+}
+
+// Read "RULES" (the list) or "RULES/<NAME>.md" (one guide). null: not such a path, or no
+// guides on this set (then the project's own RULES folder is read as any folder).
+export function readGuidePath(cwd, p, guides) {
+  if (!guides?.length) return null;
+  const raw = String(p ?? '').trim();
+  const m = /^(?:\.\/)?(?:Rules\/)?RULES(?:\/([A-Za-z-]+?)(?:\.md)?)?\/?$/.exec(raw);
+  if (!m) return null;
+  const path = guidePath(cwd);
+  if (path === 'Rules/RULES' && !/^(?:\.\/)?Rules\/RULES(?:\/|$)/.test(raw)) return null;
+  if (!m[1]) return { text: guidesList(guides, { path }) };
+  const g = guides.find((x) => x.name === m[1].toUpperCase());
+  if (!g) return { error: `No guide ${path}/${m[1]}. The guides: ${guides.map((x) => `${path}/${x.name}.md`).join(', ')}.` };
+  return { text: `${path}/${g.name}.md:\n${g.body}` };
+}
+
+// HARNESS.md's four parts, each from the built-in copy when the file on disk lacks it.
+export function harnessOf(dir = rulesDir()) {
+  const text = readPromptFile('harness', dir, 'remote').text;
+  const part = (h) => sectionOf(text, h) ?? sectionOf(BUILT_IN_REMOTE.harness ?? '', h) ?? '';
+  return { who: part('Who you are'), how: part('How you work'), guides: part('Guides'), rules: part('Rules the app enforces') };
 }
