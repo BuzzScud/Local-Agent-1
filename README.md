@@ -180,6 +180,14 @@ again at that size. A model that does not fit in the service's GPU memory is tri
 the context, down to 32k, and the size it fits at is kept for it; one that never fits goes back to
 the model before, and a message sent meanwhile waits for it.
 
+**Big-model mode:** a model on the service with 30B parameters or more (by its total) that can call
+tools runs the way Claude Code does, not the way a small model on this Mac needs. `/effort` starts
+it on Who decides Model (with its helpers and the four checks Model starts with), 80 steps a request,
+12 tries a fix and 160 lines of command output, and Read gives a file whole up to 400 lines (a part
+400 at a time, 1,000 at most). What you saved in `/effort` still wins. `/model` marks these models
+"big", and a note says when a switch turns the mode on or off. `models/evals/tools/big-ab.mjs`
+runs the practice tasks on a service with it off and on (`/test big`).
+
 **Claude:** `/remote claude`, paste an API key, enter, enter. It goes through Anthropic's own
 Messages API and official SDK: High effort thinks first and shows its summarized thinking, Low
 asks for effort low, JSON answers are held to their schema, the conversation is cached, and a

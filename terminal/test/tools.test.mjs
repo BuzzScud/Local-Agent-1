@@ -55,6 +55,23 @@ test('arguments: aliases, bad JSON, missing fields, unknown tool', () => {
   expect(parseArgs('TodoWrite', JSON.stringify({ todos: ['one', { content: 'two', status: 'completed' }] })).args.todos).toEqual([{ text: 'one', status: 'pending' }, { text: 'two', status: 'done' }]);
 });
 
+test('Read on a big model (big-model mode): a file up to 400 lines comes back whole, a part up to 1,000; else the 150 and 400 as before', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-read-big-'));
+  writeFileSync(join(dir, 'long.js'), Array.from({ length: 300 }, (_, i) => `const v${i + 1} = ${i + 1};`).join('\n') + '\n');
+  writeFileSync(join(dir, 'longer.js'), Array.from({ length: 1500 }, (_, i) => `const w${i + 1} = ${i + 1};`).join('\n') + '\n');
+  const read = { whole: 400, part: 400, max: 1000 };
+  const small = await execute('Read', { path: 'long.js' }, {}, { cwd: dir });
+  expect(small.view.outline).toBe(true);
+  const big = await execute('Read', { path: 'long.js' }, {}, { cwd: dir, read });
+  expect(big.text).toContain('long.js (300 lines):\nconst v1 = 1;');
+  expect(big.view).toMatchObject({ kind: 'read', lines: 300 });
+  // a part: 400 by default, at most 1,000 (before: 150 and 400)
+  expect((await execute('Read', { path: 'longer.js', offset: 1 }, {}, { cwd: dir, read })).view.lines).toBe(400);
+  expect((await execute('Read', { path: 'longer.js', offset: 1, limit: 5000 }, {}, { cwd: dir, read, maxResultChars: 100_000 })).view.lines).toBe(1000);
+  expect((await execute('Read', { path: 'longer.js', offset: 1 }, {}, { cwd: dir })).view.lines).toBe(150);
+  expect((await execute('Read', { path: 'longer.js', offset: 1, limit: 5000 }, {}, { cwd: dir })).view.lines).toBe(400);
+});
+
 test('paths outside the project folder are refused for changes', () => {
   expect(resolvePath(dir, '../x').inside).toBe(false);
   expect(prepare('Write', { path: '/etc/hosts', content: 'x' }, { cwd: dir }).error).toContain('outside the project folder');

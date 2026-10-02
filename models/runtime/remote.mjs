@@ -414,6 +414,23 @@ export function remoteLevels(o) {
   return GENERIC_REMOTE.thinkingLevels;
 }
 
+// Big-model mode (1 Oct 2026, the user's pick): a model on an Ollama service
+// with 30B parameters or more (by its total, so Qwen3.6 35B-A3B counts) that
+// can call tools runs the way Claude Code does, not the way a small model on
+// this Mac needs: it decides its own steps (Who decides: Model, the helpers
+// with it), reads files 400 lines at a time, and has more steps, tries and
+// command output. These are /effort's defaults for it; what you saved there
+// still wins. Models on this Mac and smaller remote ones keep today's.
+export const BIG_PARAMS = 30;
+export const BIG_HARNESS = { way: 'model', steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 } };
+// "36.0B", "268.10M", "13B", "1.2T" → billions (0 when not said).
+export const paramsB = (s) => {
+  const m = /^([\d.]+)\s*([KMBT])/i.exec(String(s ?? '').trim());
+  return m ? Number(m[1]) * { K: 1e-6, M: 1e-3, B: 1, T: 1e3 }[m[2].toUpperCase()] : 0;
+};
+// The profile for an Ollama model's entry (ollama.mjs), or null.
+export const bigHarness = (o) => (o?.known && o.chat && o.tools && paramsB(o.params) >= BIG_PARAMS ? BIG_HARNESS : null);
+
 // The settings the agent runs a remote with: the matching model's here when
 // the server runs one of ours (by its file, else its name), else GENERIC_REMOTE
 // (with an Ollama model's own effort levels). Its name says where it runs; it
@@ -432,7 +449,9 @@ export function remoteModel(r, info = {}) {
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
   const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? 'high' : 'low' } : {};
   // An Ollama model's longest context is its own (/effort's Context row goes up to it).
-  return { ...GENERIC_REMOTE, ...levels, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
+  // A big one carries big-model mode (bigHarness).
+  const harness = bigHarness(o);
+  return { ...GENERIC_REMOTE, ...levels, ...common, ...(harness ? { harness } : {}), name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: o?.ctx || ctx || GENERIC_REMOTE.maxCtx };
 }
 
 // ---- connecting ---------------------------------------------------------------------------------

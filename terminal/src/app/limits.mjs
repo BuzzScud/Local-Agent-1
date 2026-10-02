@@ -25,9 +25,10 @@ export const LIMITS = [
   {
     id: 'way', label: 'Who decides', group: 'Effort', choice: true,
     steps: () => ['app', 'model'],
-    def: () => 'app',
+    // A big model on a service (big-model mode, models/runtime/remote.mjs) starts on Model.
+    def: (m) => m?.harness?.way ?? 'app',
     show: (v) => (v === 'model' ? 'Model' : 'App'),
-    note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · next-step, tests, stuck and said-done start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'),
+    note: (v, e) => `${v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · next-step, tests, stuck and said-done start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'}${e?.model?.harness ? ' · big-model mode starts on Model' : ''}`,
   },
   // The search (group 'Search', shown first): which models find what goes
   // along with a request. Measured 29 Sep (models/qwen3-reranker-0.6b/README.md).
@@ -103,14 +104,14 @@ export const LIMITS = [
   {
     id: 'tries', label: 'Tries per fix',
     steps: () => [2, 4, 8, 12, 16],
-    def: () => 8,
+    def: (m) => m?.harness?.tries ?? 8,
     show: (v) => String(v),
     note: () => 'each try ~20 s on Low, up to a few min on High',
   },
   {
     id: 'steps', label: 'Steps per request',
     steps: () => [20, 40, 60, 80, 120],
-    def: () => 40,
+    def: (m) => m?.harness?.steps ?? 40,
     show: (v) => String(v),
     note: (v) => `stops a request after ${v} tool steps`,
   },
@@ -142,7 +143,7 @@ export const LIMITS = [
   {
     id: 'outputLines', label: 'Command output',
     steps: () => [40, 80, 160, 320],
-    def: () => 80,
+    def: (m) => m?.harness?.outputLines ?? 80,
     show: (v) => `${v} lines`,
     note: (v) => `the first ${v / 2} and last ${v / 2} lines of each command`,
   },
@@ -248,10 +249,17 @@ export function panelData(models, { freeBytes = null } = {}) {
 }
 
 // What goes into settings.json: only the limits moved off their default.
-export function limitsToSave(values, model) {
+// keep: rows saved before that this save left alone. They stay saved even when
+// they match this model's default, because a big model's defaults are not this
+// Mac's (Steps 80 picked on Qwen is still 80 after a save on a big model).
+export function limitsToSave(values, model, keep = {}) {
   const d = defaultLimits(model);
-  return Object.fromEntries(LIMITS.filter((l) => values[l.id] !== d[l.id]).map((l) => [l.id, values[l.id]]));
+  return Object.fromEntries(LIMITS.filter((l) => values[l.id] !== d[l.id] || (keep[l.id] !== undefined && keep[l.id] === values[l.id])).map((l) => [l.id, values[l.id]]));
 }
+
+// The rows big-model mode moves (models/runtime/remote.mjs BIG_HARNESS): App.jsx
+// reads them again when the model in use changes.
+export const HARNESS_LIMITS = ['way', 'steps', 'tries', 'outputLines'];
 
 // One step down (dir -1) or up (+1). A value between steps (typed into
 // settings.json by hand) goes to the next step that way. Trim stays below

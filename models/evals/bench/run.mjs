@@ -5,6 +5,7 @@
 // Control-C (or SIGTERM, the hub's Stop) ends the task under way, skips the rest, and still saves
 // and records what ran, as stopped.
 //     [--helpers all|off|scout,medic,oracle,sentry] [--flows on|off] [--way app|model]
+//     [--remote <address> --remote-model <name> [--big on|off]]
 // --helpers: the context helpers (terminal/src/agent/helpers.mjs), by codename
 // or by id (named,tests,rag,lsp); default what
 // AGENTIC_HELPERS says (unset: all). "off" is the way before them. With the code
@@ -18,6 +19,10 @@
 // (models/evals/tools/way-ab.mjs) runs both.
 // A task with a home.txt runs with its project as the home folder (HOME points
 // there for the run), so a request about the Desktop works as in the app.
+// --remote: the tasks on a model on another machine (an Ollama service or any OpenAI-compatible
+// one, AGENTIC_REMOTE_KEY for its key) instead of one started here, at the context it is loaded at.
+// --big on|off: big-model mode (models/runtime/remote.mjs BIG_HARNESS) for it, with /effort's
+// defaults for that model, as the app runs it; off: today's defaults (models/evals/tools/big-ab.mjs runs both).
 // --memory: with Agentic Coder's memory on (a throwaway one, empty at the start):
 // the rules that are always read, facts brought back, and a save after each
 // task, once its files were checked. Does the memory make anything worse?
@@ -34,8 +39,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady } from '../../index.mjs';
-import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings } from '../../../terminal/index.mjs';
+import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, Embedder, embedderReady, connectRemote } from '../../index.mjs';
+import { runHeadless, openMemory, CLAUDE_RULES, helpersOn, CODENAMES, codenameOf, testSettings, readLimits, MODEL_HOOKS } from '../../../terminal/index.mjs';
 // A run from the Tests page's control panel: its Context and Thinking cap (the rest reaches runHeadless).
 const panel = testSettings();
 import { recordTest, codeLabel } from '../record.mjs';
@@ -96,7 +101,19 @@ const saves = [];
 const embedder = (withMemory || helpers.has('rag')) && embedderReady() ? new Embedder() : null;
 let tasks;
 try { tasks = pickTasks(readdirSync(join(here, 'tasks')), { only, set: opt('set', null) }); } catch (e) { console.error(e.message); process.exit(1); }
-const server = new ModelServer(model);
+// --remote: a model on another machine stands in for the server here (nothing loads on this Mac).
+const remoteAt = opt('remote', null);
+const bigArg = opt('big', 'on');
+if (!['on', 'off'].includes(bigArg)) { console.error(`--big on or off, not "${bigArg}"`); process.exit(1); }
+let conn = null;
+if (remoteAt) {
+  try { conn = await connectRemote({ use: true, source: 'openai', kind: 'openai', connect: 'http', address: remoteAt, model: opt('remote-model', ''), key: Boolean(process.env.AGENTIC_REMOTE_KEY) }); } catch (e) { console.error(`the remote at ${remoteAt} did not answer: ${e.message}`); process.exit(1); }
+  if (bigArg === 'off') delete conn.model.harness;
+}
+const runOn = conn ? conn.model : model;
+// The app's /effort defaults for that model (big-model mode's rows when it has it); a local run passes none, as before.
+const limitsUsed = conn ? readLimits({}, runOn) : undefined;
+const server = conn ? { url: conn.url, start: async () => ({ slots: 1, ctx: conn.ctx }), stop: async () => conn.stop() } : new ModelServer(model);
 // Stop: the task under way is cut short (and left out), the rest are skipped, the model is
 // stopped, and what ran is saved and recorded as stopped. A second Control-C quits at once.
 let stopping = false;
@@ -111,10 +128,12 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 const started = await server.start({ ctx });
 const slots = started.slots > 1 ? { main: 0, side: 1 } : undefined;
-console.log(`server up on ${server.url}, ctx ${ctx}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}; thinking: ${thinkingUsed}; who decides: ${wayUsed}`);
+const ctxUsed = conn ? conn.ctx : ctx;
+if (conn) console.log(`on the remote: ${conn.info.model} at ${remoteAt}, ${Math.round(conn.ctx / 1024)}k context; big-model mode ${runOn.harness ? 'on' : 'off'} (who decides ${limitsUsed.way}, ${limitsUsed.steps} steps, ${limitsUsed.tries} tries, ${limitsUsed.outputLines} output lines, Read ${runOn.harness?.read.whole ?? 150} lines whole)`);
+console.log(`server up on ${server.url}, ctx ${ctxUsed}, thinking budget ${model.thinkingBudget}${temp ? `, temperature ${temp}` : ''}; helpers: ${codes(', ')}; focused paths: ${flowsOn ? 'on' : 'off'}; prompt: ${promptUsed}; thinking: ${thinkingUsed}; who decides: ${wayUsed}`);
 const results = [];
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-const tdir = opt('out', join(modelFolder(base), 'results', 'runs', stamp));
+const tdir = opt('out', conn ? join(here, '..', '..', 'remote', 'results', 'runs', stamp) : join(modelFolder(base), 'results', 'runs', stamp));
 mkdirSync(tdir, { recursive: true });
 try {
   runs: for (const thinking of thinkModes) for (let rep = 1; rep <= reps; rep++) {
@@ -142,7 +161,7 @@ try {
       const timer = setTimeout(() => ac.abort(), perTaskMs);
       let run;
       try {
-        run = await runHeadless({ prompt, cwd: work, url: server.url, model, thinking, effort, ctx, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
+        run = await runHeadless({ prompt, cwd: work, url: server.url, model: runOn, thinking, effort, ctx: ctxUsed, limits: limitsUsed, subagents: Boolean(conn), hooks: conn ? MODEL_HOOKS : undefined, autoApprove: true, answers, signal: ac.signal, slots, warm: !!slots, rank: withRank, flows: flowsOn, helpers, embedder, prewarm: true, thinkBudgetSecs: perTaskMs / 1000, way: wayArg ?? undefined,
           memory: withMemory ? { home: memoryHome, save: 'after', embedder, claude: withClaude } : false,
           onEvent: (type, ev) => { if (type === 'tool') process.stdout.write(`    ${ev.error ? '✗' : ev.given ? '+' : '·'} ${ev.label}(${String(ev.arg).slice(0, 50)})\n`); if (type === 'note') process.stdout.write(`    ! ${ev.text}\n`); if (type === 'context' && ev.title === 'Helpers') process.stdout.write(`    + helpers brought ${ev.items.filter((x) => !x.skipped).length} (${ev.tokens} tokens: ${byCode(ev.items)})${ev.items.some((x) => x.skipped) ? `; left out: ${ev.items.filter((x) => x.skipped).map((x) => `${x.text} (${x.skipped})`).join('; ')}` : ''}\n`); } });
       } catch (e) { run = { reason: `crash: ${e.message}`, finalText: '', secs: perTaskMs / 1000, steps: 0, toolErrors: 0, outTokens: 0 }; }
@@ -176,12 +195,12 @@ try {
 }
 const file = join(tdir, 'summary.json');
 if (withMemory) console.log(`memory: ${saves.length} saves, ${saves.reduce((n, s) => n + s.added.length, 0)} facts saved, ${saves.length ? Math.round(saves.reduce((n, s) => n + s.secs, 0) / saves.length) : 0} s a save`);
-writeFileSync(file, JSON.stringify({ memory: withMemory, helpers: [...helpers], flows: flowsOn, way: wayUsed, prompt: promptUsed, thinkingWay: thinkingUsed, ctx, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
+writeFileSync(file, JSON.stringify({ remote: conn ? { address: remoteAt, model: conn.info.model, big: Boolean(runOn.harness) } : null, memory: withMemory, helpers: [...helpers], flows: flowsOn, way: limitsUsed?.way ?? wayUsed, prompt: promptUsed, thinkingWay: thinkingUsed, ctx: ctxUsed, reps, effort: effort ?? null, temp: temp ? Number(temp) : null, budget: model.thinkingBudget, stoppedAt: pastStop() ? stopAt : null, stopped: stopping, results }, null, 2));
 for (const thinking of thinkModes) {
   const rs = results.filter((r) => r.thinking === thinking);
   console.log(`thinking ${thinking ? 'on ' : 'off'}: ${rs.filter((r) => r.pass).length}/${rs.length} passed, ${Math.round(rs.reduce((s, r) => s + r.secs, 0))}s total, ${rs.reduce((s, r) => s + (r.modelCalls ?? 0), 0)} model calls, ${rs.reduce((s, r) => s + (r.ownSteps ?? 0), 0)} own steps`);
   const failed = rs.filter((r) => !r.pass).map((r) => r.task);
-  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx,
+  if (rs.length && !noRecord) recordTest({ kind: 'tasks', model: conn ? `remote:${conn.info.model}` : base.id, name: `The ${only ? `${tasks.length} picked` : tasks.length} practice tasks${conn ? ` on ${conn.info.model} (remote), big-model mode ${runOn.harness ? 'on' : 'off'}` : ''}${reps > 1 ? `, ${reps} runs each` : ''}${withMemory ? `, with the memory on${withClaude ? " and Claude's notes" : ''}` : ''}, helpers ${codes('+')}${flowsOn ? '' : ', step by step'}${promptArg ? `, ${promptArg} prompt` : ''}${thinkingArg ? `, ${thinkingArg} thinking` : ''}${wayUsed === 'model' ? ', model decides' : ''}`, code: codeLabel(join(here, '..', '..', '..')), effort: thinking ? (effort ?? 'medium') : 'low', ctx: ctxUsed,
     passed: rs.length - failed.length, total: rs.length, secs: rs.reduce((s, r) => s + r.secs, 0), result: pastStop() || stopping ? 'stopped' : undefined, part: Boolean(only), note: failed.length ? `failed: ${failed.join(', ')}` : '', raw: tdir.replace(`${join(here, '..', '..', '..')}/`, '') });
 }
 console.log(`saved ${file}`);

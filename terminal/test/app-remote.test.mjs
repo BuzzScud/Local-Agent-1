@@ -287,6 +287,7 @@ const OLLAMA_MODELS = [
 const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
   const loaded = new Map([['tiny:3b', 131072]]);
   const chats = [];
+  const named = []; // each chat's tool names
   const loads = [];
   const OOM = 'llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory\nalloc_tensor_range: failed to allocate ROCm0 buffer of size 74995960832\nerror loading model: unable to allocate ROCm0 buffer';
   // What a request with these options loads the model at, or null when it does not fit.
@@ -312,6 +313,7 @@ const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
     if (req.url === '/api/chat') {
       if (!body.stream) return json(200, { model: body.model, message: { role: 'assistant', content: 'ready' }, done: true });
       chats.push({ model: body.model, tools: 'tools' in body, numCtx: body.options?.num_ctx ?? null });
+      named.push((body.tools ?? []).map((x) => x.function?.name ?? x.name));
       if (body.tools && !m.caps.includes('tools')) return json(400, { error: `registry.ollama.ai/library/${body.model} does not support tools` });
       const at = loadAt(m, body.options);
       if (at === null) return json(500, { error: OOM });
@@ -323,7 +325,7 @@ const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
     }
     json(404, { error: 'not found' });
   });
-  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, port: srv.address().port, chats, loads, loaded, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
+  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, port: srv.address().port, chats, named, loads, loaded, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
 });
 
 test('on an Ollama service: the footer names the model and where it runs; /model is the service’s list; another model is switched to in place (loaded first, the chat kept); one without tools asks, then answers in words', async () => {
@@ -373,6 +375,44 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   const saved = settingsOf(base);
   expect(saved.remote).toMatchObject({ use: true, source: 'openai', model: 'oldchat:14b' });
   expect(saved.remotes.openai.model).toBe('oldchat:14b');
+}, T);
+
+test('big-model mode: switching to a 30B+ model that calls tools turns it on (Who decides Model, helpers, more steps, tries and output, said in a note and in /effort); back to a small one turns it off; nothing is saved', async () => {
+  const { cwd, env, base } = setup();
+  const srv = await fullOllama();
+  const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
+    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
+    { type: 'coder' }, { sleep: 200 }, { key: 'enter' }, { wait: 'Big-model mode for coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
+    { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 200 }, { snapshot: 'panel' }, { key: 'esc' }, { sleep: 300 },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
+    { type: 'tiny' }, { sleep: 200 }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
+    { type: 'two' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 2.' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await srv.close();
+  const s = r.snapshots;
+  const flat = (x) => x.replace(/\s+/g, ' ');
+  // the list marks the big ones (the in-use small one is marked in use)
+  expect(s.list).toMatch(/coder:30b\s+30\.5B MoE.*18\.6 GB\s+big/);
+  expect(s.list).toMatch(/huge:120b.*\s+big/);
+  expect(s.list).not.toMatch(/tiny:3b.*\bbig\b/);
+  // on: said in a note, from → to
+  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: Who decides App → Model · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines, and it reads files 400 lines at a time. /effort changes any of it.');
+  // /effort shows the new defaults as the defaults
+  expect(s.panel).toMatch(/Who decides\s+◀ Model\s+▶\s+default · it sorts, looks and saves for itself/);
+  expect(s.panel).toMatch(/Steps per request\s+◀ 80\s+▶\s+default/);
+  // the request went the model's way, with the Agent tool (helpers); the small one before and after has neither
+  expect(srv.chats.map((c) => c.model)).toEqual(['coder:30b', 'tiny:3b']);
+  expect(srv.named[0]).toContain('Agent');
+  expect(srv.named[1]).not.toContain('Agent');
+  // off again: from → to back
+  expect(flat(s.back)).toContain('Big-model mode off: Who decides Model → App · Tries per fix 12 → 8 · Steps per request 80 → 40 · Command output 160 lines → 80 lines.');
+  // defaults only: nothing written to the saved limits
+  expect(settingsOf(base).limits ?? {}).toEqual({});
 }, T);
 
 test('a model that does not fit on the service: tried again at half the context until it does (that size kept for it); one that never fits goes back, a message sent meanwhile waits for it; /effort’s Context is the model’s own', async () => {

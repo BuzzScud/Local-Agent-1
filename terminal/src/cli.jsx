@@ -6,7 +6,7 @@ import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS } from './app/window.mjs';
 import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath } from '../../models/index.mjs';
-import { readLimits, modelWithLimits } from './app/limits.mjs';
+import { readLimits, modelWithLimits, HARNESS_LIMITS } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
 import { pickOnTerminal } from './app/pick.mjs';
@@ -253,7 +253,7 @@ if (opts.print) {
   if (!(await ensureTrusted(opts.cwd))) process.exit(2);
   const settings = loadSettings(opts.cwd);
   // The limits /effort saved: the context and thinking cap for the server, the rest for the agent.
-  const limits = readLimits(settings, modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]);
+  let limits = readLimits(settings, modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]);
   const model = modelWithLimits(modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL], limits);
   let server = null;
   let url = opts.url;
@@ -276,6 +276,9 @@ if (opts.print) {
     process.stderr.write(`· On the remote model: ${remote.model.name}${risk ? ` · ⚠ ${risk}` : ''}\n`);
     url = remote.url;
     ctx = opts.ctx ?? remote.ctx;
+    // Big-model mode (models/runtime/remote.mjs): the rows it moves start from the remote model, as in the app.
+    const own = readLimits(settings, remote.model);
+    limits = { ...limits, ...Object.fromEntries(HARNESS_LIMITS.map((id) => [id, own[id]])) };
     runModel = modelWithLimits(remote.model, limits);
     canSee = Boolean(remote.vision);
     if (remote.slots > 1) slots = { main: 0, side: 1 };

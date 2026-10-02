@@ -18,7 +18,9 @@ import { readSkillPath } from './prompt-files.mjs';
 
 const str = (description) => ({ type: 'string', description });
 // Read: files up to WHOLE_MAX lines come back whole; longer ones as an outline,
-// then PART_DEFAULT lines (at most PART_MAX) from the offset asked for.
+// then PART_DEFAULT lines (at most PART_MAX) from the offset asked for. A big
+// model on a service reads more at a time (env.read: big-model mode's whole,
+// part and max, models/runtime/remote.mjs).
 export const WHOLE_MAX = 150;
 const PART_DEFAULT = 150;
 const PART_MAX = 400;
@@ -704,7 +706,9 @@ export async function execute(name, args, prepared, env) {
       // A page with the design studio's built styles: that one line folded (studio.mjs), never read or edited.
       const full = hideBuilt(readFileSync(p.abs, 'utf8'));
       const total = full.split('\n').length;
-      const whole = total <= WHOLE_MAX;
+      const lim = env.read ?? {};
+      const wholeMax = lim.whole ?? WHOLE_MAX;
+      const whole = total <= wholeMax;
       // find: the lines around a word or name, so a long file is never walked
       // part by part. (On a 27,000-line page the model never once passed an
       // offset; it read outlines again and again.)
@@ -747,7 +751,7 @@ export async function execute(name, args, prepared, env) {
         }
         return { text: `${note}${o}${hits}`, view: { kind: 'read', outline: true, parts: o.split('\n').length - 2, lines: 0, total, content: `${o}${hits}` } };
       }
-      const limit = whole ? WHOLE_MAX : Math.min(Math.max(args.limit ?? PART_DEFAULT, 20), PART_MAX);
+      const limit = whole ? wholeMax : Math.min(Math.max(args.limit ?? lim.part ?? PART_DEFAULT, 20), lim.max ?? PART_MAX);
       const r = readFile(p.abs, { offset: whole ? 1 : args.offset ?? 1, limit });
       if (r.text.includes('\u0000')) return { text: `${args.path} is a binary file.`, error: true, view: { kind: 'error', message: 'Binary file' } };
       // The model gets the plain text (small models copy line numbers into

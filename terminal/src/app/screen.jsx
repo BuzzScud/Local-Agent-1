@@ -14,7 +14,7 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
-import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord } from './remote-models.mjs';
+import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig } from './remote-models.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
@@ -1134,7 +1134,7 @@ function ServicePicker({ app }) {
   const W = app.width - 4;
   const models = rows.filter((r) => r.kind === 'model');
   const nameW = Math.min(32, Math.max(16, ...models.map((r) => r.m.id.length + 2)));
-  const status = 11; // "   ✔ in use"
+  const status = 11; // "   ✔ in use", or "   big" (big-model mode)
   const drop = ['quant', 'size', 'gb'];
   let cols = SVC_COLS;
   while (2 + nameW + cols.reduce((n, [, w]) => n + w, 0) + status > W && drop.length) { const d = drop.shift(); cols = cols.filter(([k]) => k !== d); }
@@ -1170,7 +1170,7 @@ function ServicePicker({ app }) {
         {mark}
         <Text color={on ? C.accent : m.tools ? undefined : C.dim} bold={on}>{m.id.padEnd(nameW)}</Text>
         {cols.map(([c, w]) => <Text key={c} color={c === 'can' && !m.tools ? C.warn : C.dim}>{cell(m, c, w)}</Text>)}
-        {m.id === sv.inUse ? <Text color={C.ok}>   ✔ in use</Text> : null}
+        {m.id === sv.inUse ? <Text color={C.ok}>   ✔ in use</Text> : isBig(m) ? <Text color={C.dim}>   big</Text> : null}
       </Text>
     );
   };

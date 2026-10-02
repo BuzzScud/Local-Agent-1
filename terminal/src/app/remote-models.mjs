@@ -6,7 +6,7 @@
 // row, and so do this Mac's models; the other saved services follow. Typing
 // filters the service's models by name; ←→ is Effort, as in the other /model.
 // The list itself is ollama.mjs's (models/); this file only lays it out.
-import { remoteLevels } from '../../../models/index.mjs';
+import { remoteLevels, bigHarness } from '../../../models/index.mjs';
 
 // "262144" → "256k" (as the rest of the app writes a context), "10485760" → "10M".
 export const ctxWord = (n) => (!n ? '' : n >= 1_048_576 ? `${Math.round(n / 1_048_576)}M` : `${Math.round(n / 1024)}k`);
@@ -104,5 +104,14 @@ export function rowDetail(row, { inUse, used = 0 } = {}) {
   const room = m.loadedCtx || m.ctx;
   if (room && used > room * 0.85) return { tone: 'warn', text: `Its context is ${ctxWord(room)} and the chat is about ${ctxWord(used)}: the oldest part is summed up before the next reply.` };
   if (!m.loaded) return { tone: 'dim', text: `Not loaded yet: it loads as you switch${m.bytes ? ` (${gbWord(m.bytes)})` : ''}, so the first reply may wait.` };
+  if (isBig(m)) return { tone: 'dim', text: bigWords(m) };
   return null;
 }
+
+// Big-model mode (models/runtime/remote.mjs): a model with 30B parameters or more
+// that can call tools. /model marks it "big"; the line under the list says what that means.
+export const isBig = (m) => Boolean(bigHarness(m));
+export const bigWords = (m) => {
+  const h = bigHarness(m);
+  return `Big model: it decides its own steps (helpers on), reads ${h.read.whole} lines at a time, up to ${h.steps} steps.`;
+};

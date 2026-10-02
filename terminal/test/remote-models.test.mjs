@@ -9,7 +9,7 @@ import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-remote-models-home-'));
-const { groupsOf, openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, rowDetail, ctxWord, gbWord, sizeWord, canWord } = await import('../src/app/remote-models.mjs');
+const { groupsOf, openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, rowDetail, ctxWord, gbWord, sizeWord, canWord, isBig } = await import('../src/app/remote-models.mjs');
 const { modelLabels, footerParts } = await import('../src/app/screen.jsx');
 const { HOME, thinkingLevel } = await import('../../models/index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
@@ -91,6 +91,14 @@ test('the line about the highlighted model: none for one loaded or in use; one t
   expect(rowDetail(row('phi4:latest'), { inUse: 'x' }).text).toBe('No tools: it can only answer in words (no file reads, edits or commands). Enter asks first.');
   expect(rowDetail(row('qwen2.5-coder:14b'), { inUse: 'x', used: 41_000 })).toEqual({ tone: 'warn', text: 'Its context is 32k and the chat is about 40k: the oldest part is summed up before the next reply.' });
   expect(rowDetail({ kind: 'fold' }, {})).toBe(null);
+});
+
+test('big-model mode in the list: the 30B+ models that call tools are marked big; a loaded one not in use says what that means', () => {
+  expect(MODELS.filter(isBig).map((m) => m.id)).toEqual(['Qwen3.6:35B-A3B', 'gpt-oss:120b', 'laguna-s-2.1:latest', 'qwen3-coder:30b']);
+  const row = (id) => ({ kind: 'model', m: MODELS.find((m) => m.id === id) });
+  expect(rowDetail(row('Qwen3.6:35B-A3B'), { inUse: 'x' })).toEqual({ tone: 'dim', text: 'Big model: it decides its own steps (helpers on), reads 400 lines at a time, up to 80 steps.' });
+  // not loaded: the wait is the line (the mark beside its name says big)
+  expect(rowDetail(row('qwen3-coder:30b'), { inUse: 'x' }).text).toMatch(/^Not loaded yet/);
 });
 
 test('the columns’ words: context in k (or M), size with MoE, what it can do', () => {

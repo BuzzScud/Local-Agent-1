@@ -54,7 +54,7 @@ import { watchUpdates, updateText, bringIn, canRestart } from './update.mjs';
 import { runMorning, summary as morningSummary } from '../morning/index.mjs';
 import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
-import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, defaultLimits, showLimit, effortNote, defaultLevelId } from './limits.mjs';
+import { LIMITS, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, defaultLimits, showLimit, effortNote, defaultLevelId, HARNESS_LIMITS } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
@@ -562,6 +562,7 @@ export function App({ opts, win, onRestart }) {
     // The model is off (not started yet, or /stop): the pick is kept and nothing loads; /start loads it.
     if (modelOffNow() && !midTurn) {
       setModel(next);
+      relimit(next);
       agent.model = modelWithLimits(next, limitsRef.current);
       push({ type: 'note', text: `${done ? 'It applies' : `${next.name} is picked; it loads`} when you type /start. The model is off, so nothing loads now.`, tone: 'dim' });
       return;
@@ -607,6 +608,7 @@ export function App({ opts, win, onRestart }) {
       timeLoaded(st);
       agent.url = srv.url;
       agent.canSee = Boolean(srv.vision);
+      relimit(next);
       agent.model = modelWithLimits(next, limitsRef.current);
       agent.ctx = st.ctx ?? c.ctx; setCtx(agent.ctx);
       agent.syncRules(); // rules that follow the Context are read again before the warm-up below
@@ -631,6 +633,23 @@ export function App({ opts, win, onRestart }) {
   // the Keychain, the check), and only then let the model on this Mac go.
   // One that does not answer changes nothing when this Mac's model is running;
   // at the start (none running) it asks what to do (remote-down).
+  // Big-model mode (models/runtime/remote.mjs): /effort's Who decides, Steps, Tries and Command
+  // output start from the model in use, so a switch to or from a big model on a service moves them;
+  // what /effort saved still wins, and so does --way. Called before agent.model is set (the prompt
+  // and the tools follow Who decides); says so when the mode comes or goes.
+  const relimit = (m) => {
+    const was = limitsRef.current;
+    const fresh = readLimits(loadSettings(opts.cwd), m);
+    const next = { ...was, ...Object.fromEntries(HARNESS_LIMITS.filter((id) => !(id === 'way' && limitsRef.wayGiven)).map((id) => [id, fresh[id]])) };
+    const moved = limitChanges(was, next);
+    if (!moved.length) return;
+    limitsRef.current = next;
+    applyLimits(agent, next);
+    const list = moved.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
+    push({ type: 'note', text: m.harness
+      ? `Big-model mode for ${m.remote?.model ?? m.name}: ${list}, and it reads files ${m.harness.read.whole} lines at a time. /effort changes any of it.`
+      : `Big-model mode off: ${list}.`, tone: 'dim' });
+  };
   const useRemote = async (r, { atStart = false } = {}) => {
     if (!atStart && (S.current.live !== IDLE || agent.busy)) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return false; }
     const before = { model, server: serverRef.current };
@@ -672,6 +691,7 @@ export function App({ opts, win, onRestart }) {
     setModel(m);
     agent.url = conn.url;
     agent.canSee = Boolean(conn.vision);
+    relimit(m);
     agent.model = modelWithLimits(m, limitsRef.current);
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.slots = conn.slots > 1 ? { main: 0, side: 1 } : null;
@@ -706,6 +726,7 @@ export function App({ opts, win, onRestart }) {
     if (!load && !wantRef.current && !loadsAtOpen()) {
       agent.url = 'http://127.0.0.1:0';
       setModel(back);
+      relimit(back);
       agent.model = modelWithLimits(back, limitsRef.current);
       setModelOff(true);
       push({ type: 'note', text: `${note ?? `Back on ${back.name}, on this Mac.`} The model is off: /start loads it.`, tone: 'dim' });
@@ -917,6 +938,7 @@ export function App({ opts, win, onRestart }) {
     setModel(m);
     agent.url = conn.url;
     agent.canSee = Boolean(conn.vision);
+    relimit(m);
     agent.model = modelWithLimits(m, limitsRef.current);
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.syncRules();
@@ -1285,7 +1307,10 @@ export function App({ opts, win, onRestart }) {
     applyLimits(agent, next);
     const searchNote = applySearch(agent, next);
     if (searchNote) push({ type: 'note', text: searchNote, tone: 'warn' });
-    saveSettings({ limits: limitsToSave(next, model) });
+    // A row this save left alone stays saved as it was (limitsToSave's keep).
+    const touched = new Set(changes.map((c) => c.id));
+    const kept = Object.fromEntries(Object.entries(loadSettings(opts.cwd).limits ?? {}).filter(([id]) => !touched.has(id)));
+    saveSettings({ limits: limitsToSave(next, model, kept) });
     const list = changes.map((c) => `${c.label} ${c.from} → ${c.to}`).join(' · ');
     // Who decides changes the prompt and the tools: the next reply reads the instructions again, once.
     const way = changes.some((c) => c.id === 'way') ? ` ${next.way === 'model' ? 'The model decides from the next message: no sorting, no reading ahead, the checks only as /hooks switches them' : 'The app decides again from the next message'}; that reply reads the instructions again, once.` : '';

@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData, HARNESS_LIMITS } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -42,6 +42,29 @@ test('saved limits: valid ones are used, junk and out-of-range ones are left out
   // trim at or past summarize would never trim: both go back to their defaults
   const bad = readLimits({ limits: { trimAt: 0.85, summarizeAt: 0.85 } }, model);
   expect([bad.trimAt, bad.summarizeAt]).toEqual([0.78, 0.85]);
+});
+
+test('big-model mode: a big model on a service starts on Model with more steps, tries and output; what /effort saved still wins, and a save on it keeps the rows it left alone', () => {
+  const big = { ...model, id: 'remote', remote: { kind: 'openai', ollama: '0.32.12', model: 'qwen3-coder:30b' }, harness: { way: 'model', steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 } } };
+  const small = defaultLimits(model);
+  const d = defaultLimits(big);
+  expect([small.way, small.steps, small.tries, small.outputLines]).toEqual(['app', 40, 8, 80]);
+  expect([d.way, d.steps, d.tries, d.outputLines]).toEqual(['model', 80, 12, 160]);
+  // the rest is this Mac's
+  expect({ ...d, way: 0, steps: 0, tries: 0, outputLines: 0 }).toEqual({ ...small, thinking: d.thinking, way: 0, steps: 0, tries: 0, outputLines: 0 });
+  expect(HARNESS_LIMITS).toEqual(['way', 'steps', 'tries', 'outputLines']);
+  // saved wins on either
+  expect(readLimits({ limits: { way: 'app', steps: 60 } }, big)).toMatchObject({ way: 'app', steps: 60, tries: 12 });
+  // the Who decides note says why it starts on Model
+  expect(limitNote('way', { model: big, values: d })).toMatch(/big-model mode starts on Model$/);
+  expect(limitNote('way', { model, values: small })).not.toMatch(/big-model/);
+  // Steps 80 saved on Qwen, then Command output moved on a big model (where 80 is the default):
+  // Steps stays saved, so back on Qwen it is still 80
+  const v = { ...readLimits({ limits: { steps: 80 } }, big), outputLines: 320 };
+  expect(limitsToSave(v, big)).toEqual({ outputLines: 320 });
+  expect(limitsToSave(v, big, { steps: 80 })).toEqual({ steps: 80, outputLines: 320 });
+  // a row this save moved back to the default is not kept (Reset all, or ← to it)
+  expect(limitsToSave(d, big, {})).toEqual({});
 });
 
 test('←→ moves one step, stops at the ends, and trim stays below summarize', () => {

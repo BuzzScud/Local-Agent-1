@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, HOME } = await import('../index.mjs');
+const { ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, bigHarness, paramsB, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
@@ -172,5 +172,27 @@ test('connecting to an Ollama service: its own chat with the model’s context, 
     const cold = await connectRemote({ ...r, model: 'coder:30b' });
     expect([cold.numCtx, cold.ctx]).toEqual([null, 32768]);
     cold.stop();
+  } finally { await s.close(); }
+});
+
+test('big-model mode: a model of 30B or more (by its total) that can call tools; not a small one, a chat-only one, an embedder or one whose abilities are not listed', async () => {
+  expect([paramsB('36.0B'), paramsB('30.5B'), paramsB('13B'), paramsB('1.2T'), paramsB(''), paramsB(undefined)]).toEqual([36, 30.5, 13, 1200, 0, 0]);
+  expect(paramsB('268.10M')).toBeCloseTo(0.2681, 6);
+  const s = await fakeOllama();
+  try {
+    const c = await ollamaCatalog({ url: s.url, key: null });
+    const big = Object.fromEntries(c.models.map((m) => [m.id, Boolean(bigHarness(m))]));
+    expect(big).toEqual({ 'tiny:3b': false, 'coder:30b': true, 'thinker:35b': true, 'gpt-oss:120b': true, 'oldchat:14b': false, 'oldchat:latest': false, 'embed:latest': false });
+    // abilities not listed (an older Ollama): no mode, whatever the size
+    expect(bigHarness({ ...c.models.find((m) => m.id === 'gpt-oss:120b'), known: false })).toBe(null);
+    // connecting: the remote model carries it (the app's /effort defaults read it); a small one does not
+    const r = { source: 'openai', kind: 'openai', connect: 'http', address: s.url, model: 'gpt-oss:120b', context: 0, key: false };
+    const g = await connectRemote(r);
+    expect(g.model.harness).toEqual(BIG_HARNESS);
+    expect(BIG_HARNESS).toEqual({ way: 'model', steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 } });
+    g.stop();
+    const t = await connectRemote({ ...r, model: 'tiny:3b' });
+    expect(t.model.harness).toBeUndefined();
+    t.stop();
   } finally { await s.close(); }
 });
