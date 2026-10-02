@@ -26,7 +26,7 @@ const post = (path, body, headers = {}) => fetch(`${H}${path}`, { method: 'POST'
 
 test('the Test builder is a window over the hub, not a tab, and serves one page with nothing loaded from outside', async () => {
   const page0 = await (await fetch(`${H}/`)).text();
-  expect(page0).toContain('<button data-tab="arena">Arena</button>\n  <button data-tab="memory">Memory</button>');
+  expect(page0).toContain('<button data-tab="arena">Arena</button>\n  <button data-tab="remote">Remote</button>\n  <button data-tab="memory">Memory</button>');
   expect(page0).not.toContain('data-tab="builder"');
   expect(page0).toContain('<div id="bm" role="dialog" aria-modal="true" aria-label="Test builder">');
   expect(page0).toContain('<iframe id="bframe" title="Test builder"></iframe>');

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agentic Coder Remote</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --panel: #f3f3f0; --line: #e3e2dc;
+  --ink: #0b0b0b; --ink2: #52514e; --ink3: #8a887f; --accent: #2a78d6; --tint: rgba(42,120,214,.08);
+  --up: #1d7a46; --down: #b3261e; --warn: #8a5a00;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+}
+:root[data-theme="dark"] { --page: #0d0d0d; --surface: #1a1a19; --panel: #232322; --line: #34342f; --ink: #fff; --ink2: #c3c2b7; --ink3: #8f8e86; --accent: #3987e5; --tint: rgba(57,135,229,.14); --up: #5fd08f; --down: #ff8a80; --warn: #f0c674; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color-scheme: light dark; }
+/* One container that fits the window: the service row on top, the cards down the left, the picked model's tabs on the right.
+   A list or a long text scrolls inside its own box; the page itself never scrolls (a phone does). */
+main { max-width: 1480px; margin: 0 auto; padding: 14px 18px; display: flex; flex-direction: column; min-height: 100vh; gap: 12px; }
+@media (min-width: 900px) and (min-height: 560px) { html, body { height: 100%; overflow: hidden; } main { height: 100vh; min-height: 0; } }
+button { font: inherit; color: inherit; }
+.top { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; flex-wrap: wrap; }
+.top h1 { font-size: 20px; letter-spacing: -.01em; margin: 0 8px 0 0; }
+.svc { display: flex; gap: 6px; flex-wrap: wrap; }
+.svc button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--ink2); cursor: pointer; white-space: nowrap; }
+.svc button:hover { color: var(--ink); border-color: var(--ink3); }
+.svc button[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+.svc button small { color: var(--ink3); font-weight: 400; margin-left: 5px; }
+.svc button .use { color: var(--accent); margin-left: 6px; font-weight: 500; font-size: 11px; }
+.status { color: var(--ink3); font-size: 12.5px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.status b { color: var(--ink2); font-weight: 600; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink3); margin-right: 6px; vertical-align: 0; }
+.dot.ok { background: var(--up); } .dot.down { background: var(--down); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 6px 12px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { border-color: var(--ink3); }
+.btn.main { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { color: var(--ink3); background: var(--panel); border-color: var(--line); cursor: default; }
+.btn:focus-visible, .svc button:focus-visible, .card:focus-visible, .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.banner { flex: none; border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; background: var(--surface); font-size: 13.5px; color: var(--ink2); }
+.banner.down { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); }
+.banner b { color: var(--ink); }
+.split { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 14px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* The cards */
+.find { flex: none; padding: 10px; border-bottom: 1px solid var(--line); }
+.find input { width: 100%; border: 1px solid var(--line); background: var(--page); color: var(--ink); border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13px; }
+.find input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--tint); }
+.list { flex: 1; min-height: 0; overflow: auto; padding: 4px 10px 10px; scrollbar-width: thin; }
+.gh { display: flex; align-items: baseline; gap: 8px; margin: 12px 2px 6px; white-space: nowrap; min-width: 0; overflow: hidden; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; }
+.gh button { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.gh > :first-child { flex: none; }
+.gh span { min-width: 0; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--page); border-radius: 11px; padding: 8px 11px; margin: 0 0 6px; cursor: pointer; }
+.card:hover { border-color: var(--ink3); }
+.card[aria-current="true"] { border-color: var(--accent); background: var(--tint); }
+.card .n { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; min-width: 0; }
+.card .n span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.card .n .mk { margin-left: auto; flex: none; font-weight: 500; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.card .s { color: var(--ink3); font-size: 12px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.chip { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink2); background: var(--surface); white-space: nowrap; }
+.ok { color: var(--up); } .no { color: var(--down); } .warnc { color: var(--warn); }
+.empty { color: var(--ink3); font-size: 13px; padding: 14px 4px; }
+/* The picked model */
+.dh { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 16px 10px; min-width: 0; flex-wrap: wrap; }
+.dh h2 { font-size: 18px; letter-spacing: -.01em; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dh .sub { color: var(--ink3); font-size: 12.5px; white-space: nowrap; }
+.dh .sub.ok { color: var(--up); }
+.dh .acts { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.dh .note { color: var(--ink3); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52ch; }
+.dh .note.ok { color: var(--up); } .dh .note.no { color: var(--down); } .dh .note.warnc { color: var(--warn); }
+.tabs { flex: none; display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 10px; border-bottom: 1px solid var(--line); }
+.tabs button { font-size: 12.5px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink2); cursor: pointer; }
+.tabs button:hover { color: var(--ink); border-color: var(--ink3); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+.pane { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 16px; scrollbar-width: thin; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.sect { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--page); min-width: 0; }
+.sect + .sect { margin-top: 12px; }
+.sect h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.sect h3 span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 16px; margin: 0; font-size: 13.5px; }
+.facts dt { color: var(--ink3); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.facts dd small { color: var(--ink3); }
+.spec { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: 13.5px; }
+.spec .t { font-weight: 600; white-space: nowrap; }
+.spec .w { color: var(--ink2); }
+.lead { font-size: 15px; margin: 0 0 4px; }
+.from { color: var(--ink3); font-size: 12px; margin: 6px 0 0; }
+.can { display: grid; grid-template-columns: 22px max-content minmax(0, 1fr); gap: 7px 10px; font-size: 13.5px; align-items: baseline; }
+.can .w { color: var(--ink2); }
+pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink2); max-height: 46vh; overflow: auto; scrollbar-width: thin; }
+.runs { width: 100%; border-collapse: collapse; font-size: 13px; }
+.runs td.n, .runs th.n { white-space: nowrap; }
+.runs td, .runs th { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.runs th { color: var(--ink3); font-weight: 500; font-size: 12px; }
+.quiet { color: var(--ink3); font-size: 13px; }
+.big { font-size: 26px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.meter { height: 8px; border-radius: 999px; background: var(--panel); overflow: hidden; margin: 6px 0 2px; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.keys { color: var(--ink3); font-size: 11.5px; flex: none; text-align: right; }
+.keys kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--surface); }
+@media (max-width: 899px) { .split { grid-template-columns: 1fr; } .list { max-height: 40vh; } .cols { grid-template-columns: 1fr; } .status { margin-left: 0; width: 100%; } .keys { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>Remote</h1>
+    <div class="svc" id="svc" role="group" aria-label="Service"></div>
+    <span class="status" id="status" aria-live="polite">Reading the saved services…</span>
+    <button class="btn" id="refresh" type="button" title="Read the list again (r)">↻ Refresh</button>
+  </div>
+  <div class="banner" id="banner" hidden></div>
+  <div class="split" id="split">
+    <div class="box">
+      <div class="find"><input id="q" type="search" placeholder="Find a model by name" aria-label="Find a model by name" autocomplete="off" spellcheck="false"></div>
+      <div class="list" id="list" role="list" aria-label="Models"></div>
+    </div>
+    <div class="box" id="det"></div>
+  </div>
+  <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> model · <kbd>1</kbd>–<kbd>7</kbd> tab · <kbd>/</kbd> find · <kbd>r</kbd> refresh</div>
+</main>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const TABS = [['overview', 'Overview'], ['abilities', 'Abilities'], ['memory', 'Memory & context'], ['settings', 'Settings'], ['inside', 'Inside'], ['results', 'Our results'], ['license', 'License']];
+  const S = { data: null, service: null, pick: null, tab: 'overview', q: '', open: {}, detail: {}, at: 0, loading: false };
+  try { const k = JSON.parse(localStorage.getItem('remote-tab') || '{}'); if (k.service) S.service = k.service; if (k.tab) S.tab = k.tab; if (k.pick) S.pick = k.pick; } catch {}
+  const keep = () => { try { localStorage.setItem('remote-tab', JSON.stringify({ service: S.service, tab: S.tab, pick: S.pick })); } catch {} };
+  const qs = new URL(location.href).searchParams;
+  if (qs.get('service')) S.service = qs.get('service');
+  if (qs.get('model')) S.pick = qs.get('model');
+
+  // Words for numbers.
+  const ctxWord = (n) => (!n ? '' : n >= 1048576 ? `${Math.round(n / 1048576)}M` : n >= 1000 && n % 1024 === 0 ? `${Math.round(n / 1024)}k` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  const gb = (b) => (b ? `${(b / 1e9).toFixed(1)} GB` : '');
+  const ago = (iso) => { if (!iso) return ''; const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000); return s < 60 ? `${Math.round(s)} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`; };
+  const until = (iso) => { if (!iso) return ''; const s = (Date.parse(iso) - Date.now()) / 1000; if (s > 3e8) return 'stays loaded'; if (s <= 0) return 'any moment'; return s < 60 ? `in ${Math.round(s)} s` : s < 3600 ? `in ${Math.round(s / 60)} min` : `in ${(s / 3600).toFixed(1)} h`; };
+  const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+  const secs = (s) => (s == null ? '—' : s < 10 ? `${s.toFixed(1)} s` : `${Math.round(s)} s`);
+  const money = (p) => (p ? `$${+p.in.toFixed(2)} in · $${+p.out.toFixed(2)} out, a million tokens` : '');
+  const sizeOf = (m) => [m.params && `${m.params}${/moe/i.test(m.family || '') ? ' MoE' : ''}`, gb(m.bytes), m.quant].filter(Boolean).join(' · ');
+
+  const models = () => S.data?.models ?? [];
+  const byId = (id) => models().find((m) => m.id === id) ?? null;
+  const fits = (m) => !S.q || m.id.toLowerCase().includes(S.q) || String(m.name ?? '').toLowerCase().includes(S.q) || String(m.family ?? '').toLowerCase().includes(S.q);
+  // The cards in the order the list draws them (folded groups left out unless searching).
+  const order = () => (S.data?.groups ?? []).flatMap((g) => (g.fold && !S.open[g.id] && !S.q ? [] : g.ids.map(byId).filter((m) => m && fits(m))));
+
+  async function load(quiet) {
+    if (S.loading) return; S.loading = true;
+    if (!quiet) $('#status').textContent = 'Reading the service…';
+    try {
+      const r = await fetch(`/remote.json${S.service ? `?service=${encodeURIComponent(S.service)}` : ''}`, { cache: 'no-store' });
+      S.data = await r.json(); S.service = S.data.service; S.at = Date.now();
+      if (!byId(S.pick)) S.pick = order()[0]?.id ?? models()[0]?.id ?? null;
+      keep(); draw();
+      if (S.pick) loadDetail(S.pick, quiet);
+    } catch (e) { $('#status').textContent = `The hub did not answer: ${e.message}`; }
+    S.loading = false;
+    poll();
+  }
+  async function loadDetail(id, quiet) {
+    const key = `${S.service}\0${id}`;
+    if (!quiet || !S.detail[key]) { if (!S.detail[key]) drawDetail(); }
+    try {
+      const r = await fetch(`/remote/model.json?service=${encodeURIComponent(S.service)}&id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+      const d = await r.json();
+      if (!d.error) S.detail[key] = d;
+    } catch {}
+    if (S.pick === id) drawDetail();
+  }
+  // While a model is trying, loading or unloading, ask again every 2 s; else every 20 s (who is loaded changes on its own).
+  let timer = null;
+  function poll() { clearTimeout(timer); const busy = models().some((m) => m.busy); timer = setTimeout(() => { if (!document.hidden) load(true); else poll(); }, busy ? 2000 : 20000); }
+
+  function draw() {
+    const d = S.data;
+    $('#svc').innerHTML = (d.services ?? []).map((s) => `<button type="button" data-svc="${esc(s.id)}" aria-pressed="${s.id === d.service}" title="${esc(s.label)}">${esc(s.word)}<small>${esc(s.id === 'openai' && s.label ? s.label : s.id === 'machine' ? s.label : '')}</small>${s.inUse ? '<span class="use" title="the service the app uses now">in use</span>' : ''}</button>`).join('');
+    const n = models().length;
+    $('#status').innerHTML = d.state === 'ok' ? `<span class="dot ok"></span><b>${esc(d.server)}</b> · ${n} model${n === 1 ? '' : 's'} · ${models().filter((m) => m.loaded).length} loaded · read ${ago(d.at)}`
+      : d.state === 'down' ? `<span class="dot down"></span><b>Cannot reach it</b>${d.seenAt ? ` · showing the list from ${ago(d.seenAt)}` : ''}`
+      : d.state === 'setup' ? '<span class="dot"></span>Not set up' : '<span class="dot"></span>No service saved';
+    const b = $('#banner');
+    b.hidden = d.state === 'ok'; b.className = `banner${d.state === 'down' ? ' down' : ''}`;
+    b.innerHTML = d.state === 'down' ? `<b>The service did not answer:</b> ${esc(d.why)}. ${d.seenAt ? `The cards are what it listed ${ago(d.seenAt)} (${esc(new Date(d.seenAt).toLocaleString())}); Try it, Load and Unload wait until it answers.` : 'It has never been read from here, so there is no list to show yet.'}`
+      : d.state === 'setup' ? `<b>${esc((d.services.find((s) => s.id === d.service) || {}).word)} is not ready:</b> ${esc(d.why)}. Finish it in Agentic Coder with <code>/remote</code>.`
+      : d.state === 'none' ? '<b>No service is saved yet.</b> In Agentic Coder, type <code>/remote</code>, pick where it runs (Another service, Claude API or My other computer), and press Connect. Its models then show here.' : '';
+    $('#split').style.display = d.state === 'none' || d.state === 'setup' ? 'none' : '';
+    drawList(); drawDetail();
+  }
+
+  function cardHtml(m) {
+    const t = m.tried, busy = m.busy;
+    const marks = [busy ? `<span class="warnc">${busy.what === 'try' ? 'trying…' : busy.what === 'load' ? 'loading…' : 'unloading…'}</span>` : '', m.loaded && S.data.ollama ? '<span class="ok" title="loaded in the service\'s memory now">● loaded</span>' : '', t ? (t.ok ? '<span class="ok" title="counted to 20 right when tried">✔</span>' : '<span class="no" title="did not count to 20 right when tried">✗</span>') : ''].filter(Boolean).join('');
+    const sub = S.data.ollama ? sizeOf(m) : [m.ctx && `${ctxWord(m.ctx)} context`, m.price && `$${+m.price.in.toFixed(2)} / $${+m.price.out.toFixed(2)}`, m.file].filter(Boolean).join(' · ');
+    const sure = m.known !== false;
+    const chips = [sure && m.tools && 'tools', sure && m.thinking && 'thinks', sure && m.vision && 'pictures', m.embedding && 'search', !sure && S.data.ollama && 'abilities not listed', ...(m.specialties?.tags ?? []).filter((x) => ['Coding', 'Big', 'Long context', 'Tiny'].includes(x.tag)).map((x) => x.tag.toLowerCase())].filter(Boolean);
+    return `<button type="button" class="card" role="listitem" data-id="${esc(m.id)}" aria-current="${m.id === S.pick}"><div class="n"><span>${esc(m.name && m.name !== m.id ? m.name : m.id)}</span><span class="mk">${marks}</span></div>${sub ? `<div class="s">${esc(sub)}</div>` : ''}${chips.length ? `<div class="chips">${[...new Set(chips)].slice(0, 5).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>` : ''}</button>`;
+  }
+  function drawList() {
+    const groups = S.data?.groups ?? [];
+    const html = groups.map((g) => {
+      const ms = g.ids.map(byId).filter((m) => m && fits(m));
+      if (!ms.length) return '';
+      const shut = g.fold && !S.open[g.id] && !S.q;
+      const head = g.fold && !S.q ? `<button type="button" data-fold="${esc(g.id)}" aria-expanded="${!shut}">${shut ? '▸' : '▾'} ${esc(g.text)} · ${ms.length}</button>` : `${esc(g.text)} · ${ms.length}`;
+      return `<div class="gh">${head}${g.note ? `<span>${esc(g.note)}</span>` : ''}</div>${shut ? '' : ms.map(cardHtml).join('')}`;
+    }).join('');
+    $('#list').innerHTML = html || `<p class="empty">${S.q ? `No model has “${esc(S.q)}” in its name.` : 'The service lists no models.'}</p>`;
+  }
+
+  function drawDetail() {
+    const box = $('#det');
+    const m = byId(S.pick);
+    if (!m) { box.innerHTML = `<p class="empty" style="padding:20px">${S.data?.state === 'down' && !models().length ? 'Nothing to show until the service answers.' : 'Pick a model on the left.'}</p>`; return; }
+    const d = S.detail[`${S.service}\0${m.id}`] ?? null;
+    const ol = S.data.ollama, down = S.data.state !== 'ok', busy = m.busy;
+    const acts = [
+      `<button class="btn main" type="button" data-act="try" ${busy || down ? 'disabled' : ''} title="Asks it to count from 1 to 20: shows the answer, ✔ or ✗, the time and the speed">Try it</button>`,
+      ol ? (m.loaded ? `<button class="btn" type="button" data-act="unload" ${busy || down ? 'disabled' : ''} title="Takes it out of the service's memory now">Unload</button>` : `<button class="btn" type="button" data-act="load" ${busy || down ? 'disabled' : ''} title="Loads it now, at the context the app would ask for, so the first reply does not wait">Load</button>`) : '',
+    ].join('');
+    const last = m.last && !busy ? (m.last.ok ? `<span class="note ok">${m.last.what === 'load' ? 'Loaded' : m.last.what === 'unload' ? 'Unloaded' : 'Tried'} ${ago(m.last.at)}</span>` : `<span class="note no" title="${esc(m.last.error)}">${m.last.what === 'try' ? 'The try' : m.last.what === 'load' ? 'Loading' : 'Unloading'} failed: ${esc(m.last.error)}</span>`) : busy ? `<span class="note warnc">${busy.what === 'try' ? 'Asking it to count…' : busy.what === 'load' ? 'Loading it on the service (a big model can take minutes)…' : 'Unloading…'} ${ago(busy.since).replace(' ago', '')}</span>` : '';
+    const sub = [d?.service?.label, d?.inUse ? 'the app uses this one' : ''].filter(Boolean).join(' · ');
+    box.innerHTML = `<div class="dh"><h2>${esc(m.name && m.name !== m.id ? `${m.name}` : m.id)}</h2>${m.loaded && ol ? '<span class="sub ok">● loaded</span>' : ''}<span class="sub">${esc(sub)}</span><div class="acts">${last}${acts}</div></div>
+      <nav class="tabs" role="tablist">${TABS.map(([k, n], i) => `<button type="button" role="tab" data-tab="${k}" aria-selected="${S.tab === k}">${i + 1} · ${n}</button>`).join('')}</nav>
+      <div class="pane" role="tabpanel">${pane(m, d)}</div>`;
+  }
+
+  const fact = (k, v, small) => (v === '' || v == null ? '' : `<dt>${esc(k)}</dt><dd>${v}${small ? ` <small>${esc(small)}</small>` : ''}</dd>`);
+  const nothing = (what) => `<p class="quiet">${what}</p>`;
+  const waiting = (d) => (d ? '' : '<p class="quiet">Reading this model from the service…</p>');
+
+  // Plain names for the build facts Ollama gives (model_info); the rest keep their own.
+  const INSIDE = [[/^general\.architecture$/, 'Design'], [/^general\.parameter_count$/, 'Parameters'], [/^general\.basename$/, 'Base name'], [/^general\.size_label$/, 'Size label'], [/^general\.finetune$/, 'Tuned for'], [/^general\.license$/, 'License'], [/^general\.organization$/, 'Made by'],
+    [/\.block_count$/, 'Layers'], [/\.attention\.head_count$/, 'Attention heads'], [/\.attention\.head_count_kv$/, 'Key/value heads (fewer = less memory per token)'], [/\.embedding_length$/, 'Width (embedding size)'], [/\.feed_forward_length$/, 'Feed-forward size'],
+    [/\.context_length$/, 'Longest context it was trained for'], [/\.rope\.freq_base$/, 'Position scale (RoPE base)'], [/\.expert_count$/, 'Experts'], [/\.expert_used_count$/, 'Experts used per token'], [/\.vocab_size$/, 'Vocabulary'], [/^tokenizer\.ggml\.model$/, 'Tokenizer'], [/\.attention\.sliding_window$/, 'Sliding window'], [/\.attention\.key_length$/, 'Key size per head']];
+  const insideName = (k) => INSIDE.find(([re]) => re.test(k))?.[1] ?? null;
+  const num = (v) => (typeof v === 'number' && Math.abs(v) >= 1e4 ? v.toLocaleString() : String(v));
+
+  function pane(m, d) {
+    const ol = S.data.ollama, x = d?.detail ?? null;
+    if (S.tab === 'overview') {
+      const sp = m.specialties;
+      const spec = sp ? `<div class="sect"><h3>What it is good at</h3>${sp.note ? `<p class="lead"><b>${esc(sp.note.family)}.</b> ${esc(sp.note.text)}</p>` : '<p class="quiet">No note for this family yet: below is only what the service says.</p>'}
+        ${sp.tags.length ? `<div class="spec" style="margin-top:10px">${sp.tags.map((t) => `<span class="t">${esc(t.tag)}</span><span class="w">${esc(t.why)}</span>`).join('')}</div>` : ''}
+        <p class="from">${sp.note ? 'The first line is a note kept in Agentic Coder for this family; the' : 'The'} lines under it are worked out from what the service says.</p></div>`
+        : m.note || m.description ? `<div class="sect"><h3>What it is good at</h3><p class="lead">${esc(m.note || m.description)}</p><p class="from">${m.note ? 'A note kept in Agentic Coder.' : 'The service\'s own description.'}</p></div>` : '';
+      const facts = ol ? [fact('Name', esc(m.id)), fact('Family', esc(m.family)), fact('Size', esc(m.params), /moe/i.test(m.family || '') ? 'mixture of experts' : ''), fact('File', esc(gb(m.bytes))), fact('Compression', esc(m.quant), m.quant ? 'how the weights are packed: lower bits = smaller, a little less exact' : ''),
+        fact('Longest context', esc(ctxWord(m.ctx)), m.ctx ? `${m.ctx.toLocaleString()} tokens` : ''), fact('Added to the service', esc(day(m.modified))), fact('Same weights as', esc((m.sameAs || []).join(', '))), fact('Also listed as', esc((m.copies || []).join(', ')))]
+        : [fact('Name', esc(m.name || m.id)), fact('Id', esc(m.id)), fact('Context', esc(ctxWord(m.ctx)), m.ctx ? `${m.ctx.toLocaleString()} tokens` : ''), fact('Longest answer', esc(m.maxOut ? `${m.maxOut.toLocaleString()} tokens` : '')), fact('Price', esc(money(m.price))), fact('Made by', esc(m.owner)), fact('Released', esc(day(m.created))), fact('File', esc(m.file)), fact('Slots', esc(m.slots > 1 ? m.slots : ''))];
+      return `<div class="cols"><div>${spec || nothing('The service says nothing about what it is good at.')}</div><div class="sect"><h3>The facts</h3><dl class="facts">${facts.join('')}</dl></div></div>`;
+    }
+    if (S.tab === 'abilities') {
+      const row = (has, name, yes, no) => (has == null ? `<span class="quiet">?</span><b>${name}</b><span class="w">the service does not say</span>` : `<span class="${has ? 'ok' : 'no'}">${has ? '✔' : '✗'}</span><b>${name}</b><span class="w">${has ? yes : no}</span>`);
+      const known = m.known !== false;
+      const rows = [
+        row(known ? m.tools : null, 'Tools', 'it can read files, edit and run commands: it can run the agent', 'it cannot call tools: it can talk about code but not work in your files'),
+        row(known ? m.thinking : null, 'Thinking', 'it can reason before answering (Effort High), slower but better on hard steps', 'it answers straight away; Effort stays Low'),
+        row(known ? m.vision : null, 'Pictures', 'it can look at screenshots and images you paste', 'it cannot see pictures: the app hands a picture to a model that can'),
+        ...(ol ? [row(m.embedding, 'Search', 'it turns text into numbers to find similar text (a helper, not a chat model)', 'not a search helper'), row(m.chat, 'Chat', 'it answers in words', 'it does not chat')] : []),
+      ];
+      const lv = d?.levels ? `<div class="sect"><h3>Effort levels in /effort</h3><dl class="facts">${d.levels.map((l) => fact(l.label, esc(l.note))).join('')}</dl></div>` : '';
+      const big = ol && d ? `<div class="sect"><h3>Big-model mode</h3><p style="margin:0">${d.big ? '<b class="ok">On for this model.</b> It is 30B or larger and calls tools, so Agentic Coder gives it more steps (80), more tries (12) and longer reads (400 lines).' : 'Off for this model: it is under 30B, or cannot call tools. The usual limits apply.'}</p></div>` : '';
+      const caps = d?.caps ? `<div class="sect"><h3>How the app talks to it</h3><dl class="facts">${fact('Thinking', esc(d.caps.alwaysThinks ? 'always thinks (Low is the least)' : d.caps.adaptive ? 'thinks as much as it needs (adaptive)' : d.caps.budget ? 'thinks within a token budget' : 'no thinking'))}${fact('Effort setting', esc(d.caps.effort ? 'yes: low, medium, high' : 'no'))}</dl></div>` : '';
+      return `<div class="cols"><div class="sect"><h3>What it can do <span>${ol ? 'as the service lists it' : ''}</span></h3><div class="can">${rows.join('')}</div></div><div>${lv}${big}${caps}${!lv && !big && !caps ? waiting(d) : ''}</div></div>`;
+    }
+    if (S.tab === 'memory') {
+      if (!ol) return `<div class="cols"><div class="sect"><h3>Context</h3><div class="big">${esc(ctxWord(m.ctx) || '—')}</div><p class="quiet">${m.ctx ? `${m.ctx.toLocaleString()} tokens it can read at once.` : 'The service does not say.'}${m.kind === 'claude' ? ' Agentic Coder keeps a session to 200k unless /remote\'s Context row asks for more: every step sends the conversation again.' : ''}</p></div><div class="sect"><h3>Memory</h3><p class="quiet" style="margin:0">${m.kind === 'claude' ? 'Runs on Anthropic\'s computers: nothing to load or unload.' : 'This service does not say how much memory its model uses.'}</p></div></div>`;
+      const ld = x?.loaded;
+      const pct = ld && ld.size ? Math.round((ld.vram / ld.size) * 100) : null;
+      return `<div class="cols"><div><div class="sect"><h3>Context</h3><dl class="facts">${fact('Longest it can take', esc(ctxWord(m.ctx) || '—'), m.ctx ? `${m.ctx.toLocaleString()} tokens` : '')}${d ? fact('The app asks for', `<b>${esc(ctxWord(d.runsAt))}</b>`, `from ${d.runsAtFrom}`) : ''}${ld ? fact('Loaded at', esc(ctxWord(ld.ctx))) : ''}</dl><p class="from">A longer context holds more of the conversation and more files, but takes more of the service's GPU memory.</p></div></div>
+        <div class="sect"><h3>Memory on the service</h3>${ld ? `<div class="big">${esc(gb(ld.vram) || '—')}</div><p class="quiet" style="margin:0 0 4px">of GPU memory in use now${pct != null && pct < 100 ? `, ${pct}% of its ${esc(gb(ld.size))}: the rest runs on the slower main memory` : ''}</p>${pct != null ? `<div class="meter"><i style="width:${Math.min(100, pct)}%"></i></div>` : ''}<dl class="facts" style="margin-top:8px">${fact('File on disk', esc(gb(m.bytes)))}${fact('Unloads', esc(until(ld.until)), 'after it goes unused; Load again to keep it')}</dl>`
+          : `<p style="margin:0 0 8px">Not loaded now. ${d ? '' : ''}Its file is <b>${esc(gb(m.bytes) || '?')}</b>; loaded, it takes about that much GPU memory plus room for its context.</p><p class="quiet" style="margin:0">Load puts it in the service's memory now, so your first reply does not wait.</p>`}${x === null && d?.detailError ? `<p class="quiet">${esc(d.detailError)}</p>` : ''}</div></div>`;
+    }
+    if (S.tab === 'settings') {
+      if (!ol) return nothing('This service does not share a model\'s settings, chat template or built-in prompt.');
+      if (!x) return waiting(d) || nothing(d?.detailError ? `Could not read it: ${esc(d.detailError)}` : 'The service did not say.');
+      const ps = Object.entries(x.params ?? {});
+      const PN = { temperature: 'Temperature (higher = more varied)', top_p: 'Top P', top_k: 'Top K', min_p: 'Min P', repeat_penalty: 'Repeat penalty', num_ctx: 'Context it sets', stop: 'Stops at', presence_penalty: 'Presence penalty', num_predict: 'Longest answer' };
+      return `<div class="cols"><div><div class="sect"><h3>Its own settings <span>the service uses these unless the app says otherwise</span></h3>${ps.length ? `<dl class="facts">${ps.map(([k, v]) => fact(PN[k] ?? k, esc(Array.isArray(v) ? v.join('   ') : v))).join('')}</dl>` : '<p class="quiet" style="margin:0">None set: the service\'s defaults.</p>'}</div>
+        <div class="sect"><h3>Built-in system prompt</h3>${x.system ? `<pre>${esc(x.system)}</pre>` : '<p class="quiet" style="margin:0">None. Agentic Coder sends its own.</p>'}</div></div>
+        <div class="sect"><h3>Chat template <span>how a conversation is laid out for it</span></h3>${x.template ? `<pre>${esc(x.template)}</pre>` : '<p class="quiet" style="margin:0">None given.</p>'}</div></div>`;
+    }
+    if (S.tab === 'inside') {
+      if (!ol) return nothing('This service does not say how its models are built.');
+      if (!x) return waiting(d) || nothing(d?.detailError ? `Could not read it: ${esc(d.detailError)}` : 'The service did not say.');
+      const all = Object.entries(x.info ?? {});
+      const named = all.filter(([k]) => insideName(k)).map(([k, v]) => [insideName(k), v, k]);
+      const rest = all.filter(([k]) => !insideName(k));
+      const pj = Object.entries(x.projector ?? {});
+      return `<div class="cols"><div><div class="sect"><h3>How it is built</h3>${named.length ? `<dl class="facts">${named.map(([n, v, k]) => `<dt title="${esc(k)}">${esc(n)}</dt><dd>${esc(num(v))}</dd>`).join('')}</dl>` : '<p class="quiet" style="margin:0">The service gave no build facts.</p>'}</div>
+        ${pj.length ? `<div class="sect"><h3>Picture part <span>the add-on that lets it see</span></h3><dl class="facts">${pj.slice(0, 14).map(([k, v]) => fact(k.replace(/^clip\./, ''), esc(num(v)))).join('')}</dl></div>` : ''}</div>
+        <div class="sect"><h3>Every other fact <span>as the service names it</span></h3>${rest.length ? `<dl class="facts" style="font-size:12.5px">${rest.map(([k, v]) => fact(k, esc(num(v)))).join('')}</dl>` : '<p class="quiet" style="margin:0">None.</p>'}</div></div>`;
+    }
+    if (S.tab === 'results') {
+      const t = m.tried;
+      const tr = t ? `<div class="sect"><h3>Try it <span>${esc(ago(t.at))}</span></h3><p class="lead"><span class="${t.ok ? 'ok' : 'no'}">${t.ok ? '✔ Counted to 20 right' : '✗ Did not count to 20 right'}</span></p><dl class="facts">${fact('It said', `<code>${esc(t.said || '(nothing)')}</code>`)}${fact('Loading first', esc(t.loadSecs != null && t.loadSecs >= 0.5 ? secs(t.loadSecs) : t.loadSecs != null ? 'none: it was loaded' : ''))}${fact('Answer took', esc(secs(t.replySecs)))}${fact('Speed', esc(t.tokSecs ? `${t.tokSecs.toFixed(1)} tokens a second` : ''), t.tokens ? `${t.tokens} tokens` : '')}</dl></div>`
+        : '<div class="sect"><h3>Try it</h3><p style="margin:0">Not tried yet. <b>Try it</b> asks it to count from 1 to 20: you get its answer, ✔ or ✗, how long it took (loading included) and its speed. The result is kept here.</p></div>';
+      const runs = d?.runs ?? [];
+      const rr = `<div class="sect"><h3>Tests on it <span>from the test record</span></h3>${runs.length ? `<table class="runs"><tr><th class="n">When</th><th>Test</th><th class="n">Result</th><th class="n">Time</th></tr>${runs.map((r) => `<tr><td class="n">${esc(day(r.at))}</td><td>${esc(r.name)}${r.note ? `<br><small class="quiet">${esc(r.note.length > 200 ? `${r.note.slice(0, 200)}…` : r.note)}</small>` : ''}</td><td class="n ${r.result === 'pass' ? 'ok' : 'no'}">${r.total ? `${r.passed} of ${r.total}` : esc(r.result)}</td><td class="n">${esc(r.secs >= 600 ? `${Math.round(r.secs / 60)} min` : secs(r.secs))}</td></tr>`).join('')}</table>` : `<p class="quiet" style="margin:0">${d ? 'No test has run on it yet. The Arena runs one (/test in Agentic Coder).' : 'Reading…'}</p>`}</div>`;
+      return `<div class="cols"><div>${tr}</div>${rr}</div>`;
+    }
+    if (S.tab === 'license') {
+      if (!ol) return nothing(m.kind === 'claude' ? 'Claude is used under Anthropic\'s terms for your API key.' : 'This service does not share a license.');
+      if (!x) return waiting(d) || nothing('The service did not say.');
+      return `<div class="sect" style="height:100%;display:flex;flex-direction:column"><h3>License <span>${esc(x.info?.['general.license'] ?? '')}</span></h3>${x.license ? `<pre style="max-height:none;flex:1;min-height:0">${esc(x.license)}</pre>` : '<p class="quiet" style="margin:0">The service gave no license text.</p>'}</div>`;
+    }
+    return '';
+  }
+
+  async function act(what) {
+    const m = byId(S.pick);
+    if (!m) return;
+    m.busy = { what, since: new Date().toISOString() }; drawList(); drawDetail();
+    try {
+      const r = await fetch(`/remote/${what}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ service: S.service, id: m.id }) });
+      const j = await r.json();
+      if (j.error) { m.busy = null; m.last = { what, ok: false, error: j.error, at: new Date().toISOString() }; drawList(); drawDetail(); return; }
+    } catch (e) { m.busy = null; m.last = { what, ok: false, error: e.message, at: new Date().toISOString() }; drawDetail(); return; }
+    poll();
+    setTimeout(() => load(true), 1500);
+  }
+
+  function pick(id, focus) {
+    if (!id || id === S.pick) return;
+    S.pick = id; keep(); drawList(); drawDetail(); loadDetail(id, true);
+    if (focus) document.querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.focus();
+    document.querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  document.addEventListener('click', (e) => {
+    const s = e.target.closest('[data-svc]'); if (s) { if (s.dataset.svc !== S.service) { S.service = s.dataset.svc; S.pick = null; S.data = { ...S.data, models: [], groups: [] }; keep(); load(); } return; }
+    const f = e.target.closest('[data-fold]'); if (f) { S.open[f.dataset.fold] = !S.open[f.dataset.fold]; drawList(); return; }
+    const c = e.target.closest('.card'); if (c) { pick(c.dataset.id); return; }
+    const t = e.target.closest('[data-tab]'); if (t) { S.tab = t.dataset.tab; keep(); drawDetail(); return; }
+    const a = e.target.closest('[data-act]'); if (a && !a.disabled) { act(a.dataset.act); return; }
+  });
+  $('#refresh').onclick = () => load();
+  $('#q').oninput = (e) => { S.q = e.target.value.trim().toLowerCase(); drawList(); };
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const typing = e.target.matches('input, textarea');
+    if (e.key === 'Escape' && typing) { e.target.value = ''; S.q = ''; drawList(); e.target.blur(); return; }
+    if (typing && !['ArrowDown', 'ArrowUp'].includes(e.key)) return;
+    if (e.key === '/') { e.preventDefault(); $('#q').focus(); return; }
+    if (e.key === 'r') { load(); return; }
+    if (/^[1-7]$/.test(e.key)) { S.tab = TABS[+e.key - 1][0]; keep(); drawDetail(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const o = order(); if (!o.length) return; e.preventDefault();
+      const i = o.findIndex((m) => m.id === S.pick);
+      pick(o[Math.max(0, Math.min(o.length - 1, (i < 0 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1))))].id, !typing);
+    }
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - S.at > 20000) load(true); });
+  load();
+})();
+</script>
+</body>
+</html>

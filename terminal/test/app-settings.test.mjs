@@ -139,7 +139,7 @@ test('coding hub [tab]: --help lists it once instead of six words; each tab open
   expect(await hubLine(['memory'], env)).toBe('memory');
   const bad = spawnSync('bun', [CLI, 'hub', 'notes'], { encoding: 'utf8', env: { ...process.env, ...env } });
   expect(bad.status).toBe(1);
-  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, memory, instructions, help.');
+  expect(bad.stderr).toContain('coding hub: no tab called notes. Tabs: weights, docs, harness, structure, flow, arena, tests, builder, battle, remote, memory, instructions, help.');
   const noModel = spawnSync('bun', [CLI, 'hub'], { encoding: 'utf8', env: { ...process.env, ...env } }); // weights is the default, and this home has no model file
   expect(noModel.status).toBe(1);
   expect(noModel.stderr).toContain('open another tab (coding hub docs)');

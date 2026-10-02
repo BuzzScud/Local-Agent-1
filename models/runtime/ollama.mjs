@@ -136,3 +136,34 @@ export async function unloadOllama({ url, key, model, timeoutMs = 10_000 }) {
     return res.ok;
   } catch { return false; }
 }
+
+// Everything /api/show says about one model, for the hub's Remote tab: its
+// settings (temperature, stop words…), chat template, built-in system prompt,
+// license, and how it is built (model_info: layers, heads, vocabulary…; the
+// tokenizer's long word lists are left out), with /api/ps on it when loaded
+// (GPU memory, context, when it unloads). null when the service does not know it.
+export async function ollamaDetail({ url, key, model, signal, timeoutMs = 8000 } = {}) {
+  if (!model) return null;
+  const [s, ps] = await Promise.all([
+    call(url, '/api/show', { key, signal, timeoutMs, body: { model } }).catch(() => null),
+    call(url, '/api/ps', { key, signal, timeoutMs }).catch(() => null),
+  ]);
+  if (!s) return null;
+  const p = (ps?.models ?? []).find((m) => m.name === model) ?? null;
+  const scalars = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v)));
+  // "stop "<|im_end|>"\ntemperature 0.7" → { stop: ['<|im_end|>'], temperature: '0.7' }
+  const params = {};
+  for (const line of String(s.parameters ?? '').split('\n')) {
+    const m = /^(\S+)\s+(.*)$/.exec(line.trim());
+    if (!m) continue;
+    const v = m[2].replace(/^"(.*)"$/, '$1');
+    params[m[1]] = m[1] in params ? [].concat(params[m[1]], v) : m[1] === 'stop' ? [v] : v;
+  }
+  return {
+    id: model, details: s.details ?? {}, capabilities: Array.isArray(s.capabilities) ? s.capabilities : null,
+    ctx: Object.entries(s.model_info ?? {}).find(([k]) => k.endsWith('.context_length'))?.[1] ?? null,
+    params, template: String(s.template ?? ''), system: String(s.system ?? ''), license: String(s.license ?? '').slice(0, 40_000),
+    info: scalars(s.model_info), projector: scalars(s.projector_info), modified: s.modified_at ?? null,
+    loaded: p ? { vram: p.size_vram ?? null, size: p.size ?? null, ctx: p.context_length ?? null, until: p.expires_at ?? null } : null,
+  };
+}
