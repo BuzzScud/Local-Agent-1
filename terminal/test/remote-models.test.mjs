@@ -135,20 +135,20 @@ test('the columns’ words: context in k (or M), size with MoE, what it can do',
   expect([canWord(MODELS[0]), canWord(MODELS[2]), canWord(MODELS[7]), canWord({ known: false })]).toEqual(['tools · thinks · images', 'tools', '—', '']);
 });
 
-test('the footer on a remote: the model and where it runs, then shorter in a narrow window; connecting, loading, reconnecting and not answering say so', () => {
+test('the footer on a remote: the model and where it runs, then shorter in a narrow window; connecting, loading, reconnecting and not answering say so; this Mac\'s memory is not shown (it holds no model then)', () => {
   const ms = (state, o = {}) => ({ remote: true, state, name: 'Qwen3.6:35B-A3B', where: '203.0.113.7:60009', gb: null, ...o });
-  expect(modelLabels(ms('on'))).toEqual(['● Qwen3.6:35B-A3B on 203.0.113.7:60009', '● Qwen3.6:35B-A3B · remote', '● remote']);
+  expect(modelLabels(ms('on'))).toEqual(['● Qwen3.6:35B-A3B on 203.0.113.7:60009', '● Qwen3.6:35B-A3B', '● remote']);
   expect(modelLabels(ms('loading', { name: 'gpt-oss:120b', gb: 65.4 }))[0]).toBe('◐ gpt-oss:120b loading on the service · 65.4 GB');
   expect(modelLabels(ms('connecting'))[0]).toBe('◐ connecting to 203.0.113.7:60009…');
   expect(modelLabels(ms('reconnecting'))[0]).toBe('◐ reconnecting to 203.0.113.7:60009…');
   expect(modelLabels(ms('down'))[0]).toBe('✗ 203.0.113.7:60009 is not answering');
   const mac = { total: 8 * 2 ** 30, avail: 2.7 * 2 ** 30, level: 1 };
   const wide = footerParts({ mode: 'ask', notice: null, width: 108, modelState: ms('on'), mac });
-  expect([wide.label, wide.mac]).toEqual(['● Qwen3.6:35B-A3B on 203.0.113.7:60009', 'Mac 5.3/8 GB']);
+  expect([wide.label, wide.mac]).toEqual(['● Qwen3.6:35B-A3B on 203.0.113.7:60009', '']);
   expect(wide.labelAt.to - wide.labelAt.from + 1).toBe(wide.label.length); // where a click lands (/mouse on)
-  // 56 columns: the whole label does not fit, the model's name keeps its place over the Mac's memory
+  // 56 columns: the whole label does not fit, the address goes and the model's name stays
   const narrow = footerParts({ mode: 'ask', notice: null, width: 56, modelState: ms('on'), mac });
-  expect([narrow.label, narrow.mac]).toEqual(['● Qwen3.6:35B-A3B · remote', '']);
+  expect([narrow.label, narrow.mac]).toEqual(['● Qwen3.6:35B-A3B', '']);
   // a server given with --url still has no label
   expect(modelLabels(null)).toEqual([]);
 });

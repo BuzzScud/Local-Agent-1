@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync, spawn } from 'node:child_process';
-import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, SHORTCUT_ROWS, footerParts } from './screen.jsx';
+import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, shortcutRows, footerParts } from './screen.jsx';
 import { startTip } from './start.jsx';
 import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
@@ -18,7 +18,7 @@ import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHome
 import { offerFor, nextMode, modeOf } from '../agent/permissions.mjs';
 import { screenAccess, askScreenAccess, terminalApp } from '../tools/screen.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama, unloadOllama, isOutOfMemory, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, ollamaPs, preloadOllama, unloadOllama, isOutOfMemory, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
 import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, modelsInUseOn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
@@ -1725,6 +1725,8 @@ export function App({ opts, win, onRestart }) {
   useEffect(() => {
     if (!opts.macMem) return;
     const id = setInterval(() => {
+      // On a remote the footer shows the service instead (remote-footer.mjs): nothing to read here.
+      if (remoteRef.current.on) return;
       const m = macMemory();
       if (!m) return;
       const prev = macRef.current;
@@ -1734,6 +1736,32 @@ export function App({ opts, win, onRestart }) {
     return () => clearInterval(id);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const mac = macRef.current;
+
+  // The service's GPU memory for the footer's gauge and /meters (remote-footer.mjs): Ollama's
+  // /api/ps as the model comes up on the service and every 30 s after. As with the Mac's memory, a
+  // new figure waits for the next redraw, so Terminal keeps a highlight (1 Oct 2026); a spill onto
+  // the CPU starting or ending, or the model unloading, is drawn at once.
+  const psRef = useRef(null);
+  const [, redrawPs] = useState(0);
+  const psConn = model.remote && remoteState === 'on' && remoteRef.current.conn?.info?.ollama ? remoteRef.current.conn : null;
+  const psKey = psConn ? `${psConn.url} ${model.remote.model}` : null;
+  useEffect(() => {
+    psRef.current = null;
+    if (!psConn) return;
+    const name = model.remote.model;
+    let on = true;
+    const read = async () => {
+      const p = await ollamaPs({ url: psConn.url, model: name }).catch(() => null);
+      if (!on) return;
+      const prev = psRef.current;
+      psRef.current = p;
+      const spill = (x) => (x?.loaded ? (x.gpuPct ?? 100) < 100 : null);
+      if (!prev || spill(prev) !== spill(p) || Boolean(prev.loaded) !== Boolean(p?.loaded)) redrawPs((n) => n + 1);
+    };
+    read();
+    const id = setInterval(read, Number(process.env.AGENTIC_PS_EVERY) || 30_000); // ms; the tests read it faster
+    return () => { on = false; clearInterval(id); };
+  }, [psKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Memory the model really uses (for the Live thinking meter line).
   useEffect(() => {
@@ -2126,10 +2154,8 @@ export function App({ opts, win, onRestart }) {
   const toggleArmed = useRef(0);
   const toggleModel = (how = 'ctrl+t') => {
     if (opts.url) { flash('This window uses a model server given with --url: nothing here to start or stop', 3000); return; }
-    if (remoteRef.current.on) {
-      if (how === 'click') { openModelPicker(); return; }
-      flash('On the remote model: nothing loads on this Mac (/remote off goes back)', 3000); return;
-    }
+    // On a remote nothing loads on this Mac: ctrl+t, like a click, opens the model list.
+    if (remoteRef.current.on) { openModelPicker(); return; }
     if (!wantRef.current) { startFnRef.current(); return; }
     if ((S.current.live !== IDLE || agent.busy) && Date.now() - toggleArmed.current > 2000) {
       toggleArmed.current = Date.now();
@@ -2394,6 +2420,8 @@ export function App({ opts, win, onRestart }) {
       case 'compact':
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then /compact can summarize.', tone: 'dim' }); break; }
+        // agent.compact leaves a conversation this short as it is; said, so ctrl+p is not silent.
+        if ((agent.messages?.length ?? 0) <= 3) { flash('Nothing to summarize yet: the conversation is still short', 2500); break; }
         setLive({ phase: 'working', turnStart: Date.now(), verb: 'Compacting', tokens: 0 });
         try { await agent.compact(undefined, { instructions: arg || undefined }); } catch (e) { push({ type: 'note', text: e.message, tone: 'error' }); }
         setLive(IDLE);
@@ -2989,6 +3017,27 @@ export function App({ opts, win, onRestart }) {
     setPopup(null);
     setInput((s) => withUndo(s, moveBy(s, n('downArrow') - n('upArrow'), n('rightArrow') - n('leftArrow'), rowsOf(s))));
   };
+  // ctrl+r: a second opinion now (2 Oct 2026, a key for big models). The review helper on an Ollama
+  // service (/subagents) reads the last message's request and change, as it does after a change.
+  // What it finds goes into an empty prompt, for enter to send to the model.
+  const secondOpinionNow = async () => {
+    if (agent.busy || S.current.live.phase === 'working') { flash('Wait for Agentic Coder to finish, or press esc first'); return; }
+    if (!agent.helperUse?.('review')) { flash(model.remote ? 'No second opinion here: /subagents gives the job a model on an Ollama service' : 'A second opinion needs a review model on an Ollama service (/remote service, then /subagents)', 3000); return; }
+    if (!agent.turn?.changed || !agent.turn.diffs?.trim()) { flash('Nothing changed in the last message, so there is nothing to review', 2500); return; }
+    const ac = new AbortController();
+    abortRef.current = ac;
+    setLive({ phase: 'working', turnStart: Date.now(), verb: 'Checking', tokens: 0 });
+    try {
+      const found = await agent.secondOpinion(ac.signal);
+      if (found && !ac.signal.aborted) {
+        if (S.current.input.value) flash('What it found is above; your prompt was left as it is', 3000);
+        else { setInput((s) => withUndo(s, { value: found, cursor: found.length })); flash('What it found is in the prompt: enter sends it to the model', 4000); }
+      }
+    } catch (e) {
+      if (!ac.signal.aborted) push({ type: 'note', text: `Second opinion: ${e.message}`, tone: 'error' });
+    } finally { setLive(IDLE); }
+  };
+
   useInput((ch, key) => {
     if (isMouseText(ch)) return; // the mouse's reports are handled above, never typed
     const cur = S.current;
@@ -3329,8 +3378,12 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     if (key.tab && key.shift) { setMode(nextMode(cur.mode)); return; }
-    // ctrl+t: the model on this Mac on or off (the footer's label says which, and how much memory it holds).
+    // ctrl+t: the model on this Mac on or off (the footer's label says which, and how much memory it holds);
+    // on a remote, the model list.
     if (key.ctrl && ch === 't') { toggleFnRef.current('ctrl+t'); return; }
+    // ctrl+p: /compact now. ctrl+r: a second opinion on the last change now (2 Oct 2026, keys for big models).
+    if (key.ctrl && ch === 'p') { runSlash('/compact'); return; }
+    if (key.ctrl && ch === 'r') { secondOpinionNow(); return; }
     if (key.ctrl && ch === 'o') {
       const s = folds.current;
       if (!s.list.length) { flash('Nothing to expand yet'); return; }
@@ -3426,7 +3479,7 @@ export function App({ opts, win, onRestart }) {
   // Held until your first message (sendPrompt lets it go). Let go for good, printed as it is, when
   // what came under it, the / menu or the shortcuts would not fit in the window beside it, or when a
   // panel, pop-up or question opens (the page and a tall panel would not fit together).
-  const underRows = heldRows(items, measure.current) + (menu ? Math.min(MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? SHORTCUT_ROWS : 0);
+  const underRows = heldRows(items, measure.current) + (menu ? Math.min(MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && underRows <= holdRoom(items, measure.current, rows ?? 40))) holdRef.current = false;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
@@ -3436,6 +3489,12 @@ export function App({ opts, win, onRestart }) {
   const remoteGb = remoteState === 'loading' ? (catalog?.models.find((m) => m.id === model.remote?.model)?.bytes ?? 0) / 1e9 || null : null;
   // Its name is remoteModel's without " · <where>" (one of ours keeps its own name, not its file's).
   const remoteName = model.remote ? model.name.replace(` · ${model.remote.label}`, '') : null;
+  // The footer's gauges on a remote (remote-footer.mjs), from the model in use's own answers: none
+  // until the first has a speed. While it writes, the speed is this reply's, in green.
+  const writingNow = live.phase === 'working' && live.firstTokenAt && !live.waiting && live.liveTps ? live.liveTps : null;
+  const ownStats = model.remote && stats.speedsOf === model.remote.model && (stats.tps || stats.speeds?.length);
+  const server = psRef.current;
+  const gauges = ownStats ? { tps: writingNow ?? stats.tps, live: Boolean(writingNow), speeds: stats.speeds ?? [], ttft: stats.ttft ?? null, ctxUsed: stats.ctxUsed ?? agent.ctxUsed, ctx, gpuPct: server?.loaded ? server.gpuPct : null } : null;
   const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
   // What the running start has left (start-times.mjs), from how long each part has run so far.
   const tm = timing.current;
@@ -3443,7 +3502,7 @@ export function App({ opts, win, onRestart }) {
   const app = {
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
-    modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in

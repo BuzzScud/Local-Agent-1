@@ -11,7 +11,7 @@ import xterm from '@xterm/headless';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { Terminal } = xterm;
 
-export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '\x1b[B', right: '\x1b[C', left: '\x1b[D', shiftTab: '\x1b[Z', ctrlC: '\x03', ctrlL: '\x0c', ctrlO: '\x0f', backspace: '\x7f' };
+export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '\x1b[B', right: '\x1b[C', left: '\x1b[D', shiftTab: '\x1b[Z', ctrlC: '\x03', ctrlL: '\x0c', ctrlO: '\x0f', ctrlP: '\x10', ctrlR: '\x12', ctrlT: '\x14', backspace: '\x7f' };
 
 // AGENTIC_NO_OPEN: the app never opens a browser tab from a test (/help, /weights, /docs).
 // AGENTIC_HUB_PORT=0: its hub takes any free port, never the real hub's 8757.

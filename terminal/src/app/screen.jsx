@@ -13,6 +13,7 @@ import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEX
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
+import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
 import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig, isHelper as isHelperModel } from './remote-models.mjs';
@@ -335,15 +336,19 @@ function MemoryWarning({ app }) {
   return <Box paddingX={2} width={app.width}><Text color={used + room >= app.ctx * 0.85 ? C.warn : C.dim} wrap="truncate-end">{text}</Text></Box>;
 }
 
-// The status line under the footer (/meters on): model, speed, memory, effort.
+// The status line under the footer (/meters on): model, speed, memory, effort. On a remote, the
+// server's figures in place of this Mac's RAM: speeds, the first token, GPU memory, the cost, the ping
+// (remote-footer.mjs meterWords).
 function Meters({ app }) {
   const { stats, modelName, ctx, ramGb } = app;
   const speed = speedOf(app);
   const used = stats.ctxUsed ?? 0;
+  const remote = Boolean(app.modelState?.remote);
+  const far = remote ? meterWords({ g: app.gauges, pps: app.gauges ? stats.pps : null, server: app.server, spend: app.spend }) : [];
   return (
     <Box paddingX={2} width={app.width}>
       <Text color={C.dim} wrap="truncate-end">
-        {modelName}{app.modelOff ? ' (off · ctrl+t)' : ''}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb ? `  RAM ${ramGb.toFixed(1)} GB` : ''}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
+        {modelName}{app.modelOff ? ' (off · ctrl+t)' : ''}  {speed}  ctx <Text color={C.accentDim}>{bar(used / ctx)}</Text> {Math.max(1, Math.round((used / ctx) * 100))}% of {Math.round(ctx / 1024)}k{ramGb && !remote ? `  RAM ${ramGb.toFixed(1)} GB` : ''}{far.map((w) => `  ${w}`).join('')}  effort {app.thinkingLabel ?? (app.thinking ? 'on' : 'low')}
       </Text>
     </Box>
   );
@@ -606,8 +611,16 @@ const SHORTCUTS = [
   ['⌥+click to move the cursor', 'ctrl+z to undo · ctrl+y to redo'],
   ['ctrl+t to start or stop the model', '/mouse on: click its label too'],
 ];
+// On a remote nothing loads on this Mac: ctrl+t opens the model list, and the keys for big
+// models join it (remote-footer.mjs, 2 Oct 2026).
+const REMOTE_SHORTCUTS = [
+  ...SHORTCUTS.slice(0, -1),
+  ['ctrl+t to switch the model', 'ctrl+r for a second opinion now'],
+  ['ctrl+p to compact now', '/meters for the whole server line'],
+];
+export const shortcutsOf = (remote) => (remote ? REMOTE_SHORTCUTS : SHORTCUTS);
 // Rows the shortcuts take under the footer (? opens them).
-export const SHORTCUT_ROWS = SHORTCUTS.length + 1;
+export const shortcutRows = (remote) => shortcutsOf(remote).length + 1;
 
 // The footer's right side is the mode, as in Claude Code; a narrow window
 // drops the "(shift+tab to cycle)" hint so it never runs into "? for shortcuts".
@@ -629,7 +642,7 @@ export function modelLabels(ms) {
     if (ms.state === 'reconnecting') return [`◐ reconnecting to ${where}…`, '◐ reconnecting…', '◐'];
     if (ms.state === 'down') return [`✗ ${where} is not answering`, '✗ not answering', '✗'];
     if (ms.state === 'loading') return [`◐ ${name} loading on the service${ms.gb ? ` · ${ms.gb.toFixed(1)} GB` : ''}`, `◐ ${name} loading`, '◐ loading'];
-    return [`● ${name} on ${where}`, `● ${name} · remote`, '● remote'];
+    return [`● ${name} on ${where}`, `● ${name}`, '● remote'];
   }
   if (ms.state === 'off') return ['○ model off · ctrl+t start', '○ model off · ctrl+t', '○ off'];
   if (ms.state === 'loading') return [`◐ ${ms.name} loading · ctrl+t stop`, '◐ loading · ctrl+t stop', '◐ loading'];
@@ -640,8 +653,7 @@ export function modelLabels(ms) {
 // The footer's pieces, worked out once for the drawing and for a click on the model's label
 // (App.jsx). The right side ends two cells from the window's edge; a narrow window drops the
 // "(shift+tab to cycle)" hint first, then the label's detail, then the Mac's memory. On a remote
-// the model's name outlasts the Mac's memory (which holds no model then): the address goes, then
-// the memory, then the name.
+// it is remoteParts below: gauges, no Mac.
 // labelAt: the label's first and last cell on the footer's row, counted from 1.
 export function footerParts(app) {
   const { mode, notice, width } = app;
@@ -651,6 +663,7 @@ export function footerParts(app) {
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : tip ? `※ Tip: ${tip}` : '? for shortcuts');
   // The update and weights badges share the lower right with the mode label.
   const badges = [app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
+  if (app.modelState?.remote) return remoteParts(app, left, badges);
   // The Mac's memory, live, after the model's label.
   const mac = app.mac ? footerLabel(app.mac) : '';
   const modeText = MODE_TEXT[mode] ?? '';
@@ -672,7 +685,36 @@ export function footerParts(app) {
   return { left, spend: pick.spend ?? '', label: pick.label, mac: pick.mac, badges, cycle: pick.cycle, labelAt: pick.label ? { from: from + lead, to: from + lead + pick.label.length - 1 } : null };
 }
 
+// On a remote (remote-footer.mjs): no Mac's memory, which holds no model then, and no cost meter
+// (/meters has it). Once the first answer has a speed, gauges take the left side, unless a note,
+// a tip or shell mode is there; the right is the model, where it runs and the mode.
+function remoteParts(app, left, badges) {
+  const { width, mode } = app;
+  const ms = app.modelState;
+  const modeText = MODE_TEXT[mode] ?? '';
+  const labels = modelLabels(ms);
+  const rightOf = (label, cycle) => [label, badges, modeText && `${modeText}${cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
+  const list = gaugesOf(app.gaugeList);
+  const quiet = !app.notice && app.inputMode !== 'bash' && !app.tip;
+  const g = ms.state === 'on' && quiet && app.gauges && gaugeLine(app.gauges, list).length ? app.gauges : null;
+  let label, cycle, gauges = null;
+  if (g) {
+    const f = fitRemote({ avail: width - 4, g, list, right: ({ where, cycle: c, bare }) => rightOf(bare ? labels[2] : where ? labels[0] : labels[1], c) });
+    label = f.bare ? labels[2] : f.where ? labels[0] : labels[1];
+    cycle = f.cycle;
+    gauges = f.gauges.length ? f.gauges : null;
+  } else {
+    const room = width - 4 - Math.min(left.length, 15) - 2;
+    const tries = [[labels[0], true], ...labels.map((l) => [l, false])];
+    [label, cycle] = tries.find(([l, c]) => rightOf(l, c).length <= room) ?? tries.at(-1);
+  }
+  const from = width - 2 - rightOf(label, cycle).length + 1;
+  return { left, gauges, spend: '', label, mac: '', badges, cycle, labelAt: { from, to: from + label.length - 1 } };
+}
+
 const WHITE = 'ansi256(255)'; // the start page's white (start.jsx)
+// The gauges' tones (remote-footer.mjs) as colours.
+const TONE = { dim: C.dim, value: WHITE, live: C.accent, bar: C.accentDim, warn: C.warn, bad: C.bad };
 
 function Footer({ app }) {
   const { mode, notice, width } = app;
@@ -685,9 +727,11 @@ function Footer({ app }) {
   // the model's name stands out from where it runs.
   const dot = on ? C.accent : !ms?.remote ? C.dim : ms.state === 'down' ? C.bad : C.warn;
   const named = ms?.remote && on && p.label.startsWith(`● ${ms.name}`);
+  // A remote that does not answer says so in red, not only its dot.
+  const down = ms?.remote && ms.state === 'down';
   const pieces = [
     p.spend ? <Text color={C.dim}>{p.spend}</Text> : null,
-    p.label ? <Text color={C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
+    p.label ? <Text color={down ? C.bad : C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
     p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
     modeLabel(mode, { cycle: p.cycle }),
@@ -699,12 +743,16 @@ function Footer({ app }) {
       <Box height={1} />
       <Box width={width} justifyContent="space-between" paddingX={2} height={1} overflow="hidden">
         {/* A long left side (a tip) is cut to what is left; the right side stays whole, two spaces clear of it. */}
-        <Box flexShrink={1} marginRight={2}><Text color={notice ? C.warn : C.dim} wrap="truncate-end">{p.left}</Text></Box>
+        <Box flexShrink={1} marginRight={2}>
+          {p.gauges
+            ? <Text wrap="truncate-end">{p.gauges.map((s, i) => <Text key={i} color={TONE[s.tone]}>{s.text}</Text>)}</Text>
+            : <Text color={notice ? C.warn : C.dim} wrap="truncate-end">{p.left}</Text>}
+        </Box>
         <Box flexShrink={0}><Text wrap="truncate-start">{pieces.map((el, i) => <React.Fragment key={i}>{i ? <Text color={C.dim}> · </Text> : null}{el}</React.Fragment>)}</Text></Box>
       </Box>
       {app.showShortcuts ? (
         <Box flexDirection="column" paddingX={2} marginTop={1}>
-          {SHORTCUTS.map(([a, b], i) => <Text key={i} color={C.dim}>{a.padEnd(36)}{b}</Text>)}
+          {shortcutsOf(ms?.remote).map(([a, b], i) => <Text key={i} color={C.dim}>{a.padEnd(36)}{b}</Text>)}
         </Box>
       ) : null}
     </Box>

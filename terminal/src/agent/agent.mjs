@@ -2166,6 +2166,8 @@ export class Agent extends EventEmitter {
     const t0 = Date.now();
     let firstToken = null;
     let thinkEnd = null;
+    let measured = null; // the server's own speed for this request (llama.cpp, Ollama); none from the Claude API or OpenRouter
+    let written = 0; // the tokens the service says it wrote, for timing one that sends no speed
     const turn = { reasoning: '', text: '', calls: [], finish: null, tokens: 0 };
     const local = new AbortController();
     const onAbort = () => local.abort();
@@ -2211,6 +2213,8 @@ export class Agent extends EventEmitter {
         } else if (ev.type === 'done') {
           turn.finish = ev.finish;
           if (ev.usage) this.ctxUsed = (ev.usage.prompt_tokens ?? 0) + (ev.usage.completion_tokens ?? 0);
+          written = ev.usage?.completion_tokens ?? 0;
+          measured = ev.timings?.predicted_per_second ?? null;
           if (ev.timings) {
             this.stats.tps = ev.timings.predicted_per_second ?? this.stats.tps;
             if ((ev.timings.prompt_n ?? 0) > 50) this.stats.pps = ev.timings.prompt_per_second;
@@ -2248,6 +2252,20 @@ export class Agent extends EventEmitter {
     this.stats.requests++;
     turn.secs = (Date.now() - t0) / 1000;
     turn.thinkSecs = turn.reasoning ? ((thinkEnd ?? Date.now()) - (firstToken ?? t0)) / 1000 : 0;
+    // The footer's gauges on a remote (app/remote-footer.mjs): the time to this request's first
+    // token, and its speed, timed here when the service sends none; the last 8 speeds of the
+    // model in use (speedsOf names it, so another model starts its own).
+    if (firstToken) {
+      this.stats.ttft = (firstToken - t0) / 1000;
+      const writing = (Date.now() - firstToken) / 1000;
+      const speed = measured ?? ((written || turn.tokens) > 20 && writing > 0.2 ? (written || turn.tokens) / writing : null);
+      if (speed) {
+        if (!measured) this.stats.tps = speed;
+        const who = this.model?.remote?.model ?? this.model?.id ?? null;
+        this.stats.speeds = [...(this.stats.speedsOf === who ? this.stats.speeds ?? [] : []), speed].slice(-8);
+        this.stats.speedsOf = who;
+      }
+    }
     this.emit('stats', { ...this.stats, ctxUsed: this.ctxUsed, ctx: this.ctx, replyRoom: replyRoom(this.thinking, this.thinkRoom()) });
     return turn;
   }
