@@ -168,6 +168,13 @@ use the model on this Mac for now, or open the form. `/remote claude`, `/remote 
 `/remote here` comes back to this Mac, and `/model` lists each one set up as a row of its own;
 `coding -p` follows the one in use (`--local` runs on this Mac instead).
 
+**Ollama:** on an Ollama service, `/model` is the service's own list, read from Ollama's API: the
+loaded models first, then the ones that can run the agent (they call tools), each with its size,
+context and what it can do (tools, thinking, pictures). Type to filter. Enter switches in place: the
+chat stays, and the model is loaded on the service first. The chat-only models (no tools) fold into
+one row and ask before you switch to one. The footer names the model and where it runs
+(`● qwen3-coder:30b on gpu-box:11434`), and a click on it opens `/model` (`/mouse on`).
+
 **Claude:** `/remote claude`, paste an API key, enter, enter. It goes through Anthropic's own
 Messages API and official SDK: High effort thinks first and shows its summarized thinking, Low
 asks for effort low, JSON answers are held to their schema, the conversation is cached, and a

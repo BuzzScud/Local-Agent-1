@@ -20,6 +20,7 @@ import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS } from '../registry.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, claudeProbe } from './claude.mjs';
+import { ollamaModel, ollamaCtx } from './ollama.mjs';
 
 export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 // The address used: what was typed, or Anthropic's for a Claude API remote left blank.
@@ -331,11 +332,20 @@ export async function probe({ url, kind = 'llama', key = null, model = '', reply
       if (!named && out.models.length > 1) steps.push({ ok: true, text: `using ${out.model} of ${out.models.length}` });
       const picked = r.body.data.find((m) => m.id === out.model);
       out.ctx = ctxOf(picked);
+      // An Ollama service says more than its model list: what the model can do
+      // (pictures, thinking, tools) and the context it runs at (ollama.mjs).
+      const o = await ollamaModel({ url, key, model: out.model, signal, timeoutMs: Math.min(timeoutMs, 5000) }).catch(() => null);
+      if (o) {
+        out.ollama = o;
+        if (o.known) out.vision = o.vision;
+        out.ctx ??= ollamaCtx(o);
+      }
       steps.push({ ok: true, text: `model ${out.model}${out.ctx ? ` · ${Math.round(out.ctx / 1024)}k context` : ''}` });
     }
     if (reply) {
       const t1 = Date.now();
-      const t = AbortSignal.timeout(Math.max(timeoutMs, 60_000));
+      // An OpenAI-compatible service may first load the model (Ollama: tens of GB from its disk).
+      const t = AbortSignal.timeout(Math.max(timeoutMs, kind === 'openai' ? 180_000 : 60_000));
       const ask = (limit) => fetch(`${norm(url)}/v1/chat/completions`, {
         method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t,
         headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
@@ -372,9 +382,23 @@ export const GENERIC_REMOTE = {
   maxCtx: 131_072,
 };
 
+// The effort levels of a model on an Ollama service, from what it can do (o:
+// ollama.mjs's entry): Low only when it cannot think (asked to, Ollama refuses
+// the request), Low and High when it can, and Low, Medium and High for gpt-oss,
+// whose reasoning_effort has three steps. A model whose abilities are not
+// listed keeps GENERIC_REMOTE's.
+export function remoteLevels(o) {
+  const [low, high] = GENERIC_REMOTE.thinkingLevels;
+  if (!o?.known) return GENERIC_REMOTE.thinkingLevels;
+  if (!o.thinking) return [{ ...low, note: 'answers straight away: this model cannot think first' }];
+  if (/gpt-?oss/i.test(`${o.family} ${o.id}`)) return [low, { id: 'medium', label: 'Medium', effort: 'medium', note: 'thinks for a while first · gpt-oss has three levels' }, { ...high, note: 'thinks longest first' }];
+  return GENERIC_REMOTE.thinkingLevels;
+}
+
 // The settings the agent runs a remote with: the matching model's here when
-// the server runs one of ours (by its file, else its name), else GENERIC_REMOTE.
-// Its name says where it runs; it takes no memory on this Mac.
+// the server runs one of ours (by its file, else its name), else GENERIC_REMOTE
+// (with an Ollama model's own effort levels). Its name says where it runs; it
+// takes no memory on this Mac. remote.model: the name the server knows it by.
 export function remoteModel(r, info = {}) {
   const file = info.file ? basename(info.file) : null;
   const name = String(info.model ?? r?.model ?? '').toLowerCase();
@@ -384,9 +408,11 @@ export function remoteModel(r, info = {}) {
     ?? null;
   const where = remoteLabel(r);
   const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
-  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
+  const o = info.ollama ?? null;
+  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null }, bytes: 0, draft: null, slots: info.slots ?? 1 };
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
-  return { ...GENERIC_REMOTE, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: ctx ?? GENERIC_REMOTE.maxCtx };
+  const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? 'high' : 'low' } : {};
+  return { ...GENERIC_REMOTE, ...levels, ...common, name: `${info.model || r?.model || 'Remote model'} · ${where}`, maxCtx: ctx ?? GENERIC_REMOTE.maxCtx };
 }
 
 // ---- connecting ---------------------------------------------------------------------------------

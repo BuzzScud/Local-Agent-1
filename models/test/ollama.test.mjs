@@ -1,0 +1,128 @@
+// An Ollama service's own list (models/runtime/ollama.mjs): what each model is
+// and can do, which are loaded and at what context, read from /api/version,
+// /api/tags, /api/ps and /api/show; the check and the settings a remote then
+// runs with (pictures, context, effort levels); loading a model ahead of a reply.
+// A fake Ollama; the real Keychain and home are never touched.
+import { test, expect } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
+import { join } from 'node:path';
+import { createServer } from 'node:http';
+
+process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
+process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
+const { ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, COLD_CTX, probe, remoteModel, remoteLevels, GENERIC_REMOTE, HOME } = await import('../index.mjs');
+test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
+
+// The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
+const MODELS = [
+  { name: 'tiny:3b', family: 'llama', params: '3.2B', quant: 'Q4_K_M', size: 2.0e9, caps: ['completion', 'tools'], ctx: 131072, loaded: 131072, at: '2026-07-01' },
+  { name: 'coder:30b', family: 'qwen3moe', params: '30.5B', quant: 'Q4_K_M', size: 18.6e9, caps: ['completion', 'tools'], ctx: 262144, at: '2025-12-20' },
+  { name: 'thinker:35b', family: 'qwen35moe', params: '36.0B', quant: 'Q4_K_M', size: 23.9e9, caps: ['completion', 'vision', 'tools', 'thinking'], ctx: 262144, at: '2026-06-15' },
+  { name: 'gpt-oss:120b', family: 'gptoss', params: '116.8B', quant: 'MXFP4', size: 65.4e9, caps: ['completion', 'tools', 'thinking'], ctx: 131072, at: '2025-12-20' },
+  { name: 'oldchat:14b', family: 'phi3', params: '14.7B', quant: 'Q4_K_M', size: 9.1e9, caps: ['completion'], ctx: 16384, at: '2025-12-24', digest: 'same' },
+  { name: 'oldchat:latest', family: 'phi3', params: '14.7B', quant: 'Q4_K_M', size: 9.1e9, caps: ['completion'], ctx: 16384, at: '2025-12-24', digest: 'same' },
+  { name: 'embed:latest', family: 'gemma3', params: '307.58M', quant: 'BF16', size: 0.6e9, caps: ['embedding'], ctx: 2048, at: '2026-06-16' },
+];
+// seen: every request's method and path (and the model a POST names).
+function fakeOllama({ caps = true } = {}) {
+  const seen = [];
+  const server = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    const body = b ? JSON.parse(b) : {};
+    seen.push({ method: req.method, path: req.url, model: body.model ?? null });
+    const json = (code, j) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
+    const m = MODELS.find((x) => x.name === body.model);
+    if (req.url === '/api/version') return json(200, { version: '0.32.12' });
+    if (req.url === '/api/tags') return json(200, { models: MODELS.map((x) => ({ name: x.name, model: x.name, size: x.size, digest: x.digest ?? `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: { family: x.family, parameter_size: x.params, quantization_level: x.quant } })) });
+    if (req.url === '/api/ps') return json(200, { models: MODELS.filter((x) => x.loaded).map((x) => ({ name: x.name, model: x.name, size: x.size, digest: `d-${x.name}`, context_length: x.loaded })) });
+    if (req.url === '/api/show') return m ? json(200, { details: { family: m.family, parameter_size: m.params, quantization_level: m.quant }, model_info: { [`${m.family}.context_length`]: m.ctx }, ...(caps ? { capabilities: m.caps } : {}) }) : json(404, { error: `model '${body.model}' not found` });
+    if (req.url === '/api/generate') return m ? json(200, { model: m.name, response: '', done: true, done_reason: 'load' }) : json(404, { error: `model "${body.model}" not found, try pulling it first` });
+    if (req.url === '/v1/models') return json(200, { object: 'list', data: MODELS.map((x) => ({ id: x.name, object: 'model', owned_by: 'library' })) });
+    json(404, { error: 'not found' });
+  });
+  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${server.address().port}`, seen, close: () => new Promise((d) => server.close(d)) })));
+}
+
+test('the list: each model with its size, family, quantization, abilities, longest context and whether it is loaded; the same weights under two names are told', async () => {
+  const s = await fakeOllama();
+  try {
+    const c = await ollamaCatalog({ url: s.url, key: null });
+    expect(c.version).toBe('0.32.12');
+    expect(c.models.map((m) => m.id)).toEqual(MODELS.map((m) => m.name));
+    const by = Object.fromEntries(c.models.map((m) => [m.id, m]));
+    expect(by['thinker:35b']).toMatchObject({ family: 'qwen35moe', params: '36.0B', quant: 'Q4_K_M', bytes: 23.9e9, ctx: 262144, known: true, chat: true, tools: true, thinking: true, vision: true, loaded: false, loadedCtx: null });
+    expect(by['tiny:3b']).toMatchObject({ tools: true, thinking: false, vision: false, loaded: true, loadedCtx: 131072 });
+    expect(by['oldchat:14b']).toMatchObject({ chat: true, tools: false, sameAs: ['oldchat:latest'] });
+    expect(by['embed:latest']).toMatchObject({ chat: false, embedding: true });
+    // /api/show once per set of weights: the twins share one, and a second read asks for none
+    expect(s.seen.filter((x) => x.path === '/api/show').length).toBe(MODELS.length - 1);
+    await ollamaCatalog({ url: s.url, key: null });
+    expect(s.seen.filter((x) => x.path === '/api/show').length).toBe(MODELS.length - 1);
+  } finally { await s.close(); }
+});
+
+test('a server that is not Ollama has no list (one GET, answered 404); an Ollama too old to list abilities takes every model as able to chat and use tools', async () => {
+  const other = createServer((req, res) => { res.writeHead(404); res.end('{}'); });
+  await new Promise((r) => other.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${other.address().port}`;
+  expect(await ollamaCatalog({ url, key: null })).toBe(null);
+  expect(await ollamaModel({ url, key: null, model: 'x' })).toBe(null);
+  other.close();
+  const old = await fakeOllama({ caps: false });
+  try {
+    const m = await ollamaModel({ url: old.url, key: null, model: 'oldchat:latest' });
+    expect(m).toMatchObject({ known: false, chat: true, tools: true, thinking: false, vision: false });
+    expect(remoteLevels(m)).toBe(GENERIC_REMOTE.thinkingLevels);
+  } finally { await old.close(); }
+});
+
+test('the context planned for: a loaded model’s own; a cold one no more than 32k until it is loaded (Ollama cuts a longer prompt without a word)', () => {
+  expect(COLD_CTX).toBe(32768);
+  expect(ollamaCtx({ loadedCtx: 131072, ctx: 131072 })).toBe(131072);
+  expect(ollamaCtx({ loadedCtx: null, ctx: 262144 })).toBe(32768);
+  expect(ollamaCtx({ loadedCtx: null, ctx: 16384 })).toBe(16384);
+  expect(ollamaCtx({})).toBe(32768);
+});
+
+test('effort levels follow what the model can do: Low only when it cannot think, Low and High when it can, three for gpt-oss', () => {
+  expect(remoteLevels({ known: true, thinking: false, family: 'llama', id: 'tiny:3b' }).map((l) => [l.id, l.effort])).toEqual([['low', null]]);
+  expect(remoteLevels({ known: true, thinking: true, family: 'qwen35moe', id: 'thinker:35b' }).map((l) => l.id)).toEqual(['low', 'high']);
+  expect(remoteLevels({ known: true, thinking: true, family: 'gptoss', id: 'gpt-oss:120b' }).map((l) => [l.id, l.effort])).toEqual([['low', null], ['medium', 'medium'], ['high', 'high']]);
+});
+
+test('the check on an Ollama service: pictures, context and levels come from the service, and the remote runs with them', async () => {
+  const s = await fakeOllama();
+  try {
+    const url = s.url;
+    const coder = await probe({ url, kind: 'openai', model: 'coder:30b' });
+    expect(coder.ok).toBe(true);
+    expect(coder.vision).toBe(false); // an OpenAI-compatible server was taken as able to see; this model cannot
+    expect(coder.ctx).toBe(32768); // cold: 32k until it is loaded, not its 256k
+    expect(coder.ollama).toMatchObject({ version: '0.32.12', id: 'coder:30b', tools: true, thinking: false });
+    expect(coder.steps.at(-1).text).toBe('model coder:30b · 32k context');
+    const tiny = await probe({ url, kind: 'openai', model: 'tiny:3b' });
+    expect(tiny.ctx).toBe(131072); // loaded: the context it runs at
+    const thinker = await probe({ url, kind: 'openai', model: 'thinker:35b' });
+    expect(thinker.vision).toBe(true);
+    const r = { source: 'openai', kind: 'openai', address: url, model: 'coder:30b', context: 0 };
+    const m = remoteModel(r, coder);
+    expect(m.name).toBe(`coder:30b · ${url.replace('http://', '')}`);
+    expect(m.remote).toEqual({ kind: 'openai', label: url.replace('http://', ''), source: 'openai', model: 'coder:30b', ollama: '0.32.12' });
+    expect(m.thinkingLevels.map((l) => l.id)).toEqual(['low']);
+    expect(m.thinkingEffort).toBe('low');
+    expect(remoteModel({ ...r, model: 'thinker:35b' }, thinker).thinkingLevels.map((l) => l.id)).toEqual(['low', 'high']);
+    // a remote that is not Ollama keeps the plain levels
+    expect(remoteModel(r, { model: 'x' }).thinkingLevels).toBe(GENERIC_REMOTE.thinkingLevels);
+  } finally { await s.close(); }
+});
+
+test('loading a model ahead of a reply: an empty prompt to /api/generate; one the service cannot load says why', async () => {
+  const s = await fakeOllama();
+  try {
+    const j = await preloadOllama({ url: s.url, key: null, model: 'coder:30b' });
+    expect(j.done_reason).toBe('load');
+    expect(s.seen.at(-1)).toEqual({ method: 'POST', path: '/api/generate', model: 'coder:30b' });
+    await expect(preloadOllama({ url: s.url, key: null, model: 'gone:1b' })).rejects.toThrow('model "gone:1b" not found, try pulling it first');
+  } finally { await s.close(); }
+});

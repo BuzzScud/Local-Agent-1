@@ -14,15 +14,24 @@ const LLAMA_ONLY = ['cache_prompt', 'id_slot', 'chat_template_kwargs', 'thinking
 // Standard fields a server may still refuse (an older one, or a model that
 // cannot think): named in its error, they are left out of the next call to it.
 const OPTIONAL = ['reasoning_effort', 'parallel_tool_calls', 'stream_options', 'presence_penalty', 'frequency_penalty', 'top_p', 'temperature', 'seed'];
-const refused = new Map(); // url → the fields that server refused
+// Ollama names the ability, not the field: "\"llama3.2:3b\" does not support thinking".
+// Only those words leave the tools out (a 400 about one tool's name must not):
+// the model is then asked without them, and answers in words.
+const ABILITY = { thinking: 'reasoning_effort', tools: 'tools' };
+// What each model refused, by address and model: one service runs many models
+// (Ollama), and one that cannot think says nothing about the next.
+const refused = new Map(); // `${url} ${model}` → the fields that model refused
+const refusedKey = (url, model) => `${url ?? ''}\u0000${model ?? ''}`;
 
 // The body as an OpenAI-compatible server takes it (exported for the tests).
 export function openaiBody(body, { model, effort, thinking, url } = {}) {
   const out = { ...body, model };
   for (const k of LLAMA_ONLY) delete out[k];
   if (thinking && effort) out.reasoning_effort = effort;
-  for (const k of refused.get(url) ?? []) {
-    if (k === 'max_tokens' && out.max_tokens !== undefined) { out.max_completion_tokens = out.max_tokens; delete out.max_tokens; } else delete out[k];
+  for (const k of refused.get(refusedKey(url, model)) ?? []) {
+    if (k === 'max_tokens' && out.max_tokens !== undefined) { out.max_completion_tokens = out.max_tokens; delete out.max_tokens; }
+    else if (k === 'tools') { delete out.tools; delete out.tool_choice; delete out.parallel_tool_calls; }
+    else delete out[k];
   }
   return out;
 }
@@ -31,6 +40,8 @@ export function openaiBody(body, { model, effort, thinking, url } = {}) {
 export function refusedField(status, text, body) {
   if (status !== 400 && status !== 422) return null;
   if (/max_tokens/.test(text) && /max_completion_tokens/.test(text) && body.max_tokens !== undefined) return 'max_tokens';
+  const ability = /does not support (thinking|tools)\b/.exec(text)?.[1];
+  if (ability && body[ABILITY[ability]] !== undefined) return ABILITY[ability];
   return OPTIONAL.find((k) => body[k] !== undefined && new RegExp(`\\b${k}\\b`).test(text)) ?? null;
 }
 
@@ -67,7 +78,8 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
   if (thinking && thinkCap) body.thinking_budget_tokens = thinkCap;
   if (tools?.length) { body.tools = tools; body.tool_choice = toolChoice; body.parallel_tool_calls = Boolean(parallel); }
   if (extra) Object.assign(body, extra);
-  if (ep?.kind === 'openai') body = openaiBody(body, { model: ep.model, effort: body.chat_template_kwargs?.reasoning_effort ?? (thinking ? effort : null), thinking, url });
+  // The effort the model's level carries; a level without one (a model that cannot think) sends none.
+  if (ep?.kind === 'openai') body = openaiBody(body, { model: ep.model, effort: body.chat_template_kwargs?.reasoning_effort ?? (thinking && !model?.thinkingLevels?.length ? effort : null), thinking, url });
   let res;
   for (let tries = 0; ; tries++) {
     res = await fetch(`${url}/v1/chat/completions`, {
@@ -77,7 +89,8 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
     const text = await res.text().catch(() => '');
     const field = ep?.kind === 'openai' && tries < 4 ? refusedField(res.status, text, body) : null;
     if (field) {
-      refused.set(url, new Set([...(refused.get(url) ?? []), field]));
+      const k = refusedKey(url, ep.model);
+      refused.set(k, new Set([...(refused.get(k) ?? []), field]));
       body = openaiBody(body, { model: ep.model, url });
       continue;
     }

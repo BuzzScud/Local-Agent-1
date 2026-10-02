@@ -7,14 +7,17 @@
 //   - the embedder: the small model that compares meanings, for the memory;
 //   - the reranker: the small model that orders what the search found (/effort);
 //   - a remote: a model on another machine (/remote), its key, its SSH tunnel,
-//     and `coding serve`, which opens this Mac's model to another one;
+//     an Ollama service's list of models, and `coding serve`, which opens this
+//     Mac's model to another one;
 //   - the Arena: starting its runner, and whether a run there holds the memory;
 //   - the Test builder: making tests of your own (the hub's Test builder, over the Arena).
 export { HOME, ENGINE, ENGINES, DEFAULT_ENGINE, engineOf, serverBinOf, SERVER_BIN, MODELS_DIR, LOG_DIR, SLOT_DIR, DEFAULT_PORT, MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, thinkingLevel, thinkingKwargs, modelPath, onDiskBytes, draftPath, visionPath, withVision, modelFolder } from './registry.mjs';
 export { ModelServer, scanServers, serverArgs, mlxServerScript, SERVER_PROCESS, BUDGET_MESSAGE, hasDraft, stopIdleServers, stopServer, otherCopies, serverProcesses, runningServer, liveUsers, footprintOf, LINGER_SECS } from './runtime/server.mjs';
 export { availableBytes, macMemory, gib, kvBytesPerToken, needBytes, draftBytes, freeWithHandBack, freeAfterQuit, loadedBytesOf, searchBytes, visionBytes, chooseContext, contextCheck, topMemoryUsers, appName, OVERHEAD } from './runtime/memory.mjs';
 export { warmUp, pruneSaved, KEEP_SAVED } from './runtime/warmup.mjs';
-export { REMOTE_KINDS, REMOTE_SOURCES, sourceOf, keyIdOf, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, pickRemoteModel, GENERIC_REMOTE, remoteModel, connectRemote } from './runtime/remote.mjs';
+export { REMOTE_KINDS, REMOTE_SOURCES, sourceOf, keyIdOf, CONNECTS, SERVE_PORT, DEFAULT_REMOTE, parseAddress, isPrivateHost, validSshDest, directUrl, remoteLabel, remoteProblem, remoteRisk, setEndpoint, dropEndpoint, endpointOf, authHeaders, modelFetch, keyStore, validKey, readKey, saveKey, removeKey, keyEnd, sshArgs, openTunnel, probe, pickRemoteModel, GENERIC_REMOTE, remoteLevels, remoteModel, connectRemote } from './runtime/remote.mjs';
+// An Ollama service's own list: what each model can do, which are loaded, loading one ahead of a reply.
+export { ollamaVersion, ollamaCatalog, ollamaModel, ollamaCtx, preloadOllama, COLD_CTX } from './runtime/ollama.mjs';
 export { serve, serveArgs, serveKey, lanAddresses, SERVE_KEY_FILE } from './runtime/serve.mjs';
 export { CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, claudeSdk, claudeClient, claudeCaps, claudeProbe } from './runtime/claude.mjs';
 export { setup, getVision, RUNTIME } from './runtime/setup.mjs';

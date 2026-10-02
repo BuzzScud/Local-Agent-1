@@ -17,10 +17,11 @@ import { hooksFrom, hooksEnv, changeHooks, hookRows, HOOKS } from '../agent/way.
 import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom } from '../agent/prompt.mjs';
 import { offerFor } from '../agent/permissions.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
 import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, commitPick, closePick, modelChoices } from './remote-form.mjs';
+import { openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, ctxWord } from './remote-models.mjs';
 import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarning, webSettings, searchKeyId } from './web-form.mjs';
 import { PROVIDER_NAMES } from '../tools/web.mjs';
 import { readFile } from '../tools/read.mjs';
@@ -348,6 +349,12 @@ export function App({ opts, win, onRestart }) {
   const remoteRef = useRef({ conn: null, why: null, on: remoteAtStart });
   const localModelRef = useRef(null);
   const remoteFnRef = useRef({});
+  // The remote as the footer tells it (connecting · on · loading: a model loading on the service ·
+  // reconnecting · down), and an Ollama service's list of models for /model (ollama.mjs), read
+  // after it connects and again as /model opens. chatOnlyRef: a model without tools waiting for a yes.
+  const [remoteState, setRemoteState] = useState(remoteAtStart ? 'connecting' : null);
+  const [catalog, setCatalog] = useState(null);
+  const chatOnlyRef = useRef(null);
   // Pictures pasted with ctrl+v ([Image #n] → its file), and a message waiting while vision turns on.
   const pastedRef = useRef({ n: 0, files: new Map() });
   const visionWaitRef = useRef(null);
@@ -511,6 +518,14 @@ export function App({ opts, win, onRestart }) {
         { id: 'edit', label: 'Open /remote', note: 'change the address, the key or how it connects' },
       ] };
     }
+    // /model on a service: a model that cannot use tools is picked only after a yes (the user's pick, 1 Oct 2026).
+    if (id === 'service-chat-only') {
+      const m = chatOnlyRef.current?.m;
+      return { title: `${m?.id ?? 'This model'} cannot use tools`, blurb: 'On it Agentic Coder can only answer in words: no file reads, edits, commands or searches. The chat stays, and /model switches back.', what: 'the model', current: 'stay', options: [
+        { id: 'stay', label: `Stay on ${model.remote?.model ?? model.name}`, note: 'nothing changes' },
+        { id: 'switch', label: `Switch to ${m?.id ?? 'it'} anyway`, note: 'it answers in words only' },
+      ] };
+    }
     if (id === 'autostart') return { title: 'Model at start', blurb: `Whether ${model.name} loads as a window opens. Off, it waits for /start, so a window you only look around in takes none of the Mac's memory. Kept for next time.`, what: 'the model at start', current: settings.modelAtStart ? 'on' : 'off', options: [{ id: 'off', label: 'Off', note: 'the model loads when you type /start' }, { id: 'on', label: 'On', note: 'the model loads as soon as a window opens' }] };
     if (id === 'mouse') return { title: 'Mouse in the prompt box', blurb: 'Drag over the text you are typing to highlight it: copied at once, delete removes it, typing replaces it. A click on the model’s label in the footer starts or stops it. While it is on the mouse is Agentic Coder’s; hold fn for Terminal’s own highlight. Kept for next time.', what: 'the mouse', current: S.current.mouse ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'click, drag to highlight, double click for a word, click the model’s label' }, { id: 'off', label: 'Off', note: 'the mouse stays Terminal’s; option+click and ctrl+t still work' }] };
     return { title: 'Status bar', blurb: 'Model, speed, memory and effort on one line under the prompt. Kept for next time.', what: 'the status bar', current: S.current.meters ? 'on' : 'off', options: [{ id: 'on', label: 'On', note: 'show it under the prompt' }, { id: 'off', label: 'Off', note: 'hide it; /stats has the numbers' }] };
@@ -625,6 +640,7 @@ export function App({ opts, win, onRestart }) {
     remoteRef.current.on = true;
     setModel(remoteModel(r));
     setStarting(true); setStartPhase('connecting');
+    setRemoteState('connecting'); setCatalog(null);
     let conn;
     try { conn = await connectRemote(r); } catch (e) {
       remoteRef.current.why = e.message;
@@ -632,11 +648,13 @@ export function App({ opts, win, onRestart }) {
       if (before.server && !before.model.remote) {
         remoteRef.current.on = false;
         setModel(before.model);
+        setRemoteState(null);
         // Kept, but off: the next start does not try a remote that just failed.
         if (settings.remote?.use) settings.remote = saveSettings({ remote: { ...settings.remote, use: false } }).remote;
         push({ type: 'note', text: `The remote at ${remoteLabel(r)} did not answer, so nothing changed: ${e.message}. Still on ${before.model.name}, on this Mac; the remote is saved but off (/remote to fix it and try again).`, tone: 'error' });
         return false;
       }
+      setRemoteState('down');
       push({ type: 'note', text: `The remote model at ${remoteLabel(r)} did not answer: ${e.message}.`, tone: 'error' });
       openChoice('remote-down');
       return false;
@@ -661,6 +679,9 @@ export function App({ opts, win, onRestart }) {
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: setStartPhase }); } catch {}
     setStarting(false);
     push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · ${Math.round(conn.ctx / 1024)}k context. Your prompts, your code and the files it reads now go to ${remoteLabel(r)}; /remote switches back.`, tone: 'dim' });
+    setRemoteState('on');
+    preloadRemote(conn);
+    refreshCatalog(conn);
     const risk = remoteRisk(r);
     if (risk) push({ type: 'note', text: `⚠ ${risk}.`, tone: 'warn' });
     const q = queuedRef.current;
@@ -676,6 +697,7 @@ export function App({ opts, win, onRestart }) {
     remoteRef.current.on = false;
     remoteRef.current.conn?.stop();
     remoteRef.current.conn = null;
+    setRemoteState(null); setCatalog(null);
     const back = localModelRef.current ?? modelById(settings.model) ?? MODELS[DEFAULT_MODEL];
     localModelRef.current = null;
     agent.slots = null;
@@ -696,12 +718,15 @@ export function App({ opts, win, onRestart }) {
   const reconnect = async () => {
     remoteRef.current.conn?.stop();
     remoteRef.current.conn = null;
+    setRemoteState('reconnecting');
     try {
       const conn = await connectRemote(settings.remote ?? DEFAULT_REMOTE);
       remoteRef.current.conn = conn;
       agent.url = conn.url;
+      setRemoteState('on');
       push({ type: 'note', text: `Connected to the remote again (${remoteLabel(settings.remote)}).`, tone: 'dim' });
     } catch (e) {
+      setRemoteState('down');
       remoteRef.current.why = e.message;
       setTimeout(() => openChoice('remote-down'), 0);
       throw new Error(`the remote model at ${remoteLabel(settings.remote)} stopped answering: ${e.message}`);
@@ -780,6 +805,106 @@ export function App({ opts, win, onRestart }) {
     if (remoteRef.current.on && remoteRef.current.conn && sourceOf(settings.remote) === source) { push({ type: 'note', text: `Already on ${sourceWord(source)} (${remoteLabel(settings.remote)}).`, tone: 'dim' }); return; }
     settings.remote = saveSettings({ remote: { ...r, use: true } }).remote;
     useRemote(settings.remote);
+  };
+  // An Ollama service's list (ollama.mjs), read in the background: after a connect, and as /model opens.
+  const refreshCatalog = (conn = remoteRef.current.conn) => {
+    if (!conn?.info?.ollama) return;
+    ollamaCatalog({ url: conn.url }).then((c) => { if (c && remoteRef.current.conn === conn) setCatalog(c); }).catch(() => {});
+  };
+  // A model not loaded on the service is loaded now (an empty prompt), so a switch is not first felt
+  // on the next reply; the footer says so meanwhile. Then the context it really runs at is read and
+  // used (until then no more than 32k is planned for: Ollama cuts a longer prompt without a word),
+  // unless /remote's Context names one.
+  const preloadRemote = (conn) => {
+    const o = conn?.info?.ollama;
+    if (!o || o.loaded) return;
+    const my = (remoteRef.current.loads = (remoteRef.current.loads ?? 0) + 1);
+    const mine = () => remoteRef.current.loads === my && remoteRef.current.conn === conn;
+    const name = conn.info.model;
+    const t0 = Date.now();
+    setRemoteState('loading');
+    preloadOllama({ url: conn.url, model: name }).then(async () => {
+      const now = mine() ? await ollamaModel({ url: conn.url, model: name }).catch(() => null) : null;
+      if (!mine()) return;
+      setRemoteState('on');
+      if (now?.loadedCtx && !settings.remote?.context && now.loadedCtx !== agent.ctx) { conn.ctx = now.loadedCtx; agent.ctx = now.loadedCtx; setCtx(now.loadedCtx); agent.syncRules(); }
+      push({ type: 'note', text: `${name} is loaded on the service (${Math.max(1, Math.round((Date.now() - t0) / 1000))} s)${now?.loadedCtx ? ` · ${ctxWord(agent.ctx)} context` : ''}.`, tone: 'dim' });
+      refreshCatalog(conn);
+    }).catch((e) => {
+      if (!mine()) return;
+      setRemoteState('on');
+      push({ type: 'note', text: `${name} did not load on the service: ${e.message}. The next reply asks for it again.`, tone: 'warn' });
+    });
+  };
+  // /model on an Ollama service: another of its models, in place. The chat stays (one longer than
+  // the new model's context is summed up before the next reply, as when a chat fills), and /remote's
+  // set-up keeps the pick. One that does not answer changes nothing.
+  const switchService = async (entry) => {
+    if (busyNow()) { push({ type: 'note', text: 'Agentic Coder is in the middle of a reply. Let it finish (or press esc), then switch.', tone: 'warn' }); return; }
+    const before = remoteRef.current.conn;
+    const r = { ...settings.remote, model: entry.id };
+    setRemoteState('connecting');
+    let conn;
+    try { conn = await connectRemote(r); } catch (e) {
+      setRemoteState(before ? 'on' : 'down');
+      push({ type: 'note', text: `Could not switch to ${entry.id}: ${e.message}. Still on ${model.remote?.model ?? model.name}.`, tone: 'error' });
+      return;
+    }
+    // The same address (http): its endpoint now names the new model. A tunnel of its own (ssh): the old one closes.
+    if (before && before.url !== conn.url) before.stop();
+    remoteRef.current.conn = conn;
+    remoteRef.current.why = null;
+    const src = sourceOf(r);
+    const saved = saveSettings({ remote: r, ...(settings.remotes?.[src] ? { remotes: { ...settings.remotes, [src]: { ...settings.remotes[src], model: entry.id } } } : {}) });
+    settings.remote = saved.remote;
+    settings.remotes = saved.remotes;
+    const m = conn.model;
+    setModel(m);
+    agent.url = conn.url;
+    agent.canSee = Boolean(conn.vision);
+    agent.model = modelWithLimits(m, limitsRef.current);
+    agent.ctx = conn.ctx; setCtx(conn.ctx);
+    agent.syncRules();
+    setRemoteState('on');
+    // What it will run at once loaded (the 32k planned for until then is raised then); a cold
+    // model's context is said by the note once it has loaded.
+    const room = entry.loadedCtx || entry.ctx || conn.ctx;
+    const used = agent.ctxUsed ?? 0;
+    push({ type: 'note', text: `Now on ${entry.id} on ${remoteLabel(r)}${entry.loaded ? ` · ${ctxWord(room)} context` : ''}. The chat stays${used > room * 0.85 ? `; at about ${ctxWord(used)} it is more than fits, so the oldest part is summed up before the next reply` : ''}.${entry.tools ? '' : ' It cannot use tools: it answers in words only.'}`, tone: 'dim' });
+    preloadRemote(conn);
+    refreshCatalog(conn);
+  };
+  // /model: the model list and the thinking level in one picker. Each model's edited copy, when
+  // one is saved, is one more row after the models, and each service set up in /remote one more
+  // (Claude API, the other computer, another service). On an Ollama service it is the service's
+  // own list instead (remote-models.mjs), read again as it opens; this Mac's models and the other
+  // services follow it. Its Effort starts from the one you chose, whatever the model in use allows.
+  const openModelPicker = () => {
+    const conn = remoteRef.current.conn;
+    if (model.remote && conn?.info?.ollama) {
+      refreshCatalog(conn);
+      const last = localModelRef.current ?? modelById(settings.model);
+      const sv = { title: sourceWord(model.remote.source), where: model.remote.label, ms: conn.info.ms ?? null, mac: [...Object.values(MODELS), ...editedModels()], services: remoteChoices(settings).filter((x) => x.source !== model.remote.source), lastLocal: last?.name ?? null };
+      setPicker({ ...openService({ inUse: model.remote.model, levelId: agent.thinking ? agent.effort ?? 'high' : 'low', on: Boolean(agent.thinking) }), sv });
+      return;
+    }
+    const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
+    const models = [...Object.values(MODELS), ...editedModels(), ...remoteChoices(settings)];
+    setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), levelId: lvNow.id, on: Boolean(lvNow.effort) });
+  };
+  // What the service's /model draws from: what was set as it opened, and what moves (the list, the chat).
+  const serviceOf = (pk) => ({ ...pk.sv, catalog, version: catalog?.version ?? model.remote?.ollama ?? null, inUse: model.remote?.model ?? null, used: agent.ctxUsed ?? 0 });
+  // The screen's part of it: the list, and the highlighted model's levels with the one shown.
+  const serviceProps = (pk) => {
+    const sv = serviceOf(pk);
+    const lm = levelModelOf(atRow(pk, serviceRows(pk, sv)), model);
+    return { service: sv, pickLevels: lm.thinkingLevels ?? [], pickLevelId: thinkingLevel(lm, pk.on, pk.levelId).id };
+  };
+  // A model on this Mac picked while on a remote: back to this Mac with it (the remote stays saved, off).
+  const pickHere = (picked) => {
+    localModelRef.current = picked;
+    settings.remote = saveSettings({ model: picked.id, remote: { ...(settings.remote ?? DEFAULT_REMOTE), use: false } }).remote;
+    useLocal({ note: `Now on ${picked.name}, on this Mac. /remote turns the remote back on.` });
   };
   remoteFnRef.current = { ...remoteFnRef.current, useRemote, useLocal, reconnect, openForm: openRemoteForm, to: remoteTo };
 
@@ -1002,6 +1127,14 @@ export function App({ opts, win, onRestart }) {
         if (!agentRef.current?.canSee) { push({ type: 'note', text: `${seer.name} could not take the picture; back to ${back.name}, and the message goes without it.`, tone: 'warn' }); await remoteFnRef.current.switchBack(); }
         go();
       })();
+      return;
+    }
+    if (id === 'service-chat-only') {
+      const pick = chatOnlyRef.current;
+      chatOnlyRef.current = null;
+      if (value !== 'switch' || !pick) return;
+      if (pick.lv) setThinking(Boolean(pick.lv.effort), pick.lv.effort ? pick.lv.id : undefined);
+      switchService(pick.m);
       return;
     }
     if (id === 'remote-down') {
@@ -1487,7 +1620,10 @@ export function App({ opts, win, onRestart }) {
   const toggleArmed = useRef(0);
   const toggleModel = (how = 'ctrl+t') => {
     if (opts.url) { flash('This window uses a model server given with --url: nothing here to start or stop', 3000); return; }
-    if (remoteRef.current.on) { flash('On the remote model: nothing loads on this Mac (/remote off goes back)', 3000); return; }
+    if (remoteRef.current.on) {
+      if (how === 'click') { openModelPicker(); return; }
+      flash('On the remote model: nothing loads on this Mac (/remote off goes back)', 3000); return;
+    }
     if (!wantRef.current) { startFnRef.current(); return; }
     if ((S.current.live !== IDLE || agent.busy) && Date.now() - toggleArmed.current > 2000) {
       toggleArmed.current = Date.now();
@@ -2028,12 +2164,7 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'model': {
-        // The model list and the thinking level in one picker. Each model's
-        // edited copy, when one is saved, is one more row after the models.
-        const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
-        // Each service set up in /remote is one more row (Claude API, the other computer, another service).
-        const models = [...Object.values(MODELS), ...editedModels(), ...remoteChoices(settings)];
-        setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), levelId: lvNow.id, on: Boolean(lvNow.effort) });
+        openModelPicker();
         break;
       }
       case 'stats':
@@ -2399,6 +2530,40 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     // Model picker: ↑↓ model, ←→ thinking, enter saves
+    // /model on an Ollama service (remote-models.mjs): ↑↓ a row, ←→ the highlighted model's effort,
+    // letters filter by name (backspace takes one back, esc clears it, then closes), enter switches
+    // to the model (one without tools asks first), opens or shuts a fold, or goes to a model here.
+    if (cur.picker?.kind === 'service') {
+      const pk = cur.picker;
+      const sv = serviceOf(pk);
+      const rows = serviceRows(pk, sv);
+      const row = atRow(pk, rows);
+      const lm = levelModelOf(row, model);
+      const levels = lm.thinkingLevels ?? [];
+      const lv = thinkingLevel(lm, pk.on, pk.levelId);
+      const k = levels.findIndex((l) => l.id === lv.id);
+      // A model with one level (it cannot think) leaves the effort you chose for the others as it was.
+      const toLevel = (i) => (levels.length > 1 && levels[i] ? { levelId: levels[i].id, on: Boolean(levels[i].effort) } : {});
+      const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab ? ch.replace(/[\x00-\x1f\x7f]/g, '') : '';
+      if (key.leftArrow) setPicker({ ...pk, ...toLevel(Math.max(0, k - 1)) });
+      else if (key.rightArrow || key.tab) setPicker({ ...pk, ...toLevel(key.tab ? (k + 1) % levels.length : Math.min(levels.length - 1, k + 1)) });
+      else if (key.upArrow) setPicker(moveService(pk, rows, -1));
+      else if (key.downArrow) setPicker(moveService(pk, rows, 1));
+      else if (key.escape) setPicker(pk.filter ? filterService(pk, sv, '') : null);
+      else if (key.ctrl && ch === 'c') setPicker(null);
+      else if (key.backspace || key.delete) { if (pk.filter) setPicker(filterService(pk, sv, pk.filter.slice(0, -1))); }
+      else if (key.return && row) {
+        if (row.kind === 'fold') { setPicker(toggleFold(pk, row.id)); return; }
+        setPicker(null);
+        if (row.kind === 'model' && !row.m.tools && row.m.id !== sv.inUse) { chatOnlyRef.current = { m: row.m, lv: levels.length > 1 ? lv : null }; openChoice('service-chat-only'); return; }
+        if (levels.length > 1) setThinking(Boolean(lv.effort), lv.effort ? lv.id : undefined);
+        if (row.kind === 'service') { remoteTo(row.s.source); return; }
+        if (row.kind === 'local') { pickHere(row.m); return; }
+        if (row.m.id === sv.inUse) { push({ type: 'note', text: `${row.m.id} · effort ${lv.label.toLowerCase()}.`, tone: 'dim' }); return; }
+        switchService(row.m);
+      } else if (typed) setPicker(filterService(pk, sv, pk.filter + typed));
+      return;
+    }
     if (cur.picker?.kind === 'model') {
       const pk = cur.picker;
       // ←→ step through the highlighted model's own levels, from the one it shows now.
@@ -2421,12 +2586,7 @@ export function App({ opts, win, onRestart }) {
           else remoteTo(picked.source);
           return;
         }
-        if (model.remote) {
-          localModelRef.current = picked;
-          settings.remote = saveSettings({ model: picked.id, remote: { ...(settings.remote ?? DEFAULT_REMOTE), use: false } }).remote;
-          useLocal({ note: `Now on ${picked.name}, on this Mac. /remote turns the remote back on.` });
-          return;
-        }
+        if (model.remote) { pickHere(picked); return; }
         // A different model — or the same edited copy with newer edits saved
         // since — restarts the model server in place; the window stays.
         const changed = picked.id !== model.id || (picked.edited && model.edited && picked.edited.saved !== model.edited.saved);
@@ -2717,7 +2877,11 @@ export function App({ opts, win, onRestart }) {
   const hintFor = /^\/(\S+) $/.exec(input.value);
   const argHint = hintFor && input.cursor === input.value.length ? COMMANDS.find((c) => c.name === hintFor[1])?.arg ?? null : null;
   // The model's label in the footer (screen.jsx modelLabels): off, loading, or on with the memory it holds.
-  const modelState = opts.url || model.remote ? null : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
+  // A remote: the model by the name the server knows, where it runs, and how it is going (screen.jsx modelLabels).
+  const remoteGb = remoteState === 'loading' ? (catalog?.models.find((m) => m.id === model.remote?.model)?.bytes ?? 0) / 1e9 || null : null;
+  // Its name is remoteModel's without " · <where>" (one of ours keeps its own name, not its file's).
+  const remoteName = model.remote ? model.name.replace(` · ${model.remote.label}`, '') : null;
+  const modelState = opts.url ? null : model.remote ? { remote: true, state: remoteState ?? 'connecting', name: remoteName, where: model.remote.label, gb: remoteGb } : modelOff ? { state: 'off' } : starting ? { state: 'loading', name: model.name } : { state: 'on', name: model.name, gb: ramGb };
   // What the running start has left (start-times.mjs), from how long each part has run so far.
   const tm = timing.current;
   const startLeftNow = starting && tm ? startLeft(timesRef.current[tm.id], { phase: startPhase, cold: tm.cold, sinceLoad: (now - tm.loadAt) / 1000, sinceWarm: tm.warmAt ? (now - tm.warmAt) / 1000 : 0 }) : null;
@@ -2726,7 +2890,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

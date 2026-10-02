@@ -131,7 +131,7 @@ test('each service keeps its key under its own name (a key saved before Run on s
   saveKey('test-machine-0123456789', 'machine');
   const c = await connectRemote(R({ source: 'machine', keyId: 'machine', address: fake.url, kind: 'llama', key: true, keyEnd: '6789' }));
   expect(endpointOf(fake.url)).toMatchObject({ key: 'test-machine-0123456789' });
-  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine' });
+  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine', model: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', ollama: null });
   c.stop();
   await fake.close();
 });
@@ -313,6 +313,8 @@ test('the Test row on a server that wants max_completion_tokens (OpenAI’s reas
     let b = ''; for await (const c of req) b += c;
     res.setHeader('content-type', 'application/json');
     if (req.url === '/v1/models') { res.end(JSON.stringify({ data: [{ id: 'reasoner' }] })); return; }
+    // Any other GET (Ollama's /api/version, which this server is not): not found, as on OpenAI.
+    if (req.method === 'GET') { res.writeHead(404); res.end('{}'); return; }
     const body = JSON.parse(b);
     asked.push(Object.keys(body).filter((k) => /tokens/.test(k)));
     if ('max_tokens' in body) { res.writeHead(400); res.end(JSON.stringify({ error: { message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead." } })); return; }

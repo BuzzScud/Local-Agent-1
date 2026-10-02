@@ -67,15 +67,16 @@ export function remotesOf(settings) {
 // an address, or for the Claude API a key (its own, or ANTHROPIC_API_KEY).
 export const readyRemote = (r) => Boolean(r) && !remoteProblem(r) && (r.kind !== 'claude' || Boolean(r.key || process.env.ANTHROPIC_API_KEY));
 
-// The saved services as /model rows, the one in use marked by the caller.
+// The saved services as /model rows, the one in use marked by the caller. Another
+// service is named by its model (it has many), its address going to the row's note.
 export function remoteChoices(settings) {
   const all = remotesOf(settings);
   return REMOTE_SOURCES.filter((s) => readyRemote(all[s])).map((s) => {
     const r = all[s];
-    return { id: `remote-${s}`, remoteRow: true, source: s, kind: r.kind, profile: r, name: `${WORDS.source(s)} · ${s === 'claude' ? claudeName(r.model || DEFAULT_CLAUDE_MODEL) : remoteLabel(r)}` };
+    return { id: `remote-${s}`, remoteRow: true, source: s, kind: r.kind, profile: r, name: `${WORDS.source(s)} · ${s === 'claude' ? claudeName(r.model || DEFAULT_CLAUDE_MODEL) : s === 'openai' && r.model ? r.model : remoteLabel(r)}` };
   });
 }
-export const remoteRowDesc = (x) => (x.source === 'claude' ? 'Anthropic · billed to your key' : x.source === 'openai' ? 'OpenAI-compatible service' : `${WORDS.kind(x.kind)} · another computer`);
+export const remoteRowDesc = (x) => (x.source === 'claude' ? 'Anthropic · billed to your key' : x.source === 'openai' ? `${x.profile?.model ? `${remoteLabel(x.profile)} · ` : ''}OpenAI-compatible service` : `${WORDS.kind(x.kind)} · another computer`);
 
 // The form as it opens: on the service in use (This Mac when no remote is),
 // or on `source`. keys: null = the saved key stays; '' = none; a string = a

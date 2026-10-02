@@ -83,6 +83,65 @@ test('a field the server refuses (named in its 400) is left out, then and for ev
   expect(openaiBody({ model: 'coding', cache_prompt: true, top_k: 5, temperature: 1 }, { model: 'm' })).toEqual({ model: 'm', temperature: 1 });
 });
 
+test('Ollama names the ability it lacks, not the field: "does not support thinking" leaves out reasoning_effort, "does not support tools" the tools; each model remembers its own', async () => {
+  const bodies = [];
+  // As Ollama 0.32 answers (1 Oct 2026): thinking refused by plain-tools, tools refused by chat-only, both taken by thinker.
+  const s = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    const body = JSON.parse(b);
+    bodies.push(body);
+    const no = (what) => { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message: what, type: 'invalid_request_error' } })); };
+    if (body.model === 'plain-tools' && body.reasoning_effort) return no('"plain-tools" does not support thinking');
+    if (body.model === 'chat-only' && body.tools) return no('registry.ollama.ai/library/chat-only:latest does not support tools');
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: body.model }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise((r) => s.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${s.address().port}`;
+  const tools = [{ type: 'function', function: { name: 'Read', parameters: {} } }];
+  const ask = async (model) => {
+    setEndpoint(url, { remote: true, kind: 'openai', key: null, model, label: 'svc' });
+    return (await drain(streamChat({ url, messages: [{ role: 'user', content: 'hi' }], tools, model: GENERIC_REMOTE, sampling: {}, thinking: true, effort: 'high', maxTokens: 9 }))).find((e) => e.type === 'text')?.text;
+  };
+  try {
+    expect(await ask('plain-tools')).toBe('plain-tools');
+    expect(bodies.slice(-2).map((x) => 'reasoning_effort' in x)).toEqual([true, false]);
+    expect(await ask('chat-only')).toBe('chat-only');
+    const [asked, again] = bodies.slice(-2);
+    expect(['tools' in asked, 'tools' in again, 'tool_choice' in again, 'parallel_tool_calls' in again]).toEqual([true, false, false, false]);
+    // another model at the same address still thinks and gets its tools: refusals are kept per model
+    expect(await ask('thinker')).toBe('thinker');
+    expect(bodies.at(-1)).toMatchObject({ model: 'thinker', reasoning_effort: 'high' });
+    expect('tools' in bodies.at(-1)).toBe(true);
+    const n = bodies.length;
+    expect(await ask('plain-tools')).toBe('plain-tools');
+    expect(bodies.length).toBe(n + 1); // remembered: right the first time
+  } finally { dropEndpoint(url); s.close(); }
+  // a 400 about one tool (its name, say) never takes the tools away
+  expect(refusedField(400, "Invalid 'tools[0].function.name': string does not match pattern", { tools: [{}] })).toBe(null);
+  expect(refusedField(400, '"x" does not support thinking', { tools: [{}] })).toBe(null); // nothing of it was sent
+});
+
+test('a model whose only level is Low (it cannot think) is sent no reasoning_effort, whatever effort was chosen for the others', async () => {
+  const seen = [];
+  const s = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    seen.push(JSON.parse(b));
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
+  });
+  await new Promise((r) => s.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${s.address().port}`;
+  setEndpoint(url, { remote: true, kind: 'openai', key: null, model: 'tiny:3b', label: 'svc' });
+  const lowOnly = { ...GENERIC_REMOTE, thinkingLevels: [GENERIC_REMOTE.thinkingLevels[0]], thinkingEffort: 'low' };
+  try {
+    await drain(streamChat({ url, messages: [], model: lowOnly, sampling: {}, thinking: true, effort: 'high', maxTokens: 9 }));
+    expect('reasoning_effort' in seen[0]).toBe(false);
+    await drain(streamChat({ url, messages: [], model: GENERIC_REMOTE, sampling: {}, thinking: true, effort: 'high', maxTokens: 9 }));
+    expect(seen[1].reasoning_effort).toBe('high');
+  } finally { dropEndpoint(url); s.close(); }
+});
+
 test('a key the remote does not take: the error says so and points to /remote', async () => {
   const fake = await startFakeServer([], { key: 'test-right-0123456789' });
   setEndpoint(fake.url, { remote: true, kind: 'llama', key: 'test-wrong-0123456789', label: 'box' });

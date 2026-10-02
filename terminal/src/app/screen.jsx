@@ -14,6 +14,7 @@ import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
+import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord } from './remote-models.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
@@ -599,10 +600,20 @@ export function footerRight(mode, room) {
 }
 
 // The model's label on the footer's right, longest first (a narrow window takes a shorter one).
-// modelState: { state: off · loading · on, name, gb }; null for a server given with --url or a
-// remote, where nothing of the Mac's is loaded. ctrl+t switches it, and so does a click on it (/mouse on).
+// modelState: { state: off · loading · on, name, gb }; null for a server given with --url.
+// ctrl+t switches it, and so does a click on it (/mouse on).
+// A remote (remote: true): the model and where it runs, as it connects, loads there,
+// reconnects or stops answering; a click on it opens /model.
 export function modelLabels(ms) {
   if (!ms) return [];
+  if (ms.remote) {
+    const { name, where } = ms;
+    if (ms.state === 'connecting') return [`◐ connecting to ${where}…`, '◐ connecting…', '◐'];
+    if (ms.state === 'reconnecting') return [`◐ reconnecting to ${where}…`, '◐ reconnecting…', '◐'];
+    if (ms.state === 'down') return [`✗ ${where} is not answering`, '✗ not answering', '✗'];
+    if (ms.state === 'loading') return [`◐ ${name} loading on the service${ms.gb ? ` · ${ms.gb.toFixed(1)} GB` : ''}`, `◐ ${name} loading`, '◐ loading'];
+    return [`● ${name} on ${where}`, `● ${name} · remote`, '● remote'];
+  }
   if (ms.state === 'off') return ['○ model off · ctrl+t start', '○ model off · ctrl+t', '○ off'];
   if (ms.state === 'loading') return [`◐ ${ms.name} loading · ctrl+t stop`, '◐ loading · ctrl+t stop', '◐ loading'];
   const gb = ms.gb ? ` · ${ms.gb.toFixed(1)} GB` : '';
@@ -611,7 +622,9 @@ export function modelLabels(ms) {
 
 // The footer's pieces, worked out once for the drawing and for a click on the model's label
 // (App.jsx). The right side ends two cells from the window's edge; a narrow window drops the
-// "(shift+tab to cycle)" hint first, then the label's detail, then the Mac's memory.
+// "(shift+tab to cycle)" hint first, then the label's detail, then the Mac's memory. On a remote
+// the model's name outlasts the Mac's memory (which holds no model then): the address goes, then
+// the memory, then the name.
 // labelAt: the label's first and last cell on the footer's row, counted from 1.
 export function footerParts(app) {
   const { mode, notice, width } = app;
@@ -629,7 +642,7 @@ export function footerParts(app) {
   const ls = labels.length ? labels : [''];
   const tries = [
     { label: ls[0], mac, cycle: true },
-    ...ls.map((label) => ({ label, mac, cycle: false })),
+    ...(app.modelState?.remote ? ls.slice(0, 2) : ls).map((label) => ({ label, mac, cycle: false })),
     ...ls.map((label) => ({ label, mac: '', cycle: false })),
   ];
   const textOf = (t) => [t.label, t.mac && `● ${t.mac}`, badges, modeText && `${modeText}${t.cycle ? CYCLE_HINT : ''}`].filter(Boolean).join(' · ');
@@ -638,14 +651,21 @@ export function footerParts(app) {
   return { left, label: pick.label, mac: pick.mac, badges, cycle: pick.cycle, labelAt: pick.label ? { from, to: from + pick.label.length - 1 } : null };
 }
 
+const WHITE = 'ansi256(255)'; // the start page's white (start.jsx)
+
 function Footer({ app }) {
   const { mode, notice, width } = app;
   // An open menu takes the footer's place, as in Claude Code.
   if (app.menu?.items?.length) return null;
   const p = footerParts(app);
-  const on = app.modelState?.state === 'on';
+  const ms = app.modelState;
+  const on = ms?.state === 'on';
+  // A remote's dot: green on, orange while it connects or loads, red when it does not answer;
+  // the model's name stands out from where it runs.
+  const dot = on ? C.accent : !ms?.remote ? C.dim : ms.state === 'down' ? C.bad : C.warn;
+  const named = ms?.remote && on && p.label.startsWith(`● ${ms.name}`);
   const pieces = [
-    p.label ? <Text color={C.dim}><Text color={on ? C.accent : C.dim}>{p.label[0]}</Text>{p.label.slice(1)}</Text> : null,
+    p.label ? <Text color={C.dim}><Text color={dot}>{p.label[0]}</Text>{named ? <><Text> </Text><Text color={WHITE}>{ms.name}</Text>{p.label.slice(2 + ms.name.length)}</> : p.label.slice(1)}</Text> : null,
     p.mac ? <Text color={C.dim}><Text color={PRESSURE_COLOR[pressureWord(app.mac)]}>●</Text> {p.mac}</Text> : null,
     p.badges ? <Text color={C.accent}>{p.badges}</Text> : null,
     modeLabel(mode, { cycle: p.cycle }),
@@ -1048,7 +1068,6 @@ function ModelPicker({ app }) {
   // The highlighted model's own levels, and the one it shows (App.jsx pickLevels: the level you chose, or its nearest).
   const levels = app.pickLevels ?? app.thinkingLevels;
   const at = Math.max(0, levels.findIndex((l) => l.id === app.pickLevelId));
-  const lv = levels[at];
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       <Text bold>Model</Text>
@@ -1072,6 +1091,18 @@ function ModelPicker({ app }) {
         );
       })}
       <Text> </Text>
+      <EffortRows levels={levels} at={at} />
+      <Text> </Text>
+      <Text color={C.dim}>↑↓ model · ←→ effort · enter to save · esc to cancel</Text>
+    </Box>
+  );
+}
+
+// /model's Effort row and the note under it: the highlighted model's levels, the one shown at `at`.
+function EffortRows({ levels, at }) {
+  const lv = levels[at];
+  return (
+    <>
       <Text>
         <Text bold>{'Effort     '}</Text>
         <Text color={at > 0 ? C.accent : C.faint}>◀  </Text>
@@ -1083,9 +1114,85 @@ function ModelPicker({ app }) {
         ))}
         <Text color={at < levels.length - 1 ? C.accent : C.faint}>  ▶</Text>
       </Text>
-      <Text color={C.dim}>{'           '}{lv ? `${lv.label}: ${lv.note}` : ''}</Text>
+      <Text color={C.dim} wrap="truncate-end">{'           '}{lv ? `${lv.label}: ${lv.note}` : ''}</Text>
+    </>
+  );
+}
+
+// /model on an Ollama service (remote-models.mjs lays the rows out): the service's
+// models in columns (name, size, quantization, context, what it can do, on disk),
+// a window of rows around the cursor, the line about the highlighted model, Effort.
+// A narrow window drops the quantization, then the size, then the GB.
+const SVC_COLS = [['size', 11], ['quant', 8], ['ctx', 8], ['can', 25], ['gb', 8]];
+function ServicePicker({ app }) {
+  const pk = app.picker;
+  const sv = app.service;
+  const rows = serviceRows(pk, sv);
+  const cur = atRow(pk, rows);
+  const levels = app.pickLevels ?? [];
+  const at = Math.max(0, levels.findIndex((l) => l.id === app.pickLevelId));
+  const W = app.width - 4;
+  const models = rows.filter((r) => r.kind === 'model');
+  const nameW = Math.min(32, Math.max(16, ...models.map((r) => r.m.id.length + 2)));
+  const status = 11; // "   ✔ in use"
+  const drop = ['quant', 'size', 'gb'];
+  let cols = SVC_COLS;
+  while (2 + nameW + cols.reduce((n, [, w]) => n + w, 0) + status > W && drop.length) { const d = drop.shift(); cols = cols.filter(([k]) => k !== d); }
+  const cell = (m, k, w) => {
+    if (k === 'size') return sizeWord(m).padEnd(w);
+    if (k === 'quant') return m.quant.padEnd(w);
+    if (k === 'ctx') return `${ctxWord(m.loadedCtx || m.ctx).padStart(5)}   `;
+    if (k === 'can') return (m.tools ? canWord(m) : '— chat only').padEnd(w);
+    return gbWord(m.bytes).padStart(w);
+  };
+  // The rows that fit, the cursor's always among them.
+  const view = Math.max(6, (app.rows ?? 24) - 17);
+  const i = Math.max(0, rows.indexOf(cur));
+  const top = Math.max(0, Math.min(i - Math.floor(view / 2), rows.length - view));
+  const shown = rows.slice(top, top + view);
+  const above = rows.slice(0, top).filter((r) => r.id).length;
+  const below = rows.slice(top + view).filter((r) => r.id).length;
+  const detail = rowDetail(cur, { inUse: sv.inUse, used: sv.used });
+  const g = sv.catalog ? groupsOf(sv.catalog.models) : null;
+  const total = g ? g.loaded.length + g.agent.length + g.chatOnly.length : 0;
+  const row = (r, k) => {
+    const on = r === cur;
+    const mark = <Text color={C.accent}>{on ? '❯ ' : '  '}</Text>;
+    if (r.kind === 'blank') return <Text key={k}> </Text>;
+    if (r.kind === 'note') return <Text key={k} color={C.dim} wrap="truncate-end">  {r.text}</Text>;
+    if (r.kind === 'head') return <Text key={k} wrap="truncate-end"><Text bold>{r.text}</Text><Text color={C.dim}>  {r.note}</Text></Text>;
+    if (r.kind === 'fold') return <Text key={k} wrap="truncate-end">{mark}<Text color={C.dim}>{r.open ? '▾ ' : '▸ '}</Text><Text bold color={on ? C.accent : undefined}>{r.text}</Text><Text color={C.dim}>  {r.note}</Text></Text>;
+    if (r.kind === 'local') return <Text key={k} wrap="truncate-end">{mark}<Text color={on ? C.accent : undefined} bold={on}>{r.m.name.padEnd(nameW)}</Text><Text color={C.dim}>{(r.m.bytes / 1e9).toFixed(1)} GB · on this Mac</Text></Text>;
+    if (r.kind === 'service') return <Text key={k} wrap="truncate-end">{mark}<Text color={on ? C.accent : undefined} bold={on}>{r.s.name.padEnd(nameW)}</Text><Text color={C.dim}>{remoteRowDesc(r.s)}</Text></Text>;
+    const m = r.m;
+    return (
+      <Text key={k} wrap="truncate-end">
+        {mark}
+        <Text color={on ? C.accent : m.tools ? undefined : C.dim} bold={on}>{m.id.padEnd(nameW)}</Text>
+        {cols.map(([c, w]) => <Text key={c} color={c === 'can' && !m.tools ? C.warn : C.dim}>{cell(m, c, w)}</Text>)}
+        {m.id === sv.inUse ? <Text color={C.ok}>   ✔ in use</Text> : null}
+      </Text>
+    );
+  };
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Box justifyContent="space-between">
+        <Text bold wrap="truncate-end">Model · {sv.title}</Text>
+        <Text color={C.dim} wrap="truncate-start">{`  ${sv.where}${sv.version ? ` · Ollama ${sv.version}` : ''}${sv.ms != null ? ` · ${sv.ms} ms` : ''}`}</Text>
+      </Box>
+      {pk.filter
+        ? <Box justifyContent="space-between"><Text><Text bold>Filter  </Text>{pk.filter}<Text color={C.accent}>█</Text></Text><Text color={C.dim}>{`${models.length} of ${total} · esc clears the filter`}</Text></Box>
+        : <Text color={C.dim} wrap="truncate-end">Pick the model and its effort. Switching keeps the chat; it is kept for next time.</Text>}
       <Text> </Text>
-      <Text color={C.dim}>↑↓ model · ←→ effort · enter to save · esc to cancel</Text>
+      {above ? <Text color={C.dim}>  ↑ {above} more</Text> : null}
+      {shown.map((r, k) => row(r, top + k))}
+      {below ? <Text color={C.dim}>  ↓ {below} more</Text> : null}
+      <Text> </Text>
+      <Text color={detail?.tone === 'warn' ? C.warn : C.dim} wrap="truncate-end">{detail ? `  ${detail.text}` : ' '}</Text>
+      <Text> </Text>
+      <EffortRows levels={levels} at={at} />
+      <Text> </Text>
+      <Text color={C.dim} wrap="truncate-end">↑↓ model · ←→ effort · type to filter · enter switches, the chat stays · esc cancels</Text>
     </Box>
   );
 }
@@ -1313,6 +1420,8 @@ export function Screen({ app }) {
       <Box flexDirection="column" flexShrink={0}>
       {app.picker?.kind === 'model' ? (
         <ModelPicker app={app} />
+      ) : app.picker?.kind === 'service' ? (
+        <ServicePicker app={app} />
       ) : app.picker?.kind === 'choice' ? (
         <ChoicePicker app={app} />
       ) : app.picker?.kind === 'limits' ? (
