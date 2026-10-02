@@ -8,8 +8,13 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
-| [design rounds/remote-three-windows-preview-2026-10-01.html](design%20rounds/remote-three-windows-preview-2026-10-01.html) | page | Three windows, one service | 39 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0246.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-02-0241.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 17 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2329.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
+| [tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html](tests/agentic-coder-auto-screen-check-qwen-2026-10-01-2326.html) | page | Auto &amp; Screen check · Qwen3.5 9B | 16 KB | 2026-10-02 |
+| [design rounds/agentic-coder-modes-and-screen-preview-2026-10-01.html](design%20rounds/agentic-coder-modes-and-screen-preview-2026-10-01.html) | page | Modes and Screen preview | 90 KB | 2026-10-02 |
 | [tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html](tests/agentic-coder-big-model-mode-qwen3-coder-next-latest-2026-10-01-2259.html) | page | Big-model mode: off vs on · qwen3-coder-next:latest | 22 KB | 2026-10-02 |
+| [design rounds/remote-three-windows-preview-2026-10-01.html](design%20rounds/remote-three-windows-preview-2026-10-01.html) | page | Three windows, one service | 39 KB | 2026-10-02 |
 | [tests/work-28-tests-2026-09-29.txt](tests/work-28-tests-2026-09-29.txt) | file |  | 23 KB | 2026-10-02 |
 | [tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html](tests/agentic-coder-who-decides-app-vs-model-qwen-2026-09-30-1618.html) | page | Who decides: App vs Model · Qwen3.5 9B | 14 KB | 2026-10-02 |
 | [tests/agentic-coder-who-decides-app-vs-model-gemma-2026-09-30-1619.html](tests/agentic-coder-who-decides-app-vs-model-gemma-2026-09-30-1619.html) | page | Who decides: App vs Model · Gemma 4 12B QAT | 14 KB | 2026-10-02 |
