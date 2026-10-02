@@ -2067,14 +2067,15 @@ export class Agent extends EventEmitter {
   // (a test may write files), stopped after a minute.
   async runTestsFirst(signal) {
     this.emit('note', { text: `Running ${this.testCmd} first, to see what fails (a minute at most).`, tone: 'dim' });
-    const scratch = new Scratch(this.cwd);
+    let scratch;
     try {
+      scratch = new Scratch(this.cwd);
       const r = await scratch.run(this.testCmd, { signal, timeoutMs: TESTS_FIRST_MS });
       return { cmd: this.testCmd, out: r.out ?? '', code: r.code, timedOut: r.timedOut, secs: (r.ms ?? 0) / 1000 };
     } catch (e) {
       if (signal?.aborted || e.name === 'AbortError') throw e;
       return null;
-    } finally { scratch.dispose(); }
+    } finally { scratch?.dispose(); }
   }
 
   // A greeting or thanks: one short reply, no tools, no focused paths.

@@ -1,6 +1,6 @@
 // The focused paths (src/flows) against the scripted model.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync, chmodSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -398,6 +398,40 @@ test('tools can write their caches in node_modules of the scratch copy; your nod
     expect(r.out).toContain('42');
   } finally { s.dispose(); }
   expect(readdirSync(join(cwd, 'node_modules', '.vite-temp'))).toEqual([]);
+});
+
+test('no scratch copy of the home folder or of a folder too big to be a project; node_modules does not count', () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'big');
+  mkdirSync(join(cwd, 'node_modules', 'pkg'), { recursive: true });
+  for (const f of ['a.mjs', 'b.mjs']) writeFileSync(join(cwd, f), 'x\n');
+  for (const f of ['1.js', '2.js', '3.js']) writeFileSync(join(cwd, 'node_modules', 'pkg', f), 'x\n');
+  expect(() => new Scratch(cwd, { home: cwd })).toThrow('No throwaway copy of this folder: it is the home folder, not a project.');
+  new Scratch(cwd, { maxFiles: 2 }).dispose();
+  writeFileSync(join(cwd, 'c.mjs'), 'x\n');
+  expect(() => new Scratch(cwd, { maxFiles: 2 })).toThrow('it holds more than 2 files');
+  expect(() => new Scratch(cwd, { maxBytes: 4 })).toThrow(/it holds more than .* GB/);
+});
+
+test('a clone that stops at an unreadable file is not copied a second time; a read-only folder in the copy is removed with it', () => {
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'locked');
+  mkdirSync(join(cwd, 'sub'), { recursive: true });
+  mkdirSync(join(cwd, 'ro', 'inner'), { recursive: true });
+  writeFileSync(join(cwd, 'sub', 'ok.txt'), 'a\n');
+  writeFileSync(join(cwd, 'sub', 'secret'), 'b\n');
+  writeFileSync(join(cwd, 'ro', 'inner', 'f'), 'c\n');
+  chmodSync(join(cwd, 'sub', 'secret'), 0o000);
+  for (const d of ['ro/inner', 'ro']) chmodSync(join(cwd, d), 0o500);
+  const s = new Scratch(cwd);
+  try {
+    expect(s.read('sub/ok.txt')).toBe('a\n');
+    expect(existsSync(s.path('sub/sub'))).toBe(false); // was a whole second copy (Library/Library, 2 Oct 2026)
+    expect(s.read('ro/inner/f')).toBe('c\n');
+  } finally {
+    s.dispose();
+    chmodSync(join(cwd, 'sub', 'secret'), 0o600);
+    for (const d of ['ro', 'ro/inner']) chmodSync(join(cwd, d), 0o700);
+  }
+  expect(existsSync(s.dir)).toBe(false);
 });
 
 test('a fix described only by what it looks like asks where first; one that points somewhere does not', async () => {
