@@ -136,27 +136,52 @@ test('typed in the home folder: where to start comes first; 2 starts in Agentic 
   expect(esc.text).not.toContain('Recent activity');
 }, T * 2);
 
-test('coding -p: a question with choices is an arrow menu, "Type an answer" takes a line, a bare question takes a line', async () => {
+// The last menu comes after a typed line (readline, which pauses the terminal's input as it closes):
+// its keys still arrive. Under Bun 1.4.2 a reader that starts right on that pause gets none (2 Oct 2026).
+// The way a new Terminal window starts (2 Oct 2026, "it won't let me type"): coding typed in the
+// home folder, enter on Where to start, enter on the safety check, then typing. Under Bun 1.4.2
+// nothing typed reached the prompt box on one Mac (a race; never on the other).
+test('typed in the home folder, enter through where to start and the safety check: typing reaches the prompt box', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'agentic-e2e-'));
+  const home = join(base, 'home-folder');
+  const repo = join(home, 'agentic-coder');
+  cpSync(join(import.meta.dir, '..', 'demo-project'), repo, { recursive: true });
+  mkdirSync(join(repo, 'terminal', 'src'), { recursive: true });
+  writeFileSync(join(repo, 'terminal', 'src', 'cli.jsx'), '');
+  const env = { HOME: home, AGENTIC_HOME: join(base, 'home'), AGENTIC_REPO: repo }; // no trust seeded, no model
+  const r = await runInPty({ cwd: home, env, args: ['--no-flows'], steps: [
+    { wait: 'Where should it work?' }, { sleep: 200 }, { key: 'enter' },
+    { wait: 'Quick safety check' }, { sleep: 200 }, { key: 'enter' },
+    { wait: '? for shortcuts' }, { sleep: 1000 }, { type: 'hello there' }, { wait: '> hello there' }, { snapshot: 'typed' }, ...quitTyped,
+  ] });
+  expect(r.snapshots.typed).toMatch(/where\s+~ · your home folder/);
+  expect(Object.keys(JSON.parse(readFileSync(join(base, 'home', 'trust.json'), 'utf8')))).toHaveLength(1);
+}, T);
+
+test('coding -p: a question with choices is an arrow menu, "Type an answer" takes a line, a bare question takes a line, and a menu after a typed line still takes keys', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([
     { tool: { name: 'Ask', args: { question: 'Which file should change?', options: ['export.mjs', 'trades.json'] } } },
     { tool: { name: 'Ask', args: { question: 'Pretty or one line?', options: ['pretty', 'one line'] } } },
     { tool: { name: 'Ask', args: { question: 'What should the flag be called?' } } },
+    { tool: { name: 'Ask', args: { question: 'A test as well?', options: ['with a test', 'without a test'] } } },
     { text: 'trades.json, indented by 4, named --json.' },
   ]);
   const r = await runInPty({ cwd, env, args: ['-p', 'do the thing', '--url', fake.url, '--no-flows'], steps: [
     { wait: 'Which file should change?' }, { sleep: 200 }, { snapshot: 'menu' }, { key: 'down' }, { sleep: 100 }, { snapshot: 'down' }, { key: 'enter' },
     { wait: 'Pretty or one line?' }, { sleep: 200 }, { type: '3' }, { wait: '>' }, { type: 'indented by 4' }, { key: 'enter' },
     { wait: 'What should the flag be called?' }, { sleep: 200 }, { type: '--json' }, { key: 'enter' },
+    { wait: 'A test as well?' }, { sleep: 200 }, { key: 'down' }, { sleep: 100 }, { snapshot: 'afterLine' }, { key: 'enter' },
     { wait: 'named --json.' }, { sleep: 300 },
   ] });
   await fake.close();
   expect(r.snapshots.menu).toContain('❯ 1. export.mjs');
   expect(r.snapshots.menu).toContain('  3. Type an answer');
   expect(r.snapshots.down).toContain('❯ 2. trades.json');
+  expect(r.snapshots.afterLine).toContain('❯ 2. without a test'); // the arrow reached the menu after a typed line
   expect(r.text).toContain('trades.json, indented by 4, named --json.');
   expect(r.code).toBe(0);
   // The answers reached the model: the picked row, the typed line, the bare line.
   const sent = JSON.stringify(fake.requests);
-  for (const a of ['trades.json', 'indented by 4', '--json']) expect(sent).toContain(a);
+  for (const a of ['trades.json', 'indented by 4', '--json', 'without a test']) expect(sent).toContain(a);
 }, T);

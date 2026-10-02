@@ -2,6 +2,8 @@
 // it closes, since the app's prompt box reads the same stdin next (2 Oct 2026).
 import { test, expect } from 'bun:test';
 import { PassThrough } from 'node:stream';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pickOnTerminal, keysOf } from '../src/app/pick.mjs';
 
 test('keys: arrows in both spellings, a lone esc, other escape sequences skipped', () => {
@@ -11,17 +13,41 @@ test('keys: arrows in both spellings, a lone esc, other escape sequences skipped
   expect(keysOf('\x1b[1;2Cj')).toEqual(['j']);
 });
 
-test('the menu picks, and takes off every listener it put on stdin', async () => {
+test('the menu picks, takes off every listener it put on stdin, and never pauses it', async () => {
   const input = new PassThrough();
   const output = new PassThrough(); output.resume();
-  const before = input.listenerCount('data');
+  let paused = 0;
+  input.on('pause', () => paused++);
   const p = pickOnTerminal(['a', 'b', 'c'], { input, output });
   input.write('\x1b[B\x1b[B\x1b[A\r');
   expect(await p).toBe(1);
-  expect(input.listenerCount('data')).toBe(before);
-  expect(input.listenerCount('keypress')).toBe(0);
+  for (const e of ['data', 'readable', 'keypress']) expect(input.listenerCount(e)).toBe(0);
   const q = pickOnTerminal(['a', 'b'], { input, output });
   input.write('\x1b');
   expect(await q).toBeNull();
-  expect(input.listenerCount('data')).toBe(before);
+  for (const e of ['data', 'readable', 'keypress']) expect(input.listenerCount(e)).toBe(0);
+  expect(paused).toBe(0); // the pause is what left the prompt box deaf (pick.mjs)
+});
+
+// Whatever reads the terminal before the app (or between its screens) never pauses stdin: under
+// Bun 1.4.2 a pause can leave the prompt box that reads next with no keys, and only on some Macs,
+// so a test that types after the menu alone does not catch it everywhere (2 Oct 2026).
+test('nothing in the app pauses the terminal\'s input', () => {
+  const src = join(import.meta.dir, '..', 'src');
+  const files = readdirSync(src, { recursive: true }).filter((f) => /\.(mjs|jsx|js)$/.test(f));
+  const found = files.filter((f) => /\b(stdin|input)\.pause\(\)/.test(readFileSync(join(src, f), 'utf8')));
+  expect(found).toEqual([]);
+});
+
+// What the app's prompt box does next (Ink: 'readable' and read()): it gets the keys typed after
+// the menu closed. With 'data' and pause() it got nothing under Bun 1.4.2 (2 Oct 2026).
+test('after the menu, a reader like the prompt box gets what is typed next', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough(); output.resume();
+  const p = pickOnTerminal(['a', 'b'], { input, output });
+  input.write('2');
+  expect(await p).toBe(1);
+  const got = new Promise((resolve) => input.on('readable', () => { const c = input.read(); if (c !== null) resolve(String(c)); }));
+  input.write('hello');
+  expect(await got).toBe('hello');
 });

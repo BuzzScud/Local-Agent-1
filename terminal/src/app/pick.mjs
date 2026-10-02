@@ -4,9 +4,12 @@
 // it. Typing a number picks that row at once, as in the app. Esc or
 // ctrl+c gives null. Answers the index of the row picked.
 //
-// Keys are read here, not with readline's emitKeypressEvents: that one leaves its own listener on
-// stdin after the menu closes, and the app's prompt box reads the same stdin right after (2 Oct
-// 2026, "it won't let me type" after the Where to start menu). The menu takes off all it put on.
+// Keys are read the way the app's prompt box (Ink) reads them right after: 'readable' and read(),
+// never 'data' and pause(). Under Bun 1.4.2, stdin paused while a read is under way can leave the
+// next 'readable' listener (Ink's) with no keys at all. It is a race: on the other Mac nothing typed
+// reached the prompt box after this menu (0 of 5 starts), on the main one it never showed (2 Oct
+// 2026, "it won't let me type"; the first fix took readline out but kept the pause). The menu
+// takes off all it put on; keys typed after the one that closes it stay for the app.
 
 const MARK = '\x1b[38;5;147m'; // the app's C.ask (#afafff)
 const OFF = '\x1b[0m';
@@ -26,12 +29,10 @@ export function pickOnTerminal(options, { input = process.stdin, output = proces
     let over = false;
     const raw = input.isTTY;
     if (raw) input.setRawMode(true);
-    input.resume();
     const done = (v) => {
       over = true;
-      input.off('data', onData);
+      input.off('readable', onReadable);
       if (raw) input.setRawMode(false);
-      input.pause();
       resolve(v);
     };
     const onKey = (k) => {
@@ -42,11 +43,14 @@ export function pickOnTerminal(options, { input = process.stdin, output = proces
       else if (/^[1-9]$/.test(k) && Number(k) <= n) { redraw(i = Number(k) - 1); done(i); }
     };
     // One chunk can hold several keys (typed fast, or pasted): taken one at a time, and
-    // nothing after the key that closes the menu.
-    const onData = (chunk) => {
-      for (const k of keysOf(String(chunk))) { if (over) break; onKey(k); }
+    // nothing after the key that closes the menu; the chunks not read yet stay for the app.
+    const onReadable = () => {
+      let chunk;
+      while (!over && (chunk = input.read()) !== null) {
+        for (const k of keysOf(String(chunk))) { if (over) break; onKey(k); }
+      }
     };
-    input.on('data', onData);
+    input.on('readable', onReadable);
   });
 }
 
