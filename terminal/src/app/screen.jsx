@@ -13,7 +13,7 @@ import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEX
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
-import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId } from './limits.mjs';
+import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc } from './remote-form.mjs';
 import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig, isHelper as isHelperModel } from './remote-models.mjs';
 import { triedWord } from './tryouts.mjs';
@@ -939,41 +939,60 @@ function SettingsPicker({ app }) {
 // the model; • a value not saved yet. Thinking cap is dimmed while Effort is Low.
 // Eleven limits (Look first last) keep the panel within 22 lines because the keys' hint sits on the
 // Reset all line, not a line of its own: it fits a 24-row window (app-effort.test.mjs).
+// On an Ollama service the Effort row is Thinking (the model's own choices: Off · On, Off · Max…),
+// the Thinking cap is a line saying why it is not there, and the ranks page's values are suggested
+// beside the rows (remote-suggested.mjs). /model's menu for one model (pk.own, 2 Oct 2026) is this
+// panel with only the rows each model keeps for itself, and a line on why those values are suggested.
 function LimitsPicker({ app }) {
   const pk = app.picker;
+  const own = pk.own ?? null;
+  const svc = Boolean(own || pk.model.remote?.ollama);
+  const shown = shownLimits(pk.model, { own: Boolean(own) });
+  const sg = pk.suggested ?? null;
   const levels = pk.model.thinkingLevels ?? [];
   const lv = levels[pk.level];
   const off = lv ? 1 : 0; // the Effort row, when the model has levels
   const effortOn = lv ? !!lv.effort : undefined;
-  const lw = Math.max(...LIMITS.map((l) => l.label.length), off ? 'Effort'.length : 0) + 2;
+  const effortWord = svc ? 'Thinking' : 'Effort';
+  const lw = Math.max(...shown.map((l) => l.label.length), off ? effortWord.length : 0, svc ? 'Thinking cap'.length : 0) + 2;
   // Wide enough for every name a search row can show, so the notes do not move.
-  const vw = Math.max(...LIMITS.flatMap((l) => (l.choice ? l.steps(pk.model).map((s) => showLimit(l.id, s).length) : [showLimit(l.id, pk.values[l.id]).length])), ...levels.map((l) => l.label.length)) + 1;
+  const vw = Math.max(...shown.flatMap((l) => (l.choice ? l.steps(pk.model).map((s) => showLimit(l.id, s).length) : [showLimit(l.id, pk.values[l.id]).length])), ...levels.map((l) => l.label.length)) + 1;
   const heading = (name) => <Text key={`h-${name}`} color={C.faint}>{`── ${name} `}{'─'.repeat(Math.max(0, app.width - 8 - name.length))}</Text>;
-  const env = { ...pk.env, values: pk.values, effortOn, effortLevel: lv?.effort ?? null };
-  const reset = pk.index === off + LIMITS.length;
+  const env = { ...pk.env, values: pk.values, effortOn, effortLevel: lv?.effort ?? null, effortWord };
+  const reset = pk.index === off + shown.length;
   const onEffort = off && pk.index === 0;
   const effortUnsaved = pk.level !== pk.savedLevel;
+  // What the ranks page suggests for a row: ✓ when it already has it.
+  const suggests = (v, want, show) => (want === undefined || want === null ? '' : v === want ? '✓ suggested · ' : `suggested ${show(want)} · `);
+  const where = own ? (own.inUse ? 'in use · enter saves, from its next step' : 'nothing loads until you press enter') : '←→ moves a row; its cost is on the right. Kept for next time.';
+  const keys = own ? `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter ${own.inUse ? 'saves' : 'switches to it'} · esc ${own.back ? 'back to the list' : 'cancels'}`
+    : `↑↓ choose · ←→ change${sg ? ' · s suggested' : ''} · enter saves · esc cancels${svc ? '' : ' · ↻ restarts model'}`;
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
       {/* The hint sits on the title's line: the panel stays within 22 lines with Who decides in it. */}
-      <Text wrap="truncate-end"><Text bold>Effort and limits</Text><Text color={C.dim}>{'   '}←→ moves a row; its cost is on the right. Kept for next time.</Text></Text>
+      <Text wrap="truncate-end"><Text bold>{own ? `${own.id} · its own settings` : svc ? `Effort and limits · ${pk.model.remote.model}` : 'Effort and limits'}</Text><Text color={C.dim}>{'   '}{where}</Text></Text>
+      {own ? (
+        <Text color={C.dim} wrap="truncate-end">{sg ? `Suggested: ${sg.why} · ${sg.source}` : 'Nothing suggested for it on the ranks page: each row starts from the shared settings.'}</Text>
+      ) : null}
       {lv ? (
         <>
           <Text wrap="truncate-end">
-            <Text color={onEffort ? C.accent : undefined} bold={onEffort}>{onEffort ? '❯' : ' '} {'Effort'.padEnd(lw)}</Text>
+            <Text color={onEffort ? C.accent : undefined} bold={onEffort}>{onEffort ? '❯' : ' '} {effortWord.padEnd(lw)}</Text>
             <Text color={onEffort && pk.level > 0 ? C.accent : C.faint}>◀ </Text>
             <Text color={effortUnsaved ? C.accent : undefined} bold={effortUnsaved}>{lv.label.padEnd(vw)}</Text>
             <Text color={onEffort && pk.level < levels.length - 1 ? C.accent : C.faint}>▶ </Text>
             <Text color={effortUnsaved ? C.accent : C.faint}>{effortUnsaved ? '•' : ' '}</Text>
-            <Text color={C.dim}>{'  '}{lv.id === defaultLevelId(pk.model) ? 'default · ' : ''}{effortNote(lv, pk.values.thinking)}</Text>
+            <Text color={C.dim}>{'  '}{suggests(lv.id, sg?.level, (id) => levels.find((l) => l.id === id)?.label ?? id)}{lv.id === defaultLevelId(pk.model) && !svc ? 'default · ' : ''}{effortNote(lv, pk.values.thinking)}</Text>
           </Text>
         </>
       ) : null}
-      {LIMITS.map((l, i) => {
+      {shown.map((l, i) => {
         // A heading where a group starts: "Search" over the search's rows, "Limits" over the rest.
         // Who decides (group 'Effort') sits under the Effort row with no heading of its own.
+        // On a service /effort says which rows the model keeps for itself.
         const group = l.group ?? 'Limits';
-        const head = group !== 'Effort' && (i === 0 || (LIMITS[i - 1].group ?? 'Limits') !== group) ? heading(group) : null;
+        const title = svc && !own ? 'Limits · this model’s own' : group;
+        const head = group !== 'Effort' && (i === 0 || (shown[i - 1].group ?? 'Limits') !== group) ? heading(title) : null;
         const on = off + i === pk.index;
         const v = pk.values[l.id];
         const steps = l.steps(pk.model);
@@ -989,15 +1008,19 @@ function LimitsPicker({ app }) {
             <Text color={unsaved ? C.accent : idle ? C.dim : undefined} bold={unsaved}>{showLimit(l.id, v).padEnd(vw)}</Text>
             <Text color={on && v !== steps.at(-1) ? C.accent : C.faint}>▶ </Text>
             <Text color={unsaved ? C.accent : C.faint}>{unsaved ? '•' : ' '}</Text>
-            <Text color={C.dim}>{l.restart ? '↻ ' : '  '}</Text>
-            <Text color={note.startsWith('⚠') ? C.warn : C.dim}>{isDefault(l.id, pk.values, pk.model) ? 'default · ' : ''}{note}</Text>
+            <Text color={C.dim}>{l.restart && !svc ? '↻ ' : '  '}</Text>
+            <Text color={note.startsWith('⚠') ? C.warn : C.dim}>{suggests(v, sg?.limits?.[l.id], (x) => showLimit(l.id, x))}{isDefault(l.id, pk.values, pk.model) ? 'default · ' : ''}{note}</Text>
           </Text>
+          {/* Their place on a service: why there is no Thinking cap there (and, in /effort, where the search went). One line, so the panel keeps its 22. */}
+          {svc && l.id === 'context' ? (own
+            ? <Text color={C.dim} wrap="truncate-end">{'  '}{'Thinking cap'.padEnd(lw)}{'  '}not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer</Text>
+            : <Text color={C.dim} wrap="truncate-end">{'  '}{'Not here'.padEnd(lw)}{'  '}Thinking cap: Ollama has none, Reply length holds it all · Search: the service’s own, /subagents gives it a model</Text>) : null}
           </React.Fragment>
         );
       })}
       <Text wrap="truncate-end">
-        <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {'Reset all'.padEnd(lw)}</Text>
-        <Text color={C.dim}>{'  '}↑↓ choose · ←→ change · enter saves · esc cancels · ↻ restarts model</Text>
+        <Text color={reset ? C.accent : undefined} bold={reset}>{reset ? '❯' : ' '} {(svc ? 'Use shared' : 'Reset all').padEnd(lw)}</Text>
+        <Text color={C.dim}>{'  '}{reset && svc ? `enter: ${own?.id ?? pk.model.remote?.model ?? 'it'} back to the shared settings${own && !own.inUse ? ', then it switches' : ''}` : keys}</Text>
       </Text>
     </Box>
   );
@@ -1296,8 +1319,6 @@ function ServicePicker({ app }) {
   const sv = app.service;
   const rows = serviceRows(pk, sv);
   const cur = atRow(pk, rows);
-  const levels = app.pickLevels ?? [];
-  const at = Math.max(0, levels.findIndex((l) => l.id === app.pickLevelId));
   const W = app.width - 4;
   const models = rows.filter((r) => r.kind === 'model');
   const nameW = Math.min(32, Math.max(16, ...models.map((r) => r.m.id.length + 2)));
@@ -1314,7 +1335,7 @@ function ServicePicker({ app }) {
     return gbWord(m.bytes).padStart(w);
   };
   // The rows that fit, the cursor's always among them.
-  const view = Math.max(6, (app.rows ?? 24) - 17);
+  const view = Math.max(6, (app.rows ?? 24) - 14);
   const i = Math.max(0, rows.indexOf(cur));
   const top = Math.max(0, Math.min(i - Math.floor(view / 2), rows.length - view));
   const shown = rows.slice(top, top + view);
@@ -1350,7 +1371,7 @@ function ServicePicker({ app }) {
       </Box>
       {pk.filter
         ? <Box justifyContent="space-between"><Text><Text bold>Filter  </Text>{pk.filter}<Text color={C.accent}>█</Text></Text><Text color={C.dim}>{`${models.length} of ${total} · esc clears the filter`}</Text></Box>
-        : <Text color={C.dim} wrap="truncate-end">Pick the model and its effort. Switching keeps the chat; it is kept for next time.</Text>}
+        : <Text color={C.dim} wrap="truncate-end">Pick a model: its own settings come next, and it loads only when you press enter there. The chat stays.</Text>}
       <Text> </Text>
       {above ? <Text color={C.dim}>  ↑ {above} more</Text> : null}
       {shown.map((r, k) => row(r, top + k))}
@@ -1358,9 +1379,7 @@ function ServicePicker({ app }) {
       <Text> </Text>
       <Text color={detail?.tone === 'warn' ? C.warn : C.dim} wrap="truncate-end">{detail ? `  ${detail.text}` : ' '}</Text>
       <Text> </Text>
-      <EffortRows levels={levels} at={at} />
-      <Text> </Text>
-      <Text color={C.dim} wrap="truncate-end">↑↓ model · ←→ effort · type to filter · enter switches, the chat stays · esc cancels</Text>
+      <Text color={C.dim} wrap="truncate-end">↑↓ model · type to filter · enter its settings, then it switches · esc cancels</Text>
     </Box>
   );
 }

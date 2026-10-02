@@ -407,16 +407,20 @@ export const GENERIC_REMOTE = {
 };
 
 // The effort levels of a model on an Ollama service, from what it can do (o:
-// ollama.mjs's entry): Low only when it cannot think (asked to, Ollama refuses
-// the request), Low and High when it can, and Low, Medium and High for gpt-oss,
-// whose reasoning_effort has three steps. A model whose abilities are not
-// listed keeps GENERIC_REMOTE's.
+// ollama.mjs's entry), named as the model has them (2 Oct 2026, the user's
+// pick): None when it cannot think (asked to, Ollama refuses the request);
+// Low, Medium and High for gpt-oss, whose think takes three steps and is never
+// off (Low is its least); Off and Max for Laguna (Poolside shipped no steps in
+// between); Off and On for the rest (Ollama's think is true or false). The ids
+// stay low / medium / high, so a level chosen on one model carries to the next.
+// A model whose abilities are not listed keeps GENERIC_REMOTE's.
 export function remoteLevels(o) {
   const [low, high] = GENERIC_REMOTE.thinkingLevels;
   if (!o?.known) return GENERIC_REMOTE.thinkingLevels;
-  if (!o.thinking) return [{ ...low, note: 'answers straight away: this model cannot think first' }];
-  if (/gpt-?oss/i.test(`${o.family} ${o.id}`)) return [low, { id: 'medium', label: 'Medium', effort: 'medium', note: 'thinks for a while first · gpt-oss has three levels' }, { ...high, note: 'thinks longest first' }];
-  return GENERIC_REMOTE.thinkingLevels;
+  if (!o.thinking) return [{ ...low, label: 'None', note: 'answers straight away: this model cannot think first' }];
+  if (/gpt-?oss/i.test(`${o.family} ${o.id}`)) return [{ ...low, note: 'thinks briefly first: gpt-oss always thinks, this is its least' }, { id: 'medium', label: 'Medium', effort: 'medium', note: 'thinks for a while first · gpt-oss has three levels' }, { ...high, note: 'thinks longest first · slow, and it can loop' }];
+  if (/laguna/i.test(`${o.family} ${o.id}`)) return [{ ...low, label: 'Off' }, { ...high, label: 'Max', note: 'thinks between its tool calls for as long as it needs: Laguna has only off and max' }];
+  return [{ ...low, label: 'Off' }, { ...high, label: 'On', note: 'thinks first: this model has no steps, only on or off' }];
 }
 
 // Big-model mode (1 Oct 2026, the user's pick): a model on an Ollama service

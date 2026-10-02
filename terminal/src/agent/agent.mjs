@@ -2151,7 +2151,12 @@ export class Agent extends EventEmitter {
   // One model reply, streamed.
   async generate(signal, { retry = true, textOnly = false, maxTokens: cap } = {}) {
     const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
-    const maxTokens = cap ?? replyRoom(this.thinking, this.model?.thinkingBudget);
+    // A model on a service with its own Reply length (/effort): up to that, never more than the
+    // context has left under the trim line (at least the answer's 2,048).
+    // One that cannot think (a single level: a remote's None) gets no room for thinking.
+    const own = this.model?.replyTokens;
+    const thinks = this.thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
+    const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.trimAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
     this.lastRoom = maxTokens;
     // fitContext keeps the answer's 2,048 and this much thinking free: in a tight
     // memory the thinking shrinks (thinkRoom), not the answer.

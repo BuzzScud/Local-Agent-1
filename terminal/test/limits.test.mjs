@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData, HARNESS_LIMITS } from '../src/app/limits.mjs';
+import { LIMITS, defaultLimits, readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, showLimit, limitNote, effortNote, defaultLevelId, TEST_CTX, testDefaults, testSettings, testLimits, panelData, HARNESS_LIMITS, OWN_ROWS, ownOf, shownLimits } from '../src/app/limits.mjs';
 import { COMMANDS } from '../src/app/commands.mjs';
 import { Agent } from '../src/agent/agent.mjs';
 import { execute } from '../src/agent/tools.mjs';
@@ -21,7 +21,7 @@ test('/effort is the one command for the panel (/increase is gone), and every li
   expect(COMMANDS.find((c) => c.name === 'effort').picker).toBe(true);
   const d = defaultLimits(model);
   // the search's rows first (BGE-M3, by meaning, no reranker: as before), then the limits
-  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, tries: 8, steps: 40, rulesRoom: 0, upFront: 0, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85, way: 'app', look: 'auto' });
+  expect(d).toEqual({ embedder: 'bge-m3', retriever: 'meaning', reranker: 'off', context: 0, thinking: model.thinkingBudget, replyTokens: 0, temperature: 'own', presence: 'own', keepLoaded: 'open', tries: 8, steps: 40, rulesRoom: 0, upFront: 0, outputLines: 80, timeoutSecs: 120, trimAt: 0.78, summarizeAt: 0.85, way: 'app', look: 'auto' });
   // Who decides first, under the Effort row with no heading; then the search's three rows
   expect(LIMITS[0]).toMatchObject({ id: 'way', group: 'Effort', label: 'Who decides' });
   expect(LIMITS.slice(1, 4).map((l) => [l.id, l.group])).toEqual([['embedder', 'Search'], ['retriever', 'Search'], ['reranker', 'Search']]);
@@ -62,6 +62,40 @@ test('big-model mode: a big model on a service starts with more steps, tries and
   expect(limitsToSave(v, big, { steps: 80 })).toEqual({ steps: 80, outputLines: 320 });
   // a row this save moved back to the default is not kept (Reset all, or ← to it)
   expect(limitsToSave(d, big, {})).toEqual({});
+});
+
+test('a model on a service keeps its own rows (/model’s menu): laid over the shared ones, the rest shared; another model, and this Mac’s, keep theirs; the Thinking cap and the search are not shown there', () => {
+  const on = (name) => ({ ...model, id: 'remote', remote: { kind: 'openai', ollama: '0.32.12', model: name } });
+  const settings = { limits: { steps: 60, timeoutSecs: 300, way: 'model' }, remote: { tuned: { 'laguna-s-2.1:latest': { level: 'high', limits: { steps: 80, timeoutSecs: 600, outputLines: 160, way: 'app', context: 131072, tries: 'many' } } } } };
+  // its own rows win; a shared row (Who decides) or one it cannot keep (Context: "contexts" holds it) is not taken from its set, nor a bad value
+  expect(readLimits(settings, on('laguna-s-2.1:latest'))).toMatchObject({ steps: 80, timeoutSecs: 600, outputLines: 160, way: 'model', context: 0, tries: 8 });
+  expect(readLimits(settings, on('laguna-s-2.1:latest'), { own: false })).toMatchObject({ steps: 60, timeoutSecs: 300, outputLines: 80 });
+  // another model on the service, and this Mac's, have the shared ones
+  expect(readLimits(settings, on('ornith:35b'))).toMatchObject({ steps: 60, timeoutSecs: 300, outputLines: 80 });
+  expect(readLimits(settings, model)).toMatchObject({ steps: 60, timeoutSecs: 300, outputLines: 80 });
+  expect(ownOf(settings, 'laguna-s-2.1:latest').level).toBe('high');
+  expect(ownOf(settings, 'ornith:35b')).toBe(null);
+  expect(OWN_ROWS).toEqual(['replyTokens', 'temperature', 'presence', 'keepLoaded', 'tries', 'steps', 'rulesRoom', 'upFront', 'outputLines', 'timeoutSecs', 'trimAt', 'summarizeAt', 'look']);
+  // the rows: all on this Mac; no Thinking cap on a service; the menu has the model's own and its Context
+  // the rows: this Mac's as before (no model rows); on a service no Thinking cap or search, and the model's rows; the menu has the model's own and its Context
+  expect(shownLimits(model).map((l) => l.id)).toEqual(LIMITS.filter((l) => !['replyTokens', 'temperature', 'presence', 'keepLoaded'].includes(l.id)).map((l) => l.id));
+  expect(shownLimits(on('x')).map((l) => l.id)).toEqual(LIMITS.filter((l) => l.id !== 'thinking' && l.group !== 'Search').map((l) => l.id));
+  expect(panelData([model])[model.id].rows.map((r) => r.id)).not.toContain('replyTokens');
+  expect(shownLimits(on('x'), { own: true }).map((l) => l.id)).toEqual(['context', ...OWN_ROWS]);
+});
+
+test('the model on a service: its Reply length and sampling go with its requests; its own leaves the service’s', () => {
+  const svc = { ...model, id: 'remote', remote: { kind: 'openai', ollama: '0.32.12', model: 'x' }, sampling: {}, thinkingSampling: {}, maxCtx: 262144 };
+  const d = defaultLimits(svc);
+  expect([d.replyTokens, d.temperature, d.presence, d.keepLoaded]).toEqual([0, 'own', 'own', 'open']);
+  expect(modelWithLimits(svc, { ...d, thinking: svc.thinkingBudget })).toBe(svc); // nothing of its own: the same model
+  const m = modelWithLimits(svc, { ...d, thinking: svc.thinkingBudget, replyTokens: 32768, temperature: 0.2, presence: 1.5 });
+  expect(m.replyTokens).toBe(32768);
+  expect(m.sampling).toEqual({ temperature: 0.2, presence_penalty: 1.5 });
+  expect(m.thinkingSampling).toEqual({ temperature: 0.2, presence_penalty: 1.5 });
+  expect(readLimits({ remote: { tuned: { x: { limits: { temperature: 0, keepLoaded: 300, replyTokens: 9_999_999 } } } } }, svc)).toMatchObject({ temperature: 0, keepLoaded: 300, replyTokens: 0 }); // more than its longest step: left out
+  expect(showLimit('keepLoaded', 'open')).toBe('while open');
+  expect(showLimit('replyTokens', 32768)).toBe('32k tokens');
 });
 
 test('←→ moves one step, stops at the ends, and trim stays below summarize', () => {
@@ -154,7 +188,8 @@ test('a test run from the Run tab: the tests\' defaults are the app\'s but 32k, 
 
 test('the Run tab\'s panel: every /effort row with its steps and what each costs, the effort levels, and Context\'s note for each pair of Search models', () => {
   const p = panelData([model], { freeBytes: 20e9 })[model.id];
-  expect(p.rows.map((r) => r.id)).toEqual(LIMITS.map((l) => l.id));
+  // (the model rows of a service, Reply length to Keep loaded, are not for this Mac's models the tests run)
+  expect(p.rows.map((r) => r.id)).toEqual(LIMITS.filter((l) => !l.model).map((l) => l.id));
   expect(p.defs).toEqual(testDefaults(model));
   for (const r of p.rows) {
     expect(r.steps.some((s) => s.v === r.def)).toBe(true);

@@ -284,10 +284,13 @@ const OLLAMA_MODELS = [
   { name: 'huge:120b', family: 'laguna', params: '117.6B', caps: ['completion', 'tools'], ctx: 262144, size: 75.2e9, at: '2026-07-23', fits: 65536 },
   { name: 'giant:400b', family: 'laguna', params: '400B', caps: ['completion', 'tools'], ctx: 262144, size: 240.0e9, at: '2026-07-24', fits: 0 },
 ];
-const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
+const fullOllama = ({ serviceCtx = 65536, models = OLLAMA_MODELS } = {}) => new Promise((ok) => {
   const loaded = new Map([['tiny:3b', 131072]]);
   const chats = [];
   const named = []; // each chat's tool names
+  const thinks = []; // each chat's think (absent: undefined)
+  const predicts = []; // each chat's num_predict
+  const keeps = []; // each chat's keep_alive
   const loads = [];
   const OOM = 'llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory\nalloc_tensor_range: failed to allocate ROCm0 buffer of size 74995960832\nerror loading model: unable to allocate ROCm0 buffer';
   // What a request with these options loads the model at, or null when it does not fit.
@@ -296,10 +299,10 @@ const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
     let b = ''; for await (const c of req) b += c;
     const body = b ? JSON.parse(b) : {};
     const json = (code, j) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
-    const m = OLLAMA_MODELS.find((x) => x.name === body.model);
+    const m = models.find((x) => x.name === body.model);
     if (req.url === '/api/version') return json(200, { version: '0.32.12' });
-    if (req.url === '/api/tags') return json(200, { models: OLLAMA_MODELS.map((x) => ({ name: x.name, size: x.size, digest: `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: { family: x.family, parameter_size: x.params, quantization_level: 'Q4_K_M' } })) });
-    if (req.url === '/api/ps') return json(200, { models: [...loaded].map(([name, ctx]) => ({ name, size: OLLAMA_MODELS.find((x) => x.name === name).size, context_length: ctx })) });
+    if (req.url === '/api/tags') return json(200, { models: models.map((x) => ({ name: x.name, size: x.size, digest: `d-${x.name}`, modified_at: `${x.at}T12:00:00Z`, details: { family: x.family, parameter_size: x.params, quantization_level: 'Q4_K_M' } })) });
+    if (req.url === '/api/ps') return json(200, { models: [...loaded].map(([name, ctx]) => ({ name, size: models.find((x) => x.name === name).size, context_length: ctx })) });
     if (req.url === '/api/show') return m ? json(200, { details: { family: m.family, parameter_size: m.params, quantization_level: 'Q4_K_M' }, model_info: { [`${m.family}.context_length`]: m.ctx }, capabilities: m.caps }) : json(404, { error: 'not found' });
     if (req.url === '/api/generate') {
       await new Promise((r) => setTimeout(r, 300));
@@ -309,11 +312,14 @@ const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
       loaded.set(body.model, at);
       return json(200, { model: body.model, response: '', done: true, done_reason: 'load' });
     }
-    if (req.url === '/v1/models') return json(200, { object: 'list', data: OLLAMA_MODELS.map((x) => ({ id: x.name, object: 'model', owned_by: 'library' })) });
+    if (req.url === '/v1/models') return json(200, { object: 'list', data: models.map((x) => ({ id: x.name, object: 'model', owned_by: 'library' })) });
     if (req.url === '/api/chat') {
       if (!body.stream) return json(200, { model: body.model, message: { role: 'assistant', content: 'ready' }, done: true });
       chats.push({ model: body.model, tools: 'tools' in body, numCtx: body.options?.num_ctx ?? null });
       named.push((body.tools ?? []).map((x) => x.function?.name ?? x.name));
+      thinks.push(body.think);
+      predicts.push(body.options?.num_predict ?? null);
+      keeps.push(body.keep_alive);
       if (body.tools && !m.caps.includes('tools')) return json(400, { error: `registry.ollama.ai/library/${body.model} does not support tools` });
       const at = loadAt(m, body.options);
       if (at === null) return json(500, { error: OOM });
@@ -325,7 +331,7 @@ const fullOllama = ({ serviceCtx = 65536 } = {}) => new Promise((ok) => {
     }
     json(404, { error: 'not found' });
   });
-  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, port: srv.address().port, chats, named, loads, loaded, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
+  srv.listen(0, '127.0.0.1', () => ok({ url: `http://127.0.0.1:${srv.address().port}`, port: srv.address().port, chats, named, thinks, predicts, keeps, loads, loaded, close: () => new Promise((d) => { srv.closeAllConnections?.(); srv.close(d); }) }));
 });
 
 test('on an Ollama service: the footer names the model and where it runs; /model is the service’s list; another model is switched to in place (loaded first, the chat kept); one without tools asks, then answers in words', async () => {
@@ -334,16 +340,19 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
   const where = `127.0.0.1:${srv.port}`;
+  let loadsAtMenu = -1;
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 }, { snapshot: 'start' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 1.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
     { type: 'coder' }, { sleep: 200 }, { snapshot: 'filtered' },
+    // enter: its own settings first; nothing loads until enter there
+    { key: 'enter' }, { wait: 'coder:30b · its own settings' }, { sleep: 300 }, { snapshot: 'menu' }, { fn: () => { loadsAtMenu = srv.loads.filter((l) => l.model === 'coder:30b').length; } },
     { key: 'enter' }, { wait: 'Now on coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
     { type: 'two' }, { key: 'enter' }, { wait: 'From coder:30b, reply 2.' }, { sleep: 200 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
     { type: 'oldchat' }, { sleep: 200 }, { key: 'enter' }, { wait: 'cannot use tools' }, { sleep: 150 }, { snapshot: 'ask' },
-    { key: 'down' }, { sleep: 80 }, { key: 'enter' }, { wait: 'Now on oldchat:14b' }, { sleep: 200 },
+    { key: 'down' }, { sleep: 80 }, { key: 'enter' }, { wait: 'oldchat:14b · its own settings' }, { sleep: 200 }, { key: 'enter' }, { wait: 'Now on oldchat:14b' }, { sleep: 200 },
     { type: 'three' }, { key: 'enter' }, { wait: 'From oldchat:14b, reply 3.' }, { sleep: 200 }, { snapshot: 'words' },
     ...quit,
   ] });
@@ -363,6 +372,18 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   expect(s.filtered).toMatch(/Filter\s+coder/);
   expect(s.filtered).toMatch(/❯ coder:30b/);
   expect(s.filtered).toContain('Not loaded yet: it loads as you switch (18.6 GB), so the first reply may wait.');
+  // its own settings before the switch: the model's rows, its Thinking (it cannot think), no Thinking cap, nothing loaded yet
+  expect(s.menu).toMatch(/coder:30b · its own settings\s+nothing loads until you press enter/);
+  expect(s.menu).toContain('Nothing suggested for it on the ranks page');
+  expect(s.menu).toMatch(/Thinking\s+◀ None\s+▶\s+answers straight away: this model cannot think first/);
+  expect(s.menu).toMatch(/Steps per request\s+◀ 80\s+▶\s+default/); // a big model's
+  expect(s.menu).toMatch(/Thinking cap\s+not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer/);
+  expect(s.menu).toMatch(/Reply length\s+◀ auto\s+▶\s+default · 2,048 tokens a reply/);
+  expect(s.menu).toMatch(/Temperature\s+◀ its own\s+▶/);
+  expect(s.menu).toMatch(/Keep loaded\s+◀ while open\s+▶/);
+  expect(s.menu).not.toContain('Embedder');
+  expect(loadsAtMenu).toBe(0);
+  expect(srv.loads.filter((l) => l.model === 'coder:30b').length).toBeGreaterThan(0);
   // switched in place: loaded on the service, its context read once loaded, the footer follows, the pick kept
   expect(s.switched).toMatch(/coder:30b is loaded on the service \(\d+ s\) · 64k context/);
   expect(s.switched).toMatch(new RegExp(`● coder:30b on ${where.replace('.', '\\.')}`));
@@ -385,11 +406,11 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 }, { snapshot: 'list' },
-    { type: 'coder' }, { sleep: 200 }, { key: 'enter' }, { wait: 'Big-model mode for coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
+    { type: 'coder' }, { sleep: 200 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode for coder:30b' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
-    { type: '/effort' }, { key: 'enter' }, { wait: 'Reset all' }, { sleep: 200 }, { snapshot: 'panel' }, { key: 'esc' }, { sleep: 300 },
+    { type: '/effort' }, { key: 'enter' }, { wait: 'Use shared' }, { sleep: 200 }, { snapshot: 'panel' }, { key: 'esc' }, { sleep: 300 },
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'tiny' }, { sleep: 200 }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
+    { type: 'tiny' }, { sleep: 200 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
     { type: 'two' }, { key: 'enter' }, { wait: 'From tiny:3b, reply 2.' }, { sleep: 200 },
     ...quit,
   ] });
@@ -411,8 +432,9 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   expect(srv.named[1]).not.toContain('Agent');
   // off again: from → to back
   expect(flat(s.back)).toContain('Big-model mode off: Tries per fix 12 → 8 · Steps per request 80 → 40 · Command output 160 lines → 80 lines.');
-  // defaults only: nothing written to the saved limits
+  // defaults only: nothing written to the saved limits, nor kept for either model (the menus were left as they were)
   expect(settingsOf(base).limits ?? {}).toEqual({});
+  expect(settingsOf(base).remote.tuned ?? {}).toEqual({});
 }, T);
 
 test('a model that does not fit on the service: tried again at half the context until it does (that size kept for it); one that never fits goes back, a message sent meanwhile waits for it; /effort’s Context is the model’s own', async () => {
@@ -425,16 +447,17 @@ test('a model that does not fit on the service: tried again at half the context 
     { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
     // huge: 256k and 128k do not fit, 64k does
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'huge' }, { sleep: 150 }, { key: 'enter' }, { wait: 'huge:120b is loaded on the service' }, { sleep: 300 }, { snapshot: 'fitted' },
+    { type: 'huge' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'huge:120b is loaded on the service' }, { sleep: 300 }, { snapshot: 'fitted' },
     { type: 'one' }, { key: 'enter' }, { wait: 'From huge:120b, reply 1.' }, { sleep: 200 },
     // giant: never fits; "two" is sent while it is loading, waits, and goes to huge once it is back
     { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
-    { type: 'giant' }, { sleep: 150 }, { key: 'enter' }, { sleep: 250 },
+    { type: 'giant' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { sleep: 250 },
     { type: 'two' }, { key: 'enter' }, { sleep: 150 }, { snapshot: 'waiting' },
     { wait: 'Back on huge:120b' }, { wait: 'From huge:120b, reply 2.' }, { sleep: 300 }, { snapshot: 'back' },
     // /effort: the Context row is huge's own 64k, no memory sum of this Mac; ← 32k, enter: it loads again at 32k
+    // (no search rows on a service: Thinking, Who decides, then Context)
     { type: '/effort' }, { key: 'enter' }, { wait: 'Effort and limits' }, { sleep: 200 },
-    ...down(5), { sleep: 100 }, { snapshot: 'panel' },
+    ...down(2), { sleep: 100 }, { snapshot: 'panel' },
     { key: 'left' }, { sleep: 100 }, { key: 'enter' }, { wait: '· 32k context.' }, { sleep: 300 }, { snapshot: 'smaller' },
     ...quit,
   ] });
@@ -456,10 +479,109 @@ test('a model that does not fit on the service: tried again at half the context 
   // /effort on the service: the model's own context, said in its words, never NaN
   expect(s.panel).toMatch(/❯ Context\s+◀ 64k\s+▶\s+↻? ?64k on the service · huge:120b loads again at this size/);
   expect(s.panel).not.toContain('NaN');
+  // the search is the service's own (/subagents): its rows are not in /effort there
+  expect(s.panel).toMatch(/Not here\s+Thinking cap: Ollama has none, Reply length holds it all · Search: the service’s own/);
+  for (const row of ['Embedder', 'Retriever', 'Reranker']) expect(s.panel).not.toContain(row);
   expect(s.smaller).toMatch(/Context 64k → 32k for huge:120b, kept for it/);
   expect(srv.loads.at(-1)).toEqual({ model: 'huge:120b', numCtx: 32768, ok: true });
   const saved = settingsOf(base);
   expect(saved.remote.contexts).toEqual({ 'huge:120b': 32768 });
   expect(saved.remotes.openai.contexts).toEqual({ 'huge:120b': 32768 });
   expect(saved.remote.model).toBe('huge:120b');
+}, T);
+
+// /model's menu (2 Oct 2026, the user's picks): enter on a model on the service opens its own settings first
+// (the model's real Thinking choices, its rows, the ranks page's values suggested beside them, no Thinking cap);
+// nothing loads until enter there, which switches with them. Each model keeps its own: another model has the
+// shared ones, and the first one's come back with it. On the model in use the menu saves at once.
+const MENU_MODELS = [
+  { name: 'tiny:3b', family: 'llama', params: '3.2B', caps: ['completion', 'tools'], ctx: 131072, size: 2.0e9, at: '2026-07-01' },
+  { name: 'laguna-s-2.1:latest', family: 'laguna', params: '117.6B', caps: ['completion', 'tools', 'thinking'], ctx: 262144, size: 75.2e9, at: '2026-07-23' },
+];
+test('/model on a service: a model’s own settings come first (Thinking Off · Max, suggested values, s fills them in), nothing loads until enter; they are kept for it alone and come back with it', async () => {
+  const { cwd, env, base } = setup();
+  const srv = await fullOllama({ serviceCtx: 262144, models: MENU_MODELS });
+  const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
+  let lagunaLoadsAtMenu = -1;
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 300 },
+    { type: 'laguna' }, { sleep: 200 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 300 }, { snapshot: 'menu' },
+    { fn: () => { lagunaLoadsAtMenu = srv.loads.filter((l) => l.model === 'laguna-s-2.1:latest').length; } },
+    { key: 's' }, { sleep: 200 }, { snapshot: 'filled' },
+    ...down(5), { key: 'left' }, { sleep: 100 }, // Keep loaded: while open → 30 min
+    { key: 'enter' }, { wait: 'Now on laguna-s-2.1:latest' }, { wait: 'laguna-s-2.1:latest is loaded on the service' }, { sleep: 300 }, { snapshot: 'switched' },
+    { type: 'one' }, { key: 'enter' }, { wait: 'From laguna-s-2.1:latest, reply 1.' }, { sleep: 200 },
+    // the model in use: its menu saves at once (Steps 80 → 120)
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 }, { key: 'enter' }, { wait: 'in use · enter saves' }, { sleep: 200 }, { snapshot: 'inUse' },
+    ...down(7), { key: 'right' }, { sleep: 100 }, { key: 'enter' }, { wait: 'Kept for laguna-s-2.1:latest alone' }, { sleep: 200 }, { snapshot: 'saved' },
+    // another model: the shared settings (and big-model mode off)
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
+    { type: 'tiny' }, { sleep: 150 }, { key: 'enter' }, { wait: 'tiny:3b · its own settings' }, { sleep: 200 }, { snapshot: 'tinyMenu' }, { key: 'enter' }, { wait: 'Big-model mode off' }, { sleep: 300 }, { snapshot: 'back' },
+    // (laguna thinks at Max, so Look first sent its replies back for more: count none of them)
+    { type: 'two' }, { key: 'enter' }, { wait: 'From tiny:3b, reply' }, { sleep: 200 },
+    // laguna's come back in its menu; esc goes back to the list, esc again closes it, nothing switched
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
+    { type: 'laguna' }, { sleep: 150 }, { key: 'enter' }, { wait: 'laguna-s-2.1:latest · its own settings' }, { sleep: 200 }, { snapshot: 'again' },
+    { key: 'esc' }, { wait: 'Model · Another service' }, { sleep: 200 }, { snapshot: 'list' }, { key: 'esc' }, { sleep: 100 }, { key: 'esc' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await srv.close();
+  const s = r.snapshots;
+  const flat = (x) => x.replace(/\s+/g, ' ');
+  // the menu: its Thinking choices with the suggested one, the suggested rows, the line on why, no Thinking cap; nothing loaded yet
+  expect(s.menu).toMatch(/laguna-s-2\.1:latest · its own settings\s+nothing loads until you press enter/);
+  expect(flat(s.menu)).toContain('Suggested: starved by the defaults: it thinks long, runs long tool loops and long builds · ranks page, not measured here');
+  expect(s.menu).toMatch(/Look first\s+◀ auto\s+▶\s+default · follows Thinking: none while it is off/);
+  expect(s.menu).toMatch(/❯ Thinking\s+◀ Off\s+▶\s+suggested Max · answers straight away/);
+  expect(s.menu).toMatch(/Context\s+◀ auto\s+▶\s+suggested 128k · default · the service's own/);
+  expect(s.menu).toMatch(/Steps per request\s+◀ 80\s+▶\s+✓ suggested · default · stops a request after 80 tool steps/);
+  expect(s.menu).toMatch(/Command timeout\s+◀ 2 min\s+▶\s+suggested 10 min · default/);
+  expect(s.menu).toMatch(/Thinking cap\s+not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer/);
+  expect(s.menu).toMatch(/Reply length\s+◀ auto\s+▶\s+suggested 32k tokens · default · 2,048 tokens a reply/);
+  expect(s.menu).toContain('s suggested · enter switches to it · esc back to the list');
+  expect(lagunaLoadsAtMenu).toBe(0);
+  // s: every suggested value filled in, marked as not saved yet
+  expect(s.filled).toMatch(/Thinking\s+◀ Max\s+▶ •\s+✓ suggested/);
+  expect(s.filled).toMatch(/Context\s+◀ 128k\s+▶ •\s+✓ suggested · 128k on the service · laguna-s-2\.1:latest loads at this size as you switch/);
+  expect(s.filled).toMatch(/Command timeout\s+◀ 10 min\s+▶ •\s+✓ suggested/);
+  expect(s.filled).toMatch(/Reply length\s+◀ 32k tokens\s+▶ •\s+✓ suggested · up to 32k a reply, thinking and answer together/);
+  // the switch: loaded at its own context, its own settings in use, and it thinks (Max: think true)
+  expect(srv.loads.find((l) => l.model === 'laguna-s-2.1:latest')).toEqual({ model: 'laguna-s-2.1:latest', numCtx: 131072, ok: true });
+  expect(flat(s.switched)).toContain('Big-model mode for laguna-s-2.1:latest and its own settings: Reply length auto → 32k tokens · Keep loaded while open → 30 min · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines · Command timeout 2 min → 10 min');
+  expect(srv.chats[0]).toEqual({ model: 'laguna-s-2.1:latest', tools: true, numCtx: 131072 });
+  expect(srv.thinks[0]).toBe(true);
+  // its Reply length and Keep loaded reach the service with each request
+  expect(srv.predicts[0]).toBe(32768);
+  expect(srv.keeps[0]).toBe(1800);
+  // on the model in use: the same menu, saved at once and kept for it alone
+  expect(s.inUse).toMatch(/laguna-s-2\.1:latest · its own settings\s+in use · enter saves, from its next step/);
+  expect(s.inUse).toMatch(/Thinking\s+◀ Max\s+▶\s+✓ suggested/);
+  expect(flat(s.saved)).toContain('Saved: Steps per request 80 → 120. In use from the next step; kept for next time. Kept for laguna-s-2.1:latest alone.');
+  // another model: the shared ones; it cannot think
+  expect(s.tinyMenu).toMatch(/Thinking\s+◀ None\s+▶/);
+  expect(s.tinyMenu).toMatch(/Command timeout\s+◀ 2 min\s+▶/);
+  expect(flat(s.back)).toContain('Big-model mode off: Reply length 32k tokens → auto · Keep loaded 30 min → while open · Tries per fix 12 → 8 · Steps per request 120 → 40 · Command output 160 lines → 80 lines · Command timeout 10 min → 2 min.');
+  const tinyAt = srv.chats.findIndex((c) => c.model === 'tiny:3b');
+  expect(tinyAt).toBeGreaterThan(0);
+  expect(srv.thinks[tinyAt]).toBe(undefined); // tiny cannot think: nothing asked
+  expect(srv.predicts[tinyAt]).toBe(2048); // …and no room for thinking either
+  expect(srv.keeps[tinyAt]).toBe(-1);
+  // laguna's own came back with it; esc went back to the list, and nothing switched
+  expect(s.again).toMatch(/Thinking\s+◀ Max\s+▶ \s/);
+  expect(s.again).toMatch(/Context\s+◀ 128k\s+▶/);
+  expect(s.again).toMatch(/Steps per request\s+◀ 120\s+▶/);
+  expect(s.again).toMatch(/Command timeout\s+◀ 10 min\s+▶/);
+  expect(s.again).toMatch(/Reply length\s+◀ 32k tokens\s+▶/);
+  expect(s.again).toMatch(/Keep loaded\s+◀ 30 min\s+▶/);
+  expect(s.list).toMatch(/Filter\s+laguna/); // the list as it was left
+  expect(s.list).toMatch(/❯ laguna-s-2\.1:latest/);
+  const saved = settingsOf(base);
+  expect(saved.remote.model).toBe('tiny:3b');
+  expect(saved.remote.tuned).toEqual({ 'laguna-s-2.1:latest': { level: 'high', limits: { replyTokens: 32768, keepLoaded: 1800, timeoutSecs: 600, steps: 120 } } });
+  expect(saved.remotes.openai.tuned).toEqual(saved.remote.tuned);
+  expect(saved.remote.contexts).toEqual({ 'laguna-s-2.1:latest': 131072 });
+  // nothing of it in the shared limits
+  expect(saved.limits ?? {}).toEqual({});
 }, T);
