@@ -1,7 +1,7 @@
 // Instructions: local vs remote (the Arena → ▶ Run a test, `/test remote-rules`; 2 Oct 2026): one model
 // on a service (/remote's Another service, an Ollama) plays the same tasks with each set of prompt
 // files (terminal/src/agent/prompt-files.mjs): the local set, the one the 9–12B models on this Mac get
-// (terminal/rules), then the remote set (terminal/rules/remote: HARNESS.md, its TOOLS.md, nine guides
+// (terminal/rules), then the remote set (terminal/rules/remote: HARNESS.md, its TOOLS.md, fourteen guides
 // and its skills), then the remote set with its skills off (a skill takes a request off the app's
 // focused change and fix paths, so whether they help is measured, not assumed). The app decides on
 // every side. The tasks: the Practice 28 and the 10 hard ones (30–39), each through
@@ -146,7 +146,7 @@ const chips = alone ? [{ text: `${judged.reduce((n, j) => n + j.a.passed, 0)} of
 ]);
 const changed = [
   '<b>Local.</b> The instructions the models on this Mac get (terminal/rules): the built-in opening, Work habits, Fixing a bug and Rules, TOOLS.md\'s Tool use lines, and no skills on.',
-  '<b>Remote.</b> terminal/rules/remote: HARNESS.md\'s opening, How you work and rules, its TOOLS.md, the nine guides it opens by name (RULES/<NAME>.md), and four skills (Write a test, Review code, Refactor, Flaky test) that come with a request whose words they use.',
+  '<b>Remote.</b> terminal/rules/remote: HARNESS.md\'s opening, How you work and rules, its TOOLS.md, the fourteen guides it opens by name (RULES/<NAME>.md), and four skills (Write a test, Review code, Refactor, Flaky test) that come with a request whose words they use.',
   '<b>Remote, skills off.</b> The same, with no skills: so no request leaves the app\'s focused change and fix paths for a skill\'s steps.',
   '<b>The same on every side.</b> The model, its context (the size it is loaded at on the service), Effort Low, the app deciding, the tasks and their checks.',
 ];

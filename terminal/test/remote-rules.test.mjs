@@ -13,6 +13,7 @@ const { rulesSetOf, savedInstructions, readPromptFile, readGuides, guidesList, r
 const { systemPrompt, promptSetOf, SESSION_MARK } = await import('../src/agent/prompt.mjs');
 const { wayPrompt, MODEL_TOOL_LINES, ANSWER_HABIT } = await import('../src/agent/way.mjs');
 const { prepare, execute } = await import('../src/agent/tools.mjs');
+const { permissionsTable, decide, MODES } = await import('../src/agent/permissions.mjs');
 const { fileInfo, validateFile, saveFile, FILES } = await import('../src/app/prompt-files-hub.mjs');
 const { LIMITS } = await import('../src/app/limits.mjs');
 const { instructionsRoute } = await import('../src/app/instructions-hub.mjs');
@@ -279,5 +280,58 @@ test('a helper (the Agent tool) under a forced row keeps its parent\'s set: remo
     expect(first.messages[0].content).toContain('- RULES/SUBAGENTS.md:'); // the Agent tool is offered, so its guide is listed
     expect(helper.messages[0].content).toContain('# You are a helper');
     expect(helper.messages[0].content).toContain('\nHow you work\n');
+  } finally { await fake.close(); }
+});
+
+
+test('the second round (2 Oct): CONTEXT, PERMISSIONS, DEBUGGING, RECOVERY and SECURITY listed; verification, handoff, style and packages merged in', () => {
+  expect(GUIDES).toEqual(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MEMORY', 'GIT', 'ANSWERS']);
+  const p = systemPrompt({ cwd: proj, git: 'g', set: 'remote' });
+  for (const g of ['CONTEXT', 'PERMISSIONS', 'DEBUGGING', 'RECOVERY', 'SECURITY']) expect(p).toContain(`- RULES/${g}.md: `);
+  expect(p).toContain('- RULES/DEBUGGING.md: when the cause of a problem is not known yet');
+  expect(harnessOf().how).toContain('Commands here have no internet: use the packages already installed.');
+  expect(harnessOf().how).toContain("read a neighbouring file for its naming, formatting, comment density and how it handles errors");
+  const read = (g) => readFileSync(join(SOURCE, 'remote', `${g}.md`), 'utf8');
+  expect(PF.sectionOf(read('TESTING'), 'Prove the claim')).toContain('not "should work"');
+  expect(PF.sectionOf(read('ANSWERS'), 'Hand off')).toContain('The exact next command');
+  for (const g of ['VERIFICATION', 'HANDOFF', 'STYLE', 'DEPS']) expect(existsSync(join(SOURCE, 'remote', `${g}.md`))).toBe(false);
+  // no guide tells the model to undo with commands that wipe others' work
+  for (const g of GUIDES) for (const line of read(g).split('\n').filter((l) => /git (stash|bisect|checkout|reset|clean)/.test(l))) expect([g, line]).toEqual([g, expect.stringMatching(/never/i)]);
+});
+
+test('PERMISSIONS comes with the table of right now, and the table says what the app really decides, in every mode', async () => {
+  const row = { edit: 'Edit or Write a file', protect: 'A protected file', readCmd: 'A command that only reads', cmd: 'Any other command', commit: 'git commit', web: 'WebSearch and WebFetch' };
+  const steps = { edit: ['Edit', { path: 'a.js', old_text: 'a', new_text: 'b' }, 'a.js'], protect: ['Edit', { path: '.env', old_text: 'a', new_text: 'b' }, '.env'], readCmd: ['Bash', { command: 'git status' }], cmd: ['Bash', { command: 'npm run build' }], commit: ['Bash', { command: 'git commit -m x' }], web: ['WebFetch', { url: 'https://example.com' }] };
+  const kind = (d) => ({ allow: 'runs', deny: 'refused', check: 'check' }[d.decision] ?? 'ask');
+  const said = (cell) => (/^refused/.test(cell) ? 'refused' : /^runs/.test(cell) ? 'runs' : /checks/.test(cell) ? 'check' : 'ask');
+  for (const mode of MODES) {
+    const t = permissionsTable({ mode });
+    for (const [k, [name, args, rel]] of Object.entries(steps)) {
+      const cell = t.split('\n').find((l) => l.startsWith(`| ${row[k]}`)).split('|')[2].trim();
+      expect([mode, k, said(cell)]).toEqual([mode, k, kind(decide(name, args, { mode, cwd: proj, rel, rules: {}, allowedPrefixes: new Set() }))]);
+    }
+  }
+  const t = permissionsTable({ mode: 'plan', rules: { allow: ['npm test'], never: ['npm publish'], protect: ['secrets/**'] }, session: new Set(['git add']) });
+  expect(t).toContain('Mode: Plan.');
+  expect(t).toContain('allowed without asking: "npm test"; never: "npm publish"; protected: "secrets/**"');
+  expect(t).toContain('Allowed for this session: "git add".');
+  expect(t).toContain('git push sends your code off this Mac');
+  // read through the tool: the guide, then the table; without the app's side, the guide alone
+  const env = { cwd: proj, rulesSet: 'remote', agents: false, permissionsNow: () => ({ mode: 'edits', rules: { never: ['npm publish'] }, session: [] }) };
+  const r = (await execute('Read', { path: 'RULES/PERMISSIONS.md' }, null, env)).text;
+  expect(r.startsWith('RULES/PERMISSIONS.md:\n## How permission works here')).toBe(true);
+  expect(r).toContain('## Right now (from the app, as you read this)\n\nMode: Accept edits.');
+  expect(r).toContain('never: "npm publish"');
+  expect((await execute('Read', { path: 'RULES/PERMISSIONS.md' }, null, { ...env, permissionsNow: undefined })).text).not.toContain('Right now');
+});
+
+test('the agent hands Read its mode and rules: a remote model opening PERMISSIONS sees the mode it is in', async () => {
+  const fake = await startFakeServer([{ tool: { name: 'Read', args: { path: 'RULES/PERMISSIONS.md' } } }, { text: 'Read it.' }]);
+  try {
+    const a = new Agent({ url: fake.url, model: remote, cwd: proj, system: systemPrompt({ cwd: proj, git: 'none' }), memory: false, flows: false, verify: false, mode: 'plan', permissions: { allow: [], never: ['npm publish'], protect: [] } });
+    await a.send('what am I allowed to do here?');
+    const result = a.messages.find((m) => m.role === 'tool').content;
+    expect(result).toContain('Mode: Plan.');
+    expect(result).toContain('never: "npm publish"');
   } finally { await fake.close(); }
 });

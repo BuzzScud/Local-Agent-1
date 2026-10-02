@@ -461,3 +461,46 @@ export function decide(name, args, ctx) {
   const { why, ...d } = judge(name, args, ctx);
   return d;
 }
+
+// ---- the remote set's PERMISSIONS guide (prompt-files.mjs) -------------------------------------
+
+const MODE_NAMES = { auto: 'Auto', ask: 'Manual', edits: 'Accept edits', plan: 'Plan', bypass: 'Bypass permissions' };
+// What each kind of step does in a mode, as judge() decides it.
+const STEPS = {
+  edit: { ask: 'asks first', edits: 'runs', auto: 'runs', plan: 'refused', bypass: 'runs' },
+  protect: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs' },
+  readCmd: { ask: 'runs', edits: 'runs', auto: 'runs', plan: 'runs', bypass: 'runs' },
+  cmd: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'refused', bypass: 'runs' },
+  commit: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs' },
+  web: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'asks first', bypass: 'runs' },
+};
+// "Right now": a table of what runs, asks or is refused in this mode, with the user's own rules,
+// added to PERMISSIONS.md when the model reads it, so the guide never disagrees with the app.
+export function permissionsTable({ mode = 'ask', rules = null, session = [] } = {}) {
+  const m = MODES.includes(mode) ? mode : 'ask';
+  const blocked = [...new Set(BLOCKED.map((b) => b.why))];
+  const list = (xs) => (xs?.length ? xs.map((x) => `"${x}"`).join(', ') : 'none');
+  const rows = [
+    ['Read, List and Search inside the project', 'runs'],
+    ['Edit or Write a file in the project', STEPS.edit[m]],
+    [`A protected file (${[...PROTECTED.slice(0, 5), ...(rules?.protect ?? [])].join(', ')}…)`, STEPS.protect[m]],
+    ['A command that only reads (ls, cat, git status, git diff…)', STEPS.readCmd[m]],
+    ['Any other command', `${STEPS.cmd[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', unless a rule below allows it' : ''}`],
+    ['git commit', STEPS.commit[m]],
+    ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
+    ['Files or commands outside the project, the internet from a command', 'refused (the sandbox)'],
+    ['Agentic Coder\'s own settings and rules', 'refused'],
+  ];
+  return `## Right now (from the app, as you read this)
+
+Mode: ${MODE_NAMES[m]}.
+
+| Step | Here |
+|---|---|
+${rows.map(([a, b]) => `| ${a} | ${b} |`).join('\n')}
+
+Always refused, in every mode (what each would do): ${blocked.join('; ')}.
+
+The user's rules (/permissions): allowed without asking: ${list(rules?.allow)}; never: ${list(rules?.never)}; protected: ${list(rules?.protect)}.
+Allowed for this session: ${list([...(session ?? [])])}.`;
+}
