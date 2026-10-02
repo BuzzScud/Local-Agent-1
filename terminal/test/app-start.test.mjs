@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
-import { T, setup, quit, seedTrust } from './app-setup.mjs';
+import { T, setup, quit, quitTyped, seedTrust } from './app-setup.mjs';
 import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
 // The stand-in plays the default model (its file name and its name on screen).
@@ -120,7 +120,8 @@ test('typed in the home folder: where to start comes first; 2 starts in Agentic 
   const a = mk();
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd: a.home, env: a.env, args: ['--url', fake.url, '--no-flows'], steps: [
-    { wait: 'Where to start' }, { sleep: 200 }, { snapshot: 'menu' }, { type: '2' }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' }, ...quit,
+    { wait: 'Where to start' }, { sleep: 200 }, { snapshot: 'menu' }, { type: '2' }, { wait: '? for shortcuts' }, { sleep: 300 }, { snapshot: 'start' },
+    { type: 'hello there' }, { wait: '> hello there' }, ...quitTyped, // typing reaches the prompt box after the menu
   ] });
   await fake.close();
   expect(r.snapshots.menu).toContain('❯ 1. ~ · your home folder');
