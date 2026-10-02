@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { familyNote, workedOut } from '../src/app/remote-specialties.mjs';
+import { familyNote, workedOut, categoryOf, categoryGroups } from '../src/app/remote-specialties.mjs';
 import { countedRight } from '../src/app/remote-hub.mjs';
 
 // A small Ollama: a loaded coder, a thinker, a chat-only model that counts wrong,
@@ -80,7 +80,7 @@ test('nothing saved with /remote: the page says how to connect one, and the hub 
   expect(o.hub).toContain('<button data-tab="remote">Remote</button>');
 });
 
-test('an Ollama service: its models in the groups /model uses, each with what it is good at; Claude saved without a key is not ready', () => {
+test('an Ollama service: its models by category, biggest first, each with what it is good at; Claude saved without a key is not ready', () => {
   const o = inChild(`out.data = await get('/remote.json');`, { settings: SAVED });
   const d = o.data;
   expect(d.state).toBe('ok');
@@ -88,11 +88,14 @@ test('an Ollama service: its models in the groups /model uses, each with what it
   expect(d.services.map((s) => [s.id, s.ready, s.inUse])).toEqual([['claude', false, false], ['openai', true, true]]);
   expect(d.services[0].problem).toContain('needs an API key');
   expect(d.services.some((s) => 'profile' in s)).toBe(false); // the saved set-up (and its key) stays on the hub's side
-  const g = Object.fromEntries(d.groups.map((x) => [x.id, x.ids]));
-  expect(g.loaded).toEqual(['qwen3-coder-next:latest']);
-  expect(g.agent).toContain('gpt-oss:120b');
-  expect(g.chat).toEqual(['deepseek-coder-v2:latest']);
-  expect(g.helpers).toEqual(['embeddinggemma:latest']);
+  // By what each is for, biggest first; loaded or not does not move a card.
+  expect(d.groups.map((x) => [x.id, x.ids])).toEqual([
+    ['coding', ['qwen3-coder-next:latest', 'deepseek-coder-v2:latest']],
+    ['thinking', ['gpt-oss:120b']],
+    ['helpers', ['embeddinggemma:latest']],
+    ['unlisted', ['laguna-xs-2.1:latest']],
+  ]);
+  expect(d.groups.every((x) => x.ranked)).toBe(true);
   const q = d.models.find((m) => m.id === 'qwen3-coder-next:latest');
   expect(q.loaded).toBe(true);
   expect(q.specialties.note.family).toBe('Qwen 3 Coder (Alibaba)');
@@ -191,4 +194,20 @@ test('Try it is right only when all twenty numbers come back in order', () => {
   expect(countedRight('1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20')).toBe(true);
   expect(countedRight('1 2 3 4 5 … 20')).toBe(false);
   expect(countedRight('')).toBe(false);
+});
+
+test('the categories: helpers and unlisted first, then coding, thinking, pictures, general; each biggest first', () => {
+  expect(categoryOf({ id: 'functiongemma:latest', known: true, tools: true, params: '268.10M' })).toBe('helpers');
+  expect(categoryOf({ id: 'embeddinggemma:latest', embedding: true, params: '307.58M' })).toBe('helpers');
+  expect(categoryOf({ id: 'laguna-xs-2.1:latest', known: false })).toBe('unlisted');
+  expect(categoryOf({ id: 'qwen3-coder:30b', known: true, tools: true, thinking: true })).toBe('coding'); // coding wins over thinking
+  expect(categoryOf({ id: 'gpt-oss:120b', known: true, thinking: true })).toBe('thinking');
+  expect(categoryOf({ id: 'llama4:latest', known: true, vision: true, tools: true })).toBe('pictures');
+  expect(categoryOf({ id: 'phi4:latest', known: true, params: '14.7B' })).toBe('general');
+  const g = categoryGroups([
+    { id: 'qwen2.5-coder:14b', known: true, params: '14.8B' }, { id: 'qwen2.5-coder:32b', known: true, params: '32.8B' },
+    { id: 'qwen3-coder-next:latest', known: true, params: '79.7B' }, { id: 'laguna-s', known: false, bytes: 14e9 }, { id: 'laguna-xs', known: false, bytes: 4e9 },
+  ]);
+  expect(g.map((x) => [x.id, x.ids])).toEqual([['coding', ['qwen3-coder-next:latest', 'qwen2.5-coder:32b', 'qwen2.5-coder:14b']], ['unlisted', ['laguna-s', 'laguna-xs']]]);
+  expect(g.find((x) => x.id === 'unlisted').fold).toBe(true);
 });

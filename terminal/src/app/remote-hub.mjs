@@ -3,7 +3,7 @@
 // apart from the app's windows, so it reads the services from settings.json
 // ("remotes", and "remote" for the one in use) and each key from the Keychain;
 // a key never reaches the page.
-//   GET  /remote.json?service=<id>          the saved services, and that one's models (its cards)
+//   GET  /remote.json?service=<id>          the saved services, and that one's models (its cards, by category, biggest first)
 //   GET  /remote/model.json?service=&id=    one model in full: the service's details, what it is good at, our results
 //   POST /remote/try     { service, id }    asks it to count to 20: the answer, ✔ or ✗, the time and the speed (kept)
 //   POST /remote/load    { service, id }    loads it on an Ollama service now, at the context the app would ask for
@@ -20,8 +20,7 @@ import {
 } from '../../../models/index.mjs';
 import { loadSettings } from './store.mjs';
 import { remotesOf, readyRemote, sourceWord } from './remote-form.mjs';
-import { groupsOf } from './remote-models.mjs';
-import { specialtiesOf } from './remote-specialties.mjs';
+import { specialtiesOf, categoryGroups } from './remote-specialties.mjs';
 
 const noStore = { 'cache-control': 'no-store' };
 const json = (body, status = 200) => Response.json(body, { status, headers: noStore });
@@ -103,22 +102,8 @@ export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {
     }
     if (r.kind === 'openai') {
       const cat = await ollamaCatalog({ url: c.url, key: c.key, timeoutMs: 10_000 });
-      if (cat) {
-        const g = groupsOf(cat.models, sv.model);
-        const shown = new Set([...g.loaded, ...g.agent, ...g.chatOnly, ...(g.helpers ?? [])].map((m) => m.id));
-        // Before the helpers group (2 Oct 2026) an embedder was left out of the groups; here it is a helper.
-        const helpers = g.helpers ?? cat.models.filter((m) => !shown.has(m.id));
-        const ids = (l) => l.map((m) => m.id);
-        return {
-          server: `Ollama ${cat.version}`, ollama: true, models: cat.models.map((m) => ({ ...m, kind: 'ollama' })),
-          groups: [
-            { id: 'loaded', text: 'Loaded now', note: 'in the service\'s memory: the first reply does not wait', ids: ids(g.loaded) },
-            { id: 'agent', text: 'Can run the agent', note: 'loads when first used', ids: ids(g.agent) },
-            { id: 'chat', text: 'Chat only', note: 'no tools: no file reads, edits or commands', ids: ids(g.chatOnly), fold: true },
-            { id: 'helpers', text: 'Helpers', note: 'pictures, search, small jobs', ids: ids(helpers), fold: true },
-          ].filter((x) => x.ids.length),
-        };
-      }
+      // Cards by what each model is for, biggest first (categoryGroups); a loaded one keeps its mark.
+      if (cat) return { server: `Ollama ${cat.version}`, ollama: true, models: cat.models.map((m) => ({ ...m, kind: 'ollama' })), groups: categoryGroups(cat.models) };
       const res = await fetch(`${c.url.replace(/\/+$/, '')}/v1/models`, { headers: c.key ? { authorization: `Bearer ${c.key}` } : {}, signal: AbortSignal.timeout(10_000) });
       if (res.status === 401 || res.status === 403) throw new Error(c.key ? 'the API key was not accepted' : 'it needs an API key: add one in /remote');
       const j = await res.json().catch(() => null);
