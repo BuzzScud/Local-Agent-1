@@ -15,7 +15,7 @@
 // The technical recoveries stay on both ways: a reply that repeats itself, a call cut off at the
 // reply limit, thinking that ran out of room, the step limit, the same step three times.
 
-import { toolUseText } from './prompt-files.mjs';
+import { toolUseText, toolUseFor } from './prompt-files.mjs';
 
 export const WAYS = ['app', 'model'];
 export const wayOf = (v) => (v === 'model' ? 'model' : 'app');
@@ -113,7 +113,8 @@ export function wayPrompt(system, way) {
   if (typeof system !== 'string') return system;
   if (way !== 'model') {
     if (!system.includes(MODEL_TOOL_LINES)) return system;
-    const back = toolUseText().includes(ONE_AT_A_TIME) ? system.replace(MODEL_TOOL_LINES, ONE_AT_A_TIME) : system.replace(`\n${MODEL_TOOL_LINES}`, '');
+    const lines = system.includes('\nHow you work\n') ? toolUseFor('remote') : toolUseText();
+    const back = lines.includes(ONE_AT_A_TIME) ? system.replace(MODEL_TOOL_LINES, ONE_AT_A_TIME) : system.replace(`\n${MODEL_TOOL_LINES}`, '');
     return back.replace(`\n${ANSWER_HABIT}`, '');
   }
   if (system.includes(MODEL_TOOL_LINES)) return system;
@@ -124,8 +125,9 @@ export function wayPrompt(system, way) {
     const end = tools >= 0 ? s.indexOf('\n\n', tools + 1) : -1;
     if (end > 0) s = `${s.slice(0, end)}\n${MODEL_TOOL_LINES}${s.slice(end)}`;
   }
-  // After the Work habits' last line, when the prompt has them (AGENTIC_PROMPT=old does not).
-  const habits = s.indexOf('Work habits\n');
+  // After the Work habits' last line, when the prompt has them (AGENTIC_PROMPT=old does not),
+  // or the remote set's How you work.
+  const habits = s.includes('Work habits\n') ? s.indexOf('Work habits\n') : s.indexOf('How you work\n');
   if (habits >= 0) {
     const end = s.indexOf('\n\n', habits);
     if (end > 0) s = `${s.slice(0, end)}\n${ANSWER_HABIT}${s.slice(end)}`;

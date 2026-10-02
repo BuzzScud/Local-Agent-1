@@ -7,7 +7,7 @@ import { instructionBlock } from './instructions.mjs';
 import { RULES } from './rules.mjs';
 import { memoryNotes } from './facts.mjs';
 import { rulesRoomFor } from './room.mjs';
-import { toolUseText, TOOL_USE_OLD, readSkills, skillsList, skillPath } from './prompt-files.mjs';
+import { toolUseText, toolUseFor, TOOL_USE_OLD, readSkills, skillsList, skillPath, readGuides, guidesList, guidePath, harnessOf } from './prompt-files.mjs';
 
 // The home folder and its Desktop, Documents and Downloads: places to start
 // from, not projects. Agentic Coder answers from what it knows there, and goes into a
@@ -212,11 +212,49 @@ export function stayRule(cwd, home = homedir()) {
   return `- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; ${vague} A file the user wants "on my desktop" is made in this folder, and you say where it is.`;
 }
 
+// This session's part: the same on both sets.
+function sessionPart({ cwd, notes, git, today, tests, now }) {
+  return `${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}${isHomeFolder(cwd) ? `\n${HOME_NOTE}` : ''}
+${notes ? `\nProject notes\n${now ? `${NOTES_RANK}\n\n` : ''}${notes}\n` : ''}`;
+}
+
+// The instructions for a model on another machine (prompt-files.mjs, the remote set):
+// HARNESS.md's opening, how it works and its rules in place of the built-in ones, the remote
+// TOOLS.md, then the guides and skills it opens by name. The hub's shared working instructions,
+// the stay rule and this session's part are the same as on this Mac. agents: the Agent tool is
+// offered, so the helpers guide is listed.
+function remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents }) {
+  const h = harnessOf();
+  const guides = guidesList(readGuides('remote', { agents }), { path: guidePath(cwd), intro: h.guides });
+  const list = skillsList(skills ?? readSkills(undefined, 'remote'), { path: skillPath(cwd) });
+  return `${h.who}
+
+${instructionBlock(instructions)}
+
+Tool use
+${toolUse ?? toolUseFor('remote')}
+
+How you work
+${h.how}
+
+${guides ? `${guides}\n\n` : ''}${list ? `${list}\n\n` : ''}${example ? `${EXAMPLE}\n` : ''}Rules
+${stayRule(cwd)}
+${h.rules}
+
+${math ? `${math}\n\n` : ''}${sessionPart({ cwd, notes, git, today, tests, now: true })}`;
+}
+
+// Which set a prompt was built with: the remote one has its own "How you work" part.
+export const REMOTE_PART = '\nHow you work\n';
+export const promptSetOf = (system) => (typeof system === 'string' && system.includes(REMOTE_PART) ? 'remote' : 'local');
+
 // toolUse and skills: terminal/rules/TOOLS.md and SKILLS.md as they are now
 // (prompt-files.mjs); the old prompt keeps the Tool use lines it had and no skills.
-export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions, toolUse, skills }) {
+// set 'remote': the remote set's instructions (remotePrompt); AGENTIC_PROMPT=old keeps the old local one.
+export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false }) {
   const today = localDay(date);
   const now = promptVersion() !== 'old';
+  if (set === 'remote' && now) return remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents });
   const tooling = toolUse ?? (now ? toolUseText() : TOOL_USE_OLD);
   const list = now ? skillsList(skills ?? readSkills(), { path: skillPath(cwd) }) : '';
   return `You are Agentic Coder, a coding assistant in the user's terminal on their Mac. You work inside one project folder and use tools to read, search, change and test code. You can see the files only through your tools.
@@ -233,6 +271,5 @@ ${now ? stayRule(cwd) : STAY_OLD}
 - These commands are blocked: rm -rf, sudo, git push, git reset --hard, kill, pkill, killall.
 - If the user only asks a question, answer it from the code you read; do not change files or build scratch experiments to find out.
 
-${math ? `${math}\n\n` : ''}${SESSION_MARK}Today: ${today}. macOS, zsh. Git: ${git}.${tests ? `\nRun the tests with: ${tests}` : ''}${isHomeFolder(cwd) ? `\n${HOME_NOTE}` : ''}
-${notes ? `\nProject notes\n${now ? `${NOTES_RANK}\n\n` : ''}${notes}\n` : ''}`;
+${math ? `${math}\n\n` : ''}${sessionPart({ cwd, notes, git, today, tests, now })}`;
 }

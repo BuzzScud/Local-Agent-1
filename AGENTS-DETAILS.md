@@ -115,6 +115,19 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   folder of its own, so the shipped files never decide what it sees (`terminal/test/prompt-files.test.mjs`).
   The Arena's Skills check measures a skill on the real model.
 
+- **The remote set** (`terminal/rules/remote/`, 2 Oct 2026, the owner's ask: "make a separate one for remote
+  models to follow, since they have more capabilities"): HARNESS.md, its own TOOLS.md and SKILLS.md, and nine guides
+  the model opens with Read at `RULES/<NAME>.md` (prompt-files.mjs `readGuides`, `readGuidePath`; prompt.mjs
+  `remotePrompt`). The owner's picks: every remote model gets it (auto), all twelve files, the guides as a list the
+  model opens (like Claude Code's skills), and the app still decides. The agent picks the set each message
+  (`rulesSet()`: settings.json `"instructions"`, saved from the hub's tab 09, and `AGENTIC_INSTRUCTIONS`
+  over it; not an /effort row, since that panel is as tall as 80×24 allows); a prompt built for the other set is built
+  again once (`promptSetOf`), a helper takes its parent's row and never reloads. The local instructions stay the
+  same letter for letter (`terminal/test/remote-rules.test.mjs`). A rebuild of the rules brings the memory only
+  when the agent has one (`notesFrom`), so a practice run never reads the owner's. Measured by
+  `models/evals/tools/remote-rules-ab.mjs` (the Arena's `remote-rules` and `hard`); the hard tasks (30–39) are
+  `bench/run.mjs --set hard` and never run without `--set` or `--only`.
+
 - **Look first** (`terminal/src/agent/look.mjs`, the last /effort row, since 30 Sep 2026): auto follows
   Effort (Low none, Medium 15 s, High 30 s). It is the last row so the rows above keep their places for
   the app tests that move with the arrow keys; the panel keeps 22 lines because the keys' hint sits on

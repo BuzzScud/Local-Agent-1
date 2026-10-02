@@ -13,10 +13,10 @@ import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
 import { decide, isReadOnly, offerFor, protectedBy, ownBy } from './permissions.mjs';
-import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom } from './prompt.mjs';
+import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom, promptSetOf } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
-import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseText } from './prompt-files.mjs';
+import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseFor, rulesSetOf, readGuides, guidesList, guidePath, harnessOf } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
 import { pickPieces, studioNotes, buildStyles, buildNote, isBuilt } from './studio.mjs';
@@ -437,7 +437,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -493,7 +493,13 @@ export class Agent extends EventEmitter {
     this.testCmd = verify ? testCommand(cwd) : null;
     this.messages = [{ role: 'system', content: wayPrompt(system, this.way) }];
     this.workingInstructions = readInstructions().sections;
-    this.promptStampUsed = this.promptStamp();
+    // The instructions set (prompt-files.mjs): a prompt built for the other set than this
+    // model's (the app and coding -p build the local one) is built again here, once. A helper
+    // gets its parent's row, so the prompt it was given (the parent's set) is kept.
+    this.instructionsSet = instructions ?? null;
+    this.rulesSetUsed = promptSetOf(system);
+    this.promptStampUsed = this.rulesSetUsed === this.rulesSet() ? this.promptStamp() : null;
+    if (this.promptStampUsed === null && typeof system === 'string') this.refreshNotes();
     this.allowedPrefixes = new Set();
     this.readFiles = new Set(); // files read (or written) in this conversation
     this.todos = null;
@@ -502,6 +508,14 @@ export class Agent extends EventEmitter {
     this.stats = { tps: null, pps: null, outTokens: 0, requests: 0 };
   }
 
+  // Which set (prompt-files.mjs rulesSetOf): null follows settings.json "instructions" (auto by
+  // default: the remote set for a model on another machine). Read before each message, so a switch
+  // of model or of the saved choice applies then. A helper is handed its parent's set.
+  instructionsSet = null;
+  rulesSet() { return rulesSetOf(this.instructionsSet, this.model); }
+  // The memory goes with the rules when it is on, as it did when the conversation started
+  // (App.jsx, headless.mjs): a practice run without it never reads the user's own.
+  notesFrom() { return { memory: Boolean(this.memory), home: this.memory?.home }; }
   // The prompt of this way: the model's own tool lines when it decides (way.mjs wayPrompt).
   setSystem(system) { this.messages[0] = { role: 'system', content: wayPrompt(system, this.way) }; }
   // The tools the model is offered: the app's eight, and its own five when it decides.
@@ -554,9 +568,18 @@ export class Agent extends EventEmitter {
   get notesRoomNow() { return this.rulesRoom || notesRoom(this.ctx); }
   get upFrontNow() { return this.upFront || upFrontFor(this.ctx); }
   // The rules or the context changed what the room comes to: the rules are read again once, before the next message.
+  // So is the set (/effort's Instructions row, or a model on another machine now): said in a note.
   syncRules() {
+    if (this.rulesSetUsed !== undefined && this.rulesSetUsed !== this.rulesSet()) {
+      this.refreshNotes();
+      this.emit('note', { text: this.setNote(), tone: 'dim' });
+      return;
+    }
     if (this.notesRoomUsed === undefined || this.notesRoomUsed === this.notesRoomNow) return;
     this.refreshNotes();
+  }
+  setNote() {
+    return this.rulesSetUsed === 'remote' ? 'Remote instructions (terminal/rules/remote): HARNESS.md, TOOLS.md, the guides and the skills, for a model on another machine.' : 'Local instructions (terminal/rules), as on this Mac.';
   }
   // The rules changed (/rules): the next message reads them. The instructions
   // are read again once, as after a move to another folder.
@@ -564,14 +587,21 @@ export class Agent extends EventEmitter {
     const before = tokensOf(this.messages[0].content);
     this.notesRoomUsed = this.notesRoomNow;
     this.promptStampUsed = this.promptStamp();
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed).text, git: gitSummary(this.cwd), instructions: this.workingInstructions }));
+    this.rulesSetUsed = this.rulesSet();
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn() }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // The prompt files as they are now: the rules files (AGENTS.md or CLAUDE.md, whole, without
   // the memory), TOOLS.md's Tool use lines and SKILLS.md's list (prompt-files.mjs). A change to
-  // any of them, saved in the hub or anywhere else, is read before the next message.
+  // any of them, saved in the hub or anywhere else, is read before the next message. With them
+  // the set this model gets, and on the remote set HARNESS.md and the guides' list.
   promptStamp() {
-    try { return `${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseText()}\u0000${skillsList(readSkills(), { path: skillPath(this.cwd) })}`; } catch { return null; }
+    try {
+      const set = this.rulesSet();
+      const agents = this.agentsOn();
+      const remote = set === 'remote' ? `${JSON.stringify(harnessOf())}\u0000${guidesList(readGuides(set, { agents }), { path: guidePath(this.cwd) })}` : '';
+      return `${set}\u0000${set === 'remote' ? agents : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set)}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
+    } catch { return null; }
   }
   promptFilesChanged() {
     const now = this.promptStamp();
@@ -587,7 +617,8 @@ export class Agent extends EventEmitter {
     this.rewind?.moved(dir);
     this.testCmd = this.verify ? testCommand(dir) : null;
     this.notesRoomUsed = this.notesRoomNow;
-    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed).text, git: gitSummary(dir), instructions: this.workingInstructions }));
+    this.rulesSetUsed = this.rulesSet();
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn() }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.promptStampUsed = this.promptStamp();
     this.readFiles = new Set();
@@ -1044,9 +1075,11 @@ export class Agent extends EventEmitter {
       this.emit('note', { text: 'Updated working instructions loaded.', tone: 'dim' });
     }
     // A save of AGENTS.md, TOOLS.md or SKILLS.md (the hub's Prompt files) applies between tasks too.
-    if (this.promptFilesChanged()) {
+    // Not in a helper: its one task keeps the prompt it was handed (the parent's, with its part).
+    if (!this.isHelper && this.promptFilesChanged()) {
+      const was = this.rulesSetUsed;
       this.refreshNotes();
-      this.emit('note', { text: 'Updated prompt files loaded (AGENTS.md, TOOLS.md, SKILLS.md).', tone: 'dim' });
+      this.emit('note', { text: was === this.rulesSetUsed ? 'Updated prompt files loaded (AGENTS.md, TOOLS.md, SKILLS.md).' : this.setNote(), tone: 'dim' });
     }
     this.busy = true;
     const started = Date.now();
@@ -1125,7 +1158,7 @@ export class Agent extends EventEmitter {
     // the request on both ways. On App the work goes step by step with them, not down a focused
     // path. Model way used to get only the list and had to Read the skill itself.
     let skill = null;
-    if (!follow) { try { skill = pickSkill(text); } catch {} }
+    if (!follow) { try { skill = pickSkill(text, readSkills(undefined, this.rulesSetUsed ?? this.rulesSet())); } catch {} }
     // First the focused paths (rename / fix / change); the loop handles the rest.
     // (The model that decides calls them itself: Rename and TestFirst.)
     this.carried = null;
@@ -2266,7 +2299,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', agents: this.agentsOn(), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -2461,7 +2494,7 @@ export class Agent extends EventEmitter {
     const helper = new Agent({
       url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind), thinking: this.thinking, effort: this.effort, ctx: this.ctx,
       mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash,
-      way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, permissions: this.permissions, waitForServer: this.waitForServer,
+      way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
     });

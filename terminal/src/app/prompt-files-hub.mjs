@@ -3,6 +3,9 @@
 //   AGENTS.md  the chosen folder's own rules file (the page's Folder menu)
 //   TOOLS.md   terminal/rules/TOOLS.md: the "Tool use" part of the instructions
 //   SKILLS.md  terminal/rules/SKILLS.md: steps a request's words bring
+// and the remote set (2 Oct 2026, terminal/rules/remote/, prompt-files.mjs): its TOOLS.md and
+// SKILLS.md behind tabs 07–08's Local | Remote switch, and HARNESS.md and the nine guides on
+// tab 09 ("remote:<name>": remote:tools, remote:skills, remote:harness, remote:PLANNING …).
 // A save never overwrites a newer change made elsewhere (another window, an
 // editor, another session): the file's revision must match. The text before
 // each save is kept (20 a file) in ~/.agentic-coder/prompt-files/, so Undo
@@ -13,12 +16,19 @@ import { homedir } from 'node:os';
 import { createHash, randomUUID } from 'node:crypto';
 import { instructionHome } from '../agent/instructions.mjs';
 import { projectNotes, notesRoom } from '../agent/prompt.mjs';
-import { BUILT_IN, PROMPT_FILES, rulesDir, readPromptFile, sectionOf, toolUseText, parseSkills, skillProblems, skillsList, pickSkill, skillNote } from '../agent/prompt-files.mjs';
+import { BUILT_IN, BUILT_IN_REMOTE, PROMPT_FILES, REMOTE_DIR, GUIDES, rulesDir, readPromptFile, sectionOf, toolUseText, parseSkills, skillProblems, skillsList, pickSkill, skillNote, readGuides } from '../agent/prompt-files.mjs';
 
-export const FILES = Object.freeze(['agents', 'tools', 'skills']);
-export const FILE_NAMES = Object.freeze({ agents: 'AGENTS.md', ...PROMPT_FILES });
-// Hard limits a save checks. TOOLS.md is in every conversation, so it stays small.
-export const FILE_LIMITS = Object.freeze({ agents: 60_000, tools: 4_000, skills: 40_000 });
+export const REMOTE_FILES = Object.freeze(['remote:tools', 'remote:skills', 'remote:harness', ...GUIDES.map((g) => `remote:${g}`)]);
+export const FILES = Object.freeze(['agents', 'tools', 'skills', ...REMOTE_FILES]);
+// A remote file's key without "remote:" (tools, skills, harness, PLANNING …).
+const inner = (which) => which.replace(/^remote:/, '');
+const isRemote = (which) => which.startsWith('remote:');
+const fileName = (which) => (which === 'agents' ? 'AGENTS.md' : PROMPT_FILES[inner(which)] ?? (inner(which) === 'harness' ? 'HARNESS.md' : `${inner(which)}.md`));
+export const FILE_NAMES = Object.freeze(Object.fromEntries(FILES.map((f) => [f, isRemote(f) ? `remote/${fileName(f)}` : fileName(f)])));
+// Hard limits a save checks. TOOLS.md and HARNESS.md are in every conversation, so they stay small.
+export const FILE_LIMITS = Object.freeze({ agents: 60_000, tools: 4_000, skills: 40_000, 'remote:tools': 4_000, 'remote:skills': 40_000, 'remote:harness': 8_000, ...Object.fromEntries(GUIDES.map((g) => [`remote:${g}`, 6_000])) });
+// HARNESS.md's parts the remote instructions are built from (prompt.mjs remotePrompt).
+export const HARNESS_PARTS = ['Who you are', 'How you work', 'Rules the app enforces'];
 const HISTORY_KEEP = 20;
 const estimate = (text) => Math.ceil((text?.length ?? 0) / 3.6);
 
@@ -38,7 +48,7 @@ export const AGENTS_STARTER = `# Working in this project
 
 // Headings the prompt is cut by (instructions-hub.mjs promptParts): a line of TOOLS.md or
 // SKILLS.md that is one of them would split the prompt in the wrong place.
-const RESERVED = ['This session', 'Project notes', 'Shared working instructions', 'End shared working instructions', 'Rules', 'Work habits', 'Fixing a bug'];
+const RESERVED = ['This session', 'Project notes', 'Shared working instructions', 'End shared working instructions', 'Rules', 'Work habits', 'Fixing a bug', 'How you work', 'Guides', 'Tool use', 'Skills'];
 
 const digest = (text) => createHash('sha256').update(text === null ? '\u0000missing' : text).digest('hex').slice(0, 24);
 const failure = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -49,7 +59,8 @@ const tilde = (p) => (p ? p.replace(home(), '~') : p);
 export function filePath(which, folder) {
   if (which === 'agents') return join(folder, 'AGENTS.md');
   const dir = rulesDir();
-  return dir ? join(dir, PROMPT_FILES[which]) : null;
+  if (!dir) return null;
+  return isRemote(which) ? join(dir, REMOTE_DIR, fileName(which)) : join(dir, PROMPT_FILES[which]);
 }
 
 function readText(path) {
@@ -89,9 +100,15 @@ export function fileInfo(which, folder, { state } = {}) {
       others: notes.sources.filter((s) => s.path !== path).map((s) => ({ name: s.name, label: s.label, chars: s.chars, status: s.status })) };
   }
   // TOOLS.md and SKILLS.md: the built-in copy stands in when there is none on disk.
-  const text = disk ?? BUILT_IN[which];
-  const out = { ...base, text, starter: BUILT_IN[which], rulesDir: tilde(rulesDir()), fromDisk: disk !== null };
-  if (which === 'tools') {
+  const builtIn = isRemote(which) ? BUILT_IN_REMOTE[inner(which)] ?? '' : BUILT_IN[which];
+  const text = disk ?? builtIn;
+  const out = { ...base, text, starter: builtIn, rulesDir: tilde(rulesDir()), fromDisk: disk !== null, set: isRemote(which) ? 'remote' : 'local' };
+  if (which === 'remote:harness') return { ...out, tokens: estimate(HARNESS_PARTS.map((h) => sectionOf(text, h) ?? '').join('\n')) };
+  if (isRemote(which) && !['remote:tools', 'remote:skills'].includes(which)) {
+    const g = readGuides('remote', { agents: true }).find((x) => `remote:${x.name}` === which);
+    return { ...out, guide: inner(which), about: g?.about ?? '', tokens: estimate(g?.body ?? '') };
+  }
+  if (inner(which) === 'tools') {
     const lines = toolUseText(text);
     return { ...out, toolUse: lines, tokens: estimate(lines), oneAtATime: /Call one tool at a time/.test(lines) };
   }
@@ -108,7 +125,7 @@ export function filesData(folder, opts) {
 // The text a save may write: plain text in the limit, and for TOOLS.md and
 // SKILLS.md what their readers need.
 export function validateFile(which, text) {
-  if (!FILES.includes(which)) throw failure('Pick AGENTS.md, TOOLS.md or SKILLS.md.');
+  if (!FILES.includes(which)) throw failure('Pick AGENTS.md, TOOLS.md, SKILLS.md or one of the remote files.');
   if (typeof text !== 'string') throw failure(`${FILE_NAMES[which]} must be text.`);
   const clean = `${text.replace(/\r\n?/g, '\n').replace(/\s+$/, '')}\n`;
   if (!clean.trim()) throw failure(`${FILE_NAMES[which]} is empty. Write something first, or use Undo.`);
@@ -118,8 +135,13 @@ export function validateFile(which, text) {
     const bad = clean.split('\n').find((l) => RESERVED.includes(l.trim()));
     if (bad) throw failure(`A line of ${FILE_NAMES[which]} is "${bad.trim()}", a heading the instructions are cut by. Put a word before or after it.`);
   }
-  if (which === 'tools' && !sectionOf(clean, 'Tool use')) throw failure('TOOLS.md needs its "## Tool use" section with at least one line: those lines are what the model gets.');
-  if (which === 'skills') {
+  if (inner(which) === 'tools' && !sectionOf(clean, 'Tool use')) throw failure('TOOLS.md needs its "## Tool use" section with at least one line: those lines are what the model gets.');
+  if (which === 'remote:harness') {
+    const missing = HARNESS_PARTS.filter((h) => !sectionOf(clean, h));
+    if (missing.length) throw failure(`HARNESS.md needs its ${missing.map((h) => `"## ${h}"`).join(', ')} part${missing.length > 1 ? 's' : ''}: the remote instructions are built from them.`);
+  }
+  if (isRemote(which) && GUIDES.includes(inner(which)) && !/^## \S/m.test(clean)) throw failure(`${FILE_NAMES[which]} needs at least one "## " part: that is what the model reads when it opens the guide.`);
+  if (inner(which) === 'skills') {
     const { errors } = skillProblems(parseSkills(clean));
     if (errors.length) throw failure(errors.join(' '));
   }
@@ -147,7 +169,7 @@ function locked(state, fn) {
 }
 
 export function saveFile(which, folder, text, revision, { state = instructionHome(), undo = false } = {}) {
-  if (!FILES.includes(which)) throw failure('Pick AGENTS.md, TOOLS.md or SKILLS.md.');
+  if (!FILES.includes(which)) throw failure('Pick AGENTS.md, TOOLS.md, SKILLS.md or one of the remote files.');
   const path = filePath(which, folder);
   if (!path) throw failure(`${FILE_NAMES[which]} is built into this copy of Agentic Coder: the repo (terminal/rules/) is not on this Mac, so there is nowhere to save it.`, 409);
   const clean = undo ? null : validateFile(which, text);

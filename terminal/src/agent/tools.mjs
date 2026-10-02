@@ -15,7 +15,7 @@ import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
 import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
-import { readSkillPath } from './prompt-files.mjs';
+import { readSkillPath, readSkills, readGuidePath, readGuides } from './prompt-files.mjs';
 
 const str = (description) => ({ type: 'string', description });
 // Read: files up to WHOLE_MAX lines come back whole; longer ones as an outline,
@@ -564,6 +564,7 @@ export function prepare(name, args, env) {
     if (!p.inside) return { error: `${args.path} is outside the project folder, which is not allowed.` };
     if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
     if (readSkillPath(env.cwd, args.path, [])) return { error: `${args.path} is one of the user's skills (SKILLS.md), which are read-only here. Read them; never change them.` };
+    if (readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents }))) return { error: `${args.path} is one of the user's guides (terminal/rules/remote), which are read-only here. Read them; never change them.` };
     let exists = existsSync(p.abs);
     if (!exists && name === 'Edit') {
       const alt = didYouMean(env.cwd, args.path);
@@ -694,7 +695,11 @@ export async function execute(name, args, prepared, env) {
   switch (name) {
     case 'Read': {
       // "SKILLS/<name>": one of the user's skills (terminal/rules/SKILLS.md, prompt-files.mjs).
-      const skill = readSkillPath(env.cwd, args.path);
+      // "RULES/<NAME>.md": one of the guides of the remote set (terminal/rules/remote/).
+      const guide = readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents }));
+      if (guide?.error) return { text: guide.error, error: true, view: { kind: 'error', message: 'No such guide' } };
+      if (guide) return { text: guide.text, view: { kind: 'read', lines: guide.text.split('\n').length, total: guide.text.split('\n').length, content: guide.text } };
+      const skill = readSkillPath(env.cwd, args.path, readSkills(undefined, env.rulesSet));
       if (skill?.error) return { text: skill.error, error: true, view: { kind: 'error', message: 'No such skill' } };
       if (skill) return { text: skill.text, view: { kind: 'read', lines: skill.text.split('\n').length, total: skill.text.split('\n').length, content: skill.text } };
       let p = resolvePath(env.cwd, args.path);

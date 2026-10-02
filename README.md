@@ -347,6 +347,27 @@ the text before each save (20 a file, kept in `~/.agentic-coder/prompt-files/`).
 **Skills check** measures a skill on the real model: the example on three test-writing tasks,
 without and with it.
 
+**The remote set** (`terminal/rules/remote/`, since 2 Oct 2026) is a second set of prompt files for
+a model on another machine (/remote), which can take more than the 9–12B models here:
+- **HARNESS.md**: its opening, how it works and its rules, in place of the local opening, Work
+  habits and Rules (each `##` part keeps its heading: the app builds the instructions from them).
+- **TOOLS.md** and **SKILLS.md**: its own Tool use lines and four skills (Write a test, Review
+  code, Refactor, Flaky test), in the same formats as the local files.
+- **Nine guides** (PLANNING, TESTING, REVIEW, BUG-FIXING, DESIGN, SUBAGENTS, MEMORY, GIT, ANSWERS):
+  each is one line in the prompt's Guides list (the first sentence under its title) and the model
+  opens it with Read at `RULES/<NAME>.md` when the task fits (`Rules/RULES/…` when the project has
+  a RULES folder of its own). SUBAGENTS is listed only when the Agent tool is offered.
+
+Tab 09's **The model gets** menu picks the set, saved in settings.json as `"instructions"`: Auto
+(the default: remote for a model on /remote, local here), Local or Remote. The app reads it before
+each message and says when the set changes; `AGENTIC_INSTRUCTIONS` wins over it. A file missing from
+`remote/` falls back to the local one (TOOLS, SKILLS), the built-in copy (HARNESS) or is left out
+(a guide). Tabs 07–08 get a **Local | Remote** switch, and **09 Remote: HARNESS & guides** edits
+the rest, saved and undone like the other files. ▶ Run a test → **Instructions: local vs remote**
+plays the Practice 28 and the 10 hard tasks on the /remote model three ways (local, remote, remote
+with its skills off); **Hard practice tasks** plays the hard ones alone (`bench/run.mjs --set hard`:
+30–39, several files, exact edge cases, a spec to follow, a vague request with two causes).
+
 Since 30 Sep 2026 the built-in prompt has a **Work habits** block (how Opus and Fable work: act
 once you know enough, pick one way, report failures plainly, Read and Search over cat and grep…),
 names each notes file's kind and says which notes win. `AGENTIC_PROMPT=old` gives the prompt from

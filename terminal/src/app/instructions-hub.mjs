@@ -13,7 +13,7 @@ import { MODELS, DEFAULT_MODEL, thinkingKwargs, Embedder, embedderReady, EMBEDDE
 import { loadSettings, saveSettings } from './store.mjs';
 import { readLimits } from './limits.mjs';
 import { howChosen } from '../agent/search.mjs';
-import { pickSkill, readSkills } from '../agent/prompt-files.mjs';
+import { pickSkill, readSkills, RULE_SETS, instructionsEnv } from '../agent/prompt-files.mjs';
 import { FILES, filesData, saveFile, trySkill } from './prompt-files-hub.mjs';
 
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
@@ -152,6 +152,11 @@ export function instructionsData(cwd, home, { folder } = {}) {
 // both: settings.json's place is fixed when models/index.mjs is first imported,
 // so a test file could otherwise write the real one.
 export const settingsHooks = { load: (cwd) => loadSettings(cwd), save: (patch) => saveSettings(patch) };
+// The saved set (auto, local or remote) and AGENTIC_INSTRUCTIONS when it decides instead.
+export function instructionsChoice() {
+  const saved = settingsHooks.load().instructions;
+  return { saved: RULE_SETS.includes(saved) ? saved : 'auto', env: instructionsEnv() ?? null };
+}
 
 // The design cards as the hub shows them: the style, the sets and their looks.
 function designInfo(cwd) {
@@ -230,10 +235,10 @@ export async function instructionsRoute(req, url, cwd, home, { onDesign } = {}) 
     // The Prompt files tabs (prompt-files-hub.mjs): AGENTS.md of a known folder, TOOLS.md and SKILLS.md.
     if (url.pathname === '/instructions/files.json' && req.method === 'GET') {
       const at = folder && knownFolders(cwd).some((f) => f.path === folder) ? folder : cwd;
-      return json(filesData(at, { state: home }));
+      return json({ ...filesData(at, { state: home }), instructions: instructionsChoice() });
     }
     const filesPost = ['/instructions/files/save', '/instructions/files/undo', '/instructions/files/try'].includes(url.pathname);
-    if ((filesPost || ['/instructions/save', '/instructions/undo', '/instructions/recall', '/instructions/design-style'].includes(url.pathname)) && req.method === 'POST') {
+    if ((filesPost || ['/instructions/save', '/instructions/undo', '/instructions/recall', '/instructions/design-style', '/instructions/set'].includes(url.pathname)) && req.method === 'POST') {
       if (!/^application\/json(?:\s*;|$)/i.test(req.headers.get('content-type') ?? '')) return json({ error: 'Send JSON.' }, 415);
       const reader = req.body?.getReader();
       if (!reader) return json({ error: 'Provide instructions and a revision.' }, 400);
@@ -249,7 +254,13 @@ export async function instructionsRoute(req, url, cwd, home, { onDesign } = {}) 
       if (filesPost) {
         if (!FILES.includes(data.file)) return json({ error: 'Pick AGENTS.md, TOOLS.md or SKILLS.md.' }, 400);
         const info = saveFile(data.file, at, data.text, data.revision, { state: home, undo: url.pathname.endsWith('/undo') });
-        return json({ ...filesData(at, { state: home }), saved: info.file });
+        return json({ ...filesData(at, { state: home }), instructions: instructionsChoice(), saved: info.file });
+      }
+      // Which set the model gets (tab 09): settings.json "instructions", read by the app before each message.
+      if (url.pathname === '/instructions/set') {
+        if (!RULE_SETS.includes(data.set)) return json({ error: `The sets: ${RULE_SETS.join(', ')}.` }, 400);
+        settingsHooks.save({ instructions: data.set });
+        return json({ instructions: instructionsChoice() });
       }
       if (url.pathname === '/instructions/design-style') {
         if (!STYLES.includes(data.style)) return json({ error: `The styles: ${STYLES.join(', ')}.` }, 400);
