@@ -43,30 +43,30 @@ button { font: inherit; color: inherit; }
 .banner { flex: none; border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; background: var(--surface); font-size: 13.5px; color: var(--ink2); }
 .banner.down { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); }
 .banner b { color: var(--ink); }
-/* The list takes the larger share so every model shows at once: its cards flow in as many columns as fit, each group's heading across them. */
-.split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(480px, 1fr); gap: 14px; }
+/* The model 70%, the list 30% (their pick, 2 Oct): one category at a time over the list, its models as full cards (the largest category has 7, so it fits). */
+.split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: 14px; }
 .box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 /* The cards */
 .find { flex: none; padding: 10px; border-bottom: 1px solid var(--line); }
 .find input { width: 100%; border: 1px solid var(--line); background: var(--page); color: var(--ink); border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13px; }
 .find input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--tint); }
-.list { flex: 1; min-height: 0; overflow: auto; padding: 2px 10px 10px; scrollbar-width: thin; display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 5px; align-content: start; }
+.list { flex: 1; min-height: 0; overflow: auto; padding: 2px 10px 10px; scrollbar-width: thin; display: grid; grid-template-columns: 1fr; gap: 6px; align-content: start; }
 .list > .gh, .list > .empty { grid-column: 1 / -1; }
 .gh { display: flex; align-items: baseline; gap: 8px; margin: 8px 2px 0; white-space: nowrap; min-width: 0; overflow: hidden; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); font-weight: 600; }
 .gh button { background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 .gh > :first-child { flex: none; }
 .gh span { min-width: 0; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card { display: block; width: 100%; min-width: 0; text-align: left; border: 1px solid var(--line); background: var(--page); border-radius: 10px; padding: 6px 10px; margin: 0; cursor: pointer; }
+.card { display: block; width: 100%; min-width: 0; text-align: left; border: 1px solid var(--line); background: var(--page); border-radius: 10px; padding: 7px 10px; margin: 0; cursor: pointer; }
 .card:hover { border-color: var(--ink3); }
 .card[aria-current="true"] { border-color: var(--accent); background: var(--tint); }
-.card .n { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; min-width: 0; }
+.card .n { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; min-width: 0; line-height: 20px; }
 .card .n .rk { flex: none; font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--ink2); border: 1px solid var(--line); border-radius: 999px; min-width: 18px; height: 18px; display: inline-grid; place-items: center; padding: 0 5px; font-variant-numeric: tabular-nums; }
-.card .n span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.card .n span:first-of-type { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .card .n .mk { margin-left: auto; flex: none; font-weight: 500; font-size: 11.5px; display: flex; gap: 6px; align-items: center; }
 .card .l2 { display: flex; align-items: center; gap: 6px; margin-top: 3px; min-width: 0; overflow: hidden; white-space: nowrap; }
 .card .s { color: var(--ink3); font-size: 11.5px; font-family: var(--mono); flex: none; }
 .card .chips { margin: 0; flex-wrap: wrap; min-width: 0; height: 19px; overflow: hidden; } /* a chip that does not fit whole drops to a hidden second line */
-@media (max-width: 1600px) { .list { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); } }
+
 .chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .chip { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--ink2); background: var(--surface); white-space: nowrap; }
 .ok { color: var(--up); } .no { color: var(--down); } .warnc { color: var(--warn); }
@@ -112,6 +112,11 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
 .meter i { display: block; height: 100%; background: var(--accent); }
 .keys { color: var(--ink3); font-size: 11.5px; flex: none; text-align: right; }
 .keys kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--surface); }
+/* The category buttons over the list: one category's models at a time (Find looks through all of them). */
+.cats { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 4px; }
+.cats button { font: inherit; font-size: 12px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink2); cursor: pointer; }
+.cats button small { color: var(--ink3); margin-left: 5px; }
+.cats button[aria-selected="true"] { color: var(--ink); border-color: var(--accent); background: var(--tint); font-weight: 600; }
 @media (max-width: 899px) { .split { grid-template-columns: 1fr; } .list { max-height: 40vh; } .cols { grid-template-columns: 1fr; } .status { margin-left: 0; width: 100%; } .keys { display: none; } }
 </style>
 </head>
@@ -159,7 +164,10 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
   const byId = (id) => models().find((m) => m.id === id) ?? null;
   const fits = (m) => !S.q || m.id.toLowerCase().includes(S.q) || String(m.name ?? '').toLowerCase().includes(S.q) || String(m.family ?? '').toLowerCase().includes(S.q);
   // The cards in the order the list draws them (folded groups left out unless searching).
-  const order = () => (S.data?.groups ?? []).flatMap((g) => (g.fold && !S.open[g.id] && !S.q ? [] : g.ids.map(byId).filter((m) => m && fits(m))));
+  const catOf = (id) => (S.data?.groups ?? []).find((g) => g.ids.includes(id))?.id ?? null;
+  const curCat = () => S.cat ?? catOf(S.pick) ?? S.data?.groups?.[0]?.id ?? null;
+  const shown = () => (S.data?.groups ?? []).filter((g) => S.q || g.id === curCat());
+  const order = () => shown().flatMap((g) => (g.fold && !S.open[g.id] && !S.q ? [] : g.ids.map(byId).filter((m) => m && fits(m))));
 
   async function load(quiet) {
     if (S.loading) return; S.loading = true;
@@ -210,18 +218,21 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
     const sub = S.data.ollama ? [m.params && `${m.params}${/moe/i.test(m.family || '') ? ' MoE' : ''}`, gb(m.bytes)].filter(Boolean).join(' · ') : [m.ctx && `${ctxWord(m.ctx)} context`, m.price && `$${+m.price.in.toFixed(2)} / $${+m.price.out.toFixed(2)}`, m.file].filter(Boolean).join(' · ');
     const sure = m.known !== false;
     const chips = [sure && m.tools && 'tools', sure && m.thinking && 'thinks', sure && m.vision && 'pictures', m.embedding && 'search', !sure && S.data.ollama && 'abilities not listed', ...(m.specialties?.tags ?? []).filter((x) => ['Big', 'Long context'].includes(x.tag)).map((x) => x.tag.toLowerCase())].filter(Boolean);
-    return `<button type="button" class="card" role="listitem" data-id="${esc(m.id)}" aria-current="${m.id === S.pick}"><div class="n">${rank ? `<i class="rk">${rank}</i>` : ''}<span>${esc(m.name && m.name !== m.id ? m.name : m.id)}</span><span class="mk">${marks}</span></div><div class="l2">${sub ? `<span class="s">${esc(sub)}</span>` : ''}${chips.length ? `<span class="chips">${[...new Set(chips)].slice(0, 4).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</span>` : ''}</div></button>`;
+    return `<button type="button" class="card" role="listitem" data-id="${esc(m.id)}" aria-current="${m.id === S.pick}" title="${esc([m.id, sub, [...new Set(chips)].join(' · ')].filter(Boolean).join('\n'))}"><div class="n">${rank ? `<i class="rk">${rank}</i>` : ''}<span>${esc(m.name && m.name !== m.id ? m.name : m.id)}</span><span class="mk">${marks}</span></div><div class="l2">${sub ? `<span class="s">${esc(sub)}</span>` : ''}${chips.length ? `<span class="chips">${[...new Set(chips)].slice(0, 4).map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</span>` : ''}</div></button>`;
   }
   function drawList() {
-    const groups = S.data?.groups ?? [];
-    const html = groups.map((g) => {
+    const groups = shown();
+    const all = S.data?.groups ?? [];
+    const cur = curCat();
+    const cats = all.length ? `<div class="cats" role="tablist" aria-label="Category">${all.map((g) => `<button type="button" role="tab" data-cat="${esc(g.id)}" aria-selected="${!S.q && g.id === cur}">${esc(g.text)}<small>${g.ids.length}</small></button>`).join('')}</div>` : '';
+    const html = cats + groups.map((g) => {
       const ms = g.ids.map(byId).filter((m) => m && fits(m));
       if (!ms.length) return '';
       const shut = g.fold && !S.open[g.id] && !S.q;
       const head = g.fold && !S.q ? `<button type="button" data-fold="${esc(g.id)}" aria-expanded="${!shut}">${shut ? '▸' : '▾'} ${esc(g.text)} · ${ms.length}</button>` : `${esc(g.text)} · ${ms.length}`;
       return `<div class="gh">${head}${g.note ? `<span>${esc(g.note)}</span>` : ''}</div>${shut ? '' : ms.map((m, i) => cardHtml(m, g.ranked ? i + 1 : 0)).join('')}`;
     }).join('');
-    $('#list').innerHTML = html || `<p class="empty">${S.q ? `No model has “${esc(S.q)}” in its name.` : 'The service lists no models.'}</p>`;
+    $('#list').innerHTML = (html && html !== cats ? html : `${cats}<p class="empty">${S.q ? `No model has “${esc(S.q)}” in its name.` : 'The service lists no models.'}</p>`) || `<p class="empty">${S.q ? `No model has “${esc(S.q)}” in its name.` : 'The service lists no models.'}</p>`;
   }
 
   function drawDetail() {
@@ -346,6 +357,7 @@ pre { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; wh
   document.addEventListener('click', (e) => {
     const s = e.target.closest('[data-svc]'); if (s) { if (s.dataset.svc !== S.service) { S.service = s.dataset.svc; S.pick = null; S.data = { ...S.data, models: [], groups: [] }; keep(); load(); } return; }
     const f = e.target.closest('[data-fold]'); if (f) { S.open[f.dataset.fold] = !S.open[f.dataset.fold]; drawList(); return; }
+    const k = e.target.closest('[data-cat]'); if (k) { S.cat = k.dataset.cat; S.q = ''; $('#q').value = ''; drawList(); return; }
     const c = e.target.closest('.card'); if (c) { pick(c.dataset.id); return; }
     const t = e.target.closest('[data-tab]'); if (t) { S.tab = t.dataset.tab; keep(); drawDetail(); return; }
     const a = e.target.closest('[data-act]'); if (a && !a.disabled) { act(a.dataset.act); return; }
