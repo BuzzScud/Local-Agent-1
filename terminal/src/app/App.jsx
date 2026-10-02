@@ -6,7 +6,7 @@ import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { Screen, permissionOptions, primeRows, btwLayout, heldRows, holdRoom, MENU_ROWS, SHORTCUT_ROWS, footerParts } from './screen.jsx';
 import { startTip } from './start.jsx';
 import { loadTimes, saveTime, startLeft, typicalStart } from './start-times.mjs';
@@ -18,13 +18,17 @@ import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHome
 import { offerFor, nextMode, modeOf } from '../agent/permissions.mjs';
 import { screenAccess, askScreenAccess, terminalApp } from '../tools/screen.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama, isOutOfMemory, setEndpoint, endpointOf } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, preloadOllama, unloadOllama, isOutOfMemory, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
-import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
+import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, modelsInUseOn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
 import { isImage, isPdf, preparedImage, pdfText, clipboardImage } from '../tools/media.mjs';
-import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, commitPick, closePick, modelChoices } from './remote-form.mjs';
-import { openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, ctxWord } from './remote-models.mjs';
+import { rowsOf as remoteRows, openForm, moveRow, startEdit, editField, pasteField, commitEdit, testForm, withTest, savePlan, connectionChanged, formWarning, kindWord, sourceWord, remotesOf, readyRemote, remoteChoices, openModelPick, movePick, moveCopy, commitPick, closePick, modelChoices } from './remote-form.mjs';
+import { openService, serviceRows, atRow, moveService, filterService, toggleFold, levelModelOf, ctxWord, suggestModel } from './remote-models.mjs';
+import { jobsOf, openSubagents, moveJob, stepModel, toggleJob, savedOf, MAIN } from './subagents.mjs';
+import { RemoteEmbedder, HELPER_CTX, HELPER_KEEP } from '../agent/helper-models.mjs';
+import { tryOut } from '../agent/tryout.mjs';
+import { serviceKey, readTryouts, saveTryout, triedWord } from './tryouts.mjs';
 import { WEB_ROWS, openWebForm, moveWebRow, testWebForm, toWebSettings, webWarning, webSettings, searchKeyId } from './web-form.mjs';
 import { PROVIDER_NAMES } from '../tools/web.mjs';
 import { readFile } from '../tools/read.mjs';
@@ -379,6 +383,7 @@ export function App({ opts, win, onRestart }) {
     const tidy = () => {
       if (tidied) return;
       tidied = true;
+      remoteFnRef.current.unloadOnQuit?.();
       unregisterWindow();
       const m = copyRef.current;
       if (!m) return;
@@ -994,9 +999,60 @@ export function App({ opts, win, onRestart }) {
   // One that does not fit in the service's GPU memory is tried again at half the context, down to
   // 32k, and the size it fitted at is kept for that model; one that never loads gives way to `back`,
   // the model in use before, and says why (the user's pick, 1 Oct 2026). Answers whether it loads.
-  const preloadRemote = (conn, { back = null } = {}) => {
+  // After the model is loaded (or was): this window notes what it uses on the service, the model
+  // left behind is let go (only you use the service: the user's pick, 2 Oct 2026; never one another
+  // window uses), and a model never tried gets its try-out.
+  const afterLoad = (conn, { back = null } = {}) => {
+    const name = conn?.info?.model;
+    if (!name || !conn.info.ollama) return;
+    noteModels(conn);
+    if (back && back !== name && !modelsInUseOn(conn.url).has(back)) {
+      unloadOllama({ url: conn.url, model: back }).then((ok) => { if (ok) { push({ type: 'note', text: `${back} let go on the service, so ${name} has its room.`, tone: 'dim' }); refreshCatalog(conn); } });
+    }
+    maybeTryOut(conn);
+  };
+  // The window closes: what it used on the service is let go, unless another window uses it. The
+  // process is ending, so it is one curl the window waits for (at most 2 seconds), with the key on
+  // its stdin, never on its command line.
+  remoteFnRef.current.unloadOnQuit = () => {
+    const conn = remoteRef.current.conn;
+    if (!conn?.info?.ollama || process.env.AGENTIC_UNLOAD === 'off') return;
+    const others = modelsInUseOn(conn.url);
+    const helpers = Object.values(agent.helperJobs ?? {}).filter((j) => j.on && j.model && j.model !== MAIN).map((j) => j.model);
+    const names = [...new Set([conn.info.model, ...helpers])].filter((n) => n && !others.has(n));
+    if (!names.length) return;
+    const head = { ...remoteRef.current.headers, ...authHeaders(conn.url) };
+    const q = (v) => JSON.stringify(String(v));
+    const one = (name) => [`url = ${q(`${conn.url.replace(/\/+$/, '')}/api/generate`)}`, `header = ${q('Content-Type: application/json')}`, ...Object.entries(head).map(([k, v]) => `header = ${q(`${k}: ${v}`)}`), `data = ${q(JSON.stringify({ model: name, keep_alive: 0 }))}`, 'output = "/dev/null"'].join('\n');
+    try { spawnSync('curl', ['-s', '-Z', '--connect-timeout', '1', '-m', '2', '-K', '-'], { input: names.map(one).join('\nnext\n'), timeout: 2500, stdio: ['pipe', 'ignore', 'ignore'] }); } catch { /* the service lets them go by itself later */ }
+  };
+  // What this window uses on the service (copies.mjs): the main model and the helpers that are loaded.
+  const noteModels = (conn = remoteRef.current.conn) => {
+    if (!conn?.info?.ollama) { updateWindow({ service: null, models: [] }); return; }
+    const helpers = Object.values(agent.helperJobs ?? {}).filter((j) => j.on && j.model && j.model !== MAIN).map((j) => j.model);
+    updateWindow({ service: conn.url, models: [...new Set([conn.info.model, ...helpers])] });
+    // Kept for the window's close: the endpoint (and its key) is gone by then.
+    remoteRef.current.headers = authHeaders(conn.url);
+  };
+  // The try-out (agent/tryout.mjs): the first time a model on a service is picked, three short real
+  // steps, in the background; the result is kept (tryouts.mjs) and shows in /model and /remote.
+  const maybeTryOut = (conn) => {
+    const name = conn?.info?.model;
+    const where = settings.remote?.address;
+    if (!name || !where || process.env.AGENTIC_TRYOUT === 'off') return;
+    const entry = catalog?.models.find((m) => m.id === name) ?? conn.info.ollama ?? {};
+    if (entry.tools === false || readTryouts(where)[name] || remoteRef.current.trying === name) return;
+    remoteRef.current.trying = name;
+    push({ type: 'note', text: `Trying ${name} once: it reads a file, fixes one line and runs a command (nothing is changed for real).`, tone: 'dim' });
+    tryOut({ url: conn.url, model: name, entry, numCtx: conn.numCtx ?? undefined, keepAlive: -1 }).then((r) => {
+      saveTryout(where, name, { ok: r.ok, tokS: r.tokS ?? null, why: r.why, steps: r.steps, secs: r.secs });
+      push({ type: 'note', text: `${r.ok ? '✔' : '✗'} ${name}: ${r.steps.map((x) => `${x.ok ? '✔' : '✗'} ${x.text}`).join(' · ')}${r.tokS ? ` · ${Math.round(r.tokS)} tok/s` : ''}. ${r.ok ? 'It works with the agent; kept for next time.' : `It did not pass (${r.why}): /model shows ✗ beside it; it can still be used.`}`, tone: r.ok ? 'dim' : 'warn' });
+      refreshCatalog(conn);
+    }).catch(() => {}).finally(() => { if (remoteRef.current.trying === name) remoteRef.current.trying = null; });
+  };
+  const preloadRemote = (conn, { back = null, skip = new Set() } = {}) => {
     const o = conn?.info?.ollama;
-    if (!o || (o.loaded && (!conn.numCtx || o.loadedCtx === conn.numCtx))) return false;
+    if (!o || (o.loaded && (!conn.numCtx || o.loadedCtx === conn.numCtx))) { afterLoad(conn, { back }); return false; }
     const my = (remoteRef.current.loads = (remoteRef.current.loads ?? 0) + 1);
     const mine = () => remoteRef.current.loads === my && remoteRef.current.conn === conn;
     const name = conn.info.model;
@@ -1009,7 +1065,7 @@ export function App({ opts, win, onRestart }) {
       let at = numCtx || Math.min(o.ctx || 262_144, 262_144);
       let err = null;
       for (;;) {
-        try { await preloadOllama({ url: conn.url, model: name, numCtx }); err = null; break; } catch (e) { err = e; }
+        try { await preloadOllama({ url: conn.url, model: name, numCtx, keepAlive: -1 }); err = null; break; } catch (e) { err = e; }
         if (!mine() || !isOutOfMemory(err.message) || at / 2 < 32_768) break;
         push({ type: 'note', text: `${name} did not fit on the service at ${ctxWord(at)} context: trying ${ctxWord(at / 2)}…`, tone: 'warn' });
         at /= 2;
@@ -1030,6 +1086,7 @@ export function App({ opts, win, onRestart }) {
         setRemoteState('on');
         push({ type: 'note', text: `${name} is loaded on the service (${Math.max(1, Math.round((Date.now() - t0) / 1000))} s)${real ? ` · ${ctxWord(agent.ctx)} context` : ''}.${numCtx !== asked ? ' Kept at that size for it; /effort’s Context row changes it.' : ''}`, tone: 'dim' });
         refreshCatalog(conn);
+        afterLoad(conn, { back });
         flushQueued();
         return;
       }
@@ -1049,6 +1106,20 @@ export function App({ opts, win, onRestart }) {
           push({ type: 'note', text: `${back} did not answer either: ${e.message}. /model or /remote to pick another.`, tone: 'error' });
         }
         return;
+      }
+      // No model to go back to: a backup, the best one that passed its try-out (or else the suggestion).
+      // (At most two spares in a row: a service with no room for any gets a note, not a loop.)
+      const gone = new Set([...skip, name]);
+      const spare = catalog && gone.size <= 2 ? suggestModel(catalog.models.filter((m) => !gone.has(m.id)), readTryouts(settings.remote?.address)) : null;
+      if (spare) {
+        push({ type: 'note', text: `${name} did not load on the service: ${why}. Using ${spare} instead (/model picks another).`, tone: 'warn' });
+        try {
+          const c2 = await useServiceModel(spare);
+          setRemoteState('on');
+          refreshCatalog(c2);
+          if (!preloadRemote(c2, { skip: gone })) flushQueued();
+          return;
+        } catch (e) { push({ type: 'note', text: `${spare} did not answer either: ${e.message}.`, tone: 'error' }); }
       }
       setRemoteState('on');
       push({ type: 'note', text: `${name} did not load on the service: ${why}. /model picks another.`, tone: 'warn' });
@@ -1121,8 +1192,50 @@ export function App({ opts, win, onRestart }) {
     const models = [...Object.values(MODELS), ...editedModels(), ...remoteChoices(settings)];
     setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), levelId: lvNow.id, on: Boolean(lvNow.effort) });
   };
+  // /subagents: the helper models on an Ollama service, one row per job (subagents.mjs). The jobs are
+  // kept by service address; changes are saved as they are made.
+  const subagentsKey = () => serviceKey(settings.remote?.address ?? '');
+  const openSubagentsPanel = () => {
+    const conn = remoteRef.current.conn;
+    if (!(model.remote && conn?.info?.ollama)) { push({ type: 'note', text: 'Subagents are helper models on an Ollama service: connect to one first (/remote service), then /subagents gives each job a model.', tone: 'dim' }); return; }
+    const open = (c) => setPicker(openSubagents(jobsOf(settings.helperModels?.[subagentsKey()] ?? {}, c?.models ?? [], model.remote.model)));
+    if (catalog) { open(catalog); refreshCatalog(conn); return; }
+    ollamaCatalog({ url: conn.url }).then((c) => { if (c) setCatalog(c); open(c); }).catch(() => open(null));
+  };
+  // Kept as settings.json `helperModels` by service ("subagents" there already switches the Agent tool).
+  const saveSubagents = (jobs) => {
+    settings.helperModels = saveSettings({ helperModels: { ...(settings.helperModels ?? {}), [subagentsKey()]: savedOf(jobs) } }).helperModels;
+    applyHelpers();
+  };
+  // The jobs the agent works with (helper-models.mjs): each with the service's entry for its
+  // model, and the code search's embedder from the service when that job is on.
+  const applyHelpers = (c = catalog) => {
+    const conn = remoteRef.current.conn;
+    if (!(model.remote?.ollama && conn?.info?.ollama && c?.models?.length)) { agent.helperJobs = null; agent.searchEmbedder = null; return; }
+    const jobs = jobsOf(settings.helperModels?.[subagentsKey()] ?? {}, c.models, model.remote.model);
+    agent.helperJobs = Object.fromEntries(jobs.map((j) => [j.id, { on: j.on, model: j.model, entry: c.models.find((m) => m.id === j.model) ?? null }]));
+    const search = agent.helperJobs.search;
+    const want = search?.on && search.model && search.model !== MAIN ? `${conn.url}|${search.model}` : null;
+    if (!want) agent.searchEmbedder = null;
+    else if (agent.searchEmbedder?.key !== want) { agent.searchEmbedder = new RemoteEmbedder({ url: conn.url, model: search.model }); agent.searchEmbedder.key = want; }
+  };
+  useEffect(() => { applyHelpers(catalog); }, [catalog, model]);
+  // enter on a job: its model is loaded on the service now (a search model is asked for one meaning).
+  const loadSubagent = (job) => {
+    const conn = remoteRef.current.conn;
+    if (!conn || !job.on || !job.model || job.model === MAIN) return;
+    const m = catalog?.models.find((x) => x.id === job.model);
+    if (m?.loaded) { push({ type: 'note', text: `${job.model} is already loaded on the service.`, tone: 'dim' }); return; }
+    push({ type: 'note', text: `Loading ${job.model} on the service for ${job.label}…`, tone: 'dim' });
+    const t0 = Date.now();
+    const go = m?.embedding
+      ? fetch(`${conn.url.replace(/\/+$/, '')}/api/embed`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders(conn.url) }, body: JSON.stringify({ model: job.model, input: 'ready' }) }).then((r) => { if (!r.ok) throw new Error(`${r.status}`); })
+      : preloadOllama({ url: conn.url, model: job.model, numCtx: HELPER_CTX[job.id] ?? undefined, keepAlive: HELPER_KEEP });
+    go.then(() => { push({ type: 'note', text: `${job.model} is loaded (${Math.max(1, Math.round((Date.now() - t0) / 1000))} s).`, tone: 'dim' }); refreshCatalog(conn); noteModels(conn); })
+      .catch((e) => push({ type: 'note', text: `${job.model} did not load: ${isOutOfMemory(e.message) ? 'the service has no room for it next to the main model' : e.message}.`, tone: 'warn' }));
+  };
   // What the service's /model draws from: what was set as it opened, and what moves (the list, the chat).
-  const serviceOf = (pk) => ({ ...pk.sv, catalog, version: catalog?.version ?? model.remote?.ollama ?? null, inUse: model.remote?.model ?? null, used: agent.ctxUsed ?? 0 });
+  const serviceOf = (pk) => ({ ...pk.sv, catalog, version: catalog?.version ?? model.remote?.ollama ?? null, inUse: model.remote?.model ?? null, used: agent.ctxUsed ?? 0, tried: readTryouts(settings.remote?.address) });
   // The screen's part of it: the list, and the highlighted model's levels with the one shown.
   const serviceProps = (pk) => {
     const sv = serviceOf(pk);
@@ -1174,6 +1287,8 @@ export function App({ opts, win, onRestart }) {
   // true: the message waits (vision turning on, or a question about downloading it);
   // false: it goes now (text only, with a note why).
   const needVision = (value, shown) => {
+    // A Pictures helper on the service (/subagents) describes it; the message goes now.
+    if (model.remote && agent.helperUse?.('pictures')) return false;
     if (model.remote) { push({ type: 'note', text: `The remote model (${remoteLabel(settings.remote)}) cannot look at pictures${model.remote.kind === 'llama' ? ': its coding serve has no vision add-on (coding setup there gets it)' : ''}. The message goes with a line saying so.`, tone: 'warn' }); return false; }
     if (opts.url) { push({ type: 'note', text: 'The model server given with --url is not looking at pictures (start it with its --mmproj file). The message goes with a line saying so.', tone: 'warn' }); return false; }
     if (!model.vision) {
@@ -1557,7 +1672,8 @@ export function App({ opts, win, onRestart }) {
     // A picture, and a model not looking at pictures yet: its vision is turned on first (the
     // message waits for it), or, where it cannot be, the message goes with a line saying so.
     if (images.length && !agent.canSee && !visionAsked && remoteFnRef.current.needVision?.(value, shown)) return;
-    const blind = images.length && !agent.canSee;
+    // Not seen, unless a Pictures helper describes it (agent.work, /subagents).
+    const blind = images.length && !agent.canSee && !agent.helperUse?.('pictures');
     holdRef.current = false; // your first message prints the start page above it
     push({ type: 'user', text: shown, attached });
     let content = blind ? `${text}\n\n(The user attached ${images.length === 1 ? 'a picture' : `${images.length} pictures`} (${images.map((i) => i.path).join(', ')}), but this model is not looking at pictures now.)` : text;
@@ -2492,6 +2608,10 @@ export function App({ opts, win, onRestart }) {
         openModelPicker();
         break;
       }
+      case 'subagents': {
+        openSubagentsPanel();
+        break;
+      }
       case 'stats':
         push({ type: 'panel', title: 'Stats', pad: 20, rows: [
           ['model', `${model.name}${model.edited ? ` · ${model.edited.edits.length} edit${model.edited.edits.length === 1 ? '' : 's'} · saved ${new Date(model.edited.saved).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`],
@@ -2620,7 +2740,7 @@ export function App({ opts, win, onRestart }) {
   let menu = null;
   const btwShown = Boolean(btw && !perm && !answerWait);
   if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
-    const cmds = inputMode === 'prompt' ? matchCommands(input.value) : [];
+    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama) }) : [];
     if (cmds.length) menu = { kind: 'slash', pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     const at = mentionAt(input);
     if (!menu && at) {
@@ -2859,6 +2979,18 @@ export function App({ opts, win, onRestart }) {
     // /model on an Ollama service (remote-models.mjs): ↑↓ a row, ←→ the highlighted model's effort,
     // letters filter by name (backspace takes one back, esc clears it, then closes), enter switches
     // to the model (one without tools asks first), opens or shuts a fold, or goes to a model here.
+    // /subagents: ↑↓ the job, ←→ its model, space on or off (saved at once), enter loads it now, esc closes.
+    if (cur.picker?.kind === 'subagents') {
+      const pk = cur.picker;
+      const set = (next) => { setPicker(next); if (next.jobs !== pk.jobs) saveSubagents(next.jobs); };
+      if (key.upArrow) setPicker(moveJob(pk, -1));
+      else if (key.downArrow || key.tab) setPicker(moveJob(pk, 1));
+      else if (key.leftArrow || key.rightArrow) set(stepModel(pk, key.leftArrow ? -1 : 1));
+      else if (ch === ' ') set(toggleJob(pk));
+      else if (key.return) loadSubagent(pk.jobs[pk.at]);
+      else if (key.escape || (key.ctrl && ch === 'c')) setPicker(null);
+      return;
+    }
     if (cur.picker?.kind === 'service') {
       const pk = cur.picker;
       const sv = serviceOf(pk);
@@ -2944,6 +3076,7 @@ export function App({ opts, win, onRestart }) {
         const n = pk.pick.models.length;
         if (key.upArrow) setPicker(movePick(pk, -1));
         else if (key.downArrow || key.tab) setPicker(movePick(pk, 1));
+        else if (key.leftArrow || key.rightArrow) setPicker(moveCopy(pk, key.leftArrow ? -1 : 1));
         else if (key.return) { const next = commitPick(pk); setPicker(next); connectForm(next); }
         else if (/^[1-9]$/.test(ch) && Number(ch) <= n) { const next = commitPick({ ...pk, pick: { ...pk.pick, index: Number(ch) - 1 } }); setPicker(next); connectForm(next); }
         else if (key.escape) setPicker(closePick(pk));
@@ -3216,7 +3349,7 @@ export function App({ opts, win, onRestart }) {
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
-    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
+    thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),

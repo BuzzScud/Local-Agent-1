@@ -277,6 +277,8 @@ export function pickRemoteModel(ids) {
   for (const id of pool) {
     let s = 0;
     if (good.test(id)) s += 10;
+    // A coder beats a general model of the same family (llama4 was suggested over qwen3-coder-next, 2 Oct 2026).
+    if (/coder|codestral|starcoder|codeqwen/i.test(id)) s += 5;
     if (/:latest$/.test(id) || !id.includes(':')) s += 2;
     if (/instruct|chat|-it\b/i.test(id)) s += 1;
     if (s > bestS) { bestS = s; best = id; }
@@ -495,7 +497,9 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
     // price: dollars a million tokens, in and out (the cost meter, terminal spend.mjs); free: a service of your own.
     const price = r.kind === 'claude' ? CLAUDE_MODELS.find((m) => m.id === info.model)?.price ?? null : info.price ?? null;
     const free = !price && (Boolean(o) || r.kind === 'llama' || isPrivateHost(parseAddress(r.address ?? '')?.host ?? ''));
-    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family } : {}) });
+    // keepAlive -1: the service keeps the model loaded until told (the window unloads it as it closes),
+    // not Ollama's 5 idle minutes (the user's pick, 2 Oct 2026).
+    setEndpoint(url, { remote: true, kind: r.kind, key: secret, model: info.model ?? 'coding', label: remoteLabel(r), price, free, ...(o ? { ollama: true, numCtx, thinks: o.thinking, tools: o.tools, family: o.family, keepAlive: -1 } : {}) });
     return {
       // vision: it can take a picture (a llama.cpp server says so; OpenAI-compatible and Claude: yes)
       url, ctx, numCtx, slots: r.kind === 'llama' ? info.slots : 1, model, info, tunnel, vision: info.vision !== false,

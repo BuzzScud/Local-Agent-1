@@ -15,6 +15,11 @@ process.env.AGENTIC_DESIGN ??= 'off';
 process.env.AGENTIC_LAYOUT ??= 'off';
 // The design studio too (src/agent/studio.mjs): its pieces and its build.
 process.env.AGENTIC_STUDIO ??= 'off';
+// On an Ollama service (/subagents, 2 Oct 2026): a model's first-pick try-out and letting
+// the models go as a window closes are off unless a test turns them on (app-subagents):
+// the try-out's three asks would count as replies in the tests that count them.
+process.env.AGENTIC_TRYOUT ??= 'off';
+process.env.AGENTIC_UNLOAD ??= 'off';
 // A page asked for "on my desktop" (src/app/App.jsx openPage): no test opens a
 // browser, or offers to copy a page to the real Desktop.
 process.env.AGENTIC_OPEN ??= 'off';

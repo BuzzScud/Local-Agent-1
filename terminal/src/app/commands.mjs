@@ -22,6 +22,7 @@ export const COMMANDS = [
   // The model is off when a window opens (the user's pick, 30 Sep 2026): /start loads it, /stop gives its memory back.
   { name: 'start', desc: "Load the model (ctrl+t too): it takes the Mac's memory until /stop or you quit" },
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
+  { name: 'subagents', desc: 'The helper models on your Ollama service, one per job: pictures, side jobs, code search, a second opinion, UI design; switch each on or off and pick its model' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'stats', desc: 'Speed, memory and context used' },
@@ -71,11 +72,17 @@ export const SETTINGS = [
 ];
 export const IN_SETTINGS = new Set(SETTINGS.flatMap((g) => g.rows.map((r) => r.name)));
 
-// The / menu: every command but the ones /settings holds.
-export function matchCommands(value) {
+// On an Ollama service /subagents takes the place of /start and /stop (they load and unload the
+// model on this Mac), so the / menu holds 17 there, within the 18 that fit an 80 × 24 window; elsewhere
+// /subagents is left out of it. Each still works typed in full.
+export const SERVICE_ONLY = new Set(['subagents']);
+export const MAC_ONLY = new Set(['start', 'stop']);
+
+// The / menu: every command but the ones /settings holds. service: on an Ollama service now.
+export function matchCommands(value, { service = false } = {}) {
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const shown = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name));
+  const shown = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name));
   return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }

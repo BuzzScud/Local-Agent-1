@@ -70,7 +70,7 @@ export class AutoSave {
     const ac = new AbortController();
     this.abort = ac;
     const a = this.agent;
-    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots.side, cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
+    this.running = saveLessons({ url: a.url, model: a.model, slot: a.slots.side, use: a.sideUse?.(), cwd: a.cwd, home: a.memory.home, lessons: a.lessons, messages: a.messages, signal: ac.signal, embedder: a.memory.embedder, confirm: this.ask })
       .then((out) => { if (out?.skipped) this.say('Not saved · /update memory saves what matters at any time'); const line = saveLine(out); if (line) this.say(line); return out; })
       .catch(() => null)
       .finally(() => { this.running = null; if (this.abort === ac) this.abort = null; });

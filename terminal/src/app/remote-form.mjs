@@ -8,7 +8,9 @@
 // the list (a coder highlighted); enter picks one and the check runs again.
 // ←→ moves a choice row; enter (or typing) on a text row edits it in place.
 // A key never leaves the Keychain except to go in a request's header.
-import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf } from '../../../models/index.mjs';
+import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
+import { groupsOf, suggestModel } from './remote-models.mjs';
+import { readTryouts } from './tryouts.mjs';
 
 export const SOURCES = ['here', ...REMOTE_SOURCES];
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
@@ -116,7 +118,32 @@ export function modelChoices(form) {
 // The list Connect (or enter on the Model row) opens: the names the server
 // listed, a coder highlighted when none is named yet. enter takes that one
 // and Connect checks it; esc puts the form back with the list still on the row.
-export function openModelPick(form, models = null) {
+// On an Ollama service (the check read its list, form.test.catalog) the list is
+// in /model's groups, each with what it can do, its size and its try-out, the
+// copies of one model on one row (←→ picks the copy), and the suggestion is the
+// one most likely to run the agent well (suggestModel), not the first name that
+// sounds like a coder.
+export function openModelPick(form, models = null, { tried = readTryouts(cur(form)?.address) } = {}) {
+  const catalog = form.test?.catalog ?? null;
+  if (catalog?.models?.length > 1) {
+    const g = groupsOf(catalog.models);
+    const groups = [
+      { text: 'Loaded on the service', note: 'answers at once', list: g.loaded },
+      { text: 'Can run the agent', note: 'loads when you connect', list: g.agent },
+      { text: 'Chat only', note: 'no tools, so no file reads, edits or commands', list: g.chatOnly },
+      { text: 'Helpers', note: 'pictures, search, small jobs: /subagents gives them a job', list: g.helpers },
+    ].filter((x) => x.list.length).map((x) => ({ ...x, ids: x.list.map((m) => m.id) }));
+    const ids = groups.flatMap((x) => x.ids);
+    const v = cur(form)?.model;
+    const head = v ? (ids.includes(v) ? v : g.loaded.concat(g.agent, g.chatOnly, g.helpers).find((m) => m.copies.includes(v))?.id) : null;
+    const suggested = suggestModel(catalog.models, tried) ?? ids[0];
+    const at = head ?? suggested;
+    const entries = Object.fromEntries([...g.loaded, ...g.agent, ...g.chatOnly, ...g.helpers].map((m) => [m.id, m]));
+    // Which copy each row stands for (a saved model that is a copy: that one).
+    const copy = head && head !== v ? { [head]: v } : {};
+    const rows = rowsOf(form);
+    return { ...form, pick: { models: ids, index: Math.max(0, ids.indexOf(at)), suggested, groups, entries, copy, tried, total: catalog.models.length }, index: Math.max(0, rows.findIndex((r) => r.id === 'model')) };
+  }
   const ids = (models?.length ? models : modelChoices(form)).filter(Boolean);
   if (ids.length < 2) return form;
   const v = cur(form)?.model;
@@ -130,8 +157,20 @@ export function movePick(form, dir) {
   const n = form.pick.models.length;
   return { ...form, pick: { ...form.pick, index: (form.pick.index + n + dir) % n } };
 }
+// ←→ on a row that stands for several copies (laguna-xs-2.1 :latest · :bf16 · :q8_0): the next one.
+export function moveCopy(form, dir) {
+  const p = form.pick;
+  const id = p?.models[p.index];
+  const m = p?.entries?.[id];
+  if (!m?.copies?.length) return form;
+  const all = [id, ...m.copies];
+  const now = Math.max(0, all.indexOf(p.copy?.[id] ?? id));
+  return { ...form, pick: { ...p, copy: { ...p.copy, [id]: all[(now + all.length + dir) % all.length] } } };
+}
+// The name the highlighted row stands for (its copy, when one was picked).
+export const pickedName = (p, i = p?.index) => { const id = p?.models[i]; return p?.copy?.[id] ?? id; };
 export function commitPick(form) {
-  const name = form.pick?.models[form.pick.index];
+  const name = pickedName(form.pick);
   if (!name) return form;
   return { ...withValues(form, { model: name }), pick: null };
 }
@@ -373,6 +412,8 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, 
       url = tunnel.url;
     } else url = directUrl(r);
     const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, reply: true, autoPick, signal, timeoutMs });
+    // An Ollama service with several models: its whole list, so the list Connect opens says what each can do.
+    if (r.kind === 'openai' && res.models?.length > 1) res.catalog = await ollamaCatalog({ url, key, signal, timeoutMs }).catch(() => null);
     if (tunnel) res.steps.unshift({ ok: true, text: 'ssh tunnel open' });
     return res;
   } catch (e) {

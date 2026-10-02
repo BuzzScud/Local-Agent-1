@@ -354,7 +354,7 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   // /model: the service's list, the one in use marked, what each can do; the chat-only model and this Mac folded
   expect(s.list).toContain('Model · Another service');
   expect(s.list).toMatch(/Ollama 0\.32\.12/);
-  expect(s.list).toMatch(/❯ tiny:3b\s+3\.2B\s+Q4_K_M\s+128k\s+tools\s+2\.0 GB\s+✔ in use/);
+  expect(s.list).toMatch(/❯ tiny:3b\s+3\.2B\s+Q4_K_M\s+128k\s+tools\s+2\.0 GB\s+not tried\s+✔ in use/);
   expect(s.list).toMatch(/Can run the agent/);
   expect(s.list).toMatch(/coder:30b\s+30\.5B MoE\s+Q4_K_M\s+256k\s+tools\s+18\.6 GB/);
   expect(s.list).toMatch(/▸ Chat only\s+1 on the service/);
@@ -397,7 +397,7 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   const s = r.snapshots;
   const flat = (x) => x.replace(/\s+/g, ' ');
   // the list marks the big ones (the in-use small one is marked in use)
-  expect(s.list).toMatch(/coder:30b\s+30\.5B MoE.*18\.6 GB\s+big/);
+  expect(s.list).toMatch(/coder:30b\s+30\.5B MoE.*18\.6 GB\s+not tried\s+big/);
   expect(s.list).toMatch(/huge:120b.*\s+big/);
   expect(s.list).not.toMatch(/tiny:3b.*\bbig\b/);
   // on: said in a note, from → to
