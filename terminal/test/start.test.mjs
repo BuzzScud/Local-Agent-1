@@ -1,15 +1,18 @@
 // The start page (start.jsx): two columns under a titled line, the model loading in place, the
 // tip under the prompt box until the first message, and the safety check in the same columns.
+// Also where to start (start-folder.mjs): typed in the home folder, which folder to work in.
 import { test, expect } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
 const h = React.createElement;
-import { StartPage, TrustPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
+import { StartPage, TrustPage, FolderPage, botPixels, botRows, botCells, botGlyph, greyOf, nameOf, BOT_STRIP_ROW, ago, titleOf, recentOf, gitWords, notesWords, startTip, tipsOn, TIPS, INIT_TIP } from '../src/app/start.jsx';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { setup, T, quit } from './app-setup.mjs';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { startFolders, folderOption } from '../src/app/start-folder.mjs';
 
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
 const draw = (el, cols) => strip(renderToString(el, { columns: cols })).split('\n');
@@ -184,6 +187,30 @@ test('the safety check in the same columns: nothing read, the question, the answ
     for (const s of ['Quick safety check', 'Is this a folder you created or one you trust?', '  1. Yes, I trust this folder', '❯ 2. No, exit', 'not trusted yet', 'nothing read here yet', 'wakes up after you say yes']) expect(text).toContain(s);
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(w);
   }
+});
+
+test('where to start in the same columns: the two folders, the first marked, nothing past the edge', () => {
+  for (const w of [80, 107]) {
+    const lines = draw(h(FolderPage, { width: w, options: ['~ · your home folder', '~/agentic-coder · Agentic Coder'], model: 'Qwen3.5 9B', selected: 0 }), w);
+    const text = lines.join('\n');
+    for (const s of ['Where to start', 'started ~ · your home folder', '❯ 1. ~ · your home folder', '  2. ~/agentic-coder · Agentic Coder', 'wakes up where you pick', 'Enter to confirm · Esc to exit']) expect(text).toContain(s);
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(w);
+  }
+});
+
+test('where to start is asked only in the home folder, with Agentic Coder\'s folder found; not elsewhere, and not when continuing', () => {
+  const base = mkdtempSync(join(tmpdir(), 'agentic-start-folder-')); // under a link on macOS (/var is /private/var)
+  const home = join(base, 'home'), repo = join(home, 'agentic-coder'), other = join(home, 'project');
+  mkdirSync(repo, { recursive: true });
+  mkdirSync(other);
+  // A Terminal's folder is the real path: still the home folder, offered as spelled so it shows under ~.
+  const offered = startFolders({ cwd: realpathSync(home) }, { home, repo });
+  expect(offered.map(folderOption)).toEqual(['~ · your home folder', '~/agentic-coder · Agentic Coder']);
+  expect(offered.map((f) => f.path)).toEqual([home, repo]);
+  for (const o of [{ cwd: other }, { cwd: repo }, { cwd: home, continueLast: true }, { cwd: home, resumeId: 'abc' }, { cwd: home, folder: true }]) expect(startFolders(o, { home, repo })).toBe(null);
+  expect(startFolders({ cwd: home }, { home, repo: null })).toBe(null); // no repo found: nothing to pick between
+  expect(startFolders({ cwd: home }, { home, repo: home })).toBe(null);
+  expect(startFolders({ cwd: home }, { home, repo: '/opt/agentic-coder' }).map(folderOption)[1]).toBe('/opt/agentic-coder · Agentic Coder');
 });
 
 test('the real app: a tip under the prompt box until the first message, then "? for shortcuts"', async () => {

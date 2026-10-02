@@ -9,8 +9,10 @@ import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCh
 import { readLimits, modelWithLimits, HARNESS_LIMITS } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
+import { resolve } from 'node:path';
 import { pickOnTerminal } from './app/pick.mjs';
-import { TrustPage, TRUST_OPTIONS } from './app/start.jsx';
+import { TrustPage, TRUST_OPTIONS, FolderPage } from './app/start.jsx';
+import { startFolders, folderOption } from './app/start-folder.mjs';
 
 // coding -p: a question from Agentic Coder is printed and answered on the same
 // terminal. Its choices are a menu like the app's (arrows, enter, or the
@@ -65,6 +67,17 @@ async function ensureTrusted(cwd) {
   return false;
 }
 
+// Typed in the home folder: which folder to work in, before the safety check (app/start-folder.mjs).
+// The folder picked, or null (esc: nothing started).
+async function pickStartFolder(folders) {
+  const width = Math.max(MIN_COLS, process.stdout.columns || 100);
+  const model = (modelById(opts.modelId) ?? MODELS[DEFAULT_MODEL]).name;
+  const options = folders.map(folderOption);
+  const page = (i) => `\n${renderToString(<FolderPage width={width} options={options} model={model} selected={i} />, { columns: width })}\n\n`;
+  const pick = await pickOnTerminal(options, { page });
+  return pick === null ? null : folders[pick].path;
+}
+
 const HELP = cliHelpText({ version: VERSION, modelName: MODELS[DEFAULT_MODEL].name, lingerMins: LINGER_SECS / 60, models: setupModels(MODELS, DEFAULT_MODEL) });
 
 function parse(argv) {
@@ -96,6 +109,8 @@ function parse(argv) {
     else if (a === '--local') o.local = true;
     // --start: the model loads as the window opens (otherwise it waits for /start; /autostart on keeps that).
     else if (a === '--start') o.load = true;
+    // --folder <path>: work there, not where coding was typed (a restart after /update passes it).
+    else if (a === '--folder') { o.folder = true; o.cwd = resolve(val() ?? '.'); }
     else rest.push(a);
   }
   if (rest.length) o.prompt = rest.join(' ');
@@ -244,6 +259,8 @@ if (process.argv[2] === 'setup') {
 const opts = parse(process.argv.slice(2));
 if (opts.help) { process.stdout.write(HELP); process.exit(0); }
 if (opts.version) { process.stdout.write(`${VERSION}\n`); process.exit(0); }
+// Commands run where the agent works, as if coding had been typed there.
+if (opts.folder) { try { process.chdir(opts.cwd); } catch { process.stderr.write(`coding: no folder ${opts.cwd}\n`); process.exit(2); } }
 // The model picked last time (kept by /model) — the edited copy included,
 // when its file and manifest are still there.
 opts.modelId = (modelById(opts.modelId) ?? modelById(loadSettings(opts.cwd).model) ?? MODELS[DEFAULT_MODEL]).id;
@@ -351,6 +368,15 @@ if (opts.print) {
   }
 } else {
   if (!process.stdin.isTTY) { process.stderr.write('coding needs a terminal. For scripts use: coding -p "…"\n'); process.exit(2); }
+  // Typed in the home folder: which folder to work in; the safety check is then about that one.
+  const folders = startFolders(opts);
+  if (folders) {
+    const at = await pickStartFolder(folders);
+    if (at === null) process.exit(0);
+    opts.cwd = at;
+    opts.picked = true;
+    process.chdir(at);
+  }
   // Step 1, before anything in the folder is read: the safety check.
   if (!(await ensureTrusted(opts.cwd))) process.exit(0);
   // What the start loaded, for the start page: the notes read into the model, settings a folder
@@ -400,7 +426,8 @@ if (opts.print) {
   if (restartArgs) {
     // The launcher waiting on this app starts the new version (see update.mjs).
     const { leaveRestart, RESTART_CODE } = await import('./app/update.mjs');
-    leaveRestart(restartArgs);
+    // The launcher starts it where coding was typed: a folder picked or given comes along.
+    leaveRestart(opts.picked || opts.folder ? ['--folder', opts.cwd, ...restartArgs] : restartArgs);
     process.stdout.write('\x1b[2m  ↻ Restarting on the update…\x1b[0m\n');
     process.exit(RESTART_CODE);
   }
