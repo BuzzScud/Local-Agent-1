@@ -9,6 +9,7 @@ files with nothing loaded from outside; download one and open it in a browser to
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
 | [tests/agentic-coder-test-record.html](tests/agentic-coder-test-record.html) | page | Agentic Coder test record | 448 KB | 2026-10-03 |
+| [tests/agentic-coder-door-check-2026-10-03-1027.html](tests/agentic-coder-door-check-2026-10-03-1027.html) | page | Door check · background sessions and the door between Macs | 13 KB | 2026-10-03 |
 | [tests/agentic-coder-door-check-2026-10-03-0943.html](tests/agentic-coder-door-check-2026-10-03-0943.html) | page | Door check · background sessions and the door between Macs | 13 KB | 2026-10-03 |
 | [tests/agentic-coder-door-check-2026-10-03-0941.html](tests/agentic-coder-door-check-2026-10-03-0941.html) | page | Door check · background sessions and the door between Macs | 13 KB | 2026-10-03 |
 | [tests/agentic-coder-door-check-2026-10-03-0939.html](tests/agentic-coder-door-check-2026-10-03-0939.html) | page | Door check · background sessions and the door between Macs | 13 KB | 2026-10-03 |
