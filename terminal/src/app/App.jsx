@@ -2534,7 +2534,7 @@ export function App({ opts, win, onRestart }) {
         if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then /compact can summarize.', tone: 'dim' }); break; }
         // agent.compact leaves a conversation this short as it is; said, so ctrl+p is not silent.
-        if ((agent.messages?.length ?? 0) <= 3) { flash('Nothing to summarize yet: the conversation is still short', 2500); break; }
+        if ((agent.said?.() ?? agent.messages?.length ?? 0) <= 3) { flash('Nothing to summarize yet: the conversation is still short', 2500); break; }
         setLive({ phase: 'working', turnStart: Date.now(), verb: 'Compacting', tokens: 0 });
         try { await agent.compact(undefined, { instructions: arg || undefined }); } catch (e) { push({ type: 'note', text: e.message, tone: 'error' }); }
         setLive(IDLE);

@@ -100,6 +100,9 @@ test('the agent: once a conversation on the remote set, as a List step it did no
     expect(result.content).toContain('The tests run with node --test from the repo top.');
     expect(asked.indexOf(call)).toBeGreaterThan(asked.findIndex((m) => m.role === 'user')); // after the request, before any step of its own
     expect(events[0]).toMatchObject({ name: 'List', label: 'Reading all memory files', given: true, view: { kind: 'opening' } });
+    // The opening read is not conversation: what was said is counted without its two messages,
+    // so one short exchange is still "nothing to summarize yet" (/compact, ctrl+p).
+    expect(a.messages.length - a.said()).toBe(2);
     await a.send('and where is it used?');
     expect(a.messages.filter((m) => m.opening)).toHaveLength(1); // not again while it is still in the conversation
     // Trimmed away (memory filled): it comes again with the next message.
@@ -110,6 +113,7 @@ test('the agent: once a conversation on the remote set, as a List step it did no
     const l = new Agent({ url: fake.url, model: local, cwd: repo, system: systemPrompt({ cwd: repo, git: 'g' }), memory: { home, recall: false }, home, flows: false, verify: false });
     await l.send('what does total do?');
     expect(l.messages.some((m) => m.opening)).toBe(false);
+    expect(l.said()).toBe(l.messages.length); // on this Mac the count is what it always was
     process.env.AGENTIC_OPENING = 'off';
     const off = new Agent({ url: fake.url, model: remote, cwd: repo, system: systemPrompt({ cwd: repo, git: 'g' }), memory: { home, recall: false }, home, flows: false, verify: false });
     await off.send('what does total do?');
