@@ -558,6 +558,31 @@ export function openMemory(cwd, { home = homedir(), today = day(), rules = null 
 // What is read at every start: the rules that always hold, in full, then one
 // line per fact. The facts themselves come with the request they fit.
 // maxChars: about 430 tokens, 7 seconds of reading at a cold start.
+// The memory whole, for the opening read of a model on another machine (opening.mjs): every fact in
+// use about the user and about this project, in full, most useful first, each with its kind and the day
+// it was saved (so an old one can be checked), up to maxChars. An event is left out, as above.
+export function factsInFull(cwd, { home = homedir(), maxChars = 8000 } = {}) {
+  const dirs = memoryDirs(cwd, home);
+  const tilde = (p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
+  const keep = (list) => list.filter((f) => f.always || !looksLikeEvent(f.text)).sort(byWorth);
+  const you = keep(readFacts(dirs.you));
+  const here = keep(readFacts(dirs.project));
+  let text = '';
+  let left = 0;
+  for (const [title, list] of [[`About the user (${tilde(dirs.you)})`, you], [`About this project (${dirs.project ? tilde(dirs.project) : ''})`, here]]) {
+    if (!list.length) continue;
+    const lines = [];
+    for (const f of list) {
+      const body = f.kind === 'recipe' && f.steps.length ? `${oneLine(f.text)} Steps: ${f.steps.map((s, i) => `${i + 1}. ${s}`).join(' ')}` : oneLine(f.text);
+      const l = `- ${f.always ? '[always] ' : ''}${f.kind === 'failed' && !/^failed\b/i.test(body) ? 'failed: ' : ''}${body} (${f.kind}${f.saved ? `, saved ${f.saved}` : ''})`;
+      if (text.length + title.length + lines.join('\n').length + l.length > maxChars) { left++; continue; }
+      lines.push(l);
+    }
+    if (lines.length) text += `${text ? '\n\n' : ''}${title}\n${lines.join('\n')}`;
+  }
+  return { text, you: you.length, project: here.length, left };
+}
+
 export function memoryNotes(cwd, { home = homedir(), maxChars = 1600 } = {}) {
   const dirs = memoryDirs(cwd, home);
   const you = readFacts(dirs.you).sort(byWorth);

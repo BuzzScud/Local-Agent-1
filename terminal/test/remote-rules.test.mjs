@@ -261,7 +261,8 @@ test('as shipped: twelve files in terminal/rules/remote, each guide with a "Read
   }
   const h = readFileSync(join(dir, 'HARNESS.md'), 'utf8');
   for (const part of ['Who you are', 'How you work', 'Guides', 'Rules the app enforces']) expect(PF.sectionOf(h, part)).toBeTruthy();
-  expect(PF.sectionOf(readFileSync(join(dir, 'TOOLS.md'), 'utf8'), 'Tool use').split('\n').at(-1)).toBe('- Call one tool at a time and wait for its result.');
+  // The last line asks for a step's reads together (3 Oct 2026): a model on another machine runs every call of a reply.
+  expect(PF.sectionOf(readFileSync(join(dir, 'TOOLS.md'), 'utf8'), 'Tool use').split('\n').at(-1)).toStartWith("- Send the reads and searches a step needs together, in one reply");
   expect(PF.parseSkills(readFileSync(join(dir, 'SKILLS.md'), 'utf8')).map((s) => s.name)).toEqual(['Write a test', 'Review code', 'Refactor', 'Flaky test']);
 });
 

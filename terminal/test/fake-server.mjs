@@ -1,6 +1,7 @@
 // A stand-in for llama-server that replays scripted replies over the same
 // streaming API, so the agent and the terminal app can be tested without the
-// real model. Each reply: { reasoning?, text?, tool?: { name, args }, tools?: [{ name, args }, …] }.
+// real model. Each reply: { reasoning?, text?, tool?: { name, args }, tools?: [{ name, args }, …] },
+// or { error } for a stream that ends with the service's error.
 // tokens: what the answer says it wrote, when not what it sent (Ollama sends nothing of a call cut off).
 // route(request) may answer a request out of turn (the memory's save, which
 // comes whenever the app finds a pause): its reply is sent and the scripted
@@ -36,6 +37,8 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null,
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const send = (delta, finish = null) => res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
     const pieces = (s) => s.match(new RegExp(`[\\s\\S]{1,${chunk}}`, 'g')) ?? [];
+    // error: the stream ends with the service's error, as Ollama's does when it cannot read a tool call.
+    if (reply.error) { res.write(`data: ${JSON.stringify({ error: { message: reply.error } })}\n\n`); res.end(); return; }
     const wait = () => new Promise((r) => setTimeout(r, delayMs));
     let n = 0;
     for (const p of pieces(reply.reasoning ?? '')) { send({ reasoning_content: p }); n++; await wait(); }

@@ -25,7 +25,8 @@ export const LIMITS = [
   {
     id: 'way', label: 'Who decides', group: 'Effort', choice: true,
     steps: () => ['app', 'model'],
-    def: () => 'app',
+    // A big model on a service (big-model mode) decides for itself, as Claude Code does; the rest as before.
+    def: (m) => m?.harness?.way ?? 'app',
     show: (v) => (v === 'model' ? 'Model' : 'App'),
     note: (v) => (v === 'model' ? 'it sorts, looks and saves for itself, like Claude Code · next-step, tests, stuck and said-done start on (/hooks)' : 'the app sorts, reads ahead and checks, as before'),
   },

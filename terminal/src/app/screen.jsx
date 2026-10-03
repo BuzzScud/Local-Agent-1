@@ -73,6 +73,17 @@ function ToolView({ it, width }) {
       break;
     }
     case 'todos': return <Todos title={it.label === 'Plan' ? 'Plan' : 'Update Todos'} items={v.items.map((t) => ({ text: t.text, done: t.status === 'done', active: t.status === 'in_progress' }))} />;
+    // The opening read on a remote (agent/opening.mjs), as Claude Code shows its own: the title, the command, what came.
+    case 'opening': return (
+      <Box flexDirection="column">
+        <Row markColor={bullet}><Text bold>{v.title}</Text></Row>
+        <Result>
+          <Text color={C.dim} wrap="truncate-end">$ {v.command}</Text>
+          {v.lines.map((l, i) => <Text key={i} wrap="truncate-end">{l}</Text>)}
+          <Text color={C.dim}>(ctrl+o to expand)</Text>
+        </Result>
+      </Box>
+    );
     case 'denied': body = <Text color={C.warn}>Not allowed: {v.message}</Text>; break;
     case 'declined': body = <Text color={C.dim}>You said no{v.feedback ? `: ${v.feedback}` : ''}</Text>; break;
     case 'answer': body = <Text><Text color={C.dim}>You: </Text>{v.text}</Text>; break;

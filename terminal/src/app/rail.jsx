@@ -162,6 +162,13 @@ export function ToolNode({ it }) {
         </Box>
       );
     }
+    case 'opening': return (
+      <Box flexDirection="column">
+        <Node g="○" c={C.dim}><Head verb={v.title} c="ansi256(250)" what="" detail={v.lines[0] ?? ''} hint="ctrl+o to expand" /></Node>
+        <Pipe><Text color={C.dim} wrap="truncate-end">$ {v.command}</Text></Pipe>
+        {v.lines.slice(1).map((l, i) => <Pipe key={i}><Text wrap="truncate-end">{l}</Text></Pipe>)}
+      </Box>
+    );
     case 'todos': return (
       <Box flexDirection="column">
         <Node g="☐" c={C.ok}><Text bold>{it.label === 'Plan' ? 'Plan' : 'Update Todos'}</Text></Node>

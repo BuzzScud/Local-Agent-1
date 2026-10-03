@@ -51,7 +51,12 @@ function byWords(t) {
   // Greetings and thanks go straight to the conversation: asking the model to
   // sort them cost a request, and with a big model a re-read of its instructions.
   if (isSmallTalk(t)) return { kind: 'question', chat: true };
-  if (/\b(don'?t|do not|without|no)\s+(change|chang|edit|touch|modif)|\b(change|edit|touch|modify)\s+nothing\b|\bno (code )?changes?\b|\bjust (explain|tell|describe|show)\b/i.test(t)) return { kind: 'question' };
+  // "Don't change …" asks for no change only when nothing in the request opens with a thing to do:
+  // "Move it into one shared function in validate.mjs … Don't change what any handler returns" is a
+  // change with a limit, and sorted as a question every Edit of it was turned away (3 Oct 2026, hard
+  // task 31). "Just explain" is a question whatever else it says.
+  const opensWithWork = /(?:^|[.!?]\s+|\n\s*)(?:please\s+)?(?:add|fix|change|make|implement|create|rename|remove|delete|update|refactor|write|move|extract|split|merge|replace|use|build|convert|rewrite|simplify)\b(?!\s+(?:nothing|anything)\b)/i.test(t);
+  if (/\bjust (explain|tell|describe|show)\b/i.test(t) || (!opensWithWork && /\b(don'?t|do not|without|no)\s+(change|chang|edit|touch|modif)|\b(change|edit|touch|modify)\s+nothing\b|\bno (code )?changes?\b/i.test(t))) return { kind: 'question' };
   // Deleting, moving, renaming or copying a file is a file operation, not a
   // code change: it goes step by step, where the command asks you first.
   // ("delete trades.json" once became code that deleted the file on every run.)

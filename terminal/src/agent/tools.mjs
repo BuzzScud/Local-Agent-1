@@ -254,15 +254,18 @@ export function parseArgs(name, json, way = 'app') {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { error: 'The arguments must be a JSON object.' };
   const def = defOf(name, way);
   if (!def) return { error: `There is no tool called "${name}". The tools are: ${toolDefs(way).map((d) => d.name).join(', ')}.` };
-  const args = normalizeArgs(name, raw, way);
-  // Read on Model: a path or a list of paths (one of them is needed).
-  if (name === 'Read' && way === 'model') {
-    if (typeof args.paths === 'string') args.paths = args.paths.split(/[\s,]+/).filter(Boolean);
+  // Read takes a list of paths on both ways: only Model's list of tools says so, but a big model sends
+  // one on App too (3 Oct 2026, Qwen3.6 on a service: "Read needs path", a step lost). A list sent as
+  // a string of JSON ('["a.mjs", "b.mjs"]') is read as the list it is.
+  const args = normalizeArgs(name, raw, name === 'Read' ? 'model' : way);
+  if (name === 'Read') {
+    if (typeof args.paths === 'string') args.paths = listOfPaths(args.paths);
     if (Array.isArray(args.paths)) args.paths = args.paths.map((x) => String(x).trim()).filter(Boolean).slice(0, 8);
     if (!args.path && args.paths?.length === 1) { args.path = args.paths[0]; delete args.paths; }
-    if (!args.path && !args.paths?.length) return { error: 'Read needs "path" (one file) or "paths" (a list of files). Send the Read call again with one of them set.' };
+    if (args.path && args.paths) delete args.paths;
+    if (!args.path && !args.paths?.length) return { error: way === 'model' ? 'Read needs "path" (one file) or "paths" (a list of files). Send the Read call again with one of them set.' : needsText(name, 'path') };
   }
-  for (const req of def.parameters.required ?? []) {
+  for (const req of name === 'Read' && args.paths ? [] : def.parameters.required ?? []) {
     if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: needsText(name, req) };
   }
   for (const [k, v] of Object.entries(args)) {
@@ -273,6 +276,12 @@ export function parseArgs(name, json, way = 'app') {
     if (want === 'boolean' && typeof v !== 'boolean') args[k] = v === 'true' || v === 1 || v === '1';
   }
   return { args };
+}
+
+// A list of paths sent as one string: JSON ('["a.mjs", "b.mjs"]'), else split at commas and spaces.
+function listOfPaths(s) {
+  if (/^\s*\[/.test(s)) { try { const v = JSON.parse(s); if (Array.isArray(v)) return v; } catch {} }
+  return s.replace(/^\s*\[|\]\s*$/g, '').split(/[\s,]+/).map((x) => x.replace(/^["']|["']$/g, '')).filter(Boolean);
 }
 
 // What the terminal shows for a call: Read(export.mjs), Update(x), Bash(npm test)…
@@ -600,9 +609,13 @@ export function prepare(name, args, env) {
       if (alt.length === 1) { Object.assign(p, resolvePath(env.cwd, alt[0])); args.path = alt[0]; exists = true; }
     }
     // Rewriting a whole existing file is how a small model breaks it, so only Edit may change one.
+    // A model on another machine (the remote set) may, as Claude Code does: once it has read the file in
+    // this conversation (env.rewrite). Refused, Qwen3.6 tried to copy a whole test file into old_text,
+    // lost its place and ended the task with nothing written (3 Oct 2026, hard task 32).
     if (name === 'Write' && exists) {
       const lines = readFileSync(p.abs, 'utf8').split('\n').filter((l) => l.trim()).length;
-      if (lines > 0) return { error: `${p.rel} already exists (${lines} lines). Use Edit to change the part that needs changing; Write is only for new files.` };
+      if (lines > 0 && env.rulesSet === 'remote' && !env.rewrite?.(p.abs)) return { error: `${p.rel} already exists (${lines} lines). Read it first: then Write may replace it whole, or Edit changes one part of it.` };
+      if (lines > 0 && env.rulesSet !== 'remote') return { error: `${p.rel} already exists (${lines} lines). Use Edit to change the part that needs changing; Write is only for new files.` };
     }
     if (exists && statSync(p.abs).isDirectory()) {
       return { error: `${p.rel === '.' ? 'The project folder' : p.rel} is a folder. ${name} changes one file at a time: use Search to find the files, then ${name === 'Edit' ? 'Edit each one (replace_all changes every match inside one file)' : 'Write a file path'}.` };
@@ -853,7 +866,8 @@ export async function execute(name, args, prepared, env) {
     case 'Bash': {
       // Output lines and the timeout move with /effort (env.bash).
       const timeoutMs = env.bash?.timeoutMs ?? 120_000;
-      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal });
+      // A model on another machine gets a test run's passing tests folded into one line (squeezeTests).
+      const r = await runCommand(args.command, { cwd: env.cwd, timeoutMs, maxLines: env.bash?.maxLines ?? 80, signal: env.signal, squeeze: env.rulesSet === 'remote' });
       const body = r.lines.join('\n');
       const took = timeoutMs >= 90_000 ? `${Math.round(timeoutMs / 60_000)} minutes` : `${Math.round(timeoutMs / 1000)} s`;
       const status = r.timedOut ? `\n(stopped after ${took})` : r.code === 0 ? '' : `\n(exit code ${r.code})`;
