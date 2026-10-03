@@ -18,7 +18,7 @@ import { systemPrompt, projectNotes, gitSummary, SESSION_MARK, notesRoom, isHome
 import { offerFor, nextMode, modeOf } from '../agent/permissions.mjs';
 import { screenAccess, askScreenAccess, terminalApp } from '../tools/screen.mjs';
 import { resolvePath } from '../agent/tools.mjs';
-import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, ollamaPs, preloadOllama, unloadOllama, isOutOfMemory, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
+import { warmUp, MODELS, DEFAULT_MODEL, modelPath, onDiskBytes, serverBinOf, engineOf, thinkingLevel, ModelServer, chooseContext, availableBytes, needBytes, runningServer, LINGER_SECS, liveUsers, stopIdleServers, stopServer, otherCopies, serverProcesses, contextCheck, freeWithHandBack, freeAfterQuit, searchBytes, scanServers, hasDraft, battleHold, battleCounts, findRunTest, RUN_TESTS, readEditedAll, editedModels, modelById, readRecord, Embedder, embedderReady, HOME, macMemory , connectRemote, remoteLabel, remoteRisk, remoteModel, saveKey, removeKey, keyStore, DEFAULT_REMOTE, sourceOf, withVision, visionPath, getVision, ollamaCatalog, ollamaModel, ollamaPs, preloadOllama, unloadOllama, isOutOfMemory, floorCtx, setEndpoint, endpointOf, authHeaders } from '../../../models/index.mjs';
 import { droppedFiles, IMAGE_TOKEN } from '../agent/images.mjs';
 import { spendEvents, spendLabel, windowSpend } from '../agent/spend.mjs';
 import { registerWindow, updateWindow, unregisterWindow, projectOf, othersIn, modelsInUseOn, copyAt, makeCopy, removeCopy, copyChanges, changeLines, putBack, copyDiff, keptCopies } from './copies.mjs';
@@ -827,7 +827,7 @@ export function App({ opts, win, onRestart }) {
     setStarting(true); setStartPhase('connecting');
     setRemoteState('connecting'); setCatalog(null);
     let conn;
-    try { conn = await connectRemote(r); } catch (e) {
+    try { conn = await connectRemote(r, { serviceSize: true }); } catch (e) {
       remoteRef.current.why = e.message;
       setStarting(false);
       if (before.server && !before.model.remote) {
@@ -1095,7 +1095,14 @@ export function App({ opts, win, onRestart }) {
       let at = numCtx || Math.min(o.ctx || 262_144, 262_144);
       let err = null;
       for (;;) {
-        try { await preloadOllama({ url: conn.url, model: name, numCtx, keepAlive: -1 }); err = null; break; } catch (e) { err = e; }
+        try {
+          await preloadOllama({ url: conn.url, model: name, numCtx, keepAlive: -1 });
+          // The service's own size is less than the agent works in (Ollama's own is 4k): loaded again at
+          // the floor, and kept for it below.
+          const own = numCtx ? null : (await ollamaModel({ url: conn.url, model: name }).catch(() => null))?.loadedCtx;
+          if (own && own < floorCtx(o) && mine()) { numCtx = at = floorCtx(o); conn.numCtx = numCtx; setEndpoint(conn.url, { ...endpointOf(conn.url), numCtx }); continue; }
+          err = null; break;
+        } catch (e) { err = e; }
         if (!mine() || !isOutOfMemory(err.message) || at / 2 < 32_768) break;
         push({ type: 'note', text: `${name} did not fit on the service at ${ctxWord(at)} context: trying ${ctxWord(at / 2)}…`, tone: 'warn' });
         at /= 2;
@@ -1162,7 +1169,7 @@ export function App({ opts, win, onRestart }) {
   const useServiceModel = async (id) => {
     const before = remoteRef.current.conn;
     const r = { ...settings.remote, model: id };
-    const conn = await connectRemote(r);
+    const conn = await connectRemote(r, { serviceSize: true });
     // The same address (http): its endpoint now names the new model. A tunnel of its own (ssh): the old one closes.
     if (before && before.url !== conn.url) before.stop();
     remoteRef.current.conn = conn;

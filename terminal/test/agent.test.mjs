@@ -95,6 +95,25 @@ test('bad arguments come back as an error the model can fix', async () => {
   expect(agent.messages.find((m) => m.role === 'tool').content).toContain('Edit needs "old_text"');
 });
 
+test('no room on the service\'s GPU is said as it is: the conversation is not summarized away (that error ends "a smaller Context")', async () => {
+  const { createServer } = await import('node:http');
+  const { setEndpoint, dropEndpoint } = await import('../../models/index.mjs');
+  const server = createServer((req, res) => { req.resume(); if (req.url === '/health') { res.end('{"status":"ok"}'); return; } res.writeHead(500, { 'content-type': 'application/json' }); res.end('{"error":"an error was encountered while running the model: CUDA error\\nCUDA error: the resource allocation failed"}'); });
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  setEndpoint(url, { remote: true, kind: 'llama', key: null, model: 'qwen', label: 'svc' });
+  const cwd = project();
+  const notes = [];
+  const agent = new Agent({ url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), ctx: 32768, mode: 'edits', flows: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  try {
+    expect(await agent.send('add a --json flag to export.mjs')).toBe('error');
+    expect(notes.join('\n')).toContain('the service has no room to load qwen (out of GPU memory)');
+    expect(notes.join('\n')).not.toMatch(/outgrew|Summarizing/);
+    expect(agent.messages.some((m) => m.role === 'user' && /add a --json flag/.test(m.content))).toBe(true);
+  } finally { dropEndpoint(url); await new Promise((d) => server.close(d)); }
+});
+
 test('a tool call written as text still runs', async () => {
   const replies = [{ text: 'Reading.\n<tool_call>\n{"name": "Read", "arguments": {"path": "export.mjs"}}\n</tool_call>' }, { text: 'It prints CSV.' }];
   const { events } = await run(replies);

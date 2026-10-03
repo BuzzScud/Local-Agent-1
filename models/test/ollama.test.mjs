@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, bigHarness, paramsB, HOME } = await import('../index.mjs');
+const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, floorCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, bigHarness, paramsB, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
@@ -151,6 +151,7 @@ test('out of GPU memory, in the words a service uses (llama.cpp’s CUDA and ROC
   expect(isOutOfMemory('llama-server process has terminated: exit status 1: cudaMalloc failed: out of memory\nalloc_tensor_range: failed to allocate ROCm0 buffer of size 74995960832')).toBe(true);
   expect(isOutOfMemory('error loading model: unable to allocate ROCm0 buffer')).toBe(true);
   expect(isOutOfMemory('model requires more system memory (75.0 GiB) than is available (40.2 GiB)')).toBe(true);
+  expect(isOutOfMemory('an error was encountered while running the model: CUDA error\nCUDA error: the resource allocation failed')).toBe(true);
   expect(isOutOfMemory('llama-server process has terminated: exit status 2')).toBe(false);
   expect(isOutOfMemory('model "x" not found, try pulling it first')).toBe(false);
 });
@@ -185,11 +186,35 @@ test('connecting to an Ollama service: its own chat with the model’s context, 
     expect([t.numCtx, t.ctx]).toEqual([131072, 131072]);
     expect(endpointOf(t.url)).toMatchObject({ ollama: true, numCtx: 131072, thinks: false });
     t.stop();
-    // a cold one: none until it is loaded (the service's own), 32k planned for meanwhile
+    // a cold one: the floor is named, so the service loads it at what the agent plans for (coding -p, the bench)
     const cold = await connectRemote({ ...r, model: 'coder:30b' });
-    expect([cold.numCtx, cold.ctx]).toEqual([null, 32768]);
+    expect([cold.numCtx, cold.ctx]).toEqual([32768, 32768]);
+    expect(endpointOf(cold.url)).toMatchObject({ numCtx: 32768 });
     cold.stop();
+    // the app (serviceSize): none until it is loaded at the service's own, which it then reads and pins
+    const app = await connectRemote({ ...r, model: 'coder:30b' }, { serviceSize: true });
+    expect([app.numCtx, app.ctx]).toEqual([null, 32768]);
+    app.stop();
   } finally { await s.close(); }
+});
+
+test('a model loaded smaller than the agent works in (Ollama’s own 4k) is named the floor, 32k or its longest when that is less', async () => {
+  expect([floorCtx({ ctx: 262144 }), floorCtx({ ctx: 16384 }), floorCtx({})]).toEqual([32768, 16384, 32768]);
+  const s = await fakeOllama();
+  const tiny = MODELS.find((m) => m.name === 'tiny:3b');
+  tiny.loaded = 4096;
+  try {
+    const r = { source: 'openai', kind: 'openai', connect: 'http', address: s.url, model: 'tiny:3b', context: 0, key: false };
+    for (const opts of [{}, { serviceSize: true }]) {
+      const t = await connectRemote(r, opts);
+      expect([t.numCtx, t.ctx]).toEqual([32768, 32768]);
+      t.stop();
+    }
+    // its own context from /effort still wins, small or not
+    const own = await connectRemote({ ...r, contexts: { 'tiny:3b': 8192 } });
+    expect([own.numCtx, own.ctx]).toEqual([8192, 8192]);
+    own.stop();
+  } finally { tiny.loaded = 131072; await s.close(); }
 });
 
 test('big-model mode: a model of 30B or more (by its total) that can call tools; not a small one, a chat-only one, an embedder or one whose abilities are not listed', async () => {
