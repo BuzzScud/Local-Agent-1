@@ -194,6 +194,34 @@ export function removeKey(id = 'default') {
   } catch {}
 }
 
+// A secret longer than a key, kept the same way (an MCP server's sign-in: its client and its tokens,
+// as JSON). Stored as base64url, one line, so it goes through security's command line like a key.
+const SECRET_MAX = 32 * 1024;
+export function saveSecret(text, id, label = 'Agentic Coder') {
+  const b64 = Buffer.from(String(text), 'utf8').toString('base64url');
+  if (b64.length > SECRET_MAX) throw new Error('that is too long to keep');
+  if (keyStore() === 'keychain') {
+    const q = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+    spawnSync(SECURITY, ['-i'], { input: `add-generic-password -U -a ${q(id)} -s ${q(SERVICE)} -l ${q(label)} -w ${q(b64)}\n`, encoding: 'utf8', timeout: 10_000 });
+    if (readSecret(id) !== String(text)) throw new Error('the Keychain did not keep it');
+    return 'keychain';
+  }
+  let all = {};
+  try { all = JSON.parse(readFileSync(keyFile(), 'utf8')); } catch {}
+  all[id] = b64;
+  mkdirSync(HOME, { recursive: true });
+  writeFileSync(keyFile(), `${JSON.stringify(all)}\n`, { mode: 0o600 });
+  chmodSync(keyFile(), 0o600);
+  return 'file';
+}
+export function readSecret(id) {
+  let b64 = null;
+  if (keyStore() === 'keychain') { const r = spawnSync(SECURITY, ['find-generic-password', '-a', id, '-s', SERVICE, '-w'], { encoding: 'utf8', timeout: 10_000 }); b64 = r.status === 0 ? r.stdout.replace(/\n$/, '') : null; }
+  else { try { b64 = JSON.parse(readFileSync(keyFile(), 'utf8'))[id] ?? null; } catch { b64 = null; } }
+  if (!b64) return null;
+  try { return Buffer.from(b64, 'base64url').toString('utf8'); } catch { return null; }
+}
+
 // The end of a key, for the form (••••3f9a): enough to tell two keys apart.
 export const keyEnd = (key) => (key && key.length >= 12 ? key.slice(-4) : '');
 

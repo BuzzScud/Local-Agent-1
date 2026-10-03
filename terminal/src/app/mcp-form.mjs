@@ -72,7 +72,7 @@ export function listRows(pk) {
   if (pk.project?.servers.length && pk.project.answer !== 'yes') rows.push({ id: 'project' });
   return rows;
 }
-const STATE_WORDS = { connected: 'connected', starting: 'starting…', failed: 'not running', off: 'off', signin: 'sign in needed' };
+const STATE_WORDS = { connected: 'connected', starting: 'starting…', failed: 'not running', off: 'off', signin: 'sign in: s' };
 // One server's line: [dot, state, where, tools].
 export function serverLine(s) {
   const tools = s.state !== 'connected' ? (s.error ?? '') : `${s.off ? `${s.tools - s.off} of ${s.tools} tools on` : `${s.tools} tool${s.tools === 1 ? '' : 's'}`}${s.reads ? ` · ${s.reads} read${s.reads === 1 ? 's' : ''}` : ''}${s.changes ? ' · changed its tools' : ''}`;
@@ -123,7 +123,7 @@ export function showMcpValue(form, id) {
       if (form.key) return `${'•'.repeat(8)}${keyEnd(form.key)}`;
       return form.server?.hasKey ? `${'•'.repeat(8)}${form.server.keyEnd ?? ''}` : 'none';
     }
-    case 'test': return form.test?.running ? 'starting it…' : form.test ? (form.test.ok ? '✔ it works' : '✗ it does not') : 'enter to check';
+    case 'test': return form.test?.running ? (form.test.step ? 'signing in…' : 'starting it…') : form.test ? (form.test.ok ? '✔ it works' : '✗ it does not') : 'enter to check';
     case 'save': return 'enter to save';
     default: return String(v[id] ?? '') || '—';
   }
@@ -144,7 +144,7 @@ export function mcpRowNote(form, id) {
     case 'local': return !v.sandbox ? '' : parseLocal(v.local) === 'any' ? 'every service running on this Mac' : parseLocal(v.local)?.length ? 'only these ports of this Mac' : 'ports it may reach here: 5432 · any';
     case 'auth': return v.auth === 'oauth' ? 'a browser page once; the token is kept' : v.auth === 'key' ? `Authorization: Bearer … · kept in the ${store}` : 'it needs no key';
     case 'claude': return v.claude === 'connector' ? 'Claude calls it from Anthropic’s side: no question here' : 'the same on every model';
-    case 'test': return 'starts it once and lists its tools';
+    case 'test': return form.test?.step ?? (v.runs === 'address' && v.auth === 'oauth' ? 'signs in, then lists its tools' : 'starts it once and lists its tools');
     case 'save': return form.was ? 'keeps the changes, for every folder' : 'for every folder (mcp.json)';
     default: return '';
   }

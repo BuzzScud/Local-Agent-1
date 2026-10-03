@@ -47,6 +47,11 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
       blocks.push({ type: 'server_tool_use', id: `srvtoolu_t${n}`, name: 'tool_search_tool_bm25', input: { query: reply.toolSearch.query } });
       blocks.push({ type: 'tool_search_tool_result', tool_use_id: `srvtoolu_t${n}`, content: { type: 'tool_search_tool_search_result', tool_references: reply.toolSearch.found.map((name) => ({ type: 'tool_reference', tool_name: name })) } });
     }
+    // mcp: { server, name, input, result, error }: a tool called through Anthropic's MCP connector, on its side.
+    if (reply.mcp) {
+      blocks.push({ type: 'mcp_tool_use', id: `mcptoolu_${n}`, name: reply.mcp.name, server_name: reply.mcp.server, input: reply.mcp.input ?? {} });
+      blocks.push({ type: 'mcp_tool_result', tool_use_id: `mcptoolu_${n}`, is_error: Boolean(reply.mcp.error), content: [{ type: 'text', text: reply.mcp.result ?? '' }] });
+    }
     if (reply.text) blocks.push({ type: 'text', text: reply.text });
     for (const [i, t] of [...(reply.tool ? [reply.tool] : []), ...(reply.tools ?? [])].entries()) blocks.push({ type: 'tool_use', id: `toolu_${n}${i ? `_${i}` : ''}`, name: t.name, input: t.args });
     const stop = reply.stop ?? (reply.tool || reply.tools ? 'tool_use' : 'end_turn');
@@ -68,7 +73,7 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
       } else if (b.type.endsWith('_tool_result')) {
         send('content_block_start', { index: i, content_block: b });
       } else {
-        send('content_block_start', { index: i, content_block: { type: b.type, id: b.id, name: b.name, input: {} } });
+        send('content_block_start', { index: i, content_block: { type: b.type, id: b.id, name: b.name, ...(b.server_name ? { server_name: b.server_name } : {}), input: {} } });
         const args = JSON.stringify(b.input);
         for (const part of args.match(/.{1,10}/gs) ?? []) send('content_block_delta', { index: i, delta: { type: 'input_json_delta', partial_json: part } });
       }

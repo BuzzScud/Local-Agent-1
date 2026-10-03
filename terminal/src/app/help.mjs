@@ -142,6 +142,7 @@ export const PLACES = [
   ['~/.agentic-coder/mcp.json', 'your MCP servers (/mcp), for every folder: each one’s command or address, its sandbox, and your marks on its tools (off, and “reads”). Never a key: the Keychain holds those, under mcp-<server>'],
   ['.agentic/mcp.json', 'a project’s own MCP servers: never started before you said yes to that very file, and asked about again when it changes; the model cannot change it without asking'],
   ['~/.agentic-coder/logs/mcp-<server>.log', 'what an MCP server printed, and when it started, stopped or changed its tools'],
+  ['Keychain · mcp-<server>-signin', 'an MCP server you signed in to: the app’s registration with it and its tokens, refreshed by themselves; /mcp’s o takes them away'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
   ['~/.agentic-coder/logs', 'the model server and update logs'],

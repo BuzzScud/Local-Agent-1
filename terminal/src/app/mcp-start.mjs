@@ -5,13 +5,16 @@
 // so they measure the same as before. AGENTIC_MCP=off: no hub at all.
 import { McpHub } from '../tools/mcp.mjs';
 import { serversFor, serverKey, knownEra, rememberEra, mcpLogFile, allowedPrint, rememberAllowed } from './mcp-store.mjs';
+import { oauthProvider } from './mcp-auth.mjs';
 
 export const mcpOff = (env = process.env) => /^(off|0|false|no)$/i.test(String(env.AGENTIC_MCP ?? ''));
 
 // { hub, project, broken }: the hub with its servers starting in the background; project: the
 // folder's own mcp.json as it is (asked about by the app; never started unasked); broken: why a
 // file could not be read. null when MCP is off.
-export function openMcp(cwd, { auth = null } = {}) {
+// A server you sign in to gets the sign-in's provider, with nobody there: its kept tokens, refreshed
+// by themselves; a sign-in that is needed is only noted (/mcp does it).
+export function openMcp(cwd, { auth = (server) => oauthProvider(server) } = {}) {
   if (mcpOff()) return null;
   const hub = new McpHub({ cwd, keyOf: serverKey, era: knownEra, saveEra: rememberEra, logFile: mcpLogFile, auth, allowed: { print: allowedPrint, remember: rememberAllowed } });
   const found = serversFor(cwd);

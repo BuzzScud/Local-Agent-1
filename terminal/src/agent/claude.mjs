@@ -25,7 +25,7 @@ const WEB_SERVER = {
   '20260209': { WebSearch: { type: 'web_search_20260209', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5 } },
   basic: { WebSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 5 } },
 };
-const SERVER_BLOCK = /^(server_tool_use|web_search_tool_result|web_fetch_tool_result|.*_tool_result)$/;
+const SERVER_BLOCK = /^(server_tool_use|mcp_tool_use|mcp_tool_listing|web_search_tool_result|web_fetch_tool_result|.*_tool_result)$/;
 // Anthropic's tool search: with many MCP tools (agent/mcp.mjs marks them defer: true), their
 // definitions stay out of the context until Claude searches for one; the search runs on Anthropic's side.
 const TOOL_SEARCH = { type: 'tool_search_tool_bm25_20251119', name: 'tool_search_tool_bm25' };
@@ -133,6 +133,9 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     ...(system ? { system } : {}),
   };
   if (!drop.has('cache')) params.cache_control = { type: 'ephemeral' };
+  // MCP servers handed to Anthropic's connector (/mcp's "On Claude" row): Claude calls them from
+  // Anthropic's side, public https addresses only, tools only; their calls come back as finished steps.
+  const connector = drop.has('connector') ? [] : (extra?.mcpServers ?? []);
   if (tools?.length) {
     // WebSearch and WebFetch become Anthropic's own web tools (left out if the model refused them).
     const server = drop.has('web') ? {} : WEB_SERVER[drop.has('webnew') || caps.webTools !== '20260209' ? 'basic' : '20260209'];
@@ -143,6 +146,10 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     params.tools = [...own.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(defer && t.defer ? { defer_loading: true } : {}), ...(drop.has('eager') ? {} : { eager_input_streaming: true }) })), ...web, ...(defer ? [TOOL_SEARCH] : [])];
     // Several calls a reply only when the model decides (agent/way.mjs), as with the local models.
     params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: !parallel };
+  }
+  if (connector.length) {
+    params.mcp_servers = connector.map((s) => ({ type: 'url', url: s.url, name: s.name, ...(s.token ? { authorization_token: s.token } : {}) }));
+    params.tools = [...(params.tools ?? []), ...connector.map((s) => ({ type: 'mcp_toolset', mcp_server_name: s.name }))];
   }
   if (!drop.has('thinking')) {
     if (caps.adaptive && (think || caps.alwaysThinks || caps.binding)) {
@@ -159,6 +166,7 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
   const betas = [];
   if (params.thinking?.block_binding) betas.push('thinking-binding-controls-2026-08-01');
   if (caps.fallbacks && !drop.has('fallbacks')) { params.fallbacks = 'default'; betas.push('server-side-fallback-2026-07-01'); }
+  if (params.mcp_servers) betas.push('mcp-client-2025-11-20');
   if (betas.length) params.betas = betas;
   return params;
 }
@@ -174,6 +182,7 @@ function refusedField(message, params) {
   if (params.output_config?.effort && /effort/i.test(m)) return 'effort';
   if (params.output_config?.format && /format|json_schema|schema/i.test(m)) return 'format';
   if (params.tools?.some((t) => t.defer_loading) && /defer_loading|tool_search/i.test(m)) return 'toolsearch';
+  if (params.mcp_servers && /mcp_servers|mcp_toolset|mcp-client|mcp server/i.test(m)) return 'connector';
   if (params.tools?.some((t) => t.type) && /web_(search|fetch)/i.test(m)) return params.tools.some((t) => /_2026/.test(t.type ?? '')) ? 'webnew' : 'web';
   if (params.tools?.[0]?.eager_input_streaming && /eager_input_streaming/i.test(m)) return 'eager';
   if (params.cache_control && /cache_control/i.test(m)) return 'cache';
@@ -234,6 +243,18 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
           yield b.type === 'web_search_tool_result'
             ? { type: 'server', id: b.tool_use_id, name: 'WebSearch', args: { query: input.query ?? '' }, view: err ? { kind: 'error', message: `the search did not work (${err})` } : { kind: 'websearch', count: Array.isArray(b.content) ? b.content.length : 0, service: 'Anthropic' }, error: Boolean(err) }
             : { type: 'server', id: b.tool_use_id, name: 'WebFetch', args: { url: input.url ?? b.content?.url ?? '' }, view: err ? { kind: 'error', message: `the page could not be read (${err})` } : { kind: 'fetched', url: b.content?.url ?? input.url ?? '', status: 200 }, error: Boolean(err) };
+        } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'mcp_tool_use') {
+          // A tool of an MCP server called through Anthropic's connector: its input comes as it streams.
+          const b = ev.content_block;
+          server.set(b.id, { name: b.name, server: b.server_name, json: b.input && Object.keys(b.input).length ? JSON.stringify(b.input) : '', index: ev.index });
+        } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'mcp_tool_result') {
+          const b = ev.content_block;
+          const call = server.get(b.tool_use_id);
+          let input = {};
+          try { input = JSON.parse(call?.json || '{}'); } catch {}
+          const text = (Array.isArray(b.content) ? b.content : []).map((c) => (c?.type === 'text' ? c.text : `[${c?.type ?? 'content'}]`)).join('\n');
+          const said = Object.entries(input).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ').slice(0, 70);
+          yield { type: 'server', id: b.tool_use_id, name: 'Mcp', shown: { label: `${call?.server ?? 'MCP'} · ${call?.name ?? 'tool'}`, arg: said }, view: { kind: 'mcp', lines: text ? text.split('\n').length : 0, content: text, connector: true }, error: Boolean(b.is_error) };
         } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_search_tool_result') {
           // A search for tools done on Anthropic's side: shown as a finished step, with what it loaded.
           const b = ev.content_block;

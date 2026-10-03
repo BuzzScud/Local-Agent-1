@@ -10,7 +10,8 @@
 //
 // The spec: { era: 'legacy' | 'modern' | 'both', name, version, instructions, tools, resources,
 // prompts, start: 'ok' | 'crash' | 'hang' | 'deaf' | 'garbage', changeAfter (tool calls before the list
-// changes to tools2), token (an address: the Bearer token it wants), keyEnv + key (a program: the
+// changes to tools2), token (an address: the Bearer token it wants), oauth (an address: a sign-in in
+// front of it, with its own small authorization server; oauthDeny: the sign-in says no), keyEnv + key (a program: the
 // environment variable it wants and what must be in it), log (a file: one JSON line per message) }.
 // A tool's `does` says what a call does: echo · text · add · picture · fail · crash · hang · slow ·
 // structured · link · ask (it asks the user one thing first) · env (an environment variable) ·
@@ -18,7 +19,7 @@
 import { createServer } from 'node:http';
 import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 
 export const LEGACY = '2025-11-25';
@@ -224,10 +225,46 @@ export async function startFakeMcp(spec = {}, { port = 0 } = {}) {
   });
   const server = fakeServer(spec, { send, ask });
   const session = randomUUID();
+  let base = '';
+  // The sign-in (spec.oauth): discovery, registration, the page that says yes (as a user would),
+  // the code for tokens with PKCE, and a refresh. issued: the access tokens it accepts.
+  const signin = { clients: 0, codes: new Map(), issued: new Set(), refresh: new Set(), n: 0, asked: [] };
+  const oauthRoute = (req, res, raw) => {
+    const u = new URL(req.url, base);
+    const json = (status, value) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
+    if (u.pathname.startsWith('/.well-known/oauth-protected-resource')) return json(200, { resource: `${base}/mcp`, authorization_servers: [base] }), true;
+    if (u.pathname === '/.well-known/oauth-authorization-server') return json(200, { issuer: base, authorization_endpoint: `${base}/authorize`, token_endpoint: `${base}/token`, registration_endpoint: `${base}/register`, response_types_supported: ['code'], grant_types_supported: ['authorization_code', 'refresh_token'], code_challenge_methods_supported: ['S256'], token_endpoint_auth_methods_supported: ['none'] }), true;
+    if (u.pathname === '/.well-known/openid-configuration') return json(404, {}), true;
+    if (u.pathname === '/register' && req.method === 'POST') { const meta = JSON.parse(raw || '{}'); signin.clients += 1; return json(201, { ...meta, client_id: `client-${signin.clients}` }), true; }
+    if (u.pathname === '/authorize') {
+      signin.asked.push(Object.fromEntries(u.searchParams));
+      const to = new URL(u.searchParams.get('redirect_uri'));
+      if (spec.oauthDeny) to.searchParams.set('error', 'access_denied');
+      else { const code = `code-${++signin.n}`; signin.codes.set(code, u.searchParams.get('code_challenge')); to.searchParams.set('code', code); }
+      if (u.searchParams.get('state')) to.searchParams.set('state', u.searchParams.get('state'));
+      res.writeHead(302, { location: to.href }); res.end(); return true;
+    }
+    if (u.pathname === '/token' && req.method === 'POST') {
+      const f = new URLSearchParams(raw);
+      const give = () => { const t = `tok-${++signin.n}`, r = `ref-${signin.n}`; signin.issued.add(t); signin.refresh.add(r); return json(200, { access_token: t, token_type: 'Bearer', expires_in: 3600, refresh_token: r }); };
+      if (f.get('grant_type') === 'authorization_code') {
+        const challenge = signin.codes.get(f.get('code'));
+        const sent = createHash('sha256').update(String(f.get('code_verifier'))).digest('base64url');
+        if (!challenge || challenge !== sent) return json(400, { error: 'invalid_grant', error_description: 'that code, or its verifier, is not one this server gave' }), true;
+        signin.codes.delete(f.get('code'));
+        return give(), true;
+      }
+      if (f.get('grant_type') === 'refresh_token' && signin.refresh.has(f.get('refresh_token'))) return give(), true;
+      return json(400, { error: 'invalid_grant' }), true;
+    }
+    return false;
+  };
   const http = createServer(async (req, res) => {
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const raw = Buffer.concat(chunks).toString('utf8');
+    if (spec.oauth && oauthRoute(req, res, raw)) return;
+    if (spec.oauth && !signin.issued.has(String(req.headers.authorization ?? '').replace(/^Bearer /, ''))) { res.writeHead(401, { 'www-authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"` }); res.end('sign in first'); return; }
     let body = null;
     try { body = raw ? JSON.parse(raw) : null; } catch { /* not JSON */ }
     seen.push({ method: req.method, url: req.url, headers: req.headers, body });
@@ -270,7 +307,10 @@ export async function startFakeMcp(spec = {}, { port = 0 } = {}) {
     }
   });
   await new Promise((resolve) => http.listen(port, '127.0.0.1', resolve));
+  base = `http://127.0.0.1:${http.address().port}`;
   return {
+    signin,
+    forget: () => signin.issued.clear(), // every token it gave stops working (a refresh still does)
     url: `http://127.0.0.1:${http.address().port}/mcp`,
     port: http.address().port,
     seen,

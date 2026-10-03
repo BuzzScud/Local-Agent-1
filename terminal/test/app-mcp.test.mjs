@@ -106,6 +106,44 @@ test('a project\'s own MCP servers wait for a yes at the start, and a changed fi
   expect(Object.values(state.projects)[0].answer).toBe('never');
 }, T * 2);
 
+test('Level 1 in the window: sign in to a server (s), attach a resource (@shop:), run a server\'s prompt (/shop:)', async () => {
+  const { cwd, env, base } = setup();
+  const home = join(base, 'home');
+  const { startFakeMcp } = await import('./fake-mcp.mjs');
+  const tracker = await startFakeMcp({ oauth: true });
+  mkdirSync(home, { recursive: true });
+  const shop = { era: 'modern', resources: [{ uri: 'shop://notes/release', name: 'release notes', text: 'Release 4.2: the magic number is 8812.' }], prompts: [{ name: 'review-pr', description: 'Review a pull request', arguments: [{ name: 'number', required: true }], text: 'Review pull request {number} of the shop, briefly.' }] };
+  writeFileSync(join(home, 'mcp.json'), JSON.stringify({ servers: { tracker: { url: tracker.url, auth: 'oauth' }, shop: { command: COMMAND, sandbox: false, env: { FAKE_MCP: JSON.stringify(shop) } } } }));
+  const fake = await startFakeServer([{ text: 'The number is 8812.' }, { text: 'Reviewed.' }]);
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_SIGNIN_FOLLOW: '1' }, timeoutMs: 100_000, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { wait: 'needs you to sign in' }, { type: '/mcp' }, { key: 'enter' }, { wait: 'sign in: s' }, { sleep: 200 }, { snapshot: 'before' },
+    // tracker is first in the list: s signs in (the stand-in "browser" says yes), and it connects.
+    { type: 's' }, { wait: 'Signed in to tracker' }, { wait: 'connected' }, { sleep: 300 }, { snapshot: 'after' }, { key: 'esc' }, { sleep: 300 },
+    { type: 'what does @shop:' }, { wait: '@shop:shop://notes/release' }, { sleep: 150 }, { snapshot: 'menu' }, { key: 'tab' }, { sleep: 150 }, { type: 'say about the magic number?' }, { key: 'enter' }, { wait: 'The number is 8812.' }, { sleep: 300 }, { snapshot: 'answer' },
+    { type: '/shop:' }, { wait: '/shop:review-pr' }, { sleep: 150 }, { snapshot: 'prompts' }, { type: 'review-pr 57' }, { key: 'enter' }, { wait: 'Reviewed.' }, { sleep: 300 }, { snapshot: 'reviewed' },
+    ...quit,
+  ] });
+  await fake.close();
+  await tracker.close();
+  expect(flat(r.snapshots.before)).toMatch(/tracker\s+○ sign in: s/);
+  expect(flat(r.snapshots.after)).toMatch(/tracker\s+● connected/);
+  expect(flat(r.snapshots.after)).toContain('Signed in to tracker: the token is in the Keychain');
+  expect(tracker.signin.issued.size).toBe(1);
+  // The token is kept apart from mcp.json.
+  expect(readFileSync(join(home, 'mcp.json'), 'utf8')).not.toContain('tok-');
+  expect(readFileSync(join(home, 'remote-keys.json'), 'utf8')).toContain('mcp-tracker-signin');
+  // @shop: listed its resource; the message went with it, marked as data.
+  expect(flat(r.snapshots.menu)).toContain('release notes');
+  expect(flat(r.snapshots.answer)).toMatch(/Attached @shop:shop:\/\/notes\/release \(MCP resource, 1 line\)/);
+  const asked = JSON.stringify(fake.requests.find((q) => q.stream).messages);
+  expect(asked).toContain('<resource server=\\"shop\\" uri=\\"shop://notes/release\\">');
+  expect(asked).toContain('Release 4.2: the magic number is 8812.');
+  // /shop: listed its prompt; typed in full, it went as the message.
+  expect(flat(r.snapshots.prompts)).toMatch(/\/shop:review-pr\s+Review a pull request · number/);
+  expect(flat(r.snapshots.reviewed)).toContain('shop\'s prompt “review-pr” with number 57 · sent as your message');
+  expect(JSON.stringify(fake.requests.filter((q) => q.stream).at(-1).messages)).toContain('Review pull request 57 of the shop, briefly.');
+}, T * 2);
+
 test('a server\'s own question while its tool runs is shown as the server\'s, and the answer goes back to it', async () => {
   const { cwd, env, base } = setup();
   const home = join(base, 'home');
