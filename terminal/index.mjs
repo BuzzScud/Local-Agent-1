@@ -24,6 +24,7 @@ export { streamChat } from './src/agent/client.mjs';
 export { complete, decide, SETUP_THINK_CAP } from './src/flows/llm.mjs';
 // The request sorter and the lines of its test, for the sorting check (models/evals/tools/sort-check.mjs).
 export { modelSort, routeByRules, sortQuestion, KINDS as SORT_KINDS } from './src/flows/index.mjs';
+export { questionFor } from './src/flows/clarify.mjs';
 export { LINES as SORT_LINES } from './test/sort-lines.mjs';
 export { changeFlow } from './src/flows/change.mjs';
 export { fixFlow } from './src/flows/fix.mjs';
