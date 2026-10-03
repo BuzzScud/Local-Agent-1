@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
 import { systemPrompt, WORK_HABITS } from '../src/agent/prompt.mjs';
-import { askedQuestions, fileSaid, planSaid, changesSaid, lookSaid, checkInQuestion, stuckQuestion } from '../src/agent/questions.mjs';
+import { askedQuestions, fileSaid, planSaid, changesSaid, lookSaid, stepSaid, checkInQuestion, stuckQuestion } from '../src/agent/questions.mjs';
 import { parseArgs, TOOL_DEFS } from '../src/agent/tools.mjs';
 import { permissionOptions } from '../src/app/screen.jsx';
 import { cleanChoices } from '../src/flows/clarify.mjs';
@@ -77,7 +77,12 @@ test("the app's own questions in plain words: files by name, the Desktop as your
   expect(lookSaid('WebFetch', { url: 'https://example.com/a/b' })).toBe('a web page on example.com');
   const q = checkInQuestion(['the output of a command', 'countdown-card.html on your Desktop'], 6 * 60);
   expect(q.question).toBe('I have spent 6 minutes looking around and have not changed anything yet. I looked at the output of a command and countdown-card.html on your Desktop. Am I on the right track?');
-  expect(stuckQuestion('repeat', 'export.mjs', '').question).toBe('I tried the same step twice (looking at export.mjs) and I am not getting further. What should I do?');
+  expect(stuckQuestion('repeat', stepSaid('Read', { path: 'export.mjs' }), '').question).toBe('I tried the same step twice (looking at export.mjs) and I am not getting further. What should I do?');
+  // The step it repeated, by name: the command, the file changed (3 Oct: "looking at the output of a command", "looking at Edit").
+  expect(stuckQuestion('repeat', stepSaid('Bash', { command: 'npm test' }), '').question).toBe('I tried the same step twice (running npm test) and I am not getting further. What should I do?');
+  expect(stepSaid('Edit', { path: 'src/export.mjs' })).toBe('changing export.mjs in src');
+  expect(stepSaid('Write', { path: 'notes.txt' })).toBe('writing notes.txt');
+  expect(stepSaid('List', { path: 'src' })).toBe('looking at the files in src');
   // The error's own words come last.
   expect(stuckQuestion('errors', 'x', 'ENOENT: no such file').question).toBe('Three steps in a row did not work. The last one said: ENOENT: no such file What should I do?');
 });

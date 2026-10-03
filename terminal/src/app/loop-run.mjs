@@ -1,7 +1,7 @@
 // One run of a loop (/loop, app/loops.mjs), from the run's side. The window that owns the loop
 // starts `coding -p --loop-events` for each run; this is how the two talk:
 //   the run writes one JSON line per thing that happens to its stdout:
-//     { t: 'tool', label, arg, error, given, test }   a step (test: it ran the tests)
+//     { t: 'tool', label, arg, error, given, test, failed }   a step (test: it ran the tests; failed: they failed, when known)
 //     { t: 'note', text }                             a line from the app
 //     { t: 'text', text, final }                      what the model said
 //     { t: 'ask', id, kind, name, text, options, always, sig }   it waits for an answer
@@ -13,7 +13,9 @@
 // Nothing else is printed on stdout, so a line that does not parse is not from here.
 
 // A step that runs the project's tests (the board lights its TESTS step, and a miss turns the run red).
-export const isTestRun = (label, arg) => label === 'Bash' && /\b(test|tests|pytest|jest|vitest|mocha|unittest|rspec)\b/.test(String(arg ?? ''));
+// The agent says which steps those are (ev.tests: permissions.mjs runsTests, the rule its own check
+// uses); reading or searching a test file is not one.
+export const isTestRun = (ev) => Boolean(ev?.tests);
 
 // What an "always" covers for the loop's later runs: this exact command, every edit, this site.
 export function signatureOf(req) {
@@ -73,9 +75,11 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
     signal: ac.signal,
     event(type, ev) {
       if (type === 'tool') {
-        const test = isTestRun(ev.label, ev.arg);
-        if (test) tests = { ok: !ev.error };
-        say({ t: 'tool', label: ev.label, arg: one(ev.arg, 240), error: Boolean(ev.error), given: Boolean(ev.given), test });
+        const test = isTestRun(ev);
+        // A result not known (piped into tail with the counts cut off) leaves the last one as it was.
+        const known = test && ev.tests.failed !== null && ev.tests.failed !== undefined;
+        if (known) tests = { ok: !ev.tests.failed };
+        say({ t: 'tool', label: ev.label, arg: one(ev.arg, 240), error: Boolean(ev.error), given: Boolean(ev.given), test, ...(known ? { failed: Boolean(ev.tests.failed) } : {}) });
       } else if (type === 'note') { lastNote = one(ev.text, 400); say({ t: 'note', text: lastNote }); }
       else if (type === 'assistant' && String(ev.text ?? '').trim()) { if (ev.final) final = ev.text; say({ t: 'text', text: String(ev.text).trim().slice(0, 4000), final: Boolean(ev.final) }); }
     },

@@ -35,16 +35,23 @@ const PRESET_NAME = { debug: 'Fix the failing tests', test: 'Run the tests' };
 const nameOf = (message) => { const t = String(message).replace(/\s+/g, ' ').trim().split(/[.:!?](?:\s|$)/)[0]; return t.length > 28 ? `${t.slice(0, 27)}…` : t; };
 export const everyWord = (secs) => (!secs ? '' : secs % 86_400 === 0 ? `${secs / 86_400}d` : secs % 3600 === 0 ? `${secs / 3600}h` : secs % 60 === 0 ? `${secs / 60}m` : `${secs}s`);
 
-// What follows /loop: [debug|test|web] [10m] [message]. A kind alone uses its ready-made message;
-// a debugging loop with no time runs until its tests pass; any other loop with no time paces itself.
+// A time as people write it: 10m, 10 min, 10 minutes, 1.5h, 2 hours, 30 seconds, every hour.
+const UNIT_WORD = String.raw`(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?)`;
+const LEAD_TIME = new RegExp(String.raw`^(?:every\s+)?(?:(\d+(?:\.\d+)?)\s*${UNIT_WORD}|(?:an?\s+)?(second|minute|hour|day))\b[,:]?\s*`, 'i');
+const TAIL_TIME = new RegExp(String.raw`[\s,]+every\s+(?:(\d+(?:\.\d+)?)\s*${UNIT_WORD}|(?:an?\s+)?(second|minute|hour|day))\s*[.!]?$`, 'i');
+const secsOf = (m) => Math.round(Number(m[1] ?? 1) * UNIT[(m[2] ?? m[3])[0].toLowerCase()]);
+
+// What follows /loop: [debug|test|web] [10m] [message] [every 10 minutes]. The time comes first or
+// last ("every …"), in short or long words. A kind alone uses its ready-made message; a debugging
+// loop with no time runs until its tests pass; any other loop with no time paces itself.
 export function parseLoop(text, { min = minSecs() } = {}) {
   let rest = String(text ?? '').trim();
   let kind = null;
   let m = /^(debug|tests?|web)\b\s*/i.exec(rest);
   if (m) { kind = m[1].toLowerCase().replace(/^tests$/, 'test'); rest = rest.slice(m[0].length); }
   let every = null;
-  m = /^(\d+(?:\.\d+)?)\s*(s|secs?|m|mins?|h|hrs?|d|days?)\b\s*/i.exec(rest);
-  if (m) { every = Math.round(Number(m[1]) * UNIT[m[2][0].toLowerCase()]); rest = rest.slice(m[0].length); }
+  m = LEAD_TIME.exec(rest) ?? TAIL_TIME.exec(rest);
+  if (m) { every = secsOf(m); rest = `${rest.slice(0, m.index)}${rest.slice(m.index + m[0].length)}`; }
   let message = rest.trim();
   let name = null;
   if (!message) {
@@ -149,7 +156,11 @@ export function startRun(spec, { self = selfCommand(), env = process.env } = {})
   child.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
   child.on('error', (e) => emit({ t: 'end', reason: 'error', final: `The run could not start: ${e.message}` }));
   // A run that ends without saying so (a crash, the model gone): its last words on stderr say why.
-  child.on('exit', (code) => setTimeout(() => emit({ t: 'end', reason: 'error', final: err.trim().split('\n').filter((l) => l.trim() && !l.startsWith('·')).slice(-1)[0] ?? `the run ended (code ${code})` }), 50));
+  // Said once its output has closed, so a last line still on its way is read first; a run whose
+  // output stays open after it exits (something it started still holds it) is ended 2 s later.
+  const gone = (code) => emit({ t: 'end', reason: 'error', final: err.trim().split('\n').filter((l) => l.trim() && !l.startsWith('·')).slice(-1)[0] ?? `the run ended (code ${code})` });
+  child.on('close', (code) => gone(code));
+  child.on('exit', (code) => setTimeout(() => gone(code), 2000).unref?.());
   child.stdin.on('error', () => {});
   return {
     pid: child.pid,
@@ -182,7 +193,7 @@ export class Loops {
   get asking() { return [...this.needsYou].sort((a, b) => a.current.needs.since - b.current.needs.since)[0] ?? null; }
   say(l, kind, text, more = {}) { this.log.push({ at: this.now(), id: l?.id ?? null, kind, text, ...more }); if (this.log.length > 300) this.log.shift(); }
   changed() { this.dirty = true; this.onChange(); }
-  line(l, run, kind, text) { try { mkdirSync(dirOf(this.home, this.pid), { recursive: true, mode: 0o700 }); appendFileSync(runFile(this.home, this.pid, l.id, run.n), `${JSON.stringify({ at: this.now() - run.startedAt, kind, text })}\n`); } catch { /* the board shows less */ } run.lines = (run.lines ?? 0) + 1; }
+  line(l, run, kind, text, more = {}) { try { mkdirSync(dirOf(this.home, this.pid), { recursive: true, mode: 0o700 }); appendFileSync(runFile(this.home, this.pid, l.id, run.n), `${JSON.stringify({ at: this.now() - run.startedAt, kind, text, ...more })}\n`); } catch { /* the board shows less */ } run.lines = (run.lines ?? 0) + 1; }
 
   // /loop <text>: a new loop in this window's folder, in the mode it is in now.
   add(parsed, { folder = this.folder, mode = 'ask' } = {}) {
@@ -238,7 +249,7 @@ export class Loops {
 
   onEvent(l, run, ev) {
     if (this.closed || l.current !== run) return;
-    if (ev.t === 'tool') { this.line(l, run, ev.error ? 'fail' : 'tool', `${ev.label}(${ev.arg ?? ''})`); if (ev.test) run.tests = { ok: !ev.error }; }
+    if (ev.t === 'tool') { const failed = ev.test && ev.failed !== undefined ? Boolean(ev.failed) : Boolean(ev.error); this.line(l, run, failed ? 'fail' : 'tool', `${ev.label}(${ev.arg ?? ''})`, { test: Boolean(ev.test) }); if (ev.test && ev.failed !== undefined) run.tests = { ok: !failed }; }
     else if (ev.t === 'note') this.line(l, run, 'note', ev.text);
     else if (ev.t === 'text') this.line(l, run, 'text', ev.text);
     else if (ev.t === 'ask') {

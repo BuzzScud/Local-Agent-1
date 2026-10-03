@@ -8,13 +8,13 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
-import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, planSaid } from './questions.mjs';
+import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, planSaid } from './questions.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
 import { rankFiles } from './rank.mjs';
-import { decide, isReadOnly, offerFor, protectedBy, ownBy } from './permissions.mjs';
+import { decide, isReadOnly, testRunOf, offerFor, protectedBy, ownBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom, promptSetOf } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
 import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
@@ -35,7 +35,7 @@ import { Scratch } from '../flows/scratch.mjs';
 import { lostNames } from '../flows/blocks.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
 import { upFrontFor, SERVICE_REPLY } from './room.mjs';
-import { readResults } from '../flows/results.mjs';
+import { readResults, testsFailed } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
 import { autoCheck } from './auto-check.mjs';
@@ -1125,7 +1125,10 @@ export class Agent extends EventEmitter {
       // A test run a path made: if this message goes on step by step, the
       // tests helper hands its result over instead of running them again.
       if (label === 'Bash' && view?.kind === 'bash' && this.happened) this.happened.testRun = { cmd: String(arg), out: (view.lines ?? []).join('\n'), code: view.code, secs: (view.ms ?? 0) / 1000 };
-      this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error });
+      // A run of the tests says so, with whether they failed (a loop's run reads it: loop-run.mjs).
+      const run = label === 'Bash' && view?.kind === 'bash' ? testRunOf(arg, { testCmd: this.testCmd }) : null;
+      const tests = run ? { failed: testsFailed((view.lines ?? []).join('\n'), view.code ?? (error ? 1 : 0), run) } : null;
+      this.emit('tool', { id: `flow_${++seq}`, name: label, label, arg, view, error, ...(tests ? { tests } : {}) });
     };
     return {
       // The facts brought back for this request (recall.mjs), for the paths' own prompts.
@@ -2810,16 +2813,24 @@ export class Agent extends EventEmitter {
     if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
     // One that could have written a file (not ls, git log, cat…): the "said done, nothing changed" check counts it as a change.
     if (this.turn && call.name === 'Bash' && !isReadOnly(args.command)) this.turn.wroteByCommand = true;
-    if (this.keepProgress && this.turn && call.name === 'Bash' && !this.turn.changed && !this.turn.failsBefore && /\btest\b/.test(args.command)) this.turn.failsBefore = failsOf(out.view?.lines?.join('\n') ?? out.text, out.error);
-    if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) {
+    // A run of the tests (the project's test command, this message's check, or a test runner): only
+    // such a command is the check, never one that reads or searches a test file. It failed when its
+    // runner counted a failure or it exited with an error; piped on into another command (… | tail)
+    // with no counts in what came out, the result is not known (failed: null) and changes nothing,
+    // so the app runs the tests itself before the message ends (checkCmd).
+    const run = call.name === 'Bash' && out.view?.kind === 'bash' ? testRunOf(args.command, { testCmd: this.testCmd, check: this.turn?.check }) : null;
+    const tests = run ? { failed: testsFailed(out.view.lines?.join('\n') ?? out.text, out.error ? 1 : 0, run) } : null;
+    const known = tests && tests.failed !== null;
+    if (this.keepProgress && this.turn && known && !this.turn.changed && !this.turn.failsBefore) this.turn.failsBefore = failsOf(out.view?.lines?.join('\n') ?? out.text, tests.failed);
+    if (this.turn && known && this.turn.changed) {
       this.turn.testedAfterChange = true;
-      this.turn.checkOk = !out.error;
-      this.turn.checkFailed = Boolean(out.error);
+      this.turn.checkOk = !tests.failed;
+      this.turn.checkFailed = tests.failed;
       // What still fails after the change, for a loop's run that may keep a half-fix.
-      if (this.keepProgress) this.turn.failsAfter = failsOf(out.view?.lines?.join('\n') ?? out.text, out.error);
-      if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error };
+      if (this.keepProgress) this.turn.failsAfter = failsOf(out.view?.lines?.join('\n') ?? out.text, tests.failed);
+      if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !tests.failed };
     }
-    this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
+    this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000, ...(tests ? { tests } : {}) });
     return out;
   }
 
@@ -3453,7 +3464,7 @@ export class Agent extends EventEmitter {
   // with what went wrong; a hint goes straight to the model.
   async stuckAsk(why, call, out, signal) {
     const t = this.turn;
-    const step = lookSaid(call.name, parseArgs(call.name, call.args).args ?? {});
+    const step = stepSaid(call.name, parseArgs(call.name, call.args).args ?? {});
     const err = String(out?.text ?? '').split('\n').find((l) => l.trim())?.trim().slice(0, 160) ?? '';
     const q = stuckQuestion(why, step, err);
     const { question } = q;
