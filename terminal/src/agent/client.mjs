@@ -84,7 +84,7 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
   const ep = endpointFor(url, use);
   // The Claude API speaks its own Messages API (claude.mjs).
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
-  if (ep?.ollama) { yield* streamOllama({ url, ep, messages: ownStart(messages, conversation), tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
+  if (ep?.ollama) { yield* streamOllama({ url, ep, messages: ownStartOn(ep) ? ownStart(messages, conversation) : messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
   let body = {
     model: 'coding',
     // Pictures beside the text go in as the server takes them (images.mjs).
@@ -167,6 +167,17 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
 // practice task's request (3 Oct 2026, in 5 of 9 hard tasks). With a first line of their own, two
 // conversations share no start the service could take one's saved state for. Such a model reads the
 // instructions again for each conversation anyway, so this costs nothing there.
+// AGENTIC_OWN_START: on (the default: every model of an Ollama service, as since 3 Oct 2026) · off ·
+// auto (only the model kinds where the mixing was seen, OWN_START_KINDS). The line costs a model that
+// can reuse a conversation's saved start that reuse, and "costs nothing" was measured on one kind
+// only: the switch is there so the cost can be measured on the others (the fix plan's M2).
+export const OWN_START_KINDS = ['qwen35moe'];
+export function ownStartOn(ep, env = process.env) {
+  const v = String(env.AGENTIC_OWN_START ?? 'on').toLowerCase();
+  if (['off', '0', 'false'].includes(v)) return false;
+  if (v !== 'auto') return true;
+  return OWN_START_KINDS.includes(String(ep?.family ?? '').toLowerCase());
+}
 export function ownStart(messages, conversation) {
   if (!conversation || messages?.[0]?.role !== 'system' || typeof messages[0].content !== 'string') return messages;
   return [{ ...messages[0], content: `Conversation ${conversation}.\n${messages[0].content}` }, ...messages.slice(1)];

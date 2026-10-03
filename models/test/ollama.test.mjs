@@ -11,7 +11,7 @@ import { createServer } from 'node:http';
 
 process.env.AGENTIC_HOME ??= mkdtempSync(join(tmpdir(), 'agentic-ollama-home-'));
 process.env.AGENTIC_REMOTE_KEYSTORE = 'file';
-const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, floorCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, bigHarness, paramsB, HOME } = await import('../index.mjs');
+const { ollamaCatalog, ollamaModel, ollamaPs, ollamaCtx, floorCtx, preloadOllama, isOutOfMemory, COLD_CTX, probe, remoteModel, remoteLevels, ollamaCtxOf, connectRemote, endpointOf, GENERIC_REMOTE, BIG_HARNESS, BIG_WAYS, bigWay, bigHarness, paramsB, HOME } = await import('../index.mjs');
 test('the tests run in a throwaway home', () => { expect(HOME).not.toBe(join(homedir(), '.agentic-coder')); });
 
 // The models as Ollama 0.32 describes them. loaded: in /api/ps at that context.
@@ -232,6 +232,14 @@ test('big-model mode: a model of 30B or more (by its total) that can call tools;
     const g = await connectRemote(r);
     expect(g.model.harness).toEqual(BIG_HARNESS);
     expect(BIG_HARNESS).toEqual({ steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 }, way: 'model' }); // the model decides, as in Claude Code (3 Oct 2026)
+    // Who decides is kept by model kind, so a measurement can set one kind without the rest: every kind is
+    // Model until one is measured otherwise (BIG_WAYS holds only the default today).
+    expect(BIG_WAYS).toEqual({ default: 'model' });
+    const coder = c.models.find((m) => m.id === 'coder:30b');
+    expect([bigWay(coder), bigWay({ family: 'qwen35moe', id: 'qwen3.6:35b' }), bigWay(null)]).toEqual(['model', 'model', 'model']);
+    expect(bigWay(coder, { default: 'model', 'coder:30b': 'app' })).toBe('app'); // by its name
+    expect(bigWay({ family: 'qwen35moe', id: 'x' }, { default: 'app', qwen35moe: 'model' })).toBe('model'); // by its family
+    expect(bigHarness(coder, { default: 'model', coder: 'app' })).toEqual({ ...BIG_HARNESS, way: 'app' });
     g.stop();
     const t = await connectRemote({ ...r, model: 'tiny:3b' });
     expect(t.model.harness).toBeUndefined();

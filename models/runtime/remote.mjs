@@ -476,8 +476,18 @@ export const paramsB = (s) => {
   const m = /^([\d.]+)\s*([KMBT])/i.exec(String(s ?? '').trim());
   return m ? Number(m[1]) * { K: 1e-6, M: 1e-3, B: 1, T: 1e3 }[m[2].toUpperCase()] : 0;
 };
+// Who decides, by model kind: a word found in the model's family or name ('qwen35moe', 'coder'), the
+// longest that fits. Every kind is 'model' until a measurement of that kind says otherwise (the fix
+// plan's M1: so far 9 hard tasks, once, on one kind, against 28 tasks on another saying the opposite);
+// a measured kind gets its own line here, and /effort's saved row still wins over both.
+export const BIG_WAYS = { default: 'model' };
+export function bigWay(o, ways = BIG_WAYS) {
+  const name = `${o?.family ?? ''} ${o?.id ?? ''}`.toLowerCase();
+  const hit = Object.keys(ways).filter((k) => k !== 'default' && name.includes(k.toLowerCase())).sort((a, b) => b.length - a.length)[0];
+  return ways[hit ?? 'default'] ?? 'model';
+}
 // The profile for an Ollama model's entry (ollama.mjs), or null.
-export const bigHarness = (o) => (o?.known && o.chat && o.tools && paramsB(o.params) >= BIG_PARAMS ? BIG_HARNESS : null);
+export const bigHarness = (o, ways = BIG_WAYS) => (o?.known && o.chat && o.tools && paramsB(o.params) >= BIG_PARAMS ? { ...BIG_HARNESS, way: bigWay(o, ways) } : null);
 
 // The settings the agent runs a remote with: the matching model's here when
 // the server runs one of ours (by its file, else its name), else GENERIC_REMOTE

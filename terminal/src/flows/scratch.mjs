@@ -5,7 +5,7 @@
 // project's history, so tests that ask git which files are tracked or
 // ignored work as they do in your project, and a test that commits or
 // stashes changes only the copy.
-import { mkdtempSync, readdirSync, symlinkSync, readFileSync, writeFileSync, rmSync, existsSync, mkdirSync, realpathSync, cpSync, statSync, lstatSync } from 'node:fs';
+import { mkdtempSync, readdirSync, symlinkSync, readFileSync, writeFileSync, rmSync, existsSync, mkdirSync, realpathSync, cpSync, statSync, lstatSync, statfsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -22,10 +22,48 @@ const CACHES = new Set(['.vite-temp', '.vite', '.cache', '.tmp']);
 // a copy of all of it, and a failed clone doubled it: 135 GB, the disk full.)
 const MAX_BYTES = 5 * 1024 ** 3;
 const MAX_FILES = 200_000;
+// What a copy must leave free on the disk. A clone takes no room, but one that falls back to a
+// plain copy does, and a full disk stops everything else on the Mac.
+const MIN_FREE = 10 * 1024 ** 3;
+// A copy with no note of its maker (made by an app from before 3 Oct 2026) is left over after this long.
+const OLD_MS = 60 * 60_000;
+const PREFIX = 'agentic-scratch-';
+const freeBytes = (dir) => { try { const s = statfsSync(dir); return Number(s.bavail) * Number(s.bsize); } catch { return null; } };
+const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// A folder copied without write permission (iCloud's) stops rmSync part way: opened up, the rest goes too.
+function removeWhole(dir) {
+  try { rmSync(dir, { recursive: true, force: true }); } catch {
+    spawnSync('chmod', ['-R', 'u+rwx', dir]);
+    try { rmSync(dir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+// Copies left behind by an app that was killed in the middle of a step (dispose never ran: up to
+// MAX_BYTES each, for good). Each copy notes its maker beside it (<copy>.owner, the process id);
+// before a new copy is made, the ones whose maker is gone are removed. Answers how many went.
+export function sweepScratch(tmp = tmpdir(), { now = Date.now(), alive = isAlive } = {}) {
+  let names = [];
+  try { names = readdirSync(tmp); } catch { return 0; }
+  let gone = 0;
+  for (const n of names) {
+    if (!n.startsWith(PREFIX) || n.endsWith('.owner')) continue;
+    const dir = join(tmp, n), note = `${dir}.owner`;
+    let st;
+    try { st = lstatSync(dir); } catch { continue; }
+    if (!st.isDirectory()) continue;
+    let pid = 0;
+    try { pid = Number(readFileSync(note, 'utf8')) || 0; } catch {}
+    if (pid ? alive(pid) : now - st.mtimeMs < OLD_MS) continue;
+    removeWhole(dir);
+    rmSync(note, { force: true });
+    if (!existsSync(dir)) gone++;
+  }
+  return gone;
+}
 
 // Why no copy is made of cwd, or null. Counted the way cp copies it (a link
 // as a link) and stopped as soon as it is over a limit.
-function noCopy(cwd, { home, maxBytes, maxFiles }) {
+function noCopy(cwd, { home, maxBytes, maxFiles, free, minFree }) {
   if (isHomeFolder(cwd, home)) return 'it is the home folder, not a project';
   const todo = readdirSync(cwd).filter((n) => !SKIP.has(n) && !LINK.has(n)).map((n) => join(cwd, n));
   let bytes = 0, files = 0;
@@ -37,6 +75,9 @@ function noCopy(cwd, { home, maxBytes, maxFiles }) {
     if (++files > maxFiles) return `it holds more than ${maxFiles.toLocaleString('en-US')} files outside node_modules and the other linked folders`;
     if ((bytes += st.size) > maxBytes) return `it holds more than ${maxBytes / 1024 ** 3} GB outside node_modules and the other linked folders`;
   }
+  // The room the temp folder's disk has, were the copy to take its full size (a failed clone does).
+  const room = free(tmpdir());
+  if (room != null && room - bytes < minFree) return `the disk has ${(room / 1024 ** 3).toFixed(1)} GB free, and a copy must leave ${minFree / 1024 ** 3} GB`;
   return null;
 }
 
@@ -50,11 +91,13 @@ function linkEach(from, to) {
 }
 
 export class Scratch {
-  constructor(cwd, { home = homedir(), maxBytes = MAX_BYTES, maxFiles = MAX_FILES } = {}) {
-    const why = noCopy(cwd, { home, maxBytes, maxFiles });
+  constructor(cwd, { home = homedir(), maxBytes = MAX_BYTES, maxFiles = MAX_FILES, free = freeBytes, minFree = MIN_FREE } = {}) {
+    sweepScratch();
+    const why = noCopy(cwd, { home, maxBytes, maxFiles, free, minFree });
     if (why) throw new Error(`No throwaway copy of this folder: ${why}.`);
     this.cwd = cwd;
-    this.dir = mkdtempSync(join(tmpdir(), 'agentic-scratch-'));
+    this.dir = mkdtempSync(join(tmpdir(), PREFIX));
+    try { writeFileSync(`${this.dir}.owner`, String(process.pid)); } catch { /* without its note it is swept after an hour */ }
     this.saved = new Map(); // rel → original text (null = did not exist)
     for (const name of readdirSync(cwd)) {
       if (SKIP.has(name)) continue;
@@ -96,13 +139,9 @@ export class Scratch {
     return { code: r.code, timedOut: r.timedOut, ms: r.ms, out: r.lines.join('\n').split(this.dir).join('.').replace(/\/private\./g, '.') };
   }
 
-  // A folder copied without write permission (iCloud's) stops rmSync part
-  // way: opened up, the rest goes too.
   dispose() {
-    try { rmSync(this.dir, { recursive: true, force: true }); } catch {
-      spawnSync('chmod', ['-R', 'u+rwx', this.dir]);
-      try { rmSync(this.dir, { recursive: true, force: true }); } catch {}
-    }
+    removeWhole(this.dir);
+    rmSync(`${this.dir}.owner`, { force: true });
   }
 }
 

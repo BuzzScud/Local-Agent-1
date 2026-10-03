@@ -98,6 +98,13 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   hides a tool for a test of the skips. Which tests need what was measured, not guessed: the suite run with python and
   the picture helper taken away.
 - **Every test process has a throwaway home** (test-env.mjs, 3 Oct 2026) and removes its own when it ends.
+- **Throwaway copies** (`terminal/src/flows/scratch.mjs`): each notes its maker beside it (`<copy>.owner`), and before
+  a new one the copies whose maker is gone are removed (`sweepScratch`; one with no note after an hour); a copy that
+  would leave under 10 GB free on the disk is refused with the reason.
+- **Two switches a measurement needs** (3 Oct 2026, changing nothing until one is run): `AGENTIC_OWN_START` on · off ·
+  auto (`ownStartOn` in client.mjs; auto = the model kinds in `OWN_START_KINDS`) for the own first line of a
+  conversation on an Ollama service, and `BIG_WAYS` in models/runtime/remote.mjs (`bigWay`): who decides, by model
+  kind, every kind Model until its own measurement says otherwise.
 
 ## The memory
 

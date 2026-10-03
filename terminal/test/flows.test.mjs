@@ -1,6 +1,6 @@
 // The focused paths (src/flows) against the scripted model.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync, chmodSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync, readdirSync, chmodSync, existsSync, utimesSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 import { routeByRules, isCodeProject } from '../src/flows/index.mjs';
 import { fileHints, isTestFile } from '../src/flows/localize.mjs';
 import { checkInText } from '../src/flows/fix.mjs';
-import { Scratch } from '../src/flows/scratch.mjs';
+import { Scratch, sweepScratch } from '../src/flows/scratch.mjs';
 import { excerpts } from '../src/flows/excerpts.mjs';
 import { spawnSync } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
@@ -410,6 +410,40 @@ test('no scratch copy of the home folder or of a folder too big to be a project;
   writeFileSync(join(cwd, 'c.mjs'), 'x\n');
   expect(() => new Scratch(cwd, { maxFiles: 2 })).toThrow('it holds more than 2 files');
   expect(() => new Scratch(cwd, { maxBytes: 4 })).toThrow(/it holds more than .* GB/);
+});
+
+test('copies left by an app that was killed go before the next one is made; a copy that would leave the disk nearly full is refused', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'agentic-sweep-'));
+  const left = (name, { pid = null, hoursOld = 0 } = {}) => {
+    const d = join(tmp, name);
+    mkdirSync(join(d, 'sub'), { recursive: true });
+    writeFileSync(join(d, 'sub', 'f.txt'), 'x\n');
+    chmodSync(join(d, 'sub'), 0o500); // a read-only folder in it goes too
+    if (pid != null) writeFileSync(`${d}.owner`, String(pid));
+    if (hoursOld) { const t = new Date(Date.now() - hoursOld * 3_600_000); utimesSync(d, t, t); }
+    return d;
+  };
+  const dead = left('agentic-scratch-dead01', { pid: 4_000_001 });
+  const live = left('agentic-scratch-live01', { pid: process.pid, hoursOld: 5 });
+  const young = left('agentic-scratch-young1'); // no note (made by an older app), just made: left alone
+  const old = left('agentic-scratch-old001', { hoursOld: 2 }); // no note, two hours old: left over
+  const other = left('agentic-layout-x', { hoursOld: 9 }); // not a throwaway copy: never touched
+  expect(sweepScratch(tmp, { alive: (pid) => pid === process.pid })).toBe(2);
+  expect([dead, live, young, old, other].map((d) => existsSync(d))).toEqual([false, true, true, false, true]);
+  expect(existsSync(`${dead}.owner`)).toBe(false);
+  for (const d of [live, young, other]) chmodSync(join(d, 'sub'), 0o700);
+
+  const cwd = join(mkdtempSync(join(tmpdir(), 'agentic-flow-')), 'small');
+  mkdirSync(cwd);
+  writeFileSync(join(cwd, 'a.mjs'), 'x\n');
+  const s = new Scratch(cwd);
+  expect(readFileSync(`${s.dir}.owner`, 'utf8')).toBe(String(process.pid)); // each copy notes its maker
+  s.dispose();
+  expect([existsSync(s.dir), existsSync(`${s.dir}.owner`)]).toEqual([false, false]);
+  const GB = 1024 ** 3;
+  expect(() => new Scratch(cwd, { free: () => 3 * GB })).toThrow('No throwaway copy of this folder: the disk has 3.0 GB free, and a copy must leave 10 GB.');
+  new Scratch(cwd, { free: () => 500 * GB }).dispose();
+  new Scratch(cwd, { free: () => null }).dispose(); // the free space cannot be read: a copy is made, as before
 });
 
 test('a clone that stops at an unreadable file is not copied a second time; a read-only folder in the copy is removed with it', () => {
