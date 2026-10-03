@@ -21,6 +21,21 @@ test('the poster\'s list: secrets, auth, payments, deploys and migrations ask fi
   expect(guardStep({ name: 'Read', args: { path: 'src/keys.py' } })).toBeNull();
 });
 
+test('auth and payments are told from names that only look alike: the app\'s own sessions, an event subscription, a git checkout (3 Oct 2026)', () => {
+  const key = (p) => edit(p, 'a', 'a', 'b')?.key ?? null;
+  // signing in, and a signed-in user's session: asks
+  for (const p of ['src/auth/session.ts', 'lib/oauth_client.py', 'app/login.jsx', 'server/jwt.mjs', 'users/password_reset.py', 'web/signin.tsx', 'api/sso/callback.js', 'src/auth_utils.py', 'src/user_session.js', 'lib/session_store.py', 'web/session-cookie.ts'])
+    expect([p, key(p)]).toEqual([p, 'auth']);
+  // money: asks
+  for (const p of ['app/billing.py', 'src/payments/charge.ts', 'lib/stripe_client.js', 'shop/checkout.py', 'api/invoice.mjs', 'billing/subscription.py', 'src/paypal/webhook.js', 'app/subscription_billing.py'])
+    expect([p, key(p)]).toEqual([p, 'payments']);
+  // only the name looks alike: runs as usual (each of these asked before)
+  for (const p of ['terminal/src/app/sessions.mjs', 'src/session-host.js', 'terminal/test/sessions.test.mjs', 'lib/events/subscriptions.mjs', 'src/pubsub/subscription.ts', 'src/git/checkout.mjs', 'tools/git-checkout.sh', 'src/git_checkout.py', 'src/repayment.js'])
+    expect([p, key(p)]).toEqual([p, null]);
+  // and never did
+  for (const p of ['src/author.py', 'docs/authoring.md', 'src/logins_chart_notes/readme.md'.replace('logins_chart_notes', 'charts')]) expect([p, key(p)]).toEqual([p, null]);
+});
+
 test('new packages: install commands and new names in package.json or requirements ask first; a plain install does not', () => {
   expect(bash('npm install left-pad')).toMatchObject({ key: 'pkg', title: 'New package' });
   expect(bash('pip install numpy')).toMatchObject({ key: 'pkg' });
