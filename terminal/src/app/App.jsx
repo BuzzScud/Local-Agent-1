@@ -52,6 +52,8 @@ import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_S
 import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { readRecord as sessionRecord, askJump, DETACH_LABEL } from './sessions.mjs';
+import { Loops, parseLoop, describe as describeLoop } from './loops.mjs';
+import { openBoardWindow } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
 import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
@@ -950,6 +952,60 @@ export function App({ opts, win, onRestart }) {
     setPicker({ ...startEdit({ ...f, index: remoteRows(f).findIndex((r) => r.id === ask) }, ask), ask });
   };
   const busyNow = () => S.current.live !== IDLE || agent.busy || S.current.starting;
+
+  // Loops (/loop, loops.mjs): made in this window and ended with it. Each run is a process of its
+  // own; the board (/loops) is a Terminal window of its own.
+  const loopsRef = useRef(null);
+  const loopsSeen = useRef({ board: false, asked: new Set(), ended: new Set() });
+  const [loopsBadge, setLoopsBadge] = useState(null);
+  // The footer's count: the loops still open, and whether one waits for you.
+  const loopsBadgeOf = (m) => { const open = m.open.length, need = m.needsYou.length; return open ? `↻ ${open} loop${open === 1 ? '' : 's'}${need ? ` · ${need} needs you` : ''}` : null; };
+  const loopsOf = () => {
+    if (loopsRef.current) return loopsRef.current;
+    loopsRef.current = new Loops({
+      folder: agent.cwd, name: process.env.AGENTIC_IN_HOST || agent.cwd.split('/').filter(Boolean).pop() || 'this window',
+      // Whether a run can start now, and how it reaches the model this window uses: the service /remote is
+      // on, the server given with --url, or the copy loaded on this Mac (then one run at a time, and none
+      // while this window itself is answering). Nothing loads for a loop: with the model off, they wait.
+      status: () => {
+        const a = agentRef.current;
+        const name = a?.model?.name ?? 'the model';
+        const mode = a?.mode ?? 'ask';
+        if (remoteRef.current?.on) return { on: true, name, where: 'its service', limit: 3, mode, flows: opts.flows };
+        const url = opts.url ?? null;
+        if (!url && !serverRef.current?.port) return { on: false, why: S.current.starting ? 'the model is loading' : 'the model is off', name, where: 'this Mac', limit: 1, mode };
+        if (S.current.live !== IDLE || a?.busy) return { on: false, why: 'this window is answering', name, where: 'this Mac', limit: 1, mode };
+        return { on: true, name, where: 'this Mac', limit: 1, mode, url, slots: opts.slots, local: !url, flows: opts.flows };
+      },
+      spend: () => windowSpend().usd,
+    });
+    return loopsRef.current;
+  };
+  useEffect(() => {
+    const t = setInterval(() => {
+      const m = loopsRef.current;
+      if (!m) return;
+      m.tick();
+      setLoopsBadge(loopsBadgeOf(m));
+      // A loop that needs you, and one that ended by itself, each say so here once.
+      const seen = loopsSeen.current;
+      for (const l of m.needsYou) {
+        const key = `${l.id}-${l.current.n}-${l.current.needs.id}`;
+        if (seen.asked.has(key)) continue;
+        seen.asked.add(key);
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.current.needs.text} Answer on the loop board (/loops).`, tone: 'warn' });
+      }
+      for (const l of m.loops) {
+        if (l.state !== 'done' || seen.ended.has(l.id)) continue;
+        seen.ended.add(l.id);
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) ended: ${l.doneWhy}.`, tone: 'dim' });
+      }
+    }, 500);
+    // The window closes: its loops end with it, and a run under way is stopped.
+    const end = () => loopsRef.current?.close();
+    process.once('exit', end);
+    return () => { clearInterval(t); process.off('exit', end); end(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Saves what the form changed: the keys first (nothing is written when one
   // cannot be kept), then settings.json. Answers the plan, or null.
   const keepForm = (pk, { connect }) => {
@@ -2249,6 +2305,7 @@ export function App({ opts, win, onRestart }) {
 
   const quit = useCallback(async () => {
     setLeaving(true);
+    loopsRef.current?.close();
     abortRef.current?.abort();
     btwRef.current?.ac.abort();
     saveNow();
@@ -2546,6 +2603,37 @@ export function App({ opts, win, onRestart }) {
       // /jumptomac [mac]: this window goes to your other Mac's sessions (the menu coding attach
       // <mac> shows) and this session keeps running; ctrl+b there comes back. The window does it
       // (door.mjs viewJumping): the app only asks its host to send the window that typed this.
+      case 'loop':
+      case 'loops': {
+        // /loop [debug|test|web] [10m] [message]: a message sent again by itself (loops.mjs). /loops: its board.
+        const m = loopsOf();
+        const a = arg.trim();
+        const board = () => { m.save(); loopsSeen.current.board = true; return openBoardWindow(m.pid); };
+        if (cmd === 'loops' || /^(board|open)$/i.test(a)) {
+          push({ type: 'note', text: board() ? 'The loop board opened in a Terminal window of its own. q closes it; the loops stay with this window.' : 'Open the loop board from another terminal window: coding loops', tone: 'dim' });
+          break;
+        }
+        if (!a || /^list$/i.test(a)) {
+          push({ type: 'note', text: m.loops.length ? ['Loops of this window (they end when it closes) · /loops opens the board:', ...m.loops.map((l) => `  ${l.id}. ${l.name} · ${describeLoop(l)}`)].join('\n') : '/loop 10m <message> sends a message again every 10 minutes. /loop test 5m runs the tests, /loop debug fixes failing tests until they pass, /loop web 30m <what to read> reads pages. /loops opens the board; /loop stop ends them.', tone: 'dim' });
+          break;
+        }
+        const sub = /^(stop|pause|run)\s*(all|\d+)?$/i.exec(a);
+        if (sub) {
+          const what = sub[1].toLowerCase();
+          const which = !sub[2] || sub[2].toLowerCase() === 'all' ? m.open : [m.loop(Number(sub[2]))].filter(Boolean);
+          const did = which.filter((l) => (what === 'stop' ? m.stop(l.id) : what === 'pause' ? m.pause(l.id) : m.runNow(l.id)));
+          setLoopsBadge(loopsBadgeOf(m));
+          push({ type: 'note', text: did.length ? `${{ stop: 'Stopped', pause: 'Paused, or going again', run: 'Running now' }[what]}: ${did.map((l) => l.name).join(', ')}.` : 'No such loop here. /loop lists them.', tone: did.length ? 'dim' : 'warn' });
+          break;
+        }
+        const p = parseLoop(a);
+        if (p.error) { push({ type: 'note', text: p.error, tone: 'warn' }); break; }
+        const l = m.add(p, { folder: agent.cwd, mode: agent.mode });
+        setLoopsBadge(loopsBadgeOf(m));
+        const opened = !loopsSeen.current.board && board();
+        push({ type: 'note', text: `↻ Loop ${l.id} started: ${l.name} · ${describeLoop(l)}${p.note}. Its runs work in this folder, in ${modeWord(agent.mode)}, and it ends when this window closes. ${opened ? 'The loop board opened in a Terminal window of its own.' : '/loops opens the board.'}`, tone: 'dim' });
+        break;
+      }
       case 'jumptomac': {
         const here = process.env.AGENTIC_IN_HOST;
         const mac = (arg || loadSettings().lastMac || '').trim();
@@ -3710,6 +3798,8 @@ export function App({ opts, win, onRestart }) {
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),
     shareBadge: sharedOn ? `⇄ on ${sharedOn}` : null,
+    // Loops made in this window (/loop): how many are open, and whether one waits for you.
+    loopsBadge,
     // The footer's right side starts with these (screen.jsx footerParts): this window's own copy, the cost meter.
     spend: [inCopy ? 'own copy' : '', spend].filter(Boolean).join(' · '),
     weightsBadge: model.edited

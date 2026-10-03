@@ -26,6 +26,8 @@ export const COMMANDS = [
   { name: 'subagents', desc: 'The helper models on your Ollama service, one per job: pictures, side jobs, code search, a second opinion, UI design; switch each on or off and pick its model' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
   { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone it goes to the Mac used last)', arg: '[mac]' },
+  { name: 'loop', desc: 'Send a message again by itself, every so often or until its job is done: /loop test 5m, /loop debug, /loop web 30m <what to read>, /loop 10m <message>; alone: this window’s loops', arg: '[debug|test|web] [10m] [message]' },
+  { name: 'loops', desc: 'Open the loop board in a window of its own: each loop, the step its run is on, and a chat box to steer it' },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
@@ -84,7 +86,9 @@ export const TYPED_ONLY = new Set(['morning']);
 // In the / menu where it fits (3 Oct 2026, the owner: "i dont see the new command?"; it had been
 // typed only, so nothing showed it, not even /jump): listed in the whole menu in a window with room
 // for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
-export const WHEN_ROOM = new Set(['jumptomac']);
+// /loop and /loops (3 Oct 2026) follow it the same way, in this order: a window with one free row
+// shows /jumptomac, with three all of them.
+export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops']);
 export const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On
@@ -99,6 +103,9 @@ export function matchCommands(value, { service = false, room = 18, side = false 
   if (!m) return [];
   const q = m[1].toLowerCase();
   const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name) && (side || !REMOTE_ONLY.has(c.name)));
-  const shown = q || all.length <= room ? all : all.filter((c) => !WHEN_ROOM.has(c.name));
+  // Too many for the window: the when-there-is-room ones go, the last of them first.
+  const free = room - all.filter((c) => !WHEN_ROOM.has(c.name)).length;
+  const kept = new Set([...WHEN_ROOM].slice(0, Math.max(0, free)));
+  const shown = q || all.length <= room ? all : all.filter((c) => !WHEN_ROOM.has(c.name) || kept.has(c.name));
   return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }

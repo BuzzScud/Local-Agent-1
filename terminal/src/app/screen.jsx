@@ -675,7 +675,8 @@ export function footerParts(app) {
   const left = notice ?? (app.inputMode === 'bash' ? '! shell mode: runs the command yourself' : tip ? `※ Tip: ${tip}` : '? for shortcuts');
   // The update and weights badges share the lower right with the mode label; so does "⇄ on <this
   // Mac>" while another Mac has a window on this session (App.jsx).
-  const badges = [app.shareBadge, app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
+  // (Loops made in this window come first: "↻ 2 loops · 1 needs you", App.jsx.)
+  const badges = [app.loopsBadge, app.shareBadge, app.updateBadge, app.weightsBadge].filter(Boolean).join('  ');
   if (app.modelState?.remote) return remoteParts(app, left, badges);
   // The Mac's memory, live, after the model's label.
   const mac = app.mac ? footerLabel(app.mac) : '';

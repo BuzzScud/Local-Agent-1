@@ -1,0 +1,104 @@
+// One run of a loop (/loop, app/loops.mjs), from the run's side. The window that owns the loop
+// starts `coding -p --loop-events` for each run; this is how the two talk:
+//   the run writes one JSON line per thing that happens to its stdout:
+//     { t: 'tool', label, arg, error, given, test }   a step (test: it ran the tests)
+//     { t: 'note', text }                             a line from the app
+//     { t: 'text', text, final }                      what the model said
+//     { t: 'ask', id, kind, name, text, options, always, sig }   it waits for an answer
+//     { t: 'end', reason, final, secs, steps, tests } the run is over
+//   the window writes to its stdin:
+//     { t: 'answer', id, choice: 'yes' | 'always' | 'no', text }   to an ask
+//     { t: 'note', text }   a note typed to the loop: sent to the model when its turn ends
+//     { t: 'stop' }         end the run now
+// Nothing else is printed on stdout, so a line that does not parse is not from here.
+
+// A step that runs the project's tests (the board lights its TESTS step, and a miss turns the run red).
+export const isTestRun = (label, arg) => label === 'Bash' && /\b(test|tests|pytest|jest|vitest|mocha|unittest|rspec)\b/.test(String(arg ?? ''));
+
+// What an "always" covers for the loop's later runs: this exact command, every edit, this site.
+export function signatureOf(req) {
+  if (req.name === 'Bash') return `Bash:${String(req.args?.command ?? '').trim()}`;
+  if (['Edit', 'Write', 'Rename', 'Update'].includes(req.name)) return 'Edit:*';
+  if (req.name === 'WebFetch') return String(req.rule ?? `WebFetch:${req.args?.url ?? ''}`);
+  if (req.name === 'WebSearch') return 'WebSearch';
+  if (req.name === 'Screen') return `Screen:${String(req.args?.app ?? '').trim().toLowerCase()}`;
+  return null; // a question, a test to confirm, a commit: asked every time
+}
+
+const one = (s, n = 160) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+// The question as the board shows it: what it wants to do, in a line.
+export function askText(req) {
+  if (req.name === 'Ask') return { kind: 'question', text: one(req.args?.question, 300), options: (req.args?.options ?? []).map((o) => one(o, 80)), always: null };
+  if (req.name === 'Bash') return { kind: 'permission', text: `May it run: ${one(req.args?.command, 140)}`, always: req.once ? null : 'this command' };
+  if (req.name === 'Write') return { kind: 'permission', text: `May it write ${one(req.args?.path, 100)}?`, always: req.once ? null : 'every edit' };
+  if (req.name === 'Edit' || req.name === 'Update') return { kind: 'permission', text: `May it change ${one(req.args?.path, 100)}?`, always: req.once ? null : 'every edit' };
+  if (req.name === 'Rename') return { kind: 'permission', text: `May it rename ${one(req.args?.from ?? req.args?.name, 60)}?`, always: req.once ? null : 'every edit' };
+  if (req.name === 'WebFetch') { const site = String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1') || one(req.args?.url, 80); return { kind: 'permission', text: `May it read ${site}?`, always: req.rule ? site : null }; }
+  if (req.name === 'WebSearch') return { kind: 'permission', text: `May it search the web for “${one(req.args?.query, 80)}”?`, always: 'web searches' };
+  if (req.name === 'Screen') return { kind: 'permission', text: `May it look at ${String(req.args?.app ?? '').trim() ? `${String(req.args.app).trim()}'s window` : 'the whole screen'}?`, always: 'this app' };
+  if (req.name === 'Test') return { kind: 'permission', text: 'May it use the test it wrote to decide?', always: null };
+  return { kind: 'permission', text: `May it use ${req.name}?`, always: null };
+}
+
+// mode: the window's mode when the loop was made. allow: what "always" already covers for this loop.
+export function loopIO({ input = process.stdin, output = process.stdout, mode = 'ask', allow = [] } = {}) {
+  const waiting = new Map();
+  const notes = [];
+  const allowed = new Set(allow);
+  const ac = new AbortController();
+  let seq = 0;
+  let tests = null;
+  let final = '';
+  let lastNote = '';
+  const say = (o) => { try { output.write(`${JSON.stringify(o)}\n`); } catch { /* the window is gone */ } };
+  const got = (m) => {
+    if (m?.t === 'answer') { const w = waiting.get(m.id); if (w) { waiting.delete(m.id); w(m); } }
+    else if (m?.t === 'note' && String(m.text ?? '').trim()) notes.push(String(m.text).trim());
+    else if (m?.t === 'stop') ac.abort();
+  };
+  // Lines are read with 'readable' and read(), as every key in the app is (see pick.mjs).
+  let carry = '';
+  input.setEncoding?.('utf8');
+  input.on('readable', () => {
+    let chunk;
+    while ((chunk = input.read()) !== null) {
+      carry += chunk;
+      for (let i = carry.indexOf('\n'); i >= 0; i = carry.indexOf('\n')) { const line = carry.slice(0, i); carry = carry.slice(i + 1); try { got(JSON.parse(line)); } catch { /* not ours */ } }
+    }
+  });
+  // The window closed: its loops end with it, and so does this run.
+  input.on('end', () => { for (const w of waiting.values()) w({ choice: 'no' }); waiting.clear(); ac.abort(); });
+  const hands = mode !== 'ask'; // Accept edits, Auto, Bypass: nobody is asked to confirm a plan
+  return {
+    signal: ac.signal,
+    event(type, ev) {
+      if (type === 'tool') {
+        const test = isTestRun(ev.label, ev.arg);
+        if (test) tests = { ok: !ev.error };
+        say({ t: 'tool', label: ev.label, arg: one(ev.arg, 240), error: Boolean(ev.error), given: Boolean(ev.given), test });
+      } else if (type === 'note') { lastNote = one(ev.text, 400); say({ t: 'note', text: lastNote }); }
+      else if (type === 'assistant' && String(ev.text ?? '').trim()) { if (ev.final) final = ev.text; say({ t: 'text', text: String(ev.text).trim().slice(0, 4000), final: Boolean(ev.final) }); }
+    },
+    // The answer to anything the run asks. A plan to confirm and a check-in go to the window only in
+    // Manual mode; a "stuck" question is skipped, as in every run nobody watches.
+    async ask(req) {
+      if (req.name === 'Ask') {
+        if (req.kind === 'stuck') return { choice: 'skip' };
+        if ((req.kind === 'plan' || req.kind === 'checkin') && hands) return { choice: 'answer', text: req.kind === 'plan' ? 'yes' : 'keep going' };
+      }
+      const sig = signatureOf(req);
+      if (sig && allowed.has(sig)) return { choice: 'yes' };
+      if (ac.signal.aborted) return { choice: 'no' };
+      const id = ++seq;
+      const a = await new Promise((resolve) => { waiting.set(id, resolve); say({ t: 'ask', id, name: req.name, sig, ...askText(req) }); });
+      if (req.name === 'Ask') return a.choice === 'no' ? { choice: 'no' } : { choice: 'answer', text: String(a.text ?? (a.choice === 'yes' || a.choice === 'always' ? 'yes' : '')).trim() || 'yes' };
+      if (a.choice === 'always' && sig) allowed.add(sig);
+      return { choice: a.choice === 'yes' || a.choice === 'always' ? 'yes' : 'no' };
+    },
+    // A note typed while it worked: the next message of the same conversation.
+    more() { return notes.length ? notes.shift() : null; },
+    // A run that did not finish and said nothing: the app's last line says why (the model gone, out of steps).
+    end(r) { say({ t: 'end', reason: r.reason, final: String(r.finalText || final || (r.reason === 'done' ? '' : lastNote)).trim().slice(0, 6000), secs: r.secs, steps: r.steps, tests }); },
+    fail(message) { say({ t: 'end', reason: 'error', final: String(message), secs: 0, steps: 0, tests }); },
+  };
+}

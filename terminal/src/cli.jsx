@@ -117,6 +117,9 @@ function parse(argv) {
     else if (a === '--folder') { o.folder = true; o.cwd = resolve(val() ?? '.'); }
     // --bg: start in the background, with no window (app/sessions.mjs); coding attach opens it.
     else if (a === '--bg') o.bg = true;
+    // --loop-events: one run of a loop (/loop). Its window starts it, reads what happens as JSON lines and
+    // answers its questions (app/loop-run.mjs); the message comes in AGENTIC_LOOP_SPEC.
+    else if (a === '--loop-events') { o.loopEvents = true; o.print = true; }
     else rest.push(a);
   }
   if (rest.length) o.prompt = rest.join(' ');
@@ -298,6 +301,12 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
   const { viewJumping } = await import('./app/door.mjs');
   process.exit(await viewJumping({ connect: localConnect(target), name: target.name }, { pick }));
 }
+// coding loops [pid]: the loop board of a coding window (/loop makes the loops, /loops opens this in a window of its own).
+if (process.argv[2] === 'loops') {
+  const { runBoard } = await import('./app/loops-board.mjs');
+  const pid = Number(process.argv[3]);
+  process.exit(await runBoard({ pid: Number.isInteger(pid) && pid > 0 ? pid : null }));
+}
 // coding door [on|off|new-key]: let your other Macs open the sessions here, over Tailscale, with a key (app/door.mjs).
 if (process.argv[2] === 'door') {
   const { doorCli, runDoor } = await import('./app/door.mjs');
@@ -343,6 +352,20 @@ if (opts.folder) { try { process.chdir(opts.cwd); } catch { process.stderr.write
 opts.modelId = (modelById(opts.modelId) ?? modelById(loadSettings(opts.cwd).model) ?? MODELS[DEFAULT_MODEL]).id;
 
 if (opts.print) {
+  // A loop's run: its message and what "always" already covers come from the window that started it.
+  let loop = null;
+  if (opts.loopEvents) {
+    const { loopIO } = await import('./app/loop-run.mjs');
+    let spec = {};
+    try { spec = JSON.parse(process.env.AGENTIC_LOOP_SPEC ?? '{}'); } catch { /* no message: said below */ }
+    opts.prompt = spec.prompt;
+    const { modeOf } = await import('./agent/permissions.mjs');
+    const mode = modeOf(opts.mode) ?? 'ask';
+    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode };
+    // Plan mode only reads, as in the window.
+    if (mode === 'plan' && opts.prompt) opts.prompt += '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]';
+    process.on('SIGTERM', () => process.exit(143));
+  }
   if (!opts.prompt) { process.stderr.write('coding -p needs a prompt\n'); process.exit(2); }
   if (!(await ensureTrusted(opts.cwd))) process.exit(2);
   const settings = loadSettings(opts.cwd);
@@ -437,15 +460,19 @@ if (opts.print) {
       // The memory: facts brought back, and what the run taught saved before it ends.
       memory: memoryOn(settings) ? { save: (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.
-      answers: process.stdin.isTTY ? askOnTerminal : null,
+      answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
+      // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent
+      // when the turn ends, and a half-fix kept when fewer tests fail (agent.mjs madeProgress).
+      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, signal: loop.io.signal, keepProgress: true } : {}),
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
-      onEvent: (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
+      onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });
-    process.stdout.write(`${r.finalText.trim()}\n`);
+    if (loop) loop.io.end(r); else process.stdout.write(`${r.finalText.trim()}\n`);
     await stop();
     process.exit(r.reason === 'done' ? 0 : 1);
   } catch (e) {
     process.stderr.write(`coding: ${e.message}\n`);
+    loop?.io.fail(e.message);
     await stop();
     process.exit(1);
   }
