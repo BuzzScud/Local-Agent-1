@@ -23,15 +23,16 @@ const script = (req) => {
 };
 // Run without stopping this process: the stand-in answers from here, and a
 // spawnSync holds every server in the process until the command ends on Bun 1.4 (1.2 kept serving).
-async function runCheck(file, url) {
+// ms and extra (2 Oct, the Agents check): its own time limit, and more arguments for the runner.
+async function runCheck(file, url, { ms = 230_000, extra = [] } = {}) {
   const out = mkdtempSync(join(tmpdir(), 'agentic-arena-check-'));
   const r = await new Promise((resolve) => {
-    const p = spawn('node', [join(RUNNERS, file), '--model', 'qwen', '--url', url, '--no-record', '--out', out], { env: { ...process.env, AGENTIC_HOME: mkdtempSync(join(tmpdir(), 'agentic-arena-home-')) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn('node', [join(RUNNERS, file), '--model', 'qwen', '--url', url, '--no-record', '--out', out, ...extra], { env: { ...process.env, AGENTIC_HOME: mkdtempSync(join(tmpdir(), 'agentic-arena-home-')) }, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     p.stdout.on('data', (c) => { stdout += c; });
     p.stderr.on('data', (c) => { stderr += c; });
-    const t = setTimeout(() => p.kill('SIGKILL'), 230_000);
+    const t = setTimeout(() => p.kill('SIGKILL'), ms);
     p.on('close', (status) => { clearTimeout(t); resolve({ status, stdout, stderr }); });
   });
   return { ...r, out, rows: JSON.parse(readFileSync(join(out, 'rows.json'), 'utf8')), summary: JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) };
@@ -64,3 +65,29 @@ test('the Tool habits check: 8 runs with the shortcuts off, the search habit fro
     expect(r.status).toBe(1); // the rule does not hold on a stand-in that does no work
   } finally { await fake.close(); }
 }, 240_000);
+
+// The Agents check (agents-ab.mjs): 6 runs, each task plain and through --agents, step by step
+// (--no-flows: a stand-in that only says done would keep a focused path trying for minutes); a
+// stand-in that answers /agents' focused calls (the interview, SPEC.md, the plan, the reviews).
+const agentsScript = (req) => {
+  const sys = String(req.messages?.[0]?.content ?? '');
+  if (/Ask the 3 to 5 questions/.test(sys)) return { text: '{"questions":[{"q":"What counts as done?","options":["the tests pass","it runs"]}]}' };
+  if (/Write SPEC\.md/.test(sys)) return { text: '## Goal\nThe change.\n\n## Acceptance checks\n1. it works' };
+  if (/Break the spec/.test(sys)) return { text: '{"tasks":[{"title":"The change","check":"it works"}]}' };
+  if (/one area:|You are the /.test(sys)) return { text: '{"findings":[]}' };
+  if (/review work another assistant/.test(sys)) return { text: 'LGTM' };
+  return { text: 'Done.' };
+};
+test('the Agents check: 6 runs, each task as a plain request and through /agents, a verdict', async () => {
+  const fake = await startFakeServer([], { delayMs: 0, route: agentsScript });
+  try {
+    const r = await runCheck('agents-ab.mjs', fake.url, { extra: ['--no-flows'] });
+    expect(r.stdout.split('\n').filter((l) => /^(PASS|FAIL)\s/.test(l))).toHaveLength(6);
+    expect(r.stdout).toContain('a look only: no results page, no line in the test record');
+    expect(r.rows.map((x) => `${x.task}-${x.arm}`)).toEqual(['discount-plain', 'discount-agents', 'tax-plain', 'tax-agents', 'shipping-plain', 'shipping-agents']);
+    expect(r.rows.filter((x) => x.arm === 'agents').every((x) => /^(GO|NO-GO|STOPPED)/.test(x.verdict))).toBe(true);
+    expect(r.rows.filter((x) => x.arm === 'agents').every((x) => /wrote SPEC\.md/.test(x.detail))).toBe(true);
+    expect(r.summary).toMatchObject({ checks: 6, of: 6, page: '', pass: false }); // nothing right on either side is not a pass
+    expect(r.status).toBe(1);
+  } finally { await fake.close(); }
+}, 300_000);

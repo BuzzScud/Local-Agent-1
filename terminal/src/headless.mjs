@@ -9,6 +9,8 @@ import { openMemory } from './agent/facts.mjs';
 import { saveLessons, worthSaving } from './agent/lessons.mjs';
 import { helpersOn } from './agent/helpers.mjs';
 import { llmCalls } from './flows/llm.mjs';
+import { AgentsRun } from './agent/agents-run.mjs';
+import { agentDriver } from './agent/agents-driver.mjs';
 
 // memory: true uses the memory (facts brought back, lessons saved when the
 // run ends); { home, embedder, save } sets where it lives and how. Off by
@@ -22,7 +24,7 @@ import { llmCalls } from './flows/llm.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -106,7 +108,27 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   // A picture the model reads by itself: its vision turned on then (coding -p reloads the model).
   // It can look at the screen then too (the Screen tool, offered to a model that can see).
   if (visionOn) { agent.visionOn = () => visionOn(agent); agent.mayLook = () => true; }
-  const reason = await agent.send(canSee || !images.length ? prompt : `${prompt}\n\n(Pictures were named, but this model is not looking at pictures.)`, { signal, images: canSee && images.length ? images : undefined });
+  let reason;
+  if (agents) {
+    // coding -p --agents: the /agents run (agents-run.mjs) with nobody to ask. The interview and the plan
+    // take the first answer, a NO-GO is fixed, a task that will not pass is left open; a step on the stop
+    // list is allowed with --yes (autoApprove) and refused without it. Its log comes out as notes.
+    const run = new AgentsRun({ request: prompt, driver: agentDriver(agent) });
+    let told = 0;
+    run.on('state', (s) => {
+      while (told < s.log.length) { const e = s.log[told++]; onEvent('note', { text: `/agents · ${e.who}: ${e.text}`, tone: e.tone === 'bad' || e.tone === 'warn' ? 'warn' : 'dim' }); }
+      const g = s.gate;
+      if (!g || g.seen) return;
+      g.seen = true;
+      const n = g.kind !== 'stop' || g.title === 'NO-GO' ? 0 : /won't pass/.test(g.title) ? 1 : autoApprove ? 1 : 0;
+      onEvent('note', { text: `/agents asks: ${g.title} → ${g.opts[n]}`, tone: 'dim' });
+      setTimeout(() => run.answer(n), 0);
+    });
+    signal?.addEventListener('abort', () => run.stop(), { once: true });
+    const s = await run.start();
+    reason = s.verdict?.kind === 'go' ? 'done' : 'stopped';
+    finalText = [run.verdictLine(), ...(s.report ?? [])].join('\n');
+  } else reason = await agent.send(canSee || !images.length ? prompt : `${prompt}\n\n(Pictures were named, but this model is not looking at pictures.)`, { signal, images: canSee && images.length ? images : undefined });
   const secs = (Date.now() - t0) / 1000;
   // What the run taught goes into the memory before it ends.
   let saved = null;

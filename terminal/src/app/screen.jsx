@@ -12,6 +12,7 @@ import { money } from '../agent/spend.mjs';
 import { wrap, Row, Result, ToolHead, Diff, Todos, InputBox, modeLabel, MODE_TEXT, CYCLE_HINT } from '../ui/parts.jsx';
 import { Markdown } from './markdown.jsx';
 import { MIN_COLS, MIN_ROWS } from './window.mjs';
+import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
@@ -1606,6 +1607,8 @@ export function Screen({ app }) {
   // An empty <Static> of its own resets what Ink keeps to print again on a
   // full clear, so the old (wider) conversation is not printed into the small window.
   if (app.tooSmall) return <Box flexDirection="column"><Static key={`small${app.redraw}`} items={[]}>{() => null}</Static><TooSmall app={app} /></Box>;
+  // /agents' tree has the whole window (agents-view.jsx); the conversation is printed again when it closes.
+  if (app.agentsTree) return <Box flexDirection="column"><Static key={`agents${app.redraw}`} items={[]}>{() => null}</Static><AgentsView state={app.agentsTree} columns={app.columns} rows={app.rows} now={app.agentsNow} /></Box>;
   // The conversation is printed from the top of the window (at the start and
   // again after a resize); the prompt box, footer and status line sit on the
   // last lines, with blank space in between until the conversation fills it.
@@ -1683,6 +1686,7 @@ export function Screen({ app }) {
         <BtwPanel app={app} />
       ) : (
         <Box flexDirection="column">
+          {app.agentsLine ? <AgentsLine segs={app.agentsLine} /> : null}
           <PromptBox app={app} />
           <Menu app={app} />
           <Footer app={app} />

@@ -93,6 +93,7 @@ function parse(argv) {
     else if (a === '-v' || a === '--version') o.version = true;
     else if (a === '-p' || a === '--print') { o.print = true; if (argv[i + 1] && !argv[i + 1].startsWith('-')) rest.push(val()); }
     else if (a === '-c' || a === '--continue') o.continueLast = true;
+    else if (a === '--agents') o.agents = true;
     else if (a === '--resume') o.resumeId = val();
     else if (a === '--layout') val(); // one layout now (like Claude Code); still accepted so older scripts run
     else if (a === '--effort') { const v = String(val() ?? '').toLowerCase().replace(/^off$/, 'low').replace(/^xhigh$/, 'high'); o.thinking = v !== 'low'; if (v === 'medium' || v === 'high') o.effort = v; }
@@ -418,6 +419,8 @@ if (opts.print) {
       helpers: helpersFrom(settings),
       // Who decides (--way, else AGENTIC_WAY, else /effort's row in limits) and the hooks /hooks left on.
       way: opts.way, hooks: hooksFrom(settings),
+      // --agents: the request goes through /agents' six stages (agents-run.mjs) instead of one message.
+      agents: !!opts.agents,
       // The web as /web left it: a search service and reading pages (each asks, or --yes allows).
       web: webSettings(settings.web), subagents: settings.subagents !== false,
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
@@ -500,7 +503,11 @@ if (opts.print) {
   const win = new TerminalWindow(process.stdout);
   // /update asks for a restart: set here, run once this window has closed.
   let restartArgs = null;
-  const instance = render(<App opts={opts} win={win} onRestart={(a) => { restartArgs = a; }} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30 });
+  // incrementalRendering (Ink writes only the lines that changed): tried on 3 Oct 2026 for /agents'
+  // 58-row tree, it broke the full-window switch and a question's prompt in the app tests, so it is
+  // off unless AGENTIC_INCREMENTAL=on; the tree moves at 8 frames a second without it.
+  const incremental = (process.env.AGENTIC_INCREMENTAL ?? 'off') === 'on';
+  const instance = render(<App opts={opts} win={win} onRestart={(a) => { restartArgs = a; }} />, { stdout: win, exitOnCtrlC: false, patchConsole: true, maxFps: 30, incrementalRendering: incremental });
   const bye = () => { try { instance.unmount(); } catch {} };
   process.on('SIGTERM', bye);
   process.on('SIGHUP', bye);
