@@ -21,6 +21,14 @@ const { Agent } = await import('../src/agent/agent.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
 const { MODELS, DEFAULT_MODEL, HOME } = await import('../../models/index.mjs');
 
+// The settings.json these tests write and delete is only ever in this file's own throwaway home, or the
+// one the preload made for this process (3 Oct 2026: in one process after a file that had loaded the
+// models part first, HOME was the real ~/.agentic-coder, and the delete after each test took the real
+// settings.json while every test here passed).
+const own = HOME === FIRST_HOME || (Boolean(process.env.AGENTIC_TEST_HOME) && HOME === process.env.AGENTIC_TEST_HOME);
+const SETTINGS = () => { if (!own) throw new Error(`not this test's own throwaway home: ${HOME}`); return join(HOME, 'settings.json'); };
+test('the settings file these tests change is in their own throwaway home', () => { expect(own).toBe(true); });
+
 const SOURCE = new URL('../rules/', import.meta.url).pathname;
 const local = MODELS[DEFAULT_MODEL];
 const remote = { ...local, remote: { model: 'big-coder' } };
@@ -37,19 +45,19 @@ beforeEach(() => {
   delete process.env.AGENTIC_INSTRUCTIONS;
 });
 afterEach(() => {
-  try { unlinkSync(join(HOME, 'settings.json')); } catch {}
+  if (own) try { unlinkSync(join(HOME, 'settings.json')); } catch {}
   for (const [k, v] of [['AGENTIC_RULES_DIR', saved.rules], ['AGENTIC_HOME', saved.home], ['AGENTIC_INSTRUCTIONS', saved.set]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
 
 test('which set: auto takes the remote one for a model on another machine; settings.json or AGENTIC_INSTRUCTIONS can force either', () => {
   expect(savedInstructions()).toBe('auto');
-  writeFileSync(join(HOME, 'settings.json'), JSON.stringify({ instructions: 'local' }));
+  writeFileSync(SETTINGS(), JSON.stringify({ instructions: 'local' }));
   expect(savedInstructions()).toBe('local');
   expect(rulesSetOf(null, remote, {})).toBe('local'); // the saved choice
   expect(rulesSetOf(null, remote, { AGENTIC_INSTRUCTIONS: 'auto' })).toBe('remote'); // the env wins over it
-  writeFileSync(join(HOME, 'settings.json'), JSON.stringify({ instructions: 'nonsense' }));
+  writeFileSync(SETTINGS(), JSON.stringify({ instructions: 'nonsense' }));
   expect(savedInstructions()).toBe('auto');
-  writeFileSync(join(HOME, 'settings.json'), '{');
+  writeFileSync(SETTINGS(), '{');
   expect(savedInstructions()).toBe('auto');
   expect(rulesSetOf('auto', local, {})).toBe('local');
   expect(rulesSetOf('auto', remote, {})).toBe('remote');
@@ -177,12 +185,12 @@ test('the agent: a remote model gets the remote set from its first message; a sw
     expect(notes).toContain('Local instructions (terminal/rules), as on this Mac.');
     expect(fake.requests.filter((r) => r.tools?.length).at(-1).messages[0].content).toContain('\nWork habits\n');
     // "remote" saved in settings.json (the hub's tab 09): the next message reads the remote set, and says so
-    writeFileSync(join(HOME, 'settings.json'), JSON.stringify({ instructions: 'remote' }));
+    writeFileSync(SETTINGS(), JSON.stringify({ instructions: 'remote' }));
     await a.send('and once more?');
     expect(a.rulesSetUsed).toBe('remote');
     expect(notes).toContain('Remote instructions (terminal/rules/remote): HARNESS.md, TOOLS.md, the guides and the skills, for a model on another machine.');
     // a switch of model is said at once when the app moves its limits (syncRules)
-    unlinkSync(join(HOME, 'settings.json')); a.syncRules();
+    unlinkSync(SETTINGS()); a.syncRules();
     expect(a.rulesSetUsed).toBe('local');
     expect(notes.at(-1)).toBe('Local instructions (terminal/rules), as on this Mac.');
     a.instructionsSet = 'remote'; a.syncRules();
@@ -220,7 +228,7 @@ test('the hub saves which set the model gets in settings.json; files.json says i
   expect((await read(call('/instructions/files.json'))).instructions).toEqual({ saved: 'auto', env: null });
   expect((await call('/instructions/set', { set: 'sideways' })).status).toBe(400);
   expect((await read(call('/instructions/set', { set: 'remote' }))).instructions).toEqual({ saved: 'remote', env: null });
-  expect(JSON.parse(readFileSync(join(HOME, 'settings.json'), 'utf8')).instructions).toBe('remote');
+  expect(JSON.parse(readFileSync(SETTINGS(), 'utf8')).instructions).toBe('remote');
   expect(savedInstructions()).toBe('remote');
   process.env.AGENTIC_INSTRUCTIONS = 'local';
   expect((await read(call('/instructions/files.json'))).instructions).toEqual({ saved: 'remote', env: 'local' });

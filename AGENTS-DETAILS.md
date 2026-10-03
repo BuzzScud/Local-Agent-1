@@ -64,6 +64,14 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   Raw results of model tests stay on the Mac in `models/<model>/results/` (not in git);
   a test's working copy of another project goes outside the repo, not into `results/`.
 
+- **The tests' home is never the real one** (3 Oct 2026, after a test deleted the real settings.json): several
+  test files in one `bun test` share one process, and the models part reads its home once. The preload
+  (`terminal/test/test-env.mjs`) gives every test process a throwaway `AGENTIC_HOME` before anything loads (its own
+  folder is `AGENTIC_TEST_HOME`), and inside a test run (`NODE_ENV=test`, which bun test sets) `models/registry.mjs`
+  puts a throwaway in place of the real home whatever the order. A test that deletes in the home checks first that
+  the folder is its own (`remote-rules.test.mjs`). `terminal/test/test-home.test.mjs` runs two files in one process
+  with a pretend `$HOME` and a planted settings.json, which must still be there after.
+
 - **Every test run goes in the test record**, which the hub shows from its Arena tab
   (`/tests` in Agentic Coder, `coding hub tests`). The Arena (`/arena`, `/test`; it is the Tests tab and
   the Battle tab as one, since 30 Sep 2026) runs a test on one model or battles two with it, and the
