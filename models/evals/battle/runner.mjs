@@ -52,7 +52,11 @@ const shortOf = (id) => (isRemoteId(id) ? entrantOf(id)?.short ?? parseRemoteId(
 const fullNameOf = (id) => (isRemoteId(id) ? entrantOf(id)?.name ?? parseRemoteId(id).model : MODELS[id].name);
 // Who may run now: a model on this Mac, or a model of the service /remote is connected to.
 const canRun = (id) => IDS.includes(id) || (isRemoteId(id) && connectedRemote()?.source === parseRemoteId(id).source);
-const vsOf = (v) => (Array.isArray(v) && v.length === 2 && v[0] !== v[1] && v.every(canRun) ? [...v] : PAIR);
+// A battle's two as kept on its item. A remote one stays itself even once /remote is no longer connected:
+// its run then ends with that reason (run-one.mjs), and is never swapped for the default pair.
+const vsOf = (v) => (Array.isArray(v) && v.length === 2 && v[0] !== v[1] && v.every((id) => IDS.includes(id) || isRemoteId(id)) ? [...v] : PAIR);
+// The two a page asks for: a remote one only while its service is connected.
+const vsAsked = (v) => { if (Array.isArray(v) && v.some((id) => isRemoteId(id) && !canRun(id))) throw new Error('a model in that battle is on a service /remote is not connected to now: connect it with /remote first'); return vsOf(v); };
 const IDLE_EXIT_MS = Number(process.env.AGENTIC_BATTLE_IDLE_SECS ?? 7200) * 1000;
 const GRACE_MS = 90_000; // a run that goes past 10 min + this (stuck loading, say) is stopped
 
@@ -100,7 +104,7 @@ const newKey = () => `${stamp()}-${(seq++).toString(36)}`;
 const freshId = (dir, base) => { let id = base; for (let n = 2; existsSync(join(dir, id)); n++) id = `${base}-${n}`; return id; };
 const whoOf = (w) => { if (w === 'both' || canRun(w)) return w; if (isRemoteId(w)) throw new Error('that remote model is on a service /remote is not connected to now: connect it with /remote first'); throw new Error(`pick who runs it: ${IDS.join(', ')} or both`); };
 // A battle's two models, kept on its item; a run on one model has none.
-const vsFor = (who, v) => (who === 'both' ? { vs: vsOf(v) } : {});
+const vsFor = (who, v) => (who === 'both' ? { vs: vsAsked(v) } : {});
 
 let current = null;   // { match, test, side, child, startedAt } while a test runs
 let now = null;       // the item running now
@@ -139,7 +143,7 @@ function makeItems(list) {
       if (!c) throw new Error('no such check');
       if (!c.model) { out.push({ key: newKey(), kind: 'check', test: c.id, title: c.name, who: null, think: false, settings: null }); continue; }
       const who = whoOf(b.who), pair = who === 'both' ? newKey() : null;
-      if ((who === 'both' ? vsOf(b.vs) : [who]).some(isRemoteId)) throw new Error(`${c.name} runs on the models on this Mac only: pick one of them for it`);
+      if ((who === 'both' ? vsAsked(b.vs) : [who]).some(isRemoteId)) throw new Error(`${c.name} runs on the models on this Mac only: pick one of them for it`);
       for (const m of who === 'both' ? vsOf(b.vs) : [who]) {
         const cmd = runCommand(c.id, { model: m, think, models: IDS, settings }); // throws what is wrong with it
         out.push({ key: newKey(), kind: 'check', test: c.id, title: c.name, who: m, think: cmd.think, settings: cmd.settings, ...(pair ? { pair } : {}) });
