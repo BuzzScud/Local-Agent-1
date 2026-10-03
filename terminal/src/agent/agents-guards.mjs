@@ -2,9 +2,11 @@
 // whether it must ask first. The poster's list (auth, payments, deploys, migrations, secrets,
 // deletions), the math guards (a test's expected value or tolerance changed), a new package, and a
 // big diff (over 100 lines or 3 files in one task). Verify, Review and Ship only read, so an edit
-// there is turned away without asking, and so is a change to the test a task is making pass.
+// there is turned away without asking, and so is a change to the test a task is making pass; a
+// command there that is not plain reading (permissions.mjs isReadOnly) asks first (3 Oct 2026).
 // guardStep → null (go on), { key, title, detail } (ask you) or { deny, title } (turned away).
 import { basename } from 'node:path';
+import { isReadOnly } from './permissions.mjs';
 
 export const GUARD_OPTS = {
   default: ['No: do it another way', 'Allow it this once', 'Tell it what to do (type it)'],
@@ -12,6 +14,7 @@ export const GUARD_OPTS = {
   big: ['No: keep the change smaller', 'Allow it this once', 'Tell it what to do (type it)'],
   list: ['No: keep the file', 'Allow it this once', 'Tell it what to do (type it)'],
   secret: ["No: don't touch it", 'Allow it this once', 'Tell it what to do (type it)'],
+  run: ['No: only read here', 'Allow it this once', 'Tell it what to do (type it)'],
 };
 
 const TEST_FILE = (rel) => /(^|\/)(tests?|__tests__|spec)\//.test(rel) || /[._-](test|spec)\.[a-z]+$/i.test(rel) || /^test_.*\.py$/.test(basename(rel));
@@ -91,6 +94,8 @@ export function guardStep(step, ctx = {}) {
   // Deletions: a command that removes files, or a file written empty.
   if (cmd && DELETE_CMD.test(cmd)) return { key: 'list', title: 'Deletion', detail: `It wants to run: ${cmd.slice(0, 120)}` };
   if (name === 'Write' && String(before).trim() && !after.trim()) return { key: 'list', title: 'Deletion', detail: `It wants to empty ${rel}.` };
+  // Verify, Review and Ship: a command that can write asks first.
+  if (cmd && ctx.stage >= 3 && !isReadOnly(cmd)) return { key: 'run', title: 'A command that can write', detail: `${ctx.stage === 3 ? 'Verify' : ctx.stage === 4 ? 'Review' : 'Ship'} only reads, and this command can change files: ${cmd.slice(0, 120)}` };
   // Math guards: a checking number of a test changed.
   if (writes && TEST_FILE(rel) && String(before).trim()) {
     const moved = checkNumbersChanged(before, after);

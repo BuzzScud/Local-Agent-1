@@ -237,6 +237,19 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   must ask, 8 fitting should run) and 3 screen questions through `coding -p`. Qwen3.5 9B passed 18 of 19 on
   2 Oct 2026 (a `git mv` rename still asks: cautious, not unsafe).
 
+## /agents
+
+- **What a run may do** (`terminal/src/agent/agents-run.mjs`, the fix plan of 3 Oct 2026): Ship offers "Fix it" for a
+  critical finding twice (`SHIP_FIXES`), then only "Stop here", so no screen (which always answers Fix it) ends NO-GO;
+  resume in Build keeps the task list (done stays done, a task caught half-way goes back to its saved test, `t.test`);
+  before the first write, a SPEC.md, CONSTRAINTS.md or tasks/*.md that no /agents run wrote here (the run file's
+  `wrote`: a hash of each file a run wrote, carried from run to run) asks Keep mine (`place`: every file of the run in
+  `.agentic/agents/<run id>/`) · Replace (yours copied to `.agentic/agents/kept/<run id>/` first) · Stop, and with no
+  screen keeps yours. RED is real: no test file after a second ask leaves the task open ("no test written"); a test
+  that passes before any code is asked once to fail, then the task is "already true" and skips GREEN; a suite command
+  that cannot run one file is never a task's own test. "Allow it this once" is once; in Verify, Review and Ship a
+  command that is not plain reading (`isReadOnly`) asks first; in Plan mode /agents says so and does not start.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

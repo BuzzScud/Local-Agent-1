@@ -2,7 +2,7 @@
 // commands and the files of the window's project. A step of work is a message to the agent
 // (agent.send: its tools, its permissions, a /rewind point each); a question that only needs an
 // answer (the interview, the plan, a review) is one focused call with no tools (flows/llm.mjs).
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { complete } from '../flows/llm.mjs';
 import { reviewChange, findingsOf } from './helper-models.mjs';
@@ -40,6 +40,8 @@ export function agentDriver(agent, { home = null } = {}) {
     get model() { return modelName(agent); },
     get reviewer() { return agent.helperUse?.('review')?.model ?? null; },
     get testCmd() { return agent.testCmd ?? testCommand(cwd()); },
+    // Plan mode turns every edit away: the run says so up front instead.
+    get mode() { return agent.mode; },
     complete: call,
     // A step goes to the model's own loop: not sorted into the focused paths, and not asked about
     // as a plan first (the run has its plan, and your yes to it); both come back after the step.
@@ -76,14 +78,15 @@ export function agentDriver(agent, { home = null } = {}) {
     },
     listFiles: () => projectFiles(cwd()),
     read(rel) { try { return readFileSync(join(cwd(), rel), 'utf8'); } catch { return null; } },
+    has: (rel) => existsSync(join(cwd(), rel)),
     write(rel, text) { const abs = join(cwd(), rel); mkdirSync(dirname(abs), { recursive: true }); writeFileSync(abs, text); },
-    // The run's state, so /agents resume can go on after a quit (at most once a second).
-    save(state) {
+    // The run's state, so /agents resume can go on after a quit (at most once a second; at its end, at
+    // once, so the files it wrote are on record for the next run).
+    save(state, { now = false } = {}) {
+      const put = () => { try { const f = runFile(cwd()); mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify({ ...state, gate: null }, null, 1)); } catch { /* the run goes on without its file */ } };
+      if (now) { clearTimeout(saving); saving = null; put(); return; }
       if (saving) return;
-      saving = setTimeout(() => {
-        saving = null;
-        try { const f = runFile(cwd()); mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, JSON.stringify({ ...state, gate: null }, null, 1)); } catch { /* the run goes on without its file */ }
-      }, 1000);
+      saving = setTimeout(() => { saving = null; put(); }, 1000);
       saving.unref?.();
     },
     setGuard(fn) { agent.toolGuard = fn; },

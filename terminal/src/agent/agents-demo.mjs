@@ -80,6 +80,7 @@ export function demoDriver({ beat = Number(process.env.AGENTIC_AGENTS_DEMO_MS) |
     },
     listFiles: () => ['kepler.py', 'tests/'],
     read: (rel) => files.get(rel) ?? (rel === 'SPEC.md' ? SPEC : null),
+    has: (rel) => files.has(rel),
     write: (rel, text) => { files.set(rel, text); },
     save: () => {},
     setGuard: () => {},

@@ -21,6 +21,7 @@ function standIn(over = {}) {
     model: 'stand-in', reviewer: null, testCmd: 'bun test',
     async complete({ system, user }) {
       calls.push({ system, user });
+      if (over.complete) { const r = over.complete(system); if (r) return r; }
       if (/Ask the 3 to 5 questions/.test(system)) return '{"questions":[{"q":"What counts as done?","options":["the checks pass","it runs"]}]}';
       if (/Write SPEC\.md/.test(system)) return '## Goal\nAdd two numbers.\n\n## Acceptance checks\n1. add(2, 3) is 5';
       if (/Break the spec/.test(system)) return '{"tasks":[{"title":"Add","check":"add(2, 3) is 5"},{"title":"Negatives","check":"add(-2, 3) is 1"}]}';
@@ -203,4 +204,178 @@ test('the helpers: the covering command from the suite\'s, test files, JSON in a
   expect(missOf('✗ caps at 30 s\n  expected: <= 30000 · received: 32100\n 1 fail')).toBe('expected: <= 30000 · received: 32100');
   expect(isMathy('solve Kepler\'s equation to 1e-12')).toBe(true);
   expect(isMathy('add a login page')).toBe(false);
+});
+
+// 3 Oct 2026 (the fix plan's Part 3): no endless Ship, resume keeps what is done, your own files are
+// never replaced silently, test first for real, "this once" is once, the read-only stages ask before a
+// command that can write, and Plan mode says so up front.
+const three = () => '{"tasks":[{"title":"Add","check":"add(2, 3) is 5"},{"title":"Negatives","check":"add(-2, 3) is 1"},{"title":"Zero","check":"add(0, 0) is 0"}]}';
+const worked = (sends) => [...new Set(sends.map((x) => /task (\d+)\/\d+/.exec(x)?.[1]).filter(Boolean))];
+
+test('a reviewer that always finds something critical: Ship runs 3 times ("Fix it" is offered twice, then only "Stop here"), then NO-GO with the finding', async () => {
+  let ships = 0;
+  const { d } = standIn({ findings: (system) => (/You are the code-reviewer/.test(system) ? (ships++, '{"findings":[{"level":"critical","at":"src/add.mjs:2","text":"it adds strings","fix":"check the types"}]}') : null) });
+  const run = new AgentsRun({ request: 'add two numbers', driver: d });
+  const offered = [];
+  answering(run, (gate) => { if (gate.title === 'NO-GO') offered.push(gate.opts); if (ships > 6) run.stop(); return [0]; }); // [0] = "Fix it" whenever it is offered, as coding -p answers
+  const s = await run.start();
+  expect(ships).toBe(3);
+  expect(offered).toEqual([['Fix it, then run Ship again', 'Stop here: NO-GO'], ['Fix it, then run Ship again', 'Stop here: NO-GO'], ['Stop here: NO-GO']]);
+  expect(s.verdict).toEqual({ kind: 'nogo', why: 'src/add.mjs:2 it adds strings' });
+  expect(s.items[2].filter((t) => t.title.startsWith('Fix: '))).toHaveLength(2);
+});
+
+test('resume in Build keeps the tasks that are done: stopped after 2 of 3, it works on task 3 only', async () => {
+  const { d, sends } = standIn({ complete: (system) => (/Break the spec/.test(system) ? three() : null) });
+  const run = new AgentsRun({ request: 'add two numbers', driver: d });
+  answering(run);
+  let stopped = false;
+  run.on('state', (st) => { if (!stopped && st.stage === 2 && st.items[2].filter((t) => t.state === 'done').length === 2) { stopped = true; run.stop(); } });
+  const s1 = await run.start();
+  expect(s1.items[2].map((t) => t.state).slice(0, 2)).toEqual(['done', 'done']);
+  const saved = JSON.parse(JSON.stringify({ ...s1, gate: null }));
+  const before = sends.length;
+  const again = new AgentsRun({ request: saved.request, driver: d, saved });
+  answering(again);
+  const s2 = await again.start(saved.stage);
+  expect(worked(sends.slice(before))).toEqual(['3']);
+  expect(s2.items[2].map((t) => t.state)).toEqual(['done', 'done', 'done']);
+  expect(s2.verdict.kind).toBe('go');
+});
+
+test('resume of a task caught in its build step starts again from its failing test, not a new one', async () => {
+  const { d, sends } = standIn({ complete: (system) => (/Break the spec/.test(system) ? three() : null) });
+  const run = new AgentsRun({ request: 'add two numbers', driver: d });
+  answering(run);
+  let stopped = false;
+  run.on('state', (st) => { if (!stopped && st.stage === 2 && st.item === 1 && st.nodes[1] === 'now') { stopped = true; run.stop(); } });
+  const s1 = await run.start();
+  expect(s1.items[2][1]).toMatchObject({ state: 'now', test: 'test/add.test.mjs' });
+  const saved = JSON.parse(JSON.stringify({ ...s1, gate: null }));
+  const before = sends.length;
+  const again = new AgentsRun({ request: saved.request, driver: d, saved });
+  answering(again);
+  await again.start(saved.stage);
+  const after = sends.slice(before);
+  expect(after.some((x) => /task 2\/3/.test(x) && /Write ONE new failing test/.test(x))).toBe(false);
+  expect(after.find((x) => /task 2\/3/.test(x))).toContain('Make the new test in test/add.test.mjs pass with the least code');
+  expect(worked(after)).toEqual(['2', '3']);
+});
+
+test('your own SPEC.md and tasks files: "Keep mine" leaves them byte for byte and the run keeps all its files in .agentic/agents/<run>/; "Replace" copies them there first; "Stop" writes nothing', async () => {
+  const mine = { 'SPEC.md': '# My spec\nkeep me\n', 'tasks/todo.md': '- [ ] my own list\n' };
+  const fresh = (pick) => {
+    const x = standIn();
+    for (const [k, v] of Object.entries(mine)) x.writes.set(k, v);
+    const run = new AgentsRun({ request: 'add two numbers', driver: x.d });
+    const asked = [];
+    answering(run, (gate) => { if (gate.kind === 'files') { asked.push(gate); return [pick]; } return [0]; });
+    return { ...x, run, asked };
+  };
+  const k = fresh(0);
+  const s = await k.run.start();
+  expect(k.asked).toHaveLength(1);
+  expect(k.asked[0].opts).toEqual(['Keep mine (this run writes its files in .agentic/agents/)', 'Replace them (yours are copied to .agentic/agents/kept/ first)', 'Stop']);
+  expect(k.asked[0].detail).toContain('SPEC.md, tasks/todo.md');
+  for (const [f, v] of Object.entries(mine)) expect(k.writes.get(f)).toBe(v);
+  const dir = `.agentic/agents/${s.id}`;
+  expect(s.place).toBe(dir);
+  for (const f of ['SPEC.md', 'CONSTRAINTS.md', 'tasks/plan.md', 'tasks/todo.md', 'tasks/review.md', 'tasks/ship.md']) expect(k.writes.has(`${dir}/${f}`)).toBe(true);
+  expect(k.writes.has('CONSTRAINTS.md')).toBe(false); // none at the top: all of the run's are in its folder
+  expect(k.calls.find((c) => /Break the spec/.test(c.system)).user).toContain('Add two numbers.'); // the plan read the run's SPEC.md back, not yours
+  expect(s.verdict.kind).toBe('go');
+
+  const r = fresh(1);
+  const t = await r.run.start();
+  for (const [f, v] of Object.entries(mine)) expect(r.writes.get(`.agentic/agents/kept/${t.id}/${f}`)).toBe(v);
+  expect(r.writes.get('SPEC.md')).toContain('## Acceptance checks');
+  expect(t.place).toBe('');
+
+  const x = fresh(2);
+  const u = await x.run.start();
+  expect(u.verdict.kind).toBe('stopped');
+  expect([...x.writes.keys()].filter((f) => !f.endsWith('run.json')).sort()).toEqual(['SPEC.md', 'tasks/todo.md']);
+  expect(x.sends).toHaveLength(0);
+});
+
+test('files an earlier /agents run wrote here are its own: no question; a file you edited after it is yours again', async () => {
+  const { d, writes } = standIn();
+  d.save = (st) => { writes.set('.agentic/agents/run.json', JSON.stringify({ ...st, gate: null })); };
+  const runOnce = async () => { const asked = []; const run = new AgentsRun({ request: 'add two numbers', driver: d }); answering(run, (g) => { if (g.kind === 'files') asked.push(g); return [0]; }); await run.start(); return asked; };
+  expect(await runOnce()).toHaveLength(0); // an empty folder
+  expect(await runOnce()).toHaveLength(0); // the first run's files
+  writes.set('SPEC.md', '# edited by me\n');
+  const asked = await runOnce();
+  expect(asked).toHaveLength(1);
+  expect(asked[0].detail).toContain('SPEC.md');
+  expect(asked[0].detail).not.toContain('CONSTRAINTS.md');
+});
+
+test('test first for real: no test written is asked for once more, then the task stays open as "no test written"; a test that passes before any code is asked once to fail, then marked "already true"', async () => {
+  // No test file in any task: asked twice a task, never "done", no GO.
+  const none = standIn({ send: async (text) => (/failing test|no test file/.test(text) ? { reason: 'done', files: [], diff: '', text: 'ok' } : null) });
+  const run = new AgentsRun({ request: 'add two numbers', driver: none.d });
+  answering(run);
+  const s = await run.start();
+  expect(s.items[2].map((t) => [t.state, t.why])).toEqual([['open', 'no test written'], ['open', 'no test written']]);
+  expect(none.sends.filter((x) => /least code/.test(x))).toHaveLength(0);
+  expect(none.sends.filter((x) => /task 1\/2/.test(x))).toHaveLength(2);
+  expect(none.execs).not.toContain('bun test ./test/add.test.mjs');
+  expect(s.verdict.kind).not.toBe('go');
+  expect(s.report.join('\n')).toContain('○ 1. Add · no test written');
+
+  // The new test passes at once, and again after it is asked to fail: "already true", no build step.
+  const pass = standIn({ exec: () => ({ code: 0, out: '1 pass' }) });
+  const run2 = new AgentsRun({ request: 'add two numbers', driver: pass.d });
+  answering(run2);
+  const s2 = await run2.start();
+  expect(s2.items[2].map((t) => t.already)).toEqual([true, true]);
+  expect(pass.sends.filter((x) => /passes already, before any code/.test(x))).toHaveLength(2);
+  expect(pass.sends.filter((x) => /least code/.test(x))).toHaveLength(0);
+  expect(s2.report.join('\n')).toContain('1. Add · already true: its test passed before any code');
+
+  // A suite command that cannot run one file is never a task's own test.
+  const cargo = standIn({ send: async (text) => (/failing test/.test(text) ? { reason: 'done', files: ['tests/add.rs'], diff: '+test', text: 'ok' } : null) });
+  cargo.d.testCmd = 'cargo test';
+  const run3 = new AgentsRun({ request: 'add two numbers', driver: cargo.d });
+  answering(run3);
+  const s3 = await run3.start();
+  expect(cargo.execs.slice(0, 1)).toEqual(['cargo test']); // the first run of the suite is the task's check step, not its red
+  expect(s3.log.some((e) => /no command runs tests\/add\.rs alone/.test(e.text))).toBe(true);
+});
+
+test('"Allow it this once" is once; Verify, Review and Ship ask before a command that can write; a run in Plan mode says so and does nothing', async () => {
+  const results = [];
+  const { d } = standIn({
+    send: async (text, guard) => {
+      if (/least code/.test(text) && !results.length) {
+        for (let i = 0; i < 2; i++) results.push(await guard({ name: 'Bash', args: { command: 'npm install left-pad' }, before: '' }));
+      }
+      if (/verify: show that the request works/.test(text)) {
+        results.push(await guard({ name: 'Bash', args: { command: 'ls -la && git status' }, before: '' }));
+        results.push(await guard({ name: 'Bash', args: { command: 'node src/add.mjs > out.txt' }, before: '' }));
+      }
+      return null;
+    },
+  });
+  const run = new AgentsRun({ request: 'add two numbers', driver: d });
+  const stops = [];
+  answering(run, (gate) => { if (gate.kind !== 'stop') return [0]; stops.push(gate.title); return [stops.length === 1 ? 1 : 0]; });
+  const s = await run.start();
+  expect(results[0]).toBeNull(); // allowed this once
+  expect(results[1]?.text).toContain('The user said no to this step (New package'); // asked again, and no
+  expect(results[2]).toBeNull(); // a command that only reads runs
+  expect(results[3]?.text).toContain('The user said no to this step (A command that can write');
+  expect(stops).toEqual(['Stop · New package', 'Stop · New package', 'Stop · A command that can write']);
+
+  const p = standIn();
+  p.d.mode = 'plan';
+  const planned = new AgentsRun({ request: 'add two numbers', driver: p.d });
+  answering(planned);
+  const t = await planned.start();
+  expect(t.verdict.kind).toBe('stopped');
+  expect(t.verdict.why).toContain('Plan mode');
+  expect(p.sends).toHaveLength(0);
+  expect(p.writes.size).toBe(0);
+  expect(p.calls).toHaveLength(0);
 });

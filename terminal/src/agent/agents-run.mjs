@@ -15,6 +15,7 @@
 // /agents demo give their own (agents-demo.mjs).
 import { EventEmitter } from 'node:events';
 import { basename } from 'node:path';
+import { createHash } from 'node:crypto';
 import { guardStep, GUARD_OPTS } from './agents-guards.mjs';
 
 export const STAGES = [
@@ -27,6 +28,14 @@ export const STAGES = [
 ];
 export const MAX_TRIES = 3;
 export const LIMITS = { lines: 100, files: 3 };
+// Ship's fix rounds: a critical finding is offered "Fix it" this many times, then only "Stop here".
+export const SHIP_FIXES = 2;
+// The files a run writes. One already here that no /agents run wrote is yours: the run asks before it
+// writes (keep yours and write its own in .agentic/agents/<run>/, replace them after a copy, or stop).
+export const RUN_FILES = ['SPEC.md', 'CONSTRAINTS.md', 'tasks/plan.md', 'tasks/todo.md', 'tasks/review.md', 'tasks/ship.md'];
+const RUN_JSON = '.agentic/agents/run.json';
+const hashOf = (text) => createHash('sha1').update(String(text ?? '')).digest('hex').slice(0, 16);
+const PLAN_MODE = 'Plan mode only reads, and /agents writes its files and the code: leave Plan mode (shift+tab), then /agents again';
 
 // The five areas of a review: the poster's for code, and for math the ones that break numbers.
 export const AREAS = {
@@ -107,6 +116,8 @@ export class AgentsRun extends EventEmitter {
       verdict: null, gate: null, paused: false, answers: [], tasks: [], diffs: [], report: [],
     };
     this.s.testCmd = this.s.testCmd ?? driver.testCmd ?? null;
+    // On resume Build keeps its task list: what is done stays done.
+    this.resumed = Boolean(saved);
   }
 
   get state() { return this.s; }
@@ -150,11 +161,11 @@ export class AgentsRun extends EventEmitter {
   }
 
   // ---- the ring ----
-  enter(k, items) {
+  enter(k, items, { keep = false } = {}) {
     const s = this.s;
     s.stage = k; s.item = 0;
-    s.items[k] = items.map((x) => ({ state: 'todo', ...x }));
-    s.stageAt[k] = this.now();
+    if (!keep) s.items[k] = items.map((x) => ({ state: 'todo', ...x }));
+    if (!keep || s.stageAt[k] == null) s.stageAt[k] = this.now();
     s.nodes = ['todo', 'todo', 'todo', 'todo']; s.active = []; s.tries = 1; s.miss = '';
     this.log('main', `${String(k + 1).padStart(2, '0')} ${STAGES[k].name}`, 'stage');
   }
@@ -200,6 +211,35 @@ export class AgentsRun extends EventEmitter {
     return r ?? { ok: true, findings: [] };
   }
   wholeDiff() { return this.s.diffs.join('\n').slice(-24_000); }
+  // The run's own files: at the top of the project, or in .agentic/agents/<run>/ when you kept yours.
+  where(rel) { return this.s.place ? `${this.s.place}/${rel}` : rel; }
+  get(rel) { return this.d.read?.(this.where(rel)) ?? null; }
+  put(rel, text) {
+    this.d.write?.(this.where(rel), text);
+    (this.s.wrote ??= {})[this.where(rel)] = hashOf(text);
+  }
+  // Before the first write: your own SPEC.md or tasks files (not written by an earlier /agents run here,
+  // as its run file says) are never replaced without asking.
+  async yours() {
+    const s = this.s;
+    if (s.place !== undefined) return;
+    const there = (rel) => (this.d.has ? this.d.has(rel) : this.d.read?.(rel) != null);
+    const theirs = RUN_FILES.filter((f) => there(f) && s.wrote?.[f] !== hashOf(this.d.read?.(f) ?? ''));
+    s.place = '';
+    if (!theirs.length) return;
+    const dir = `.agentic/agents/${s.id}`;
+    this.log('stop', `Your files are here: ${theirs.join(', ')}`, 'warn');
+    const { n } = await this.ask({ kind: 'files', title: 'Your files are here', detail: `${theirs.join(', ')} ${theirs.length === 1 ? 'is' : 'are'} here, and no /agents run wrote ${theirs.length === 1 ? 'it' : 'them'}. Keep yours and this run writes all its files in ${dir}/, or replace them after a copy in .agentic/agents/kept/${s.id}/.`, opts: ['Keep mine (this run writes its files in .agentic/agents/)', 'Replace them (yours are copied to .agentic/agents/kept/ first)', 'Stop'] });
+    if (n === 0) { s.place = dir; this.log('you', `keep mine: this run's files are in ${dir}/`); return; }
+    if (n === 1) {
+      for (const f of theirs) this.d.write?.(`.agentic/agents/kept/${s.id}/${f}`, this.d.read?.(f) ?? '');
+      this.log('you', `replace them: yours are in .agentic/agents/kept/${s.id}/`);
+      return;
+    }
+    s.verdict = { kind: 'stopped', why: `you stopped it: your ${theirs.join(', ')} ${theirs.length === 1 ? 'is' : 'are'} as ${theirs.length === 1 ? 'it was' : 'they were'}` };
+    this.ac.abort();
+    throw new Error('stopped');
+  }
 
   // ---- the guards: a step on the stop list asks you first ----
   async guard(step) {
@@ -207,7 +247,6 @@ export class AgentsRun extends EventEmitter {
     const hit = guardStep(step, { stage: s.stage, task, cover: this.cover, node: s.active[0], limits: LIMITS, math: s.math });
     if (!hit) { if (task) { s.diff = task.lines ?? 0; s.files = (task.filesTouched ?? []).length; } return null; }
     if (hit.deny) { this.log('stop', hit.deny, 'warn'); return { denied: hit.title, text: hit.deny }; }
-    if (task?.allowed?.includes(hit.key)) return null;
     s.stops++;
     const was = s.nodes.slice();
     for (const n of s.active) s.nodes[n] = 'stop';
@@ -216,7 +255,8 @@ export class AgentsRun extends EventEmitter {
     const opts = GUARD_OPTS[hit.key] ?? GUARD_OPTS.default;
     const { n, text } = await this.ask({ kind: 'stop', title: `Stop · ${hit.title}`, detail: hit.detail, opts, typeAt: 2 });
     s.tripped = null; s.nodes = was; this.changed();
-    if (n === 1) { if (task) (task.allowed ??= []).push(hit.key); this.log('you', 'allowed it this once'); return null; }
+    // Once is once: the same step later asks again. A big diff allowed still counts its lines.
+    if (n === 1) { if (task && hit.lines != null) { task.lines = hit.lines; task.filesTouched = hit.files; } this.log('you', 'allowed it this once'); return null; }
     const said = n === 2 && text ? text : null;
     this.log('you', said ?? opts[0]);
     return { denied: `${hit.title}: you said no`, text: `The user said no to this step (${hit.title}: ${hit.detail}).${said ? ` They said: ${said}` : ' Do it another way, without it.'}` };
@@ -231,8 +271,12 @@ export class AgentsRun extends EventEmitter {
   }
   async run(from) {
     const stages = [() => this.define(), () => this.plan(), () => this.build(), () => this.verify(), () => this.review(), () => this.ship()];
+    // What earlier /agents runs here wrote (their run file), read before this run saves its own.
+    this.s.wrote ??= { ...(jsonOf(this.d.read?.(RUN_JSON))?.wrote ?? {}) };
     try {
-      for (let k = from; k < STAGES.length; k++) await stages[k]();
+      // Plan mode turns every edit away: said once, up front, instead of at each step.
+      if (this.d.mode === 'plan') this.s.verdict = { kind: 'stopped', why: PLAN_MODE };
+      else for (let k = from; k < STAGES.length; k++) await stages[k]();
       if (!this.s.verdict) this.s.verdict = { kind: 'go' };
     } catch (e) {
       if (!this.ac.signal.aborted && e?.message !== 'stopped') { this.s.verdict = { kind: 'failed', why: String(e?.message ?? e).slice(0, 200) }; this.log('stop', `/agents stopped: ${this.s.verdict.why}`, 'bad'); }
@@ -240,6 +284,7 @@ export class AgentsRun extends EventEmitter {
     }
     this.s.active = []; this.s.gate = null; this.s.endedAt = this.now();
     this.log('main', this.verdictLine(), this.s.verdict.kind === 'go' ? 'good' : 'warn');
+    try { this.d.save?.(this.s, { now: true }); } catch { /* the run ends without its file */ }
     this.emit('end', this.s);
     return this.s;
   }
@@ -253,6 +298,7 @@ export class AgentsRun extends EventEmitter {
   // 01 Define: the interview, then SPEC.md and CONSTRAINTS.md.
   async define() {
     const s = this.s;
+    await this.yours();
     this.lanes([{ name: 'explorer', does: 'reads the project' }, { name: 'worker', does: 'waits for the plan' }, { name: 'checker', does: 'checks SPEC.md' }]);
     this.enter(0, [{ title: 'the questions' }]);
     this.begin(0);
@@ -288,8 +334,8 @@ export class AgentsRun extends EventEmitter {
     let spec = String(await this.think(SPEC_SYSTEM, `The request: ${s.request}\n\nThe user's answers:\n${qa}\n\nThe project's files:\n${files}`, { maxTokens: 1500 }) ?? '').trim();
     spec = spec.replace(/^```\w*\n?|```\s*$/g, '').trim();
     if (!/acceptance/i.test(spec)) spec += `\n\n## Acceptance checks\n1. ${s.request}`;
-    this.d.write?.('SPEC.md', `# ${s.request}\n\n${spec.replace(/^# .*\n+/, '')}\n`);
-    this.d.write?.('CONSTRAINTS.md', [
+    this.put('SPEC.md', `# ${s.request}\n\n${spec.replace(/^# .*\n+/, '')}\n`);
+    this.put('CONSTRAINTS.md', [
       '# Constraints', '', 'The quality bar /agents holds this work to.', '',
       '- Every task starts with a failing test, then the least code to pass it.',
       `- At most ${LIMITS.lines} changed lines and ${LIMITS.files} files a task; more asks first.`,
@@ -309,7 +355,7 @@ export class AgentsRun extends EventEmitter {
     const s = this.s;
     this.lanes([{ name: 'explorer', does: 'reads SPEC.md' }, { name: 'worker', does: 'waits for your yes' }, { name: 'checker', does: 'a test per task' }]);
     this.enter(1, [{ title: 'SPEC.md' }, { title: 'the tasks' }, { title: 'their checks' }, { title: 'tasks/plan.md' }]);
-    const spec = this.d.read?.('SPEC.md') ?? s.request;
+    const spec = this.get('SPEC.md') ?? s.request;
     this.begin(0); await this.node(0, 3000); this.lane(0, 'run'); this.done(0); this.lane(0, 'done'); this.finishItem();
     this.begin(1); await this.node(1, 30_000);
     const files = (this.d.listFiles?.() ?? []).slice(0, 60).join('\n');
@@ -321,7 +367,7 @@ export class AgentsRun extends EventEmitter {
     this.begin(3); await this.node(3, 2000);
     s.tasks = tasks;
     const plan = ['# Plan', '', `For: ${s.request}`, '', ...tasks.map((t, i) => `${i + 1}. **${t.title}** · check: ${t.check}${t.files.length ? ` · ${t.files.join(', ')}` : ''}`), ''].join('\n');
-    this.d.write?.('tasks/plan.md', plan);
+    this.put('tasks/plan.md', plan);
     this.writeTodo();
     this.done(3); this.finishItem();
     this.log('main', `tasks/plan.md: ${tasks.length} tasks`);
@@ -338,13 +384,16 @@ export class AgentsRun extends EventEmitter {
   }
   writeTodo() {
     const s = this.s;
-    this.d.write?.('tasks/todo.md', ['# To do', '', ...s.tasks.map((t, i) => `- [${s.items[2]?.[i]?.state === 'done' ? 'x' : ' '}] ${i + 1}. ${t.title}`), ''].join('\n'));
+    this.put('tasks/todo.md', ['# To do', '', ...s.tasks.map((t, i) => `- [${s.items[2]?.[i]?.state === 'done' ? 'x' : ' '}] ${i + 1}. ${t.title}`), ''].join('\n'));
   }
 
   // 03 Build: every task test-first, in order.
   async build(only = null) {
     const s = this.s;
-    if (only === null) this.enter(2, s.tasks.map((t) => ({ title: t.title, check: t.check, files: t.files, tries: 1, doubt: null })));
+    // Resumed in Build: the task list stays, done stays done, a task caught half-way starts again from its test.
+    const keep = only === null && this.resumed && s.stage === 2 && s.items[2]?.length > 0;
+    if (only === null) this.enter(2, s.tasks.map((t) => ({ title: t.title, check: t.check, files: t.files, tries: 1, doubt: null })), { keep });
+    if (keep) this.log('main', `resumed: ${s.items[2].filter((t) => t.state === 'done').length} of ${s.items[2].length} tasks were done`);
     this.lanes([{ name: 'explorer', does: 'finds the spot' }, { name: 'worker', does: 'edits + tests' }, { name: 'checker', does: s.math ? 'suite + math' : 'suite + build' }]);
     for (let i = only ?? 0; i < s.items[2].length; i++) {
       if (only !== null && i !== only) break;
@@ -355,29 +404,57 @@ export class AgentsRun extends EventEmitter {
   }
   async task(i) {
     const s = this.s, t = s.items[2][i], n = s.items[2].length, name = `task ${i + 1}/${n}`;
+    // Caught half-way by a stop (resume): its failing test is written, so it starts again from there.
+    const again = t.state === 'now' && t.test ? t.test : null;
     this.begin(i);
     t.lines = 0; t.filesTouched = []; s.diff = 0; s.files = 0;
     this.cover = null;
-    // RED: one failing test, nothing else.
+    // RED: one failing test, nothing else. No test file: asked once more, then the task stays open.
+    // A test that passes before any code: asked once to fail for the right reason, then "already true".
     await this.node(0, 40_000);
     this.lane(0, 'run'); this.lane(1, 'run');
-    const red = await this.send(`/agents · ${name}: ${t.title}\nWrite ONE new failing test for this check: ${t.check}\nPut it where this project keeps its tests, in their style. Change only test files: do not write the code yet, and do not run the whole suite.`, `/agents · ${name} · red · ${t.title}`);
+    let testFile = again;
+    if (!again) {
+      const red = await this.send(`/agents · ${name}: ${t.title}\nWrite ONE new failing test for this check: ${t.check}\nPut it where this project keeps its tests, in their style. Change only test files: do not write the code yet, and do not run the whole suite.`, `/agents · ${name} · red · ${t.title}`);
+      testFile = (red.files ?? []).find(isTestFile) ?? null;
+      if (!testFile) {
+        this.log('checker', 'no test file was written: asked once more', 'warn');
+        const more = await this.send(`/agents · ${name}: no test file was written. Write ONE new failing test for this check now, in a test file where this project keeps its tests: ${t.check}\nChange only test files: do not write the code yet.`, `/agents · ${name} · red · again`);
+        testFile = (more.files ?? []).find(isTestFile) ?? null;
+      }
+    } else this.log('main', `${name}: back to its failing test, ${again}`);
     this.lane(0, 'done');
-    const testFile = (red.files ?? []).find(isTestFile) ?? null;
+    if (!testFile) {
+      this.done(0, 'miss'); this.lane(1, 'wait');
+      this.log('stop', `${name}: no test written, so it stays open`, 'warn');
+      this.finishItem('open', { why: 'no test written' });
+      return;
+    }
     this.cover = testFile;
     t.test = testFile;
-    const cmd = coveringCommand(s.testCmd, testFile);
-    if (cmd) {
+    // Its own covering run: just its test file. The whole suite is never a task's own test.
+    const cover = coveringCommand(s.testCmd, testFile);
+    const cmd = cover && cover !== s.testCmd ? cover : null;
+    let already = false;
+    if (cmd && !again) {
       this.lane(2, 'run');
-      const r = await this.exec(cmd);
-      this.lane(2, 'wait');
+      let r = await this.exec(cmd);
       this.log('checker', `${cmd}: ${r.code === 0 ? 'passes already' : 'fails, as it should'}`);
-    } else this.log('main', 'no test command found: the check is the model\'s own run', 'warn');
+      if (r.code === 0) {
+        await this.send(`/agents · ${name}: the new test in ${testFile} passes already, before any code. Change it so it fails for the reason its check is about (${t.check}): it must fail now and pass once the code is right. Change only the test.`, `/agents · ${name} · red · make it fail`);
+        r = await this.exec(cmd);
+        already = r.code === 0;
+        this.log('checker', `${cmd}: ${already ? 'still passes: already true, no code step' : 'fails, as it should'}`, already ? 'warn' : '');
+      }
+      this.lane(2, 'wait');
+    } else if (!cmd) this.log('main', `no command runs ${testFile} alone: its check is the whole suite after the code`, 'warn');
     this.done(0);
-    // GREEN: the least code, up to three tries; then it asks you.
+    // GREEN: the least code, up to three tries; then it asks you. Skipped when it is already true.
+    if (already) t.already = true;
     let tries = 0;
     let why = '';
     for (;;) {
+      if (already) break;
       await this.node(1, 60_000);
       this.lane(1, 'run');
       const ask = tries === 0
@@ -458,7 +535,7 @@ export class AgentsRun extends EventEmitter {
     this.begin(2); await this.node(2, 60_000); this.lane(2, 'run');
     const cross = await this.send(s.math
       ? '/agents · verify: check one result a second, independent way (another method, a brute-force or closed-form check) and report both numbers and how far apart they are. Do not change files.'
-      : '/agents · verify: try the edge cases SPEC.md names (empty, missing, too big, the first and the last) and report each result. Do not change files.', `/agents · verify · ${s.math ? 'two ways' : 'edge cases'}`, 'question');
+      : `/agents · verify: try the edge cases ${this.where('SPEC.md')} names (empty, missing, too big, the first and the last) and report each result. Do not change files.`, `/agents · verify · ${s.math ? 'two ways' : 'edge cases'}`, 'question');
     this.log('checker', firstLine(cross.text) || 'checked');
     this.done(2); this.lane(2, 'done'); this.finishItem('done', { result: firstLine(cross.text, 60) });
     this.begin(3); await this.node(3, 2000);
@@ -472,7 +549,7 @@ export class AgentsRun extends EventEmitter {
     const s = this.s, areas = AREAS[s.math ? 'math' : 'code'];
     this.enter(4, areas.map(([title, hint]) => ({ title, hint })));
     this.lanes([{ name: 'explorer', does: 'reads the diff' }, { name: 'worker', does: 'finds an input' }, { name: 'checker', does: 'tries to break' }]);
-    const spec = this.d.read?.('SPEC.md') ?? s.request;
+    const spec = this.get('SPEC.md') ?? s.request;
     const lines = ['# Review', ''];
     for (let i = 0; i < areas.length; i++) {
       const [area, hint] = areas[i];
@@ -491,7 +568,7 @@ export class AgentsRun extends EventEmitter {
       const crit = f.find((x) => x.level === 'critical');
       if (crit) await this.fix(crit, 4);
     }
-    this.d.write?.('tasks/review.md', lines.join('\n'));
+    this.put('tasks/review.md', lines.join('\n'));
   }
   // A critical finding: one fix task in Build, then back where it came from.
   async fix(f, back) {
@@ -513,7 +590,7 @@ export class AgentsRun extends EventEmitter {
     const s = this.s;
     this.enter(5, REVIEWERS.map((r) => ({ title: r.name })).concat([{ title: 'merged report' }]));
     this.lanes(REVIEWERS.map((r) => ({ name: r.name, does: r.does })));
-    const spec = this.d.read?.('SPEC.md') ?? s.request;
+    const spec = this.get('SPEC.md') ?? s.request;
     const all = [];
     s.nodes = ['now', 'now', 'now', 'todo']; s.active = [0, 1, 2]; s.stepAt = this.now(); s.stepEta = 60_000;
     for (let i = 0; i < 3; i++) { s.items[5][i].state = 'now'; this.lane(i, 'run'); }
@@ -536,19 +613,21 @@ export class AgentsRun extends EventEmitter {
       `# Ship report`, '', `For: ${s.request}`, '',
       `Verdict: ${crit.length ? 'NO-GO' : 'GO'}`, '',
       '## Findings', '', ...(all.length ? all.map((x) => `- ${x.by} · **${x.level}** ${x.at ?? ''}: ${x.text}${x.fix ? ` · fix: ${x.fix}` : ''}`) : ['- nothing found']), '',
-      '## Tasks', '', ...s.items[2].map((t, i) => `- ${t.state === 'done' ? '✓' : '○'} ${i + 1}. ${t.title}${t.doubt ? ` · second opinion: ${t.doubt}` : ''}`), '',
+      '## Tasks', '', ...s.items[2].map((t, i) => `- ${t.state === 'done' ? '✓' : '○'} ${i + 1}. ${t.title}${t.why ? ` · ${t.why}` : ''}${t.already ? ' · already true: its test passed before any code' : ''}${t.doubt ? ` · second opinion: ${t.doubt}` : ''}`), '',
       '## Rollback', '', '- Nothing was committed. Read `git diff`, then commit what you keep.', `- /rewind goes back to before any step of this run (${s.rewind} task points).`, '',
     ];
-    this.d.write?.('tasks/ship.md', s.report.join('\n'));
+    this.put('tasks/ship.md', s.report.join('\n'));
     this.done(3); this.finishItem();
     if (crit.length || open.length) {
       const why = crit.length ? `${crit[0].at ?? ''} ${crit[0].text}`.trim() : `${open.length} task${open.length === 1 ? '' : 's'} left open`;
-      // A critical finding: fixing it comes first. Tasks left open: stopping there comes first (GO is your call).
-      const opts = crit.length ? ['Fix it, then run Ship again', 'Stop here: NO-GO'] : ['Stop here: NO-GO', 'Go on anyway: GO'];
-      const { n } = await this.ask({ kind: 'stop', title: 'NO-GO', detail: `${why}.`, opts });
+      // A critical finding: fixing it comes first, SHIP_FIXES times at most (no screen always answers
+      // "Fix it"), then only stopping. Tasks left open: stopping there comes first (GO is your call).
+      const rounds = s.shipFixes ?? 0, more = rounds < SHIP_FIXES;
+      const opts = crit.length ? (more ? ['Fix it, then run Ship again', 'Stop here: NO-GO'] : ['Stop here: NO-GO']) : ['Stop here: NO-GO', 'Go on anyway: GO'];
+      const { n } = await this.ask({ kind: 'stop', title: 'NO-GO', detail: crit.length && !more ? `${why}. Still critical after ${rounds} rounds of fixes: Ship stops here.` : `${why}.`, opts });
       const stopHere = n < 0 || opts[n] === 'Stop here: NO-GO';
       if (stopHere) { s.verdict = { kind: 'nogo', why }; return; }
-      if (crit.length) { await this.fix({ text: crit[0].text, fix: crit[0].fix }, 5); return this.ship(); }
+      if (crit.length) { s.shipFixes = rounds + 1; await this.fix({ text: crit[0].text, fix: crit[0].fix }, 5); return this.ship(); }
     }
     s.verdict = { kind: 'go' };
   }

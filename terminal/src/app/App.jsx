@@ -2417,7 +2417,7 @@ export function App({ opts, win, onRestart }) {
       if (!demo && before === 'ask') setMode('ask');
       setAgentsState({ ...st });
       const v = st.verdict ?? {};
-      const files = demo ? 'a pretend run: nothing was written' : 'SPEC.md, CONSTRAINTS.md, tasks/plan.md, tasks/todo.md, tasks/review.md and tasks/ship.md';
+      const files = demo ? 'a pretend run: nothing was written' : st.place ? `its files in ${st.place}/ (yours are as they were)` : 'SPEC.md, CONSTRAINTS.md, tasks/plan.md, tasks/todo.md, tasks/review.md and tasks/ship.md';
       push({ type: 'note', text: `/agents ${v.kind === 'go' ? 'GO' : v.kind === 'nogo' ? 'NO-GO' : v.kind === 'failed' ? 'stopped by an error' : 'stopped'}${v.why ? `: ${v.why}` : ''} · ${st.items[2]?.filter((t) => t.state === 'done').length ?? 0} tasks done · ${files} · nothing committed (read git diff, then commit). /agents opens the tree again.`, tone: v.kind === 'go' ? 'dim' : 'warn' });
       // A few seconds on the result, then the window is yours again.
       setTimeout(() => { if (agentsRef.current === run && !run.running) closeAgents(); }, 4000);
@@ -2518,6 +2518,8 @@ export function App({ opts, win, onRestart }) {
         if (sub === 'demo') { startAgents('build a Kepler solver: where an orbit is at time t', { demo: true }); break; }
         if (busy || S.current.starting) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
         if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then /agents again.', tone: 'dim' }); break; }
+        // Plan mode turns every edit away: said up front, not at each step (the run says it too).
+        if (agent.mode === 'plan') { push({ type: 'note', text: '/agents writes its files and the code, and Plan mode only reads: leave Plan mode (shift+tab), then /agents again.', tone: 'warn' }); break; }
         if (sub === 'resume') {
           const saved = savedRun(agent.cwd);
           if (!saved) { push({ type: 'note', text: 'No unfinished /agents run in this folder.', tone: 'dim' }); break; }
