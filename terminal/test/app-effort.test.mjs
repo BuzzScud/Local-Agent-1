@@ -3,8 +3,11 @@
 // limits that move up and down, kept in settings.json. (/increase was folded
 // into it on 29 Sep 2026; the Search rows came the same day.)
 import { test, expect } from 'bun:test';
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createServer } from 'node:net';
+import { spawn, spawnSync } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
@@ -145,6 +148,28 @@ test('saved limits are read at start: /stats lists them', async () => {
   await fake.close();
   expect(r.text).toContain('context auto · thinking cap 4,096 tokens · 16 tries · 80 steps · /effort moves them');
 }, T);
+
+// The tests below count the stand-in server's starts (its FAKE_LLAMA_ARGS list). On a busy Mac another
+// test's server takes the port in the moment of a start; the app then moves to the next port
+// (models/runtime/server.mjs), and each try that found its port taken was counted as a restart (3 Oct
+// 2026: "Expected length: 1, Received length: 3"). The stand-in notes a start once it has its port.
+test('the stand-in server notes a start only once it has its port: a try that found the port taken is not a start', async () => {
+  const argsFile = join(mkdtempSync(join(tmpdir(), 'agentic-standin-')), 'server-args.jsonl');
+  const standIn = join(import.meta.dir, 'fake-llama-server.mjs');
+  const env = { ...process.env, FAKE_LLAMA_ARGS: argsFile };
+  const holder = createServer();
+  await new Promise((ok) => holder.listen(0, '127.0.0.1', ok));
+  const port = String(holder.address().port);
+  const taken = spawnSync(standIn, ['--port', port], { env, timeout: 20_000 });
+  expect(taken.status).toBeGreaterThan(0); // it could not listen, and exits as the real server does
+  expect(existsSync(argsFile)).toBe(false);
+  await new Promise((ok) => holder.close(ok));
+  const child = spawn(standIn, ['--port', port], { env, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 200 && !existsSync(argsFile); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(readFileSync(argsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l))).toEqual([['--port', port]]);
+  } finally { child.kill(); }
+}, 40_000);
 
 test('/effort on a server Agentic Coder started: a new context and thinking cap restart it with both, and the window stays', async () => {
   const { cwd, env, base } = setup();
