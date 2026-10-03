@@ -19,7 +19,9 @@ export default {
   watch: ['Said “done” when it was not, three times on pages tried by hand (29 Sep 2026).'],
   // Kept under its own name here: Unsloth's MTP repo names it like the plain file.
   file: 'Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf',
-  url: 'https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/Qwen3.5-9B-UD-Q5_K_XL.gguf',
+  // Its links (vision too) are pinned to the repo's revision of 16 May 2026 since
+  // 3 Oct 2026, so a later upload cannot change a file under its checksum.
+  url: 'https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/9716a636ee4bddc3fed678220b7a33dd2a4160ae/Qwen3.5-9B-UD-Q5_K_XL.gguf',
   sha256: 'bb0aa4bf2acf4b6d97eca051a7af91200729e9e97449ce98785af9e70f6d703c',
   bytes: 6_874_345_824,
   // Layout from Qwen's config.json: 32 layers, every 4th full attention (8),
@@ -46,7 +48,7 @@ export default {
   // model only once a picture is attached (--mmproj). computeBytes: its working space.
   vision: {
     file: 'mmproj-qwen3.5-9b-F16.gguf',
-    url: 'https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/mmproj-F16.gguf',
+    url: 'https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/9716a636ee4bddc3fed678220b7a33dd2a4160ae/mmproj-F16.gguf',
     sha256: '5a40d1f771686432172a4981018a0d30d03a5aaf5793a5badd5416573362a232',
     bytes: 918_165_984,
     computeBytes: 0.3e9,

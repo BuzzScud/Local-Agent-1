@@ -11,7 +11,9 @@ export default {
   kind: 'embedding',
   name: 'BGE-M3',
   file: 'bge-m3-Q8_0.gguf',
-  url: 'https://huggingface.co/gpustack/bge-m3-GGUF/resolve/main/bge-m3-Q8_0.gguf',
+  // Pinned to the repo's revision of 31 Oct 2024 since 3 Oct 2026, so a later
+  // upload cannot change the file under its checksum.
+  url: 'https://huggingface.co/gpustack/bge-m3-GGUF/resolve/2d48f1737679ad900d5c26c5aad5410e9c70fdca/bge-m3-Q8_0.gguf',
   sha256: '950f4a8e5e19477a6d3c26d2f162233c20002c601f75e4b002e3239997821167',
   bytes: 634_553_760,
   pooling: 'cls',
