@@ -98,6 +98,11 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   hides a tool for a test of the skips. Which tests need what was measured, not guessed: the suite run with python and
   the picture helper taken away.
 - **Every test process has a throwaway home** (test-env.mjs, 3 Oct 2026) and removes its own when it ends.
+- **The app tests drive the app in its own window** (`AGENTIC_SESSIONS=off` in test-env.mjs), not the way a window
+  runs it since 3 Oct 2026 (inside a keeper, sessions.mjs). `terminal/test/app-keeper.test.mjs` drives the everyday
+  things through the keeper (a reply, a paste, /clear, the menus before the app and typing after them, a mouse drag),
+  each ending with the app quitting and no keeper left. A new thing that depends on keys, the mouse or the screen
+  gets a line there too.
 - **Throwaway copies** (`terminal/src/flows/scratch.mjs`): each notes its maker beside it (`<copy>.owner`), and before
   a new one the copies whose maker is gone are removed (`sweepScratch`; one with no note after an hour); a copy that
   would leave under 10 GB free on the disk is refused with the reason.
