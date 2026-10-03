@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>/loop · the loop board, three designs</title>
+<style>
+:root{color-scheme:dark;--bg:#0f1113;--card:#171a1d;--line:#2a2f35;--text:#e6e6e6;--dim:#9aa3ad;--accent:#7ee2a8;--term:#16181a;--bad:#ff8a80;--warn:#ffaf5f}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;overflow:hidden}
+::-webkit-scrollbar{display:none}
+header{padding:12px 22px 6px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:21px;margin:0;font-weight:600;letter-spacing:-.02em}header .date{color:var(--dim);font-size:13px}
+nav{display:flex;gap:6px;padding:0 22px 10px;flex-wrap:wrap;align-items:center}
+nav button{background:#1b1f23;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;cursor:pointer}
+nav button.on{background:var(--accent);color:#0b0d0e;border-color:var(--accent);font-weight:600}
+nav #needs{margin-left:auto;color:var(--warn);font-size:13px;font-weight:600;min-width:150px;text-align:right}
+main{padding:0 22px 12px;height:calc(100% - 92px);overflow:auto;scrollbar-width:none}
+section{display:none}section.on{display:block}
+#live.on{display:flex;gap:16px;align-items:flex-start}#termwrap{flex:0 0 auto;min-width:0;max-width:100%}#side{flex:1 1 0;min-width:300px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 16px}
+.card h3{margin:2px 0 6px;font-size:15px}.card h3 small{color:var(--dim);font-weight:400;font-size:13px;margin-left:6px}
+.card+.card{margin-top:10px}
+ol,ul{margin:0 0 4px;padding-left:19px}li{margin:4px 0}
+code,kbd{font:12.5px "SF Mono",ui-monospace,Menlo,monospace;color:#cfe}
+kbd{background:#22272c;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--text)}
+.dim{color:var(--dim)}p{margin:6px 0}
+.win{background:var(--term);border:1px solid var(--line);border-radius:10px;overflow:hidden;width:max-content;max-width:100%}
+#bar{display:flex;align-items:center;gap:7px;padding:6px 10px;background:#22262a;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--dim)}
+#bar i{width:11px;height:11px;border-radius:50%;background:#3a4047;display:inline-block}#bar .name{margin:0 auto;padding-right:44px}
+.term{width:max-content;max-width:100%;padding:6px 9px;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:13px;line-height:16px;white-space:pre;overflow:hidden;color:#d0d0d0;cursor:default;font-variant-ligatures:none}
+.term b.g{font-weight:inherit;display:inline-block;width:1ch;text-align:center;overflow:visible;white-space:pre}
+#keys{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12.5px;color:var(--dim)}
+#keys button{background:#1b1f23;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:4px 9px;font:inherit;font-size:12.5px;cursor:pointer;min-width:30px}
+#keys button:hover{border-color:#4a525b}#keys button b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-weight:600;color:var(--accent);margin-right:5px}
+#keys button.ans:disabled{background:#15181b;color:#5c646d;cursor:default;border-color:#22272c}#keys button.ans:disabled b{color:#5c646d}
+#keys.asking button.ans{border-color:var(--warn)}#keys.asking button.ans b{color:var(--warn)}
+#keys .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+.about{display:none}.about.on{display:block}
+.good{color:var(--accent)}.weak{color:var(--warn)}
+#compare .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.minibox{cursor:pointer}.minibox:hover .win{border-color:#4a525b}
+.minibox h3{margin:0 0 5px;font-size:14px}.minibox h3 small{color:var(--dim);font-weight:400;margin-left:6px}
+.minibox .term{padding:5px 7px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:4px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:12.5px}td:first-child{color:var(--dim);width:24%}
+td .y{color:var(--accent);font-weight:600}td .m{color:var(--warn);font-weight:600}td .n{color:var(--bad);font-weight:600}
+#real.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+pre.diff{margin:6px 0 0;background:#111315;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:min(10.5px,calc((100vw - 150px) / 3 / 80 / 0.6021));line-height:1.3;font-family:"SF Mono",ui-monospace,Menlo,monospace;white-space:pre;overflow:hidden;color:#b8c0c8}
+pre.diff .a{color:#87d787}pre.diff .d{color:#ff8a80}
+.checks{columns:1;font-size:12px;line-height:1.35;color:var(--dim);margin:0}.checks li{margin:1px 0;list-style:none}.checks{padding-left:0}.checks b{color:var(--accent);margin-right:6px}
+@media (max-height:860px){.card{padding:8px 14px}li{margin:3px 0}header{padding-top:8px}}
+@media (max-width:900px){html,body{overflow:auto;height:auto}main{height:auto;overflow:visible}#live.on{flex-direction:column}#side{min-width:0;width:100%}#real.on,#compare .three{grid-template-columns:minmax(0,1fr)}nav #needs{min-width:0}pre.diff{font-size:8px;overflow-x:auto}}
+@media (max-height:820px){#side{font-size:12.5px;line-height:1.4}#side li{margin:2px 0}#side .card{padding:6px 14px}#side .card+.card{margin-top:8px}}
+</style></head><body>
+<header><h1>/loop · the loop board, three designs</h1><span class="date">Live preview · 3 Oct 2026 · three loops: debugging, testing, the web · nothing is built into the app yet · keys 1–5 switch tabs</span></header>
+<nav><button data-id="board">1 · Board</button><button data-id="timeline">2 · Timeline</button><button data-id="tiles">3 · Tiles</button><button data-id="compare">4 · Side by side</button><button data-id="real">5 · What is real</button><span id="needs"></span></nav>
+<main>
+<section id="live">
+  <div id="termwrap">
+    <div class="win"><div id="bar"><i></i><i></i><i></i><span class="name">Loops</span></div><div id="term" class="term"></div></div>
+    <div id="keys">
+      <button data-k="up"><b>↑</b></button><button data-k="down"><b>↓</b></button><button data-k="left"><b>←</b></button><button data-k="right"><b>→</b></button>
+      <button data-k="enter"><b>enter</b>watch</button><button data-k="esc"><b>esc</b>back</button>
+      <span class="sep"></span>
+      <button class="ans" data-k="a"><b>a</b>always</button><button class="ans" data-k="y"><b>y</b>once</button><button class="ans" data-k="n"><b>n</b>no</button>
+      <span class="sep"></span>
+      <button data-k="r"><b>r</b>run now</button><button data-k="p"><b>p</b>pause</button><button data-k="e"><b>e</b>every</button><button data-k="s"><b>s</b>stop</button><button data-k="+"><b>+</b>new loop</button><button data-k="m"><b>m</b>model</button><button data-k="x"><b>x</b>start over</button>
+    </div>
+  </div>
+  <div id="side">
+    <div class="card about" data-d="1"><h3>1 · Board <small>a list, with the picked loop opened below</small></h3><ul>
+      <li>Every loop is <b>one line</b>: its kind, how often it runs, what it is doing now, its last runs as squares, its last result.</li>
+      <li>The lower half opens the loop you picked: its run on the left, and on the right what that kind of loop keeps track of (every test, run by run, or the pages it reads).</li>
+      <li><span class="good">Good at:</span> many loops at once; the answer to “is anything red or waiting for me?” in one look.</li>
+      <li><span class="weak">Weaker at:</span> you see only one loop’s run at a time.</li></ul></div>
+    <div class="card about" data-d="2"><h3>2 · Timeline <small>each loop is a lane, time runs left to right</small></h3><ul>
+      <li>A run is a <b>bar</b>: green passed, red failed, yellow while it waited for you. ◇ marks when the next runs are due. The green line is now.</li>
+      <li><kbd>←</kbd> <kbd>→</kbd> walk back through a loop’s runs and show what that run did. <kbd>[</kbd> <kbd>]</kbd> change the time scale.</li>
+      <li><span class="good">Good at:</span> what ran when, what waited on what, and what happened while you were away.</li>
+      <li><span class="weak">Weaker at:</span> it wants a wide window, and a run’s own lines get the smaller half.</li></ul></div>
+    <div class="card about" data-d="3"><h3>3 · Tiles <small>every loop working, side by side</small></h3><ul>
+      <li>Each loop is a <b>small window of its own</b>: its run’s lines as they come in, a bar to its next run, its last runs at the bottom.</li>
+      <li>A loop that needs you turns <b>yellow</b> and shows its question in the tile.</li>
+      <li><span class="good">Good at:</span> two to four loops you want to watch at the same time.</li>
+      <li><span class="weak">Weaker at:</span> past six loops the tiles get small.</li></ul></div>
+    <div class="card"><h3>Try this <small>about two minutes</small></h3><ol>
+      <li>The <b>web loop</b> asks before it reads a site. Pick it and press <kbd>a</kbd>, <kbd>y</kbd> or <kbd>n</kbd>.</li>
+      <li>The <b>debugging loop</b> fixes three bugs: a real run of Qwen3.5 9B, 43 seconds. It ends by itself when the tests pass.</li>
+      <li>One run at a time on this Mac’s model, so a loop that is due says <b>next in line</b>.</li>
+      <li>A minute in, the <b>test loop</b> runs again by itself and turns green.</li>
+      <li><kbd>enter</kbd> opens one run full size. <kbd>+</kbd> makes a loop. <kbd>m</kbd> switches the model off: the loops wait. <kbd>x</kbd> starts over.</li></ol>
+      <p class="dim">The same board is open in a Terminal window on this Mac, where the tests and the web pages are run for real. To open it again, double-click <code>Loop board preview.command</code> in <code>docs/private/loops-preview/</code>.</p></div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="three">
+    <div class="minibox" data-d="1"><h3>1 · Board <small>click to open</small></h3><div class="win"><div id="mini1" class="term"></div></div></div>
+    <div class="minibox" data-d="2"><h3>2 · Timeline <small>click to open</small></h3><div class="win"><div id="mini2" class="term"></div></div></div>
+    <div class="minibox" data-d="3"><h3>3 · Tiles <small>click to open</small></h3><div class="win"><div id="mini3" class="term"></div></div></div>
+  </div>
+  <div class="card" style="margin-top:12px"><table>
+    <tr><th>The same three loops, live in all three</th><th>1 · Board</th><th>2 · Timeline</th><th>3 · Tiles</th></tr>
+    <tr><td>Is anything red, or waiting for me?</td><td><span class="y">Yes</span> · one line per loop</td><td><span class="y">Yes</span> · a lane per loop</td><td><span class="m">Partly</span> · you read each tile</td></tr>
+    <tr><td>Watch a run while it works</td><td><span class="m">One</span> · the picked loop</td><td><span class="m">One</span> · the picked loop, in less room</td><td><span class="y">All</span> · at the same time</td></tr>
+    <tr><td>What ran when, and what waited</td><td><span class="n">No</span> · squares only</td><td><span class="y">Yes</span> · that is the design</td><td><span class="m">Partly</span> · the last five runs per tile</td></tr>
+    <tr><td>A loop needs you</td><td><span class="y">Clear</span> · its line, and the question below</td><td><span class="m">Okay</span> · a yellow bar and a line</td><td><span class="y">Clear</span> · a yellow tile with the question in it</td></tr>
+    <tr><td>Eight loops</td><td><span class="y">Fits</span> · eight lines</td><td><span class="y">Fits</span> · two rows each</td><td><span class="n">Tight</span> · two rows of small tiles</td></tr>
+    <tr><td>A small window (100 × 30)</td><td><span class="y">Fine</span></td><td><span class="m">Okay</span> · less time on screen</td><td><span class="m">Okay</span> · two tiles across</td></tr>
+  </table>
+  <p class="dim"><b style="color:var(--text)">If I had to pick:</b> the Board as the home screen, because the first question on opening it is “is anything red or waiting for me?”. The Timeline answers a different question well (what happened while I was away) and could be a second view on the same loops, one key away, as <kbd>tab</kbd> is here.</p></div>
+</section>
+
+<section id="real">
+  <div>
+    <div class="card"><h3>Real</h3><ul>
+      <li><b>The debugging run.</b> Qwen3.5 9B on this Mac, run by the app itself (its answer-once mode, <code>coding -p</code>), today at 11:57. It took 43 seconds. Its six steps and its closing words are its own, and the fix it wrote is the file the tests run against.</li>
+      <li><b>The tests.</b> Five real tests of a small sample project, three of them failing at the start. In the Terminal window they are run again every time. On this page they are the recorded results of those same runs.</li>
+      <li><b>The web pages.</b> The release pages of Bun and Ollama on github.com. The Terminal window reads them each time. This page shows what they answered at 12:21: Bun 1.4.2 (2026-09-05), Ollama 0.35.1 (2026-10-02).</li>
+      <li><b>The screens.</b> One piece of drawing code, used by the Terminal window and by this page.</li></ul></div>
+    <div class="card"><h3>Not real</h3><ul>
+      <li><b>No model runs now.</b> In the app a model would read the test output or the page and write the summary. Here the summary lines of the test loop and the web loop are the preview’s own wording, made from the real results.</li>
+      <li><b>There is no /loop in the app yet.</b> The window’s name and the folder <code>~/Desktop/trades-export</code> are a sample.</li>
+      <li><b>“Debug until fixed”</b> in the new-loop form is shown and not started: one debugging loop was recorded.</li></ul></div>
+  </div>
+  <div>
+    <div class="card"><h3>The fix Qwen wrote <small>export.mjs, +19 −2, all 5 tests pass</small></h3><pre class="diff">@@ -3,8 +3,25 @@
+ import { readFileSync } from 'node:fs';
+ 
+ export function toCsv(rows) {
+<span class="d">-  const header = Object.keys(rows[0]);</span>
+<span class="d">-  const lines = rows.map((row) =&gt; header.map((key) =&gt; row[key]).join(','));</span>
+<span class="a">+  if (rows.length === 0) {</span>
+<span class="a">+    return '';</span>
+<span class="a">+  }</span>
+<span class="a">+</span>
+<span class="a">+  // Determine header from the union of keys in all rows</span>
+<span class="a">+  const header = [...new Set(rows.flatMap(row =&gt; Object.keys(row)))];</span>
+<span class="a">+</span>
+<span class="a">+  const lines = rows.map((row) =&gt; {</span>
+<span class="a">+    const values = header.map((key) =&gt; {</span>
+<span class="a">+      const val = row[key];</span>
+<span class="a">+      const str = val === undefined || val === null ? '' : String(val);</span>
+<span class="a">+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {</span>
+<span class="a">+        return `"${str.replace(/"/g, '""')}"`;</span>
+<span class="a">+      }</span>
+<span class="a">+      return str;</span>
+<span class="a">+    });</span>
+<span class="a">+    return values.join(',');</span>
+<span class="a">+  });</span>
+<span class="a">+</span>
+   return [header.join(','), ...lines].join('\n');
+ }
+ </pre></div>
+    <div class="card"><h3>Checked in a real terminal <small>13 of 13, every key pressed</small></h3><ul class="checks"><li><b>✓</b>the web loop asks before it reads a site</li><li><b>✓</b>tab moves to design 2, then 3</li><li><b>✓</b>answered while another run works: it waits next in line</li><li><b>✓</b>the debugging run plays while the others wait their turn</li><li><b>✓</b>the debugging loop ends by itself when the tests pass</li><li><b>✓</b>then the real pages are read</li><li><b>✓</b>the test loop turns green on its own next run</li><li><b>✓</b>enter opens one run, esc goes back</li><li><b>✓</b>the new-loop form shows the /loop line it stands for</li><li><b>✓</b>model off: loops wait and say so</li><li><b>✓</b>e changes how often, p pauses, s asks first</li><li><b>✓</b>x starts the preview over</li><li><b>✓</b>q closes the board cleanly</li></ul></div>
+  </div>
+  <div>
+    <div class="card"><h3>Found while making this <small>it matters for the build</small></h3><ol>
+      <li><b>One sentence stopped every edit.</b> My first loop message said “do not change the tests”. The app read the whole message as a question and refused all 17 edits over two runs (7 minutes with nothing changed). It is the sorting flaw this morning’s audit named. A loop repeats its message with nobody watching, so this has to be fixed first, or /loop has to warn when a message will be read as a question.</li>
+      <li><b>A half-fix is put back.</b> When a message’s last test run fails, the app undoes that message’s changes. So a debugging run that fixes two bugs of three leaves nothing, and the next run starts from zero. Safe, but a debugging loop may never get there on a hard bug. The build needs a choice: keep it, or keep the progress when fewer tests fail than before.</li>
+      <li><b>The plan question.</b> In Manual mode the app asks “Before I change anything… go ahead?” at a run’s first change. With your pick (a run that asks is paused, “needs you”), every debugging run would wait for you once. In Accept edits or Auto it does not.</li></ol></div>
+    <div class="card"><h3>What the build adds</h3><ul>
+      <li><code>/loop 10m &lt;message&gt;</code> and <code>/loops</code> in the app, and this board in a window of its own.</li>
+      <li>Each run as its own background session with a fresh conversation, so <kbd>enter</kbd> joins the real run.</li>
+      <li>Your picks so far: loops stop with their window · a run that asks is paused · they wait while the model is off · they end when the job is done or after 24 hours.</li></ul></div>
+  </div>
+</section>
+</main>
+<noscript><p style="padding:0 22px">This preview draws the three boards with JavaScript. Turn it on to see them.</p></noscript>
+
+<script>
+(() => {
+const DATA = {"rec":{"message":"Some tests in this folder fail. Fix export.mjs so that every test passes.","checks":[{"before":1,"fail":3,"pass":2}],"runs":[{"n":1,"ms":42936,"startedAt":1791043020135,"endedAt":1791043063125,"final":"This change updates the CSV export logic to handle empty datasets, dynamically infer headers from all rows, and properly escape special characters like commas, quotes, and newlines. Fixed export.mjs; all 5 tests pass.","after":{"pass":5,"fail":0,"failing":[]},"steps":[{"at":195,"text":"⏺ Plan()"},{"at":351,"text":"✗ Bash(node --test)"},{"at":352,"text":"⏺ Read(export.mjs)"},{"at":38761,"text":"⏺ Ask(Before I change anything: change export.mjs (+19 −2). Go ahead? Say yes, or tell me what to do instead.)"},{"at":38761,"text":"⏺ Update(export.mjs)"},{"at":38832,"text":"⏺ Bash(node --test)"}]}]},"versionTimes":[1791043013460,1791043059070],"tests":[{"ms":52,"pass":2,"fail":3,"list":[{"ok":true,"name":"toCsv writes a header row and one line per trade"},{"ok":true,"name":"main reads the trades file"},{"ok":false,"name":"no trades gives an empty file, not a crash"},{"ok":false,"name":"a value with a comma or a quote is quoted"},{"ok":false,"name":"a column only some trades have still gets a header"}]},{"ms":48,"pass":5,"fail":0,"list":[{"ok":true,"name":"toCsv writes a header row and one line per trade"},{"ok":true,"name":"main reads the trades file"},{"ok":true,"name":"no trades gives an empty file, not a crash"},{"ok":true,"name":"a value with a comma or a quote is quoted"},{"ok":true,"name":"a column only some trades have still gets a header"}]}],"feeds":{"Bun":{"status":200,"bytes":26698,"entries":[{"title":"Bun v1.4.2","updated":"2026-09-05T05:57:51Z"},{"title":"Bun v1.4.1","updated":"2026-09-04T08:34:46Z"},{"title":"Bun v1.4","updated":"2026-08-20T14:08:57Z"}]},"Ollama":{"status":200,"bytes":21739,"entries":[{"title":"v0.35.1","updated":"2026-10-02T18:28:37Z"},{"title":"v0.35.1-rc2","updated":"2026-10-02T01:05:01Z"},{"title":"v0.35.1-rc1","updated":"2026-10-01T22:52:04Z"}]}}};
+// The three loop screens as rows of [text, style] pieces: the live window prints them as
+// terminal colours, the preview page as HTML. One row = exactly `cols` characters.
+// A short name for a test, for the narrow places.
+const shortTest = (n) => ({
+  'toCsv writes a header row and one line per trade': 'header + lines',
+  'main reads the trades file': 'reads the file',
+  'no trades gives an empty file, not a crash': 'no trades',
+  'a value with a comma or a quote is quoted': 'quoting',
+  'a column only some trades have still gets a header': 'extra column',
+}[n] ?? n);
+
+// Styles: a foreground (xterm-256), b = bold, and a background after "on".
+const STYLE = {
+  accent: { fg: 114 }, accentDim: { fg: 71 }, dim: { fg: 245 }, faint: { fg: 240 }, border: { fg: 242 },
+  white: { fg: 255 }, text: { fg: 252 }, ask: { fg: 147 }, ok: { fg: 114 }, bad: { fg: 203 }, warn: { fg: 215 },
+  debug: { fg: 209 }, test: { fg: 111 }, web: { fg: 73 }, okDim: { fg: 65 }, badDim: { fg: 131 },
+};
+// Row backgrounds.
+const BG = { sel: 236, user: 237, needs: 58, chipDebug: 52, chipTest: 17, chipWeb: 23, bar: 235 };
+const KIND = {
+  debug: { word: 'DEBUG', style: 'debug', bg: 'chipDebug', icon: '◆' },
+  test: { word: 'TEST', style: 'test', bg: 'chipTest', icon: '■' },
+  web: { word: 'WEB', style: 'web', bg: 'chipWeb', icon: '◎' },
+};
+const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+// ---- pieces ----
+const p = (t, s = 'text') => [String(t), s];
+const width = (row) => row.reduce((n, [t]) => n + t.length, 0);
+// A row cut or filled to n characters; bg (a BG key) paints the whole row.
+function fit(row, n, bg = null) {
+  const out = [];
+  let w = 0;
+  for (const [t, s] of row) {
+    if (w >= n) break;
+    const take = t.slice(0, n - w);
+    out.push([take, bg && !String(s).includes(' on ') ? `${s} on ${bg}` : s]);
+    w += take.length;
+  }
+  if (w < n) out.push([' '.repeat(n - w), bg ? `text on ${bg}` : 'text']);
+  return out;
+}
+const pad = (s, n) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
+const padL = (s, n) => (s.length >= n ? s.slice(0, n) : ' '.repeat(n - s.length) + s);
+const cut = (s, n) => (s.length <= n ? s : `${s.slice(0, Math.max(0, n - 1))}…`);
+const join = (...rows) => rows.flat();
+
+const clock = (t) => new Date(t).toTimeString().slice(0, 8);
+const hm = (t) => new Date(t).toTimeString().slice(0, 5);
+function dur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+  return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
+}
+const countdown = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const everyWord = (l) => (l.every ? (l.every % 3600 === 0 ? `${l.every / 3600}h` : l.every % 60 === 0 ? `${l.every / 60}m` : `${l.every}s`) : 'until done');
+const spin = (now) => SPIN[Math.floor(now / 120) % SPIN.length];
+const chip = (kind) => [` ${KIND[kind].word} `, `${KIND[kind].style} b on ${KIND[kind].bg}`];
+const chipW = (kind) => KIND[kind].word.length + 2;
+
+// What a loop is doing, in one word or two, and its colour.
+function stateOf(l, now) {
+  if (l.state === 'needs') return ['! needs you', 'warn b'];
+  if (l.current?.inLine) return ['… next in line', 'dim'];
+  if (l.current && l.pauseAfter) return [`${spin(now)} running · pauses after`, 'dim'];
+  if (l.state === 'running') return [`${spin(now)} running ${dur(now - l.current.startedAt)}`, 'accent'];
+  if (l.state === 'paused') return ['‖ paused', 'dim'];
+  if (l.state === 'done') return ['✓ done', 'ok'];
+  if (l.state === 'stopped') return ['■ stopped', 'faint'];
+  if (l.state === 'off') return ['○ waits: model off', 'faint'];
+  if (l.queued) return ['… next in line', 'dim'];
+  return [`in ${countdown(l.nextAt - now)}`, 'dim'];
+}
+// The last runs as marks: green passed, red failed, yellow asking, green spinner running.
+function marks(l, n, now) {
+  const out = [];
+  const runs = l.runs.slice(-(l.current ? n - 1 : n));
+  for (const r of runs) out.push(['■', r.ok ? 'ok' : 'bad']);
+  if (l.current) out.push([l.current.needs ? '■' : spin(now), l.current.needs ? 'warn' : 'accent']);
+  const row = [];
+  for (const m of out) row.push(m, [' ', 'text']);
+  return row;
+}
+// One line about the last finished run.
+function lastWords(l) {
+  const r = l.runs.at(-1);
+  if (!r) return [l.state === 'off' ? 'waits for /start' : 'no run yet', 'faint'];
+  return [`${r.ok ? '✓' : '✗'} ${r.summary}`, r.ok ? 'ok' : l.kind === 'web' ? 'text' : 'bad'];
+}
+const modelRow = (eng) => (eng.model.on ? [p('●', 'accent'), p(` ${eng.model.name} loaded`, 'dim')] : [p('○', 'faint'), p(` ${eng.model.name} off · /start`, 'faint')]);
+
+function header(eng, now, cols, title) {
+  const run = eng.loops.filter((l) => l.current && !l.current.needs && !l.current.inLine).length; // working now, not waiting
+  const need = eng.needsYou.length;
+  let left = [p(' ↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${eng.window.name} · ${eng.window.folder}`, 'dim')];
+  const right = [p(`${run} running`, run ? 'accent' : 'dim'), ...(need ? [p(' · ', 'faint'), p(`${need} needs you`, 'warn b')] : []), p('   ', 'text'), ...modelRow(eng), p(`   ${clock(now)} `, 'dim')];
+  if (width(left) + width(right) + 1 > cols) left = [p(' ↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${eng.window.name}`, 'dim')];
+  const gap = Math.max(1, cols - width(left) - width(right));
+  return fit([...left, p(' '.repeat(gap)), ...right], cols);
+}
+const rule = (cols, s = 'faint', ch = '─') => fit([p(ch.repeat(cols), s)], cols);
+const blank = (cols, bg) => fit([], cols, bg);
+function footer(cols, keys, toast, now) {
+  if (toast && toast.until > now) return fit([p(' '), p(toast.text, toast.style ?? 'accent')], cols);
+  // A narrow window: two spaces between the keys in place of the dot.
+  const tight = keys.reduce((n, [k, w]) => n + k.length + w.length + 4, 0) - 2 > cols;
+  const row = [p(' ')];
+  keys.forEach(([k, w], i) => { if (i) row.push(p(tight ? '  ' : ' · ', 'faint')); row.push(p(k, 'white'), p(` ${w}`, 'dim')); });
+  return fit(row, cols);
+}
+const MAIN_KEYS = [['↑↓', 'pick'], ['enter', 'watch'], ['r', 'run now'], ['p', 'pause'], ['e', 'every'], ['s', 'stop'], ['+', 'new loop'], ['q', 'close']];
+// Keys only this preview has: the real board has one design, and the model is switched in the app's own window.
+const previewRow = (cols) => fit([p(' preview only: ', 'faint'), p('tab', 'dim'), p(' next design · ', 'faint'), p('m', 'dim'), p(' model off / on (/stop, /start) · ', 'faint'), p('x', 'dim'), p(' start over', 'faint')], cols);
+
+// ---- a run's lines, as the app draws a conversation ----
+// cols: the width they get; answers rows.
+function runLines(l, run, cols, now, { tail = null, full = false } = {}) {
+  const out = [];
+  if (!run) return out;
+  const w = cols;
+  for (const x of run.lines) {
+    if (x.kind === 'user') { if (full) out.push(fit([p(' > ', 'dim'), p(cut(x.text, w - 4), 'white')], w, 'user')); continue; }
+    if (x.kind === 'loopnote') { if (full) out.push(fit([p('   '), p(cut(`(${x.text})`, w - 4), 'faint')], w)); continue; }
+    if (x.kind === 'tool' || x.kind === 'fail') {
+      const m = /^([A-Za-z ]+)\((.*)\)$/.exec(x.text);
+      out.push(fit([p(' ⏺ ', x.kind === 'fail' ? 'bad' : 'accent'), ...(m ? [p(m[1], 'white b'), p(`(${cut(m[2], w - m[1].length - 6)})`, 'dim')] : [p(cut(x.text, w - 4), x.kind === 'fail' ? 'bad' : 'white')])], w));
+      if (x.kind === 'fail' && m) out.push(fit([p('   ⎿ ', 'faint'), p(/test/.test(m[2]) ? 'the tests fail' : 'did not work', 'badDim')], w));
+      if (m && m[1] === 'Ask') out.push(fit([p('   ⎿ ', 'faint'), p('yes (answered by the run)', 'dim')], w));
+      continue;
+    }
+    if (x.kind === 'pass' || x.kind === 'failt') { out.push(fit([p('   ⎿ ', 'faint'), p(x.kind === 'pass' ? '✔ ' : '✖ ', x.kind === 'pass' ? 'ok' : 'bad'), p(cut(full ? x.text : shortTest(x.text), w - 8), 'dim')], w)); continue; }
+    if (x.kind === 'note') { out.push(fit([p('   · ', 'faint'), p(cut(x.text, w - 6), 'dim')], w)); continue; }
+    if (x.kind === 'out') { out.push(fit([p('   ⎿ ', 'faint'), p(cut(x.text, w - 6), 'dim')], w)); continue; }
+    if (x.kind === 'ask') { if (run.needs && x === run.lines.at(-1)) continue; out.push(fit([p(' ? ', 'warn b'), p(cut(x.text, w - 4), 'warn')], w)); continue; }
+    if (x.kind === 'answer') { out.push(fit([p('   ⎿ ', 'faint'), p(cut(x.text, w - 6), 'dim')], w)); continue; }
+    if (x.kind === 'text') {
+      // The model's words, wrapped.
+      const words = x.text.replace(/\*\*/g, '').replace(/`/g, '').split(/\s+/);
+      let line = '';
+      const lines = [];
+      for (const word of words) { if ((line + ' ' + word).trim().length > w - 4) { lines.push(line.trim()); line = word; } else line += ` ${word}`; }
+      if (line.trim()) lines.push(line.trim());
+      lines.forEach((t, i) => out.push(fit([p(i ? '   ' : ' ● ', 'white'), p(t, 'text')], w)));
+    }
+  }
+  if (run === l.current) {
+    if (run.needs) {
+      out.push(fit([p(' ')], w));
+      out.push(fit([p(' ! ', 'warn b'), p(`${run.needs.text} `, 'white b'), p(run.needs.why, 'dim')], w, 'needs'));
+      out.push(fit([p('   '), p('y', 'white b'), p(' yes, this time   ', 'dim'), p('a', 'white b'), p(` yes, always for ${run.needs.site}   `, 'dim'), p('n', 'white b'), p(' no', 'dim')], w, 'needs'));
+    } else if (run.inLine) out.push(fit([p(' … ', 'dim'), p('Answered. Next in line: it goes on when the run under way ends.', 'dim')], w));
+    else out.push(fit([p(` ${spin(now)} `, 'accent'), p(`Working… ${dur(now - run.startedAt)}`, 'dim')], w));
+  }
+  return tail ? out.slice(-tail) : out;
+}
+
+// ---- 1 · Board: a table of loops, the picked one opened below ----
+function drawBoard(eng, ui, { cols, rows, now }) {
+  const out = [header(eng, now, cols, 'Loops')];
+  out.push(rule(cols));
+  const nameW = Math.max(18, Math.min(30, cols - 92));
+  const headRow = [p('    '), p(pad('LOOP', nameW + 1), 'faint'), p(pad('KIND', 8), 'faint'), p(pad('EVERY', 12), 'faint'), p(pad('NOW', 26), 'faint'), p(pad('RUNS', 14), 'faint'), p('LAST RESULT', 'faint')];
+  out.push(fit(headRow, cols));
+  eng.loops.forEach((l, i) => {
+    const sel = i === ui.sel;
+    const [sw, ss] = stateOf(l, now);
+    const mk = marks(l, 6, now);
+    const row = [p(sel ? '  ❯ ' : '    ', 'accent b'), p(pad(cut(l.name, nameW), nameW + 1), sel ? 'white b' : 'text'), chip(l.kind), p(' '.repeat(8 - chipW(l.kind))), p(pad(everyWord(l), 12), 'dim'), p(pad(sw, 26), ss), ...mk, p(' '.repeat(Math.max(1, 14 - width(mk)))), lastWords(l)];
+    out.push(fit(row, cols, sel ? 'sel' : null));
+  });
+  out.push(rule(cols));
+  const l = eng.loops[ui.sel];
+  const body = rows - out.length - 3;
+  const panel = l ? boardPanel(eng, l, ui, cols, body, now) : [];
+  for (let i = 0; i < body; i++) out.push(panel[i] ?? blank(cols));
+  out.push(rule(cols));
+  out.push(footer(cols, MAIN_KEYS, ui.toast, now));
+  out.push(previewRow(cols));
+  return out;
+}
+
+function boardPanel(eng, l, ui, cols, h, now) {
+  const out = [];
+  const until = l.until ? `stops when ${l.until}` : `every ${everyWord(l)}`;
+  const ends = l.state === 'done' || l.state === 'stopped' ? (l.doneWhy ?? '') : `ends ${l.endsAt - now > 20 * 3600_000 ? 'tomorrow' : 'today'} ${hm(l.endsAt)} (24 h) or when its window closes`;
+  out.push(fit([p('  '), chip(l.kind), p(' '), p(l.name, 'white b'), p(`  ·  ${until}  ·  `, 'dim'), p(ends, l.state === 'done' ? 'ok' : 'faint')], cols));
+  out.push(fit([p('  Message  ', 'faint'), p(cut(l.message, cols - 14), 'dim')], cols));
+  out.push(blank(cols));
+  const leftW = Math.floor(cols * 0.55);
+  const rightW = cols - leftW - 3;
+  // Left: the run happening now, or the next one coming.
+  const left = [];
+  const run = l.current ?? l.runs.at(-1);
+  if (l.current) left.push(fit([p('  NOW  ', 'accent b'), p(`run ${l.current.n} · started ${hm(l.current.startedAt)} · ${dur(now - l.current.startedAt)}`, 'dim')], leftW));
+  else if (run) left.push(fit([p('  LAST ', 'faint'), p(`run ${run.n} · ${hm(run.startedAt)} · took ${dur(run.endedAt - run.startedAt)} · `, 'dim'), lastWords(l)], leftW));
+  else left.push(fit([p('  NEXT ', 'faint'), p('the first run', 'dim')], leftW));
+  if (!l.current && !['done', 'stopped'].includes(l.state)) {
+    const span = l.every ? l.every * 1000 : 15_000;
+    const k = l.state === 'off' || l.state === 'paused' ? 0 : Math.min(1, Math.max(0, 1 - (l.nextAt - now) / span));
+    const bw = Math.max(10, leftW - 30);
+    const fill = Math.round(bw * k);
+    left.push(fit([p('  next ', 'faint'), p('█'.repeat(fill), l.state === 'off' ? 'faint' : 'accentDim'), p('░'.repeat(bw - fill), 'faint'), p(`  ${stateOf(l, now)[0]}`, stateOf(l, now)[1])], leftW));
+  }
+  left.push(fit([], leftW));
+  for (const r of runLines(l, run, leftW - 2, now, { tail: h - 6 })) left.push(fit([p('  '), ...r], leftW));
+  // Right: what this kind of loop keeps track of.
+  const right = l.kind === 'web' ? webPanel(l, rightW, now) : testsPanel(eng, l, rightW, now);
+  for (let i = 0; i < h - 3; i++) out.push(fit([...(left[i] ?? fit([], leftW)), p(' │ ', 'faint'), ...(right[i] ?? fit([], rightW))], cols));
+  return out;
+}
+
+// The tests over the runs: one row a test, one column a run (debug and test loops).
+function testsPanel(eng, l, w, now) {
+  const out = [];
+  const names = ['toCsv writes a header row and one line per trade', 'main reads the trades file', 'no trades gives an empty file, not a crash', 'a value with a comma or a quote is quoted', 'a column only some trades have still gets a header'];
+  const runs = l.runs.slice(-Math.max(1, Math.floor((w - 20) / 2)));
+  out.push(fit([p(l.kind === 'debug' ? 'TESTS AFTER EACH TRY' : 'TESTS, RUN BY RUN', 'faint')], w));
+  out.push(fit([p(pad('', 17)), ...runs.map((r) => p(padL(String(r.n % 100), 2), 'faint')), ...(l.current ? [p(' ⋯', 'faint')] : [])], w));
+  for (const n of names) {
+    const row = [p(pad(shortTest(n), 17), 'dim')];
+    for (const r of runs) {
+      const failing = r.result?.failing ?? [];
+      row.push(p(' ■', failing.includes(n) ? 'bad' : r.result ? 'ok' : 'faint'));
+    }
+    if (l.current) row.push(p(` ${spin(now)}`, 'accent'));
+    out.push(fit(row, w));
+  }
+  const last = l.runs.at(-1)?.result;
+  out.push(fit([], w));
+  if (last) {
+    out.push(fit([p(`${last.pass} pass `, 'ok'), p('· ', 'faint'), p(`${last.fail} fail`, last.fail ? 'bad' : 'dim'), p(`  after run ${l.runs.at(-1).n}`, 'faint')], w));
+    if (last.change) out.push(fit([p(cut(last.change, w), 'dim')], w));
+  }
+  if (l.kind === 'debug') {
+    out.push(fit([], w));
+    out.push(fit([p('TRIES', 'faint')], w));
+    for (const r of l.runs.slice(-4)) out.push(fit([p(`#${r.n} `, 'faint'), p(`${hm(r.startedAt)} `, 'dim'), p(padL(dur(r.endedAt - r.startedAt), 7), 'dim'), p('  '), p(cut(`${r.ok ? '✓' : '✗'} ${r.summary}`, w - 17), r.ok ? 'ok' : 'bad')], w));
+    if (l.current) out.push(fit([p(`#${l.current.n} `, 'faint'), p(`${hm(l.current.startedAt)} `, 'dim'), p(padL(dur(now - l.current.startedAt), 7), 'accent'), p('  '), p(`${spin(now)} trying`, 'accent')], w));
+  }
+  return out;
+}
+
+function webPanel(l, w, now) {
+  const out = [];
+  out.push(fit([p('PAGES IT READS', 'faint')], w));
+  const last = l.runs.at(-1)?.result?.found ?? [];
+  for (const pg of l.pages ?? []) {
+    const f = last.find((x) => x.label === pg.label);
+    out.push(fit([p(pad(pg.label, 8), 'white b'), p(cut(pg.shown, w - 8), 'dim')], w));
+    if (f?.newest) out.push(fit([p('        newest ', 'faint'), p(f.newest, 'accent'), p(`  ${f.date?.slice(0, 10) ?? ''}`, 'dim')], w));
+    else if (f?.skipped) out.push(fit([p('        not read: you said no', 'faint')], w));
+    else out.push(fit([p('        not read yet', 'faint')], w));
+    if (f?.next?.length) out.push(fit([p('        before ', 'faint'), p(cut(f.next.join(' · '), w - 15), 'dim')], w));
+  }
+  out.push(fit([], w));
+  out.push(fit([p('RUNS', 'faint')], w));
+  for (const r of l.runs.slice(-5)) out.push(fit([p(`#${r.n} `, 'faint'), p(`${hm(r.startedAt)}  `, 'dim'), p(cut(r.summary, w - 12), r.result?.news?.length ? 'warn b' : 'text')], w));
+  if (l.current) out.push(fit([p(`#${l.current.n} `, 'faint'), p(`${hm(l.current.startedAt)}  `, 'dim'), p(l.current.needs ? '! waiting for your answer' : `${spin(now)} reading`, l.current.needs ? 'warn' : 'accent')], w));
+  out.push(fit([], w));
+  out.push(fit([p('Sites: ', 'faint'), p(l.sitesWord ?? 'each site asks first', 'dim')], w));
+  return out;
+}
+
+// ---- 2 · Timeline: each loop a lane in time, now in the middle ----
+const SCALES = [5, 10, 30, 60, 300];
+function drawTimeline(eng, ui, { cols, rows, now }) {
+  const out = [header(eng, now, cols, 'Loops · timeline')];
+  out.push(rule(cols));
+  const labW = 30;
+  const cells = cols - labW - 14;
+  const per = SCALES[ui.scale ?? 1] * 1000; // ms a cell
+  const nowCell = Math.floor(cells * 0.68);
+  const t0 = now - nowCell * per; // the time at cell 0
+  const cellAt = (t) => Math.floor((t - t0) / per);
+  // Axis: a time every 8 cells, now marked.
+  const axis = Array.from({ length: cells }, () => ' ');
+  const axisStyle = Array.from({ length: cells }, () => 'faint');
+  const nowWord = '▼ now';
+  const secs = per < 60_000;
+  const step = per * (secs ? 16 : 8);
+  for (let c = 0; c < cells; c++) {
+    const t = t0 + c * per;
+    if (Math.floor(t / step) === Math.floor((t - per) / step)) continue;
+    const s = secs ? clock(Math.floor(t / step) * step) : hm(Math.floor(t / step) * step);
+    if (c + s.length > cells || (c + s.length + 1 > nowCell && c < nowCell + nowWord.length + 1)) continue;
+    for (let k = 0; k < s.length; k++) axis[c + k] = s[k];
+  }
+  for (let k = 0; k < nowWord.length && nowCell + k < cells; k++) { axis[nowCell + k] = nowWord[k]; axisStyle[nowCell + k] = 'accent b'; }
+  out.push(fit([p(pad(`   one cell = ${SCALES[ui.scale ?? 1] < 60 ? `${SCALES[ui.scale ?? 1]}s` : `${SCALES[ui.scale ?? 1] / 60}m`}`, labW), 'faint'), ...axis.map((ch, i) => p(ch, axisStyle[i]))], cols));
+  eng.loops.forEach((l, i) => {
+    const sel = i === ui.sel;
+    const lane = Array.from({ length: cells }, (_, c) => (c === nowCell ? ['│', 'accentDim'] : [c % 8 === 0 ? '┊' : ' ', 'faint']));
+    const runs = [...l.runs, ...(l.current ? [l.current] : [])];
+    runs.forEach((r, ri) => {
+      const a = cellAt(r.startedAt);
+      const b = cellAt(r.endedAt ?? now);
+      const picked = sel && ui.runSel === ri;
+      for (let c = Math.max(0, a); c <= Math.min(cells - 1, b); c++) {
+        const asking = r.needs && c >= cellAt(r.needs.since);
+        const style = r === l.current ? (asking ? 'warn' : 'accent') : r.ok ? 'okDim' : 'badDim';
+        lane[c] = [picked ? '▓' : '█', picked ? (r.ok ? 'ok' : r === l.current ? 'accent' : 'bad') : style];
+      }
+      if (a >= 0 && a < cells && b - a >= 2 && r !== l.current) { const tag = r.ok ? '✓' : '✗'; lane[a] = [tag, `${r.ok ? 'white' : 'white'} b on ${r.ok ? 22 : 52}`]; }
+    });
+    // What is coming: the next run, then every N after it.
+    if (!['done', 'stopped'].includes(l.state) && !l.current) {
+      const style = l.state === 'off' || l.state === 'paused' ? 'faint' : 'accentDim';
+      let t = l.nextAt;
+      for (let k = 0; k < 40; k++) {
+        const c = cellAt(t);
+        if (c >= cells) break;
+        if (c > nowCell || (c === nowCell && k === 0)) lane[Math.max(c, nowCell)] = [l.state === 'off' ? '○' : l.state === 'paused' ? '‖' : '◇', style];
+        if (!l.every) break;
+        t += l.every * 1000;
+      }
+    }
+    if (l.state === 'done' || l.state === 'stopped') { const c = Math.min(cells - 1, nowCell + 1); lane[c] = [l.state === 'done' ? '✓' : '■', l.state === 'done' ? 'ok b' : 'faint']; }
+    const [sw, ss] = stateOf(l, now);
+    out.push(fit([p(sel ? ' ❯ ' : '   ', 'accent b'), chip(l.kind), p(' '), p(pad(cut(l.name, labW - 4 - chipW(l.kind)), labW - 4 - chipW(l.kind)), sel ? 'white b' : 'text'), ...lane.map(([ch, s]) => p(ch, s)), p(`  ${padL(everyWord(l), 10)}`, 'faint')], cols, sel ? 'sel' : null));
+    out.push(fit([p(' '.repeat(labW)), p(cut(sw, 24), ss), p('   '), lastWords(l)], cols, sel ? 'sel' : null));
+  });
+  out.push(fit([p(' '.repeat(labW)), p('█ ', 'okDim'), p('passed  ', 'faint'), p('█ ', 'badDim'), p('failed  ', 'faint'), p('█ ', 'accent'), p('running  ', 'faint'), p('█ ', 'warn'), p('asking you  ', 'faint'), p('◇ ', 'accentDim'), p('next runs  ', 'faint'), p('○ ', 'faint'), p('waits for the model', 'faint')], cols));
+  out.push(rule(cols));
+  // Below: the picked loop's runs, and the picked run's lines.
+  const l = eng.loops[ui.sel];
+  const body = rows - out.length - 3;
+  const listW = 44;
+  const lineW = cols - listW - 3;
+  const runs = l ? [...l.runs, ...(l.current ? [l.current] : [])] : [];
+  const ri = ui.runSel ?? runs.length - 1;
+  const list = [fit([p(` RUNS OF ${l ? l.name.toUpperCase() : ''}`, 'faint')], listW)];
+  const first = Math.max(0, Math.min(ri - (body - 3), runs.length - (body - 1)));
+  runs.slice(first, first + body - 1).forEach((r, k) => {
+    const idx = first + k;
+    const on = idx === ri;
+    const live = r === l.current;
+    list.push(fit([p(on ? ' ❯ ' : '   ', 'accent b'), p(`#${padL(String(r.n), 2)} `, 'faint'), p(`${clock(r.startedAt)} `, 'dim'), p(padL(dur((r.endedAt ?? now) - r.startedAt), 7), live ? 'accent' : 'dim'), p('  '), live ? p(r.needs ? '! needs you' : `${spin(now)} now`, r.needs ? 'warn b' : 'accent') : p(cut(`${r.ok ? '✓' : '✗'} ${r.summary}`, listW - 26), r.ok ? 'ok' : 'bad')], listW, on ? 'sel' : null));
+  });
+  if (!runs.length) list.push(fit([p('   no run yet', 'faint')], listW));
+  const pickedRun = runs[ri];
+  const lines = [fit([p(pickedRun ? `RUN ${pickedRun.n} · ${pickedRun === l.current ? 'live' : `${hm(pickedRun.startedAt)}, took ${dur(pickedRun.endedAt - pickedRun.startedAt)}`}` : '', 'faint')], lineW), ...runLines(l, pickedRun, lineW, now, { tail: body - 1 })];
+  for (let i = 0; i < body; i++) out.push(fit([...(list[i] ?? fit([], listW)), p(' │ ', 'faint'), ...(lines[i] ?? fit([], lineW))], cols));
+  out.push(rule(cols));
+  out.push(footer(cols, [['↑↓', 'loop'], ['←→', 'run'], ['enter', 'watch'], ['[ ]', 'zoom'], ['r', 'run now'], ['p', 'pause'], ['e', 'every'], ['s', 'stop'], ['+', 'new loop'], ['q', 'close']], ui.toast, now));
+  out.push(previewRow(cols));
+  return out;
+}
+
+// ---- 3 · Tiles: every loop working, side by side ----
+function drawTiles(eng, ui, { cols, rows, now }) {
+  const out = [header(eng, now, cols, 'Loops · live')];
+  const n = eng.loops.length;
+  const across = cols >= 114 ? Math.min(3, n) : Math.min(2, n);
+  const down = Math.ceil(n / across);
+  const h = Math.floor((rows - 3) / down);
+  const tw = Math.floor(cols / across);
+  const grid = [];
+  for (let r = 0; r < down; r++) {
+    const tiles = [];
+    for (let c = 0; c < across; c++) {
+      const i = r * across + c;
+      const w = c === across - 1 ? cols - tw * (across - 1) : tw;
+      tiles.push(i < n ? tile(eng, eng.loops[i], i === ui.sel, w, h, now) : Array.from({ length: h }, () => fit([], w)));
+    }
+    for (let y = 0; y < h; y++) grid.push(fit(tiles.flatMap((t) => t[y]), cols));
+  }
+  for (const g of grid) out.push(g);
+  while (out.length < rows - 2) out.push(blank(cols));
+  out.push(footer(cols, [['←→', 'pick'], ['enter', 'zoom'], ['r', 'run now'], ['p', 'pause'], ['e', 'every'], ['s', 'stop'], ['+', 'new loop'], ['q', 'close']], ui.toast, now));
+  out.push(previewRow(cols));
+  return out.slice(0, rows);
+}
+
+function tile(eng, l, sel, w, h, now) {
+  const needs = l.state === 'needs';
+  const bs = needs ? 'warn' : sel ? 'white' : 'border';
+  const inner = w - 4;
+  const out = [];
+  const [sw, ss] = stateOf(l, now);
+  const title = [p('╭─ ', bs), chip(l.kind), p(' '), p(cut(l.name, inner - chipW(l.kind) - sw.length - 6), sel ? 'white b' : 'text'), p(' ')];
+  const right = [p(` ${sw} `, ss), p('─╮', bs)];
+  out.push(fit([...title, p('─'.repeat(Math.max(0, w - width(title) - width(right))), bs), ...right], w));
+  const side = (row, bg = null) => fit([p('│ ', bs), ...fit(row, inner, bg), p(' │', bs)], w);
+  const runN = l.current ? l.current.n : l.runs.length;
+  out.push(side([p(l.every ? `every ${everyWord(l)}` : `until ${l.until}`, 'dim'), p(` · run ${runN || '—'}`, 'faint'), p(' · ', 'faint'), ...marks(l, Math.max(3, Math.floor((inner - 30) / 2)), now)]));
+  // The bar: how far the run has got, or how long until the next.
+  let bar;
+  if (l.current) {
+    const k = l.kind === 'debug' && l.current.rec ? Math.min(1, (l.current.elapsedRec ?? 0) / l.current.rec.ms) : null;
+    const bw = inner - 12;
+    bar = k === null ? [p('▰'.repeat(Math.floor(now / 200) % (bw + 1)), 'accent'), p('▱'.repeat(bw - (Math.floor(now / 200) % (bw + 1))), 'faint')] : [p('█'.repeat(Math.round(bw * k)), 'accent'), p('░'.repeat(bw - Math.round(bw * k)), 'faint')];
+    bar.push(p(`  ${padL(dur(now - l.current.startedAt), 8)}`, 'accent'));
+  } else if (!['done', 'stopped'].includes(l.state)) {
+    const span = l.every ? l.every * 1000 : 15_000;
+    const k = l.state === 'off' || l.state === 'paused' ? 0 : Math.min(1, Math.max(0, 1 - (l.nextAt - now) / span));
+    const bw = inner - 12;
+    bar = [p('█'.repeat(Math.round(bw * k)), 'accentDim'), p('░'.repeat(bw - Math.round(bw * k)), 'faint'), p(`  ${padL(l.state === 'off' ? 'model off' : l.state === 'paused' ? 'paused' : `next ${countdown(l.nextAt - now)}`, 10)}`, 'dim')];
+  } else bar = [p(l.doneWhy ? `${l.state === 'done' ? '✓' : '■'} ${l.doneWhy}` : '', l.state === 'done' ? 'ok' : 'faint')];
+  out.push(side(bar));
+  out.push(fit([p('├', bs), p('─'.repeat(w - 2), 'faint'), p('┤', bs)], w));
+  const run = l.current ?? l.runs.at(-1);
+  const histH = h >= 24 ? 5 : 0; // the last runs, when the tile is tall enough
+  const bodyH = h - out.length - 3 - (histH ? histH + 1 : 0);
+  const lines = runLines(l, run, inner, now, { tail: bodyH });
+  for (let i = 0; i < bodyH; i++) out.push(side(lines[i] ?? []));
+  if (histH) {
+    out.push(fit([p('├', bs), p('─ ', 'faint'), p('RUNS', 'faint'), p(` ${'─'.repeat(w - 9)}`, 'faint'), p('┤', bs)], w));
+    const past = l.runs.slice(-(l.current ? histH - 1 : histH));
+    const rowsH = past.map((r) => [p(`#${padL(String(r.n), 2)} `, 'faint'), p(`${hm(r.startedAt)} `, 'dim'), p(padL(dur(r.endedAt - r.startedAt), 7), 'dim'), p('  '), p(cut(`${r.ok ? '✓' : '✗'} ${r.summary}`, inner - 17), r.ok ? 'ok' : l.kind === 'web' ? 'text' : 'bad')]);
+    if (l.current) rowsH.push([p(`#${padL(String(l.current.n), 2)} `, 'faint'), p(`${hm(l.current.startedAt)} `, 'dim'), p(padL(dur(now - l.current.startedAt), 7), 'accent'), p('  '), p(l.current.needs ? '! needs you' : l.current.inLine ? '… next in line' : `${spin(now)} now`, l.current.needs ? 'warn b' : 'accent')]);
+    for (let i = 0; i < histH; i++) out.push(side(rowsH[i] ?? (i === 0 ? [p('no run yet', 'faint')] : [])));
+  }
+  out.push(fit([p('├', bs), p('─'.repeat(w - 2), 'faint'), p('┤', bs)], w));
+  const lw = lastWords(l);
+  out.push(side(needs ? [p('! ', 'warn b'), p(cut(l.current.needs.text, inner - 18), 'white b'), p('  y · a · n', 'warn')] : [p('last ', 'faint'), p(cut(lw[0], inner - 5), lw[1])], needs ? 'needs' : null));
+  out.push(fit([p('╰', bs), p('─'.repeat(w - 2), bs), p('╯', bs)], w));
+  return out;
+}
+
+// ---- watching one run (enter): the run's own screen ----
+function drawWatch(eng, ui, { cols, rows, now }) {
+  const l = eng.loop(ui.watch.id);
+  const runs = [...l.runs, ...(l.current ? [l.current] : [])];
+  const run = ui.watch.run === null || ui.watch.run === undefined ? (l.current ?? l.runs.at(-1)) : runs[ui.watch.run];
+  const live = run && run === l.current;
+  const out = [header(eng, now, cols, 'Loops')];
+  out.push(fit([p('  '), chip(l.kind), p(' '), p(l.name, 'white b'), p(run ? `  ·  run ${run.n}  ·  ${live ? `live, ${dur(now - run.startedAt)}` : `${hm(run.startedAt)}, took ${dur(run.endedAt - run.startedAt)}  ·  `}` : '  ·  no run yet', 'dim'), ...(run && !live ? [lastWords(l)] : [])], cols));
+  out.push(rule(cols));
+  const body = rows - out.length - 2;
+  const lines = runLines(l, run, cols - 2, now, { full: true });
+  const scroll = Math.max(0, Math.min(ui.watch.scroll ?? 0, lines.length - body));
+  const start = Math.max(0, lines.length - body - scroll);
+  for (let i = 0; i < body; i++) out.push(fit([p(' '), ...(lines[start + i] ?? [])], cols));
+  out.push(rule(cols));
+  out.push(footer(cols, [['esc', 'back to the loops'], ...(run?.needs ? [['y a n', 'answer']] : []), ['↑↓', 'scroll'], ['r', 'run now'], ['p', 'pause'], ['s', 'stop']], ui.toast, now));
+  return out;
+}
+
+// ---- the new-loop form, over any design ----
+const KINDS_NEW = [
+  { kind: 'test', name: 'Test every…', message: 'Run the tests. Say which fail and why; change nothing.', every: 60 },
+  { kind: 'web', name: 'Watch a page', message: 'Read the Bun and Ollama release pages. Tell me when either has a new version.', every: 300 },
+  { kind: 'debug', name: 'Debug until fixed', message: 'The tests fail. Find why, fix it, run them again.', every: null, recordedOnly: true },
+];
+const EVERY = [60, 120, 300, 600, 1800, 3600];
+function overlayNew(rowsOut, ui, { cols, now }) {
+  const f = ui.form;
+  const w = Math.min(cols - 8, 96);
+  const x = Math.floor((cols - w) / 2);
+  const k = KINDS_NEW[f.kind];
+  const ev = k.every === null ? 'until done' : everyWord({ every: EVERY[f.every] });
+  const typed = `/loop ${k.every === null ? '' : `${ev} `}${f.message}`;
+  const field = (i) => (f.field === i ? 'accent b' : 'faint');
+  const box = [
+    [p('╭─ ', 'accent'), p('New loop', 'white b'), p(` ${'─'.repeat(w - 13)}╮`, 'accent')],
+    [p('│ ', 'accent')],
+    [p('│ ', 'accent'), p(pad('Kind', 10), field(0)), ...KINDS_NEW.flatMap((kk, i) => [p(i === f.kind ? '❯ ' : '  ', 'accent b'), p(kk.name, i === f.kind ? 'white b' : kk.recordedOnly ? 'faint' : 'dim'), p('    ')])],
+    [p('│ ', 'accent'), p(pad('Message', 10), field(1)), p(cut(f.message, w - 16), 'white'), p(f.field === 1 && Math.floor(now / 500) % 2 ? '▏' : ' ', 'accent')],
+    [p('│ ', 'accent'), p(pad('Every', 10), field(2)), ...(k.every === null ? [p('until the tests pass (a debugging loop runs again as soon as a try ends)', 'dim')] : EVERY.flatMap((e, i) => [p(i === f.every ? `[${everyWord({ every: e })}]` : ` ${everyWord({ every: e })} `, i === f.every ? 'white b' : 'dim'), p(' ')]))],
+    [p('│ ', 'accent'), p(pad('Folder', 10), 'faint'), p('~/Desktop/trades-export · this window\'s model and mode', 'dim')],
+    [p('│ ', 'accent')],
+    [p('│ ', 'accent'), p('Same as typing  ', 'faint'), p(cut(typed, w - 20), 'text')],
+    [p('│ ', 'accent'), ...(k.recordedOnly ? [p('The preview has one recorded debugging loop; this kind is shown, not started.', 'warn')] : [p('Stops after 24 h, when its window closes, or with s on the board.', 'faint')])],
+    [p('│ ', 'accent')],
+    [p('│ ', 'accent'), p('tab', 'white'), p(' next  ', 'dim'), p('←→', 'white'), p(' choose  ', 'dim'), p('enter', 'white'), p(' start  ', 'dim'), p('esc', 'white'), p(' cancel', 'dim')],
+    [p(`╰${'─'.repeat(w - 2)}╯`, 'accent')],
+  ];
+  const top = Math.max(3, Math.floor((rowsOut.length - box.length) / 2));
+  box.forEach((b, i) => {
+    const inner = i === 0 || i === box.length - 1 ? fit(b, w, 'bar') : fit([...fit(b, w - 1, 'bar'), p('│', 'accent on bar')], w);
+    const row = rowsOut[top + i];
+    rowsOut[top + i] = fit([...sliceRow(row, 0, x), ...inner, ...sliceRow(row, x + w, cols)], cols);
+  });
+  return rowsOut;
+}
+function sliceRow(row, a, b) {
+  const out = [];
+  let x = 0;
+  for (const [t, s] of row) {
+    const s0 = Math.max(a, x), s1 = Math.min(b, x + t.length);
+    if (s1 > s0) out.push([t.slice(s0 - x, s1 - x), s]);
+    x += t.length;
+  }
+  return out;
+}
+
+function confirmRow(rowsOut, ui, { cols }) {
+  const c = ui.confirm;
+  // On the keys' line: the last row in a run's own screen, the one above the preview's line elsewhere.
+  rowsOut[rowsOut.length - (c.back === 'watch' ? 1 : 2)] = fit([p(' '), p(c.text, 'warn b'), p('   y', 'white b'), p(' yes  ', 'dim'), p('n', 'white b'), p(' no', 'dim')], cols);
+  return rowsOut;
+}
+
+const DESIGNS = { 1: { name: 'Board', draw: drawBoard }, 2: { name: 'Timeline', draw: drawTimeline }, 3: { name: 'Tiles', draw: drawTiles } };
+function drawScreen(eng, ui, size) {
+  let rows = ui.view === 'watch' ? drawWatch(eng, ui, size) : DESIGNS[ui.design].draw(eng, ui, size);
+  if (ui.view === 'new') rows = overlayNew(rows, ui, size);
+  if (ui.view === 'confirm') rows = confirmRow(rows, ui, size);
+  return rows.slice(0, size.rows);
+}
+
+// The loops behind the three design previews: when each runs, what a run holds, the question a
+// run waits on, and what the keys do. No Node and no browser in here: the terminal window
+// (engine.mjs) gives it real tests and real pages, the preview page gives it the recorded ones.
+
+const clean = (s) => String(s).replace(/\x1b\[[0-9;]*m/g, '');
+// A recorded line of `coding -p` as a run line: ⏺ Tool(arg) / ✗ Tool(arg) / · note.
+function lineOf(text) {
+  const t = clean(text).trimEnd();
+  if (!t.trim()) return null;
+  if (/^[⏺✗] /.test(t)) return { kind: t[0] === '✗' ? 'fail' : 'tool', text: t.slice(2).replace(/ \[app\]$/, '') };
+  if (t.startsWith('· ')) return { kind: 'note', text: t.slice(2) };
+  return { kind: 'out', text: t };
+}
+
+const PAGES = [
+  { site: 'github.com', label: 'Bun', url: 'https://github.com/oven-sh/bun/releases.atom', shown: 'github.com/oven-sh/bun/releases' },
+  { site: 'github.com', label: 'Ollama', url: 'https://github.com/ollama/ollama/releases.atom', shown: 'github.com/ollama/ollama/releases' },
+];
+
+class LoopsBase {
+  // rec: the recorded debugging loop. versionTimes: when (in the recording's clock) the model
+  // changed the file. speed: the recording plays this many times faster.
+  constructor({ rec, versionTimes = [], speed = 1, now = () => Date.now(), testEvery = 60, webEvery = 120 } = {}) {
+    this.rec = rec;
+    this.versionTimes = versionTimes;
+    this.speed = speed;
+    this.now = now;
+    this.listeners = [];
+    const t = now();
+    this.started = t;
+    this.model = { name: 'Qwen3.5 9B', on: true };
+    this.window = { name: 'trades-export-1', folder: '~/Desktop/trades-export' };
+    this.sites = new Map(); // site → 'always'
+    this.version = 0; // which state of export.mjs the project is in
+    this.loops = [
+      { id: 1, kind: 'debug', name: 'Fix the export bugs', message: rec.message, every: null, until: 'the tests pass', state: 'waiting', nextAt: t + 6000, runs: [], current: null, endsAt: t + 86_400_000, created: t, cursor: 0 },
+      { id: 2, kind: 'test', name: 'Run the tests', message: 'Run the tests. Say which fail and why; change nothing.', every: testEvery, until: null, state: 'waiting', nextAt: t + 3000, runs: [], current: null, endsAt: t + 86_400_000, created: t },
+      { id: 3, kind: 'web', name: 'Watch Bun + Ollama', message: 'Read the Bun and Ollama release pages. Tell me when either has a new version.', every: webEvery, until: null, state: 'waiting', nextAt: t + 1200, runs: [], current: null, endsAt: t + 86_400_000, created: t, pages: PAGES },
+    ];
+    this.nextId = 4;
+    this.timer = null;
+  }
+  on(name, fn) { this.listeners.push([name, fn]); return this; }
+  emit(name) { for (const [n, fn] of this.listeners) if (n === name) fn(); }
+  start() { this.timer = setInterval(() => this.tick(), 250); this.tick(); return this; }
+  stop() { clearInterval(this.timer); this.stopped = true; }
+  changed() { if (!this.stopped) this.emit('change'); }
+  loop(id) { return this.loops.find((l) => l.id === id); }
+  get needsYou() { return this.loops.filter((l) => l.state === 'needs'); }
+
+  // The two things a front end supplies.
+  async testResult() { throw new Error('testResult'); } // → { ms, pass, fail, list: [{ ok, name }] }
+  async pageResult() { throw new Error('pageResult'); } // (page) → { status, bytes, entries: [{ title, updated }] }
+  versionChanged() {}
+
+  tick() {
+    if (this.stopped) return;
+    const t = this.now();
+    this.follow(t);
+    // A run that was answered while another worked goes on once the model is free.
+    for (const l of this.loops) if (l.current?.inLine && !this.busy(l)) { const go = l.current.inLine; l.current.inLine = null; this.changed(); go(); }
+    for (const l of [...this.loops].sort((a, b) => a.nextAt - b.nextAt)) {
+      if (l.current) { if (l.kind === 'debug') this.stepReplay(l, t); continue; }
+      if (['paused', 'done', 'stopped'].includes(l.state)) continue;
+      if (t >= l.endsAt) { l.state = 'done'; l.doneWhy = 'ran for 24 h'; this.changed(); continue; }
+      if (!this.model.on) { if (l.state !== 'off') { l.state = 'off'; this.changed(); } continue; }
+      if (l.state === 'off') { l.state = 'waiting'; this.changed(); }
+      if (t < l.nextAt) continue;
+      // One run at a time on this Mac's model: a loop that is due waits for the one running.
+      if (this.busy(l)) { if (!l.queued) { l.queued = true; this.changed(); } continue; }
+      l.queued = false;
+      this.begin(l, t);
+    }
+  }
+  // Another loop's run is using the model now (one waiting for your answer is not).
+  busy(except) { return this.loops.some((o) => o !== except && o.current && !o.current.needs && !o.current.inLine); }
+  line(l, run) { if (!this.busy(l)) return Promise.resolve(); return new Promise((resolve) => { run.inLine = resolve; this.changed(); }); }
+
+  begin(l, t) {
+    const run = { n: l.runs.length + 1, startedAt: t, endedAt: null, ok: null, summary: null, lines: [] };
+    l.current = run;
+    l.state = 'running';
+    this.changed();
+    if (l.kind === 'debug') this.beginReplay(l, run);
+    else if (l.kind === 'test') this.runTests(l, run);
+    else if (l.kind === 'web') this.readPages(l, run);
+  }
+
+  end(l, run, { ok, summary, result }) {
+    if (this.stopped || l.current !== run) return;
+    run.endedAt = this.now();
+    run.ok = ok;
+    run.summary = summary;
+    run.result = result;
+    l.runs.push(run);
+    l.current = null;
+    if (l.kind === 'debug' && ok) { l.state = 'done'; l.doneWhy = `${l.until} after ${run.n} run${run.n === 1 ? '' : 's'}`; }
+    else if (l.state === 'stopped') { /* stays stopped */ }
+    else if (l.pauseAfter || l.state === 'paused') { l.state = 'paused'; l.pauseAfter = false; }
+    else l.state = this.model.on ? 'waiting' : 'off';
+    // Every: counted from the end of the run. Until done: the next try 15 s after this one.
+    l.nextAt = run.endedAt + (l.every ? l.every * 1000 : 15_000);
+    this.changed();
+  }
+
+  // ---- debug: the recorded runs, played back ----
+  beginReplay(l, run) {
+    const rec = this.rec.runs[l.cursor];
+    if (!rec) { l.current = null; l.state = 'done'; l.doneWhy = `stopped after ${l.runs.length} runs: still failing`; this.changed(); return; }
+    const note = run.n === 1 ? 'Run 1 of a debugging loop that stops when the tests pass.' : `Run ${run.n}. The last run ended: ${String(this.rec.runs[l.cursor - 1]?.final ?? '').replace(/\s+/g, ' ').slice(-140)}`;
+    run.rec = rec;
+    run.lines.push({ at: 0, kind: 'user', text: l.message }, { at: 0, kind: 'loopnote', text: note });
+    run.replay = (rec.steps ?? []).map((s) => (s.out !== undefined ? null : { at: s.at, ...lineOf(s.text) })).filter((x) => x && x.kind);
+    run.ri = 0;
+  }
+  stepReplay(l, t) {
+    const run = l.current;
+    if (!run.rec) return;
+    const el = (t - run.startedAt) * this.speed;
+    let moved = false;
+    while (run.ri < run.replay.length && run.replay[run.ri].at <= el) { run.lines.push(run.replay[run.ri++]); moved = true; }
+    run.elapsedRec = el;
+    if (el >= run.rec.ms) {
+      const after = run.rec.after;
+      for (const part of String(run.rec.final ?? '').trim().split('\n').filter((x) => x.trim()).slice(0, 14)) run.lines.push({ at: run.rec.ms, kind: 'text', text: part });
+      const before = this.rec.checks.find((c) => c.before === run.n)?.fail ?? 0;
+      l.cursor++;
+      this.end(l, run, {
+        ok: after.fail === 0,
+        summary: after.fail === 0 ? `all ${after.pass} tests pass` : `${before - after.fail > 0 ? `fixed ${before - after.fail}, ` : ''}${after.fail} still failing`,
+        result: { pass: after.pass, fail: after.fail, failing: after.failing ?? [] },
+      });
+      return;
+    }
+    if (moved) this.changed();
+  }
+  // The project holds export.mjs as the model had left it at this moment of its run.
+  follow(t) {
+    const d = this.loops.find((l) => l.kind === 'debug');
+    if (!d) return;
+    let real = null;
+    if (d.current?.rec) real = d.current.rec.startedAt + (t - d.current.startedAt) * this.speed;
+    else if (d.runs.length) real = d.runs.at(-1).rec?.endedAt ?? null;
+    if (real === null) return;
+    let k = 0;
+    for (let i = 0; i < this.versionTimes.length; i++) if (this.versionTimes[i] <= real) k = i;
+    if (k !== this.version) { this.version = k; this.versionChanged(k); }
+  }
+
+  // ---- test: the project's tests ----
+  async runTests(l, run) {
+    run.lines.push({ at: 0, kind: 'user', text: l.message }, { at: 0, kind: 'tool', text: 'Bash(node --test)' });
+    this.changed();
+    const tr = await this.testResult(l, run);
+    if (this.stopped || l.current !== run) return;
+    for (const x of tr.list) run.lines.push({ at: tr.ms, kind: x.ok ? 'pass' : 'failt', text: x.name });
+    run.lines.push({ at: tr.ms, kind: 'out', text: `ℹ pass ${tr.pass} · fail ${tr.fail} · ${tr.ms} ms` });
+    const failing = tr.list.filter((x) => !x.ok).map((x) => x.name);
+    const prev = l.runs.at(-1)?.result;
+    const fixedNow = prev ? prev.failing.filter((n) => !failing.includes(n)) : [];
+    const brokeNow = prev ? failing.filter((n) => !prev.failing.includes(n)) : [];
+    const summary = tr.fail === 0 ? `all ${tr.pass} pass` : `${tr.pass} of ${tr.pass + tr.fail} pass`;
+    const change = fixedNow.length ? `now passing: ${fixedNow.map(shortTest).join(', ')}` : brokeNow.length ? `newly failing: ${brokeNow.map(shortTest).join(', ')}` : prev ? 'no change since the last run' : 'first run';
+    const said = `${summary[0].toUpperCase()}${summary.slice(1)}. ${failing.length ? `Failing: ${failing.map(shortTest).join(', ')}. ` : ''}${change[0].toUpperCase()}${change.slice(1)}.`;
+    run.lines.push({ at: tr.ms, kind: 'text', text: said });
+    // In the app a model reads the output, which takes seconds; the run stays up as long here.
+    setTimeout(() => this.end(l, run, { ok: tr.fail === 0, summary, result: { pass: tr.pass, fail: tr.fail, failing, change, list: tr.list } }), Math.max(0, 2500 - tr.ms));
+  }
+
+  // ---- web: the release pages; the first read of a site asks ----
+  async readPages(l, run) {
+    run.lines.push({ at: 0, kind: 'user', text: l.message });
+    const found = [];
+    const at = () => this.now() - run.startedAt;
+    for (const pg of l.pages) {
+      if (this.stopped || l.current !== run) return;
+      run.lines.push({ at: at(), kind: 'tool', text: `Read page(${pg.shown})` });
+      this.changed();
+      if (this.sites.get(pg.site) !== 'always' && !(run.allowed ?? new Set()).has(pg.site)) {
+        const answer = await this.ask(l, run, { site: pg.site, url: pg.shown, text: `May it read ${pg.site}?`, why: 'each site asks first' });
+        if (this.stopped || l.current !== run) return;
+        await this.line(l, run);
+        if (this.stopped || l.current !== run) return;
+        if (answer === 'no') { run.lines.push({ at: at(), kind: 'fail', text: `Not read: you said no to ${pg.site}` }); found.push({ ...pg, skipped: true }); continue; }
+        if (answer === 'always') this.sites.set(pg.site, 'always');
+        run.allowed = new Set([...(run.allowed ?? []), pg.site]);
+      }
+      try {
+        const f = await this.pageResult(pg);
+        const top = f.entries[0];
+        run.lines.push({ at: at(), kind: 'out', text: `${f.status} · ${(f.bytes / 1024).toFixed(1)} KB · newest ${top?.title ?? '?'} (${top?.updated?.slice(0, 10) ?? '?'})` });
+        found.push({ ...pg, newest: top?.title, date: top?.updated, next: f.entries.slice(1).map((e) => e.title) });
+      } catch (e) {
+        run.lines.push({ at: at(), kind: 'fail', text: `${pg.shown}: ${e.message}` });
+        found.push({ ...pg, error: e.message });
+      }
+      this.changed();
+    }
+    if (this.stopped || l.current !== run) return;
+    const prev = l.runs.at(-1)?.result?.found ?? [];
+    const news = found.filter((f) => f.newest && prev.find((o) => o.label === f.label && o.newest && o.newest !== f.newest));
+    const short = (f) => String(f.newest).replace(/^Bun /, '').replace(/^v/, '');
+    const line = found.map((f) => (f.skipped ? `${f.label} not read` : f.error ? `${f.label}: no answer` : `${f.label} ${short(f)}`)).join(' · ');
+    const read = found.some((f) => f.newest);
+    const summary = news.length ? `NEW: ${news.map((n) => `${n.label} ${short(n)}`).join(', ')}` : !read ? line : prev.some((o) => o.newest) ? `nothing new · ${line}` : `first look · ${line}`;
+    run.lines.push({ at: at(), kind: 'text', text: `${summary[0].toUpperCase()}${summary.slice(1)}.` });
+    setTimeout(() => this.end(l, run, { ok: read && !found.some((f) => f.error), summary, result: { found, news } }), 1200);
+  }
+
+  // A question the run waits on: the loop shows "needs you" until it is answered.
+  ask(l, run, q) {
+    return new Promise((resolve) => {
+      run.needs = { ...q, since: this.now(), resolve };
+      run.lines.push({ at: this.now() - run.startedAt, kind: 'ask', text: `${q.text} (${q.why})` });
+      l.state = 'needs';
+      this.changed();
+    });
+  }
+  answer(id, answer) {
+    const l = this.loop(id);
+    const n = l?.current?.needs;
+    if (!n) return false;
+    l.current.needs = null;
+    l.current.lines.push({ at: this.now() - l.current.startedAt, kind: 'answer', text: answer === 'always' ? `Yes, always for ${n.site}` : answer === 'yes' ? 'Yes, this time' : 'No' });
+    if (l.state === 'needs') l.state = 'running';
+    this.changed();
+    n.resolve(answer);
+    return true;
+  }
+
+  // ---- what the keys do ----
+  runNow(id) {
+    const l = this.loop(id);
+    if (!l || l.current || ['done', 'stopped'].includes(l.state)) return false;
+    if (!this.model.on) return false;
+    if (l.state === 'paused') l.state = 'waiting';
+    l.nextAt = this.now();
+    this.tick();
+    return true;
+  }
+  pause(id) {
+    const l = this.loop(id);
+    if (!l || ['done', 'stopped'].includes(l.state)) return false;
+    if (l.state === 'paused' || l.pauseAfter) { l.pauseAfter = false; if (l.state === 'paused') { l.state = 'waiting'; l.nextAt = Math.max(l.nextAt, this.now() + 1000); } }
+    else if (!l.current) l.state = 'paused';
+    else l.pauseAfter = true;
+    this.changed();
+    return true;
+  }
+  stopLoop(id) {
+    const l = this.loop(id);
+    if (!l) return false;
+    const run = l.current;
+    l.state = 'stopped';
+    l.doneWhy = 'stopped by you';
+    if (run) {
+      // The run under way ends here; what it had done stays on the board.
+      if (run.needs) { const n = run.needs; run.needs = null; n.resolve('no'); }
+      run.inLine = null;
+      run.endedAt = this.now(); run.ok = false; run.summary = 'stopped by you'; run.lines.push({ at: run.endedAt - run.startedAt, kind: 'note', text: 'Stopped by you.' });
+      l.runs.push(run); l.current = null;
+    }
+    this.changed();
+    return true;
+  }
+  setEvery(id, secs) {
+    const l = this.loop(id);
+    if (!l || l.kind === 'debug') return false;
+    const last = l.runs.at(-1)?.endedAt ?? this.now();
+    l.every = secs;
+    if (!l.current) l.nextAt = Math.max(this.now() + 1000, last + secs * 1000);
+    this.changed();
+    return true;
+  }
+  toggleModel() { this.model.on = !this.model.on; this.changed(); this.tick(); }
+  add({ kind, name, message, every }) {
+    const t = this.now();
+    const l = { id: this.nextId++, kind, name, message, every, until: null, state: 'waiting', nextAt: t + 1000, runs: [], current: null, endsAt: t + 86_400_000, created: t, pages: kind === 'web' ? PAGES : undefined };
+    this.loops.push(l);
+    this.changed();
+    return l;
+  }
+}
+
+// What each key does on the loop board, the same in the terminal window and in the preview page.
+// app: { eng, ui, quit(), again() }. Keys arrive by name: 'up' 'down' 'left' 'right' 'enter'
+// 'esc' 'tab' 'shiftTab' 'backspace', or the character typed.
+
+const newUi = (design = 1) => ({ design, sel: 0, runSel: null, scale: 1, view: 'main', toast: null, watch: null, form: null, confirm: null });
+const say = (ui, text, style = 'accent') => { ui.toast = { text, style, until: Date.now() + 2800 }; };
+const runsOf = (l) => [...l.runs, ...(l.current ? [l.current] : [])];
+const ended = (l) => ['done', 'stopped'].includes(l.state);
+
+function handleKey(app, k) {
+  const { eng, ui } = app;
+  if (ui.view === 'confirm') {
+    const c = ui.confirm;
+    if (k === 'y' || k === 'enter') { ui.view = c.back; ui.confirm = null; c.yes(); }
+    else if (k === 'n' || k === 'esc') { ui.view = c.back; ui.confirm = null; }
+    return;
+  }
+  if (ui.view === 'new') return formKey(app, k);
+  const l = ui.view === 'watch' ? eng.loop(ui.watch.id) : eng.loops[ui.sel];
+  if (!l) return;
+  // A question waits: y / a / n answer it, from the board or from the run's own screen.
+  if (l.current?.needs && ['y', 'a', 'n'].includes(k)) {
+    const site = l.current.needs.site;
+    eng.answer(l.id, { y: 'yes', a: 'always', n: 'no' }[k]);
+    say(ui, k === 'n' ? `Not read: ${site}` : k === 'a' ? `${site} is allowed from now on` : `${site} allowed for this run`);
+    return;
+  }
+  if (k === 'r') { say(ui, eng.runNow(l.id) ? `${l.name}: running now` : l.current ? `${l.name} is already running` : ended(l) ? `${l.name} has ended` : 'The model is off: /start first (m here)', 'accent'); return; }
+  if (k === 'p') {
+    if (!eng.pause(l.id)) { say(ui, `${l.name} has ended`, 'dim'); return; }
+    say(ui, l.state === 'paused' ? `${l.name}: paused` : l.pauseAfter ? `${l.name}: pauses after this run` : `${l.name}: going again`);
+    return;
+  }
+  if (k === 's') {
+    if (ended(l)) { say(ui, `${l.name} has already ended`, 'dim'); return; }
+    ui.confirm = { text: `Stop "${l.name}"? Its runs so far stay on the board.`, back: ui.view, yes: () => { eng.stopLoop(l.id); say(ui, `${l.name}: stopped`); } };
+    ui.view = 'confirm';
+    return;
+  }
+  if (k === 'e') {
+    if (l.kind === 'debug') { say(ui, 'A debugging loop runs until the tests pass: it has no "every"', 'dim'); return; }
+    if (ended(l)) { say(ui, `${l.name} has ended`, 'dim'); return; }
+    const next = EVERY[(EVERY.indexOf(l.every) + 1) % EVERY.length];
+    eng.setEvery(l.id, next);
+    say(ui, `${l.name}: every ${everyWord({ every: next })} from now on`);
+    return;
+  }
+  if (k === 'm') { eng.toggleModel(); say(ui, eng.model.on ? 'Model loaded (/start): waiting loops go on' : 'Model off (/stop): loops wait, nothing loads by itself', eng.model.on ? 'accent' : 'warn'); return; }
+  if (ui.view === 'watch') {
+    if (k === 'esc' || k === 'q' || k === 'enter') { ui.view = 'main'; ui.watch = null; }
+    else if (k === 'up') ui.watch.scroll = (ui.watch.scroll ?? 0) + 3;
+    else if (k === 'down') ui.watch.scroll = Math.max(0, (ui.watch.scroll ?? 0) - 3);
+    return;
+  }
+  if (k === 'q') return app.quit();
+  if (k === 'x') return app.again();
+  if (k === 'tab') return setDesign(app, (ui.design % 3) + 1);
+  if (k === 'shiftTab') return setDesign(app, ((ui.design + 1) % 3) + 1);
+  if (['1', '2', '3'].includes(k)) return setDesign(app, Number(k));
+  // "+" makes a loop (n is only ever "no", so a new loop can never be taken for an answer).
+  if (k === '+' || k === '=') { ui.form = { kind: 0, every: 0, field: 0, message: KINDS_NEW[0].message }; ui.view = 'new'; return; }
+  if (k === 'enter') { ui.watch = { id: l.id, run: ui.design === 2 ? ui.runSel : null, scroll: 0 }; ui.view = 'watch'; return; }
+  const n = eng.loops.length;
+  if (ui.design === 3) {
+    if (k === 'left' || k === 'up') ui.sel = (ui.sel + n - 1) % n;
+    else if (k === 'right' || k === 'down') ui.sel = (ui.sel + 1) % n;
+    return;
+  }
+  if (k === 'up') { ui.sel = (ui.sel + n - 1) % n; ui.runSel = null; }
+  else if (k === 'down') { ui.sel = (ui.sel + 1) % n; ui.runSel = null; }
+  else if (ui.design === 2) {
+    const total = runsOf(l).length;
+    if (k === 'left' && total) ui.runSel = Math.max(0, (ui.runSel ?? total - 1) - 1);
+    else if (k === 'right' && total) { const next = (ui.runSel ?? total - 1) + 1; ui.runSel = next >= total - 1 ? null : next; }
+    else if (k === '[') ui.scale = Math.max(0, ui.scale - 1);
+    else if (k === ']') ui.scale = Math.min(SCALES.length - 1, ui.scale + 1);
+  }
+}
+function setDesign(app, d) {
+  app.ui.design = d;
+  app.ui.runSel = null;
+  say(app.ui, `Design ${d} · ${DESIGNS[d].name}`);
+  app.designChanged?.(d);
+}
+
+function formKey(app, k) {
+  const { eng, ui } = app;
+  const f = ui.form;
+  const close = () => { ui.view = 'main'; ui.form = null; };
+  if (k === 'esc') return close();
+  if (k === 'tab' || k === 'down') { f.field = (f.field + 1) % 3; return; }
+  if (k === 'shiftTab' || k === 'up') { f.field = (f.field + 2) % 3; return; }
+  if (k === 'enter') {
+    const kind = KINDS_NEW[f.kind];
+    if (kind.recordedOnly) { say(ui, 'Shown, not started: the preview has one recorded debugging loop', 'warn'); return close(); }
+    if (!f.message.trim()) { say(ui, 'A loop needs a message', 'warn'); return; }
+    const l = eng.add({ kind: kind.kind, name: f.message.split(/[.:]/)[0].slice(0, 26), message: f.message, every: EVERY[f.every] });
+    ui.sel = eng.loops.indexOf(l);
+    close();
+    say(ui, `Loop ${l.id} started: its first run is next`);
+    return;
+  }
+  if (f.field === 0 && (k === 'left' || k === 'right')) { f.kind = (f.kind + (k === 'right' ? 1 : KINDS_NEW.length - 1)) % KINDS_NEW.length; f.message = KINDS_NEW[f.kind].message; return; }
+  if (f.field === 2 && (k === 'left' || k === 'right')) { f.every = (f.every + (k === 'right' ? 1 : EVERY.length - 1)) % EVERY.length; return; }
+  if (f.field === 1) {
+    if (k === 'backspace') f.message = f.message.slice(0, -1);
+    else if (k.length === 1 && k >= ' ') f.message += k;
+  }
+}
+
+// The preview page's own part: the loops with their recorded results, the screens drawn as HTML,
+// the keys, the tabs. (draw.mjs, base.mjs and keys.mjs are above it, as in the terminal window.)
+class PageEngine extends LoopsBase {
+  constructor() { super({ rec: DATA.rec, versionTimes: DATA.versionTimes }); }
+  // The tests' real results on the file as it is at this moment of the debugging run.
+  testResult() { const r = DATA.tests[Math.min(this.version, DATA.tests.length - 1)]; return new Promise((res) => setTimeout(() => res(r), r.ms)); }
+  // What the real page answered when this preview was made.
+  pageResult(pg) { const f = DATA.feeds[pg.label]; return new Promise((res, rej) => setTimeout(() => (f ? res(f) : rej(new Error('no answer'))), 450)); }
+}
+
+// xterm's 256 colours (Apple Terminal's first 16).
+const PAL = (() => {
+  const out = ['#000000', '#990000', '#00a600', '#999900', '#0000b2', '#b200b2', '#00a6b2', '#bfbfbf', '#666666', '#e50000', '#00d900', '#e5e500', '#0000ff', '#e500e5', '#00e5e5', '#e5e5e5'];
+  const lv = [0, 95, 135, 175, 215, 255];
+  const hex = (n) => n.toString(16).padStart(2, '0');
+  for (let r = 0; r < 6; r++) for (let g = 0; g < 6; g++) for (let b = 0; b < 6; b++) out.push(`#${hex(lv[r])}${hex(lv[g])}${hex(lv[b])}`);
+  for (let i = 0; i < 24; i++) { const v = hex(8 + i * 10); out.push(`#${v}${v}${v}`); }
+  return out;
+})();
+const cssCache = new Map();
+function cssOf(style) {
+  let c = cssCache.get(style);
+  if (c !== undefined) return c;
+  const [fgPart, bgPart] = String(style).split(' on ');
+  const names = fgPart.split(' ');
+  const s = STYLE[names[0]] ?? STYLE.text;
+  c = `color:${PAL[s.fg]}`;
+  if (names.includes('b')) c += ';font-weight:700';
+  if (bgPart) c += `;background:${PAL[BG[bgPart] ?? Number(bgPart)]}`;
+  cssCache.set(style, c);
+  return c;
+}
+const TEXT_STYLE = new Set(['⏺', '✔', '✖', 'ℹ', '▼']); // drawn as text, never as a colour emoji
+function glyphs(t) {
+  let out = '';
+  for (const ch of t) {
+    const cp = ch.codePointAt(0);
+    if (cp <= 0x7e) out += ch === '<' ? '&lt;' : ch === '>' ? '&gt;' : ch === '&' ? '&amp;' : ch;
+    else if (cp >= 0x2500 && cp <= 0x257f) out += ch;
+    else out += `<b class="g">${ch}${TEXT_STYLE.has(ch) ? '︎' : ''}</b>`;
+  }
+  return out;
+}
+const rowHtml = (row) => row.map(([t, s]) => `<span style="${cssOf(s)}">${glyphs(t)}</span>`).join('');
+
+// One terminal on the page: cols × rows cells, a font sized to fit its box.
+class Term {
+  constructor(el, { cols = 124, rows = 38, maxFont = 14 } = {}) {
+    this.el = el; this.cols = cols; this.rows = rows; this.maxFont = maxFont;
+    this.lines = [];
+    this.html = [];
+    for (let i = 0; i < rows; i++) { const d = document.createElement('div'); d.innerHTML = ' '; el.appendChild(d); this.lines.push(d); }
+  }
+  fit(boxW, boxH) {
+    // A cell is 0.6021 of the font size wide in SF Mono and Menlo; measured, in case another font is used.
+    if (!Term.ratio) { const m = document.createElement('span'); m.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:100px "SF Mono",ui-monospace,Menlo,monospace'; m.textContent = '0000000000'; document.body.appendChild(m); Term.ratio = m.getBoundingClientRect().width / 1000; m.remove(); }
+    const byW = boxW / this.cols / Term.ratio;
+    const byH = boxH ? boxH / this.rows / 1.25 : Infinity;
+    const fs = Math.max(4, Math.min(this.maxFont, byW, byH));
+    this.el.style.fontSize = `${fs.toFixed(2)}px`;
+    this.el.style.lineHeight = `${Math.max(5, Math.round(fs * 1.25))}px`;
+  }
+  draw(frame) {
+    for (let i = 0; i < this.rows; i++) {
+      const h = frame[i] ? rowHtml(frame[i]) : ' ';
+      if (h !== this.html[i]) { this.html[i] = h; this.lines[i].innerHTML = h; }
+    }
+  }
+}
+
+const $ = (q) => document.querySelector(q);
+const TABS = ['board', 'timeline', 'tiles', 'compare', 'real'];
+const app = {
+  eng: null,
+  ui: newUi(1),
+  quit() { app.ui.toast = { text: 'q closes the window in the Terminal. Here the page stays open.', style: 'dim', until: Date.now() + 2800 }; },
+  again() { start(); app.ui = newUi(app.ui.design); app.ui.toast = { text: 'Started over: the project has its three bugs again', style: 'accent', until: Date.now() + 2800 }; },
+  designChanged(d) { show(TABS[d - 1], { fromKey: true }); },
+};
+function start() { app.eng?.stop(); app.eng = new PageEngine(); app.eng.on('change', paint); app.eng.start(); }
+
+const main = new Term($('#term'));
+const minis = [1, 2, 3].map((d) => ({ design: d, term: new Term($(`#mini${d}`), { maxFont: 9 }), ui: { ...newUi(d), sel: d === 1 ? 2 : 0 } }));
+let tab = 'board';
+
+function paint() {
+  const now = Date.now();
+  if (app.ui.sel >= app.eng.loops.length) app.ui.sel = app.eng.loops.length - 1;
+  if (TABS.indexOf(tab) < 3) {
+    main.draw(drawScreen(app.eng, app.ui, { cols: main.cols, rows: main.rows, now }));
+    // The answer keys light up when the picked loop waits for you.
+    const l = app.ui.view === 'watch' ? app.eng.loop(app.ui.watch.id) : app.eng.loops[app.ui.sel];
+    const asks = Boolean(l?.current?.needs) && app.ui.view !== 'new' && app.ui.view !== 'confirm';
+    document.querySelectorAll('#keys .ans').forEach((b) => { b.disabled = !asks; });
+    $('#keys').classList.toggle('asking', asks);
+    const need = app.eng.needsYou.length;
+    $('#needs').textContent = need ? `${need} loop${need === 1 ? '' : 's'} need${need === 1 ? 's' : ''} you` : '';
+  } else if (tab === 'compare') {
+    for (const m of minis) m.term.draw(drawScreen(app.eng, m.ui, { cols: m.term.cols, rows: m.term.rows, now }));
+  }
+}
+function fitAll() {
+  const live = $('#live');
+  if (live.classList.contains('on')) {
+    // The terminal takes what the window leaves beside the notes (340 px) and above the key strip.
+    const narrow = window.innerWidth <= 900;
+    const boxW = live.clientWidth - (narrow ? 0 : 16 + 340) - 20;
+    // The key strip is as wide as the terminal above it (it may take two rows), so it is measured at that width.
+    const keys = $('#keys');
+    for (let pass = 0; pass < 2; pass++) {
+      const h = narrow ? 0 : window.innerHeight - $('#term').getBoundingClientRect().top - keys.offsetHeight - 34;
+      main.fit(boxW, h > 200 ? h : 0);
+      keys.style.maxWidth = `${Math.ceil($('#term').getBoundingClientRect().width)}px`;
+    }
+  }
+  if ($('#compare').classList.contains('on')) for (const m of minis) m.term.fit(m.term.el.closest('.minibox').getBoundingClientRect().width - 18, 0);
+}
+function show(id, { fromKey = false } = {}) {
+  if (!TABS.includes(id)) id = 'board';
+  tab = id;
+  const i = TABS.indexOf(id);
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+  $('#live').classList.toggle('on', i < 3);
+  $('#compare').classList.toggle('on', id === 'compare');
+  $('#real').classList.toggle('on', id === 'real');
+  if (i < 3) {
+    if (!fromKey && app.ui.design !== i + 1) { app.ui.design = i + 1; app.ui.runSel = null; if (app.ui.view === 'watch') { app.ui.view = 'main'; app.ui.watch = null; } }
+    document.querySelectorAll('.about').forEach((a) => a.classList.toggle('on', a.dataset.d === String(i + 1)));
+    $('#bar .name').textContent = `Loops — ${['Board', 'Timeline', 'Tiles'][i]} — 124 × 38`;
+  }
+  try { history.replaceState(null, '', `#${id}`); } catch { /* a file page may refuse */ }
+  fitAll();
+  paint();
+}
+
+// ---- keys ----
+const NAMED = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'enter', Escape: 'esc', Backspace: 'backspace' };
+function press(k) { handleKey(app, k); paint(); }
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const liveTab = TABS.indexOf(tab) < 3;
+  const typing = liveTab && app.ui.view === 'new' && app.ui.form?.field === 1;
+  // 1–5 switch tabs (1–3 are the designs), except while a message is being typed.
+  if (!typing && /^[1-5]$/.test(e.key)) { e.preventDefault(); show(TABS[Number(e.key) - 1]); return; }
+  if (!liveTab) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { const i = TABS.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : -1); if (i >= 0 && i < TABS.length) show(TABS[i]); }
+    return;
+  }
+  const k = e.key === 'Tab' ? (e.shiftKey ? 'shiftTab' : 'tab') : NAMED[e.key] ?? (e.key.length === 1 ? e.key : null);
+  if (!k) return;
+  e.preventDefault();
+  press(k);
+});
+document.querySelectorAll('#keys button').forEach((b) => b.addEventListener('click', () => { press(b.dataset.k); b.blur(); }));
+document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => { show(b.dataset.id); b.blur(); }));
+document.querySelectorAll('.minibox').forEach((b) => b.addEventListener('click', () => show(TABS[Number(b.dataset.d) - 1])));
+window.addEventListener('resize', fitAll);
+
+start();
+show(location.hash.slice(1) || 'board');
+setInterval(paint, 125);
+document.fonts?.ready?.then(() => { Term.ratio = 0; fitAll(); });
+
+})();
+</script>
+</body></html>
