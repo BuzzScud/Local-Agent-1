@@ -3378,8 +3378,13 @@ export class Agent extends EventEmitter {
     return true;
   }
 
+  // How many messages you and the model have said. The opening read (giveOpening: two messages the
+  // app put in) is not conversation, so on a remote one short exchange is still too short to
+  // summarize, as it is on this Mac, where there is no opening read and the count is the same as before.
+  said() { return this.messages.filter((m) => !m.opening && !(m.tool_calls ?? []).some((c) => String(c.id).startsWith('opening_'))).length; }
+
   async compact(signal, { instructions } = {}) {
-    if (this.messages.length <= 3) return;
+    if (this.said() <= 3) return;
     this.emit('note', { text: 'Summarizing the conversation to free memory…', tone: 'dim' });
     this.emit('busy', { task: 'summarizing' });
     const history = this.messages.slice(1).map((m) => {
