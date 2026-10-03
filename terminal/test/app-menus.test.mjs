@@ -170,16 +170,16 @@ test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bon
   expect([saved.thinking, saved.effort]).toEqual([true, 'medium']);
 }, T);
 
-test('"/" menu like Claude Code: the 18 commands, and /jumptomac as a 19th where the window has room for it (the rest are in /settings), the footer makes room, tab fills in', async () => {
+test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /btw there, /jumptomac in its row; the rest are in /settings), the footer makes room, tab fills in', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
-  // An 80 × 24 window holds the 18, /exit the last, nothing scrolls; /jumptomac shows once its name is typed.
+  // An 80 × 24 window holds the 18, /exit the last, nothing scrolls; typing /j leaves /jumptomac alone.
   const small = await runInPty({ cwd, env, cols: 80, rows: 24, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 200 }, { snapshot: 'all' },
     { type: 'j' }, { wait: '/jumptomac' }, { sleep: 200 }, { snapshot: 'j' },
     ...quitTyped,
   ] });
-  // The tests' own window (155 × 43) has room for one more row: /jumptomac is listed, under /remote.
+  // The tests' own window (155 × 43): the same 18, /jumptomac under /remote.
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 200 }, { snapshot: 'all' },
     { type: 'model' }, { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'mo' },
@@ -190,11 +190,13 @@ test('"/" menu like Claude Code: the 18 commands, and /jumptomac as a 19th where
   const rows = (s) => s.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
   expect(rows(small.snapshots.all)).toHaveLength(18);
   expect(small.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/);
-  expect(small.snapshots.all).not.toContain('/jumptomac');
+  expect(small.snapshots.all).toMatch(/^\s{2}\/jumptomac\s+Jump this window to your other/m);
+  expect(small.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m); // a side question is for a remote: not listed here
   expect(rows(small.snapshots.j)).toHaveLength(1);
-  expect(small.snapshots.j).toMatch(/\/jumptomac\s+Jump this window to your other Mac/);
-  expect(rows(r.snapshots.all)).toHaveLength(19);
+  expect(small.snapshots.j).toMatch(/\/jumptomac\s+Jump this window to your other/);
+  expect(rows(r.snapshots.all)).toHaveLength(18);
   expect(r.snapshots.all).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
+  expect(r.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m);
   expect(r.snapshots.all).toMatch(/\/settings\s+Everything else in one menu/);
   expect(r.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/); // the last one shows too: nothing scrolls
   expect(r.snapshots.all).not.toMatch(/^\s{2}\/(doctor|weights|meters)\s/m); // those live in /settings

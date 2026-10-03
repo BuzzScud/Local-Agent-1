@@ -5,6 +5,8 @@
 // first side question re-read all 3,751 tokens), and answers on the side
 // lane while the main job goes on in lane 0.
 import { streamChat } from './client.mjs';
+import { CLAUDE_MODELS, claudeName, ollamaCatalog, authHeaders } from '../../../models/index.mjs';
+import { HELPER_CTX, HELPER_KEEP } from './helper-models.mjs';
 
 const tokensOf = (s) => Math.ceil((s?.length ?? 0) / 3.6);
 
@@ -19,6 +21,8 @@ export const MIN_ROOM = 600;
 export const BTW_SYSTEM = [
   'This is a side question from the user, asked with /btw while Agentic Coder (a coding assistant on their Mac) keeps working on the conversation below.',
   'Answer it directly, in one short reply: a few plain sentences or a short list.',
+  // 3 Oct 2026, on a remote: asked "what are you doing right now?", a model began "I am not doing anything; I am a text-based AI".
+  'In the question, "you" means Agentic Coder, and you answer as Agentic Coder, in the first person ("I am running the tests"): never speak about yourself as a separate assistant.',
   'You have NO tools: you cannot read files, run commands or change anything, and this is a one-off reply with no follow-up.',
   'Answer only from the conversation below, and be specific: name the files, commands, steps and numbers it shows. Never say you will do something or "let me check".',
   'If the conversation does not tell you, say so plainly. If you have to guess (how long something takes, especially), say it is a guess.',
@@ -133,23 +137,125 @@ export function sideMessages({ messages, question, now, room }) {
   ];
 }
 
-// Asks the side question on the side lane and streams the answer.
-// Answers { text } or { noRoom: true }; throws on a server error; an abort
-// (esc closed the panel) ends it quietly with what was written.
-export async function askAside({ agent, question, live, signal, onText, now = Date.now() }) {
-  const room = roomFor({ ctx: agent.ctx, ctxUsed: agent.ctxUsed, busy: agent.busy, thinking: agent.thinking, budget: agent.model?.thinkingBudget });
-  const messages = sideMessages({ messages: agent.messages, question, now: rightNow({ busy: agent.busy, live, todos: agent.todos, messages: agent.messages, now }), room });
-  if (!messages) return { noRoom: true, room };
+// ---- on a remote (3 Oct 2026) ------------------------------------------------------------------
+// The owner's picks: /btw works only on a remote. There the lowest model answers when the service
+// has it ready, else the main one, which is loaded already. Measured that day on their Ollama
+// service: the loaded 36B answered in 1.7 s; the lowest (3B, 2 GB) and the next one up never
+// loaded beside it (the main model is kept there for ever); and a question asked while the main
+// model wrote a reply was answered the moment that reply ended (one request at a time).
+
+// Tokens of the conversation a side question on a remote carries at most: its own request, not a
+// share of the main one's memory, but a long copy is slow to read.
+export const SIDE_COPY = 12_000;
+// How long the lowest model may take over its first word, the one time a session it is tried cold.
+export const TRY_MS = 8000;
+// After this long with no word from a busy main model, the panel says what it waits for.
+export const WAIT_NOTE_MS = 3000;
+
+const weights = (p) => { const m = /([\d.]+)\s*([MB])/i.exec(String(p ?? '')); return m ? Number(m[1]) * (m[2].toUpperCase() === 'B' ? 1e9 : 1e6) : 0; };
+// The service's models that can take a side question, smallest first: they chat, are not
+// embedders or picture readers (those see but call no tools), and have a billion weights at least.
+export function lowModels(models = [], main) {
+  return models.filter((m) => m.id !== main && m.chat !== false && !m.embedding && !(m.vision && !m.tools) && weights(m.params) >= 1e9)
+    .sort((x, y) => (x.bytes || 0) - (y.bytes || 0));
+}
+// Who answers on an Ollama service: { model (null: the main one), why }.
+//   ready  a smaller model the service has loaded now (the smallest of them)
+//   try    the lowest, or the one /subagents names for side jobs, not loaded: tried once a session
+//   main   the main model: nothing smaller is ready, and the one try did not load
+// tried: null not yet this session, true it loaded, false it would not.
+export function sideChoice({ models = [], main, picked = null, tried = null }) {
+  const mainBytes = models.find((m) => m.id === main)?.bytes || Infinity;
+  const low = lowModels(models, main).filter((m) => !m.bytes || m.bytes < mainBytes);
+  const want = (picked && picked !== main && models.find((m) => m.id === picked)) || low[0] || null;
+  const ready = [want, ...low].find((m) => m?.loaded);
+  if (ready) return { model: ready.id, why: 'ready' };
+  if (want && tried !== false) return { model: want.id, why: 'try' };
+  return { model: null, why: 'main' };
+}
+// The Claude API's lowest model (its cheapest), or null when the main one is it already.
+export function lowestClaude(main) {
+  const low = [...CLAUDE_MODELS].sort((x, y) => (x.price.in + x.price.out) - (y.price.in + y.price.out))[0];
+  return low && low.id !== main ? low.id : null;
+}
+
+// One answer, streamed. firstMs: no first word by then ends it as { timedOut: true }.
+async function stream({ agent, messages, use, signal, onText, firstMs = 0 }) {
+  const stop = new AbortController();
+  const both = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
   let all = '';
+  let late = false;
+  const t = firstMs ? setTimeout(() => { if (!all) { late = true; stop.abort(); } }, firstMs) : null;
   try {
-    for await (const ev of streamChat({ url: agent.url, messages, model: agent.model, thinking: false, sampling: agent.model.sampling, maxTokens: ANSWER_TOKENS, slot: agent.slots?.side, signal, use: agent.sideUse?.() })) {
+    for await (const ev of streamChat({ url: agent.url, messages, model: agent.model, thinking: false, sampling: agent.model.sampling, maxTokens: ANSWER_TOKENS, slot: agent.slots?.side, signal: both, use })) {
       if (ev.type === 'text') { all += ev.text; onText?.(all); }
     }
   } catch (e) {
+    if (late) return { timedOut: true };
     if (signal?.aborted) return { text: all, aborted: true };
     throw e;
+  } finally { clearTimeout(t); }
+  return late && !all ? { timedOut: true } : { text: all.trim() };
+}
+
+// Asks the side question and streams the answer. Answers { text, who } or { noRoom: true };
+// throws on a server error; an abort (esc closed the panel) ends it quietly with what was written.
+// remote: null on a model server with a side lane (this Mac's with --url --slots 2, or your other
+// computer's): the question goes down that lane, with a share of the one memory. On a service:
+// { kind, ollama, main, models (the service's list, when the app has it), picked (the
+// model /subagents names for side jobs), memo (kept by the app for the session: { tried }) }.
+// onNote(text): what the panel says while it waits (who is asked, what holds the answer up).
+export async function askAside({ agent, question, live, signal, onText, onNote, remote = null, now = Date.now(), tryMs = TRY_MS, waitNoteMs = WAIT_NOTE_MS }) {
+  const right = rightNow({ busy: agent.busy, live, todos: agent.todos, messages: agent.messages, now });
+  if (!remote) {
+    const room = roomFor({ ctx: agent.ctx, ctxUsed: agent.ctxUsed, busy: agent.busy, thinking: agent.thinking, budget: agent.model?.thinkingBudget });
+    const messages = sideMessages({ messages: agent.messages, question, now: right, room });
+    if (!messages) return { noRoom: true, room };
+    const r = await stream({ agent, messages, use: agent.sideUse?.(), signal, onText });
+    return { ...r, sent: messages };
   }
-  return { text: all.trim(), sent: messages };
+  // A request of its own on the service: the copy is cut to what reads quickly, not to a shared memory.
+  const messages = sideMessages({ messages: agent.messages, question, now: right, room: Math.min((agent.ctx || 32_768) - ANSWER_TOKENS - MARGIN, SIDE_COPY) });
+  if (!messages) return { noRoom: true };
+  // The main model by its own name (the app's label for it carries the service's address).
+  const mainName = remote.kind === 'claude' ? claudeName(remote.main) : remote.main ?? remote.mainName ?? 'the main model';
+  let use;
+  let who = mainName;
+  if (remote.kind === 'claude') {
+    const low = lowestClaude(remote.main);
+    if (low) { use = { model: low }; who = claudeName(low); }
+  } else if (remote.ollama) {
+    // What the service has, with what it has loaded now.
+    let models = remote.models ?? [];
+    try {
+      if (!models.length) models = (await ollamaCatalog({ url: agent.url, signal, timeoutMs: 4000 }))?.models ?? [];
+      const ps = await fetch(`${agent.url.replace(/\/+$/, '')}/api/ps`, { headers: authHeaders(agent.url), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(4000)]) : AbortSignal.timeout(4000) }).then((r) => r.json());
+      const up = new Map((ps.models ?? []).map((m) => [m.name, m]));
+      models = models.map((m) => ({ ...m, loaded: up.has(m.id), loadedCtx: up.get(m.id)?.context_length ?? null }));
+    } catch { if (signal?.aborted) return { text: '', aborted: true }; }
+    const memo = remote.memo ?? {};
+    const pick = sideChoice({ models, main: remote.main, picked: remote.picked, tried: memo.tried ?? null });
+    const entry = models.find((m) => m.id === pick.model);
+    // A model the service has loaded is asked at the context it is loaded at (another would load
+    // it again) and its own keep-alive is left as it is; one tried cold is kept half an hour.
+    const useOf = (cold) => ({ model: entry.id, numCtx: cold ? HELPER_CTX.side : entry.loadedCtx || HELPER_CTX.side, thinks: Boolean(entry.thinking), tools: entry.tools !== false, family: entry.family ?? '', keepAlive: cold ? HELPER_KEEP : undefined });
+    if (pick.why === 'ready') { use = useOf(false); who = entry.id; }
+    else if (pick.why === 'try') {
+      onNote?.(`Asking ${entry.id}, the lowest model there…`);
+      const r = await stream({ agent, messages, use: useOf(true), signal, onText, firstMs: tryMs });
+      if (!r.timedOut) { memo.tried = true; return { ...r, who: entry.id, sent: messages }; }
+      memo.tried = false; // not again this session: the service did not load it beside the main model
+      onNote?.(`${entry.id} is not ready on the service; ${mainName} answers…`);
+    }
+  }
+  // The main model on an Ollama service, which takes one request at a time: asked mid-reply, it
+  // waits its turn (the Claude API and the hosted services answer beside the main reply).
+  const note = !use && remote.ollama && agent.busy
+    ? setTimeout(() => onNote?.(`${mainName} is busy with its reply: this answers when that ends…`), waitNoteMs) : null;
+  try {
+    const r = await stream({ agent, messages, use, signal, onText: (all) => { clearTimeout(note); onText?.(all); } });
+    return { ...r, who, sent: messages };
+  } finally { clearTimeout(note); }
 }
 
 // What "f" hands to the main job with your next message.

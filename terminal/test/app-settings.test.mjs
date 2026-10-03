@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
-import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY, WHEN_ROOM, matchCommands } from '../src/app/commands.mjs';
+import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY, WHEN_ROOM, REMOTE_ONLY, matchCommands } from '../src/app/commands.mjs';
 import { helpData, cliHelpText, setupModels } from '../src/app/help.mjs';
 
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
@@ -23,8 +23,17 @@ test('coding setup --model names every other model in /model, from the model lis
 });
 
 test('the / menu holds 18 commands and /settings the other 18; every one is still a command, and the Help page lists both parts', () => {
-  const menu = matchCommands('/').map((c) => c.name);
+  // Where a side question can be taken (a remote, a server with a second lane): the 18, /btw among them.
+  const menu = matchCommands('/', { side: true }).map((c) => c.name);
   expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'test', 'settings', 'exit']);
+  // On this Mac's own model /btw is off (3 Oct 2026, the owner's pick: only on a remote): it leaves
+  // the menu, and its row goes to /jumptomac, which fits the 18 there.
+  expect([...REMOTE_ONLY]).toEqual(['btw']);
+  const here = matchCommands('/').map((c) => c.name);
+  expect(here).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'test', 'settings', 'exit']);
+  expect(matchCommands('/btw')).toEqual([]);
+  expect(matchCommands('/btw', { side: true }).map((c) => c.name)).toEqual(['btw']);
+  expect(COMMANDS.some((c) => c.name === 'btw')).toBe(true); // typed in full it runs, and says where it works
   expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'autostart', 'helpers', 'hooks', 'rules', 'instructions', 'memory', 'web', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {
@@ -32,7 +41,7 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
     expect(menu).not.toContain(n);
   }
   // On an Ollama service /subagents takes the place of /start and /stop: 17, so /jumptomac fits as the 18th.
-  const onService = matchCommands('/', { service: true }).map((c) => c.name);
+  const onService = matchCommands('/', { service: true, side: true }).map((c) => c.name);
   expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'jumptomac', 'test', 'settings', 'exit']); // 18: /jumptomac fits there
   expect(COMMANDS.some((c) => c.name === 'subagents')).toBe(true);
   // /agents took /morning's row (2 Oct 2026): /morning is typed only, and still a command on /help
@@ -41,7 +50,7 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   // and in any window once its name is typed; typed only, nobody saw it.
   expect([...WHEN_ROOM]).toEqual(['jumptomac']);
   expect(menu).not.toContain('jumptomac');
-  const tall = matchCommands('/', { room: 49 }).map((c) => c.name);
+  const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
   expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'test', 'settings', 'exit']);
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);

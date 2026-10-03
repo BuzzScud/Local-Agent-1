@@ -63,7 +63,8 @@ export function refusedField(status, text, body) {
 // come meanwhile. The wait is shared by every window on the same service (its label).
 // use: another model on the same Ollama service for this one call (a /subagents helper):
 // { model, numCtx, thinks, tools, family, keepAlive }, laid over the service's endpoint.
-const endpointFor = (url, use) => { const ep = endpointOf(url); return ep && use && ep.ollama ? { ...ep, ...use } : ep; };
+// use: another model for this one call (/subagents' helpers on an Ollama service; on the Claude API, the model alone: /btw's lowest one).
+const endpointFor = (url, use) => { const ep = endpointOf(url); return ep && use && ep.ollama ? { ...ep, ...use } : ep && use?.model && ep.kind === 'claude' ? { ...ep, model: use.model } : ep; };
 
 export async function* streamChat(args) {
   const ep = endpointFor(args.url, args.use);

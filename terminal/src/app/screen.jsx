@@ -1517,7 +1517,7 @@ function BtwPanel({ app }) {
   const icon = spinFrame(app.spinner, secs);
   const tone = b.phase === 'noroom' ? C.warn : b.phase === 'error' ? C.bad : undefined;
   const keys = b.phase === 'done'
-    ? [L.maxOffset > 0 ? '↑/↓ to scroll' : null, 'c to copy', 'f to send to main', 'Esc to close'].filter(Boolean).join(' · ')
+    ? [b.who ? `answered by ${b.who}` : null, L.maxOffset > 0 ? '↑/↓ to scroll' : null, 'c to copy', 'f to send to main', 'Esc to close'].filter(Boolean).join(' · ')
     : b.phase === 'writing' ? 'Esc to stop and close' : 'Esc to close';
   return (
     <Box flexDirection="column" width={app.width} flexShrink={0}>
@@ -1528,7 +1528,7 @@ function BtwPanel({ app }) {
       ))}
       <Text> </Text>
       {b.phase === 'answering' ? (
-        <Box paddingX={4}><Text><Text color={icon.color}>{icon.glyph}</Text><Text color={C.accent}> Answering…</Text><Text color={C.dim}> ({fmtSecs(secs)})</Text></Text></Box>
+        <Box paddingX={4}><Text wrap="truncate-end"><Text color={icon.color}>{icon.glyph}</Text><Text color={C.accent}> {b.wait ?? 'Answering…'}</Text><Text color={C.dim}> ({fmtSecs(secs)})</Text></Text></Box>
       ) : (
         <Box paddingX={4} flexDirection="column" height={L.view} overflow="hidden">
           {L.rows.slice(L.offset, L.offset + L.view).map((r, i) => (
