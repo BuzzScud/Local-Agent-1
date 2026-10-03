@@ -1,7 +1,7 @@
 // End-to-end, the real app in a pseudo-terminal (see app.test.mjs).
 // Here: the menus and the keys of the prompt.
 import { test, expect } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
@@ -142,10 +142,13 @@ test('/model: the model list and the effort in one picker; the choice is used an
 
 test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bonsai have Medium); the level you pick is kept while the cursor moves, and enter saves it', async () => {
   const { cwd, env, base } = setup();
+  // /model lists only the models whose file is on this Mac (and the one in use): stand-ins for K2 Horizon and Bonsai.
+  const models = join(base, 'home', 'models'); mkdirSync(models, { recursive: true });
+  for (const id of ['k2', 'bonsai']) writeFileSync(join(models, MODELS[id].file), 'stand-in');
   const fake = await startFakeServer([]);
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/model' }, { key: 'enter' }, { wait: 'Pick the model and its effort' }, { sleep: 200 },
-    // the model list: Gemma, Qwen (in use), K2 Horizon, Bonsai
+    // the model list: Qwen (in use), K2 Horizon, Bonsai (Gemma's file is not here, so it is not listed)
     { key: 'down' }, { sleep: 150 }, { key: 'down' }, { sleep: 300 }, { snapshot: 'bonsai' },
     { key: 'right' }, { sleep: 300 }, { snapshot: 'medium' },
     { key: 'up' }, { sleep: 150 }, { key: 'up' }, { sleep: 300 }, { snapshot: 'qwen' },
@@ -157,6 +160,8 @@ test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bon
   const effort = (s) => /Effort\s+◀\s+(.*?)\s+▶/.exec(s)?.[1].replace(/\s+/g, ' ');
   const note = (s) => /(?:Low|Medium|High): [^│\n]*/.exec(s.split('Effort')[1] ?? '')?.[0].trim();
   expect(r.snapshots.bonsai).toMatch(/❯ Bonsai 2 27B/);
+  expect(r.snapshots.bonsai).toMatch(/K2 Horizon 7B/); // a model is listed once its file is here…
+  expect(r.snapshots.bonsai).not.toMatch(/Gemma 4 12B|ConstantKV/); // …and left out while it is not
   expect(effort(r.snapshots.bonsai)).toBe('Low · Medium · High'); // its own three levels, not Qwen's two
   expect(note(r.snapshots.medium)).toMatch(/^Medium: thinks briefly first/);
   // Qwen has no Medium: it shows its nearest, High…
@@ -164,7 +169,7 @@ test('/model: the Effort row is the highlighted model\'s own (K2 Horizon and Bon
   expect(note(r.snapshots.qwen)).toMatch(/^High: /);
   // …and back on Bonsai the pick is still Medium: moving the cursor changes nothing.
   expect(note(r.snapshots.back)).toMatch(/^Medium: /);
-  // Enter: the effort is saved (Bonsai's file is not in this test's home, so it says how to get it and keeps Qwen).
+  // Enter: the effort is saved (Bonsai's model server is not in this test's home, so it says how to get it and keeps Qwen).
   expect(r.text).toContain('Bonsai 2 27B is not ready on this Mac yet: coding setup --model bonsai');
   const saved = JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
   expect([saved.thinking, saved.effort]).toEqual([true, 'medium']);

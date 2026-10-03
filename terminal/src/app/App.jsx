@@ -1302,17 +1302,21 @@ export function App({ opts, win, onRestart }) {
   // own list instead (remote-models.mjs), read again as it opens; this Mac's models and the other
   // services follow it, and enter on one of its models opens that model's own settings first
   // (openOwnSettings). Elsewhere its Effort starts from the one you chose, whatever the model in use allows.
+  // A model whose file is not on this Mac is left out of both lists (3 Oct 2026, the owner's pick: the
+  // models were removed to free the disk); its settings stay in its model.mjs, and once
+  // coding setup --model <id> brings the file back it is listed again. The one in use always is.
+  const onThisMac = (m) => existsSync(modelPath(m));
   const openModelPicker = () => {
     const conn = remoteRef.current.conn;
     if (model.remote && conn?.info?.ollama) {
       refreshCatalog(conn);
       const last = localModelRef.current ?? modelById(settings.model);
-      const sv = { title: sourceWord(model.remote.source), where: model.remote.label, ms: conn.info.ms ?? null, mac: [...Object.values(MODELS), ...editedModels()], services: remoteChoices(settings).filter((x) => x.source !== model.remote.source), lastLocal: last?.name ?? null };
+      const sv = { title: sourceWord(model.remote.source), where: model.remote.label, ms: conn.info.ms ?? null, mac: [...Object.values(MODELS).filter(onThisMac), ...editedModels()], services: remoteChoices(settings).filter((x) => x.source !== model.remote.source), lastLocal: last?.name ?? null };
       setPicker({ ...openService({ inUse: model.remote.model }), sv });
       return;
     }
     const lvNow = thinkingLevel(model, agent.thinking, agent.effort);
-    const models = [...Object.values(MODELS), ...editedModels(), ...remoteChoices(settings)];
+    const models = [...Object.values(MODELS).filter((m) => m.id === model.id || onThisMac(m)), ...editedModels(), ...remoteChoices(settings)];
     setPicker({ kind: 'model', models, index: Math.max(0, models.findIndex((m) => (model.remote ? m.source === model.remote.source : m.id === model.id))), levelId: lvNow.id, on: Boolean(lvNow.effort) });
   };
   // /subagents: the helper models on an Ollama service, one row per job (subagents.mjs). The jobs are
