@@ -13,7 +13,10 @@ const t0 = Date.now();
 // one that needs a reply still running sets FAKE_LLAMA_REPLY_MS (below), one that
 // needs the start-up to last longer sets FAKE_LLAMA_LOAD_MS (default 1500), or FAKE_LLAMA_WARM_MS (default
 // 2500) for the step after the model is up, while it takes in the instructions.
-if (process.env.FAKE_LLAMA_ARGS) appendFileSync(process.env.FAKE_LLAMA_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`);
+// The note is written once it has its port: one that found the port taken (another test's server
+// started in the same moment, and the app moves to the next port) exits here and was never a start,
+// so a test that counts the starts counts the servers that ran.
+const noteStart = () => { if (process.env.FAKE_LLAMA_ARGS) appendFileSync(process.env.FAKE_LLAMA_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // --api-key-file (coding serve): everything but /health asks for that key, as the real one does.
 const keyFile = process.argv.includes('--api-key-file') ? arg('--api-key-file') : null;
@@ -52,4 +55,4 @@ createServer(async (req, res) => {
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: text }, finish_reason: null }] })}\n\n`);
   res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
   res.end();
-}).listen(port, '127.0.0.1');
+}).listen(port, '127.0.0.1', noteStart);
