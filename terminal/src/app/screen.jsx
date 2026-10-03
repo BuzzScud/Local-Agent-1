@@ -593,7 +593,7 @@ function PermissionPrompt({ app }) {
 function Menu({ app }) {
   const { menu } = app;
   if (!menu || !menu.items.length) return null;
-  const SHOW = MENU_ROWS;
+  const SHOW = menu.rows ?? MENU_ROWS; // a taller window holds more (App.jsx)
   const start = Math.max(0, Math.min(menu.index - 5, menu.items.length - SHOW));
   const shown = menu.items.slice(start, start + SHOW);
   return (

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
-import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY, matchCommands } from '../src/app/commands.mjs';
+import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY, WHEN_ROOM, matchCommands } from '../src/app/commands.mjs';
 import { helpData, cliHelpText, setupModels } from '../src/app/help.mjs';
 
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
@@ -31,14 +31,21 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
     expect(COMMANDS.some((c) => c.name === n)).toBe(true); // typed in full it still runs
     expect(menu).not.toContain(n);
   }
-  // On an Ollama service /subagents takes the place of /start and /stop: 17, so it still fits.
+  // On an Ollama service /subagents takes the place of /start and /stop: 17, so /jumptomac fits as the 18th.
   const onService = matchCommands('/', { service: true }).map((c) => c.name);
-  expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'test', 'settings', 'exit']);
+  expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'jumptomac', 'test', 'settings', 'exit']); // 18: /jumptomac fits there
   expect(COMMANDS.some((c) => c.name === 'subagents')).toBe(true);
   // /agents took /morning's row (2 Oct 2026): /morning is typed only, and still a command on /help
-  // /jumptomac (3 Oct 2026) is typed only too: the menu and /settings are full.
-  expect([...TYPED_ONLY]).toEqual(['morning', 'jumptomac']);
-  expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
+  expect([...TYPED_ONLY]).toEqual(['morning']);
+  // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
+  // and in any window once its name is typed; typed only, nobody saw it.
+  expect([...WHEN_ROOM]).toEqual(['jumptomac']);
+  expect(menu).not.toContain('jumptomac');
+  const tall = matchCommands('/', { room: 49 }).map((c) => c.name);
+  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'test', 'settings', 'exit']);
+  expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac']);
+  expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
+  expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
   expect(matchCommands('/doc')).toEqual([]); // half a hidden name finds nothing
   expect(matchCommands('/se').map((c) => c.name)).toEqual(['settings']);
   expect(matchCommands('/te').map((c) => c.name)).toEqual(['test', 'remote']); // /tests (the record) is in /settings; remote holds "te"

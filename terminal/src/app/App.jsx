@@ -3019,8 +3019,13 @@ export function App({ opts, win, onRestart }) {
   let menu = null;
   const btwShown = Boolean(btw && !perm && !answerWait);
   if (!perm && !picker && !btwShown && input.value !== menuClosedFor) {
-    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama) }) : [];
-    if (cmds.length) menu = { kind: 'slash', pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
+    // The rows the / menu may take: 18 as ever, and more in a window with room for them (the box, the
+    // footer and their gaps take 6). Under the start page while it is still live, only what fits
+    // under it: one row too many would print the page, and /start could no longer change it in place.
+    const fits = holdRef.current ? holdRoom(items, measure.current, rows ?? 40) - heldRows(items, measure.current) : (rows ?? 24) - 6;
+    const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
+    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room }) : [];
+    if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     const at = mentionAt(input);
     if (!menu && at) {
       if (!filesRef.current) { filesRef.current = []; let n = 0; for (const f of walk(cwd)) { if (!f.dir) filesRef.current.push(f.path); if (++n > 5000) break; } }
@@ -3641,7 +3646,7 @@ export function App({ opts, win, onRestart }) {
   // Held until your first message (sendPrompt lets it go). Let go for good, printed as it is, when
   // what came under it, the / menu or the shortcuts would not fit in the window beside it, or when a
   // panel, pop-up or question opens (the page and a tall panel would not fit together).
-  const underRows = heldRows(items, measure.current) + (menu ? Math.min(MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
+  const underRows = heldRows(items, measure.current) + (menu ? Math.min(menu.rows ?? MENU_ROWS, menu.items.length) : 0) + (showShortcuts ? shortcutRows(Boolean(model.remote)) : 0);
   if (holdRef.current && !(items[0]?.type === 'welcome' && !picker && !popup && !perm && !btw && underRows <= holdRoom(items, measure.current, rows ?? 40))) holdRef.current = false;
   // "/btw " typed: its argument's hint after the cursor, as in Claude Code.
   const hintFor = /^\/(\S+) $/.exec(input.value);
