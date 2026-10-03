@@ -19,9 +19,13 @@ export const GUARD_OPTS = {
 
 const TEST_FILE = (rel) => /(^|\/)(tests?|__tests__|spec)\//.test(rel) || /[._-](test|spec)\.[a-z]+$/i.test(rel) || /^test_.*\.py$/.test(basename(rel));
 const SECRET = /(^|\/|\s|['"])(\.env(\.[\w-]+)?|[\w-]*\.pem|[\w-]*\.key|id_rsa\w*|id_ed25519\w*|credentials(\.\w+)?|secrets?\.(json|ya?ml|toml)|\.npmrc|\.pypirc|\.netrc)(\s|$|['"])/i;
+// Auth and payments by the file's name, as whole words of it. A session is auth only when it is a signed-in
+// user's (user_session, session_store, session-cookie, or a file under auth/): the app's own sessions.mjs
+// is not. A subscription is payments only beside billing: an event subscription is not. A checkout is a
+// shop's unless it is git's (3 Oct 2026: these three asked on every edit and taught "Allow" as a habit).
 const POSTER = [
-  ['auth', 'Auth', /(^|\/)(auth|oauth|login|logout|sessions?|passwords?|jwt)([._/-]|$)/i],
-  ['payments', 'Payments', /(payment|billing|stripe|checkout|invoice|subscription)/i],
+  ['auth', 'Auth', /(^|\/)(auth|oauth|login|logout|signin|signup|sso|2fa|mfa|passwords?|jwt)([._\/-]|$)|(^|[\/_.-])(user[_-]?sessions?|sessions?[_-](store|cookies?|tokens?))([._\/-]|$)/i],
+  ['payments', 'Payments', /(^|[\/_.-])(payments?|billing|stripe|paypal|invoices?|(?<!git[\/_-])checkout)([._\/-]|$)/i],
   ['deploys', 'Deploys', /(^|\/)(\.github\/workflows\/|deploy|Dockerfile|docker-compose|k8s\/|helm\/|terraform\/|fly\.toml|vercel\.json|netlify\.toml|Procfile|app\.ya?ml$)/i],
   ['migrations', 'Migrations', /(^|\/)(migrations?|db\/migrate|alembic)\//i],
 ];
