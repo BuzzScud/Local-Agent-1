@@ -23,3 +23,6 @@ process.env.AGENTIC_UNLOAD ??= 'off';
 // A page asked for "on my desktop" (src/app/App.jsx openPage): no test opens a
 // browser, or offers to copy a page to the real Desktop.
 process.env.AGENTIC_OPEN ??= 'off';
+// Background sessions (src/app/sessions.mjs): an app a test drives runs in its own
+// window, as before, unless the test is about sessions (sessions.test.mjs turns them on).
+process.env.AGENTIC_SESSIONS ??= 'off';

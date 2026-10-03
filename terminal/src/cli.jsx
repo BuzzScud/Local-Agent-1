@@ -114,6 +114,8 @@ function parse(argv) {
     else if (a === '--start') o.load = true;
     // --folder <path>: work there, not where coding was typed (a restart after /update passes it).
     else if (a === '--folder') { o.folder = true; o.cwd = resolve(val() ?? '.'); }
+    // --bg: start in the background, with no window (app/sessions.mjs); coding attach opens it.
+    else if (a === '--bg') o.bg = true;
     else rest.push(a);
   }
   if (rest.length) o.prompt = rest.join(' ');
@@ -244,6 +246,54 @@ if (process.argv[2] === 'serve') {
   } catch (e) { process.stderr.write(`coding serve: ${e.message}\n`); await s?.stop().catch(() => {}); process.exit(1); }
   await new Promise(() => {});
 }
+// coding session-host: the keeper of one background session (app/sessions.mjs). coding starts it, not you.
+if (process.argv[2] === 'session-host') {
+  const { runHost } = await import('./app/sessions.mjs');
+  let spec = null;
+  try { spec = JSON.parse(process.env.AGENTIC_HOST_SPEC ?? ''); } catch {}
+  if (!spec?.name) { process.stderr.write('coding session-host is started by coding itself.\n'); process.exit(2); }
+  const env = { ...process.env };
+  delete env.AGENTIC_HOST_SPEC;
+  try { process.exit((await runHost(spec, env)) ?? 0); } catch (e) { process.stderr.write(`coding session-host: ${e.message}\n`); process.exit(1); }
+}
+// coding sessions [mac]: what runs in the background here, or on another Mac (through its door).
+// coding attach [name] · coding attach <mac> [name]: open one in this window; ctrl+b leaves it again.
+if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
+  const { listBackground, describe, viewSession, localConnect, DETACH_LABEL } = await import('./app/sessions.mjs');
+  const a = process.argv.slice(3);
+  const at = a.indexOf('--port');
+  const port = at >= 0 ? Number(a[at + 1]) : undefined;
+  const [first, second] = a.filter((x, i) => at < 0 || (i !== at && i !== at + 1));
+  const list = listBackground();
+  const say = (t) => process.stdout.write(`${t}\n`);
+  const pick = async (rows, title) => { process.stderr.write(`${title}\n`); return pickOnTerminal(rows, { hint: 'Enter to open · Esc to leave' }); };
+  const remote = async (host, name, listOnly) => {
+    const { attachRemote, DOOR_PORT } = await import('./app/door.mjs');
+    try { return await attachRemote({ host, name, port: port || DOOR_PORT, pick, listOnly }); } catch (e) { process.stderr.write(`${e.message}\n`); return 1; }
+  };
+  if (process.argv[2] === 'sessions') {
+    if (first) process.exit(await remote(first, null, true));
+    if (!list.length) say(`Nothing runs in the background here. ${DETACH_LABEL} in a coding window sends it there; coding --bg starts one.`);
+    for (const s of list) say(`  ${describe(s)}`);
+    process.exit(0);
+  }
+  const here = first ? list.find((s) => s.name === first) : null;
+  if (first && !here) process.exit(await remote(first, second, false));
+  let target = here;
+  if (!target) {
+    if (!list.length) { say(`Nothing runs in the background here. ${DETACH_LABEL} in a coding window sends it there; coding --bg starts one. Another Mac's: coding attach <its name>`); process.exit(0); }
+    const i = list.length === 1 ? 0 : await pick(list.map((s) => describe(s)), 'Background sessions on this Mac');
+    if (i === null) process.exit(0);
+    target = list[i];
+  }
+  process.exit(await viewSession({ connect: localConnect(target), name: target.name }));
+}
+// coding door [on|off|new-key]: let your other Macs open the sessions here, over Tailscale, with a key (app/door.mjs).
+if (process.argv[2] === 'door') {
+  const { doorCli, runDoor } = await import('./app/door.mjs');
+  if (process.argv[3] === 'run') { await runDoor(); process.exit(0); }
+  process.exit(await doorCli(process.argv.slice(3)));
+}
 // coding connect [address]: use a model on another machine, with no model downloaded here (terminal/src/app/connect-cli.mjs).
 if (process.argv[2] === 'connect') {
   const { connectCli } = await import('./app/connect-cli.mjs');
@@ -262,6 +312,20 @@ if (process.argv[2] === 'setup') {
 const opts = parse(process.argv.slice(2));
 if (opts.help) { process.stdout.write(HELP); process.exit(0); }
 if (opts.version) { process.stdout.write(`${VERSION}\n`); process.exit(0); }
+// coding --bg: the app starts in a session with no window (app/sessions.mjs); a first
+// prompt is worked on at once, so the model loads with it.
+if (opts.bg) {
+  if (opts.print) { process.stderr.write('coding: --bg starts a window-less session; -p answers once here. Use one.\n'); process.exit(2); }
+  const { canHost, startHost, OLD_BUN } = await import('./app/sessions.mjs');
+  if (!canHost()) { process.stderr.write(`coding --bg: ${OLD_BUN()}\n`); process.exit(1); }
+  const args = process.argv.slice(2).filter((a) => a !== '--bg');
+  if (opts.prompt && !opts.load) args.push('--start');
+  try {
+    const rec = await startHost({ folder: opts.cwd, args, cols: process.stdout.columns || 120, rows: process.stdout.rows || 40 });
+    process.stdout.write(`Started in the background: ${rec.name}. Open it with: coding attach ${rec.name}\n`);
+    process.exit(0);
+  } catch (e) { process.stderr.write(`coding --bg: ${e.message}\n`); process.exit(1); }
+}
 // Commands run where the agent works, as if coding had been typed there.
 if (opts.folder) { try { process.chdir(opts.cwd); } catch { process.stderr.write(`coding: no folder ${opts.cwd}\n`); process.exit(2); } }
 // The model picked last time (kept by /model) — the edited copy included,
@@ -375,6 +439,15 @@ if (opts.print) {
   }
 } else {
   if (!process.stdin.isTTY) { process.stderr.write('coding needs a terminal. For scripts use: coding -p "…"\n'); process.exit(2); }
+  // The app runs in a background session and this window shows it (app/sessions.mjs), so
+  // ctrl+b can leave it running. Not inside a session already, and not where this Bun cannot.
+  if (!process.env.AGENTIC_IN_HOST && process.stdout.isTTY) {
+    const { sessionsOn, hostThisWindow } = await import('./app/sessions.mjs');
+    if (sessionsOn()) {
+      const code = await hostThisWindow({ folder: opts.cwd, args: process.argv.slice(2) });
+      if (code !== null) process.exit(code);
+    }
+  }
   // Typed in the home folder: which folder to work in; the safety check is then about that one.
   const folders = startFolders(opts);
   if (folders) {
@@ -383,6 +456,8 @@ if (opts.print) {
     opts.cwd = at;
     opts.picked = true;
     process.chdir(at);
+    // In a background session, its list shows the folder picked.
+    if (process.env.AGENTIC_IN_HOST) { const { noteFolder } = await import('./app/sessions.mjs'); noteFolder(process.env.AGENTIC_IN_HOST, at); }
   }
   // Step 1, before anything in the folder is read: the safety check.
   if (!(await ensureTrusted(opts.cwd))) process.exit(0);
