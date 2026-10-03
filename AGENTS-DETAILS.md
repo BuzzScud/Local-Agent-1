@@ -230,6 +230,11 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   `memory-jobs/` for the next `/start` in that folder (`AutoSave.runWaiting`), and a handed-over save whose
   model has gone waits the same way: nothing loads after a window has closed. The app tests set
   `AGENTIC_MODEL_AT_START=on` in `setup()` (app-setup.mjs); `app-model-start.test.mjs` tests it off.
+- **Two starts at the same moment** (3 Oct 2026, `models/runtime/server.mjs`): the port is looked at, then the server
+  started on it, so two windows (or two tests) starting together both saw 17600 free and one server died while
+  loading. `start()` now tries the next free port (three times at most) when its server exited while loading and
+  the port is held by another program; that exit is not said as a crash. `coding serve`'s port is the one it was
+  given, so there it fails as before. A health answer is trusted only while our own server is still running.
 - **The footer's model label** (the user's pick, 30 Sep 2026): "○ model off · ctrl+t start", "◐ Qwen3.5 9B
   loading · ctrl+t stop", "● Qwen3.5 9B · 6.9 GB · ctrl+t stop" (`modelLabels` in screen.jsx; none on --url
   or a remote). ctrl+t switches it, and with `/mouse on` so does a click on it; in the middle of a reply the
