@@ -272,7 +272,13 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
   const pick = pickSession;
   const remote = async (host, name, listOnly) => {
     const { attachRemote, DOOR_PORT } = await import('./app/door.mjs');
-    try { return await attachRemote({ host, name, port: port || DOOR_PORT, pick, listOnly }); } catch (e) { process.stderr.write(`${e.message}\n`); return 1; }
+    try { return await attachRemote({ host, name, port: port || DOOR_PORT, pick, listOnly }); } catch (e) {
+      process.stderr.write(`${e.message}\n`);
+      // coding attach <name>: a name that is no session here was taken for another Mac's. In case it was a
+      // slip of a session's name, say what does run here.
+      if (!listOnly) process.stderr.write(`${list.length ? `If you meant a session on this Mac, these run here: ${list.map((s) => s.name).join(', ')}.` : 'No session runs in the background on this Mac either.'} coding sessions lists them.\n`);
+      return 1;
+    }
   };
   if (process.argv[2] === 'sessions') {
     if (first) process.exit(await remote(first, null, true));
