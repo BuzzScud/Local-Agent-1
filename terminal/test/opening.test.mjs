@@ -120,3 +120,22 @@ test('the agent: once a conversation on the remote set, as a List step it did no
     expect(off.messages.some((m) => m.opening)).toBe(false);
   } finally { fake.close(); }
 });
+
+test('/compact on a short remote chat makes no call to the service; a longer one is summarized with the memory in it once, and the opening read comes back once after', async () => {
+  const fake = await startFakeServer([], { delayMs: 0 });
+  const summaries = () => fake.requests.filter((r) => /summarize a coding session/i.test(String(r.messages?.[0]?.content ?? '')));
+  try {
+    const a = new Agent({ url: fake.url, model: remote, cwd: repo, system: systemPrompt({ cwd: repo, git: 'g' }), memory: { home, recall: false }, home, flows: false, verify: false });
+    await a.send('say hello');
+    expect(a.said()).toBeLessThanOrEqual(3);
+    await a.compact();
+    expect(summaries()).toHaveLength(0);
+    await a.send('say hello again');
+    await a.compact();
+    expect(summaries()).toHaveLength(1);
+    expect(summaries()[0].messages[1].content.split('Agentic Coder read these for you').length - 1).toBe(1);
+    expect(a.messages.some((m) => m.opening)).toBe(false); // the summary took it away…
+    await a.send('and now?');
+    expect(a.messages.filter((m) => m.opening)).toHaveLength(1); // …and it came back once
+  } finally { fake.close(); }
+});
