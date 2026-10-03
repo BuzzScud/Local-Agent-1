@@ -65,7 +65,7 @@ test('the saved copy is the Tests page with the record inside it; with no DOCS f
 
 test('a record that is not the real one never reaches the DOCS folder by itself, and its folder path is not shown', () => {
   const { dir, file } = scratch();
-  const was = { docs: (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), home: (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME), rec: (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD) };
+  const was = { docs: process.env.AGENTIC_DOCS, home: process.env.AGENTIC_HOME, rec: process.env.AGENTIC_TEST_RECORD };
   delete process.env.AGENTIC_DOCS; delete process.env.AGENTIC_TEST_RECORD;
   process.env.AGENTIC_HOME = dir; // what a test or a scratch run sets
   try {

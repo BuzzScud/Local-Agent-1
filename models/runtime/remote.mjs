@@ -227,7 +227,7 @@ export const keyEnd = (key) => (key && key.length >= 12 ? key.slice(-4) : '');
 
 // ---- the SSH tunnel -----------------------------------------------------------------------------
 
-export const TUNNEL_PORTS = [17650, 17699];
+const TUNNEL_PORTS = [17650, 17699];
 // No password prompt (the window cannot show one): a key or the ssh agent,
 // as `ssh <dest>` in Terminal would use. The tunnel ends when this app does.
 export function sshArgs({ dest, remotePort, localPort }) {

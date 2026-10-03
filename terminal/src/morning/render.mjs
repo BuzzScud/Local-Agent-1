@@ -11,7 +11,7 @@ import { pick } from './sort.mjs';
 import { plainWords } from './words.mjs';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-export const safeHref = (u) => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u) ? u : null);
+const safeHref = (u) => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u) ? u : null);
 
 const W = 840, H = 170, PAD = 14, BASE = 146;
 const CENTRES = [140, 420, 700];
@@ -300,7 +300,7 @@ export function saveDay(config, facts, words, day) {
   return dir;
 }
 
-export function savedDays(config) {
+function savedDays(config) {
   if (!existsSync(config.history)) return [];
   return readdirSync(config.history).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().flatMap((k) => {
     const facts = readJson(join(config.history, k, 'facts.json'));

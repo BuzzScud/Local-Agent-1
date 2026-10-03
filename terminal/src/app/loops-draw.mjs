@@ -39,7 +39,6 @@ export function fit(row, n, bg = null) {
   return out;
 }
 const pad = (s, n) => { const cs = [...String(s)]; return cs.length >= n ? cs.slice(0, n).join('') : String(s) + ' '.repeat(n - cs.length); };
-const padL = (s, n) => { const cs = [...String(s)]; return cs.length >= n ? cs.slice(0, n).join('') : ' '.repeat(n - cs.length) + String(s); };
 const cut = (s, n) => { const cs = [...String(s ?? '')]; return cs.length <= n ? cs.join('') : n <= 0 ? '' : `${cs.slice(0, Math.max(0, n - 1)).join('')}…`; };
 const clock = (t) => new Date(t).toTimeString().slice(0, 8);
 const hm = (t) => new Date(t).toTimeString().slice(0, 5);
@@ -55,7 +54,7 @@ const half = (now) => HALF[Math.floor(now / 220) % 4];
 const chip = (kind) => [` ${(KIND[kind] ?? KIND.task)[0]} `, `${KIND[kind] ? kind : 'task'} b on ${(KIND[kind] ?? KIND.task)[1]}`];
 const chipW = (kind) => (KIND[kind] ?? KIND.task)[0].length + 2;
 const over = (l) => l.state === 'done' || l.state === 'stopped';
-export const paceWord = (l) => (l.until ? 'until done' : l.every ? `every ${secsWord(l.every)}` : 'its own pace');
+const paceWord = (l) => (l.until ? 'until done' : l.every ? `every ${secsWord(l.every)}` : 'its own pace');
 
 // What a loop is doing, in a word or two, and its colour.
 export function stateOf(l, now) {
@@ -101,7 +100,7 @@ function keysLine(cols, keys, toast, now) {
 }
 
 // ---- a run's lines, as the app draws a conversation ----
-export function runLines(l, run, lines, cols, now, { tail = null, full = false } = {}) {
+function runLines(l, run, lines, cols, now, { tail = null, full = false } = {}) {
   const out = [];
   if (!run) return out;
   const w = cols;
@@ -141,7 +140,7 @@ const WEB = new Set(['Fetch', 'Web Search']);
 const labelOf = (x) => String(x.text ?? '').split('(')[0];
 // A run of the tests, as the run said (loop-run.mjs); a line written without that word is read by its command.
 const isTest = (x) => (typeof x.test === 'boolean' ? x.test : labelOf(x) === 'Bash' && /\b(test|tests|pytest|jest|vitest|mocha|unittest|rspec)\b/.test(x.text));
-export function cycleOf(l, lines, now) {
+function cycleOf(l, lines, now) {
   const st = (name, state, note = '', frac = null, tone = null) => ({ name, state, note, frac, tone });
   const run = l.current;
   const last = l.runs.at(-1);
@@ -424,7 +423,7 @@ export function drawBoard(state, ui, size) {
 
 // A row as terminal colours.
 const sgrCache = new Map();
-export function sgr(style) {
+function sgr(style) {
   let c = sgrCache.get(style);
   if (c) return c;
   const [fgPart, bgPart] = String(style).split(' on ');

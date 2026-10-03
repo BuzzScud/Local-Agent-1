@@ -43,8 +43,8 @@ test('the server to start is read from the comments of the project\'s own page c
   expect(ways.map((w) => (w.serve ? w.serve.cmd : `files:${w.files}`))).toEqual(['python3 tools/devserver.py', 'files:desk']);
   expect(ways.at(-1).url).toBe('/index.html');
   // The project's own word comes first.
-  mkdirSync(join(cwd, '.bonsai'));
-  writeFileSync(join(cwd, '.bonsai', 'settings.json'), JSON.stringify({ page: { serve: 'node server.mjs', in: 'desk', port: 'PORT', url: '/app/' } }));
+  mkdirSync(join(cwd, '.agentic'), { recursive: true });
+  writeFileSync(join(cwd, '.agentic', 'settings.json'), JSON.stringify({ page: { serve: 'node server.mjs', in: 'desk', port: 'PORT', url: '/app/' } }));
   expect(waysToOpen(cwd, 'desk/index.html', files)[0]).toMatchObject({ serve: { cmd: 'node server.mjs', dir: 'desk', portEnv: 'PORT' }, url: '/app/' });
 });
 

@@ -129,7 +129,7 @@ test('the panels number the lists, say where each rule applies, and the picker r
   const folders = perms.section('folders', proj);
   expect(folders.title).toBe('Trusted folders · 2');
   expect(folders.rows.some((r) => r[1]?.includes('← you are in it'))).toBe(true);
-  expect(perms.summary(proj, { session: new Set(['a b']) })).toEqual({ mode: 'manual · not saved', allow: '2 saved · 1 this session', never: '12 fixed · 1 yours', protect: '12 built in · 1 yours', folders: '2 trusted' });
+  expect(perms.summary(proj, { session: new Set(['a b']) })).toEqual({ mode: 'manual · not saved', allow: '2 saved · 1 this session', never: '12 fixed · 1 yours', protect: '11 built in · 1 yours', folders: '2 trusted' });
   expect(perms.settingsValue(proj)).toBe('4 saved · manual');
   expect(perms.settingsValue(other)).toBe('1 saved · manual');
 });

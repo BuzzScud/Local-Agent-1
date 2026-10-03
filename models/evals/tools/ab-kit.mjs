@@ -16,7 +16,7 @@ export const stampOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad
 export const subOf = (d, code) => `${d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} ${pad(d.getHours())}:${pad(d.getMinutes())} · ${code}`;
 export const short = (s, n = 90) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 // The tool lines `coding -p` prints on stderr ("⏺ Read(cart.mjs)", "✗ …"), without the mark.
-export const toolLines = (err) => String(err ?? '').split('\n').filter((l) => /^[⏺✗] /.test(l)).map((l) => l.slice(2));
+const toolLines = (err) => String(err ?? '').split('\n').filter((l) => /^[⏺✗] /.test(l)).map((l) => l.slice(2));
 // The model's own: not what the app read for it before its first step (those end " [app]").
 export const ownToolLines = (err) => toolLines(err).filter((t) => !t.endsWith(' [app]'));
 // Its notes ("· Looking first: …").
@@ -32,7 +32,7 @@ export async function refusal(model, ctx) {
   return fit.fits ? null : fit.note;
 }
 
-export const bunPath = () => (process.versions.bun ? process.execPath : [join(process.env.HOME ?? '', '.bun', 'bin', 'bun'), '/opt/homebrew/bin/bun', '/usr/local/bin/bun'].find((p) => existsSync(p)) ?? 'bun');
+const bunPath = () => (process.versions.bun ? process.execPath : [join(process.env.HOME ?? '', '.bun', 'bin', 'bun'), '/opt/homebrew/bin/bun', '/usr/local/bin/bun'].find((p) => existsSync(p)) ?? 'bun');
 
 // A throwaway home: the engine and the models linked from ~/.agentic-coder, and these settings.
 export function throwawayHome(dir, settings) {

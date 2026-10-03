@@ -35,9 +35,9 @@ export const TASKS = [
   { id: 'discount', ask: 'write a test for applyDiscount in src/price.mjs', fn: 'applyDiscount', file: 'src/price.mjs' },
   { id: 'empty', ask: 'add a unit test that total of an empty list is 0 (src/cart.mjs)', fn: 'total', file: 'src/cart.mjs' },
 ];
-export const BACKUP = { id: 'list', ask: 'create a file test/tax.test.mjs that checks withTax from src/cart.mjs', fn: 'withTax', file: 'src/cart.mjs' };
+const BACKUP = { id: 'list', ask: 'create a file test/tax.test.mjs that checks withTax from src/cart.mjs', fn: 'withTax', file: 'src/cart.mjs' };
 export const CHECKS = TASKS.length * 2 + 1;
-export const MAX_SLOWER = 0.25;
+const MAX_SLOWER = 0.25;
 
 // "Ran just the new test file": some test command ran ("npm test -- test/x.test.mjs" counts),
 // and the suite's second file left no mark, so the whole suite did not run.

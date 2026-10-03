@@ -97,7 +97,7 @@ function Meters({ session, s }) {
   );
 }
 
-export function LiveThinking({ session, s, width }) {
+function LiveThinking({ session, s, width }) {
   const a = s.active;
   let live = null;
   if (a && a.type === 'thinking') {
@@ -232,7 +232,7 @@ function Board({ session, s, width }) {
   );
 }
 
-export function TaskBoard({ session, s, width }) {
+function TaskBoard({ session, s, width }) {
   const a = s.active;
   const head = (
     <Text>

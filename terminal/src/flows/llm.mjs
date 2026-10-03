@@ -25,7 +25,7 @@ export const SETUP_THINK_CAP = 2048;
 // writing tests and drafts took 55-65% of the time and over half of what was
 // written was thinking. AGENTIC_THINK=old: every try thinks and nothing steps
 // down, as before (the Thinking old vs new test, models/evals/tools/think-ab.mjs).
-export const oldThinking = () => ((process.env.AGENTIC_THINK ?? process.env.BONSAI_THINK) === 'old');
+export const oldThinking = () => (process.env.AGENTIC_THINK === 'old');
 
 // thinkCap: a smaller thinking cap for this one call (the server's
 // --reasoning-budget stays the model's thinkingBudget).

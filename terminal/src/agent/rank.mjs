@@ -24,7 +24,7 @@ const CARD_CHARS = 1200;
 // the best one: a request about "the weather page" should not bring along
 // every file that is merely in the same project.
 export const MIN_CLOSE = 0.42;
-export const WITHIN = 0.06;
+const WITHIN = 0.06;
 
 const hash = (s) => createHash('sha1').update(s).digest('hex').slice(0, 16);
 const pack = (v) => Buffer.from(new Float32Array(v).buffer).toString('base64');

@@ -34,7 +34,7 @@ export const codenameOf = (from) => CODENAMES[HELPER_OF[from] ?? from] ?? from;
 // A helper's id from its id or its codename, any case.
 const idOf = (n) => HELPER_NAMES.find((h) => h === n || CODENAMES[h].toLowerCase() === String(n).toLowerCase());
 
-export function helpersOn(value = process.env.AGENTIC_HELPERS ?? process.env.BONSAI_HELPERS) {
+export function helpersOn(value = process.env.AGENTIC_HELPERS) {
   if (value instanceof Set) return value;
   const ids = (list) => new Set(HELPER_NAMES.filter((h) => list.some((n) => idOf(n) === h)));
   if (Array.isArray(value)) return ids(value);

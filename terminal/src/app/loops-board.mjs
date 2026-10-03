@@ -12,8 +12,8 @@ import { appCommand } from './sessions.mjs';
 import { canResize, resizeSeq } from './agents-window.mjs';
 import { pickOnTerminal } from './pick.mjs';
 
-export const BOARD_SIZE = [124, 38];
-export const EVERY = [60, 120, 300, 600, 1800, 3600];
+const BOARD_SIZE = [124, 38];
+const EVERY = [60, 120, 300, 600, 1800, 3600];
 export const newUi = () => ({ sel: 0, view: 'main', watch: null, chat: { on: false, text: '' }, toast: null, confirm: null, stamp: null });
 const say = (ui, text, style = 'accent') => { ui.toast = { text, style, until: Date.now() + 3200 }; };
 const over = (l) => l.state === 'done' || l.state === 'stopped';

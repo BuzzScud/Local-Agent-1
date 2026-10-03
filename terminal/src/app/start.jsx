@@ -77,7 +77,7 @@ export const TIPS = [
 ];
 export const INIT_TIP = '/init writes an AGENTS.md with notes about this project';
 // Only in a window that can do it: one showing a background session (app/sessions.mjs).
-export const BG_TIP = 'ctrl+b sends this window to the background; coding attach opens it again';
+const BG_TIP = 'ctrl+b sends this window to the background; coding attach opens it again';
 // AGENTIC_TIPS=off leaves the line as "? for shortcuts" (the app's tests set it: a random tip would
 // change every screen they read).
 export const tipsOn = (env = process.env) => !/^(off|0|false|no)$/i.test(env.AGENTIC_TIPS ?? '');
@@ -240,7 +240,7 @@ const Heading = ({ children, color = C.accent }) => <Text bold color={color}>{ch
 // loading or waiting = the model, reading or restoring = the instructions).
 const STEP = { loading: 0, waiting: 0, reading: 1, restoring: 1 };
 const TURN = ['◐', '◓', '◑', '◒'];
-export function stepsLine(loading, room, k = 0) {
+function stepsLine(loading, room, k = 0) {
   const at = STEP[loading.phase] ?? 0;
   const secs = ` ${Math.floor(loading.secs)}s`;
   const way = (words, rule) => words.flatMap((w, i) => [
@@ -348,7 +348,7 @@ export function StartPage({ start, width, loading = null, typing = null }) {
 
 // The safety check, in the start page's columns: the bot peeking, the folder not trusted yet, the
 // question with its two answers (selected: the row ❯ marks).
-export const TRUST_TEXT = 'Is this a folder you created or one you trust? Agentic Coder reads its notes (AGENTS.md) into the model, and can read, edit and run things here once you allow them. A yes covers this folder and everything inside it, and is remembered.';
+const TRUST_TEXT = 'Is this a folder you created or one you trust? Agentic Coder reads its notes (AGENTS.md) into the model, and can read, edit and run things here once you allow them. A yes covers this folder and everything inside it, and is remembered.';
 export const TRUST_OPTIONS = ['Yes, I trust this folder', 'No, exit'];
 export function TrustPage({ width, cwd, model, selected = 0 }) {
   const L = leftWidth(width);
@@ -383,7 +383,7 @@ export function TrustPage({ width, cwd, model, selected = 0 }) {
 // owner's pick "1 · Cards"): the folder and what it is, what it suits, then what the app already
 // knows of it (folderFacts): its conversations and whether a yes covers it. The card picked has
 // its border lit in the choice colour. The right column is as tall as the bot's, so both end together.
-export const FOLDER_TEXT = 'It reads, searches and runs things in one folder. You typed coding in your home folder, so it asks which one first.';
+const FOLDER_TEXT = 'It reads, searches and runs things in one folder. You typed coding in your home folder, so it asks which one first.';
 const FOLDER_KEYS = [['↑↓', 'choose'], ['enter', 'start here'], ['esc', 'exit']];
 const CARD_EDGE = 'ansi256(238)';
 const span = (segs) => segs.reduce((n, [t]) => n + t.length, 0);

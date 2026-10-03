@@ -44,7 +44,7 @@ export const CARD_CHARS = 3200; // of one card
 export const NOTE_CHARS = 5600; // everything that goes along, all cards together
 export const MORE = 3; // other fitting cards named by path
 // The sets in the order they win a tie: the user's own first.
-export const SET_ORDER = ['your rules', 'your picks', 'opus', 'fable', 'public systems'];
+const SET_ORDER = ['your rules', 'your picks', 'opus', 'fable', 'public systems'];
 // Which set's cards win (see "style" above). mix: opus and fable take turns.
 export const STYLES = ['auto', 'opus', 'fable', 'mix'];
 export const styleWords = (style) => ({ auto: 'your picks, then Opus, then Fable', opus: 'Opus first', fable: 'Fable first', mix: 'Opus and Fable take turns' }[style] ?? style);
@@ -179,7 +179,7 @@ const clean = (s) => ` ${String(s).toLowerCase().replace(/[‘’']/g, '').repla
 // single Words and the words of its name do not count them. A phrase with one ("simple page") still
 // does. "small" stays a word: the user's own card requests ("a small percentage change", a compact
 // profile card) find the widget by it, and "a small game" now has a game card that wins by its name.
-export const NOISE = new Set(['little', 'tiny', 'simple', 'basic', 'plain', 'quick', 'nice', 'window', 'page', 'pages', 'screen', 'screens', 'single', 'new', 'full', 'one']);
+const NOISE = new Set(['little', 'tiny', 'simple', 'basic', 'plain', 'quick', 'nice', 'window', 'page', 'pages', 'screen', 'screens', 'single', 'new', 'full', 'one']);
 
 // How well a card fits a request: its Words found in the request (a phrase
 // counts twice) and the words of its name.
@@ -258,7 +258,7 @@ export function cardSection(text, name) {
 
 // The example in a look: its own "## Look" section swapped for the look
 // card's, and the look's Do and Don't lines after the example's own.
-export function inLook(text, lookText, lookName) {
+function inLook(text, lookText, lookName) {
   const own = cardSection(text, 'Look');
   const theirs = cardSection(lookText, 'Look');
   if (!theirs) return text;

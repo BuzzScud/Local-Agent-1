@@ -17,9 +17,8 @@
 
 import { toolUseText, toolUseFor } from './prompt-files.mjs';
 
-export const WAYS = ['app', 'model'];
 export const wayOf = (v) => (v === 'model' ? 'model' : 'app');
-export const wayEnv = (env = process.env) => env.AGENTIC_WAY ?? env.BONSAI_WAY;
+export const wayEnv = (env = process.env) => env.AGENTIC_WAY;
 
 // The app's checks, as hooks. On App each one runs as it always has (its own switches still
 // hold: /design check for the layout, the plan question with confirmPlan, the check-ins).
@@ -40,11 +39,11 @@ export const HOOKS = [
   { id: 'said-done', label: 'Said done, nothing changed', what: 'a reply that says the work is done when no file changed is sent back once; if it still claims it, a line says nothing was changed' },
   { id: 'desktop', label: 'On the Desktop', what: 'a page asked for "on my desktop" that was saved somewhere else is sent back once to be moved there' },
 ];
-export const HOOK_IDS = HOOKS.map((h) => h.id);
+const HOOK_IDS = HOOKS.map((h) => h.id);
 // On for Model way unless settings.json or AGENTIC_HOOKS says otherwise. App way runs every
 // hook either way. next-step is the fourth: a reply that names a cause and stops.
 export const MODEL_HOOKS = ['next-step', 'tests', 'stuck', 'said-done'];
-export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS ?? env.BONSAI_HOOKS;
+export const hooksEnv = (env = process.env) => env.AGENTIC_HOOKS;
 
 // The hooks on, as a Set: AGENTIC_HOOKS when set ("all", "off", or a list such as
 // "empty,tests"), else settings.json's "hooks" (a list), else the four Model starts with.

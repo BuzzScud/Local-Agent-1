@@ -14,7 +14,7 @@ import { memoryDirs, readFacts, readLog, editFact, pinFact, applyChanges, restor
 const tilde = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
 const plain = ({ dir: _d, ...f }) => f;
 
-export function memoryData(cwd) {
+function memoryData(cwd) {
   const dirs = memoryDirs(cwd);
   const part = (where, dir) => ({ where, dir: tilde(dir), facts: dir ? readFacts(dir).map(plain) : [], retired: dir ? readFacts(dir, { retired: true }).map(plain) : [] });
   const parts = [part('you', dirs.you), ...(dirs.project ? [part('project', dirs.project)] : [])];

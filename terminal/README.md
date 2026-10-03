@@ -83,7 +83,7 @@ and the project does.
 
 | | |
 |---|---|
-| Where | `~/.agentic/memory` about you (it follows you into every project) and `<project>/.agentic/memory` about a project (kept out of git; a project that already has a `.bonsai/notes.md` keeps its memory in `.bonsai/memory`). One small file per fact in `facts/`, a short `index.md`, a `retired/` folder, and `log.jsonl`. |
+| Where | `~/.agentic/memory` about you (it follows you into every project) and `<project>/.agentic/memory` about a project (kept out of git). One small file per fact in `facts/`, a short `index.md`, a `retired/` folder, and `log.jsonl`. |
 | Saving | A little after a task ends (in the background, on the side slot; it stops the moment you send a message) and when you quit (a small process finishes it after the window closed). At most 5 facts a save. A turn that went well on what the memory already held starts no save. "remember that …" saves at once. |
 | What | How you like to work · facts about the project · what worked and what failed, from a check · Agentic Coder's own mistakes · the steps of a job done twice (a recipe). A fact the turns do not bear out is refused, as is one naming a file that is not there, and anything that looks like a key or a password. |
 | Bringing back | The rules marked "always" and one short line per fact are read at every start. A fact comes back in full with a request it fits: by meaning, with the small model BGE-M3 (`models/bge-m3`), or by shared words when that model is not there. It is written into the request itself, so nothing already read is read again, and the focused paths (fix, change, several files) get it in their own prompts. |
@@ -94,7 +94,7 @@ and the project does.
 | Claude's notes | What Claude Code has written down about your work (its memory folder, hundreds of notes) is a second place the memory looks. It is read where it is, every time, and never changed; Agentic Coder's own numbers for the notes are kept in `~/.agentic-coder/claude-notes`. The one or two notes that fit a request go along with it, cut to the part that fits (about 1,100 characters each), found by meaning and by the words they share. A note about sign-ins, servers or secrets is left out whole; in a note that is kept, a line that holds one is left out. Fifteen lines on how you like things done, boiled down from those notes, are read at every start (`src/agent/claude-rules.mjs`). `"claudeNotes": false` in `settings.json` leaves them out; a path names another folder (`AGENTIC_CLAUDE_NOTES` does the same). |
 | Off | `"memory": false` in `settings.json` (yours or a folder's). `AGENTIC_MEMORY_SAVE=off` keeps the memory but stops saving on its own. |
 
-The older names still work: a `BONSAI_*` switch is read when its `AGENTIC_*` twin is not set, `.bonsai/` project folders are still read, and `~/.bonsai-code` is used only until `~/.agentic-coder` exists.
+The names from before the rename (`BONSAI_*` switches, `.bonsai/` project folders, `~/.bonsai-code`) are no longer read since 3 Oct 2026.
 
 Code: `src/agent/facts.mjs` (the store), `recall.mjs` (bringing back), `lessons.mjs` (saving),
 `src/app/autosave.mjs` (when), `review.mjs` (at night), `memory-hub.mjs` + `memory.html` (the hub's tab),
@@ -184,7 +184,7 @@ Practice runs (`bun run eval`) never read your rules. Code: `src/agent/permissio
     check must fail today, you approve it, the tries are scored by it, and it stays in
     the project. A fix that hides the covering thing does not pass. With no browser, or
     no passing try, the work goes step by step, with the check and the findings in hand.
-    `AGENTIC_CHECK_FIRST=off` turns it off; a `page` entry in `.agentic/settings.json` (or the older `.bonsai/`)
+    `AGENTIC_CHECK_FIRST=off` turns it off; a `page` entry in `.agentic/settings.json`
     (`serve`, `in`, `port`, `url`) says how to open a page when Agentic Coder cannot tell.
   - Change: a test first (cross-checked against drafts, then approved by you), then
     tries. Two tests and two drafts; more only when they disagree.

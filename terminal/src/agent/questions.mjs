@@ -104,7 +104,7 @@ export function stepSaid(name, args = {}) {
 }
 
 // "a, b and c" (and "and 3 more" past six).
-export function listSaid(items, max = 6) {
+function listSaid(items, max = 6) {
   const shown = items.slice(0, max);
   const more = items.length - shown.length;
   if (more > 0) return `${shown.join(', ')} and ${more} more`;

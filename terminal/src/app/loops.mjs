@@ -19,11 +19,11 @@ import { selfCommand } from './sessions.mjs';
 export const KINDS = ['debug', 'test', 'web', 'task'];
 const UNIT = { s: 1, m: 60, h: 3600, d: 86_400 };
 // The shortest gap between two runs of a loop (a test sets AGENTIC_LOOP_MIN_SECS).
-export const minSecs = (env = process.env) => Math.max(1, Number(env.AGENTIC_LOOP_MIN_SECS) || 60);
+const minSecs = (env = process.env) => Math.max(1, Number(env.AGENTIC_LOOP_MIN_SECS) || 60);
 export const SELF_SECS = 600; // no time given: ten minutes, unless a run says NEXT RUN IN <n> MIN
-export const RETRY_SECS = 15; // a debugging loop tries again this long after a miss
-export const MAX_HOURS = 24;
-export const MAX_USD = 5;
+const RETRY_SECS = 15; // a debugging loop tries again this long after a miss
+const MAX_HOURS = 24;
+const MAX_USD = 5;
 export const PRESET = {
   debug: 'Some tests in this folder fail. Find why and fix the code until every test passes.',
   test: 'Run the tests. Say which fail and why. This is only a question: change no file.',

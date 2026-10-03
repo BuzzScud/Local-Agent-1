@@ -25,7 +25,7 @@ export function keptImages(messages, keep = KEEP_IMAGES) {
   return kept;
 }
 export const imageLabel = (img) => `[a picture shown earlier: ${img.path}${img.w ? ` (${img.w}×${img.h})` : ''}]`;
-export const dataUrl = (img) => `data:${img.mime};base64,${img.data}`;
+const dataUrl = (img) => `data:${img.mime};base64,${img.data}`;
 
 // The conversation as an OpenAI-format server takes it: your message with
 // pictures → content parts; a tool result with pictures → its text, then a user

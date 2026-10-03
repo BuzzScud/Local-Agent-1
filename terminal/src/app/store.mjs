@@ -9,8 +9,7 @@ import { startModeFor } from './perm-store.mjs';
 const SETTINGS = join(HOME, 'settings.json');
 const DEFAULTS = { thinking: null, model: DEFAULT_MODEL };
 
-// A trusted folder may set these in <folder>/.agentic/settings.json (the old
-// .bonsai/settings.json is still read); they
+// A trusted folder may set these in <folder>/.agentic/settings.json; they
 // win over the global file, and what you type on the command line wins
 // over both. Anything else in the file is ignored.
 // memory: false turns the memory off (nothing brought back, nothing saved).
@@ -19,8 +18,7 @@ const FOLDER_KEYS = ['mode', 'effort', 'memory'];
 function folderSettings(cwd) {
   if (!cwd || !isTrusted(cwd)) return {};
   let raw;
-  try { raw = JSON.parse(readFileSync(join(cwd, '.agentic', 'settings.json'), 'utf8')); }
-  catch { try { raw = JSON.parse(readFileSync(join(cwd, '.bonsai', 'settings.json'), 'utf8')); } catch { return {}; } }
+  try { raw = JSON.parse(readFileSync(join(cwd, '.agentic', 'settings.json'), 'utf8')); } catch { return {}; }
   const out = {};
   for (const k of FOLDER_KEYS) if (raw[k] !== undefined) out[k] = raw[k];
   if (typeof out.effort === 'string') {

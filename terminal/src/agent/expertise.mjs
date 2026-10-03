@@ -11,8 +11,8 @@ import { join, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 // Read when used, not at import: tests point these at their own folders.
-export const mathDir = () => (process.env.AGENTIC_MATH ?? process.env.BONSAI_MATH) ?? join(homedir(), 'Desktop', 'MATH');
-const indexFile = () => join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder'), 'expertise', 'math-index.json');
+export const mathDir = () => process.env.AGENTIC_MATH ?? join(homedir(), 'Desktop', 'MATH');
+const indexFile = () => join(process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder'), 'expertise', 'math-index.json');
 
 // Near-copies of the thesis kept in the folder as backups: not indexed.
 const SKIP_FILE = /backup|_complete\.md$/i;
@@ -61,7 +61,7 @@ function* noteFiles(root, dir = root, depth = 0) {
 }
 
 // Headings of one file: [character position, level, title], in order.
-export function headingsOf(text) {
+function headingsOf(text) {
   const out = [];
   let at = 0;
   let inCode = false;
@@ -103,7 +103,7 @@ function areaNameOf(key, files) {
   return fromTitle?.trim() || titleCase(clean(last).replace(/^chapter \d+ /, '').replace(/^\d+ /, ''));
 }
 
-export function buildIndex(root = mathDir()) {
+function buildIndex(root = mathDir()) {
   const byArea = new Map();
   for (const { abs, md } of noteFiles(root)) {
     const rel = abs.slice(root.length + 1);

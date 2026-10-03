@@ -15,7 +15,7 @@
 // hybrid changed nothing on the practice sets and the reranker helped only
 // the code search, so both are off by default.
 export const SEARCH = { embedder: 'bge-m3', retriever: 'meaning', reranker: 'off' };
-export const RRF_K = 60; // the fusion's damping: a place at the top counts, the rest fades
+const RRF_K = 60; // the fusion's damping: a place at the top counts, the rest fades
 export const WORD_TOP = 40; // how many of the word search's best join the fusion
 
 const STOP = new Set('the and for with from this that these those are was were been have has had not but you your our can could should would will what where when which who how why its into out then than there here also just about only each every all any some more most such very use used using const let var function return export import default new true false null undefined async await else case break'.split(' '));

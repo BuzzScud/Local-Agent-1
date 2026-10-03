@@ -26,23 +26,23 @@ export const STAGES = [
   { id: 'review', name: 'Review', nodes: ['READ', 'FIND', 'SHOW', 'GRADE'], unit: 'areas' },
   { id: 'ship', name: 'Ship', nodes: ['CODE', 'SECURITY', 'TESTS', 'MERGE'], unit: 'reviewers' },
 ];
-export const MAX_TRIES = 3;
+const MAX_TRIES = 3;
 export const LIMITS = { lines: 100, files: 3 };
 // Ship's fix rounds: a critical finding is offered "Fix it" this many times, then only "Stop here".
-export const SHIP_FIXES = 2;
+const SHIP_FIXES = 2;
 // The files a run writes. One already here that no /agents run wrote is yours: the run asks before it
 // writes (keep yours and write its own in .agentic/agents/<run>/, replace them after a copy, or stop).
-export const RUN_FILES = ['SPEC.md', 'CONSTRAINTS.md', 'tasks/plan.md', 'tasks/todo.md', 'tasks/review.md', 'tasks/ship.md'];
+const RUN_FILES = ['SPEC.md', 'CONSTRAINTS.md', 'tasks/plan.md', 'tasks/todo.md', 'tasks/review.md', 'tasks/ship.md'];
 const RUN_JSON = '.agentic/agents/run.json';
 const hashOf = (text) => createHash('sha1').update(String(text ?? '')).digest('hex').slice(0, 16);
 const PLAN_MODE = 'Plan mode only reads, and /agents writes its files and the code: leave Plan mode (shift+tab), then /agents again';
 
 // The five areas of a review: the poster's for code, and for math the ones that break numbers.
-export const AREAS = {
+const AREAS = {
   code: [['Correctness', 'wrong results, missed cases, the spec not met'], ['Readability', 'names, structure, comments that mislead'], ['Architecture', 'where the code lives, what it couples'], ['Security', 'OWASP: injection, secrets, unchecked input'], ['Performance', 'N+1 calls, work repeated in loops, memory']],
   math: [['Correctness', 'the result against the spec and the reference values'], ['Stability', 'cancellation, overflow, division near zero, convergence'], ['Precision', 'tolerances, floats against exact values, units'], ['Speed', 'complexity, iterations, repeated work'], ['Readability', 'names, the steps of the method, comments that mislead']],
 };
-export const REVIEWERS = [
+const REVIEWERS = [
   { name: 'code-reviewer', does: 'quality + perf', focus: 'code quality: correctness, readability, architecture, performance (no N+1, no repeated work)' },
   { name: 'security-auditor', does: 'OWASP + secrets', focus: 'security: OWASP issues, secrets in code or logs, unchecked input, unsafe commands' },
   { name: 'test-engineer', does: 'tests + coverage', focus: 'tests: every acceptance check in SPEC.md has a test, edge cases, flaky timing' },

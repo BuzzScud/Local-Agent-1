@@ -11,7 +11,7 @@ import { saveKey, removeKey, remoteRisk, remoteLabel, validKey, parseAddress } f
 import { saveSettings } from './store.mjs';
 import { openForm, startEdit, commitEdit, testForm, withTest, savePlan, toProfile, formWarning, sourceWord } from './remote-form.mjs';
 
-export const CONNECT_HELP = `coding connect [address]: use a model on another machine, with no model downloaded here.
+const CONNECT_HELP = `coding connect [address]: use a model on another machine, with no model downloaded here.
   coding connect                     asks for the address and the API key
   coding connect 192.168.1.40:8080   the address as /remote takes it (http://host:port too)
   --key KEY          the API key (else asked; --key-stdin reads it from a pipe)
@@ -43,7 +43,7 @@ export function parseConnectArgs(a) {
 }
 
 // A line typed at the terminal (the hidden one for a key), or null with no terminal.
-export function terminalAsker() {
+function terminalAsker() {
   if (!process.stdin.isTTY) return null;
   const line = (q, hidden) => new Promise((ok) => {
     const rl = createInterface({ input: process.stdin, output: process.stderr, terminal: true });

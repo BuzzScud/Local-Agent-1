@@ -21,16 +21,16 @@ import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models
 import { F, PROTO, BG_DIR, DETACH_LABEL, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
 import { recentFolders, saveSettings } from './store.mjs';
 
-const home = () => process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME;
+const home = () => process.env.AGENTIC_HOME ?? HOME;
 export const DOOR_PORT = 7790;
-export const DOOR_LABEL = 'com.agentic-coder.door';
+const DOOR_LABEL = 'com.agentic-coder.door';
 const KEY_FILE = () => join(home(), 'door.key');
 const STATE_FILE = () => join(home(), 'door.json');
 const PLIST = () => join(homedir(), 'Library', 'LaunchAgents', `${DOOR_LABEL}.plist`);
-export const keyIdFor = (host) => `door-${String(host).toLowerCase()}`;
+const keyIdFor = (host) => `door-${String(host).toLowerCase()}`;
 
 // The key, one line, readable by you only; made once and kept.
-export function doorKey({ fresh = false } = {}) {
+function doorKey({ fresh = false } = {}) {
   const file = KEY_FILE();
   if (!fresh && existsSync(file)) {
     const k = readFileSync(file, 'utf8').split('\n')[0].trim();
@@ -50,10 +50,10 @@ const same = (a, b) => {
 
 export const readState = () => { try { return JSON.parse(readFileSync(STATE_FILE(), 'utf8')); } catch { return {}; } };
 const saveState = (s) => { mkdirSync(home(), { recursive: true }); writeFileSync(STATE_FILE(), `${JSON.stringify(s, null, 2)}\n`, { mode: 0o600 }); };
-export const tailscaleAddress = (ifaces) => lanAddresses(ifaces).find((a) => a.where === 'Tailscale')?.address ?? null;
+const tailscaleAddress = (ifaces) => lanAddresses(ifaces).find((a) => a.where === 'Tailscale')?.address ?? null;
 // The name the other Mac reaches this one by: Tailscale's name for it (which is
 // often not the Mac's own name), else the Mac's own.
-export function tailscaleName() {
+function tailscaleName() {
   for (const bin of ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale']) {
     const r = spawnSync(bin, ['status', '--json'], { encoding: 'utf8', timeout: 5000 });
     if (r.status !== 0) continue;
@@ -64,7 +64,7 @@ export function tailscaleName() {
 const TAILSCALE = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale'];
 // The Tailscale name of the Mac at an address (what coding attach takes), else the address.
 // Asked without stopping the door: other windows are served meanwhile.
-export function tailscalePeer(addr, { bins = TAILSCALE } = {}) {
+function tailscalePeer(addr, { bins = TAILSCALE } = {}) {
   const tryBin = (bin) => new Promise((done) => {
     let out = '';
     let p;
@@ -480,7 +480,7 @@ export function reachProblem(e, host) {
 
 // A key typed without showing it (show: a line typed in plain sight, a folder's path). Read with
 // 'readable' and read(), never paused (pick.mjs says why).
-export async function typeKey(prompt, { input = process.stdin, output = process.stderr, show = false } = {}) {
+async function typeKey(prompt, { input = process.stdin, output = process.stderr, show = false } = {}) {
   output.write(prompt);
   if (!input.isTTY) return null;
   input.setRawMode(true);
@@ -506,7 +506,7 @@ export async function typeKey(prompt, { input = process.stdin, output = process.
 // The list of the other Mac's sessions, asking for its key the first time (and
 // again when the one kept no longer opens it). Answers { sessions, key } or
 // throws an Error whose message is meant for the person.
-export async function remoteList({ host, port = DOOR_PORT, askKey = typeKey }) {
+async function remoteList({ host, port = DOOR_PORT, askKey = typeKey }) {
   const id = keyIdFor(host);
   let key = readKey(id);
   for (let tries = 0; tries < 3; tries++) {

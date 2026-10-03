@@ -51,7 +51,7 @@ async function testsFail(ctx) {
   } catch { return false; } finally { scratch.dispose(); }
 }
 
-export function fileList(cwd, max = 60) {
+function fileList(cwd, max = 60) {
   const out = [];
   for (const f of walk(cwd)) { if (!f.dir) out.push(f.path); if (out.length >= max) break; }
   return out;

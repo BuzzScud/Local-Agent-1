@@ -18,17 +18,17 @@ import { instructionHome } from '../agent/instructions.mjs';
 import { projectNotes, notesRoom } from '../agent/prompt.mjs';
 import { BUILT_IN, BUILT_IN_REMOTE, PROMPT_FILES, REMOTE_DIR, GUIDES, rulesDir, readPromptFile, sectionOf, toolUseText, parseSkills, skillProblems, skillsList, pickSkill, skillNote, readGuides } from '../agent/prompt-files.mjs';
 
-export const REMOTE_FILES = Object.freeze(['remote:tools', 'remote:skills', 'remote:harness', ...GUIDES.map((g) => `remote:${g}`)]);
+const REMOTE_FILES = Object.freeze(['remote:tools', 'remote:skills', 'remote:harness', ...GUIDES.map((g) => `remote:${g}`)]);
 export const FILES = Object.freeze(['agents', 'tools', 'skills', ...REMOTE_FILES]);
 // A remote file's key without "remote:" (tools, skills, harness, PLANNING …).
 const inner = (which) => which.replace(/^remote:/, '');
 const isRemote = (which) => which.startsWith('remote:');
 const fileName = (which) => (which === 'agents' ? 'AGENTS.md' : PROMPT_FILES[inner(which)] ?? (inner(which) === 'harness' ? 'HARNESS.md' : `${inner(which)}.md`));
-export const FILE_NAMES = Object.freeze(Object.fromEntries(FILES.map((f) => [f, isRemote(f) ? `remote/${fileName(f)}` : fileName(f)])));
+const FILE_NAMES = Object.freeze(Object.fromEntries(FILES.map((f) => [f, isRemote(f) ? `remote/${fileName(f)}` : fileName(f)])));
 // Hard limits a save checks. TOOLS.md and HARNESS.md are in every conversation, so they stay small.
-export const FILE_LIMITS = Object.freeze({ agents: 60_000, tools: 4_000, skills: 40_000, 'remote:tools': 4_000, 'remote:skills': 40_000, 'remote:harness': 8_000, ...Object.fromEntries(GUIDES.map((g) => [`remote:${g}`, 6_000])) });
+const FILE_LIMITS = Object.freeze({ agents: 60_000, tools: 4_000, skills: 40_000, 'remote:tools': 4_000, 'remote:skills': 40_000, 'remote:harness': 8_000, ...Object.fromEntries(GUIDES.map((g) => [`remote:${g}`, 6_000])) });
 // HARNESS.md's parts the remote instructions are built from (prompt.mjs remotePrompt).
-export const HARNESS_PARTS = ['Who you are', 'How you work', 'Rules the app enforces'];
+const HARNESS_PARTS = ['Who you are', 'How you work', 'Rules the app enforces'];
 const HISTORY_KEEP = 20;
 const estimate = (text) => Math.ceil((text?.length ?? 0) / 3.6);
 

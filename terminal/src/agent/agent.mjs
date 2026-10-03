@@ -74,7 +74,7 @@ const CODE_SEARCH_CHARS = 6000; // what one CodeSearch brings back, at most (~1,
 // stop thinking. AGENTIC_THINK_BUDGET: seconds (0: never); the practice runs pass their limit.
 export const THINK_BUDGET_SECS = 900;
 export const STEP_DOWN_CAP = 64;
-const budgetFromEnv = () => { const v = Number(process.env.AGENTIC_THINK_BUDGET ?? process.env.BONSAI_THINK_BUDGET); return Number.isFinite(v) && v >= 0 ? v : THINK_BUDGET_SECS; };
+const budgetFromEnv = () => { const v = Number(process.env.AGENTIC_THINK_BUDGET); return Number.isFinite(v) && v >= 0 ? v : THINK_BUDGET_SECS; };
 const TRIM_AT = 0.78; // share of the context that starts a trim
 const TRIM_TO = 0.45; // …and where it stops
 const FULL = 0.85; // past this share (with the reply room counted) trimming was not enough: summarize
@@ -168,7 +168,7 @@ const SAME_STEP = 'You already did exactly this step. Do something different, or
 // A question put to the user: a sentence ending in "?" that speaks to them
 // ("Are you seeing it in TextEdit?", "Should I…?"), or a request for input.
 // "Why does it fail? Let me read the test." is thinking aloud, not this.
-export function asksTheUserDirectly(text) {
+function asksTheUserDirectly(text) {
   const prose = String(text ?? '').replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
   if (prose.split(/(?<=[.!?])\s+/).some((q) => /\?\s*["'”’)*_]*$/.test(q.trim()) && /\b(you|your|yours|should I|shall I|do I|would I)\b/i.test(q))) return true;
   return /\b(give me|point me|tell me|let me know|could you|would you|can you|do you want|would you like|want me to|which (?:one|file|folder|project) do you|what would you like|up to you|your call)\b/i.test(prose);
@@ -227,7 +227,7 @@ export function missingParts(html, dir) {
 // A request that wants its file on the Desktop (flows/words.mjs, where the sorting uses it too).
 export { wantsDesktop };
 // An answer that holds code to put in a file (a fenced block of three lines or more) instead of a change.
-export const writesCodeInstead = (text) => /```[^\n]*\n(?:[^\n]*\n){3,}[\s\S]*?```/.test(String(text ?? ''));
+const writesCodeInstead = (text) => /```[^\n]*\n(?:[^\n]*\n){3,}[\s\S]*?```/.test(String(text ?? ''));
 
 export function claimsDone(text) {
   const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
@@ -290,7 +290,7 @@ export function keptWriteNote(path, kept) {
 }
 
 const inParts = (file) => `Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`;
-export function cutCallNote(name, path) {
+function cutCallNote(name, path) {
   const file = path || 'the file';
   if (name === 'Write' || name === 'Edit') {
     return `Your ${name} call ran out of room before the end, so nothing was written: the whole content does not fit in one reply. ${inParts(file)}`;
@@ -299,15 +299,15 @@ export function cutCallNote(name, path) {
 }
 // A reply cut at the limit with nothing of it arrived: Ollama holds a tool call back until it is
 // whole, so a call cut off never comes at all (nor its path).
-export const emptyCutNote = () => `Your reply reached the reply limit before it ended, and none of it arrived: most likely a file too long for one reply. ${inParts('the file')}`;
+const emptyCutNote = () => `Your reply reached the reply limit before it ended, and none of it arrived: most likely a file too long for one reply. ${inParts('the file')}`;
 
 // Where a tool call written as text starts: <tool_call> (Qwen's kind and the
 // 27B's), <ifm|tool_calls> / <ifm|tool_call> (K2 Horizon's). The text before
 // it is what the model said; the stop words keep a text-only reply from one.
 export const CALL_MARK = /<tool_call>|<ifm\|tool_calls?>/;
 // What a service says when it cannot read the tool call a model wrote (Ollama's tool parsers).
-export const CALL_UNREADABLE = /\b(?:XML syntax error|error parsing tool call|failed to parse (?:the )?tool call|unexpected end of JSON input)\b/i;
-export const CALL_STOPS = ['<tool_call>', '<ifm|tool_calls>', '<ifm|tool_call>'];
+const CALL_UNREADABLE = /\b(?:XML syntax error|error parsing tool call|failed to parse (?:the )?tool call|unexpected end of JSON input)\b/i;
+const CALL_STOPS = ['<tool_call>', '<ifm|tool_calls>', '<ifm|tool_call>'];
 export const beforeCall = (s) => String(s ?? '').split(CALL_MARK)[0];
 
 // Thinking that came out in the answer's text: a reply that opens with <think> (after Qwen's own
@@ -494,10 +494,10 @@ export function helperToolFilter(tools, names) {
 const OWN_HELPER_CTX = 32_768;
 
 // The web addresses (http or https) a request names, each once.
-export const webAddresses = (text) => [...new Set(String(text ?? '').match(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi) ?? [])].map((u) => u.replace(/[.,;:!?]+$/, ''));
+const webAddresses = (text) => [...new Set(String(text ?? '').match(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi) ?? [])].map((u) => u.replace(/[.,;:!?]+$/, ''));
 
 // What an edit will do, in plain words, for the plan question (questions.mjs).
-export const planLine = planSaid;
+const planLine = planSaid;
 
 // A test run's counts and the names that fail, or null when the output says neither.
 function failsOf(text, failed) {
@@ -514,7 +514,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -3128,7 +3128,7 @@ export class Agent extends EventEmitter {
   // Nothing is saved from the tests' own practice work, nor with saving off.
   rememberFact(args, seen) {
     const off = !this.memory ? 'the memory is off here ("memory": false in settings.json)'
-      : this.memory.saveOff || (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) === 'off' ? 'saving to memory is off here'
+      : this.memory.saveOff || process.env.AGENTIC_MEMORY_SAVE === 'off' ? 'saving to memory is off here'
       : practiceWork({ request: this.happened?.request ?? '', files: [...(this.happened?.files ?? [])] }, this.cwd) ? 'this is practice work on a test’s own files, which teaches the memory nothing'
       : null;
     if (off) { seen({ kind: 'error', message: 'Not saved' }, true); return { text: `Not saved: ${off}. Carry on.` }; }

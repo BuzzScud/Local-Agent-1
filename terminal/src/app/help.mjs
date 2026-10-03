@@ -80,7 +80,7 @@ export const setupModels = (all, defaultId) => [all[defaultId], ...Object.values
 
 // `coding …` from a terminal. lingerMins: how long a model left by a closed window stays loaded.
 // models: the ones in /model ({ id, name }, the default first), for the setup line.
-export function cliRows(lingerMins = 30, models = []) {
+function cliRows(lingerMins = 30, models = []) {
   const others = models.slice(1);
   return {
     usage: [
@@ -129,7 +129,7 @@ export function cliHelpText({ version, modelName, lingerMins, models = [] }) {
 }
 
 // Where Agentic Coder keeps things. [where, what]
-export const PLACES = [
+const PLACES = [
   ['~/.agentic-coder/models', 'the model files (coding setup puts them there)'],
   ['~/.agentic-coder/settings.json', 'your choices that are kept: effort, the status bar, the mouse, the model'],
   ['~/.agentic-coder/trust.json', 'the folders you said yes to in the safety check'],
@@ -150,12 +150,12 @@ export const PLACES = [
   ['.agentic/settings.json', 'this folder only: mode, effort, and "memory": false to turn the memory off here'],
   ['.agentic/memory', 'what Agentic Coder remembers about this project: one small file per fact in facts/, kept out of git; edit or delete them freely'],
   ['~/.agentic/memory', 'what Agentic Coder remembers about you: how you like to work; it follows you into every project'],
-  ['.agentic/notes.md', 'the older notes file (.bonsai/notes.md too): its lines are carried over into the memory the first time; it is not read as rules any more'],
+  ['.agentic/notes.md', 'the older notes file: its lines are carried over into the memory the first time; it is not read as rules any more'],
   ['docs/private/design examples', 'the design cards that come with a request to make or restyle a page, one folder per set (your picks, your rules, opus, fable, public systems), plus look cards (calm, dense, bold, dark) that restyle any kind; read-only to the model as DESIGN/'],
 ];
 
 // How Agentic Coder keeps you safe, in plain words.
-export const SAFETY = [
+const SAFETY = [
   'The first time you start Agentic Coder in a folder it asks whether you trust it. Nothing there is read before you say yes.',
   'It asks before every edit and before commands that change things, unless you switch the mode. A git commit always asks.',
   'Some commands are always refused: deleting folders wholesale, sudo, git push, resetting git, stopping other programs or services.',

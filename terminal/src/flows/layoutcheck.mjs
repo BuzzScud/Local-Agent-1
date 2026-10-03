@@ -66,7 +66,7 @@ export function findChrome() {
 }
 
 // Runs inside the page. Kept to plain ES2017 so any Chrome of the last years runs it.
-export const PROBE = String.raw`(function () {
+const PROBE = String.raw`(function () {
   var errs = [];
   addEventListener('error', function (e) {
     var t = e.target;
@@ -259,8 +259,8 @@ export const PROBE = String.raw`(function () {
 })();`;
 
 // The same probe for the click pass.
-export const CLICK_PROBE = PROBE.replace('var CLICKS = false;', 'var CLICKS = true;');
-export const CLICK_PASS = { name: 'clicks', width: 1440, height: 900, clicks: true };
+const CLICK_PROBE = PROBE.replace('var CLICKS = false;', 'var CLICKS = true;');
+const CLICK_PASS = { name: 'clicks', width: 1440, height: 900, clicks: true };
 
 // The page with the probe and a <base> put first in <head>, on its first line.
 export function withProbe(html, pageDir, probeUrl) {

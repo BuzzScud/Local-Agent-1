@@ -16,7 +16,7 @@ import { closest, factVectors } from './recall.mjs';
 
 export const MAX_FACTS = 5;
 
-export const SAVE_SCHEMA = {
+const SAVE_SCHEMA = {
   type: 'object',
   properties: {
     add: { type: 'array', maxItems: MAX_FACTS, items: { type: 'object', properties: {
@@ -295,7 +295,7 @@ export function applySave({ cwd, home = homedir(), adds = [], drops = [] }, { to
 // What you said no to, kept in your memory's state.json (the last 100), so
 // a fact skipped once is not offered again by a later save or the review.
 const DECLINED_KEEP = 100;
-export const declinedBefore = (dirs) => { try { return readState(dirs.you).declined ?? []; } catch { return []; } };
+const declinedBefore = (dirs) => { try { return readState(dirs.you).declined ?? []; } catch { return []; } };
 export function rememberDeclined(dirs, texts = []) {
   const add = texts.map((t) => String(t).trim()).filter(Boolean);
   if (!add.length) return;

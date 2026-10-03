@@ -16,10 +16,10 @@ export const TURN = [
   { key: 'readfile', what: 'reading the file it opened (360 tokens at ~60/s)', secs: 6, tps: 0 },
   { key: 'write', what: 'writing the reply', secs: 7, tps: 13.8 },
 ];
-export const TOTAL = TURN.reduce((a, p) => a + p.secs, 0);
+const TOTAL = TURN.reduce((a, p) => a + p.secs, 0);
 
 // Tokens written by `t` seconds into the turn, and when the last one came.
-export function turnAt(t) {
+function turnAt(t) {
   let start = 0, tokens = 0, lastAt = null, phase = TURN[0], inPhase = 0, phaseStart = 0;
   for (const p of TURN) {
     const inside = Math.min(Math.max(0, t - start), p.secs);
@@ -71,7 +71,7 @@ function Demo() {
         <Text color={phase.tps ? C.accent : C.dim}>  {phase.tps ? '↓ writing' : '· no tokens'}</Text><Text color={C.dim}>  {phase.what}{paused ? '  (paused)' : ''}</Text>
       </Text>
       <Box height={1} />
-      <Text color={C.dim}>Bonsai uses Orbit.  BONSAI_SPINNER=classic bonsai  or  =bloom  shows another look</Text>
+      <Text color={C.dim}>Agentic Coder uses Orbit.  AGENTIC_SPINNER=classic coding  or  =bloom  shows another look</Text>
     </Box>
   );
 }

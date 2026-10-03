@@ -14,7 +14,7 @@ export { loadConfig, gather, pick, plainWords, writeWords, writeBrief };
 
 // complete + url + model (+ slot): write the words with the model; without them, plain words.
 // onStep(kind, text) reports progress: 'gather', 'words', 'done'.
-export async function runMorning({ day = 'auto', fetch = true, complete, url, model, slot, signal, onStep = () => {}, onToken, open = !(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN), config = loadConfig() } = {}) {
+export async function runMorning({ day = 'auto', fetch = true, complete, url, model, slot, signal, onStep = () => {}, onToken, open = !process.env.AGENTIC_NO_OPEN, config = loadConfig() } = {}) {
   const t0 = Date.now();
   onStep('gather', 'Reading the repos');
   const facts = await gather({ config, day, fetch });

@@ -15,7 +15,7 @@ export const WEB_ROWS = [
   { id: 'test', label: 'Test', type: 'action' },
   { id: 'save', label: 'Save', type: 'action' },
 ];
-export const DEFAULT_WEB = { search: 'off', fetch: true, claude: true, keys: {} };
+const DEFAULT_WEB = { search: 'off', fetch: true, claude: true, keys: {} };
 const CHOICES = { search: ['off', ...SEARCH_PROVIDERS], fetch: [true, false], claude: [true, false] };
 const WORDS = {
   search: (v) => (v === 'off' ? 'Off' : PROVIDER_NAMES[v] ?? v),

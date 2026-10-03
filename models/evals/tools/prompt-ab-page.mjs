@@ -30,7 +30,7 @@ export function flips(rows) {
   return { fixed: both.filter((r) => !r.old.pass && r.new.pass).map((r) => r.task), broke: both.filter((r) => r.old.pass && !r.new.pass).map((r) => r.task) };
 }
 
-export const PROMPT_NAMES = { old: 'Old prompt', new: 'New prompt', oldSub: 'before 30 Sep', newSub: 'Work habits and the rest', thing: 'prompt' };
+const PROMPT_NAMES = { old: 'Old prompt', new: 'New prompt', oldSub: 'before 30 Sep', newSub: 'Work habits and the rest', thing: 'prompt' };
 
 export function buildPromptPage({ title, dateline = '', verdict = '', chips = [], rows = [], changed = [], method = [], raw = [], names = PROMPT_NAMES }) {
   const data = JSON.stringify({ rows, old: sideTotals(rows, 'old'), new: sideTotals(rows, 'new'), flips: flips(rows) }).replace(/</g, '\\u003c');

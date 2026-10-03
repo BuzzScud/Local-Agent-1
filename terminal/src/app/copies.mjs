@@ -19,11 +19,11 @@ import { join, relative, dirname, basename, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 
-const home = () => process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME;
+const home = () => process.env.AGENTIC_HOME ?? HOME;
 const WINDOWS = () => join(home(), 'windows');
-export const COPIES = () => join(home(), 'copies');
+const COPIES = () => join(home(), 'copies');
 // Linked into a copy instead of copied (a package manager or a build puts them back).
-export const LINKED = ['node_modules', '.venv', 'venv'];
+const LINKED = ['node_modules', '.venv', 'venv'];
 // Never copied, never counted as a change.
 const SKIP = new Set([...LINKED, '.git', '__pycache__', '.next', '.nuxt', '.parcel-cache', '.turbo', '.DS_Store', '.agentic-check']);
 export const MAX_FILES = 25_000; // a bigger folder is not copied
@@ -105,7 +105,7 @@ export function modelsInUseOn(service, { pid = process.pid } = {}) {
 
 const metaFile = (id) => join(COPIES(), id, 'meta.json');
 const storeOf = (id) => join(COPIES(), id, 'base.git');
-export const readMeta = (id) => { try { return JSON.parse(readFileSync(metaFile(id), 'utf8')); } catch { return null; } };
+const readMeta = (id) => { try { return JSON.parse(readFileSync(metaFile(id), 'utf8')); } catch { return null; } };
 const saveMeta = (m) => writeFileSync(metaFile(m.id), JSON.stringify(m, null, 2));
 
 // The copy a folder is in (a window opened inside one, or one that moved there), else null.

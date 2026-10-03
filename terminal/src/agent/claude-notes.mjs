@@ -23,7 +23,7 @@ import { choose } from './search.mjs';
 // At most this many notes travel with a request (2 until 1 Oct 2026, the user's pick "keep more notes": on
 // their recent requests it added a note to 6 of 13, about 300–630 tokens). CUT and MARGIN decide first.
 export const TOP = 4;
-export const PART_CHARS = 1100; // of one note
+const PART_CHARS = 1100; // of one note
 // When a note comes along. Its meaning must be close to the request's (1 is
 // the same meaning): very close is enough by itself (CUT), less close counts
 // only when the two also share words that few notes hold (NEAR and WORDS).
@@ -44,13 +44,13 @@ const ABOUT_THEM = 0.03;
 // Whether Claude's notes are used at all: "claudeNotes": false in
 // settings.json, or AGENTIC_CLAUDE_NOTES=off (the app's tests), leaves them out,
 // and the lines boiled down from them with them.
-export const claudeOn = (settings = {}) => settings.claudeNotes !== false && !['off', ''].includes((process.env.AGENTIC_CLAUDE_NOTES ?? process.env.BONSAI_CLAUDE_NOTES) ?? 'on');
+export const claudeOn = (settings = {}) => settings.claudeNotes !== false && !['off', ''].includes(process.env.AGENTIC_CLAUDE_NOTES ?? 'on');
 
 // Where the notes are: AGENTIC_CLAUDE_NOTES or the setting "claudeNotes" names
 // the folder ("off" or false: none); otherwise Claude Code's memory folder
 // for your home folder, the one it writes to from any folder on this Mac.
 export function notesDir({ home = homedir(), setting } = {}) {
-  const named = (process.env.AGENTIC_CLAUDE_NOTES ?? process.env.BONSAI_CLAUDE_NOTES) ?? setting;
+  const named = process.env.AGENTIC_CLAUDE_NOTES ?? setting;
   if (named === false || named === 'off' || named === '') return null;
   if (typeof named === 'string') return existsSync(named) ? named : null;
   const slug = home.replace(/[/.]/g, '-');
@@ -188,7 +188,7 @@ const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
 export const wording = (n) => `${n.title ? `${n.title}. ` : ''}${n.name.replace(/-/g, ' ')}: ${holdsSecret(n.description) ? '' : n.description}`.slice(0, 1200);
 
 // Where Agentic Coder keeps its own numbers for the notes (never beside the notes).
-export const notesStore = () => (process.env.AGENTIC_CLAUDE_STORE ?? process.env.BONSAI_CLAUDE_STORE) ?? join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? HOME, 'claude-notes');
+const notesStore = () => process.env.AGENTIC_CLAUDE_STORE ?? join(process.env.AGENTIC_HOME ?? HOME, 'claude-notes');
 let held = null; // the numbers as last read: { file, model, kept, vec }
 async function vectorsFor(notes, embedder, signal, store = notesStore()) {
   const file = join(store, 'vectors.json');
@@ -286,7 +286,7 @@ export async function recallClaude(cwd, text, { embedder = null, dir = notesDir(
   }
   scored.sort((a, b) => b.score - a.score);
   const first = scored.find(fits);
-  const all = Boolean(process.env.AGENTIC_NOTES_ALL ?? process.env.BONSAI_NOTES_ALL);
+  const all = Boolean(process.env.AGENTIC_NOTES_ALL);
   const n = (all ? scored : first ? scored.filter((s) => fits(s) && s.score >= first.score - margin) : []).slice(0, top).length;
   const wordOrder = retriever === 'hybrid' && how === 'meaning' ? scored.filter((s) => s.words > 0).sort((a, b) => b.words - a.words) : null;
   const chosen = all ? { picked: scored.slice(0, top) } : await choose({ query: text, byMeaning: scored, byWords: wordOrder, n, key: (s) => s.note.id, text: (s) => `${s.note.name.replace(/-/g, ' ')}: ${s.note.description}`, retriever, reranker, signal });

@@ -13,8 +13,8 @@ import { groupsOf, suggestModel } from './remote-models.mjs';
 import { readTryouts } from './tryouts.mjs';
 import { MEMORY_TO } from '../agent/opening.mjs';
 
-export const SOURCES = ['here', ...REMOTE_SOURCES];
-export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
+const SOURCES = ['here', ...REMOTE_SOURCES];
+const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
 const ROW = {
   source: { id: 'source', label: 'Run on', type: 'choice' },
   address: { id: 'address', label: 'Address', type: 'text' },
@@ -175,7 +175,7 @@ export function moveCopy(form, dir) {
   return { ...form, pick: { ...p, copy: { ...p.copy, [id]: all[(now + all.length + dir) % all.length] } } };
 }
 // The name the highlighted row stands for (its copy, when one was picked).
-export const pickedName = (p, i = p?.index) => { const id = p?.models[i]; return p?.copy?.[id] ?? id; };
+const pickedName = (p, i = p?.index) => { const id = p?.models[i]; return p?.copy?.[id] ?? id; };
 export function commitPick(form) {
   const name = pickedName(form.pick);
   if (!name) return form;

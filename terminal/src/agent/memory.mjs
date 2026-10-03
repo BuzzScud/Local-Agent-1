@@ -1,12 +1,11 @@
 // What asks for the memory, and where a folder's memory lives. "update memory"
 // (or "remember that …") saves into the memory's facts (facts.mjs, lessons.mjs).
-// Before the facts there was one notes file per folder, .bonsai/notes.md or
-// .agentic/notes.md, written by "update memory"; its lines were carried into
+// Before the facts there was one notes file per folder, .agentic/notes.md,
+// written by "update memory"; its lines were carried into
 // the facts at the first start (openMemory). A file that is still there is no
 // longer read as rules (30 Sep 2026: only AGENTS.md and CLAUDE.md are, in
 // projectNotes in prompt.mjs), and nothing writes it any more: with the memory
 // off, nothing is saved. memoryFile still names it: the memory's folders sit beside it.
-const keepOld = (old, fresh) => (existsSync(old) ? old : fresh);
 import { existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -24,15 +23,15 @@ export const isMemoryRequest = (text) => ASKS.some((re) => re.test(String(text).
 // Where the memory lives for a folder.
 export function memoryFile(cwd, home = homedir()) {
   const at = resolve(cwd);
-  if (at === resolve(home)) return keepOld(join(home, '.bonsai', 'notes.md'), join(home, '.agentic', 'notes.md'));
+  if (at === resolve(home)) return join(home, '.agentic', 'notes.md');
   let dir = at;
   for (let i = 0; i < 12; i++) {
-    if (existsSync(join(dir, '.git'))) return keepOld(join(dir, '.bonsai', 'notes.md'), join(dir, '.agentic', 'notes.md'));
+    if (existsSync(join(dir, '.git'))) return join(dir, '.agentic', 'notes.md');
     const up = dirname(dir);
     if (up === dir || dir === resolve(home)) break;
     dir = up;
   }
-  return keepOld(join(at, '.bonsai', 'notes.md'), join(at, '.agentic', 'notes.md'));
+  return join(at, '.agentic', 'notes.md');
 }
 
 // The conversation, short: what the user and Agentic Coder said (no tool output).

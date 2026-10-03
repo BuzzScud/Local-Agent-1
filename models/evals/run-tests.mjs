@@ -200,12 +200,12 @@ export function practiceChoices(home) {
 export const ownCount = (home, level = null) => listMetas(home).filter((t) => t.suite === 'mine' && (!level || t.level === level)).length;
 // Your own tests as "One of my tests" picks them: by number, oldest first.
 //   key: '3' (what you pick), only: its folder (run-set.mjs's --only), title (with its level)
-export function ownChoices(home) {
+function ownChoices(home) {
   return listMetas(home).filter((t) => t.suite === 'mine').sort((a, b) => (a.n ?? 1e9) - (b.n ?? 1e9) || String(a.created).localeCompare(String(b.created)))
     .map((t) => ({ key: String(t.n ?? t.id), only: t.id, title: `${t.title}${LEVELS[t.level] ? ` · ${LEVELS[t.level].name}` : ''}`, copy: false }));
 }
 // The test of yours `n` names: its number (3, '3'), or its whole folder name. null: no such one.
-export function ownChoice(n, home) {
+function ownChoice(n, home) {
   const all = ownChoices(home);
   if (n == null || n === '') return all[0] ?? null;
   const key = String(n).trim();

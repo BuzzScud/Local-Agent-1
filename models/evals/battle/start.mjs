@@ -20,7 +20,7 @@ async function pingInfo() {
 const ping = async () => Boolean(await pingInfo());
 
 // The repo the runner is in: the launcher names it (the app itself is one built file).
-const repoDir = () => (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) ?? resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const repoDir = () => process.env.AGENTIC_REPO ?? resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 // Something that runs a .mjs file: node or bun, the one running now when it is one of them.
 function jsRunner() {
   if (process.env.AGENTIC_JS) return process.env.AGENTIC_JS;

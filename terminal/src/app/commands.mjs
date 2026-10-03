@@ -80,7 +80,7 @@ export const IN_SETTINGS = new Set(SETTINGS.flatMap((g) => g.rows.map((r) => r.n
 // On an Ollama service /subagents takes the place of /start and /stop (they load and unload the
 // model on this Mac), so the / menu holds 17 there, within the 18 that fit an 80 × 24 window; elsewhere
 // /subagents is left out of it. Each still works typed in full.
-export const SERVICE_ONLY = new Set(['subagents']);
+const SERVICE_ONLY = new Set(['subagents']);
 // Typed only (2 Oct 2026): /agents took /morning's row in the / menu, which holds 18 at 80 × 24, and
 // /settings is as full; /morning still runs typed in full, and /help lists it.
 export const TYPED_ONLY = new Set(['morning']);
@@ -91,7 +91,7 @@ export const TYPED_ONLY = new Set(['morning']);
 // full, like /jumptomac; the hub's Help page lists it), in this order: a window with one free row
 // shows /jumptomac, with four all of them.
 export const WHEN_ROOM = new Set(['jumptomac', 'loop', 'loops', 'mcp']);
-export const MAC_ONLY = new Set(['start', 'stop']);
+const MAC_ONLY = new Set(['start', 'stop']);
 // /btw works only where another model, or a second lane, can take the question while the main one
 // works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On
 // this Mac's own model it is not in the menu; typed in full it says where it works.

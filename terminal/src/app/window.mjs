@@ -7,7 +7,7 @@
 // before Ink erases them.)
 import { EventEmitter } from 'node:events';
 
-export const SETTLE_MS = 150;
+const SETTLE_MS = 150;
 // The smallest window the screen is laid out for; smaller shows a note instead.
 export const MIN_COLS = 80;
 export const MIN_ROWS = 24;

@@ -25,9 +25,9 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 
-const home = () => process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME;
+const home = () => process.env.AGENTIC_HOME ?? HOME;
 export const BG_DIR = () => join(home(), 'background');
-export const DETACH_KEY = '\x02'; // ctrl+b, as in Claude Code
+const DETACH_KEY = '\x02'; // ctrl+b, as in Claude Code
 export const DETACH_LABEL = 'ctrl+b';
 
 // The frames. Window → host: HELLO (JSON: size, owner), INPUT (keys), SIZE
@@ -91,7 +91,7 @@ function bgDir() {
 const recordOf = (name) => join(BG_DIR(), `${name}.json`);
 // A socket's path must stay under 104 bytes on macOS; a long home (a test's)
 // puts it in a private folder under /tmp instead.
-export function socketFor(name) {
+function socketFor(name) {
   const p = join(BG_DIR(), `${name}.sock`);
   if (Buffer.byteLength(p) <= 100) return p;
   const dir = join('/tmp', `agentic-coder-${process.getuid?.() ?? 'u'}`);
@@ -192,7 +192,7 @@ export function selfCommand() {
 // the other screen). A window that joins later is told them, or its mouse and
 // paste would not reach the app; a window that leaves turns them off again.
 const MODES = new Set(['25', '47', '1000', '1002', '1003', '1004', '1005', '1006', '1015', '1047', '1049', '2004']);
-export const RESET_MODES = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?25h\x1b[0m';
+const RESET_MODES = '\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1005l\x1b[?1006l\x1b[?1015l\x1b[?2004l\x1b[?25h\x1b[0m';
 export function modeTracker() {
   const on = new Map();
   let carry = '';
@@ -245,7 +245,7 @@ export async function runHost(spec, env = process.env) {
   const log = (text) => { try { process.stdout.write(`${new Date().toISOString()} ${name} ${text}\n`); } catch {} };
 
   const childEnv = { ...env, AGENTIC_IN_HOST: name, TERM: env.TERM || 'xterm-256color' };
-  for (const k of ['AGENTIC_HOST_SPEC', 'AGENTIC_RESTART_FILE', 'BONSAI_RESTART_FILE']) delete childEnv[k];
+  for (const k of ['AGENTIC_HOST_SPEC', 'AGENTIC_RESTART_FILE']) delete childEnv[k];
   const proc = Bun.spawn(cmd, {
     cwd: folder, env: childEnv,
     terminal: {

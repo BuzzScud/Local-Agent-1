@@ -83,13 +83,13 @@ export const BUDGET_MESSAGE = ' I have thought enough. Now I act on it.';
 // disk), in the repo the launcher names (AGENTIC_REPO).
 export function mlxServerScript() {
   const here = (() => { try { return fileURLToPath(new URL('./mlx/mlx-server.py', import.meta.url)); } catch { return null; } })();
-  const repo = process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO;
+  const repo = process.env.AGENTIC_REPO;
   return [here, repo ? join(repo, 'models', 'runtime', 'mlx', 'mlx-server.py') : null].find((p) => p && existsSync(p)) ?? here;
 }
 
 // Whether the model's guessing helper is used: it is on this Mac (coding setup
 // downloads it) and not switched off with AGENTIC_HELPER=off.
-export const hasDraft = (model) => Boolean(model?.draft && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' && existsSync(draftPath(model)));
+export const hasDraft = (model) => Boolean(model?.draft && process.env.AGENTIC_HELPER !== 'off' && existsSync(draftPath(model)));
 
 // host: where it listens ('127.0.0.1', this Mac only; `coding serve` opens it wider, serve.mjs).
 export function serverArgs(model, { ctx, port, draft = false, host = '127.0.0.1' }) {

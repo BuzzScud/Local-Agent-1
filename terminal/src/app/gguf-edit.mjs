@@ -71,7 +71,7 @@ export async function readRow(path, tensorName, row, model) {
 }
 
 // Says what is wrong with an edit list, or nothing when it is fine.
-export function validateEdits(model, edits) {
+function validateEdits(model, edits) {
   if (!Array.isArray(edits) || !edits.length) throw new Error('no edits to apply');
   const kinds = [...Object.keys(Core.SCALE_AT), ...Object.keys(Core.PLAIN)].map((k) => Core.TYPES[k]).join(', ');
   for (const e of edits) {

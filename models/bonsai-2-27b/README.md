@@ -11,7 +11,7 @@ the next word. The model Bonsai Code uses today. Settings: [`model.mjs`](model.m
 |---|---|
 | Writing | 10.8 tokens/s one word at a time (llama-bench); with the helper 13.8 on code, 13.9 on a rewrite, 10.6 on prose (was 9.6, 10.0, 9.8 with n-gram guessing) |
 | Reading | 58–62 tokens/s |
-| Memory | ~11.7 GB at 32k context with two slots and the helper (7.21 + 1.14 files, 3.4 working); 32k needs 11.9 GB free, else 16k. Without the helper (`BONSAI_HELPER=off`) 9.3–9.8 GB |
+| Memory | ~11.7 GB at 32k context with two slots and the helper (7.21 + 1.14 files, 3.4 working); 32k needs 11.9 GB free, else 16k. Without the helper (`AGENTIC_HELPER=off`) 9.3–9.8 GB |
 | Start | first start ~90 s; later starts restore the saved warm-up in 0.1 s, a first reply in ~10 s |
 | Effort | off by default: medium and high passed the same tasks and only cost time |
 

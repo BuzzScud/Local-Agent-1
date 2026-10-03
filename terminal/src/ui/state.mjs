@@ -3,7 +3,7 @@
 
 const progress = (t, a, b) => (b <= a ? 1 : Math.min(1, Math.max(0, (t - a) / (b - a))));
 
-export function toolArg(step) {
+function toolArg(step) {
   return step.args.path ?? step.args.command;
 }
 

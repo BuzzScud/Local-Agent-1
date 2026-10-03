@@ -22,7 +22,7 @@ test('a question with answers to pick, the line that says where the request went
     { wait: 'I cannot reach the Desktop from this folder.' }, { sleep: 200 }, { snapshot: 'followed' }, ...quit,
   ] });
   await fake.close();
-  if ((process.env.AGENTIC_SNAPSHOTS ?? process.env.BONSAI_SNAPSHOTS)) (await import('node:fs')).writeFileSync((process.env.AGENTIC_SNAPSHOTS ?? process.env.BONSAI_SNAPSHOTS), JSON.stringify(r.snapshots, null, 1));
+  if (process.env.AGENTIC_SNAPSHOTS) (await import('node:fs')).writeFileSync(process.env.AGENTIC_SNAPSHOTS, JSON.stringify(r.snapshots, null, 1));
   expect(r.snapshots.asking).toContain('Agentic Coder asks');
   expect(r.snapshots.asking).toMatch(/1\. Explain how the API works[\s│]+2\. Fix a broken API endpoint[\s│]+3\. Add a new API endpoint[\s│]+4\. Type your own answer…/);
   // The pick is shown as your answer, then sorted: explaining is a question.

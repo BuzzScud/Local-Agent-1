@@ -434,7 +434,7 @@ agentic-coder/
 │  ├─ bge-m3/           the small model that compares meanings, for the memory and the code search
 │  ├─ qwen3-reranker-0.6b/ the reranker /effort's Reranker row turns on (off by default)
 │  ├─ bonsai-2-27b/     the previous model, back in /model: settings (results/ stays local)
-│  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Arena: its runner, page and tests), reports, tools, dev
+│  ├─ evals/            the test bench: bench (run, tasks, words, night), battle (the Arena: its runner, page and tests), tools, dev
 │  └─ test/             unit tests of the models part
 └─ docs/                every diagram, preview, report and test page, the one home, by group (gemma-docs/ is one); private/ = the owner's own, on the Mac only; tools/ = the index and its check
 ```
@@ -479,7 +479,7 @@ Every diagram, preview, report and test page lives in [`docs/`](docs/README.md),
 Setup on a new Mac: see [Install](#install) at the top (`install.sh` does it in one line). `coding setup` builds
 the model server (llama.cpp on the model's engine: Prism's with our Metal patch today, see
 [`models/runtime/engine`](models/runtime/engine/README.md)) and downloads the models into `~/.agentic-coder`.
-Environment switches are `AGENTIC_*` (the old `BONSAI_*` names still work).
+Environment switches are `AGENTIC_*` (since 3 Oct 2026 the old `BONSAI_*` names are no longer read).
 
 ## Shared instructions
 

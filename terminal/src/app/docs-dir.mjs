@@ -30,8 +30,8 @@ export function mainFolder(dir) {
 }
 
 export function findDocsDir() {
-  const repo = process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO;
-  const tries = [(process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS), repo && join(mainFolder(repo), 'docs'), join(mainFolder(join(here, '..', '..', '..')), 'docs')].filter(Boolean);
+  const repo = process.env.AGENTIC_REPO;
+  const tries = [process.env.AGENTIC_DOCS, repo && join(mainFolder(repo), 'docs'), join(mainFolder(join(here, '..', '..', '..')), 'docs')].filter(Boolean);
   return tries.find(isDir) ?? null;
 }
 

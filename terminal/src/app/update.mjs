@@ -13,9 +13,9 @@ import { spawn } from 'node:child_process';
 import { statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const EVERY_MS = 20_000;
-export const FETCH_EVERY_MS = 5 * 60_000;
-export const FETCH_FIRST_MS = 30_000;
+const EVERY_MS = 20_000;
+const FETCH_EVERY_MS = 5 * 60_000;
+const FETCH_FIRST_MS = 30_000;
 
 // The files a rebuild picks up: the same list the launcher checks
 // (terminal/app/agentic-coder-launcher.sh), so the badge and the rebuild agree.
@@ -63,13 +63,13 @@ const changed = async (repo, from, to) => ((await git(repo, ['diff', '--name-onl
 // Where Agentic Coder's code lives: the launcher passes AGENTIC_REPO; run from the
 // source (bun run start), it is the repo this file sits in.
 export function findRepo() {
-  const tries = [(process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO), join(import.meta.dir, '..', '..', '..')].filter(Boolean);
+  const tries = [process.env.AGENTIC_REPO, join(import.meta.dir, '..', '..', '..')].filter(Boolean);
   return tries.find((d) => { try { return statSync(join(d, 'terminal', 'src', 'cli.jsx')).isFile(); } catch { return false; } }) ?? null;
 }
 
 // When the running code was built: the app file's time at start (another
 // `coding` may replace the file later), or now when run from the source.
-export function builtAt() {
+function builtAt() {
   try { if (!/(^|\/)bun$/.test(process.execPath)) return statSync(process.execPath).mtimeMs; } catch {}
   return Date.now();
 }
@@ -132,12 +132,12 @@ export async function fetchMain(repo, timeout = 20_000) {
 // Git's words, safe to put on the screen: no control characters (a file name
 // in an error cannot move the cursor or recolour the terminal), one line.
 export const plain = (text) => String(text ?? '').split('\n').map((l) => l.replace(/^(fatal|error): /, '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim()).find(Boolean)?.slice(0, 200) ?? '';
-export const msEnv = (name, dflt) => { const v = process.env[`AGENTIC_${name}`] ?? process.env[`BONSAI_${name}`]; return v === undefined || v === '' ? dflt : Number(v) || 0; };
+export const msEnv = (name, dflt) => { const v = process.env[`AGENTIC_${name}`]; return v === undefined || v === '' ? dflt : Number(v) || 0; };
 
 // Watches until stopped; calls onChange with the new state when it changes.
 // Returns { stop, check }: check() asks GitHub, then looks (for /update).
 export function watchUpdates(onChange, { repo = findRepo(), every = msEnv('UPDATE_EVERY', EVERY_MS) || EVERY_MS, fetchEvery = msEnv('FETCH_EVERY', FETCH_EVERY_MS) } = {}) {
-  if (!repo || (process.env.AGENTIC_NO_UPDATE ?? process.env.BONSAI_NO_UPDATE) === '1') return { repo: null, stop: () => {}, check: async () => null };
+  if (!repo || process.env.AGENTIC_NO_UPDATE === '1') return { repo: null, stop: () => {}, check: async () => null };
   const built = builtAt();
   let start = null;
   let last = null;
@@ -186,12 +186,12 @@ const short = (p) => (process.env.HOME && p.startsWith(process.env.HOME) ? `~${p
 // from inside the app (it waiting on the new one) lost typed keys to the old
 // process and left one more of them behind at each /update.
 export const RESTART_CODE = 75;
-export const canRestart = () => Boolean((process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE));
+export const canRestart = () => Boolean(process.env.AGENTIC_RESTART_FILE);
 // Written fresh ('wx': a file or link someone put in its place is removed, not
 // followed or reused), readable by you only. If it cannot be written, Agentic Coder
 // ends normally instead (code 0), so the launcher does not restart it.
 export function leaveRestart(args) {
-  const file = (process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE);
+  const file = process.env.AGENTIC_RESTART_FILE;
   try {
     try { unlinkSync(file); } catch {}
     writeFileSync(file, args.map((a) => `${String(a).replace(/[\r\n]/g, ' ')}\n`).join(''), { flag: 'wx', mode: 0o600 });

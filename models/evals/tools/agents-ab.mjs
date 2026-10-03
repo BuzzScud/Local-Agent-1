@@ -32,7 +32,7 @@ export const CHECKS = TASKS.length * ARMS.length;
 const testsText = (cwd) => readdirSync(join(cwd, 'test')).filter((f) => f.endsWith('.mjs')).map((f) => readFileSync(join(cwd, 'test', f), 'utf8')).join('\n');
 const suitePasses = (cwd) => spawnSync('node', ['--test'], { cwd, encoding: 'utf8', timeout: 60_000 }).status === 0;
 const node = (cwd, code) => spawnSync('node', ['--input-type=module', '-e', code], { cwd, encoding: 'utf8', timeout: 20_000 }).status === 0;
-export const WORK_RIGHT = {
+const WORK_RIGHT = {
   discount: (cwd) => node(cwd, "import { applyDiscount } from './src/price.mjs'; if (!(applyDiscount(10, 150) >= 0 && applyDiscount(100, 10) === 90)) process.exit(1);") && suitePasses(cwd),
   tax: (cwd, before) => testsText(cwd).split('withTax').length - 1 > before.withTax && suitePasses(cwd) && readFileSync(join(cwd, 'src', 'cart.mjs'), 'utf8') === before.cart,
   shipping: (cwd) => node(cwd, "import { shippingFor } from './src/shipping.mjs'; if (!(shippingFor(74.99) > 0 && shippingFor(75) === 0)) process.exit(1);") && suitePasses(cwd),

@@ -3,7 +3,7 @@
 // the run ends; on a screen too small Terminal stops at the most it fits, and the tree lays itself
 // out for that. It asks the terminal with the xterm resize code, which Terminal and iTerm2 follow;
 // tmux, VS Code, an SSH session or AGENTIC_AGENTS_RESIZE=off leave the window as it is.
-export const AGENTS_SIZE = [112, 59];
+const AGENTS_SIZE = [112, 59];
 export const resizeSeq = (cols, rows) => `\x1b[8;${rows};${cols}t`;
 export function canResize(env = process.env, out = process.stdout) {
   if (!out?.isTTY || env.AGENTIC_AGENTS_RESIZE === 'off') return false;

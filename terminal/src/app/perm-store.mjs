@@ -15,7 +15,7 @@ export const MAX_RULES = 40;
 import { MODES } from '../agent/permissions.mjs';
 
 // Read when used, not at import (as trust.json is), so tests can point it at their own home.
-const home = () => (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');
+const home = () => process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
 export const permissionsFile = () => join(home(), 'permissions.json');
 
 // { data, broken }: the file's content, or {} and why it could not be read.

@@ -195,7 +195,7 @@ test('one list of steps for the hub: the Flow tab draws all of them, the Harness
 test('scripts/flow-page.mjs saves a dated copy of the tab: one file that stands alone and names no folder of this Mac', () => {
   const dir = mkdtempSync(join(tmpdir(), 'agentic-flow-')), out = join(dir, 'flow.html');
   // A throwaway home: no test record, so the copy is the drawings without a run's numbers.
-  const r = spawnSync(process.execPath, [join(import.meta.dir, '..', 'scripts', 'flow-page.mjs'), out], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: join(dir, 'home'), BONSAI_HOME: '' } });
+  const r = spawnSync(process.execPath, [join(import.meta.dir, '..', 'scripts', 'flow-page.mjs'), out], { encoding: 'utf8', env: { ...process.env, AGENTIC_HOME: join(dir, 'home') } });
   expect(r.stderr).toBe('');
   expect(r.status).toBe(0);
   const page = readFileSync(out, 'utf8');

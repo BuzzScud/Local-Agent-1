@@ -5,6 +5,6 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
 export function copyToClipboard(text) {
-  if ((process.env.AGENTIC_CLIPBOARD ?? process.env.BONSAI_CLIPBOARD)) { try { writeFileSync((process.env.AGENTIC_CLIPBOARD ?? process.env.BONSAI_CLIPBOARD), text); return true; } catch { return false; } }
+  if (process.env.AGENTIC_CLIPBOARD) { try { writeFileSync(process.env.AGENTIC_CLIPBOARD, text); return true; } catch { return false; } }
   try { return spawnSync('pbcopy', { input: text }).status === 0; } catch { return false; }
 }

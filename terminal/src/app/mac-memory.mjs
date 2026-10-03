@@ -4,9 +4,9 @@
 // drawn once as the window opened, was taken out on 28 Sep: it went stale.)
 import { gib } from '../../../models/index.mjs';
 
-export const PRESSURE = { 1: 'fine', 2: 'tight', 4: 'critical' };
+const PRESSURE = { 1: 'fine', 2: 'tight', 4: 'critical' };
 export const pressureWord = (m) => PRESSURE[m.level] ?? 'tight';
-export const gb1 = (b) => gib(b).toFixed(1);
+const gb1 = (b) => gib(b).toFixed(1);
 export const used = (m) => Math.max(0, m.total - m.avail);
 
 // The footer's live line: "Mac 14.6/16 GB".

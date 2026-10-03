@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 
 export const spendEvents = new EventEmitter();
-const spendDir = () => join(process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME, 'spend');
+const spendDir = () => join(process.env.AGENTIC_HOME ?? HOME, 'spend');
 // Today as YYYY-MM-DD, in this Mac's own time.
 export const dayOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 

@@ -21,7 +21,7 @@ test('the instructions start the same in every project and on every day (so the 
 test('only AGENTS.md or CLAUDE.md is read as rules: a private notes.md beside them is left alone', () => {
   const dir = mkdtempSync(join(tmpdir(), 'agentic-notes-'));
   writeFileSync(join(dir, 'AGENTS.md'), 'Run the tests with npm test.');
-  for (const d of ['.bonsai', '.agentic']) {
+  for (const d of ['.agentic']) {
     mkdirSync(join(dir, d), { recursive: true });
     writeFileSync(join(dir, d, 'notes.md'), 'The deploy password lives in 1Password.');
   }

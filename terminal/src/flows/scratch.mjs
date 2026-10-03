@@ -149,7 +149,7 @@ export class Scratch {
 // your project's git, never written there) at your exact commit, with your
 // index, so staged files count as tracked. Only when the project is the top
 // of a git checkout (a worktree's .git file points elsewhere, so ask git).
-export function privateGit(cwd, dir) {
+function privateGit(cwd, dir) {
   if (!existsSync(join(cwd, '.git'))) return null;
   const q = (args, where = cwd) => spawnSync('git', args, { cwd: where, encoding: 'utf8' });
   const r = q(['rev-parse', '--show-toplevel', '--absolute-git-dir', '--git-common-dir', 'HEAD']);

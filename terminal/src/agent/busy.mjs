@@ -8,17 +8,17 @@ import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 
-export const BUSY_TRIES = 5;
+const BUSY_TRIES = 5;
 // Seconds before each next try (the service's own "retry after" wins when it asks for longer).
-export const BUSY_WAITS = [10, 20, 40, 60];
+const BUSY_WAITS = [10, 20, 40, 60];
 // AGENTIC_BUSY_WAITS="0.1,0.1,0.1,0.1" makes them short (the tests); read at each use.
 const busyWaits = () => { const w = process.env.AGENTIC_BUSY_WAITS?.split(',').map(Number).filter((n) => n >= 0); return w?.length ? w : BUSY_WAITS; };
 const BUSY_STATUS = new Set([429, 503, 529]);
 // The longest single wait (seconds) a service may ask for.
-export const LONGEST_WAIT = 120;
+const LONGEST_WAIT = 120;
 
 // In Agentic Coder's home (AGENTIC_HOME, read at each use, so a test's own home holds it).
-export const busyFile = () => join(process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME, 'remote-busy.json');
+const busyFile = () => join(process.env.AGENTIC_HOME ?? HOME, 'remote-busy.json');
 
 // The service said it is busy: a 429 (too many requests), 503 or 529 (overloaded), or those
 // words. A model that has no room to load is not busy: waiting does not make it fit.

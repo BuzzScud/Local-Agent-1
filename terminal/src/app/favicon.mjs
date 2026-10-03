@@ -33,7 +33,7 @@ export function png(w, h, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-export const ICON_SIZE = 48;
+const ICON_SIZE = 48;
 let icon = null;
 // The bot (22 × 20 pixels) twice as big, in the middle of a clear 48 × 48 square.
 export function faviconPng() {

@@ -13,7 +13,7 @@ import { Markdown } from './markdown.jsx';
 import { money } from '../agent/spend.mjs';
 
 export const RAIL = 'ansi256(243)'; // #767676: C.faint (#585858) all but vanishes as a thin line on a dark window
-export const STRIP = 'ansi256(236)'; // #303030, the grey strip under your message
+const STRIP = 'ansi256(236)'; // #303030, the grey strip under your message
 const PATH = 'ansi256(250)';
 const CODE = 'ansi256(252)';
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;

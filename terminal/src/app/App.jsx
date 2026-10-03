@@ -472,7 +472,7 @@ export function App({ opts, win, onRestart }) {
   // /rewind (rewind.mjs): copies of the folder around each message and
   // command, in AGENTIC_HOME/rewind. AGENTIC_REWIND=off leaves them out.
   const rewindRef = useRef(undefined);
-  if (rewindRef.current === undefined) rewindRef.current = (process.env.AGENTIC_REWIND ?? process.env.BONSAI_REWIND) === 'off' ? null : new Rewind({ home: HOME, session: sessionRef.current.id });
+  if (rewindRef.current === undefined) rewindRef.current = process.env.AGENTIC_REWIND === 'off' ? null : new Rewind({ home: HOME, session: sessionRef.current.id });
 
   // The agent lives for the whole session, and so does the hub of your MCP servers (/mcp):
   // they start now, in the background, so their tools are there for the first message.
@@ -674,7 +674,7 @@ export function App({ opts, win, onRestart }) {
     try { weightsRef.current ??= startWeightsServer({ path: modelPath(base), onEdits, onDesign, cwd }); } catch (e) { push({ type: 'note', text: `Could not start the hub: ${e.message}`, tone: 'warn' }); return null; }
     const more = Object.entries(extra).filter(([, v]) => v != null && v !== '').map(([k, v]) => `&${k}=${encodeURIComponent(v)}`).join('');
     const url = `${weightsRef.current.url}?tab=${tab}${more}`;
-    if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+    if (!process.env.AGENTIC_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
     return { server: weightsRef.current, url };
   };
   // /model picked a different set of weights: only the model server restarts;
@@ -4098,7 +4098,7 @@ export function App({ opts, win, onRestart }) {
     agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
-    modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
+    modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle(process.env.AGENTIC_SPINNER), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
     inputMode, menu: menu ? { ...menu, index: menuIdx } : null, waitingForYou: !!perm, thinking,
     thinkingLabel: thinkingLevel(model, thinking, effort).label.toLowerCase(), thinkingLevels: model.thinkingLevels ?? [], ...(picker?.kind === 'model' ? { pickLevels: pickLevels(picker), pickLevelId: pickLevel(picker).id } : {}), ...(picker?.kind === 'service' ? serviceProps(picker) : {}), ...(picker?.kind === 'subagents' ? { subagents: { models: catalog?.models ?? [], main: model.remote?.model ?? null, where: model.remote?.label ?? '' } } : {}), startPhase, startLeft: startLeftNow, waiting, battle, remoteSource: model.remote?.source ?? null,
     // The weights badge, lower right: edited weights saved and waiting, in

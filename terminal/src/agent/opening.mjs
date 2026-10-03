@@ -21,12 +21,12 @@ import { factsInFull } from './facts.mjs';
 import { isHomeFolder } from './prompt.mjs';
 import { HOME } from '../../../models/index.mjs';
 
-export const OPENING_MEMORY_CHARS = 8000; // ~2,200 tokens of facts at most
-export const OPENING_CHANGED = 20; // changed files listed
+const OPENING_MEMORY_CHARS = 8000; // ~2,200 tokens of facts at most
+const OPENING_CHANGED = 20; // changed files listed
 export const OPENING_COMMITS = 15;
-export const OPENING_TOP = 40; // entries of the folder's top
+const OPENING_TOP = 40; // entries of the folder's top
 const COMMIT_CHARS = 110; // a commit's line, cut (this repo's subjects run to paragraphs)
-const SKIP = new Set(['.git', '.DS_Store', '.agentic', '.bonsai']);
+const SKIP = new Set(['.git', '.DS_Store', '.agentic']);
 
 export const openingOn = () => !['off', '0', 'false'].includes(String(process.env.AGENTIC_OPENING ?? 'on').toLowerCase());
 

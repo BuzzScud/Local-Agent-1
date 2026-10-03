@@ -13,7 +13,7 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 const MARK = /\x00\x01RESIZE (\d+) (\d+)\x01\x00/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function openTerm({ cwd, cols = 155, rows = 43, args = [], env = {}, bin = (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN) }) {
+export function openTerm({ cwd, cols = 155, rows = 43, args = [], env = {}, bin = process.env.AGENTIC_BIN }) {
   const argv = bin ? [bin, ...args] : ['bun', join(root, 'src/cli.jsx'), ...args];
   const child = spawn('python3', [join(root, 'test/pty-shim.py'), String(cols), String(rows), ...argv], { cwd, env: { ...process.env, TERM: 'xterm-256color', TERM_PROGRAM: 'Apple_Terminal', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', AGENTIC_FETCH_EVERY: '0', ...env }, stdio: ['pipe', 'pipe', 'ignore'], detached: true });
   const term = new Terminal({ cols, rows, scrollback: 10000, allowProposedApi: true });

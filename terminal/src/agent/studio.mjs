@@ -33,13 +33,13 @@ import { findPrivateDir, mainFolder } from '../app/docs-dir.mjs';
 import { scoreCard } from './design.mjs';
 
 export const FOLDER = 'design studio';
-export const PIECES = 2; // pieces that go along with a request
+const PIECES = 2; // pieces that go along with a request
 export const MORE = 3; // other fitting pieces named by path
 export const PIECE_CHARS = 2600; // of one piece: a longer one is named, never cut (cut HTML is broken HTML)
 export const STUDIO_CHARS = 6400; // the head and the pieces together
 // Fewer Tailwind classes than this on a page that was never built: a plain-CSS
 // page, which the build's reset (Tailwind's preflight) would only spoil.
-export const MIN_CLASSES = 5;
+const MIN_CLASSES = 5;
 
 export function studioDir() {
   const named = process.env.AGENTIC_STUDIO_DIR;
@@ -88,7 +88,7 @@ export function readTheme(dir = studioDir()) {
 }
 
 // The colour names a theme makes (--color-<name>), for the model's note.
-export const themeColours = (theme) => [...new Set([...theme.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]).filter((n) => n !== '*'))];
+const themeColours = (theme) => [...new Set([...theme.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]).filter((n) => n !== '*'))];
 
 // The comment at the top of a piece: "# Name", "- For:", "- Words:".
 export function parsePiece(text, file = '') {
@@ -219,7 +219,7 @@ export function realBuilt(oldText, before) {
 function tailwindDir() {
   const tries = [];
   try { tries.push(dirname(createRequire(import.meta.url).resolve('tailwindcss/package.json'))); } catch {}
-  const repo = process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO;
+  const repo = process.env.AGENTIC_REPO;
   if (repo) tries.push(join(repo, 'node_modules', 'tailwindcss'), join(mainFolder(repo), 'node_modules', 'tailwindcss'));
   try { tries.push(join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'node_modules', 'tailwindcss')); } catch {}
   return tries.find((d) => existsSync(join(d, 'index.css'))) ?? null;
@@ -253,14 +253,14 @@ export function candidates(html) {
 }
 
 // The words in class="…" attributes: the classes the page means.
-export function classWords(html) {
+function classWords(html) {
   const out = new Set();
   for (const m of html.matchAll(/\bclass(?:Name)?\s*=\s*(["'])([\s\S]*?)\1/g)) for (const w of m[2].split(/\s+/)) if (w && !w.includes('${')) out.add(w);
   return [...out];
 }
 
 // A class as it appears in a selector (".md\:grid-cols-2").
-export function escapeClass(c) {
+function escapeClass(c) {
   const e = c.replace(/[^a-zA-Z0-9_\- -￿]/g, (ch) => `\\${ch}`);
   return /^\d/.test(e) ? `\\3${e[0]} ${e.slice(1)}` : e;
 }

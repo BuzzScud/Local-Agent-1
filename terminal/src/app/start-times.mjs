@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
 
-export const TIMES_FILE = () => join(HOME, 'start-times.json');
+const TIMES_FILE = () => join(HOME, 'start-times.json');
 const KEEP = 5;
 
 export function loadTimes(file = TIMES_FILE()) {

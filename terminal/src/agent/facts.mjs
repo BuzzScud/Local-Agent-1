@@ -1,6 +1,6 @@
 // Agentic Coder's memory, as facts: one small file per fact, a short index that is
 // read at every start, a folder for retired facts and a log of every change.
-//   <project>/.agentic/memory/  what holds for this project (beside an older .bonsai/notes.md: .bonsai/memory/)
+//   <project>/.agentic/memory/  what holds for this project
 //   ~/.agentic/memory/          what holds for you, in every project
 //     index.md      one line per fact (rebuilt after every change)
 //     facts/*.md    the facts
@@ -36,7 +36,7 @@ export const FIRST_FACTS = [
 // AGENTIC_HOME set (a test's own home for Agentic Coder's files) it is kept in
 // there, so a test never reads or writes the real one.
 export function memoryDirs(cwd, home = homedir()) {
-  const other = (process.env.AGENTIC_MEMORY ?? process.env.BONSAI_MEMORY) || ((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ? join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME), 'memory-about-you') : null);
+  const other = process.env.AGENTIC_MEMORY || (process.env.AGENTIC_HOME ? join(process.env.AGENTIC_HOME, 'memory-about-you') : null);
   const you = (home === homedir() && other) || join(home, '.agentic', 'memory');
   const notes = memoryFile(cwd, home);
   const project = resolve(dirname(dirname(notes))) === resolve(home) ? null : join(dirname(notes), 'memory');
@@ -182,7 +182,7 @@ export function readLog(dir) {
   try { return readFileSync(join(dir, 'log.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; }
 }
 
-// Inside a git repo the memory stays private: .bonsai/ in .git/info/exclude
+// Inside a git repo the memory stays private: .agentic/ in .git/info/exclude
 // (this checkout only; no tracked file changes).
 function keepOutOfGit(dir) {
   const root = dirname(dirname(dir));
@@ -193,7 +193,7 @@ function keepOutOfGit(dir) {
     const cur = existsSync(ex) ? readFileSync(ex, 'utf8') : '';
     if (/^\/?\.agentic\/?\s*$/m.test(cur)) return;
     mkdirSync(dirname(ex), { recursive: true });
-    appendFileSync(ex, `${cur && !cur.endsWith('\n') ? '\n' : ''}# Agentic Coder's private memory\n.bonsai/\n.agentic/\n`);
+    appendFileSync(ex, `${cur && !cur.endsWith('\n') ? '\n' : ''}# Agentic Coder's private memory\n.agentic/\n`);
   } catch { /* a repo we cannot write to keeps its memory untracked by hand */ }
 }
 
@@ -464,7 +464,7 @@ function tidyNow(dir, { today = day(), root = null } = {}) {
 }
 
 // What other code calls: the same changes, one at a time per folder (locked).
-export function rebuildIndex(...a) { return locked(a[0], () => rebuildIndexNow(...a)); }
+function rebuildIndex(...a) { return locked(a[0], () => rebuildIndexNow(...a)); }
 export function applyChanges(...a) { return locked(a[0], () => applyChangesNow(...a)); }
 export function restoreFact(...a) { return locked(a[0], () => restoreFactNow(...a)); }
 export function undoLast(...a) { return locked(a[0], () => undoLastNow(...a)); }
@@ -524,7 +524,7 @@ export function healthLine(h) {
 }
 
 // First use: the two rules go into your own memory, and the lines of an
-// older notes file (.bonsai/notes.md, from "update memory") become facts.
+// older notes file (.agentic/notes.md, from "update memory") become facts.
 // Each happens once; a fact you removed afterwards does not come back.
 // rules: more lines that always hold, saved once as well (the app passes
 // what was boiled down from Claude's notes, claude-rules.mjs).
