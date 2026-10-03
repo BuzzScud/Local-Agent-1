@@ -95,6 +95,14 @@ export function lookSaid(name, args = {}) {
   }
 }
 
+// One step as the stuck question names it: the command it ran, the file it changed, else what it
+// looked at ("running npm test", "changing export.mjs in src", "looking at the files in src").
+export function stepSaid(name, args = {}) {
+  if (name === 'Bash' && String(args.command ?? '').trim()) return `running ${clip(args.command, 80)}`;
+  if (['Edit', 'Update', 'Write'].includes(name) && args.path) return `${name === 'Write' ? 'writing' : 'changing'} ${fileSaid(args.path)}`;
+  return `looking at ${lookSaid(name, args)}`;
+}
+
 // "a, b and c" (and "and 3 more" past six).
 export function listSaid(items, max = 6) {
   const shown = items.slice(0, max);
@@ -117,10 +125,11 @@ export function checkInQuestion(looked, secs) {
 }
 
 // Stuck: the same step twice, or three that failed; the error's own words come last.
+// step: the step in words (stepSaid).
 export function stuckQuestion(why, step, err) {
   return {
     question: why === 'repeat'
-      ? `I tried the same step twice (looking at ${step}) and I am not getting further. What should I do?`
+      ? `I tried the same step twice (${step}) and I am not getting further. What should I do?`
       : `Three steps in a row did not work.${err ? ` The last one said: ${err}` : ''} What should I do?`,
     options: ['Keep going'],
     about: ['I try again my own way.'],

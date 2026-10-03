@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { blockedReason, decide, outsidePath, isReadOnly, splitCommand, ruleCovers, ruleFor, coverage, offerFor, neverRule, protectedBy, PROTECTED, checkRule, judge, MODES, CYCLE, nextMode, modeOf } from '../src/agent/permissions.mjs';
+import { blockedReason, decide, outsidePath, isReadOnly, runsTests, testRunOf, splitCommand, ruleCovers, ruleFor, coverage, offerFor, neverRule, protectedBy, PROTECTED, checkRule, judge, MODES, CYCLE, nextMode, modeOf } from '../src/agent/permissions.mjs';
 import { homedir } from 'node:os';
 
 const cases = {
@@ -116,7 +116,7 @@ test('a new line starts another command: "ls⏎rm notes.txt" asks, it no longer 
 
 test('splitCommand: the parts, and what makes a command untrustworthy', () => {
   expect(splitCommand('npm test && ls | head; echo hi\nls').parts.map((p) => p.trim())).toEqual(['npm test', 'ls', 'head', 'echo hi', 'ls']);
-  const flags = (c) => { const { parts, ...f } = splitCommand(c); return f; };
+  const flags = (c) => { const { parts, seps, ...f } = splitCommand(c); return f; };
   expect(flags('npm test 2>&1 | tail -5')).toEqual({ nested: false, writes: false, background: false, open: false });
   expect(flags('node x.mjs >/dev/null 2>/dev/null')).toEqual({ nested: false, writes: false, background: false, open: false });
   expect(flags('npm test > out.txt').writes).toBe(true);
@@ -412,4 +412,23 @@ test('a project\'s MCP file is protected: a change to it always asks, and Bypass
   expect(decide('Write', { path: '.agentic/mcp.json' }, { mode: 'auto', rel: '.agentic/mcp.json' }).decision).toBe('ask');
   expect(decide('Edit', { path: '.agentic/mcp.json' }, { mode: 'bypass', rel: '.agentic/mcp.json' }).decision).toBe('deny');
   expect(decide('Bash', { command: 'echo "{}" > .agentic/mcp.json' }, { mode: 'bypass', cwd: '/tmp/x' }).decision).toBe('deny');
+});
+
+test('a command that runs tests: a runner, the project\'s test command or the check, never a read of a test file', () => {
+  for (const c of ['npm test', 'npm run test:unit -- --watch=false', 'bun test ./terminal/test/a.test.mjs', 'bun run test', 'yarn test', 'npx jest src', 'npx vitest run', 'node --test', 'node --test test/', 'node export.test.mjs',
+    'pytest -q', 'python3 -m pytest tests/test_calc.py::test_add', 'python tests/test_calc.py', 'python -m unittest discover', 'cargo test', 'go test ./...', 'make test', 'rspec spec/a_spec.rb',
+    'cd web && npm test', 'CI=1 npm test', 'timeout 60 bun test', 'bun test 2>&1 | tail -20', '(cd api; pytest)'])
+    expect([c, runsTests(c)]).toEqual([c, true]);
+  for (const c of ['cat export.test.mjs', 'grep -n "toCsv" export.test.mjs', 'grep -rn foo test/', 'ls terminal/test', 'sed -n 1,40p tests/test_calc.py', 'git diff --stat test/', 'head -20 test/a.test.js',
+    'cat latest.log', 'npm run build', 'npm install --save-dev vitest', 'echo test', 'rg attestation src', 'node scripts/build.mjs', 'pytest.ini', 'vim test/a.js'])
+    expect([c, runsTests(c)]).toEqual([c, false]);
+  // The project's own command and the check this message named count with whatever follows them.
+  expect(runsTests('./scripts/check-all.sh --fast', { testCmd: './scripts/check-all.sh' })).toBe(true);
+  expect(runsTests('node check-page.mjs', { check: 'node check-page.mjs' })).toBe(true);
+  expect(runsTests('cat check-page.mjs', { check: 'node check-page.mjs' })).toBe(false);
+  // Piped on into another command: that command's exit code stands for the line.
+  expect(testRunOf('bun test 2>&1 | tail -20')).toEqual({ piped: true });
+  expect(testRunOf('npm test || echo failed')).toEqual({ piped: false });
+  expect(testRunOf('cd web && npm test')).toEqual({ piped: false });
+  expect(splitCommand('npm test && ls | head; echo hi').seps).toEqual(['&&', '|', ';']);
 });

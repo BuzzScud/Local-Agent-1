@@ -15,6 +15,16 @@ export function readResults(out, code) {
   return { ok, passed, failed, total: passed === null ? null : passed + failed, failing: [...new Set(failing)].slice(0, 10) };
 }
 
+// Whether a test run failed: the counts its runner printed, else its exit code. piped: the output
+// went on into another command (… | tail -20), whose exit code says nothing about the tests, so
+// with no counts in what came out the answer is null: not known.
+export function testsFailed(out, code, { piped = false } = {}) {
+  const r = readResults(String(out ?? ''), 0);
+  if (r.failed != null && (r.failed > 0 || piped)) return r.failed > 0;
+  if (piped) return null;
+  return code !== 0;
+}
+
 // The useful part of a failing run for the model: the failures, not the noise.
 export function failureDigest(out, maxLines = 60) {
   const lines = out.split('\n');

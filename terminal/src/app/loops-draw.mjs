@@ -113,7 +113,7 @@ export function runLines(l, run, lines, cols, now, { tail = null, full = false }
     if (x.kind === 'tool' || x.kind === 'fail') {
       const m = /^([A-Za-z ]+)\((.*)\)$/s.exec(x.text);
       out.push(fit([p(' ⏺ ', x.kind === 'fail' ? 'bad' : 'accent'), ...(m ? [p(m[1], 'white b'), p(`(${cut(m[2].replace(/\s+/g, ' '), w - m[1].length - 6)})`, 'dim')] : [p(cut(x.text, w - 4), 'white')])], w));
-      if (x.kind === 'fail') out.push(fit([p('   ⎿ ', 'faint'), p(m && /\btest/.test(m[2]) ? 'the tests fail' : 'did not work', 'badDim')], w));
+      if (x.kind === 'fail') out.push(fit([p('   ⎿ ', 'faint'), p(isTest(x) ? 'the tests fail' : 'did not work', 'badDim')], w));
       continue;
     }
     if (x.kind === 'note') { out.push(fit([p('   · ', 'faint'), p(cut(x.text, w - 6), 'dim')], w)); continue; }
@@ -139,7 +139,8 @@ const LOOKS = new Set(['Read', 'Search', 'List', 'Map', 'CodeSearch', 'Explore',
 const CHANGES = new Set(['Update', 'Write', 'Rename']);
 const WEB = new Set(['Fetch', 'Web Search']);
 const labelOf = (x) => String(x.text ?? '').split('(')[0];
-const isTest = (x) => labelOf(x) === 'Bash' && /\b(test|tests|pytest|jest|vitest|mocha|unittest|rspec)\b/.test(x.text);
+// A run of the tests, as the run said (loop-run.mjs); a line written without that word is read by its command.
+const isTest = (x) => (typeof x.test === 'boolean' ? x.test : labelOf(x) === 'Bash' && /\b(test|tests|pytest|jest|vitest|mocha|unittest|rspec)\b/.test(x.text));
 export function cycleOf(l, lines, now) {
   const st = (name, state, note = '', frac = null, tone = null) => ({ name, state, note, frac, tone });
   const run = l.current;

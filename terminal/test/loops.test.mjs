@@ -3,7 +3,8 @@
 // files the board reads and the keys it sends back, and the Tree drawn at the sizes it meets.
 // End to end with the app and a stand-in model: app-loops.test.mjs.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { PassThrough } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -412,7 +413,61 @@ test('what a run asks, as the board shows it, and what "always" covers', () => {
   expect(R.signatureOf({ name: 'Write', args: { path: 'a.txt' } })).toBe('Edit:*');
   expect(R.signatureOf({ name: 'Edit', args: { path: 'b.txt' } })).toBe('Edit:*');
   expect(R.signatureOf({ name: 'Ask', args: {} })).toBe(null);
-  expect(R.isTestRun('Bash', 'node --test')).toBe(true);
-  expect(R.isTestRun('Bash', 'ls')).toBe(false);
-  expect(R.isTestRun('Read', 'export.test.mjs')).toBe(false);
+  // The agent marks a run of the tests (ev.tests); reading a test file is not one.
+  expect(R.isTestRun({ label: 'Bash', arg: 'node --test', tests: { failed: false } })).toBe(true);
+  expect(R.isTestRun({ label: 'Bash', arg: 'cat export.test.mjs' })).toBe(false);
+  expect(R.isTestRun({ label: 'Read', arg: 'export.test.mjs' })).toBe(false);
+});
+
+test('a fixing loop ends only on a passing run of the tests, not on a read of a test file', () => {
+  // The run's side: only steps the agent marks as a run of the tests count (ev.tests).
+  const out = new PassThrough();
+  const said = [];
+  out.on('data', (d) => String(d).split('\n').filter(Boolean).forEach((l) => said.push(JSON.parse(l))));
+  const io = R.loopIO({ input: new PassThrough(), output: out, mode: 'auto' });
+  io.event('tool', { label: 'Bash', arg: 'bun test', error: true, tests: { failed: true } });
+  io.event('tool', { label: 'Update', arg: 'src/login.js', error: false });
+  io.event('tool', { label: 'Bash', arg: 'bun test 2>&1 | tail -5', error: false, tests: { failed: true } });
+  io.event('tool', { label: 'Bash', arg: 'cat test/login.test.js', error: false });
+  io.end({ reason: 'done', finalText: 'I changed the login check; one test still fails.' });
+  expect(said.map((e) => [e.t, e.test, e.failed])).toEqual([['tool', true, true], ['tool', false, undefined], ['tool', true, true], ['tool', false, undefined], ['end', undefined, undefined]]);
+  expect(said.at(-1).tests).toEqual({ ok: false });
+  // The window's side: the loop goes on, and the board draws the piped run as failing tests.
+  const w = window();
+  const l = w.m.add(L.parseLoop('debug'));
+  w.pass(2000);
+  for (const e of said) w.runs[0].emit(e);
+  expect(l.state).toBe('waiting');
+  expect(l.runs.at(-1).ok).toBe(false);
+  const lines = L.readRun(w.dir, process.pid, l.id, 1);
+  expect(lines.filter((x) => x.kind === 'fail').map((x) => x.text)).toEqual(['Bash(bun test)', 'Bash(bun test 2>&1 | tail -5)']);
+  expect(lines.find((x) => x.text === 'Bash(cat test/login.test.js)')).toMatchObject({ kind: 'tool', test: false });
+  w.m.close();
+});
+
+test('/loop reads a time in short or long words, first or last', () => {
+  const read = (t) => { const p = L.parseLoop(t, { min: 60 }); return [p.every, p.message]; };
+  expect(read('10m check the tests')).toEqual([600, 'check the tests']);
+  expect(read('10 minutes check the tests')).toEqual([600, 'check the tests']);
+  expect(read('10 min check the tests')).toEqual([600, 'check the tests']);
+  expect(read('1 hour read the news')).toEqual([3600, 'read the news']);
+  expect(read('2 hours check the build')).toEqual([7200, 'check the build']);
+  expect(read('every 30 seconds say hi')).toEqual([60, 'say hi']); // the shortest gap is a minute
+  expect(read('every hour, check the tests')).toEqual([3600, 'check the tests']);
+  expect(read('check the tests every 10 minutes')).toEqual([600, 'check the tests']);
+  expect(read('read the Bun release page every day.')).toEqual([86_400, 'read the Bun release page']);
+  expect(L.parseLoop('tests every 5 minutes', { min: 60 })).toMatchObject({ kind: 'test', every: 300, name: 'Run the tests' });
+  // A time inside the message is the message's own.
+  expect(read('fix the bug that happens every 5 minutes on start')).toEqual([null, 'fix the bug that happens every 5 minutes on start']);
+  expect(read('3 tests fail, fix them')).toEqual([null, '3 tests fail, fix them']);
+});
+
+test('a run\'s last line is read even when it arrives after the run\'s process has gone', async () => {
+  // The run exits at once; something it started writes its end line 300 ms later on the same output.
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-late-'));
+  writeFileSync(join(dir, 'later.mjs'), 'setTimeout(() => console.log(JSON.stringify({ t: "end", reason: "done", final: "all good" })), 300);\n');
+  writeFileSync(join(dir, 'run.mjs'), `import { spawn } from 'node:child_process';\nspawn(process.execPath, [${JSON.stringify(join(dir, 'later.mjs'))}], { stdio: ['ignore', 'inherit', 'inherit'] });\nprocess.exit(0);\n`);
+  const h = L.startRun({ folder: dir, prompt: 'x' }, { self: [process.execPath, join(dir, 'run.mjs')], env: { ...process.env } });
+  const end = await new Promise((done) => h.on((ev) => { if (ev.t === 'end') done(ev); }));
+  expect(end).toMatchObject({ reason: 'done', final: 'all good' });
 });

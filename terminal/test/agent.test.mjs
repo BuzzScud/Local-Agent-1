@@ -388,6 +388,85 @@ test('a failed check puts the message\'s edits back; a file another hand changed
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toBe('yours\n');
 });
 
+// Only a run of the tests is the check (3 Oct 2026): before, the last command with "test" in it
+// decided, so a search of the test file after the tests kept a broken change or put a good one back.
+async function checkedBy(newText, after) {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: newText } } },
+    { tool: { name: 'Bash', args: { command: 'node --test' } } },
+    ...after.map((command) => ({ tool: { name: 'Bash', args: { command } } })),
+    { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' },
+  ];
+  const cwd = project();
+  const before = readFileSync(join(cwd, 'export.mjs'), 'utf8');
+  const fake = await startFakeServer(replies);
+  const notes = [];
+  const tools = [];
+  const agent = new Agent({ url: fake.url, model, cwd, home: cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, checkIns: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  agent.on('tool', (e) => tools.push(e));
+  await agent.send('change the export');
+  await fake.close();
+  return { kept: readFileSync(join(cwd, 'export.mjs'), 'utf8') !== before, putBack: notes.some((t) => /The check failed/.test(t)), tools };
+}
+
+test('a search of the test file after passing tests does not put a good change back', async () => {
+  const r = await checkedBy('  // a note\n  return toCsv(rows);', ['grep -n "no-such-words" export.test.mjs']);
+  expect(r.tools.at(-1).error).toBe(true); // grep found nothing
+  expect(r.kept).toBe(true);
+  expect(r.putBack).toBe(false);
+  expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: false });
+  expect(r.tools.at(-1).tests).toBeUndefined();
+});
+
+test('a search of the test file after failing tests does not keep a broken change', async () => {
+  const r = await checkedBy('  return toCsv(rows).toUpperCase();', ['grep -c "test" export.test.mjs']);
+  expect(r.tools.at(-1).error).toBe(false); // grep found it
+  expect(r.kept).toBe(false);
+  expect(r.putBack).toBe(true);
+  expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: true });
+});
+
+test('failing tests piped on into another command still fail the check', async () => {
+  // The summary came through: its counts decide (grep's exit code says nothing about the tests).
+  const r = await checkedBy('  return toCsv(rows).toUpperCase();', ['node --test 2>&1 | grep -E "^ℹ (pass|fail)"']);
+  expect(r.tools.at(-1).error).toBe(false);
+  expect(r.tools.at(-1).tests).toEqual({ failed: true });
+  expect(r.kept).toBe(false);
+  expect(r.putBack).toBe(true);
+  // tail cut the summary off: not known, so the earlier failing run still decides.
+  const cut = await checkedBy('  return toCsv(rows).toUpperCase();', ['node --test 2>&1 | tail -3']);
+  expect(cut.tools.at(-1).tests).toEqual({ failed: null });
+  expect(cut.kept).toBe(false);
+});
+
+test('a good change checked only through a cut-off pipe: the app runs the tests itself', async () => {
+  const replies = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Edit', args: { path: 'export.mjs', old_text: '  return toCsv(rows);', new_text: '  // a note\n  return toCsv(rows);' } } },
+    { tool: { name: 'Bash', args: { command: 'node --test 2>&1 | tail -1' } } },
+    { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' },
+  ];
+  const cwd = project();
+  const fake = await startFakeServer(replies);
+  const notes = [];
+  const agent = new Agent({ url: fake.url, model, cwd, home: cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, checkIns: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  await agent.send('add a note to the export');
+  await fake.close();
+  expect(notes).toContain('Checking the change: node --test');
+  expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).toContain('// a note');
+});
+
+test('a test run fails by its exit code, or by the failures its runner counted', async () => {
+  const { testsFailed } = await import('../src/flows/results.mjs');
+  expect(testsFailed('ℹ tests 2\nℹ pass 2\nℹ fail 0', 0)).toBe(false);
+  expect(testsFailed('ℹ tests 2\nℹ pass 1\nℹ fail 1', 0)).toBe(true);
+  expect(testsFailed('', 1)).toBe(true);
+  expect(testsFailed('done', 0)).toBe(false);
+});
+
 test('after an edit, what a command writes stays in the project', async () => {
   const replies = [
     { tool: { name: 'Read', args: { path: 'export.mjs' } } },

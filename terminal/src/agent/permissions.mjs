@@ -141,9 +141,10 @@ const READERS = /^(?:ls|pwd|cat|head|tail|wc|grep|egrep|fgrep|rg|find|tree|file|
 // its words unsafe to judge: another command inside it ($(…), `…`), a file
 // written by > or >> (not to /dev/null), a job left running with &, a quote
 // left open. Quoted text is text: newlines and ; inside quotes do not cut.
+// seps: what cut each part from the next (| || ; && or a new line).
 export function splitCommand(command) {
   const cmd = String(command ?? '').trim();
-  const out = { parts: [], nested: /`|\$\(|<\(|>\(/.test(cmd), writes: false, background: false, open: false };
+  const out = { parts: [], seps: [], nested: /`|\$\(|<\(|>\(/.test(cmd), writes: false, background: false, open: false };
   let cur = '';
   let q = null;
   for (let i = 0; i < cmd.length; i++) {
@@ -151,7 +152,7 @@ export function splitCommand(command) {
     if (q) { if (c === '\\' && q === '"' && i + 1 < cmd.length) { cur += c + cmd[++i]; continue; } if (c === q) q = null; cur += c; continue; }
     if (c === '"' || c === "'") { q = c; cur += c; continue; }
     if (c === '\\' && i + 1 < cmd.length) { cur += c + cmd[++i]; continue; }
-    if (c === '|' || c === ';' || c === '\n' || (c === '&' && cmd[i + 1] === '&')) { out.parts.push(cur); cur = ''; if (cmd[i + 1] === c) i++; continue; }
+    if (c === '|' || c === ';' || c === '\n' || (c === '&' && cmd[i + 1] === '&')) { out.parts.push(cur); cur = ''; out.seps.push(cmd[i + 1] === c ? c + c : c); if (cmd[i + 1] === c) i++; continue; }
     if (c === '>') {
       const m = /^>{1,2}\s*\/dev\/null\b|^>&[12]\b/.exec(cmd.slice(i));
       if (m) { i += m[0].length - 1; cur = cur.replace(/\d$/, ''); continue; }
@@ -178,6 +179,40 @@ export function isReadOnly(command) {
   const s = splitCommand(cmd);
   if (s.nested || s.writes || s.background || s.open) return false;
   return s.parts.every((p) => !p.trim() || readerPart(p));
+}
+
+// Commands that run tests: the project's test command, the check named for this message, or a
+// known test runner, at the start of one of its parts (after "cd x &&", "CI=1", "timeout 60").
+// Reading, searching or listing a test file is not running it (3 Oct 2026: any command with the
+// word "test" in it counted, so a grep of the test file that found nothing put a passing change
+// back, and a cat of it after failing tests kept a broken one).
+const TEST_RUNNERS = new RegExp(`^(?:${[
+  String.raw`(?:npm|pnpm|yarn|bun)\s+(?:run(?:-script)?\s+)?test(?::[\w:.-]+)?\b(?!\.)`, String.raw`npm\s+t\b`, String.raw`bun\s+test\b`,
+  String.raw`(?:npx|bunx|pnpm\s+(?:exec|dlx)|yarn\s+(?:exec|dlx))\s+(?:-\S+\s+)*(?:jest|vitest|mocha|ava|tap|playwright\s+test|cypress\s+run)\b`,
+  String.raw`(?:\.\/node_modules\/\.bin\/)?(?:jest|vitest|mocha|ava)\b(?!\.)`,
+  String.raw`node\s+(?:-\S+\s+)*--test\b`, String.raw`deno\s+test\b`,
+  String.raw`(?:python3?|py)\s+(?:-\S+\s+)*-m\s+(?:pytest|unittest)\b`, String.raw`(?:pytest|py\.test|tox|nox)\b(?!\.)`,
+  String.raw`cargo\s+(?:test|nextest)\b`, String.raw`go\s+test\b`, String.raw`swift\s+test\b`, String.raw`dotnet\s+test\b`, String.raw`zig\s+build\s+test\b`,
+  String.raw`mvn\s+(?:\S+\s+)*test\b`, String.raw`(?:\.\/)?gradlew?\s+(?:\S+\s+)*test\b`,
+  String.raw`(?:bundle\s+exec\s+)?(?:rspec|rake\s+test)\b`, String.raw`(?:(?:\.\/)?vendor\/bin\/)?phpunit\b`, String.raw`mix\s+test\b`, String.raw`ctest\b`, String.raw`make\s+(?:-\S+\s+)*(?:test|check)\b`,
+].join('|')})`);
+// A test file run by itself: node export.test.mjs, bun ./a.spec.ts, python tests/test_calc.py.
+const TEST_FILE_RUN = /^(?:node|bun(?:\s+run)?|deno\s+run|tsx|ts-node|python3?)\s+(?:-\S+\s+)*\S*?(?:[./_-](?:test|spec)\.[cm]?[jt]sx?|_test\.py|\btest_\w*\.py)(?=\s|\)|$)/;
+// What may come before the command itself: a subshell's (, NAME=value, env, time, timeout 60.
+const WRAPPERS = /^(?:\(\s*|(?:[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)|env|time|command|nice|timeout(?:\s+-\S+)*\s+\d+[smh]?)\s+)+/;
+export function runsTests(command, own = {}) { return testRunOf(command, own) !== null; }
+// The same, with how: { piped } when the run's output goes on into another command (… | tail -20),
+// whose exit code then stands for the whole line and says nothing about the tests. null: no test run.
+export function testRunOf(command, { testCmd = null, check = null } = {}) {
+  const own = [testCmd, check].map((c) => String(c ?? '').trim().replace(/\s+/g, ' ')).filter(Boolean);
+  const s = splitCommand(command);
+  let found = null;
+  s.parts.forEach((raw, i) => {
+    const p = raw.trim().replace(WRAPPERS, '').replace(/\s+/g, ' ');
+    if (!p || !(own.some((c) => p === c || p.startsWith(`${c} `) || p.startsWith(`${c})`)) || TEST_RUNNERS.test(p) || TEST_FILE_RUN.test(p))) return;
+    found = { piped: s.seps[i] === '|' };
+  });
+  return found;
 }
 
 export function blockedReason(command) {
