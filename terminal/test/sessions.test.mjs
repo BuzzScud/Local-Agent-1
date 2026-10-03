@@ -170,6 +170,8 @@ test.skipIf(!S.canHost())('ctrl+b leaves the app running; coding sessions lists 
     const other = await codingAsync(['attach', 'demo-project-9'], { cwd, env: { ...env, AGENTIC_REMOTE_KEY: 'acd-x', AGENTIC_REMOTE_KEYSTORE: 'file' } });
     expect(other.status).toBe(1);
     expect(other.stderr).toContain('demo-project-9');
+    // In case it was a slip of the name: what does run on this Mac is said too.
+    expect(other.stderr).toContain('If you meant a session on this Mac, these run here: demo-project-1, demo-project-2. coding sessions lists them.');
 
     // Opened again in a smaller window: the whole screen is drawn again at its size, the typed text still there.
     const b = await runInPty({ cwd, env, cols: 100, rows: 30, args: ['attach', 'demo-project-1'], steps: [
