@@ -343,6 +343,8 @@ export function App({ opts, win, onRestart }) {
   // the place while one is open: answerWait is "type your answer" to it.
   const [btw, setBtw] = useState(null);
   const btwRef = useRef(null);
+  // By service, for the session: whether its lowest model loaded when tried (btw.mjs sideChoice).
+  const sideMemo = useRef({});
   const [answerWait, setAnswerWait] = useState(false);
 
   // Each new item is measured before it is shown (see primeRows), so the
@@ -541,7 +543,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState, model, catalog };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -2334,10 +2336,17 @@ export function App({ opts, win, onRestart }) {
     setBtw({ id, question, text: '', phase: 'answering', startedAt: Date.now(), scroll: null });
     autoRef.current.cancel(); // the side lane is the memory save's too
     try {
-      const r = await askAside({ agent, question, live: S.current.live, signal: ac.signal, onText: (all) => mine((b) => ({ ...b, text: all, phase: 'writing' })) });
+      // On a remote: who answers is chosen there (the lowest model that is ready, else the main one).
+      const rm = remoteRef.current.on ? S.current.model?.remote : null;
+      const remote = rm && rm.kind !== 'llama' ? {
+        kind: rm.kind, ollama: Boolean(rm.ollama), main: rm.model,
+        models: S.current.catalog?.models ?? [], picked: agent.helperJobs?.side?.on ? agent.helperJobs.side.model : null,
+        memo: (sideMemo.current[agent.url] ??= {}),
+      } : null;
+      const r = await askAside({ agent, question, live: S.current.live, signal: ac.signal, remote, tryMs: Number(process.env.AGENTIC_BTW_TRY_MS) || undefined, onText: (all) => mine((b) => ({ ...b, text: all, phase: 'writing' })), onNote: (wait) => mine((b) => (b.phase === 'answering' ? { ...b, wait } : b)) });
       if (ac.signal.aborted) return;
       if (r.noRoom) mine((b) => ({ ...b, phase: 'noroom', text: "No room for a side question right now: the conversation fills the model's memory. Ask again after this step, or /compact when it is done." }));
-      else mine((b) => ({ ...b, phase: r.text ? 'done' : 'error', text: r.text || 'No answer came back. Try asking again.' }));
+      else mine((b) => ({ ...b, phase: r.text ? 'done' : 'error', text: r.text || 'No answer came back. Try asking again.', who: r.text ? r.who ?? null : null }));
     } catch (e) {
       if (!ac.signal.aborted) mine((b) => ({ ...b, phase: 'error', text: `Could not answer: ${e.message}` }));
     }
@@ -2497,10 +2506,14 @@ export function App({ opts, win, onRestart }) {
         // A quick side question, like Claude Code's: it runs while Agentic Coder works.
         if (!arg) { push({ type: 'note', text: 'Ask the question after it: /btw what are you doing right now?', tone: 'dim' }); break; }
         if (S.current.starting) { push({ type: 'note', text: 'The model is still starting; ask again in a moment.', tone: 'dim' }); break; }
+        // Only on a remote (3 Oct 2026, the owner's pick): there another model, or the main one
+        // on a request of its own, takes the question. This Mac's own model has one memory for both.
+        const rm = remoteRef.current.on ? model.remote : null;
+        if (!rm && !opts.url) { push({ type: 'note', text: '/btw works on a remote model: /remote connects one (the lowest model there answers the side question when it is ready). On this Mac’s own model it is off.', tone: 'warn' }); break; }
         if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then ask again.', tone: 'dim' }); break; }
-        // Without a side lane the question would take the conversation's lane
-        // and throw away its reading.
-        if (agent.slots?.side === undefined) { push({ type: 'note', text: '/btw needs the model server\'s side lane, and this one has a single lane (with --url, add --slots 2).', tone: 'warn' }); break; }
+        // A llama server (your other computer, or one given with --url): without a side lane the
+        // question would take the conversation's lane and throw away its reading.
+        if ((!rm || rm.kind === 'llama') && agent.slots?.side === undefined) { push({ type: 'note', text: '/btw needs the model server\'s side lane, and this one has a single lane (with --url, add --slots 2).', tone: 'warn' }); break; }
         askBtw(arg);
         break;
       }
@@ -3027,7 +3040,7 @@ export function App({ opts, win, onRestart }) {
     // under it: one row too many would print the page, and /start could no longer change it in place.
     const fits = holdRef.current ? holdRoom(items, measure.current, rows ?? 40) - heldRows(items, measure.current) : (rows ?? 24) - 6;
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
-    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room }) : [];
+    const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
     const at = mentionAt(input);
     if (!menu && at) {

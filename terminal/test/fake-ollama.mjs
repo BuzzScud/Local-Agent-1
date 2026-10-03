@@ -34,6 +34,7 @@ export function answerOf(body, { review = 'LGTM', look = 'LGTM', describe = 'A l
   if (/review a code change/i.test(sys)) return { content: review };
   if (/check how a web page looks/i.test(sys)) return { content: look };
   if (/summarize a coding session/i.test(sys)) return { content: `Summary by ${m}.` };
+  if (/side question from the user, asked with \/btw/i.test(sys)) return { content: `Side answer by ${m}.` };
   if (body.tools?.length && /Read the file notes\.txt|spelling mistake|echo ok/.test(said)) {
     const want = /Read the file/.test(said) ? ['Read', { path: 'notes.txt' }] : /spelling/.test(said) ? ['Edit', { path: 'notes.txt', old_text: 'Hello wrold', new_text: 'Hello world' }] : ['Bash', { command: 'echo ok' }];
     if (m === 'words:7b') return { content: 'Sure, I can help with that file.' };
@@ -84,6 +85,10 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
     }
     if (req.url === '/api/chat') {
       if (body.tools && !m?.caps.includes('tools')) return json(400, { error: `registry.ollama.ai/library/${body.model} does not support tools` });
+      // opts.stuck: models the service never gets loaded (no room beside the main one): no answer, ever.
+      if (opts.stuck?.includes(body.model) && !loaded.has(body.model)) return;
+      // opts.sideDelay: ms a side question waits (a service that takes one request at a time, busy with a reply).
+      if (opts.sideDelay && /asked with \/btw/.test(String(body.messages?.[0]?.content ?? ''))) await new Promise((r) => setTimeout(r, opts.sideDelay));
       loaded.set(body.model, body.options?.num_ctx ?? 32768);
       const a = answerOf(body, opts);
       if (!body.stream) return json(200, { model: body.model, message: { role: 'assistant', content: a.content || 'ready' }, done: true });

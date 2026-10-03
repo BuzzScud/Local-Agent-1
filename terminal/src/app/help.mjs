@@ -53,7 +53,7 @@ export const KEYS = [
     ['esc', 'stop Agentic Coder; then say what to do instead'],
     ['ctrl+o', 'expand the last long output, summary or Context line; press again for the one before'],
     ['type and enter', 'queue your next message; it sends when Agentic Coder is free'],
-    ['/btw question', 'a quick side question: answered in a panel from the conversation so far, never added to it'],
+    ['/btw question', 'a quick side question: answered in a panel from the conversation so far, never added to it. Only on a remote (/remote): the lowest model there answers when the service has it ready, else the main one, and the panel says who answered; asked while the main model writes on a service that takes one request at a time, it answers when that reply ends. Off on this Mac’s own model'],
   ] },
   { group: 'The /btw panel', rows: [
     ['↑ ↓', 'scroll a long answer'],

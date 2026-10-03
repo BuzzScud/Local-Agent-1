@@ -3,7 +3,7 @@ export const COMMANDS = [
   { name: 'help', desc: 'Open the Help page in the browser: every command, key and setting' },
   { name: 'clear', desc: 'Start a new conversation: clears the screen and what the model remembers of this one, back in the folder you started in' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
-  { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
+  { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation: on a remote, the lowest model there answers when it is ready', arg: '[question]' },
   { name: 'agents', desc: 'Take a request through spec, plan, test-first build, verify, review and ship on a live agent tree; alone: open it', arg: '[request|demo|resume|stop]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
   { name: 'effort', desc: 'Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, steps', arg: '[low|medium|high]', picker: true },
@@ -86,14 +86,19 @@ export const TYPED_ONLY = new Set(['morning']);
 // for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
 export const WHEN_ROOM = new Set(['jumptomac']);
 export const MAC_ONLY = new Set(['start', 'stop']);
+// /btw works only where another model, or a second lane, can take the question while the main one
+// works: on a remote (3 Oct 2026, the owner's pick), or a server given with --url --slots 2. On
+// this Mac's own model it is not in the menu; typed in full it says where it works.
+export const REMOTE_ONLY = new Set(['btw']);
 
 // The / menu: every command but the ones /settings holds. service: on an Ollama service now.
-// room: the rows the menu may take in this window (18 at 80 × 24).
-export function matchCommands(value, { service = false, room = 18 } = {}) {
+// room: the rows the menu may take in this window (18 at 80 × 24). side: a side question can be
+// taken here (a remote, or a server with a second lane).
+export function matchCommands(value, { service = false, room = 18, side = false } = {}) {
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name));
+  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name) && (side || !REMOTE_ONLY.has(c.name)));
   const shown = q || all.length <= room ? all : all.filter((c) => !WHEN_ROOM.has(c.name));
   return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }
