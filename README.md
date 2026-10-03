@@ -284,6 +284,12 @@ it for a minute, however they are sent. `~/.agentic-coder/logs/sessions.log` kee
 session did. The Arena's **Door check** measures all of this on one Mac (no model, about 90
 seconds).
 
+From inside the app, `/jumptomac <mac>` does the same without leaving: the window goes to that
+Mac's sessions (the same menu), the session you were in keeps running, and ctrl+b there brings
+the window back to it. `/jumptomac` alone goes to the Mac used last. In a window on another Mac,
+everything the app does happens on the Mac it runs on: a model service picked with `/remote` is
+reached from that Mac, not from the one you sit at.
+
 If the other Mac takes the connection and then says nothing, the window says so and gives the
 terminal back: look at that Mac's screen, where macOS may be asking whether Agentic Coder may
 accept incoming connections (Allow), or about a folder. The door itself never waits on a folder:

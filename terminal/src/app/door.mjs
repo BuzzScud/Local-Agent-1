@@ -18,8 +18,8 @@ import { stat } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models/index.mjs';
-import { F, PROTO, BG_DIR, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
-import { recentFolders } from './store.mjs';
+import { F, PROTO, BG_DIR, DETACH_LABEL, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
+import { recentFolders, saveSettings } from './store.mjs';
 
 const home = () => process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME;
 export const DOOR_PORT = 7790;
@@ -209,7 +209,7 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
           state = 'piped';
           sock.write(frame(F.NAMED, { name: rec.name, v: PROTO, beats: true, mac }));
           // The window's own hello, without its key; a window from another Mac never owns the session.
-          piped.write(frame(F.HELLO, { cols: h.cols, rows: h.rows, fresh: Boolean(h.fresh), owner: false, via: 'door', from: who, mac }));
+          piped.write(frame(F.HELLO, { cols: h.cols, rows: h.rows, fresh: Boolean(h.fresh), owner: false, via: 'door', from: who, mac, jumps: Boolean(h.jumps) }));
           for (const f of waiting.splice(0)) piped.write(f);
           if (window) { try { show(rec.name, { cols: h.cols, rows: h.rows }); } catch {} }
         });
@@ -447,12 +447,15 @@ export async function doorCli(args, { say = (t) => process.stdout.write(`${t}\n`
 // Where a Mac's name leads: the system looks it up (Tailscale's names). AGENTIC_DOOR_AT
 // ("server-1=127.0.0.1") stands in for that in the tests and the preview pages, whose other Mac
 // is this one.
-const addressOf = (host) => (process.env.AGENTIC_DOOR_AT ?? '').split(',').map((x) => x.split('=')).find(([n]) => n === host)?.[1] ?? host;
+// With a port ("server-1=127.0.0.1:50123") when the stand-in door is not on the usual one.
+const standIn = (host) => (process.env.AGENTIC_DOOR_AT ?? '').split(',').map((x) => x.split('=')).find(([n]) => n === host)?.[1] ?? '';
+const addressOf = (host) => standIn(host).split(':')[0] || host;
+const portOf = (host, port) => Number(standIn(host).split(':')[1]) || port;
 
 // One question through the door, then the answer frame: { kind, body }.
 function ask({ host, port, hello, timeoutMs = 8000 }) {
   return new Promise((resolve, reject) => {
-    const sock = net.connect({ host: addressOf(host), port });
+    const sock = net.connect({ host: addressOf(host), port: portOf(host, port) });
     let up = false; // connected: a silence after that is the door's, not the way there
     const t = setTimeout(() => { sock.destroy(); reject(Object.assign(new Error('timeout'), up ? { code: 'SILENT' } : {})); }, timeoutMs);
     sock.on('connect', () => { up = true; sock.write(frame(F.HELLO, hello)); });
@@ -549,6 +552,8 @@ export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnl
     for (const s of sessions) say(`  ${describe(s, Date.now(), { mac: false })}`);
     return 0;
   }
+  // The Mac gone to last (its door took the key): /jumptomac with no name goes there.
+  try { saveSettings({ lastMac: host }); } catch {}
   let hello = { op: 'attach', name };
   if (!name) {
     const fresh = newRows({ host, v, folders, last });
@@ -569,8 +574,8 @@ export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnl
     if (v < 2) process.stderr.write(`\x1b[2m${host} runs an older Agentic Coder: update it there (git pull, then coding) to pick a folder or carry on a conversation.\x1b[0m\n`);
   }
   // Keys go at once, and a dead link is noticed by the system too; the window's own check-in is faster.
-  const connect = () => { const s = net.connect({ host: addressOf(host), port }); try { s.setNoDelay(true); s.setKeepAlive(true, 15_000); } catch {} return s; };
-  return viewSession({
+  const connect = () => { const s = net.connect({ host: addressOf(host), port: portOf(host, port) }); try { s.setNoDelay(true); s.setKeepAlive(true, 15_000); } catch {} return s; };
+  return viewJumping({
     name: hello.name ?? `a new session on ${host}`, where: host,
     connect,
     hello: { key, v: PROTO, ...hello },
@@ -578,5 +583,21 @@ export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnl
     again: (n) => ({ key, v: PROTO, op: 'attach', name: n, again: true }),
     silent: SILENT(host),
     ...(beatMs ? { beatMs } : {}), ...(retryMs ? { retryMs } : {}),
-  });
+  }, { pick, say: (t) => process.stderr.write(`${t}\n`) });
+}
+
+// A window that can jump (/jumptomac, typed in the app it shows): it leaves that session running,
+// shows the other Mac's sessions (the same menu as coding attach <mac>), and when that one is left
+// (ctrl+b) or ends, comes back to the session it jumped from. view: viewSession's own words.
+export async function viewJumping(view, { pick, say = (t) => process.stderr.write(`${t}\n`) } = {}) {
+  let now = { ...view, jumps: true };
+  for (;;) {
+    const r = await viewSession(now);
+    if (!r || typeof r !== 'object') return r;
+    // A clear window for the other Mac's menu (what the app drew is drawn again on the way back).
+    say(`\x1b[H\x1b[2J\x1b[2m  Jumping to ${r.jump}. ${r.name} keeps running; ${DETACH_LABEL} there comes back to it.\x1b[0m\n`);
+    try { await attachRemote({ host: r.jump, pick }); } catch (e) { say(e.message); await new Promise((res) => setTimeout(res, 2500)); }
+    // Back: the same session, which draws itself again; on another Mac, with no second window opened there.
+    now = { ...now, name: r.name, fresh: false, hello: now.again ? now.again(r.name) : now.hello };
+  }
 }
