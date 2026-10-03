@@ -39,7 +39,13 @@ export function isSmallTalk(text) {
 // rule of its own goes step by step instead of to the model for sorting.
 export function routeByRules(text) {
   const whole = text.trim();
-  if (KEEPS_ALL.test(whole)) return { kind: 'question' };
+  if (KEEPS_ALL.test(whole)) {
+    // Only the code is kept ("don't touch the code") and the rest asks for work on a text file by name
+    // (a README, a .md): the code is protected, that file is not, so the work stands.
+    const rest = whole.replace(KEEPS_CODE, (all, start) => (start?.match(/^[.!?]/)?.[0] ?? '')).trim();
+    if (rest && rest !== whole && !KEEPS_ALL.test(rest) && WORK_ON_TEXT.test(rest)) { const r = sortWords(rest); if (r && r.kind !== 'question') return r; }
+    return { kind: 'question' };
+  }
   const { rest, onIt } = setAside(whole);
   const r = sortWords(rest);
   if (rest === whole) return r;
@@ -74,6 +80,13 @@ const KEEPS_ALL = new RegExp([
   String.raw`\bno\s+(?:code\s+)?changes?${SAID}`,
   String.raw`(?:^|[.!?;:,(\n]\s*|\b(?:is|be|stay|stays|keep it|just)\s+)read[- ]only${SAID}`,
 ].join('|'), 'i');
+// The clause that keeps only the code, and a text file named in what is left.
+const KEEPS_CODE = new RegExp(String.raw`(^|[.!?]\s+|\n\s*)?[\s,;:]*\b(?:${DONT}|${WITHOUT})\s+(?:any\s+code|the\s+code|code)${SAID}(?:\s*,?\s*(?:just|and|then|but)\b)?[.!?]*`, 'gi');
+const TEXT_FILE = String.raw`(?:\b(?:README|CHANGELOG|LICENSE|CONTRIBUTING|NOTES)\b|[\w./-]+\.(?:md|markdown|txt|rst)\b|\bdocs?\/[\w./-]+)`;
+// A sentence that opens with something to do to that file ("Rewrite the README intro", "just update
+// CHANGELOG.md"). The word rules sort every request about a text file the same way, a question about
+// it too ("Explain the README"), so the doing word is asked for here; without one it stays a question.
+const WORK_ON_TEXT = new RegExp(String.raw`(?:^|[.!?]\s+|\n\s*|[,;]\s*|\b(?:just|then|and|please)\s+)(?:rewrite|update|fix|add|write|edit|change|correct|improve|shorten|expand|reword|rename|remove|delete|create|make|append|tidy|clean\s+up|polish|draft|translate|format)\b[^.!?\n]*?${TEXT_FILE}`, 'i');
 // A limit runs to the end of its clause; a sentence that is only a limit goes whole.
 const LIMIT = new RegExp(String.raw`(^|[.!?]\s+|\n\s*)?((?:[\s,;:]*(?:\b(?:but|and|so|while)\s+)?)\b(?:${DONT}|${WITHOUT}|(?:change|edit|touch|modify|alter)\s+nothing|(?<=^|[.!?;:,(\n]\s*|\b(?:and|but|with)\s+)no\s+(?:code\s+)?changes?\s+(?:to|in|on|of|for))\b([^.!?;,\n]*))([.!?]*)`, 'gi');
 function setAside(t) {
