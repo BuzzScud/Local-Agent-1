@@ -180,7 +180,7 @@ test('the Overview grid has a column for each whole test of one model ▶ Run a 
   const { board, health } = overviewTests();
   expect(board.map((t) => t.id)).toEqual(RUN_TESTS.filter((t) => t.model && !t.pick && !t.own).map((t) => t.id));
   expect(board.every((t) => !t.part)).toBe(true);
-  expect(health.map((t) => t.id)).toEqual(['big', 'remote-rules', 'hard', 'unit', 'check', 'reader', 'studio', 'constantkv', 'door']); // big, remote-rules and hard run on a service, no model of this Mac
+  expect(health.map((t) => t.id)).toEqual(['mcp-remote', 'big', 'remote-rules', 'hard', 'unit', 'check', 'reader', 'studio', 'constantkv', 'door']); // mcp-remote, big, remote-rules and hard run on a service, no model of this Mac
   const { file } = scratch();
   recordTest({ kind: 'tasks', name: 'a run', model: 'gemma', passed: 1, total: 1 }, quiet(file));
   expect(recordData(file)).toMatchObject({ board, health });

@@ -46,9 +46,11 @@ export const BUILT_IN = Object.freeze({ tools: await load('tools'), skills: awai
 export const RULE_SETS = ['auto', 'local', 'remote'];
 export const REMOTE_DIR = 'remote';
 // Listed in this order, roughly as a task goes: plan, look, change, check, recover, report.
-export const GUIDES = Object.freeze(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MEMORY', 'GIT', 'ANSWERS']);
+export const GUIDES = Object.freeze(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MCP', 'MEMORY', 'GIT', 'ANSWERS']);
 // Listed only when the Agent tool is offered (agent.mjs agentsOn).
 export const AGENTS_GUIDE = 'SUBAGENTS';
+// Listed only while a tool of an MCP server is offered (agent.mjs mcpOn).
+export const MCP_GUIDE = 'MCP';
 export const instructionsEnv = (env = process.env) => env.AGENTIC_INSTRUCTIONS;
 // The saved choice (settings.json "instructions", the file the app's settings live in), 'auto'
 // when there is none or it cannot be read.
@@ -65,7 +67,7 @@ async function loadRemote() {
   const text = async (m) => { const t = (await m).default; return t.startsWith('/$bunfs/') ? readFileSync(t, 'utf8') : t; };
   try {
     if (typeof Bun !== 'undefined') {
-      // Literal paths, so the one-file app carries all seventeen inside it (in GUIDES' order after the first three).
+      // Literal paths, so the one-file app carries all eighteen inside it (in GUIDES' order after the first three).
       const all = await Promise.all([
         text(import('../../rules/remote/HARNESS.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/TOOLS.md', { with: { type: 'text' } })),
@@ -81,6 +83,7 @@ async function loadRemote() {
         text(import('../../rules/remote/DESIGN.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/SECURITY.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/SUBAGENTS.md', { with: { type: 'text' } })),
+        text(import('../../rules/remote/MCP.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/MEMORY.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/GIT.md', { with: { type: 'text' } })),
         text(import('../../rules/remote/ANSWERS.md', { with: { type: 'text' } })),
@@ -148,7 +151,15 @@ export function toolUseText(text = readPromptFile('tools').text) {
   return sectionOf(text, 'Tool use') || sectionOf(BUILT_IN.tools, 'Tool use') || TOOL_USE_OLD;
 }
 // The Tool use lines of a set (the remote TOOLS.md, or the local one standing in for it).
-export const toolUseFor = (set = 'local', dir = rulesDir()) => toolUseText(readPromptFile('tools', dir, set).text);
+// mcp: a tool of an MCP server is offered, so the file's "## MCP tools" lines go with them, and
+// when it is the servers' list (agent/mcp.mjs mcpBrief), that list after them.
+export const toolUseFor = (set = 'local', dir = rulesDir(), { mcp = false } = {}) => {
+  const text = readPromptFile('tools', dir, set).text;
+  const lines = toolUseText(text);
+  const more = mcp ? sectionOf(text, 'MCP tools') || sectionOf(set === 'remote' ? BUILT_IN_REMOTE.tools ?? '' : BUILT_IN.tools, 'MCP tools') || '' : '';
+  const brief = typeof mcp === 'string' ? mcp : '';
+  return [lines, more, brief].filter(Boolean).join('\n');
+};
 
 const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'skill';
 
@@ -328,9 +339,9 @@ function guideOf(name, text) {
 // A set's guides: each one's name, what the list says about it and what a Read gives (its ##
 // sections; the lines above them are for the person editing it). None on the local set;
 // SUBAGENTS only when the Agent tool is offered. The shipped ones first, then the ones you added.
-export function readGuides(set = 'local', { dir = rulesDir(), agents = false, own = ownDir() } = {}) {
+export function readGuides(set = 'local', { dir = rulesDir(), agents = false, mcp = false, own = ownDir() } = {}) {
   if (set !== 'remote') return [];
-  const shipped = GUIDES.filter((g) => agents || g !== AGENTS_GUIDE).map((name) => guideOf(name, readPromptFile(name, dir, 'remote').text));
+  const shipped = GUIDES.filter((g) => (agents || g !== AGENTS_GUIDE) && (mcp || g !== MCP_GUIDE)).map((name) => guideOf(name, readPromptFile(name, dir, 'remote').text));
   const added = extraGuides(own).map((g) => {
     try { return guideOf(g.name, readFileSync(join(own, g.file), 'utf8')); } catch { return null; }
   });

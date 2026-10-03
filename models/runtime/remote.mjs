@@ -154,8 +154,8 @@ export const keyStore = () => (process.platform === 'darwin' && process.env.AGEN
 // A key the server can take in a header: printable, no spaces or line breaks.
 export const validKey = (key) => typeof key === 'string' && /^[\x21-\x7e]{1,4096}$/.test(key);
 
-// AGENTIC_REMOTE_KEY stands in for any remote's key (not a web search service's).
-const envKey = (id) => (process.env.AGENTIC_REMOTE_KEY && !String(id).startsWith('search-') ? process.env.AGENTIC_REMOTE_KEY : null);
+// AGENTIC_REMOTE_KEY stands in for any remote's key (not a web search service's, nor an MCP server's).
+const envKey = (id) => (process.env.AGENTIC_REMOTE_KEY && !/^(search|mcp)-/.test(String(id)) ? process.env.AGENTIC_REMOTE_KEY : null);
 export function readKey(id = 'default') {
   if (envKey(id)) return envKey(id);
   if (keyStore() === 'keychain') {

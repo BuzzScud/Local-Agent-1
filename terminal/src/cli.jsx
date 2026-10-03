@@ -427,7 +427,13 @@ if (opts.print) {
     if (st.slots > 1) slots = { main: 0, side: 1 };
     url = server.url;
   }
-  const stop = () => { remote?.stop(); return server?.stop(); };
+  // Your MCP servers (app/mcp-start.mjs), started now so their tools are there for the request.
+  const { openMcp } = await import('./app/mcp-start.mjs');
+  const mcp = openMcp(opts.cwd);
+  if (mcp?.broken) process.stderr.write(`· MCP: ${mcp.broken}\n`);
+  if (mcp?.project?.servers.length && mcp.project.answer !== 'yes') process.stderr.write(`· MCP: this project's own servers (.agentic/mcp.json) are not started: say yes to them in the app first\n`);
+  mcp?.hub.on('state', ({ name, state, error }) => { if (state === 'failed' || state === 'signin') process.stderr.write(`· MCP: ${name} is not running: ${error}\n`); });
+  const stop = async () => { remote?.stop(); await mcp?.hub.stopAll().catch(() => {}); return server?.stop(); };
   process.on('SIGINT', async () => { await stop(); process.exit(130); });
   try {
     // A picture (or a scanned PDF) the model reads by itself: the model reloads with its add-on, once.
@@ -455,6 +461,9 @@ if (opts.print) {
       agents: !!opts.agents,
       // The web as /web left it: a search service and reading pages (each asks, or --yes allows).
       web: webSettings(settings.web), subagents: settings.subagents !== false,
+      // Your MCP servers (/mcp): each tool asks, or --yes allows. A project's own servers run only
+      // if you said yes to them in the app before: nobody is here to be asked.
+      mcp: mcp?.hub ?? null,
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
       design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.

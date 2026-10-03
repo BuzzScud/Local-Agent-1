@@ -65,7 +65,10 @@ function gitDirs(cwd) {
 
 // root: the folder a command works in (readable + writable). readOnly: other
 // folders it may read, such as the real project behind a scratch copy.
-export function sandboxProfile(root, { home = homedir(), readOnly = [] } = {}) {
+// An MCP server started as a program (tools/mcp.mjs) runs behind the same fence, with what /mcp
+// opens for that one server: net (the internet), and local: the ports of services already
+// running on this Mac it may reach ([5432] for your Postgres), or 'any'.
+export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [] } = {}) {
   const h = real(home);
   const project = real(root);
   const inHome = (rel) => join(h, rel);
@@ -81,9 +84,7 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [] } = {}) {
     // further down still close what was already listening, and those sockets.
     // sandbox-exec takes only "localhost" or "*" as the host ("127.0.0.1:*"
     // stops every command with exit 65); localhost covers 127.0.0.1 and ::1.
-    '(deny network-outbound)',
-    '(allow network-outbound (remote ip "localhost:*"))',
-    '(allow network-outbound (remote unix-socket))',
+    ...(net ? [] : ['(deny network-outbound)', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (remote unix-socket))']),
     `(deny file-read-data (subpath ${q(h)}))`,
     `(deny file-write* (subpath ${q(h)}) (subpath "/Volumes"))`,
     '(deny file-read-data (subpath "/Volumes"))',
@@ -94,8 +95,8 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [] } = {}) {
     // What already runs here: no signals to it, no connections to it, not its data.
     '(deny signal)', '(allow signal (target same-sandbox))', // its own processes only
     `(deny file-read-data file-write* ${SERVICE_DATA.map((p) => `(subpath ${q(p)})`).join(' ')})`,
-    `(deny network-outbound (remote unix-socket (path-regex #"${SOCKETS}")))`,
-    ...listeningPorts().map((port) => `(deny network-outbound (remote ip "localhost:${port}"))`),
+    ...(local === 'any' ? [] : [`(deny network-outbound (remote unix-socket (path-regex #"${SOCKETS}")))`,
+      ...listeningPorts().filter((port) => !local.includes(port)).map((port) => `(deny network-outbound (remote ip "localhost:${port}"))`)]),
   ].filter(Boolean).join('\n');
 }
 

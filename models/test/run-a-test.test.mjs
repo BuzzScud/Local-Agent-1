@@ -88,7 +88,7 @@ test('each test the tab can run: its script is there, its command names the mode
   // The remote check asks at Low.
   // The edited copy check asks a model and its edited copy the same questions with thinking off, so it never thinks either.
   // The plain questions check asks for the app's first question the way the app does, with thinking off.
-  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting', 'questions', 'done', 'twoatonce', 'remote', 'vision', 'picturetokens', 'web', 'subagent', 'autoscreen', 'rulesfile', 'skills', 'lookfirst', 'habits', 'agents', 'thinking', 'edited', 'modelcheck']); // done sets its own (High); the New model check sets each level itself
+  expect(RUN_TESTS.filter((t) => t.model && !t.think).map((t) => t.id)).toEqual(['sorting', 'questions', 'done', 'twoatonce', 'remote', 'vision', 'picturetokens', 'web', 'mcp', 'subagent', 'autoscreen', 'rulesfile', 'skills', 'lookfirst', 'habits', 'agents', 'thinking', 'edited', 'modelcheck']); // done sets its own (High); the New model check sets each level itself
   const ed = runCommand('edited', { model: 'qwen', think: true, models });
   expect([ed.think, ed.argv]).toEqual([false, ['models/evals/tools/edited-check.mjs', '--model', 'qwen']]);
   expect(countLines(runTestById('edited'), ['original: loaded in 9 s', 'PASS original · 17 × 23 → "391"', 'FAIL edited · the capital of Japan → "Kyoto"', 'ASKED edited · “<start_of_turn>” (row 3): a special token or a space, nothing to write back'])).toEqual({ done: 3, passed: 1, total: null });

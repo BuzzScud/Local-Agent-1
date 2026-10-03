@@ -66,7 +66,7 @@ test('a guide you add is listed after the shipped ones, opens at RULES/<NAME>.md
   expect(extraGuides().map((g) => g.name)).toEqual(['DEPLOY', 'EMPTY', 'STEP2']);
   expect(readGuides('remote').find((g) => g.name === 'TESTING').about).not.toBe('never');
   const listed = readGuides('remote').map((g) => g.name);
-  expect(listed).toEqual([...GUIDES.filter((g) => g !== 'SUBAGENTS'), 'DEPLOY', 'STEP2']);
+  expect(listed).toEqual([...GUIDES.filter((g) => g !== 'SUBAGENTS' && g !== 'MCP'), 'DEPLOY', 'STEP2']);
   expect(readGuides('remote').at(-2)).toEqual({ name: 'DEPLOY', about: 'when a change goes live on the server', body: '## Steps\n\n1. Ship it.' });
   const prompt = systemPrompt({ cwd: proj, git: 'g', set: 'remote' });
   expect(prompt).toContain('- RULES/ANSWERS.md:');
@@ -212,6 +212,6 @@ test('with none of your files nothing changes: no helpers, no added guides, a fi
   writeFileSync(join(rules, 'remote', 'agents', 'TEST-WRITER.md'), WRITER);
   expect(readHelperAgents('remote')).toEqual([]);
   expect(extraGuides()).toEqual([]);
-  expect(readGuides('remote').map((g) => g.name)).toEqual(GUIDES.filter((g) => g !== 'SUBAGENTS'));
+  expect(readGuides('remote').map((g) => g.name)).toEqual(GUIDES.filter((g) => g !== 'SUBAGENTS' && g !== 'MCP'));
   expect(readFileSync(join(SOURCE, 'remote', 'SUBAGENTS.md'), 'utf8')).toContain('~/.agentic-coder/rules/remote/agents');
 });
