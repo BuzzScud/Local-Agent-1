@@ -51,6 +51,7 @@ import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_STYLES, styleWords } from '../agent/design.mjs';
 import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
+import { readRecord as sessionRecord } from './sessions.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
 import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
@@ -1756,6 +1757,18 @@ export function App({ opts, win, onRestart }) {
     return () => clearInterval(id);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const mac = macRef.current;
+  // In a background session that another Mac has a window on (through the door, door.mjs): this
+  // Mac's name, lower right, so the window there says where its keys go. The session's record
+  // says who is in it (sessions.mjs): read when a window joins, which redraws, and every 2 s.
+  const [sharedOn, setSharedOn] = useState(null);
+  useEffect(() => {
+    const name = process.env.AGENTIC_IN_HOST;
+    if (!name) return;
+    const read = () => { const on = sessionRecord(name)?.shared?.mac ?? null; setSharedOn((was) => (was === on ? was : on)); };
+    read();
+    const id = setInterval(read, 2000);
+    return () => clearInterval(id);
+  }, [redraw]);
 
   // The service's GPU memory for the footer's gauge and /meters (remote-footer.mjs): Ollama's
   // /api/ps as the model comes up on the service and every 30 s after. As with the Mac's memory, a
@@ -3651,6 +3664,7 @@ export function App({ opts, win, onRestart }) {
     // The weights badge, lower right: edited weights saved and waiting, in
     // use, or newer ones saved than the copy loaded now.
     updateBadge: updateText(update),
+    shareBadge: sharedOn ? `⇄ on ${sharedOn}` : null,
     // The footer's right side starts with these (screen.jsx footerParts): this window's own copy, the cost meter.
     spend: [inCopy ? 'own copy' : '', spend].filter(Boolean).join(' · '),
     weightsBadge: model.edited

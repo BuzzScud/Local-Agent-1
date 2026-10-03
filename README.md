@@ -269,6 +269,21 @@ coding attach <mac> <name>
 The key is asked once and kept in the Keychain. A window from another Mac never ends a session by
 closing; quit inside it, or ctrl+b to leave it running.
 
+`coding attach <mac>` lists what runs there, then what can be started there: a new session in a
+folder you worked in on that Mac, in its home, or in a folder you type (`~` is its home), or its
+last conversation carried on. The Mac the session runs on shows it too: a Terminal window opens
+there, at your window's size, so both screens show the same session and either can type. The
+footer says `⇄ on <that Mac>` while another Mac has a window on a session.
+
+A window on another Mac checks in every 10 seconds. If the link is lost (your Mac slept, the
+network dropped), the window says `Connection to <mac> lost, reconnecting…` and opens the same
+session again by itself when the link is back; ctrl+b stops the waiting. On the other side, a
+window that has said nothing for 35 seconds, or has fallen 16 MB behind, is let go: the session
+is no longer drawn at its size or counted as open there. Five wrong keys from one address refuse
+it for a minute, however they are sent. `~/.agentic-coder/logs/sessions.log` keeps what each
+session did. The Arena's **Door check** measures all of this on one Mac (no model, about 90
+seconds).
+
 ## Two parts
 
 | Part | Folder | What it is |
