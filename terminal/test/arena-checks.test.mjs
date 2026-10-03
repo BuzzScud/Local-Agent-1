@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { startFakeServer } from './fake-server.mjs';
 
 const REPO = join(import.meta.dir, '..', '..');
@@ -21,16 +21,26 @@ const script = (req) => {
   const k = Object.keys(facts).find((x) => q.includes(x));
   return { text: k ? facts[k] : 'Done.' };
 };
-function runCheck(file, url) {
+// Run without stopping this process: the stand-in answers from here, and a
+// spawnSync holds every server in the process until the command ends on Bun 1.4 (1.2 kept serving).
+async function runCheck(file, url) {
   const out = mkdtempSync(join(tmpdir(), 'agentic-arena-check-'));
-  const r = spawnSync('node', [join(RUNNERS, file), '--model', 'qwen', '--url', url, '--no-record', '--out', out], { encoding: 'utf8', timeout: 240_000, env: { ...process.env, AGENTIC_HOME: mkdtempSync(join(tmpdir(), 'agentic-arena-home-')) } });
+  const r = await new Promise((resolve) => {
+    const p = spawn('node', [join(RUNNERS, file), '--model', 'qwen', '--url', url, '--no-record', '--out', out], { env: { ...process.env, AGENTIC_HOME: mkdtempSync(join(tmpdir(), 'agentic-arena-home-')) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    p.stdout.on('data', (c) => { stdout += c; });
+    p.stderr.on('data', (c) => { stderr += c; });
+    const t = setTimeout(() => p.kill('SIGKILL'), 230_000);
+    p.on('close', (status) => { clearTimeout(t); resolve({ status, stdout, stderr }); });
+  });
   return { ...r, out, rows: JSON.parse(readFileSync(join(out, 'rows.json'), 'utf8')), summary: JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8')) };
 }
 
 test('the Look first check: 8 runs, Look first starts and sends early answers back on the on side only, a verdict', async () => {
   const fake = await startFakeServer([], { delayMs: 0, route: script });
   try {
-    const r = runCheck('look-check.mjs', fake.url);
+    const r = await runCheck('look-check.mjs', fake.url);
     expect(r.stdout.split('\n').filter((l) => /^(PASS|FAIL)\s/.test(l))).toHaveLength(8);
     expect(r.stdout).toContain('a look only: no results page, no line in the test record');
     expect(r.rows.map((x) => x.arm)).toEqual(['off', 'on', 'off', 'on', 'off', 'on', 'off', 'on']);
@@ -45,7 +55,7 @@ test('the Look first check: 8 runs, Look first starts and sends early answers ba
 test('the Tool habits check: 8 runs with the shortcuts off, the search habit from the model’s own first look', async () => {
   const fake = await startFakeServer([], { delayMs: 0, route: script });
   try {
-    const r = runCheck('habits-check.mjs', fake.url);
+    const r = await runCheck('habits-check.mjs', fake.url);
     expect(r.stdout.split('\n').filter((l) => /^(PASS|FAIL)\s/.test(l))).toHaveLength(8);
     expect(r.rows.map((x) => `${x.task}-${x.arm}`)).toEqual(['testfile-old', 'testfile-new', 'search-old', 'search-new', 'done-old', 'done-new', 'skill-old', 'skill-new']);
     expect(r.rows.filter((x) => x.task === 'search').every((x) => x.ok && x.habit)).toBe(true);
