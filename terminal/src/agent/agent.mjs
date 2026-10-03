@@ -8,6 +8,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
+import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, planSaid } from './questions.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
@@ -481,12 +482,8 @@ const OWN_HELPER_CTX = 32_768;
 // The web addresses (http or https) a request names, each once.
 export const webAddresses = (text) => [...new Set(String(text ?? '').match(/\bhttps?:\/\/[^\s<>"'`)\]]+/gi) ?? [])].map((u) => u.replace(/[.,;:!?]+$/, ''));
 
-// One line saying what an edit will do, for the plan question.
-export function planLine(name, args, prepared) {
-  const cut = (x) => { const l = String(x ?? '').trim().split('\n'); const f = l[0].trim().slice(0, 100); return l.length > 1 || l[0].length > 100 ? `${f}…` : f; };
-  if (name === 'Write') return `${prepared.created ? 'create' : 'rewrite'} ${prepared.rel ?? args.path}`;
-  return `in ${prepared.rel ?? args.path}, change "${cut(args.old_text)}" to "${cut(args.new_text)}"`;
-}
+// What an edit will do, in plain words, for the plan question (questions.mjs).
+export const planLine = planSaid;
 
 // A test run's counts and the names that fail, or null when the output says neither.
 function failsOf(text, failed) {
@@ -3158,18 +3155,21 @@ export class Agent extends EventEmitter {
   async checkIn(call, signal) {
     const t = this.turn;
     if (!t || !this.checkIns || t.changed || !LOOKS.has(call.name)) return null;
-    const shown = display(call.name, parseArgs(call.name, call.args).args ?? {});
-    t.looked.push(`${call.name} ${shown.arg ?? ''}`.trim());
+    const args = parseArgs(call.name, call.args).args ?? {};
+    const shown = display(call.name, args);
+    // Counted by the step itself; listed in plain words (the file's name, the words searched for).
+    t.looked.push({ key: `${call.name} ${shown.arg ?? ''}`.trim(), said: lookSaid(call.name, args) });
     const secs = (Date.now() - t.since) / 1000;
-    const seen = [...new Set(t.looked)];
+    const seen = [...new Set(t.looked.map((l) => l.key))];
     if (seen.length < this.checkIns.steps && secs < this.checkIns.secs) return null;
-    const list = seen.slice(-8).join('; ');
-    const question = `I have looked at ${seen.length} thing${seen.length === 1 ? '' : 's'} (${Math.round(secs / 60)} min) and not changed anything yet. Latest: ${list}. Am I on the right track? Tell me where to look, or say "keep going".`;
+    const said = [...new Set(t.looked.map((l) => l.said))];
+    const q = checkInQuestion(said, secs);
+    const { question } = q;
     t.looked = [];
     t.since = Date.now();
     const id = `checkin_${Date.now()}`;
     this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
-    const answer = await this.ask({ id, name: 'Ask', kind: 'checkin', args: { question, options: ['Keep going'] }, prepared: {}, label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'checkin', args: q, prepared: {}, label: 'Ask', arg: question });
     if (signal?.aborted) return { stop: 'interrupted' };
     if (answer.choice === 'no' && !answer.feedback) return { stop: 'declined' }; // "Stop here"
     const text = (answer.text ?? answer.feedback ?? '').trim();
@@ -3184,16 +3184,14 @@ export class Agent extends EventEmitter {
   // with what went wrong; a hint goes straight to the model.
   async stuckAsk(why, call, out, signal) {
     const t = this.turn;
-    const shown = display(call.name, parseArgs(call.name, call.args).args ?? {});
-    const step = `${call.name} ${shown.arg ?? ''}`.trim();
+    const step = lookSaid(call.name, parseArgs(call.name, call.args).args ?? {});
     const err = String(out?.text ?? '').split('\n').find((l) => l.trim())?.trim().slice(0, 160) ?? '';
-    const question = why === 'repeat'
-      ? `I ran the same step twice (${step}) and I'm not getting further. Give me a hint, say "keep going", or stop here.`
-      : `Three steps in a row failed. The last one (${step}) said: ${err}. Give me a hint, say "keep going", or stop here.`;
+    const q = stuckQuestion(why, step, err);
+    const { question } = q;
     const id = `stuck_${Date.now()}`;
     if (t) t.stuckAsks = (t.stuckAsks ?? 0) + 1;
     this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
-    const answer = await this.ask({ id, name: 'Ask', kind: 'stuck', args: { question, options: ['Keep going'] }, prepared: {}, label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'stuck', args: q, prepared: {}, label: 'Ask', arg: question });
     if (signal?.aborted) return { stop: 'interrupted' };
     if (answer.choice === 'skip') return null; // no one to ask: carry on as before
     if (answer.choice === 'no' && !answer.feedback) return { stop: 'declined' }; // "Stop here"
@@ -3210,13 +3208,14 @@ export class Agent extends EventEmitter {
   // One yes-or-steer question before changing files; yes (or "ok", "go")
   // allows the rest of this message's changes.
   async confirm(plan, signal) {
-    const question = `Before I change anything: ${plan}. Go ahead? Say yes, or tell me what to do instead.`;
+    const q = planQuestion(plan);
+    const { question } = q;
     const id = `plan_${Date.now()}`;
     this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
-    const answer = await this.ask({ id, name: 'Ask', kind: 'plan', args: { question, options: ['Yes'] }, prepared: {}, label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'plan', args: q, prepared: {}, label: 'Ask', arg: question });
     if (signal?.aborted) return { stop: 'interrupted' };
     const text = (answer.text ?? '').trim();
-    const yes = answer.choice === 'yes' || answer.choice === 'always' || /^(yes|y|ok|okay|go|go ahead|sure|do it|yep|👍)\W*$/i.test(text);
+    const yes = answer.choice === 'yes' || answer.choice === 'always' || /^(yes|y|ok|okay|go|go ahead|sure|do it|yep|👍|yes,? go ahead)\W*$/i.test(text);
     if (yes) {
       if (this.turn) this.turn.planOk = true;
       this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'yes' } });
@@ -3229,19 +3228,29 @@ export class Agent extends EventEmitter {
 
   // The model's Ask tool: the question goes through the same prompt as a
   // permission (or the answers hook when there is no screen).
+  // Several questions (more) are asked one after another, each with its place ("1 of 2").
   async askUser(id, args, shown, signal) {
-    const options = Array.isArray(args.options) ? args.options.map((o) => String(o).trim()).filter(Boolean).slice(0, 4) : [];
-    this.emit('tool-ask', { id, name: 'Ask', ...shown });
-    const answer = await this.ask({ id, name: 'Ask', args: { question: args.question, options }, prepared: {}, ...shown });
-    if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
-    if (answer.choice === 'no' || !answer.text?.trim()) {
-      this.emit('tool', { id, name: 'Ask', ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
-      return { text: `The user did not answer${answer.feedback ? ` and wrote: ${answer.feedback}` : '. Wait for their next message.'}`, error: true, stop: answer.feedback ? null : 'declined' };
+    const questions = askedQuestions(args);
+    if (!questions.length) questions.push({ question: String(args.question ?? ''), options: [], about: [], recommended: -1, several: false });
+    const got = [];
+    for (const [i, q] of questions.entries()) {
+      const qid = i ? `${id}_${i}` : id;
+      const qShown = i ? { label: 'Ask', arg: q.question } : shown;
+      this.emit('tool-ask', { id: qid, name: 'Ask', ...qShown });
+      const answer = await this.ask({ id: qid, name: 'Ask', args: { ...q, ...(questions.length > 1 ? { step: { at: i + 1, of: questions.length } } : {}) }, prepared: {}, ...qShown });
+      if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+      if (answer.choice === 'no' || !answer.text?.trim()) {
+        this.emit('tool', { id: qid, name: 'Ask', ...qShown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
+        const sofar = got.length ? ` Their answers before that: ${got.map((g) => `${g.question} → ${g.text}`).join('; ')}.` : '';
+        return { text: `The user did not answer${answer.feedback ? ` and wrote: ${answer.feedback}` : '. Wait for their next message.'}${sofar}`, error: true, stop: answer.feedback ? null : 'declined' };
+      }
+      const text = answer.text.trim();
+      this.turn?.asked?.push(q.question);
+      this.emit('tool', { id: qid, name: 'Ask', ...qShown, view: { kind: 'answer', question: q.question, text } });
+      got.push({ question: q.question, text });
     }
-    const text = answer.text.trim();
-    this.turn?.asked?.push(args.question);
-    this.emit('tool', { id, name: 'Ask', ...shown, view: { kind: 'answer', question: args.question, text } });
-    return { text: `The user answered: ${text}` };
+    if (got.length === 1) return { text: `The user answered: ${got[0].text}` };
+    return { text: `The user answered:\n${got.map((g, i) => `${i + 1}. ${g.question} → ${g.text}`).join('\n')}` };
   }
 
   // Keep the conversation inside the model's memory: first empty old tool

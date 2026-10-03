@@ -58,18 +58,21 @@ export function fileList(cwd, max = 60) {
 }
 
 // Up to three answers to pick from, as the model wrote them: short, different
-// from each other, none of them the question again.
-export function cleanOptions(list, question = '') {
+// from each other, none of them the question again. Each is a string or
+// { label, about } (about: what it means for you, with an example).
+export function cleanChoices(list, question = '') {
   const out = [];
   for (const o of Array.isArray(list) ? list : []) {
-    const t = String(o ?? '').replace(/\s+/g, ' ').trim().replace(/^(?:\d+[.)]|[-*•])\s*/, '').slice(0, 80);
+    const obj = o && typeof o === 'object';
+    const t = String((obj ? o.label : o) ?? '').replace(/\s+/g, ' ').trim().replace(/^(?:\d+[.)]|[-*•])\s*/, '').slice(0, 80);
     if (!t || t.toLowerCase() === question.trim().toLowerCase()) continue;
-    if (out.some((x) => x.toLowerCase() === t.toLowerCase())) continue;
-    out.push(t);
+    if (out.some((x) => x.label.toLowerCase() === t.toLowerCase())) continue;
+    out.push({ label: t, about: obj ? String(o.about ?? '').replace(/\s+/g, ' ').trim().slice(0, 160) : '' });
     if (out.length === 3) break;
   }
   return out.length >= 2 ? out : [];
 }
+export const cleanOptions = (list, question = '') => cleanChoices(list, question).map((c) => c.label);
 
 // The question to ask for this request ({ question, options }), or null. The
 // set questions have no answers to offer; the model's question comes with two
@@ -88,13 +91,14 @@ export async function questionFor(ctx, text) {
     return { question: `${ctx.testCmd ? FIX_QUESTION : FIX_QUESTION_NO_TESTS}${changed.length ? ` (Changed since the last commit: ${changed.join(', ')}.)` : ''}`, options: [] };
   }
   const files = fileList(ctx.cwd);
-  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 200,
+  const r = await complete({ instructions: ctx.instructions, url: ctx.url, model: ctx.model, slot: ctx.slot, signal: ctx.signal, temperature: 0, maxTokens: 360,
     system: 'You decide whether a request to a coding assistant is clear enough to start on, given the project files. The assistant can read, search and change files; it asks only what the files cannot tell it.',
-    user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}${changed.length ? `\n\nChanged since the last commit: ${changed.join(', ')}` : ''}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user and 2 or 3 short answers they might pick. Each answer is a different kind of work (explain something, fix something, add something, remove something), never the same work on three different files. Each answer is under 10 words and says what would be done. Name a file only when it is clearly the one meant; do not offer work on test files or data files unless the request is about them.`,
-    schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' }, options: { type: 'array', items: { type: 'string' }, maxItems: 3 } }, required: ['clear', 'question', 'options'] } });
+    user: `Request: "${text.trim()}"\n\nProject files:\n${files.join('\n') || '(empty folder)'}${changed.length ? `\n\nChanged since the last commit: ${changed.join(', ')}` : ''}\n\nIf it is clear what to do, answer clear: true. If not (a lone word, no idea what should change or how), answer clear: false with ONE short question for the user and 2 or 3 answers they might pick. Write for someone who does not read code: everyday words, no code names or commands. Each answer is a different kind of work (explain something, fix something, add something, remove something), never the same work on three different files. Each answer has a label under 10 words that says what would be done, and an about line that says what it means for the user, with one example. Name a file only when it is clearly the one meant; do not offer work on test files or data files unless the request is about them.`,
+    schema: { type: 'object', properties: { clear: { type: 'boolean' }, question: { type: 'string' }, options: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, about: { type: 'string' } }, required: ['label', 'about'] }, maxItems: 3 } }, required: ['clear', 'question', 'options'] } });
   if (!r.json || r.json.clear || !r.json.question?.trim()) return null;
   const question = r.json.question.trim().slice(0, 300);
-  return { question, options: cleanOptions(r.json.options, question) };
+  const choices = cleanChoices(r.json.options, question);
+  return { question, options: choices.map((c) => c.label), about: choices.map((c) => c.about) };
 }
 
 // A fix described only by what it looks like: nothing in it says where to look.
@@ -108,8 +112,8 @@ export function wantsWhere(text) {
 export async function clarify(ctx, text) {
   const q = await questionFor(ctx, text);
   if (!q) return null;
-  const { question, options } = q;
-  const answer = await ctx.ask({ id: `ask_${Date.now()}`, name: 'Ask', args: options.length ? { question, options } : { question }, prepared: {}, label: 'Ask', arg: question });
+  const { question, options, about } = q;
+  const answer = await ctx.ask({ id: `ask_${Date.now()}`, name: 'Ask', args: options.length ? { question, options, ...(about?.some(Boolean) ? { about } : {}) } : { question }, prepared: {}, label: 'Ask', arg: question });
   if (ctx.signal?.aborted) return { stop: 'interrupted' };
   if (answer.choice === 'no' || !answer.text?.trim()) {
     ctx.tool('Ask', question, { kind: 'declined', feedback: answer.feedback }, true);

@@ -3336,13 +3336,24 @@ export function App({ opts, win, onRestart }) {
     if (cur.perm) {
       const p = cur.perm;
       const n = p.options.length;
+      // A question where several may be ticked: the ticked choices, in the list's order.
+      const several = p.req.name === 'Ask' && Boolean(p.req.args?.several);
+      const tickedText = () => (p.ticked ?? []).slice().sort((a, b) => a - b).map((i) => p.options[i].text);
+      const tick = (i) => { if (p.options[i]?.choice !== 'answer') return; const t = p.ticked ?? []; setPerm({ ...p, selected: i, ticked: t.includes(i) ? t.filter((x) => x !== i) : [...t, i] }); };
       const choose = (i) => {
         const o = p.options[i];
+        // A question has no "no" row: esc stops it.
+        if (!o) { setPerm(null); p.resolve({ choice: 'no' }); setPlaceholder('Tell Agentic Coder what to do instead'); return; }
         const choice = o.choice;
         setPerm(null);
-        // Agentic Coder's question: a listed choice answers it; "type" takes the next line you enter.
-        if (choice === 'type') { answerRef.current = p.resolve; setAnswerWait(true); setPlaceholder('Type your answer to Agentic Coder, then enter'); return; }
-        if (choice === 'answer') { p.resolve({ choice, text: o.text }); return; }
+        // Agentic Coder's question: a listed choice answers it; "type" takes the next line you enter
+        // (with the ones ticked before it, on a question where several may be ticked).
+        if (choice === 'type') {
+          const before = several ? tickedText() : [];
+          answerRef.current = before.length ? (a) => p.resolve(a.choice === 'answer' ? { ...a, text: [...before, a.text].join(', ') } : a) : p.resolve;
+          setAnswerWait(true); setPlaceholder('Type your answer to Agentic Coder, then enter'); return;
+        }
+        if (choice === 'answer') { const t = several ? tickedText() : []; p.resolve({ choice, text: t.length ? t.join(', ') : o.text }); return; }
         // "Always allow": saved for this folder, and it runs now. If it cannot be saved it still holds for this session.
         if (choice === 'save') {
           const r = addRule(agentRef.current.cwd, 'allow', p.offer.rule);
@@ -3357,10 +3368,11 @@ export function App({ opts, win, onRestart }) {
       const no = p.options.findIndex((o) => o.choice === 'no');
       if (key.upArrow) setPerm({ ...p, selected: (p.selected + n - 1) % n });
       else if (key.downArrow) setPerm({ ...p, selected: (p.selected + 1) % n });
+      else if (several && ch === ' ') tick(p.selected);
       else if (key.return) choose(p.selected);
       else if (key.escape) choose(no);
       else if (key.tab && key.shift && always >= 0 && p.req.name !== 'Bash') choose(always);
-      else if (/^[1-9]$/.test(ch) && Number(ch) <= n) choose(Number(ch) - 1);
+      else if (/^[1-9]$/.test(ch) && Number(ch) <= n) { if (several && p.options[Number(ch) - 1].choice === 'answer') tick(Number(ch) - 1); else choose(Number(ch) - 1); }
       else if (key.ctrl && ch === 'c') interrupt();
       return;
     }
