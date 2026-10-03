@@ -162,7 +162,7 @@ export const RUN_TESTS = [
   { id: 'constantkv', name: 'ConstantKV check', what: 'Bonsai 2 27B ConstantKV, a copy of Bonsai whose attention memory stays the same size at any length (its own MLX runtime, not in /model): it loads and answers, reads 40+ tokens a second up to 16k, holds 64k tokens at 12.5 GB or less, and gives the app’s real tool calls on 2 of 3 tries. It needs about 12.5 GB free, so an Agentic Coder window lets go of its model first; 20–40 minutes, with a results page', model: false, memory: 12.5e9, total: 4, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/constantkv-check.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'other', name: '^ConstantKV check$', part: false } },
-  { id: 'door', name: 'Door check', what: 'background sessions and the door between Macs, on this Mac alone: a big paste arrives whole, a window whose link stalls is let go and takes no more memory, wrong keys sent together are still slowed, a cut link comes back by itself, a new session starts in the folder named; no model, about 90 seconds, with a results page', model: false, total: 9, count: '^(PASS|FAIL)\\s',
+  { id: 'door', name: 'Door check', what: 'background sessions and the door between Macs, on this Mac alone: a big paste arrives whole, a window whose link stalls is let go and takes no more memory, wrong keys sent together are still slowed, a cut link comes back by itself, a new session starts in the folder named, and a list is answered even when the folders cannot be read; no model, about 90 seconds, with a results page', model: false, total: 10, count: '^(PASS|FAIL)\\s',
     script: 'models/evals/tools/door-check.mjs', args: () => [],
     stop: 'SIGTERM', record: { kind: 'other', name: '^Door check$', part: false } },
 ];

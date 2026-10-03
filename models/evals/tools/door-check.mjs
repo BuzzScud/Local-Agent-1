@@ -14,6 +14,7 @@
 //   back       a window whose link is cut is back by itself within 6 s, and what is typed then arrives
 //   folder     a new session starts in the folder named; one that is not there is refused; "the last
 //              conversation" starts where that was, carrying it on
+//   nowait     a list is answered within 6 s, without folders, when the folders cannot be read
 //   window     a session another Mac opens gets one window on this Mac, at its size, and no second
 //              one when the same window comes back
 // It writes its results page into the DOCS folder (tests/) and its line in the test record.
@@ -301,7 +302,7 @@ try {
     // A conversation had in the repo's folder, the latest: "the last conversation there".
     mkdirSync(join(home, 'sessions', 'repo'), { recursive: true });
     const conv = join(home, 'sessions', 'repo', 'a.json');
-    writeFileSync(conv, JSON.stringify({ id: 'a', cwd: root, title: 'the door', updated: new Date().toISOString(), messages: [] }));
+    writeFileSync(conv, JSON.stringify({ title: 'the door', messages: [], cwd: root, id: 'a', updated: new Date().toISOString() })); // as the app saves one
     utimesSync(conv, new Date(), new Date());
     const d3 = await openDoor({ ...doorOpts, port: 0, startEnv: { ...process.env, AGENTIC_LAUNCHER: standIn } });
     try {
@@ -319,6 +320,20 @@ try {
       for (const w of [named, missing, last]) w.sock.destroy();
       return { ok: okNamed && /^No folder /.test(refusal) && okLast, detail: `a folder named: ${okNamed ? 'started there' : 'not started there'}; one not there: ${/^No folder /.test(refusal) ? 'refused (“No folder … on server-1.”)' : refusal ? `“${refusal}”` : 'no refusal'}; the last conversation: ${okLast ? 'carried on in its folder' : 'not carried on'}` };
     } finally { d3.close(); }
+  });
+
+  await check('nowait', 'The list is answered even when the folders cannot be read', async () => {
+    // A door whose look at its folders never comes back (a folder macOS guards, a drive that went away).
+    const d5 = await openDoor({ ...doorOpts, port: 0, folders: () => new Promise(() => {}) });
+    try {
+      const at = Date.now();
+      const w = await windowTo(d5.address().port, { op: 'list', v: 2 });
+      const answered = await until(() => w.frames.some(([k]) => k === F.LIST), 8000);
+      const secs = (Date.now() - at) / 1000;
+      const body = w.frames.find(([k]) => k === F.LIST)?.[1];
+      w.sock.destroy();
+      return { ok: answered && secs <= 6 && Array.isArray(body?.folders) && body.folders.length === 0, detail: answered ? `answered after ${secs.toFixed(1)} s, with the sessions and no folders` : 'no answer in 8 s', listSecs: answered ? secs : null };
+    } finally { d5.close(); }
   });
 
   await check('window', 'One window on this Mac for a session opened from another', async () => {
@@ -339,7 +354,7 @@ try {
   if (realHome === undefined) delete process.env.AGENTIC_HOME; else process.env.AGENTIC_HOME = realHome;
 }
 
-const OF = 9;
+const OF = 10;
 const full = !stopping && rows.length === OF;
 const pass = full && rows.every((r) => r.ok);
 const code = codeLabel();
@@ -362,7 +377,7 @@ if (look) console.log('a look only: no results page, no line in the test record'
 else if (docs) { writePage(out, rows, summary, prev); console.log(`results page: ${summary.page}`); }
 else console.log(`no results page: the DOCS folder is not here (${DOCS_DIR})`);
 if (!look) recordTest({
-  kind: 'other', name: 'Door check', passed: summary.passed, total: OF, secs, part: !full, bar: 'all 9 checks: a stalled window let go within 45 s, 5 wrong keys looked at, back within 6 s',
+  kind: 'other', name: 'Door check', passed: summary.passed, total: OF, secs, part: !full, bar: 'all 10 checks: a stalled window let go within 45 s, 5 wrong keys looked at, back within 6 s',
   result: !full ? 'stopped' : pass ? 'pass' : 'fail',
   note: `A stalled window was let go after ${summary.letGo?.toFixed(0) ?? '?'} s; ${summary.looked ?? '?'} of 40 wrong keys looked at; back ${summary.backSecs?.toFixed(1) ?? '?'} s after a cut link.${rows.filter((r) => !r.ok).map((r) => ` Failed: ${r.name} (${r.detail}).`).join('')}`,
   raw: rawOf(out), page: summary.page,

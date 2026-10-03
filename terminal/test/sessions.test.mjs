@@ -345,7 +345,8 @@ test('the folders conversations were had in, latest first: none that is gone or 
   const conv = (slug, id, cwd, title, at) => {
     mkdirSync(join(dir, slug), { recursive: true });
     const f = join(dir, slug, `${id}.json`);
-    writeFileSync(f, JSON.stringify({ id, cwd, title, updated: new Date(at).toISOString(), messages: [] }));
+    // As saveSession writes it: the title first, the folder among the last keys.
+    writeFileSync(f, JSON.stringify({ title, messages: [], cwd, id, updated: new Date(at).toISOString() }));
     utimesSync(f, at / 1000, at / 1000);
   };
   const t = Date.parse('2026-10-03T10:00:00Z');
@@ -361,6 +362,24 @@ test('the folders conversations were had in, latest first: none that is gone or 
   ]);
   expect(recentFolders({ dir, max: 1 }).length).toBe(1);
   expect(recentFolders({ dir: join(unitHome, 'nothing-here') })).toEqual([]);
+  // Left to the caller to check (the door does, with a time limit): the folder that is gone comes too.
+  expect(recentFolders({ dir, exists: null }).map((f) => f.title)).toEqual(['gone', 'the menu', 'the bench', 'a question']);
+  // Only the first and last bytes of a conversation are read, never the whole of it: one whose
+  // middle is not even JSON (and 3 MB long) is read all the same, quotes in its title included.
+  mkdirSync(join(dir, 'big'), { recursive: true });
+  writeFileSync(join(dir, 'big', 'z.json'), `{"title":"the \\"big\\" one","messages":[${'x'.repeat(3_000_000)}],"cwd":${JSON.stringify(join(repo, 'docs'))},"id":"z","updated":"2026-10-03T11:00:00.000Z"}`);
+  utimesSync(join(dir, 'big', 'z.json'), (t + 5000) / 1000, (t + 5000) / 1000);
+  const t0 = performance.now();
+  expect(recentFolders({ dir })[0]).toEqual({ folder: join(repo, 'docs'), title: 'the "big" one', updated: '2026-10-03T11:00:00.000Z', convs: 1 });
+  expect(performance.now() - t0).toBeLessThan(500);
+  // A throwaway run is told by its folder's name: its file is never opened (this one cannot be read as one).
+  mkdirSync(join(dir, 'private-var-folders-x-T-agentic-e2e-1-demo-project'), { recursive: true });
+  writeFileSync(join(dir, 'private-var-folders-x-T-agentic-e2e-1-demo-project', 'a.json'), 'not a conversation');
+  expect(recentFolders({ dir }).length).toBe(4);
+  // And what the app itself saves is what this reads (the two are written apart: store.mjs).
+  const { saveSession } = await import('../src/app/store.mjs');
+  saveSession(join(repo, 'terminal'), 'made-by-the-app', { title: 'saved by the app', messages: [{ role: 'user', content: 'hi' }] });
+  expect(recentFolders().map((f) => [f.folder, f.title])).toEqual([[join(repo, 'terminal'), 'saved by the app']]);
 });
 
 test('the rows that start a session on the other Mac: its folders, its home, a typed one, its last conversation; an older door only its home', () => {
@@ -553,3 +572,49 @@ test.skipIf(!S.canHost())('through the door, a new session in a folder typed the
     await fake.close();
   }
 }, 150_000);
+
+// ---- 3 Oct 2026, the first try between two real Macs: the other Mac took connections and said nothing for minutes ----
+
+test('the door never waits on its folders: a list is answered without them when they cannot be read in time; a folder that does not answer is not there', async () => {
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-k', mac: 'server-1', folders: () => new Promise(() => {}), foldersMs: 300, startEnv: { ...process.env, AGENTIC_SESSIONS: 'on' } });
+  try {
+    const t0 = Date.now();
+    const list = await askDoor(door.address().port, { key: 'acd-k', op: 'list', v: 2 });
+    expect(list.kind).toBe(S.F.LIST);
+    expect(list.body).toMatchObject({ v: 2, mac: 'server-1', sessions: [], folders: [], last: null });
+    expect(Date.now() - t0).toBeLessThan(3000);
+    // "The last conversation" with folders that never come: said, not waited for.
+    const last = await askDoor(door.address().port, { key: 'acd-k', op: 'new', last: true, v: 2 });
+    expect(last.body.text).toContain('No conversation was had on server-1 yet');
+  } finally { door.close(); }
+  // The real list, in the test home: a conversation in a folder that is there, one in a folder that is gone.
+  const sess = join(process.env.AGENTIC_HOME, 'sessions');
+  const conv = (slug, cwd, title) => { mkdirSync(join(sess, slug), { recursive: true }); writeFileSync(join(sess, slug, 'a.json'), JSON.stringify({ title, messages: [], cwd, id: 'a', updated: new Date().toISOString() })); };
+  conv('door-models', join(import.meta.dir, '..', '..', 'models'), 'there');
+  conv('door-gone', join(import.meta.dir, '..', '..', 'no-such-folder'), 'gone');
+  const got = await D.doorFolders(20);
+  expect(got.some((f) => f.title === 'there')).toBe(true);
+  expect(got.some((f) => f.title === 'gone')).toBe(false);
+});
+
+test('a Mac that takes the connection and then says nothing: the window says to look at its screen, and gives the terminal back', async () => {
+  expect(D.reachProblem(Object.assign(new Error('timeout'), { code: 'SILENT' }), 'server-1')).toContain('server-1 took the connection but did not answer. Look at its screen');
+  expect(D.reachProblem(new Error('timeout'), 'server-1')).toContain('did not answer. Is it awake');
+  const server = net.createServer((sock) => { sock.on('data', () => {}); sock.on('error', () => {}); }); // hears, never answers
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.columns = 90; output.rows = 28;
+  let shown = '';
+  output.on('data', (c) => { shown += c; });
+  try {
+    const code = await S.viewSession({
+      name: 'a new session on server-1', where: 'server-1', input, output,
+      connect: () => net.connect({ host: '127.0.0.1', port: server.address().port }),
+      hello: { key: 'k', v: 2, op: 'new' }, again: (n) => ({ key: 'k', v: 2, op: 'attach', name: n, again: true }),
+      silent: D.SILENT('server-1'), firstMs: 300,
+    });
+    expect(code).toBe(1);
+    expect(shown).toContain('server-1 took the connection but did not answer');
+  } finally { server.close(); }
+}, 15_000);

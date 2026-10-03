@@ -399,7 +399,9 @@ export async function startHost({ folder, args = [], cols, rows, env = process.e
 // session again. With it the window checks in every beatMs, and a link that is lost (this Mac
 // slept, the network dropped, the other Mac's door restarted) is tried again every retryMs until
 // it is back; the last line of the window says so meanwhile, and ctrl+b, ctrl+c or esc stops.
-export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000 }) {
+// silent: what to say when the other Mac takes the connection and then says nothing for firstMs
+// (a session can take a while to start there; a door that is held up says nothing at all).
+export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000, silent = '', firstMs = 20_000 }) {
   let name = named;
   return new Promise((resolve) => {
     const modes = modeTracker();
@@ -481,10 +483,12 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       const mine = connect();
       sock = mine;
       let up = false;
+      let quiet = null;
       // A Mac that is asleep takes no connection and refuses none: 5 s is enough to know.
       const slow = again ? setTimeout(() => { if (!up) mine.destroy(); }, Math.max(5000, retryMs)) : null;
       const gone = (line) => {
         clearTimeout(slow);
+        clearTimeout(quiet);
         if (done || sock !== mine) return;
         // A session the door named can be opened again; before that there is nothing to come back to.
         if (again && opened) lost();
@@ -494,6 +498,9 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
         up = true;
         clearTimeout(slow);
         heard = Date.now();
+        // Connected, and then nothing at all: said (the first time), or tried again (after a lost link).
+        if (again) quiet = setTimeout(() => { if (done || sock !== mine) return; if (opened) mine.destroy(); else finish(1, `  ${silent || `${where} is not answering.`}`); }, firstMs);
+        quiet?.unref?.();
         send(F.HELLO, first);
         if (wired) return;
         wired = true;
@@ -505,6 +512,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       });
       const read = frameReader((kind, body) => {
         if (sock !== mine) return;
+        clearTimeout(quiet);
         if (kind === F.OUTPUT) { modes.see(body); output.write(body); }
         else if (kind === F.NAMED) {
           const n = json(body);

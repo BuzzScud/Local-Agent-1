@@ -14,6 +14,7 @@ import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, statSync, openSync, closeSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models/index.mjs';
@@ -87,9 +88,22 @@ const shown = (s) => ({ name: s.name, folder: s.folder, started: s.started, view
 const tilde = (p) => (p === homedir() ? '~' : p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p);
 // A folder as the other Mac names it (~ is this Mac's home), as a path here.
 const untilde = (p) => resolve(homedir(), p === '~' ? '.' : p.startsWith('~/') ? p.slice(2) : p);
+// The door never waits on a folder: macOS can keep a look at a folder it guards waiting for an
+// answer on this Mac's screen, and a drive that went away can keep one waiting too, which would
+// stop every window the door serves. So a folder is looked at off the door's own thread, with a
+// time limit; one that does not answer in time counts as not there.
+const limited = (promise, ms, fallback) => new Promise((done) => {
+  const t = setTimeout(() => done(fallback), ms);
+  Promise.resolve(promise).then((v) => { clearTimeout(t); done(v); }, () => { clearTimeout(t); done(fallback); });
+});
+const there = (folder, ms = 1500) => limited(stat(folder).then((st) => st.isDirectory()), ms, false);
 // The folders worked in here, newest first, for the other Mac's "New session in" rows: where
 // conversations were had (store.mjs), with this Mac's home as ~. Nothing inside them is read.
-export const doorFolders = (max = 5) => recentFolders({ dir: join(home(), 'sessions'), max }).map((f) => ({ path: tilde(f.folder), title: f.title, updated: f.updated, convs: f.convs }));
+export async function doorFolders(max = 5) {
+  const found = recentFolders({ dir: join(home(), 'sessions'), max: max * 3, exists: null });
+  const ok = await Promise.all(found.map((f) => there(f.folder)));
+  return found.filter((_, i) => ok[i]).slice(0, max).map((f) => ({ path: tilde(f.folder), title: f.title, updated: f.updated, convs: f.convs }));
+}
 
 // A session another Mac started, or opened while no window here showed it, is shown on this Mac
 // too (the owner's pick, 3 Oct 2026: "seeing it both in my terminal and the server 1 terminal"):
@@ -140,7 +154,9 @@ export function limiter({ tries = 5, windowMs = 60_000, now = () => Date.now() }
 // mac: this Mac's name, as the other one knows it. peerName(address): the other Mac's.
 // show(name, size): opens a window here on a session, and start(...): starts one (a test gives
 // its own of both). staleMs: how long a window that checks in may say nothing before it is let go.
-export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000 }) {
+// foldersMs: how long the folders' list may take before the list is answered without it.
+export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000, foldersMs = 4000 }) {
+  const recentHere = () => limited(Promise.resolve().then(() => folders()), foldersMs, []);
   const limit = limiter();
   const server = net.createServer((sock) => {
     const from = sock.remoteAddress ?? '?';
@@ -177,9 +193,7 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
         return;
       }
       if (h.op === 'list') {
-        let recent = [];
-        try { recent = folders(); } catch {}
-        sock.end(frame(F.LIST, { v: PROTO, mac, sessions: listBackground().map(shown), folders: recent, last: recent[0] ?? null }));
+        recentHere().then((recent) => { if (!sock.destroyed) sock.end(frame(F.LIST, { v: PROTO, mac, sessions: listBackground().map(shown), folders: recent, last: recent[0] ?? null })); });
         return;
       }
       // A window that checks in (PROTO 2) and then says nothing for staleMs has lost its link (its
@@ -217,24 +231,23 @@ export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = proces
         if (!sessionsOn(startEnv)) { say('That Mac cannot keep sessions yet: its Bun is too old (run bun upgrade there).'); return; }
         // Where: the folder named (~ is this Mac's home), the folder of the last conversation here
         // (continued, with -c), or as before the home folder, where the app asks.
-        let folder = homedir();
-        let args = [];
-        if (h.last) {
-          let recent = [];
-          try { recent = folders(); } catch {}
-          if (!recent.length) { say(`No conversation was had on ${mac || 'that Mac'} yet.`); return; }
-          folder = untilde(recent[0].path);
-          args = ['-c'];
-        } else if (typeof h.folder === 'string' && h.folder.trim()) {
-          folder = untilde(h.folder.trim());
-          args = ['--folder', folder];
-        }
-        let isDir = false;
-        try { isDir = statSync(folder).isDirectory(); } catch {}
-        if (!isDir) { say(`No folder ${h.folder ?? folder} on ${mac || 'that Mac'}.`); return; }
-        start({ folder, args, cols: h.cols, rows: h.rows, env: startEnv })
-          .then((rec) => { h.fresh = true; return join(rec, { window: true }); })
-          .catch((e) => say(`the session did not start: ${e.message}`));
+        (async () => {
+          let folder = homedir();
+          let args = [];
+          if (h.last) {
+            const recent = await recentHere();
+            if (!recent.length) { say(`No conversation was had on ${mac || 'that Mac'} yet.`); return; }
+            folder = untilde(recent[0].path);
+            args = ['-c'];
+          } else if (typeof h.folder === 'string' && h.folder.trim()) {
+            folder = untilde(h.folder.trim());
+            args = ['--folder', folder];
+          }
+          if (!(await there(folder, 3000))) { say(`No folder ${h.folder ?? folder} on ${mac || 'that Mac'}.`); return; }
+          const rec = await start({ folder, args, cols: h.cols, rows: h.rows, env: startEnv });
+          h.fresh = true;
+          await join(rec, { window: true });
+        })().catch((e) => say(`the session did not start: ${e.message}`));
         return;
       }
       say('the door does not know that');
@@ -440,8 +453,9 @@ const addressOf = (host) => (process.env.AGENTIC_DOOR_AT ?? '').split(',').map((
 function ask({ host, port, hello, timeoutMs = 8000 }) {
   return new Promise((resolve, reject) => {
     const sock = net.connect({ host: addressOf(host), port });
-    const t = setTimeout(() => { sock.destroy(); reject(new Error('timeout')); }, timeoutMs);
-    sock.on('connect', () => sock.write(frame(F.HELLO, hello)));
+    let up = false; // connected: a silence after that is the door's, not the way there
+    const t = setTimeout(() => { sock.destroy(); reject(Object.assign(new Error('timeout'), up ? { code: 'SILENT' } : {})); }, timeoutMs);
+    sock.on('connect', () => { up = true; sock.write(frame(F.HELLO, hello)); });
     const read = frameReader((kind, body) => { clearTimeout(t); sock.destroy(); resolve({ kind, body: json(body) }); });
     sock.on('data', (c) => { try { read(c); } catch (e) { reject(e); } });
     sock.on('error', (e) => { clearTimeout(t); reject(e); });
@@ -449,8 +463,12 @@ function ask({ host, port, hello, timeoutMs = 8000 }) {
   });
 }
 
+// A Mac that takes the connection and then says nothing (3 Oct 2026, the first try between two
+// Macs: minutes of it, then it answered at once): what holds it is on that Mac's screen.
+export const SILENT = (host) => `${host} took the connection but did not answer. Look at its screen: macOS may be asking there whether Agentic Coder may accept incoming connections (Allow), or about a folder. Then try again.`;
 // In plain words, why the door could not be reached.
 export function reachProblem(e, host) {
+  if (e.code === 'SILENT') return SILENT(host);
   if (e.code === 'ECONNREFUSED') return `${host} answered, but its door is closed. On ${host}, run: coding door on`;
   if (e.code === 'ENOTFOUND' || e.code === 'EAI_AGAIN') return `No Mac called ${host} was found. Is Tailscale on here? (tailscale status lists the names)`;
   if (e.message === 'timeout' || e.code === 'ETIMEDOUT' || e.code === 'EHOSTUNREACH') return `${host} did not answer. Is it awake, with Tailscale on?`;
@@ -558,6 +576,7 @@ export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnl
     hello: { key, v: PROTO, ...hello },
     // After a lost link: the same session, by the name the door gave it.
     again: (n) => ({ key, v: PROTO, op: 'attach', name: n, again: true }),
+    silent: SILENT(host),
     ...(beatMs ? { beatMs } : {}), ...(retryMs ? { retryMs } : {}),
   });
 }

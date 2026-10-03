@@ -11,7 +11,7 @@ export function doorPage({ summary: s, rows, prev = null, raw = [] }) {
   return buildCheckPage({
     title: 'Door check · background sessions and the door between Macs', summary: s, rows, prev,  raw,
     yes: 'A window whose link stalls is let go and takes no more of the door’s memory, wrong keys are slowed whichever way they are sent, a cut link comes back by itself, and a new session starts in the folder named.',
-    passRule: 'all 9 checks',
+    passRule: 'all 10 checks',
     cards: [
       { k: 'A stalled window is let go after', v: sec(s.letGo), sub: prev ? `before: ${sec(prev.s.letGo)}` : 'on 3 Oct 2026, before this check: never (it stayed counted)', dir: 'lower is sooner' },
       { k: 'Held for it after that', v: mbOf(s.after), sub: prev ? `before: ${mbOf(prev.s.after)}` : 'on 3 Oct 2026: all it drew (1 MB a second on a busy screen), with no end', dir: 'lower is better' },
@@ -26,6 +26,7 @@ export function doorPage({ summary: s, rows, prev = null, raw = [] }) {
       'Wrong keys: 40 connections opened first, then one wrong key sent on each, all together. The door’s own log says how many it looked at (rule: 5 at most), and a new connection right after must be refused.',
       'A cut link: the app’s own window (<code>viewSession()</code>) on a session that echoes what is typed; every connection of the door is cut. The window must say “reconnecting”, be back in the session by itself (rule: within 6 s; it tries every 2 s), and what is typed then must come back.',
       'A new session: the door starts the app’s keeper with a stand-in in the app’s place that prints its folder and what it was started with. Named folder: it must start there with <code>--folder</code>. A folder that is not there: refused, nothing started. The last conversation: it starts in that conversation’s folder with <code>-c</code>.',
+      'Never waiting: a door whose look at its folders never comes back (as when macOS guards a folder, or a drive went away) must still answer a list, without folders (rule: within 6 s; the door gives the folders 4 s).',
       'The window on this Mac: the check counts the times the door asks for one (once for a session opened with no window here, once for each session started from the other Mac, not again when the same window comes back) and its size. Terminal’s own window is not opened by a check. Not measured here: two real Macs, and Tailscale between them.',
       `Nothing in ~/.agentic-coder was written but this run’s line in the test record. The Mac’s load at the end: ${s.load}. Code: ${s.code}.`,
     ],
