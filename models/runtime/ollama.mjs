@@ -39,6 +39,10 @@ export async function ollamaVersion(url, opts = {}) {
 // model's is exact.
 export const COLD_CTX = 32_768;
 export const ollamaCtx = (m) => (m?.loadedCtx || Math.min(m?.ctx || COLD_CTX, COLD_CTX));
+// The least context the agent works in: 32k, or the model's longest when that is less. The
+// instructions and tools alone are about 5k tokens, and a service's own size can be Ollama's 4k
+// (2 Oct 2026: qwen3.5:9b on a service, loaded at 4k, cut every prompt without saying so).
+export const floorCtx = (m) => Math.min(m?.ctx || COLD_CTX, COLD_CTX);
 
 // What /api/show says, kept by digest: the abilities (null on an Ollama too old
 // to list them) and the longest context ("<family>.context_length").
@@ -127,7 +131,7 @@ export async function ollamaPs({ url, key, model, signal, timeoutMs = 5000 } = {
 // The words a service uses when a model does not fit in its GPU memory: llama.cpp's
 // (CUDA, ROCm and Metal builds: "cudaMalloc failed: out of memory", "unable to allocate
 // ROCm0 buffer") and Ollama's own check ("requires more system memory").
-export const isOutOfMemory = (text) => /out of memory|failed to allocate|unable to allocate|cudaMalloc failed|requires more (?:system |gpu )?memory|insufficient memory|not enough memory/i.test(String(text ?? ''));
+export const isOutOfMemory = (text) => /out of memory|failed to allocate|unable to allocate|cudaMalloc failed|resource allocation failed|requires more (?:system |gpu )?memory|insufficient memory|not enough memory/i.test(String(text ?? ''));
 
 // Loads a model on the service without asking it anything (an empty prompt),
 // so a switch is not first felt on the next reply; numCtx: at that context (its

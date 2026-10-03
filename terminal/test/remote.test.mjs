@@ -236,7 +236,7 @@ test('Ollama’s refusals: a model too old to list its abilities is asked again 
     expect('tools' in f.bodies.at(-1)).toBe(false); // remembered for that model
     const oom = await ask('huge:120b').catch((e) => e);
     expect(oom.message).toBe('the service has no room to load huge:120b (out of GPU memory): /model picks another, or /effort a smaller Context');
-    expect(oom.status).toBe(500);
+    expect([oom.status, oom.noRoom]).toEqual([500, true]); // noRoom: the agent does not summarize the conversation for it
     // "terminated" in a server's answer is an answer, not a dropped connection: it carries its status
     const down = await ask('down:1b').catch((e) => e);
     expect(down.message).toMatch(/^remote model server \(svc\) 500: /);

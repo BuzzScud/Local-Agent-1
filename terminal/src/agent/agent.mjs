@@ -2238,7 +2238,9 @@ export class Agent extends EventEmitter {
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
       // A conversation too long for the model. Not a busy service: "Rate limit exceeded" is a 429,
       // already waited for and asked again (busy.mjs); summarizing would only lose the conversation.
-      } else if (retry && !e.busy && !isBusy(e) && /context|exceed/i.test(e.message)) {
+      // Nor a model with no room on the service's GPU (its error ends "a smaller Context": 2 Oct 2026,
+      // a CUDA out-of-memory summarized the conversation away and failed again).
+      } else if (retry && !e.busy && !isBusy(e) && !e.noRoom && /context|exceed/i.test(e.message)) {
         this.emit('note', { text: 'The conversation outgrew the model’s memory; summarizing it and trying again…', tone: 'warn' });
         await this.compact(signal);
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });

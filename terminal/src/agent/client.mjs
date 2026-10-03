@@ -28,9 +28,9 @@ const ABILITY = { thinking: 'reasoning_effort', tools: 'tools' };
 const refused = new Map(); // `${url} ${model}` → the fields that model refused
 const refusedKey = (url, model) => `${url ?? ''}\u0000${model ?? ''}`;
 // An error the server answered with (its status kept, and how long it asked to wait: busy.mjs),
-// and the one for a model that does not fit.
+// and the one for a model that does not fit (noRoom: summarizing the conversation would not make it fit).
 const serverError = (text, status, res) => Object.assign(new Error(text), { status, ...(res?.headers?.get?.('retry-after') ? { retryAfter: retryAfterHeader(res.headers.get('retry-after')) } : {}) });
-const roomError = (ep, status) => serverError(`the service has no room to load ${ep.model} (out of GPU memory): /model picks another, or /effort a smaller Context`, status);
+const roomError = (ep, status) => Object.assign(serverError(`the service has no room to load ${ep.model} (out of GPU memory): /model picks another, or /effort a smaller Context`, status), { noRoom: true });
 
 // The body as an OpenAI-compatible server takes it (exported for the tests).
 export function openaiBody(body, { model, effort, thinking, url } = {}) {

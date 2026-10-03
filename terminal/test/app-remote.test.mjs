@@ -437,6 +437,28 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   expect(settingsOf(base).remote.tuned ?? {}).toEqual({});
 }, T);
 
+test('a service whose own size is less than the agent works in (Ollama’s 4k): the model it loads is loaded again at 32k, kept for it, and every request names it', async () => {
+  const { cwd, env, base } = setup();
+  const srv = await fullOllama({ serviceCtx: 4096 });
+  const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 40_000, steps: [
+    { wait: 'On the remote:', ms: 20_000 }, { sleep: 300 },
+    { type: '/model' }, { key: 'enter' }, { wait: 'Loaded on the service' }, { sleep: 200 },
+    { type: 'coder' }, { sleep: 150 }, { key: 'enter' }, { wait: 'its own settings' }, { sleep: 150 }, { key: 'enter' }, { wait: 'coder:30b is loaded on the service' }, { sleep: 300 }, { snapshot: 'loaded' },
+    { type: 'one' }, { key: 'enter' }, { wait: 'From coder:30b, reply 1.' }, { sleep: 200 },
+    ...quit,
+  ] });
+  await srv.close();
+  const s = r.snapshots;
+  expect(s.loaded).toMatch(/coder:30b is loaded on the service \(\d+ s\) · 32k context\. Kept at that size for it; \/effort’s Context row changes it\./);
+  // the service's own first (4k), then again at the floor; the reply named it
+  expect(srv.loads.filter((l) => l.model === 'coder:30b').map((l) => l.numCtx)).toEqual([null, 32768]);
+  expect(srv.loaded.get('coder:30b')).toBe(32768);
+  expect(srv.chats.at(-1)).toEqual({ model: 'coder:30b', tools: true, numCtx: 32768 });
+  expect(settingsOf(base).remote.contexts).toMatchObject({ 'coder:30b': 32768 });
+}, T);
+
 test('a model that does not fit on the service: tried again at half the context until it does (that size kept for it); one that never fits goes back, a message sent meanwhile waits for it; /effort’s Context is the model’s own', async () => {
   const { cwd, env, base } = setup();
   const srv = await fullOllama({ serviceCtx: 262144 });

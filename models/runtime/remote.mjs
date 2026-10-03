@@ -20,7 +20,7 @@ import { createConnection } from 'node:net';
 import { basename, join } from 'node:path';
 import { HOME, MODELS } from '../registry.mjs';
 import { CLAUDE_HOST, CLAUDE_CTX, CLAUDE_MODELS, claudeProbe } from './claude.mjs';
-import { ollamaModel, ollamaCtx, isOutOfMemory } from './ollama.mjs';
+import { ollamaModel, ollamaCtx, floorCtx, isOutOfMemory } from './ollama.mjs';
 
 export const REMOTE_KINDS = ['llama', 'openai', 'claude'];
 // The address used: what was typed, or Anthropic's for a Claude API remote left blank.
@@ -477,7 +477,9 @@ export const ollamaCtxOf = (r, model) => Number(r?.contexts?.[model]) || Number(
 // Answers { url, ctx, slots, model (the settings), info, stop() }, or throws
 // with the reason in plain words. The context used: the one typed in the form,
 // else the server's, else 32k.
-export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } = {}) {
+// serviceSize: a cold Ollama model is left to load at the service's own size, which the caller
+// then reads and pins (the app's preloadRemote); without it, the request names the floor.
+export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined, serviceSize = false } = {}) {
   const problem = remoteProblem(r);
   if (problem) throw new Error(`The remote is not set up: ${problem}. Open /remote`);
   const secret = key === undefined ? (r.key ? readKey(keyIdOf(r)) : null) : key;
@@ -494,8 +496,11 @@ export async function connectRemote(r, { signal, ssh = 'ssh', key = undefined } 
     const model = remoteModel(r, info);
     const o = info.ollama ?? null;
     // Every request names the context, so the model is never loaded again behind the agent's back:
-    // its own (or /remote's), else the size it is loaded at now; a cold one's is pinned once loaded.
-    const numCtx = o ? ollamaCtxOf(r, info.model) || (o.loaded ? o.loadedCtx : null) : null;
+    // its own (or /remote's), else the size it is loaded at now, else the least the agent works in
+    // (floorCtx). Before, a cold model (coding -p, the bench) was named nothing and loaded at the
+    // service's own 4k while the agent planned for 32k, and one loaded at 4k stayed at 4k.
+    const loadedOk = o?.loaded && o.loadedCtx >= floorCtx(o) ? o.loadedCtx : null;
+    const numCtx = o ? ollamaCtxOf(r, info.model) || loadedOk || (serviceSize && !o.loaded ? null : floorCtx(o)) : null;
     // Claude: the server's own (1M today), kept to CLAUDE_CTX unless the form asks for more.
     const ctx = numCtx || r.context || (r.kind === 'claude' ? Math.min(info.ctx ?? CLAUDE_CTX, CLAUDE_CTX) : info.ctx) || 32_768;
     // price: dollars a million tokens, in and out (the cost meter, terminal spend.mjs); free: a service of your own.
