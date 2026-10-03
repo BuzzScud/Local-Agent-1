@@ -44,10 +44,10 @@ test('/remote: Run on My other computer, its rows filled in (a pasted key); a Co
     ...down(1), { key: `\x1b[200~test-wrong-0123456789\n\x1b[201~` }, { sleep: 150 }, { snapshot: 'typingKey' }, { key: 'enter' }, { sleep: 80 }, // API key, pasted (enter: on to More)
     { key: 'enter' }, { sleep: 100 }, // More opens
     ...down(1), { type: String(remote.port) }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, { snapshot: 'more' }, // Port
-    ...down(3), { key: 'enter' }, { wait: 'it did not work' }, { sleep: 150 }, { snapshot: 'failed' }, // Connect: the wrong key
+    ...down(4), { key: 'enter' }, { wait: 'it did not work' }, { sleep: 150 }, { snapshot: 'failed' }, // Connect (past Memory sent): the wrong key
     { fn: () => { afterFail = existsSync(join(base, 'home', 'settings.json')) ? settingsOf(base).remote ?? null : null; } },
-    ...up(6), { key: `\x1b[200~${KEY}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key again
-    ...down(5), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect
+    ...up(7), { key: `\x1b[200~${KEY}\x1b[201~` }, { sleep: 150 }, { key: 'enter' }, { sleep: 80 }, // API key again
+    ...down(6), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from the remote.' },
     { type: '/doctor' }, { key: 'enter' }, { wait: 'Doctor · on a remote model' }, { sleep: 150 }, { snapshot: 'doctor' },
     ...quit,
@@ -176,7 +176,7 @@ test('/remote with Run on: Claude API: a key, a model from the list, its address
     ...right(1), { sleep: 100 }, { snapshot: 'model' }, // Model: Opus 5.5 → Sonnet 5.5
     ...down(1), { key: 'enter' }, { sleep: 100 }, // More opens
     ...down(1), { type: claude.url }, { sleep: 80 }, { key: 'enter' }, { sleep: 80 }, // Address: the stand-in (enter: on to Context)
-    ...down(1), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect
+    ...down(2), { key: 'enter' }, { wait: 'On the remote:' }, { sleep: 200 }, { snapshot: 'on' }, // Connect (past Memory sent)
     { type: 'hello' }, { key: 'enter' }, { wait: 'Hello from Claude.' }, { sleep: 200 },
     ...quit,
   ] });

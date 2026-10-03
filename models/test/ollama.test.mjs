@@ -128,7 +128,7 @@ test('the check on an Ollama service: pictures, context and levels come from the
     const r = { source: 'openai', kind: 'openai', address: url, model: 'coder:30b', context: 0 };
     const m = remoteModel(r, coder);
     expect(m.name).toBe(`coder:30b · ${url.replace('http://', '')}`);
-    expect(m.remote).toEqual({ kind: 'openai', label: url.replace('http://', ''), source: 'openai', model: 'coder:30b', ollama: '0.32.12' });
+    expect(m.remote).toEqual({ kind: 'openai', label: url.replace('http://', ''), source: 'openai', model: 'coder:30b', ollama: '0.32.12', mine: false }); // an Ollama service, even on this Mac, is not your own computer: the facts about you stay here
     expect(m.thinkingLevels.map((l) => l.id)).toEqual(['low']);
     expect(m.thinkingEffort).toBe('low');
     expect(remoteModel({ ...r, model: 'thinker:35b' }, thinker).thinkingLevels.map((l) => l.id)).toEqual(['low', 'high']);

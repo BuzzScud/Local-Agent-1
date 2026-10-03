@@ -103,6 +103,16 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   skipped once is kept in `state.json` (`declined`) and not offered again; `/memory` ends with a 7-day health line.
   With `"memory": false` nothing is saved: the old `notes.md` writer is gone, and a leftover notes file is no longer read as rules (since 30 Sep 2026 only AGENTS.md and CLAUDE.md are, from the working folder up to your home folder).
 
+- **What the memory sends to another machine** (`memoryToRemote`, 3 Oct 2026, the owner's pick: "in full only to
+  your own Macs"): the opening read (`terminal/src/agent/opening.mjs`) gives a remote model the facts in full. Facts
+  about the user go only to the owner's own other computer: kind `llama` (`coding serve`) at a private address or
+  over SSH (`ownMachine` in `models/runtime/remote.mjs`, carried as `model.remote.mine`). Any other service (an
+  Ollama one even on the home network, OpenAI-style ones, the Claude API) gets the project's facts in full and none
+  about the user, and the screen says "Reading the project's memory · N facts about you stay on this Mac"; the
+  prompt's short lines are as before. settings.json `memoryToRemote`: `mine` (the default) · `all` (everything,
+  everywhere, as before) · `none` (no memory block); /remote's More has the row (Memory sent). `opening.test.mjs`
+  checks each on a pretend service.
+
 ## The prompt files
 
 - **TOOLS.md and SKILLS.md** (`terminal/rules/`, since 30 Sep 2026) are read by `terminal/src/agent/prompt-files.mjs`

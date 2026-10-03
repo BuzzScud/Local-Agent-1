@@ -50,7 +50,7 @@ import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeind
 import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
-import { openingRead, openingOn } from './opening.mjs';
+import { openingRead, openingOn, memorySent } from './opening.mjs';
 
 const MAX_STEPS = 40;
 const newConversation = () => randomUUID().slice(0, 8);
@@ -1950,7 +1950,9 @@ export class Agent extends EventEmitter {
     if (this.isHelper || !openingOn() || !this.remoteSet()) return;
     if (this.messages.some((m) => m.opening && !String(m.content).startsWith('[older output removed'))) return;
     let r = null;
-    try { r = openingRead(this.cwd, { memory: this.memory, home: this.memory?.home ?? this.home }); } catch { return; }
+    // Facts about the user go in full only to the owner's own other computer (opening.mjs memorySent).
+    const sent = memorySent(this.model);
+    try { r = openingRead(this.cwd, { memory: sent === 'none' ? null : this.memory, home: this.memory?.home ?? this.home, you: sent === 'all' }); } catch { return; }
     if (!r) return;
     const id = `opening_${Date.now()}`;
     this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: '.' }) } }] });
