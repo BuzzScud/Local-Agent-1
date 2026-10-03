@@ -3,7 +3,7 @@
 // math and the server's flags. The 27B's own tests run against its model file.
 import { test, expect } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
+import { MODELS, DEFAULT_MODEL, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, modelPath, thinkingKwargs, thinkingLevel, kvBytesPerToken, needBytes, chooseContext, serverArgs, modelFolder } from '../index.mjs';
 import bonsai27b from '../bonsai-2-27b/model.mjs';
 
 const m = bonsai27b; // the 27B: its settings as tested on this Mac (25-28 Sep 2026)
@@ -26,6 +26,18 @@ test('Qwen3.5 9B is the default (since 30 Sep 2026), Gemma 4 12B QAT the second 
   expect(m.bytes).toBe(7_206_168_928);
   expect(m.folder).toBe('bonsai-2-27b');
   expect(existsSync(new URL('../bonsai-2-27b/README.md', import.meta.url))).toBe(true);
+});
+
+// A model's files may leave the Mac to free the disk (3 Oct 2026: all but Qwen's) and come back with
+// coding setup --model <id>: every link names a fixed revision of its repo, so a later upload cannot
+// change a file under its checksum.
+test('every download names a fixed revision of its repo, so coding setup brings back the file its checksum names', () => {
+  const all = [...Object.values(MODELS), ...Object.values(EMBEDDERS), ...Object.values(RERANKERS)];
+  const links = all.flatMap((x) => [x, x.draft, x.vision]).filter((x) => x?.url && x.sha256).map((x) => x.url);
+  expect(links.length).toBeGreaterThanOrEqual(11);
+  for (const u of links) expect(u).toMatch(/^https:\/\/huggingface\.co\/[^/]+\/[^/]+\/resolve\/[0-9a-f]{40}\//);
+  // an MLX model's folder: every file at its pinned revision
+  for (const x of all.filter((x) => x.files)) expect(x.revision).toMatch(/^[0-9a-f]{40}$/);
 });
 
 test('Gemma: Low answers straight away, High turns its thinking on (no Medium: it has no effort dial)', () => {

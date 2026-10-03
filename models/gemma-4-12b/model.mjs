@@ -13,7 +13,9 @@ export default {
   by: 'Google',
   measured: { read: 127, write: 17.2 },
   file: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf',
-  url: 'https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf',
+  // Its links (helper and vision too) are pinned to the repos' revisions of 17 Jul
+  // 2026 since 3 Oct 2026, so a later upload cannot change a file under its checksum.
+  url: 'https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf',
   sha256: '90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370',
   bytes: 6_716_356_800,
   // Layout read from the file's header: 48 layers, 5 of 6 sliding-window
@@ -43,7 +45,7 @@ export default {
   // until then. computeBytes: the working space it takes beside its file.
   vision: {
     file: 'mmproj-gemma-4-12b-it-F16.gguf',
-    url: 'https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf',
+    url: 'https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/mmproj-F16.gguf',
     sha256: 'ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3',
     bytes: 175_115_840,
     computeBytes: 0.15e9,
@@ -66,7 +68,7 @@ export default {
   // Footprint beside Gemma at 32k: +0.4–0.5 GB.
   draft: {
     file: 'mtp-gemma-4-12b-it.gguf',
-    url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/main/mtp-gemma-4-12b-it.gguf',
+    url: 'https://huggingface.co/unsloth/gemma-4-12b-it-GGUF/resolve/fc034cfff751157913579611efad8462ac1be606/mtp-gemma-4-12b-it.gguf',
     sha256: '145db9094bc0f85f1701e255a2ed216dcc9800fc8bc8631ad00905b456bd451b',
     bytes: 465_109_248,
     type: 'draft-mtp,ngram-simple',

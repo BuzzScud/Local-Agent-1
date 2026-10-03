@@ -22,7 +22,9 @@ export default {
   measured: { read: 52, write: 13.7 },
   watch: [],
   file: 'Ternary-Bonsai-2-27B-PQ2_0.gguf',
-  url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-PQ2_0.gguf',
+  // Its links (helper and vision too) are pinned to the repos' revisions of 24–25
+  // Sep 2026 since 3 Oct 2026, so a later upload cannot change a file under its checksum.
+  url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-PQ2_0.gguf',
   sha256: '3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1',
   bytes: 7_206_168_928,
   // The file's own chat template is used: it already handles tool calls and
@@ -57,7 +59,7 @@ export default {
   // 32k the server's footprint went 2.38 → 3.39 GB and the helper file adds 1.14.
   draft: {
     file: 'Qwen3.8-27B-DFlash2-r3-Q4_K_M.gguf',
-    url: 'https://huggingface.co/naklitechie/Qwen3.8-27B-DFlash2-ternary-bonsai2/resolve/main/Qwen3.8-27B-DFlash2-r3-Q4_K_M.gguf',
+    url: 'https://huggingface.co/naklitechie/Qwen3.8-27B-DFlash2-ternary-bonsai2/resolve/0059b38aa255698b1a87305eb3fbb5a3cfd616e2/Qwen3.8-27B-DFlash2-r3-Q4_K_M.gguf',
     sha256: '6c11956fde5f52867e3255991b30405ae931d205a35caf3fc87a2c3865aa6530',
     bytes: 1_143_006_912,
     type: 'draft-dflash',
@@ -70,7 +72,7 @@ export default {
   // and minTokens are Qwen3.5 9B's, the same family's vision.
   vision: {
     file: 'Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf',
-    url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/main/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf',
+    url: 'https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf/resolve/b072e1d3b35a0a630cece372c2127528e0994386/Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf',
     sha256: '6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903',
     bytes: 629_246_976,
     computeBytes: 0.3e9,
