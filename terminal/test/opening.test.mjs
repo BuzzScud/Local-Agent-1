@@ -1,8 +1,8 @@
 // The opening read (src/agent/opening.mjs, 3 Oct 2026): on the remote set, before the first step of a
 // conversation, the memory whole and where the project stands, as one step the model did not take.
 import { test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -13,10 +13,11 @@ const { openMemory, applyChanges, memoryDirs, factsInFull } = await import('../s
 const { Agent } = await import('../src/agent/agent.mjs');
 const { systemPrompt } = await import('../src/agent/prompt.mjs');
 const { startFakeServer } = await import('./fake-server.mjs');
-const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
+const { MODELS, DEFAULT_MODEL, HOME, remoteModel } = await import('../../models/index.mjs');
 
 const local = MODELS[DEFAULT_MODEL];
-const remote = { ...local, remote: { model: 'big-coder' } };
+// A model on your own other computer: the memory goes whole (3 Oct 2026: only there, by default).
+const remote = { ...local, remote: { model: 'big-coder', mine: true } };
 const git = (cwd, ...a) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd, encoding: 'utf8' });
 
 let home, repo, saved;
@@ -138,4 +139,64 @@ test('/compact on a short remote chat makes no call to the service; a longer one
     await a.send('and now?');
     expect(a.messages.filter((m) => m.opening)).toHaveLength(1); // …and it came back once
   } finally { fake.close(); }
+});
+
+// What the opening read sends of the memory (3 Oct 2026, the fix plan's Part 4): facts about you go in
+// full only to your own other computer (coding serve at a private address or over SSH); any other
+// service gets the project's facts in full and none about you. settings.json "memoryToRemote":
+// mine (the default) · all · none. Each is checked on a pretend service that keeps what it was sent.
+const service = (r) => ({ ...local, remote: remoteModel({ use: true, port: null, connect: 'http', model: 'big-coder', context: 0, key: false, keyEnd: '', ...r }).remote });
+const sentTo = async (model) => {
+  const fake = await startFakeServer([], { delayMs: 0 });
+  const events = [];
+  try {
+    const a = new Agent({ url: fake.url, model, cwd: repo, system: systemPrompt({ cwd: repo, git: 'g' }), memory: { home, recall: false }, home, flows: false, verify: false });
+    a.on('tool', (e) => events.push(e));
+    await a.send('what does total do?');
+    const asked = fake.requests.find((r) => r.tools?.length).messages;
+    return { opening: String(asked.find((m) => m.role === 'tool')?.content ?? ''), label: events.find((e) => e.given)?.label };
+  } finally { fake.close(); }
+};
+const YOU = 'a long sentence that would be cut in the short lines of the prompt is here whole.';
+const PROJECT = 'The tests run with node --test from the repo top.';
+const settingsFile = () => {
+  if (HOME === join(homedir(), '.agentic-coder')) throw new Error('not in a throwaway home: settings.json would be the real one');
+  return join(HOME, 'settings.json');
+};
+const withSetting = async (v, fn) => { writeFileSync(settingsFile(), JSON.stringify({ memoryToRemote: v })); try { return await fn(); } finally { rmSync(settingsFile(), { force: true }); } };
+
+test('an Ollama service, even on the home network, gets the project\'s facts in full and none about you; the screen says how many stay on this Mac', async () => {
+  const ollama = service({ source: 'openai', kind: 'openai', address: '192.168.1.20:11434' });
+  expect(ollama.remote.mine).toBe(false);
+  const r = await sentTo(ollama);
+  expect(r.opening).toContain(PROJECT);
+  expect(r.opening).not.toContain(YOU);
+  expect(r.opening).not.toContain('About the user');
+  expect(r.label).toBe("Reading the project's memory · 3 facts about you stay on this Mac");
+  // A public address is not yours either, even running coding serve; nor is the Claude API.
+  expect(service({ source: 'machine', kind: 'llama', address: 'gpu.example.com' }).remote.mine).toBe(false);
+  expect(service({ source: 'claude', kind: 'claude', connect: 'https', address: '' }).remote.mine).toBe(false);
+});
+
+test('your own other computer (coding serve at a private address, Tailscale or over SSH) gets the memory whole', async () => {
+  const mine = service({ source: 'machine', kind: 'llama', address: '127.0.0.1:8080' });
+  expect(mine.remote.mine).toBe(true);
+  expect(service({ source: 'machine', kind: 'llama', address: '100.101.102.103' }).remote.mine).toBe(true);
+  expect(service({ source: 'machine', kind: 'llama', connect: 'ssh', address: 'me@studio' }).remote.mine).toBe(true);
+  const r = await sentTo(mine);
+  expect(r.opening).toContain(YOU);
+  expect(r.opening).toContain(PROJECT);
+  expect(r.label).toBe('Reading all memory files');
+});
+
+test('memoryToRemote "all" sends everything everywhere (as before); "none" sends no memory block at all', async () => {
+  const ollama = service({ source: 'openai', kind: 'openai', address: '192.168.1.20:11434' });
+  const all = await withSetting('all', () => sentTo(ollama));
+  expect(all.opening).toContain(YOU);
+  expect(all.opening).toContain(PROJECT);
+  const none = await withSetting('none', () => sentTo(service({ source: 'machine', kind: 'llama', address: '127.0.0.1:8080' })));
+  expect(none.opening).not.toContain(YOU);
+  expect(none.opening).not.toContain(PROJECT);
+  expect(none.opening).not.toContain('Memory');
+  expect(none.opening).toContain('Git: branch main'); // where the project stands still comes
 });

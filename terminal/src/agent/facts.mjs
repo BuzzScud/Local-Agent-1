@@ -561,7 +561,9 @@ export function openMemory(cwd, { home = homedir(), today = day(), rules = null 
 // The memory whole, for the opening read of a model on another machine (opening.mjs): every fact in
 // use about the user and about this project, in full, most useful first, each with its kind and the day
 // it was saved (so an old one can be checked), up to maxChars. An event is left out, as above.
-export function factsInFull(cwd, { home = homedir(), maxChars = 8000 } = {}) {
+// you: false leaves the facts about the user out of the text (they are still counted): a service that is
+// not the owner's own computer gets only the project's (opening.mjs memorySent).
+export function factsInFull(cwd, { home = homedir(), maxChars = 8000, you: aboutYou = true } = {}) {
   const dirs = memoryDirs(cwd, home);
   const tilde = (p) => (p.startsWith(home) ? `~${p.slice(home.length)}` : p);
   const keep = (list) => list.filter((f) => f.always || !looksLikeEvent(f.text)).sort(byWorth);
@@ -569,7 +571,7 @@ export function factsInFull(cwd, { home = homedir(), maxChars = 8000 } = {}) {
   const here = keep(readFacts(dirs.project));
   let text = '';
   let left = 0;
-  for (const [title, list] of [[`About the user (${tilde(dirs.you)})`, you], [`About this project (${dirs.project ? tilde(dirs.project) : ''})`, here]]) {
+  for (const [title, list] of [[`About the user (${tilde(dirs.you)})`, aboutYou ? you : []], [`About this project (${dirs.project ? tilde(dirs.project) : ''})`, here]]) {
     if (!list.length) continue;
     const lines = [];
     for (const f of list) {

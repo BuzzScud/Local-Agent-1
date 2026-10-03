@@ -278,15 +278,15 @@ test('the form opens on This Mac with only Run on and Switch; → walks the serv
   expect(showValue(f, 'source')).toBe('Claude API');
   expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Connect', 'Save only']);
   expect([showValue(f, 'model'), showValue(f, 'key')]).toEqual(['Opus 5.5', 'none']);
-  expect(rowNote(f, 'more')).toBe('address, context');
+  expect(rowNote(f, 'more')).toBe('address, context, memory sent');
   f = moveRow(f, 'more', 1);
-  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Connect', 'Save only']);
+  expect(labels(f)).toEqual(['Run on', 'API key', 'Model', 'More', 'Address', 'Context', 'Memory sent', 'Connect', 'Save only']);
   expect(showValue(f, 'address')).toBe('api.anthropic.com');
   f = moveRow(f, 'source', 1);
   expect(showValue(f, 'source')).toBe('My other computer');
   expect(f.more).toBe(false); // another service: More folded again
   expect(labels(f)).toEqual(['Run on', 'Address', 'Reach by', 'API key', 'More', 'Connect', 'Save only']);
-  expect(rowNote(f, 'more')).toBe('port, server, model, context');
+  expect(rowNote(f, 'more')).toBe('port, server, model, context, memory sent');
   f = moveRow(moveRow(f, 'connect', 1), 'connect', 1);
   expect(showValue(f, 'connect')).toBe('SSH tunnel');
   expect(rowNote(f, 'address')).toBe('user@host, or a name from ~/.ssh/config');
@@ -469,4 +469,24 @@ test('while Connect checks: the line says what was found, what it waits for and 
   const waiting = { running: true, id: 1, steps: [{ ok: true, text: 'reached in 73 ms' }, { ok: true, text: 'model big:latest · 32k context' }], waiting: 'asking big:latest for one word (the service may first load it: up to 3 min)', secs: 42 };
   expect(rowNote({ ...form, test: waiting }, 'go')).toBe('✔ reached in 73 ms · ✔ model big:latest · 32k context · asking big:latest for one word (the service may first load it: up to 3 min)… 42 s · esc stops');
   expect(showValue({ ...form, test: waiting }, 'go')).toBe('checking…');
+});
+
+test('Memory sent (3 Oct 2026): one row behind More saves settings.json "memoryToRemote" for every service: only to my own Macs (the default) · to every service · none', () => {
+  let f = moveRow(moveRow(openForm({}), 'source', 1), 'source', 1); // My other computer
+  f = moveRow(f, 'more', 1);
+  expect(labels(f)).toContain('Memory sent');
+  expect(showValue(f, 'memory')).toBe('only to my own Macs');
+  expect(rowNote(f, 'memory')).toBe('facts about you go whole only to coding serve on your own computer; any other service gets the project’s');
+  expect(rowChanged(f, 'memory')).toBe(false);
+  expect(savePlan(f, {}).memoryToRemote).toBeUndefined(); // nothing changed: nothing written
+  f = moveRow(f, 'memory', 1);
+  expect([showValue(f, 'memory'), rowNote(f, 'memory'), rowChanged(f, 'memory')]).toEqual(['to every service', 'every service gets every fact, about you too', true]);
+  f = moveRow(f, 'memory', 1);
+  expect([showValue(f, 'memory'), rowNote(f, 'memory')]).toEqual(['none', 'no memory goes with the first step of a conversation']);
+  expect(moveRow(f, 'memory', 1).memory).toBe('none'); // stops at the end
+  expect(savePlan(f, {}).memoryToRemote).toBe('none');
+  expect(rowNote(moveRow(f, 'more', -1), 'more')).toBe('memory sent none');
+  // a saved choice opens as it was, on every service's form
+  const g = moveRow(openForm({ memoryToRemote: 'all' }), 'source', 1);
+  expect([showValue(g, 'memory'), rowChanged(g, 'memory')]).toEqual(['to every service', false]);
 });

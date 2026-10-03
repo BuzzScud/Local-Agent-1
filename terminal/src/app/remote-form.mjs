@@ -11,6 +11,7 @@
 import { DEFAULT_REMOTE, REMOTE_SOURCES, sourceOf, keyIdOf, SERVE_PORT, CLAUDE_HOST, DEFAULT_CLAUDE_MODEL, CLAUDE_CTX, CLAUDE_MODELS, claudeName, claudeKeyProblem, parseAddress, remoteProblem, remoteRisk, remoteLabel, directUrl, openTunnel, probe, pickRemoteModel, readKey, keyEnd, validKey, keyStore, ollamaCtxOf, ollamaCatalog } from '../../../models/index.mjs';
 import { groupsOf, suggestModel } from './remote-models.mjs';
 import { readTryouts } from './tryouts.mjs';
+import { MEMORY_TO } from '../agent/opening.mjs';
 
 export const SOURCES = ['here', ...REMOTE_SOURCES];
 export const CONTEXTS = [0, 8192, 16384, 32768, 65536, 131072, 262144];
@@ -23,15 +24,18 @@ const ROW = {
   model: { id: 'model', label: 'Model', type: 'text' },
   port: { id: 'port', label: 'Port', type: 'text' },
   context: { id: 'context', label: 'Context', type: 'choice' },
+  // What the memory sends to a model on another machine (settings.json "memoryToRemote", opening.mjs):
+  // one choice for every service, so it is the form's, not a service's.
+  memory: { id: 'memory', label: 'Memory sent', type: 'choice' },
   more: { id: 'more', label: 'More', type: 'toggle' },
   go: { id: 'go', label: 'Connect', type: 'action' },
   keep: { id: 'keep', label: 'Save only', type: 'action' },
 };
 // Each service's rows: the ones most people fill in, then the ones behind More.
 const LAYOUT = {
-  claude: { main: ['key', 'model'], more: ['address', 'context'] },
-  machine: { main: ['address', 'connect', 'key'], more: ['port', 'kind', 'model', 'context'] },
-  openai: { main: ['address', 'key', 'model'], more: ['connect', 'port', 'context'] },
+  claude: { main: ['key', 'model'], more: ['address', 'context', 'memory'] },
+  machine: { main: ['address', 'connect', 'key'], more: ['port', 'kind', 'model', 'context', 'memory'] },
+  openai: { main: ['address', 'key', 'model'], more: ['connect', 'port', 'context', 'memory'] },
 };
 const CHOICES = { connect: ['http', 'https', 'ssh'], kind: ['llama', 'openai'], context: CONTEXTS };
 const WORDS = {
@@ -39,7 +43,9 @@ const WORDS = {
   connect: (v) => ({ http: 'Home network (http)', https: 'Internet (https)', ssh: 'SSH tunnel' })[v] ?? v,
   kind: (v) => ({ llama: 'llama.cpp', openai: 'OpenAI-compatible', claude: 'Claude API' })[v] ?? v,
   context: (v) => (v ? `${Math.round(v / 1024)}k` : 'from server'),
+  memory: (v) => ({ mine: 'only to my own Macs', all: 'to every service', none: 'none' })[v] ?? v,
 };
+const memoryOf = (settings) => (MEMORY_TO.includes(settings?.memoryToRemote) ? settings.memoryToRemote : 'mine');
 export const kindWord = (k) => WORDS.kind(k);
 export const sourceWord = (s) => WORDS.source(s);
 
@@ -92,6 +98,7 @@ export function openForm(settings, { on = false, source = null } = {}) {
     saved: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, saved[s]])),
     keys: Object.fromEntries(REMOTE_SOURCES.map((s) => [s, null])),
     editing: null, test: null, error: null, tried: false,
+    memory: memoryOf(settings), savedMemory: memoryOf(settings),
   };
 }
 
@@ -187,6 +194,7 @@ export function moveRow(form, id, dir) {
     return next === form.source ? form : { ...form, source: next, index: 0, more: false, test: null, error: null, tried: false, pick: null };
   }
   if (id === 'more') return { ...form, more: dir > 0 };
+  if (id === 'memory') return { ...form, memory: MEMORY_TO[Math.max(0, Math.min(MEMORY_TO.length - 1, MEMORY_TO.indexOf(form.memory ?? 'mine') + dir))] };
   const v = cur(form);
   if (!v) return form;
   const steps = id === 'model' ? modelChoices(form) : CHOICES[id];
@@ -202,6 +210,7 @@ export function showValue(form, id) {
   if (id === 'more') return form.more ? '▾' : '▸';
   if (id === 'go') return form.test?.running ? 'checking…' : form.source === 'here' ? (form.inUse === 'here' ? 'in use now' : 'enter to switch') : form.test?.needModel ? 'pick a model' : form.test && !form.test.ok ? '✗ it did not work' : 'enter to connect';
   if (id === 'keep') return 'enter to save';
+  if (id === 'memory') return WORDS.memory(form.memory ?? 'mine');
   const v = cur(form);
   const claude = v.kind === 'claude';
   if (WORDS[id]) return WORDS[id](v[id]);
@@ -235,6 +244,7 @@ export function rowNote(form, id) {
     return form.source === 'claude' ? 'checks the key and asks for one word (a fraction of a cent), then switches' : 'checks it answers, then saves and switches';
   }
   if (id === 'keep') return form.inUse === form.source ? 'keeps it · Connect uses it now' : `keeps it · this window stays on ${form.inUse === 'here' ? 'this Mac' : WORDS.source(form.inUse)}`;
+  if (id === 'memory') return ({ mine: 'facts about you go whole only to coding serve on your own computer; any other service gets the project’s', all: 'every service gets every fact, about you too', none: 'no memory goes with the first step of a conversation' })[form.memory ?? 'mine'];
   const v = cur(form);
   const claude = v.kind === 'claude';
   const ssh = v.connect === 'ssh' && !claude;
@@ -243,7 +253,7 @@ export function rowNote(form, id) {
     case 'more': {
       if (form.more) return 'enter folds them away';
       const fresh = FRESH[form.source];
-      const set = LAYOUT[form.source].more.filter((r) => (r === 'model' && v.kind === 'llama' ? v.model : v[r] !== fresh[r]));
+      const set = LAYOUT[form.source].more.filter((r) => (r === 'memory' ? (form.memory ?? 'mine') !== 'mine' : r === 'model' && v.kind === 'llama' ? v.model : v[r] !== fresh[r]));
       return set.length ? set.map((r) => `${ROW[r].label.toLowerCase()} ${showValue(form, r)}`).join(' · ') : LAYOUT[form.source].more.map((r) => ROW[r].label.toLowerCase()).join(', ');
     }
     case 'address': return claude ? `blank: ${CLAUDE_HOST} · a proxy’s address works too` : ssh ? 'user@host, or a name from ~/.ssh/config' : form.source === 'openai' ? 'the whole address, https:// and its path included' : 'its IP or name (a Tailscale name works too)';
@@ -268,6 +278,7 @@ export function rowNote(form, id) {
 // Whether a row differs from what is saved (the • after it).
 export function rowChanged(form, id) {
   if (form.source === 'here' || !(id in ROW) || ['source', 'more', 'go', 'keep'].includes(id)) return false;
+  if (id === 'memory') return (form.memory ?? 'mine') !== (form.savedMemory ?? 'mine');
   if (id === 'key') return form.keys[form.source] !== null;
   const before = form.saved[form.source] ?? FRESH[form.source];
   return (cur(form)[id] ?? null) !== (before[id] ?? null);
@@ -321,7 +332,7 @@ export function savePlan(form, settings, { connect = false } = {}) {
   const keys = [];
   for (const s of REMOTE_SOURCES) {
     const k = form.keys[s];
-    const changed = k !== null || LAYOUT[s].main.concat(LAYOUT[s].more).some((id) => (form.profiles[s][id] ?? null) !== ((form.saved[s] ?? FRESH[s])[id] ?? null));
+    const changed = k !== null || LAYOUT[s].main.concat(LAYOUT[s].more).some((id) => id !== 'memory' && (form.profiles[s][id] ?? null) !== ((form.saved[s] ?? FRESH[s])[id] ?? null));
     if (!changed && !form.saved[s] && s !== form.source) continue;
     remotes[s] = toProfile(form, s);
     const old = form.saved[s];
@@ -336,7 +347,8 @@ export function savePlan(form, settings, { connect = false } = {}) {
   if (connect) remote = form.source === 'here' ? (before ? { ...before, ...(remotes[was] ?? {}), use: false } : null) : { ...remotes[form.source], use: true };
   else if (!before?.use && form.source !== 'here') remote = { ...remotes[form.source], use: false };
   else remote = before && remotes[was] ? { ...remotes[was], use: Boolean(before.use) } : before;
-  return { remotes, remote, keys };
+  // memoryToRemote: only when the Memory sent row changed it.
+  return { remotes, remote, keys, ...((form.memory ?? 'mine') !== (form.savedMemory ?? 'mine') ? { memoryToRemote: form.memory } : {}) };
 }
 
 // ---- editing a text row in place ----------------------------------------------------------------

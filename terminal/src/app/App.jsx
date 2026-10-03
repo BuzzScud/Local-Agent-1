@@ -956,9 +956,10 @@ export function App({ opts, win, onRestart }) {
     try {
       for (const k of plan.keys) { if (k.op === 'save') saveKey(k.key, k.id, `Agentic Coder · ${sourceWord(k.source)}`); else removeKey(k.id); }
     } catch (e) { setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return null; }
-    const next = saveSettings({ remotes: plan.remotes, ...(plan.remote ? { remote: plan.remote } : {}) });
+    const next = saveSettings({ remotes: plan.remotes, ...(plan.remote ? { remote: plan.remote } : {}), ...(plan.memoryToRemote ? { memoryToRemote: plan.memoryToRemote } : {}) });
     settings.remotes = next.remotes;
     if (plan.remote) settings.remote = next.remote;
+    if (plan.memoryToRemote) settings.memoryToRemote = next.memoryToRemote;
     return plan;
   };
   // Connect: the shown service's rows are checked as they are (the tunnel opened

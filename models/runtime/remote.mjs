@@ -72,6 +72,11 @@ export function isPrivateHost(host) {
   return h === '::1' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe80:/.test(h);
 }
 
+// The owner's own other computer: coding serve (llama.cpp) reached at a private address or over SSH.
+// Facts about the user go in full only there (terminal opening.mjs); an Ollama service on the home
+// network, any OpenAI-compatible service and the Claude API are someone else's machine (3 Oct 2026).
+export const ownMachine = (r) => r?.kind === 'llama' && (r.connect === 'ssh' || isPrivateHost(parseAddress(addressOf(r))?.host ?? ''));
+
 // An SSH destination as ssh takes it: a name from ~/.ssh/config, host or
 // user@host (a port goes in the config). Never an option ("-o…").
 export const validSshDest = (dest) => /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9._:[\]-]+$/.test(String(dest ?? '')) && !String(dest).startsWith('-');
@@ -488,7 +493,7 @@ export function remoteModel(r, info = {}) {
   const where = remoteLabel(r);
   const ctx = r?.context || (r?.kind === 'claude' && info.ctx ? Math.min(info.ctx, CLAUDE_CTX) : info.ctx) || null;
   const o = info.ollama ?? null;
-  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null }, bytes: 0, draft: null, slots: info.slots ?? 1 };
+  const common = { id: 'remote', remote: { kind: r?.kind ?? 'llama', label: where, source: sourceOf(r), model: info.model || r?.model || null, ollama: o?.version ?? null, mine: ownMachine(r) }, bytes: 0, draft: null, slots: info.slots ?? 1 };
   if (base) return { ...base, ...common, base: base.id, name: `${base.name} · ${where}`, maxCtx: ctx ?? base.maxCtx };
   const levels = o?.known ? { thinkingLevels: remoteLevels(o), thinkingEffort: o.thinking ? 'high' : 'low' } : {};
   // An Ollama model's longest context is its own (/effort's Context row goes up to it).

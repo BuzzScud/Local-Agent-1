@@ -131,7 +131,7 @@ test('each service keeps its key under its own name (a key saved before Run on s
   saveKey('test-machine-0123456789', 'machine');
   const c = await connectRemote(R({ source: 'machine', keyId: 'machine', address: fake.url, kind: 'llama', key: true, keyEnd: '6789' }));
   expect(endpointOf(fake.url)).toMatchObject({ key: 'test-machine-0123456789' });
-  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine', model: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', ollama: null });
+  expect(c.model.remote).toEqual({ kind: 'llama', label: `127.0.0.1:${fake.port}`, source: 'machine', model: 'gemma-4-12B-it-qat-UD-Q4_K_XL.gguf', ollama: null, mine: true });
   c.stop();
   await fake.close();
 });
