@@ -38,7 +38,10 @@ test('start-up says what it waits for; a message typed meanwhile is sent when re
   mkdirSync(join(home, 'models'), { recursive: true });
   symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(home, 'engine', ENGINE.tag, 'llama-server'));
   writeFileSync(join(home, 'models', D.file), 'stand-in');
-  const first = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 60_000, steps: [
+  // "✓ model" shows only while the instructions are taken in (2.5 s with the stand-in), and a busy run's
+  // look at the screen can take longer than that: then the step was never seen and the wait ran out
+  // (3 Oct 2026). The stand-in takes 9 s here, so there is time to see it and to type into it.
+  const first = await runInPty({ cwd, env: { ...env, FAKE_LLAMA_WARM_MS: '9000' }, args: ['--no-flows'], timeoutMs: 75_000, steps: [
     { wait: '✓ model', ms: 45_000 }, { type: 'hello' }, { key: 'enter' },
     { wait: 'sends as soon as the model is ready' }, { snapshot: 'queued' },
     { wait: 'Hello from the stand-in model.', ms: 45_000 }, ...quit,
