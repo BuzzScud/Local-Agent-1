@@ -48,3 +48,19 @@ test('/agents demo: the agent tree takes the window, asks its questions, builds 
   expect(r.snapshots.after).not.toContain('SECOND OPINION');
   expect(r.code).toBe(0);
 }, T * 2);
+
+test('/agents in Plan mode says up front that Plan mode only reads, and starts nothing (3 Oct 2026)', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([]);
+  const r = await runInPty({ cwd, env: { ...env, AGENTIC_AGENTS_RESIZE: 'off' }, args: ['--url', fake.url, '--no-flows', '--mode', 'plan'], steps: [
+    { wait: '? for shortcuts' },
+    { type: '/agents add a --json flag' }, { key: 'enter' },
+    { wait: 'Plan mode only reads' }, { sleep: 200 }, { snapshot: 'said' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.said.replace(/\s+/g, ' ')).toContain('/agents writes its files and the code, and Plan mode only reads: leave Plan mode (shift+tab), then /agents again.');
+  expect(r.snapshots.said).not.toContain('SECOND OPINION'); // the tree never opened
+  expect(fake.requests.filter((q) => q.stream)).toHaveLength(0); // nothing was asked of the model
+  expect(r.code).toBe(0);
+}, T);
