@@ -224,9 +224,10 @@ leaves. Several windows can show one session at once: what any of them types rea
 is drawn at the smallest window's size.
 
 From another Mac, over [Tailscale](https://tailscale.com): on the Mac with the sessions run
-`coding door on` once. It listens on that Mac's Tailscale address only, asks for a key it prints,
-and starts again after a restart (a login item; `coding door off` removes it). Then, on the
-other Mac:
+`coding door on` once, in Terminal. It listens on that Mac's Tailscale address only and asks for a
+key it prints. It runs as started from Terminal, so a session it starts may use your Desktop and
+Documents as Terminal does (a login item's own program may not). After a restart a login item opens
+a Terminal window that starts it again; `coding door off` removes both. Then, on the other Mac:
 
 ```
 coding sessions <mac>     # its sessions (the Tailscale name, e.g. coding sessions studio)
