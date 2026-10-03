@@ -111,6 +111,20 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
 @media (max-width:899px),(max-height:559px){.split{grid-template-columns:1fr}.rows{flex:none;min-height:637px}.detail{overflow:visible}.charts{flex:none}.plot{flex:none;aspect-ratio:560/262}.khead{flex-wrap:wrap}}
 @media (max-width:600px){h1{font-size:23px}th,td{padding:8px 10px}.lede{white-space:normal}.col-when{width:92px!important}.col-time,.col-pg,td.tm,td.pg,th.tm,th.pg{display:none}.finds{flex-wrap:wrap}.finds input{width:100%}.board{overflow-x:auto}.board table{min-width:960px}}
 /* The ▶ in a grid cell sends that test to the Arena, which runs it (the Run tab that was here is the Arena now, 30 Sep 2026). */
+/* The grid, turned (3 Oct 2026): tests down the side in two halves, models across. */
+.board.turn .halves{display:grid;grid-template-columns:1fr 1fr;align-items:start}
+.board.turn table{table-layout:fixed;width:100%}
+.board.turn .halves table+table{border-left:1px solid var(--line)}
+.board.turn th,.board.turn td{height:21px;padding:1px 5px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;line-height:1.3}
+.board.turn thead th{height:24px;font-size:10.5px;letter-spacing:-.01em;text-transform:none}.board.turn tbody th,.board.turn thead th:first-child{padding-left:12px}
+.board.turn tbody th{font-size:12.5px;font-weight:500;text-align:left}
+.board.turn tr.spare td,.board.turn tr.spare th{cursor:default;background:none}
+.board.turn td.none{cursor:pointer;color:var(--faint)}.board.turn td.none:hover{background:var(--soft)}
+.board.turn .v{font-size:12px;letter-spacing:-.02em}.board.turn .m{display:inline;font-size:12px}
+.board.turn .q{margin-left:1px;font-size:10.5px;font-weight:600}
+.picked{border-top:1px solid var(--line);padding:4px 12px;font-size:13px;color:var(--mute);display:flex;align-items:center;gap:10px;height:30px}
+.picked>span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.picked b{color:var(--ink)}
+.picked .go{flex:none;margin:0;padding:2px 10px}
 </style>
 </head>
 <body>
@@ -278,36 +292,66 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   }
   $('health').onclick = (e) => { const b = e.target.closest('.hl'); if (b) go(b.dataset.kind); };
 
-  // The grid: each model on this Mac down the side (the one picked, or all), each test the Arena can
-  // run across the top; a cell is that model's latest whole run of that test and its change since the
-  // run before. A cell picked shows its runs over time in the chart under it.
+  // The grid, turned (3 Oct 2026, the owner's pick of two designs: at 25 tests across, a test's name was one
+  // letter and "never run" was cut to "nev"). Each test the Arena can run is a row, in two halves side by
+  // side, with its name in full; each model on this Mac is a column (the one picked, or all). A cell is
+  // that model's latest whole run of that test. The cell picked is said in words under the grid, with the
+  // one ▶ that runs it (in the hub), and its runs over time are in the chart below.
   let cell = null; // 'model|test'
   try { cell = localStorage.getItem('agentic-tests-cell'); } catch { /* no storage */ }
   const gridModels = () => (pick === 'all' ? models : models.filter((m) => m.id === pick));
   const runsOf = (t, m) => all.filter((r) => isOf(t, r) && r.model === m && r.result !== 'stopped');
+  // Short names for the models where a column or a row is narrow: the first word, and for two that
+  // share it ("Bonsai 2 27B", "Bonsai 2 27B ConstantKV") the longer one's last word.
+  const shortNames = (ms) => { const first = ms.map((m) => m.name.split(' ')[0]); return ms.map((m, i) => (first.filter((f) => f === first[i]).length > 1 && m.name.split(' ').length > 3 ? m.name.split(' ').at(-1) : first[i])); };
+  // A cell in full, for pointing at it.
+  const cellTitle = (t, m, r, ch) => esc(r ? `${t.name} on ${m.name}: ${words(r)}${r.bar ? ` (its bar: ${r.bar})` : measured(r) ? ' (measured)' : ''} · ${day(r.at)} ${clock(r.at)}${effortOf(r) === 'high' ? ' · thinking on' : ''}${ch ? ` · ${ch.text}` : ''}` : `${t.name} on ${m.name}: never run`);
+  // The cell picked, in words, under the grid: its test and model in full, the result, its bar, when,
+  // what changed since the run before, and (in the hub) the one ▶ that runs it. One line, always there.
+  function pickedLine(ms) {
+    const [mid, tid] = (cell ?? '').split('|'), t = BOARD.find((x) => x.id === tid), m = ms.find((x) => x.id === mid);
+    if (!t || !m) return '<div class="picked"><span>Pick a cell to see it here.</span></div>';
+    const r = latestOf(t, m.id);
+    // In the hub a test can be started from here; in the saved copy of the page it cannot.
+    const run = live ? `<button type="button" class="go" data-run="${esc(t.id)}" data-model="${esc(m.id)}" title="Pick ${esc(t.name)} on ${esc(m.name)} in the Arena, to run it">▶ Run it in the Arena</button>` : '';
+    if (!r) {
+      const bits = t.id === 'practice28' ? all.filter((x) => x.kind === t.kind && x.part && x.model === m.id).length : 0;
+      return `<div class="picked"><span><b>${esc(t.name)}</b> on ${esc(m.name)} · never run${bits ? ` as a whole (${bits} one-task run${bits === 1 ? '' : 's'})` : ''}</span>${run}</div>`;
+    }
+    const [c, mk] = mark(r), ch = change(r);
+    // The whole line on pointing at it, for when it is longer than the grid is wide.
+    return `<div class="picked"><span title="${cellTitle(t, m, r, ch)}"><b>${esc(t.name)}</b> on ${esc(m.name)} · <span class="${c}">${mk ? `${mk} ` : ''}${esc(words(r))}</span>${r.bar ? ` · its bar: ${esc(r.bar)}` : measured(r) ? ' · measured, no pass or fail' : ''} · ${day(r.at)} ${clock(r.at)}${effortOf(r) === 'high' ? ' · thinking on' : ''}${ch ? ` · ${esc(ch.text)}` : ''}</span>${run}</div>`;
+  }
+  // The cell shown first: one with a line to draw (two runs or more), else one with a run, else the first.
+  function firstCell(ms) {
+    const cells = ms.flatMap((m) => BOARD.map((t) => `${m.id}|${t.id}`));
+    if (!cell || !cells.includes(cell)) cell = cells.find((c) => { const [m, id] = c.split('|'); return runsOf(BOARD.find((t) => t.id === id), m).length > 1; }) ?? cells.find((c) => { const [m, id] = c.split('|'); return runsOf(BOARD.find((t) => t.id === id), m).length; }) ?? cells[0];
+  }
   function board() {
     const ms = gridModels();
     if (!ms.length) { $('board').innerHTML = pick === 'none' ? '' : '<div class="board"><p class="nomodel">No model file is on this Mac: the grid lists each model you have.</p></div>'; return; }
-    const cells = ms.flatMap((m) => BOARD.map((t) => `${m.id}|${t.id}`));
-    if (!cell || !cells.includes(cell)) cell = cells.find((c) => { const [m, id] = c.split('|'); return runsOf(BOARD.find((t) => t.id === id), m).length > 1; }) ?? cells.find((c) => { const [m, id] = c.split('|'); return runsOf(BOARD.find((t) => t.id === id), m).length; }) ?? cells[0];
+    firstCell(ms);
+    const names = shortNames(ms), one = ms.length === 1;
+    // Every model shown: the change since the run before is an arrow alone (by how much is in the line under the grid).
+    const arrow = (ch) => (ch && ch.dir ? `<span class="q ${ch.dir > 0 ? 'up1' : 'dn1'}" title="${esc(ch.text)}">${ch.dir > 0 ? '↑' : '↓'}</span>` : '');
     const td = (m, t) => {
       const r = latestOf(t, m.id), key = `${m.id}|${t.id}`;
-      const run = live ? `<button type="button" class="go" data-run="${esc(t.id)}" data-model="${esc(m.id)}" title="Pick ${esc(t.name)} on ${esc(m.name)} in the Arena, to run it">▶</button>` : '';
-      if (!r) {
-        const bits = t.id === 'practice28' ? all.filter((x) => x.kind === t.kind && x.part && x.model === m.id).length : 0;
-        return `<td class="none" data-cell="${key}"><div class="v">never run${run}</div><div class="m">${bits ? `${bits} one-task run${bits === 1 ? '' : 's'}` : '&nbsp;'}</div></td>`;
-      }
+      if (!r) return `<td class="none" data-cell="${key}" aria-selected="${key === cell}" title="${cellTitle(t, m, null)}">never</td>`;
       const [c, mk] = mark(r), ch = change(r);
-      return `<td data-cell="${key}" aria-selected="${key === cell}" title="${esc(`${t.name} on ${m.name}: ${words(r)}${r.bar ? ` (its bar: ${r.bar})` : measured(r) ? ' (measured)' : ''} · ${day(r.at)} ${clock(r.at)}${effortOf(r) === 'high' ? ' · thinking on' : ''}${ch ? ` · ${ch.text}` : ''}`)}"><div class="v ${c}">${mk ? `${mk} ` : ''}${esc(words(r))}${changeTag(ch)}${run}</div><div class="m">${day(r.at)}${r.bar ? ` · ${esc(r.bar.replace(/^at most (\d+)/, '≤ $1'))}` : measured(r) ? ' · measured' : ''}${effortOf(r) === 'high' ? ' · thinking on' : ''}</div></td>`;
+      return `<td data-cell="${key}" aria-selected="${key === cell}" title="${cellTitle(t, m, r, ch)}"><span class="v ${c}">${mk ? `${mk} ` : ''}${esc(one || r.total == null ? words(r) : `${r.passed}/${r.total}`)}</span>${one ? changeTag(ch) : arrow(ch)}${one ? `<span class="m"> · ${day(r.at)}${r.bar ? ` · ${esc(r.bar.replace(/^at most (\d+)/, '≤ $1'))}` : measured(r) ? ' · measured' : ''}${effortOf(r) === 'high' ? ' · thinking on' : ''}</span>` : ''}</td>`;
     };
-    $('board').innerHTML = `<div class="board"><table><colgroup><col style="width:168px">${BOARD.map(() => '<col>').join('')}</colgroup><thead><tr><th>Model</th>${BOARD.map((t) => `<th title="${esc(t.name)}">${esc(t.name)}</th>`).join('')}</tr></thead><tbody>${ms.map((m) => `<tr><th>${esc(m.name)}</th>${BOARD.map((t) => td(m, t)).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const half = Math.ceil(BOARD.length / 2);
+    const spare = (n) => (n > 0 ? `<tr class="spare"><th>&nbsp;</th>${ms.map(() => '<td></td>').join('')}</tr>`.repeat(n) : '');
+    const table = (tests) => `<table><colgroup><col style="width:${one ? '38%' : '184px'}">${ms.map(() => '<col>').join('')}</colgroup><thead><tr><th>Test</th>${ms.map((m, i) => `<th title="${esc(m.name)}">${esc(one ? m.name : names[i])}</th>`).join('')}</tr></thead><tbody>${tests.map((t) => `<tr><th title="${esc(t.name)}">${esc(t.name)}</th>${ms.map((m) => td(m, t)).join('')}</tr>`).join('')}${spare(half - tests.length)}</tbody></table>`;
+    $('board').innerHTML = `<div class="board turn"><div class="halves">${table(BOARD.slice(0, half))}${table(BOARD.slice(half))}</div>${pickedLine(ms)}</div>`;
   }
+
   $('board').onclick = (e) => {
     const g = e.target.closest('.go');
     // ▶: that test, on that model, picked in the Arena (the page this one is shown over; alone, the hub's Arena tab).
     if (g) { if (window.parent !== window) parent.postMessage({ agentic: 'arena-pick', test: g.dataset.run, model: g.dataset.model }, '*'); else location.href = `/?tab=arena&run=1&test=${encodeURIComponent(g.dataset.run)}&model=${encodeURIComponent(g.dataset.model)}`; return; }
     const td = e.target.closest('td[data-cell]');
-    if (td && !td.classList.contains('none')) { cell = td.dataset.cell; try { localStorage.setItem('agentic-tests-cell', cell); } catch { /* no storage */ } board(); trend(); }
+    if (td) { cell = td.dataset.cell; try { localStorage.setItem('agentic-tests-cell', cell); } catch { /* no storage */ } board(); trend(); }
   };
 
   // A line chart of one test's runs, oldest first, drawn at its box's own size (W × H px).
@@ -366,7 +410,7 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
     if (t && m && gridModels().some((x) => x.id === mid)) {
       const pts = runsOf(t, m.id).reverse(), counted = pts.every((p) => p.total != null);
       const title = `${t.name} on ${m.name}, over time`, open = `<button type="button" data-kind="${esc(t.kind)}">all runs ›</button>`;
-      if (pts.length < 2) fig(title, pts.length ? open : '', null, 'Pick a cell in the grid to see its runs here.', pts.length ? `One run so far (${esc(words(pts[0]))}, ${day(pts[0].at)}). Run it again to see a line.` : `No run yet.${live ? ' ▶ in its cell runs it.' : ''}`);
+      if (pts.length < 2) fig(title, pts.length ? open : '', null, 'Pick a cell in the grid to see its runs here.', pts.length ? `One run so far (${esc(words(pts[0]))}, ${day(pts[0].at)}). Run it again to see a line.` : `No run yet.${live ? ' ▶ under the grid runs it.' : ''}`);
       else fig(title, open, (W, H) => line({ title, pts, get: counted ? (p) => p.passed : (p) => p.secs, fmt: counted ? (v) => `${v} of ${pts.at(-1).total}` : (v) => `${v.toLocaleString()} s`, floor: counted ? Math.max(0, Math.min(...pts.map((p) => p.passed)) - 2) : undefined, top: counted ? Math.max(...pts.map((p) => p.total)) : undefined }, W, H),
         counted ? `Right answers, higher is better; ${pts.length} whole runs, oldest on the left. Pick another cell to change it.` : `Seconds, lower is better; ${pts.length} runs, oldest on the left.`);
     }
