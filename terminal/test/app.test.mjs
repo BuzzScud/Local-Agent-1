@@ -48,9 +48,39 @@ test('Agentic Coder asks: answer by number, or type an answer on the prompt line
   ] });
   await fake.close();
   expect(r.snapshots.asking).toContain('Agentic Coder asks');
-  expect(r.snapshots.asking).toMatch(/1\. export\.mjs[\s│]+2\. trades\.json[\s│]+3\. Type an answer[\s│]+4\. Stop here/);
+  expect(r.snapshots.asking).toMatch(/1\. export\.mjs[\s│]+2\. trades\.json[\s│]+3\. Type your own answer…/);
+  expect(r.snapshots.asking).toContain('Enter pick · ↑/↓ move · Esc stop'); // esc stops: no row for it
   for (const s of ['› Ask  Which file should change?', 'You: export.mjs', 'You: --json', 'Named it --json.']) expect(r.text).toContain(s);
   expect(r.text).not.toContain('› You: --json'); // the Ask step shows a typed answer; it is not echoed as a step of its own
+}, T);
+
+test('the compact question box: what the choice you are on means, the one recommended, "1 of 2", and ticking several with space', async () => {
+  const { cwd, env } = setup();
+  const fake = await startFakeServer([
+    { tool: { name: 'Ask', args: {
+      question: 'What should the footer show?',
+      options: [{ label: 'Time left this hour', about: 'A small clock. Example: "42 min left"', recommended: true }, { label: 'Messages used today', about: 'A count. Example: "18 of 50 used"' }],
+      more: [{ question: 'Which pages should get it?', options: ['Home', 'Settings', 'Reports'], several: true }],
+    } } },
+    { text: 'Footer planned.' },
+  ]);
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: '? for shortcuts' }, { type: 'add usage to the footer' }, { key: 'enter' },
+    { wait: 'What should the footer show?' }, { sleep: 200 }, { snapshot: 'first' },
+    { key: 'down' }, { wait: '18 of 50 used' }, { snapshot: 'moved' }, { key: 'up' }, { sleep: 100 }, { key: 'enter' },
+    { wait: 'Which pages should get it?' }, { sleep: 200 }, { key: ' ' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { key: 'down' }, { sleep: 100 }, { key: ' ' }, { sleep: 200 }, { snapshot: 'ticked' }, { key: 'enter' },
+    { wait: 'Footer planned.' }, ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.first).toMatch(/What should the footer show\?\s+\(1 of 2\)/);
+  expect(r.snapshots.first).toMatch(/❯ 1\. Time left this hour\s+\(recommended\)/);
+  expect(r.snapshots.first).toContain('ⓘ A small clock. Example: "42 min left"');
+  expect(r.snapshots.moved).toContain('ⓘ A count. Example: "18 of 50 used"');
+  expect(r.snapshots.moved).not.toContain('A small clock');
+  expect(r.snapshots.ticked).toMatch(/1\. \[✔\] Home[\s│]+2\. \[ \] Settings[\s│]+❯ 3\. \[✔\] Reports[\s│]+4\. Type your own answer…/);
+  expect(r.snapshots.ticked).toContain('Space tick · Enter done');
+  for (const s of ['You: Time left this hour', 'You: Home, Reports']) expect(r.text).toContain(s);
+  expect(fake.requests[1].messages.find((m) => m.role === 'tool').content).toBe('The user answered:\n1. What should the footer show? → Time left this hour\n2. Which pages should get it? → Home, Reports');
 }, T);
 
 test('working: the live thinking line above the spinner, which shows time, tokens and what it is doing; esc interrupts', async () => {

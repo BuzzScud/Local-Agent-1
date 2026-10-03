@@ -1,0 +1,142 @@
+// Questions in plain words (3 Oct 2026). A question to you is one or more
+// questions asked one after another, each with up to four choices; a choice
+// has a short label, a line saying what it means for you (shown under the
+// list for the choice you are on), and may be the one recommended. A
+// question may let you tick several choices. The app's own questions (the
+// go-ahead before a change, the check-in, the stuck question) say what it did
+// in everyday words, with a file's name at the end.
+import { basename, dirname } from 'node:path';
+
+const MAX_QUESTIONS = 4;
+const MAX_CHOICES = 4;
+const RECOMMENDED = /\s*[([]\s*recommended\s*[)\]]\s*$/i;
+const clip = (s, n) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+
+// One choice as a model wrote it: a string, or { label, about, recommended }
+// (also text/name/title and description/detail/example, which small models send).
+function choiceOf(o) {
+  if (o && typeof o === 'object') {
+    const raw = String(o.label ?? o.text ?? o.name ?? o.title ?? o.answer ?? o.option ?? '').trim();
+    const about = clip(o.about ?? o.description ?? o.detail ?? o.details ?? o.explanation ?? o.example ?? '', 160);
+    return { label: clip(raw.replace(RECOMMENDED, ''), 80), about, recommended: o.recommended === true || RECOMMENDED.test(raw) };
+  }
+  const raw = String(o ?? '').trim();
+  return { label: clip(raw.replace(RECOMMENDED, ''), 80), about: '', recommended: RECOMMENDED.test(raw) };
+}
+
+// One question: { question, options: [labels], about: [lines], recommended: index or -1, several }.
+function questionOf(q) {
+  const seen = new Set();
+  const choices = [];
+  for (const c of (Array.isArray(q?.options) ? q.options : []).map(choiceOf)) {
+    const k = c.label.toLowerCase();
+    if (!c.label || seen.has(k)) continue;
+    seen.add(k);
+    choices.push(c);
+    if (choices.length === MAX_CHOICES) break;
+  }
+  return {
+    question: String(q?.question ?? '').trim(),
+    options: choices.map((c) => c.label),
+    about: choices.map((c) => c.about),
+    recommended: choices.findIndex((c) => c.recommended),
+    several: q?.several === true && choices.length > 1,
+  };
+}
+
+// The Ask tool's arguments as the questions to ask, in order (at most four):
+// the first is question/options/several, the rest come in more (or questions).
+export function askedQuestions(args = {}) {
+  const extra = Array.isArray(args.more) ? args.more : Array.isArray(args.questions) ? args.questions : [];
+  const first = args.question ? [args] : [];
+  return [...first, ...extra].map(questionOf).filter((q) => q.question).slice(0, MAX_QUESTIONS);
+}
+
+// A file as you would say it: its name, and the folder when that helps
+// ("social-feed-post.html on your Desktop", "export.mjs in src").
+export function fileSaid(rel) {
+  const p = String(rel ?? '').replace(/^\.\//, '').replace(/^~\//, '');
+  const name = basename(p);
+  const dir = dirname(p);
+  if (!p || dir === '.' || dir === '') return name;
+  if (/^Desktop$/i.test(dir)) return `${name} on your Desktop`;
+  return `${name} in ${dir}`;
+}
+
+const lines = (n) => `${n} line${n === 1 ? '' : 's'}`;
+
+// The go-ahead before the first change, in plain words: what will happen, the file last.
+export function planSaid(name, args = {}, prepared = {}) {
+  const where = fileSaid(prepared.rel ?? args.path);
+  if (name === 'Write') return prepared.created ? `make a new file, ${where}` : `replace what is in ${where}`;
+  const changed = Math.max(prepared.additions ?? 0, prepared.removals ?? 0);
+  return `change ${changed ? lines(changed) : 'one part'} of ${where}`;
+}
+
+// A focused change's files, in plain words ("change 3 lines of export.mjs and 1 line of cli.mjs").
+export function changesSaid(changes) {
+  const each = changes.map((c) => `${lines(Math.max(c.additions ?? 0, c.removals ?? 0, 1))} of ${fileSaid(c.rel)}`);
+  return `change ${each.length > 1 ? `${each.slice(0, -1).join(', ')} and ${each.at(-1)}` : each[0]}`;
+}
+
+// One look, as the check-in lists it: the file read, the folder listed, the words searched for.
+export function lookSaid(name, args = {}) {
+  const path = args.path ?? args.paths?.[0] ?? '';
+  switch (name) {
+    case 'Read': return Array.isArray(args.paths) && args.paths.length > 1 ? `${args.paths.length} files` : fileSaid(path) || 'a file';
+    case 'List': return !path || path === '.' ? 'the list of files here' : `the files in ${fileSaid(path)}`;
+    case 'Search': return `everywhere "${clip(args.pattern ?? args.query ?? '', 40)}" appears`;
+    case 'CodeSearch': return `the code for "${clip(args.query ?? '', 40)}"`;
+    case 'Map': return 'a map of the project';
+    case 'WebSearch': return `the web for "${clip(args.query ?? '', 40)}"`;
+    case 'WebFetch': { try { return `a web page on ${new URL(args.url).hostname}`; } catch { return 'a web page'; } }
+    case 'Bash': return 'the output of a command';
+    default: return name;
+  }
+}
+
+// "a, b and c" (and "and 3 more" past six).
+export function listSaid(items, max = 6) {
+  const shown = items.slice(0, max);
+  const more = items.length - shown.length;
+  if (more > 0) return `${shown.join(', ')} and ${more} more`;
+  return shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}` : shown[0] ?? '';
+}
+
+const minutes = (secs) => { const m = Math.round(secs / 60); return m < 1 ? 'under a minute' : `${m} minute${m === 1 ? '' : 's'}`; };
+
+// The check-in: how long it has looked, what at, and the choice to go on.
+export function checkInQuestion(looked, secs) {
+  return {
+    question: `I have spent ${minutes(secs)} looking around and have not changed anything yet. I looked at ${listSaid(looked)}. Am I on the right track?`,
+    options: ['Keep going'],
+    about: ['I carry on the way I am going.'],
+    typeLabel: 'Tell me where to look…',
+    typeAbout: 'Name a file, a page or a part of the app, and I start there.',
+  };
+}
+
+// Stuck: the same step twice, or three that failed; the error's own words come last.
+export function stuckQuestion(why, step, err) {
+  return {
+    question: why === 'repeat'
+      ? `I tried the same step twice (looking at ${step}) and I am not getting further. What should I do?`
+      : `Three steps in a row did not work.${err ? ` The last one said: ${err}` : ''} What should I do?`,
+    options: ['Keep going'],
+    about: ['I try again my own way.'],
+    typeLabel: 'Give me a hint…',
+    typeAbout: 'Say what to try, or where to look, and I follow that.',
+  };
+}
+
+// The go-ahead before changing files: yes covers the rest of this request's changes.
+export function planQuestion(plan) {
+  return {
+    question: `Before I change anything: I will ${plan}. Go ahead?`,
+    options: ['Yes, go ahead'],
+    about: ['I make this change, and any others this request needs, without asking again.'],
+    recommended: 0,
+    typeLabel: 'Change something first…',
+    typeAbout: 'Tell me what to do instead, and I do that.',
+  };
+}

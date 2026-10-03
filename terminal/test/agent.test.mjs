@@ -85,7 +85,7 @@ test('three errors in a row: it asks; "Stop here" ends the turn', async () => {
   const reason = await agent.send('where are the flags read?');
   await fake.close();
   expect(reason).toBe('declined');
-  expect(asked.find((r) => r.kind === 'stuck').args.question).toContain('Three steps in a row failed');
+  expect(asked.find((r) => r.kind === 'stuck').args.question).toContain('Three steps in a row did not work.');
 });
 
 test('bad arguments come back as an error the model can fix', async () => {
@@ -460,7 +460,8 @@ test('after 6 different looks with no change it checks in, and the answer steers
   expect(reason).toBe('done');
   const checkins = events.filter((e) => e.type === 'ask' && e.kind === 'checkin');
   expect(checkins.length).toBe(1);
-  expect(checkins[0].question).toMatch(/looked at 6 things .* Read export\.mjs; Read export\.test\.mjs; Read trades\.json; List \.; Search json; Search toCsv\. Am I on the right track\?/);
+  // In plain words: the files by name, the folder, the words searched for; no tool names.
+  expect(checkins[0].question).toMatch(/^I have spent under a minute looking around and have not changed anything yet\. I looked at export\.mjs, export\.test\.mjs, trades\.json, the list of files here, everywhere "json" appears and everywhere "toCsv" appears\. Am I on the right track\?$/);
   expect(lastUser(fake.requests[8])).toMatch(/\[Check-in\].*The user answered: look at trades\.json/);
 });
 
@@ -497,7 +498,7 @@ test('on auto-accept the first edit is a plan question; an answer other than yes
   const { events, cwd, fake } = await steered([{ tool: { name: 'Read', args: { path: 'export.mjs' } } }, edit, { text: 'OK, I will ask first.' }],
     (req) => (req.kind === 'plan' ? { choice: 'answer', text: 'add a test for it first' } : { choice: 'yes' }));
   const plan = events.find((e) => e.type === 'ask' && e.kind === 'plan');
-  expect(plan.question).toMatch(/^Before I change anything: in export\.mjs, change "return toCsv\(rows\);" to "if \(argv\.includes/);
+  expect(plan.question).toBe('Before I change anything: I will change 1 line of export.mjs. Go ahead?'); // one line added, the return kept
   expect(readFileSync(join(cwd, 'export.mjs'), 'utf8')).not.toContain('--json');
   expect(fake.requests[2].messages.at(-1).content).toContain('the user wrote: add a test for it first');
   // yes lets this message's edits through, asked once

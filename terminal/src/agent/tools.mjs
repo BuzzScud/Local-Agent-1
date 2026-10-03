@@ -19,6 +19,8 @@ import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } fr
 import { permissionsTable } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
+// One choice of an Ask (agent/questions.mjs reads a bare string too).
+const choiceDef = { type: 'object', properties: { label: str('A few words'), about: str('What it means for the user, with one example'), recommended: { type: 'boolean' } }, required: ['label'] };
 // Read: files up to WHOLE_MAX lines come back whole; longer ones as an outline,
 // then PART_DEFAULT lines (at most PART_MAX) from the offset asked for. A big
 // model on a service reads more at a time (env.read: big-model mode's whole,
@@ -69,8 +71,13 @@ export const TOOL_DEFS = [
   },
   {
     name: 'Ask',
-    description: 'Ask the user one question when the request is unclear and your tools cannot settle it: what a vague request wants, which behaviour they mean, what to do when there is nothing to fix. Not for what List, Search or Read can find. Returns their answer. Ask as often as needed, one question at a time.',
-    parameters: { type: 'object', properties: { question: str('One short, specific question'), options: { type: 'array', items: { type: 'string' }, description: 'Optional: 2 to 4 short choices' } }, required: ['question'] },
+    description: 'Ask the user when the request is unclear and your tools cannot settle it: what a vague request wants, which behaviour they mean, a choice that is theirs. Not for what List, Search or Read can find. Write for someone who does not read code: everyday words, no file paths, commands or code names. Give 2 to 4 choices, each a few words with an about line saying what it means for them and one example. Put the choice you recommend first, with recommended: true. Set several: true when they may pick more than one. Up to 3 more questions go in more; they are asked one after another. Use this instead of writing questions in your reply. Returns their answers.',
+    parameters: { type: 'object', properties: {
+      question: str('One plain question'),
+      options: { type: 'array', items: choiceDef, description: '2 to 4 choices' },
+      several: { type: 'boolean', description: 'true: they may tick more than one choice' },
+      more: { type: 'array', items: { type: 'object', properties: { question: str('One plain question'), options: { type: 'array', items: choiceDef }, several: { type: 'boolean' } }, required: ['question'] }, description: 'Optional: up to 3 more questions' },
+    }, required: ['question'] },
   },
 ];
 
@@ -265,6 +272,8 @@ export function parseArgs(name, json, way = 'app') {
     if (args.path && args.paths) delete args.paths;
     if (!args.path && !args.paths?.length) return { error: way === 'model' ? 'Read needs "path" (one file) or "paths" (a list of files). Send the Read call again with one of them set.' : needsText(name, 'path') };
   }
+  // Ask's choices sent as a string of JSON are read as the list they are.
+  if (name === 'Ask') for (const k of ['options', 'more']) if (typeof args[k] === 'string') { try { const v = JSON.parse(args[k]); if (Array.isArray(v)) args[k] = v; } catch {} }
   for (const req of name === 'Read' && args.paths ? [] : def.parameters.required ?? []) {
     if (args[req] === undefined || args[req] === null || (typeof args[req] === 'string' && req !== 'new_text' && !args[req].length)) return { error: needsText(name, req) };
   }

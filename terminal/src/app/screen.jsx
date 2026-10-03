@@ -499,7 +499,15 @@ const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash comman
 export function permissionOptions(req, prefix, saveRule = null) {
   const yes = { label: 'Yes', choice: 'yes' };
   const no = { label: 'No, and tell Agentic Coder what to do differently (esc)', choice: 'no' };
-  if (req.name === 'Ask') return [...(req.args.options ?? []).map((o) => ({ label: o, choice: 'answer', text: o })), { label: 'Type an answer', choice: 'type' }, { label: 'Stop here (esc)', choice: 'no' }];
+  // A question (the compact box, 3 Oct 2026): its choices, each with what it means (about), then
+  // your own answer; esc stops (the hint line says so).
+  if (req.name === 'Ask') {
+    const a = req.args ?? {};
+    return [
+      ...(a.options ?? []).map((o, i) => ({ label: String(o), choice: 'answer', text: String(o), about: a.about?.[i] ?? '', recommended: i === a.recommended })),
+      { label: a.typeLabel ?? 'Type your own answer…', choice: 'type', about: a.typeAbout ?? 'Write it in the box below, then press enter.' },
+    ];
+  }
   // A git commit asks every time (permissions.mjs), so it has no "don't ask again".
   if (req.name === 'Bash') return req.once || !prefix ? [yes, no] : [yes, { label: `Yes, and don't ask again for ${prefix} this session`, choice: 'always' }, ...(saveRule ? [{ label: `Yes, and always allow ${saveRule} in this folder`, choice: 'save' }] : []), no];
   if (req.name === 'Test') return [{ label: 'Yes, use this test', choice: 'yes' }, { label: 'No, and tell Agentic Coder what the test should check (esc)', choice: 'no' }];
@@ -538,8 +546,8 @@ function PermissionPrompt({ app }) {
     <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
       <Text bold color={C.ask}>{title}{req.helper ? <Text color={C.dim}>  · asked by the {req.helper} helper</Text> : null}</Text>
       {req.name === 'Ask' ? (
-        <Box flexDirection="column" paddingX={2} marginY={1}>
-          <Text>{req.args.question}</Text>
+        <Box paddingX={1} marginY={1}>
+          <Text bold>{req.args.question}{req.args.step ? <Text bold={false} color={C.dim}>   ({req.args.step.at} of {req.args.step.of})</Text> : null}</Text>
         </Box>
       ) : req.name === 'Bash' ? (
         <Box flexDirection="column" paddingX={2} marginY={1}>
@@ -583,10 +591,38 @@ function PermissionPrompt({ app }) {
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}
-      {perm.options.map((o, i) => (
+      {req.name === 'Ask' ? <AskChoices perm={perm} width={width} /> : perm.options.map((o, i) => (
         <Text key={i} color={i === perm.selected ? C.ask : undefined}>{i === perm.selected ? '❯' : ' '} {i + 1}. {o.label ?? o}</Text>
       ))}
     </Box>
+  );
+}
+
+// The choices of a question, the compact way: one line each, "(recommended)" beside the one
+// recommended, [ ] boxes when several may be ticked, and under the list what the choice you are
+// on means. That line keeps the height of the longest, so the box does not move as you go.
+function AskChoices({ perm, width }) {
+  const several = Boolean(perm.req.args?.several);
+  const ticked = perm.ticked ?? [];
+  const room = Math.max(20, width - 10);
+  const tall = Math.max(1, ...perm.options.map((o) => Math.ceil(((o.about ?? '').length + 2) / room)));
+  const about = perm.options[perm.selected]?.about ?? '';
+  return (
+    <>
+      {perm.options.map((o, i) => {
+        const on = i === perm.selected;
+        const box = several && o.choice === 'answer' ? (ticked.includes(i) ? '[✔] ' : '[ ] ') : '';
+        return (
+          <Text key={i} color={on ? C.ask : undefined}>{on ? '❯' : ' '} {i + 1}. {box}{o.label}{o.recommended ? <Text color={C.dim}>  (recommended)</Text> : null}</Text>
+        );
+      })}
+      <Box height={tall} marginTop={1} paddingX={2}>
+        <Text color={C.dim}>{about ? `ⓘ ${about}` : ''}</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text color={C.dim}>{several ? 'Space tick · Enter done' : 'Enter pick'} · ↑/↓ move · Esc stop</Text>
+      </Box>
+    </>
   );
 }
 

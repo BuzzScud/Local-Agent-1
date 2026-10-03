@@ -224,8 +224,8 @@ test('a lone word: the question comes with answers to pick, and the pick is what
   const call = fake.requests[0];
   expect(call.response_format.json_schema.schema.required).toEqual(['clear', 'question', 'options']);
   expect(call.messages[1].content).toContain('different kind of work');
-  // On screen: the answers, then typing your own, then stopping.
-  expect(permissionOptions(ask.req, '').map((o) => o.label)).toEqual(['Explain how the API works', 'Fix a broken API endpoint', 'Add a new API endpoint', 'Type an answer', 'Stop here (esc)']);
+  // On screen: the answers, then typing your own (esc stops: the hint line says so).
+  expect(permissionOptions(ask.req, '').map((o) => o.label)).toEqual(['Explain how the API works', 'Fix a broken API endpoint', 'Add a new API endpoint', 'Type your own answer…']);
   // "Explain how the API works" is a question: no focused path, and the line says so.
   expect(events.find((e) => e.type === 'route').kind).toBe('question');
   expect(events.filter((e) => e.type === 'sorted').map((e) => e.text)).toEqual(['Sorted as: question · step by step']);

@@ -48,7 +48,8 @@ test('the Ask tool: the question reaches you, the answer goes back to the model'
   expect(reason).toBe('done');
   const ask = events.find((e) => e.type === 'ask');
   expect(ask.name).toBe('Ask');
-  expect(ask.req.args).toEqual({ question: 'Which file should change?', options: ['export.mjs', 'export.test.mjs'] });
+  // Bare choices: no about lines, none recommended, one answer (agent/questions.mjs).
+  expect(ask.req.args).toEqual({ question: 'Which file should change?', options: ['export.mjs', 'export.test.mjs'], about: ['', ''], recommended: -1, several: false });
   const tool = events.find((e) => e.type === 'tool' && e.label === 'Ask');
   expect(tool.view).toEqual({ kind: 'answer', question: 'Which file should change?', text: 'export.mjs' });
   expect(agent.messages.find((m) => m.role === 'tool').content).toBe('The user answered: export.mjs');
