@@ -8,6 +8,8 @@ files with nothing loaded from outside; download one and open it in a browser to
 
 | File | Kind | Title | Size | Saved |
 |---|---|---|---|---|
+| [tests/agentic-coder-questions-check-remote-Qwen3.6-35B-A3B-2026-10-03-1356.html](tests/agentic-coder-questions-check-remote-Qwen3.6-35B-A3B-2026-10-03-1356.html) | page | Plain questions check · the question it asks first | 12 KB | 2026-10-03 |
+| [design rounds/agentic-coder-plain-questions-preview-2026-10-03.html](design%20rounds/agentic-coder-plain-questions-preview-2026-10-03.html) | page | Plain questions preview | 132 KB | 2026-10-03 |
 | [design rounds/agentic-coder-tests-grid-2-designs-2026-10-03.html](design%20rounds/agentic-coder-tests-grid-2-designs-2026-10-03.html) | page | Tests grid: 2 designs · 3 Oct 2026 | 604 KB | 2026-10-03 |
 | [design rounds/agentic-coder-loop-board-3-designs-2026-10-03-v2.html](design%20rounds/agentic-coder-loop-board-3-designs-2026-10-03-v2.html) | page | /loop · the loop board, round two | 124 KB | 2026-10-03 |
 | [design rounds/agentic-coder-loop-board-3-designs-2026-10-03.html](design%20rounds/agentic-coder-loop-board-3-designs-2026-10-03.html) | page | /loop · the loop board, three designs | 83 KB | 2026-10-03 |
