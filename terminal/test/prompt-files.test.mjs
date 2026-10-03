@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 // nothing here may reach the real ~/.agentic-coder.
 const FIRST_HOME = mkdtempSync(join(tmpdir(), 'agentic-prompt-files-home-'));
 process.env.AGENTIC_HOME = FIRST_HOME;
-const { parseSkills, pickSkill, skillProblems, skillsList, skillNote, toolUseText, readSkillPath, readPromptFile, TOOL_USE_OLD, BUILT_IN } = await import('../src/agent/prompt-files.mjs');
+const { parseSkills, pickSkill, skillProblems, skillsList, skillNote, toolUseText, readSkillPath, readNearPath, readPromptFile, TOOL_USE_OLD, BUILT_IN } = await import('../src/agent/prompt-files.mjs');
 const { systemPrompt, SESSION_MARK } = await import('../src/agent/prompt.mjs');
 const { wayPrompt, MODEL_TOOL_LINES, ONE_AT_A_TIME } = await import('../src/agent/way.mjs');
 const { prepare, execute } = await import('../src/agent/tools.mjs');
@@ -156,6 +156,24 @@ test('Read SKILLS/<name> opens one skill and SKILLS the list; they are read-only
   expect(r.text).toContain('1. Read it whole first.');
   expect(prepare('Write', { path: 'SKILLS/new', content: 'x' }, { cwd: proj }).error).toContain('read-only');
   expect(prepare('Write', { path: 'SKILLS.md', content: '# mine\n' }, { cwd: proj }).error).toBeUndefined();
+  // paths near those, with no such file here: SKILLS.md or RULES/SKILLS.md the list, .SKILLS/<name> or
+  // RULES/SKILLS/<name> that skill, RULES.md the guides (when there are any); not "File not found"
+  const named = await execute('Read', { path: 'SKILLS.md' }, {}, { cwd: proj });
+  expect(named.error).toBeUndefined();
+  expect(named.text).toContain('- SKILLS/write-a-test');
+  expect((await execute('Read', { path: 'RULES/SKILLS.md' }, {}, { cwd: proj })).text).toContain('- SKILLS/explain-a-file');
+  for (const path of ['.SKILLS/write-a-test', 'RULES/SKILLS/write-a-test', './.SKILLS/Write a test.md']) {
+    const r = await execute('Read', { path }, {}, { cwd: proj });
+    expect([path, r.error, r.text]).toEqual([path, undefined, 'SKILLS/write-a-test (Write a test):\n1. Find the tests.\n2. Run only that test file.']);
+  }
+  expect((await execute('Read', { path: 'RULES/SKILLS/nope' }, {}, { cwd: proj })).text).toBe('No skill nope. The skills: SKILLS/write-a-test, SKILLS/explain-a-file.');
+  expect(readNearPath(proj, 'RULES.md', { guides: [{ name: 'TESTING', about: 'before you test' }] }).text).toContain('- RULES/TESTING.md: before you test');
+  expect(readNearPath(proj, 'RULES.md')).toBeNull(); // no guides on this set
+  // the paths the instructions give are not near paths: they open as before
+  for (const path of ['SKILLS', 'SKILLS/write-a-test', 'Rules/SKILLS/write-a-test', 'RULES/TESTING.md', 'src/SKILLS.md']) expect(readNearPath(proj, path)).toBeNull();
+  // the project's own SKILLS.md is read as it is
+  writeFileSync(join(proj, 'SKILLS.md'), '# my own skills\n');
+  expect((await execute('Read', { path: 'SKILLS.md' }, {}, { cwd: proj })).text).toContain('my own skills');
   // a project with a SKILLS folder of its own keeps it
   mkdirSync(join(proj, 'SKILLS'));
   writeFileSync(join(proj, 'SKILLS', 'a.md'), 'the project\'s own');

@@ -256,6 +256,27 @@ export function readSkillPath(cwd, p, skills) {
   return { text: `${shown}/${s.slug} (${s.name}):\n${s.body}` };
 }
 
+// A path near the ones the instructions give, which models reach for: "SKILLS.md" or
+// "RULES/SKILLS.md" opens the list of skills, ".SKILLS/<name>" or "RULES/SKILLS/<name>" that
+// skill, and "RULES.md" the list of guides (2 Oct 2026: qwen3-coder-next tried SKILLS.md,
+// .SKILLS/write-a-test, RULES/SKILLS/write-a-test and RULES.md in one task, each "File not
+// found"). The caller asks only when the project has no such file. null: not such a path.
+export function readNearPath(cwd, p, { skills, guides = [] } = {}) {
+  const raw = String(p ?? '').trim().replace(/^\.\//, '');
+  const m = /^(RULES\/|Rules\/)?(\.)?SKILLS(\.md)?(?:\/([^/]+?)(?:\.md)?)?\/?$/.exec(raw);
+  if (m && (m[1] === 'RULES/' || m[2] || m[3])) {
+    const all = skills ?? readSkills();
+    if (!all.length) return null;
+    const path = skillPath(cwd);
+    if (!m[4]) return { text: `${p} is not a file here; the skills open by their own paths.\n${skillsList(all, { path })}` };
+    const s = all.find((x) => x.slug === slugOf(m[4]));
+    if (!s) return { error: `No skill ${m[4]}. The skills: ${all.map((x) => `${path}/${x.slug}`).join(', ')}.` };
+    return { text: `${path}/${s.slug} (${s.name}):\n${s.body}` };
+  }
+  if (/^(?:RULES|Rules)\.md$/.test(raw) && guides.length) return { text: `${p} is not a file here; the guides open by their own paths.\n${guidesList(guides, { path: guidePath(cwd) })}` };
+  return null;
+}
+
 // ---- the guides (the remote set) ---------------------------------------------------------------
 
 // The path that opens a guide: RULES/<NAME>.md, or Rules/RULES/<NAME>.md when the project has a
