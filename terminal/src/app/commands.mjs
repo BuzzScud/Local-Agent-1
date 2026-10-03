@@ -4,6 +4,7 @@ export const COMMANDS = [
   { name: 'clear', desc: 'Start a new conversation: clears the screen and what the model remembers of this one, back in the folder you started in' },
   { name: 'compact', desc: 'Summarize the conversation to free memory', arg: '[what to keep]' },
   { name: 'btw', desc: 'Ask a quick side question without interrupting the main conversation', arg: '[question]' },
+  { name: 'agents', desc: 'Take a request through spec, plan, test-first build, verify, review and ship on a live agent tree; alone: open it', arg: '[request|demo|resume|stop]' },
   // picker: typed alone, the command opens a menu of its choices (like Claude Code's)
   { name: 'effort', desc: 'Effort, search and limits in one panel: thinking, embedder, reranker, context, tries, steps', arg: '[low|medium|high]', picker: true },
   { name: 'mode', desc: 'Pick the mode: auto, manual, accept edits, plan or bypass permissions (shift+tab)', arg: '[auto|manual|edits|plan|bypass]', picker: true },
@@ -76,6 +77,9 @@ export const IN_SETTINGS = new Set(SETTINGS.flatMap((g) => g.rows.map((r) => r.n
 // model on this Mac), so the / menu holds 17 there, within the 18 that fit an 80 × 24 window; elsewhere
 // /subagents is left out of it. Each still works typed in full.
 export const SERVICE_ONLY = new Set(['subagents']);
+// Typed only (2 Oct 2026): /agents took /morning's row in the / menu, which holds 18 at 80 × 24, and
+// /settings is as full; /morning still runs typed in full, and /help lists it.
+export const TYPED_ONLY = new Set(['morning']);
 export const MAC_ONLY = new Set(['start', 'stop']);
 
 // The / menu: every command but the ones /settings holds. service: on an Ollama service now.
@@ -83,6 +87,6 @@ export function matchCommands(value, { service = false } = {}) {
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const shown = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name));
+  const shown = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name));
   return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }

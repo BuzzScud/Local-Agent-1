@@ -1,7 +1,7 @@
 // Everything /help shows, in one place: the terminal's /help panel, the Help
 // tab of the hub (help.html reads it as /help.json) and `coding --help` all
 // come from these lists, so they never disagree. Plain data, no screen code.
-import { COMMANDS, SETTINGS, IN_SETTINGS } from './commands.mjs';
+import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY } from './commands.mjs';
 
 export const VERSION = '0.1.0';
 
@@ -87,6 +87,7 @@ export function cliRows(lingerMins = 30, models = []) {
       ['coding', 'start in the current folder'],
       ['coding "fix the tests"', 'start and send a first prompt'],
       ['coding -p "question"', 'answer once and exit (changes are refused unless --yes; commands you allowed in /permissions run)'],
+      ['coding -p --agents "request"', "the request through /agents' six stages with no screen: the first answer to each question; --yes allows the stop list"],
       ['coding -c', 'continue the last conversation in this folder'],
       ['coding connect [address]', 'terminal only: use a model on another machine or an API (asks for the address and key, checks them, saves them); nothing is downloaded'],
       ['coding setup', 'download the model and runtime (if missing) and check them'],
@@ -179,7 +180,7 @@ export const TIPS = [
 export function helpData({ version = '', modelName = '', effort = [], lingerMins = 30, models = [] } = {}) {
   return {
     version, modelName,
-    commands: COMMANDS.map((c) => ({ name: c.name, arg: c.arg ?? '', desc: c.desc, menu: !!c.picker, settings: IN_SETTINGS.has(c.name) })),
+    commands: COMMANDS.map((c) => ({ name: c.name, arg: c.arg ?? '', desc: c.desc, menu: !!c.picker, settings: IN_SETTINGS.has(c.name), typed: TYPED_ONLY.has(c.name) })),
     settings: SETTINGS.map((g) => ({ group: g.group, names: g.rows.map((r) => r.name) })),
     keys: KEYS,
     cli: cliRows(lingerMins, models),

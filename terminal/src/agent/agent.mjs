@@ -1214,7 +1214,8 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: `The focused path failed (${e.message}); working step by step instead.`, tone: 'warn' });
       }
     }
-    const kind = follow || decides ? undefined : this.lastRoute?.kind ?? routeByRules(text)?.kind;
+    // kindFor: what a /agents step is (agents-driver.mjs), so its words are not sorted again.
+    const kind = follow || decides ? undefined : this.kindFor ?? this.lastRoute?.kind ?? routeByRules(text)?.kind;
     this.sorted(kind, skill ? { skill: skill.name } : undefined); // no focused path ran (or none exists here): step by step
     // A bug brings the steps for its kind (terminal/rules/bug-fixing.md). They
     // go with this turn's requests to the model, not into the conversation.
@@ -1620,7 +1621,8 @@ export class Agent extends EventEmitter {
           }
           // Second opinion (/subagents): another model on the service reads the request and
           // the diff; what it finds goes back once. It can be wrong, and the model is told so.
-          if (this.turn.changed && !reviewed && !signal?.aborted && this.turn.diffs && this.helperUse('review')) {
+          // /agents asks it at its own moments instead (agents-run.mjs: reviewInTurn off).
+          if (this.turn.changed && !reviewed && !signal?.aborted && this.turn.diffs && this.reviewInTurn !== false && this.helperUse('review')) {
             reviewed = true;
             const found = await this.secondOpinion(signal);
             if (found) { this.messages.push({ role: 'user', content: auto(found) }); continue; }
@@ -2384,6 +2386,14 @@ export class Agent extends EventEmitter {
     if (prepared.error) {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: prepared.error }, error: true });
       return { text: prepared.error, error: true };
+    }
+    // /agents' stop list (agents-guards.mjs): a step on it asks you first, and a no turns it away.
+    if (this.toolGuard) {
+      const stop = await this.toolGuard({ name: call.name, args, before: prepared.before ?? '', cwd: this.cwd });
+      if (stop) {
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: stop.denied }, error: true });
+        return { text: stop.text, error: true };
+      }
     }
     // Tool-call text in what would be written (leakedCall): turned back, so the
     // file never gets it, and the model sends the call again without it.

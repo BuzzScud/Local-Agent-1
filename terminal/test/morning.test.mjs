@@ -11,7 +11,8 @@ import { pick } from '../src/morning/sort.mjs';
 import { checkWords, digest, plainWords, schemaFor, writeWords } from '../src/morning/words.mjs';
 import { buildDay, pageHtml, writeBrief } from '../src/morning/render.mjs';
 import { summary } from '../src/morning/index.mjs';
-import { matchCommands } from '../src/app/commands.mjs';
+import { matchCommands, COMMANDS } from '../src/app/commands.mjs';
+import { helpData } from '../src/app/help.mjs';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
@@ -200,8 +201,10 @@ test('history: each day is saved, a second run of the same day keeps the first u
   expect(writeBrief({ config }).days).toEqual(['2026-09-25', '2026-09-26']);
 });
 
-test('/morning is in the command menu', () => {
-  expect(matchCommands('/mor')[0]).toMatchObject({ name: 'morning' });
+test('/morning is a command typed in full (since 2 Oct 2026 /agents has its row in the / menu)', () => {
+  expect(matchCommands('/mor')).toEqual([]);
+  expect(COMMANDS.some((c) => c.name === 'morning')).toBe(true);
+  expect(helpData().commands.find((c) => c.name === 'morning')).toMatchObject({ typed: true });
 });
 
 test('/morning today in the app: reads the repos, the model writes the words, the page lands with the day in its calendar', async () => {

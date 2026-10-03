@@ -1,0 +1,1466 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agents loop v2</title>
+<style>
+/* Layout: one column. The controls, then one big live terminal (112×59 by default), then the notes.
+   One dark look on purpose, like the other design rounds: the subject is a dark terminal. */
+:root{
+  color-scheme:dark;
+  --bg:#0f1113; --panel:#161a1d; --raise:#1c2125; --line:#2a3036; --text:#e6e8ea; --dim:#9aa3ad; --accent:#87d787; --ink:#0b0d0e;
+  --term:#1d1f21; --bar:#26292c; --fs:13px;
+  /* the app's xterm-256 colours (terminal/src/ui/theme.mjs, rail.jsx) */
+  --t-fg:#d0d0d0; --t-white:#eeeeee; --t-accent:#87d787; --t-accentDim:#5faf5f; --t-dim:#8a8a8a; --t-faint:#585858;
+  --t-border:#6c6c6c; --t-rail:#767676; --t-strip:#303030; --t-path:#bcbcbc; --t-warn:#ffaf5f; --t-bad:#ff5f5f;
+  --t-edits:#af87ff; --t-plan:#5fafaf; --t-auto:#d7af5f; --t-wait:#5f875f; --t-add:#87d787; --t-del:#ff8787;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:14px/1.5 var(--ui);padding-block:20px 40px;padding-inline:16px}
+.wrap{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-direction:column;gap:4px}
+header .top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0;font-weight:650;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:16px;margin:0;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+.date{color:var(--dim);font-size:13px}
+.lede{color:var(--dim);margin:0;max-width:90ch}
+kbd{background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px var(--mono);color:var(--text)}
+code{font:12.5px var(--mono);color:#cfe3d5}
+
+/* controls */
+.controls{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center}
+.controls .k{color:var(--dim);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.chip{background:var(--raise);color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font:inherit;font-size:13px;cursor:pointer;line-height:1.35}
+.chip:hover{color:var(--text);border-color:#3a434b}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:600}
+.chip.stop{color:#f3c79a;border-color:#4a3a2a}
+.chip.stop:hover{border-color:#7a5a3a}
+.chip:focus-visible,.term:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chip kbd{background:transparent;border-color:currentColor;margin-right:5px;font-size:11px}
+.chip.do{color:var(--text)}
+.hint{grid-column:1/-1;color:var(--dim);font-size:12.5px;margin:2px 0 0}
+.notice{grid-column:1/-1;color:#f3c79a;font-size:12.5px;margin:0;min-height:1.5em}
+@media (max-width:640px){.controls{grid-template-columns:1fr}.controls .k{margin-top:6px}}
+
+.notes{margin:0;padding-left:18px;color:var(--dim);font-size:13.5px;max-width:100ch;display:flex;flex-direction:column;gap:3px}
+.notes b{color:var(--text);font-weight:600}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px}
+
+/* the terminal */
+.termwrap{min-width:0;overflow-x:auto}
+.term{background:var(--term);border:1px solid var(--line);border-radius:10px;width:max-content;max-width:none;cursor:text;margin-inline:auto}
+.term .bar{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid #2b2e31;background:var(--bar);border-radius:10px 10px 0 0;font:11.5px var(--ui);color:#8d949b}
+.term .bar i{width:10px;height:10px;border-radius:50%;background:#3c4044;display:inline-block}
+.term .bar span{flex:1;text-align:center;margin-right:46px}
+.screen{font:var(--fs)/1.34 var(--mono);color:var(--t-fg);padding:6px 1ch 4px;white-space:pre}
+.ln{min-height:1.34em;overflow:hidden}
+.strip{background:var(--t-strip)}
+.c-fg{color:var(--t-fg)}.c-white{color:var(--t-white)}.c-accent{color:var(--t-accent)}.c-accentDim{color:var(--t-accentDim)}
+.c-dim{color:var(--t-dim)}.c-faint{color:var(--t-faint)}.c-border{color:var(--t-border)}.c-rail{color:var(--t-rail)}
+.c-path{color:var(--t-path)}.c-warn{color:var(--t-warn)}.c-bad{color:var(--t-bad)}.c-wait{color:var(--t-wait)}
+.c-edits{color:var(--t-edits)}.c-plan{color:var(--t-plan)}.c-auto{color:var(--t-auto)}
+.c-add{color:var(--t-add)}.c-del{color:var(--t-del)}
+.c-head{color:var(--t-dim);font-weight:600;letter-spacing:.02em}
+.inv{background:var(--t-fg);color:var(--term)}
+.foot{color:var(--dim);font-size:13.5px;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top"><h1>/agents · design 3, version 2</h1><span class="date">2 Oct 2026 · ring and log, made for a 112 × 59 window · on a pretend service · updated with your answers</span></div>
+    <p class="lede">Design 3 grown to fill a 112 × 59 window. The comet ring is bigger and shows the step's own progress in the middle. Around it are the six stages as a track, a NOW panel, live meters for each guard on the stop list, the plan as a table, a math check (Newton's residuals, step by step), the command's output as it streams, the diff as it is written, and the timeline. Each panel changes with the stage: during Define it is SPEC.md and your answers, during Review the findings with the input that shows each one.</p>
+    <p class="lede">With your answers: the window grows only while /agents runs (to 112 × 59, or the most the screen fits) and goes back to your size when the run ends; /agents takes the whole window and esc shows the chat; and on a smaller window the ring with NOW and the tasks with the math check always stay, while the rest shrink and then go. Pick your window and what the screen fits, and watch it grow at the start and shrink at the end.</p>
+  </header>
+
+  <section class="controls" aria-label="Controls">
+    <span class="k">Version</span>
+    <div class="chips"><button class="chip" data-ver="2">2 · new</button><button class="chip" data-ver="1">1 · before</button></div>
+    <span class="k">Your window</span>
+    <div class="chips">
+      <button class="chip" data-home="80x24">80 × 24 · Terminal's default</button><button class="chip" data-home="120x40">120 × 40</button><button class="chip" data-home="150x55">150 × 55 · the .app today</button>
+    </div>
+    <span class="k">Screen fits</span>
+    <div class="chips">
+      <button class="chip" data-fits="160x70">112 × 59 or more</button><button class="chip" data-fits="112x50">112 × 50</button><button class="chip" data-fits="104x44">104 × 44</button>
+      <button class="chip" data-fits="100x40">100 × 40</button><button class="chip" data-fits="90x32">90 × 32</button><button class="chip" data-fits="80x24">80 × 24 · the smallest</button>
+    </div>
+    <span class="k">Text</span>
+    <div class="chips"><button class="chip" data-fit="fit">Fit the screen</button><button class="chip" data-fit="13">13 px</button></div>
+    <span class="k">Work</span>
+    <div class="chips">
+      <button class="chip" data-scen="math">Math · Kepler solver (Python)</button>
+      <button class="chip" data-scen="code">Coding · upload retry (JavaScript)</button>
+    </div>
+    <span class="k">Speed</span>
+    <div class="chips"><button class="chip" data-speed="1">1×</button><button class="chip" data-speed="2">2×</button><button class="chip" data-speed="4">4×</button></div>
+    <span class="k">Jump to</span>
+    <div class="chips">
+      <button class="chip" data-jump="0">01 Define</button><button class="chip" data-jump="1">02 Plan</button><button class="chip" data-jump="2">03 Build</button>
+      <button class="chip" data-jump="3">04 Verify</button><button class="chip" data-jump="4">05 Review</button><button class="chip" data-jump="5">06 Ship</button>
+    </div>
+    <span class="k">Make it stop</span>
+    <div class="chips">
+      <button class="chip stop" data-stop="tol" id="tolChip">Tolerance loosened</button>
+      <button class="chip stop" data-stop="pkg">New package</button>
+      <button class="chip stop" data-stop="big">Big diff</button>
+      <button class="chip stop" data-stop="list" id="listChip">Deletes a file</button>
+      <button class="chip stop" data-stop="stuck">Test won't pass</button>
+      <button class="chip stop" data-stop="critical">Critical finding</button>
+    </div>
+    <span class="k">Do</span>
+    <div class="chips">
+      <button class="chip do" data-act="pause" id="pauseChip"><kbd>p</kbd>Pause</button>
+      <button class="chip do" data-act="first"><kbd>1</kbd>First choice</button>
+      <button class="chip do" data-act="esc" id="escChip"><kbd>esc</kbd>Back to the chat</button>
+      <button class="chip do" data-act="restart">Restart</button>
+      <button class="chip" id="autoChip" aria-pressed="false">Answer for me</button>
+    </div>
+    <p class="hint">Click the terminal to type in it: <kbd>1</kbd>–<kbd>3</kbd>, or <kbd>↑</kbd><kbd>↓</kbd> and <kbd>enter</kbd>, answer a stop or the plan gate; <kbd>p</kbd> pauses; <kbd>esc</kbd> goes back to the chat while it keeps going. The interview answers itself (the first choice, after 2 s). The plan gate and the stops wait for you unless Answer for me is on.</p>
+    <p class="notice" id="notice" aria-live="polite"></p>
+  </section>
+
+  <div class="termwrap"><div class="term" id="t1" tabindex="0" aria-label="The /agents screen, a live terminal"><div class="bar"><i></i><i></i><i></i><span id="termTitle">coding — 112×59</span></div><div class="screen"></div></div></div>
+  <p class="foot" id="sizeNote" aria-live="polite"></p>
+
+  <div class="grid2">
+    <section class="box" aria-label="What is new">
+      <h2>What version 2 adds</h2>
+      <ul class="notes">
+        <li><b>A bigger ring with a hub.</b> 9 rows instead of 5. The comet still goes round while it works; the middle of the ring now shows the step, the try, a bar for the step's progress and its time.</li>
+        <li><b>The stage track.</b> The six stages with each one's time, and a bar for the whole run with the steps done and an estimate of the time left.</li>
+        <li><b>NOW.</b> The step, what it is doing, the command, the file and function it is in, what it proves, the doubt review, the model's speed and memory, and the rewind points.</li>
+        <li><b>Guards.</b> The stop list as meters: diff size of 100 lines, files of 3, tries of 3, and a mark for the tolerance, packages, deletions or secrets, and the poster's list. The guard that trips turns amber while it asks you.</li>
+        <li><b>Tasks.</b> The plan as a table: each task's check, tries, diff, doubt result and time. In other stages the same place lists the questions, parts, checks, review areas or reviewers.</li>
+        <li><b>Math check.</b> Newton's residual per step for each try, with the tolerance line, and the numbers each task proves. On the coding run it is the backoff waits against the 30 s cap.</li>
+        <li><b>Output and diff.</b> The command's output appears as it runs; the diff is written line by line as the model edits.</li>
+        <li><b>Timeline.</b> Every step with its time and stage, and the gauges from the remote footer you picked (speed, context, GPU) at the bottom.</li>
+      </ul>
+    </section>
+    <section class="box" aria-label="Made faster">
+      <h2>Made faster</h2>
+      <ul class="notes">
+        <li><b>Only the lines that change are drawn again.</b> Between ticks that is the ring, the NOW panel, the meters and the newest output line, about 15 of 59. This page does it line by line; the app would turn on Ink 7's <code>incrementalRendering</code>, which does the same.</li>
+        <li><b>Every panel has a fixed height,</b> so nothing moves when a line is added: output, diff and timeline keep their newest lines, and the task list scrolls to keep the current task in view.</li>
+        <li><b>Long text is cut with "…", never wrapped,</b> so a long command or path cannot push the layout down.</li>
+        <li><b>It fits by itself, in your order.</b> The ring with NOW and the tasks with the math check always stay. As rows run out, the blank rows and dividers go first, then the timeline, output and diff shrink, then the guards go to one row, then the timeline goes, then output and diff, then the guards. The ring drops to 5 rows only when even that is not enough, and below 100 columns the table drops its time, doubt and diff columns. A stop box takes its rows from the same end.</li>
+        <li><b>The comet and spinner run at 12 frames a second</b> here; the app would cap the /agents view lower, about 8, which is enough for the comet and costs less on a remote connection.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section class="box" aria-label="Your answers">
+    <h2>Your answers, as this preview shows them</h2>
+    <ul class="notes">
+      <li><b>112 × 59 only while /agents runs.</b> Before it, the window is yours (Your window); it grows as /agents opens and goes back when the run ends. A window already wider or taller keeps that side: 150 × 55 grows to 150 × 59.</li>
+      <li><b>The largest that fits.</b> The font stays; the window takes what the screen fits (Screen fits), and the view lays itself out for that.</li>
+      <li><b>Kept at quit.</b> Quitting in the middle of a run leaves the window as it is; only the end of a run gives your size back.</li>
+      <li><b>The whole window, esc to the chat.</b> While it runs, esc shows the chat with one live line, at the big size. Once it has finished, esc closes /agents and the window goes back; /agents opens the run again.</li>
+      <li><b>What always stays:</b> the ring with NOW, and the tasks with the math check, down to 80 × 24.</li>
+    </ul>
+  </section>
+
+  <p class="foot">Say what to keep, cut or move, or pick version 2 as it is.</p>
+</div>
+
+<script>
+// ---------- the two pieces of work ----------
+const SCEN = {
+  math: {
+    title: 'Kepler solver',
+    request: 'build a Kepler solver: where an orbit is at time t',
+    test: (f) => `python3 -m pytest ${f}`,
+    suite: 'python3 -m pytest',
+    checkAct: 'the whole suite, then Newton against bisection',
+    checkMore: 'bisection agrees to 1e−13',
+    numsTitle: 'MATH CHECK',
+    guard: { tol: 'tolerance 1e−12', list: 'deletions' },
+    define: [
+      { q: 'What does it take in?', opts: ['a, e, i, Ω, ω, M0 and a time t', 'a position and a velocity', 'Something else: I will type it'], part: 'Inputs', short: 'a e i Ω ω M0 t' },
+      { q: 'Which orbits?', opts: ['ellipses only: 0 ≤ e < 1', 'ellipses and hyperbolas', 'Something else: I will type it'], part: 'Scope', short: '0 ≤ e < 1' },
+      { q: 'How exact must E be?', opts: ['|E − e·sin E − M| ≤ 1e−12', '1e−9 is enough', 'Something else: I will type it'], part: 'Tolerance', short: '≤ 1e−12' },
+      { q: 'What is it checked against?', opts: ['reference cases and a slow bisection', 'reference cases only', 'Something else: I will type it'], part: 'Checks', short: 'cases + bisection' },
+    ],
+    specDone: 'SPEC.md: 5 parts · CONSTRAINTS.md: 1e−12, standard library only',
+    constraints: ['tolerance: |E − e·sin E − M| ≤ 1e−12', 'standard library only (math, dataclasses)', 'every SPEC.md check has a test', 'no commits: one rewind point per task', 'stop and ask: the stop list', 'Python 3.9 or newer'],
+    plan: [
+      { title: 'Inputs', look: 'Inputs', n: 1 },
+      { title: 'Solver', look: 'Tolerance', n: 2 },
+      { title: 'Position', look: 'Scope', n: 2 },
+      { title: 'Checks and output', look: 'Checks', n: 2 },
+    ],
+    replan: 'add a check at e = 0, a circle',
+    tasks: [
+      { title: 'Parse the elements', file: 'kepler.py', tf: 'tests/test_elements.py', fn: 'Elements', where: 'kepler.py · class Elements · lines 1–14', n: 3, test: 'rejects e ≥ 1', add: 14, del: 0, claim: 'e = 1 exactly is rejected', doubt: 'e = 1.0 raises ValueError',
+        hunk: ['@@ -0,0 +1,14 @@', '+import math', '+from dataclasses import dataclass', '+', '+@dataclass(frozen=True)', '+class Elements:', '+    a: float', '+    e: float', '+    i: float', '+    raan: float', '+    argp: float', '+    M0: float', '+    def __post_init__(self):', '+        if not 0 <= self.e < 1:', '+            raise ValueError(f"e = {self.e}: ellipses only")'],
+        nums: { kind: 'table', rows: [['e = 0', 'accepted'], ['e = 0.999', 'accepted'], ['e = 1.0', 'ValueError'], ['e = −0.1', 'ValueError']] } },
+      { title: 'Mean anomaly at t', file: 'kepler.py', tf: 'tests/test_kepler.py', fn: 'mean_anomaly', where: 'kepler.py · mean_anomaly() · lines 16–19', n: 3, test: 'M wraps to [0, 2π)', add: 4, del: 0, claim: 'a negative t wraps too', doubt: 't = −1 day gives M in [0, 2π)',
+        hunk: ['@@ -15,0 +16,4 @@', '+MU = 398600.4418  # km³/s², Earth', '+def mean_anomaly(el, t):', '+    n = math.sqrt(MU / el.a**3)', '+    return (el.M0 + n * t) % (2 * math.pi)'],
+        nums: { kind: 'table', rows: [['t = 0', 'M = M0'], ['t = one period', '|ΔM| = 3e−16'], ['t = −1 day', 'M = 5.71, in [0, 2π)']] } },
+      { title: 'Kepler solver', file: 'kepler.py', tf: 'tests/test_kepler.py', fn: 'solve_kepler', where: 'kepler.py · solve_kepler() · lines 21–28', n: 6, test: 'solves e = 0.9 within 1e−12', add: 8, del: 0,
+        miss: '|E − M − e·sin E| = 3e−9 (wants ≤ 1e−12)', missErr: 'ArithmeticError: |f| = 3e-09 after 50 steps', fix: 'start Newton at E0 = π when e > 0.8', claim: 'it converges for every e < 1', doubt: 'e = 0.999, M = 1e−6 converges in 9 steps',
+        hunk: ['@@ -20,0 +21,8 @@', '+def solve_kepler(M, e, tol=1e-12, steps=50):', '+    E = M', '+    for _ in range(steps):', '+        f = E - e * math.sin(E) - M', '+        if abs(f) <= tol:', '+            return E', '+        E -= f / (1 - e * math.cos(E))', '+    raise ArithmeticError(f"|f| = {abs(f):.0e} after {steps} steps")'],
+        hunk2: ['@@ -22,1 +22,2 @@ def solve_kepler(M, e, tol=1e-12, steps=50):', '-    E = M', '+    # far from M when e is big: start at π', '+    E = math.pi if e > 0.8 else M', '     for _ in range(steps):', '         f = E - e * math.sin(E) - M'],
+        nums: { kind: 'log', label: '|E − M − e·sin E| per Newton step, e = 0.9', limit: 1e-12, limitLabel: 'tolerance', tries: [[1.2e-1, 3e-2, 4e-3, 9e-5, 2e-6, 8e-8, 3e-9, 3e-9], [4e-1, 2e-2, 6e-5, 4e-10, 4e-16]] } },
+      { title: 'True anomaly', file: 'kepler.py', tf: 'tests/test_kepler.py', fn: 'true_anomaly', where: 'kepler.py · true_anomaly() · lines 30–33', n: 9, test: 'ν matches the tan(ν/2) form at 8 points', add: 4, del: 0, claim: 'ν is in [0, 2π)', doubt: 'E = π exactly gives ν = π',
+        hunk: ['@@ -29,0 +30,4 @@', '+def true_anomaly(E, e):', '+    s = math.sqrt(1 - e * e) * math.sin(E)', '+    nu = math.atan2(s, math.cos(E) - e)', '+    return nu % (2 * math.pi)'],
+        nums: { kind: 'table', rows: [['E = 0', 'ν = 0'], ['E = π', 'ν = π'], ['8 points, tan(ν/2) form', 'max |Δν| = 2e−16']] } },
+      { title: 'Position vector', file: 'orbit.py', tf: 'tests/test_orbit.py', fn: 'position', where: 'orbit.py · position() · lines 1–14', n: 4, test: 'r = a(1 − e·cos E)', add: 14, del: 0, claim: 'i = 0 needs no special case', doubt: 'i = 0 leaves Ω undefined: a test added, then it passed', doubtFix: true,
+        hunk: ['@@ -0,0 +1,14 @@', '+from kepler import mean_anomaly, solve_kepler, true_anomaly', '+import math', '+', '+def position(el, t):', '+    E = solve_kepler(mean_anomaly(el, t), el.e)', '+    r = el.a * (1 - el.e * math.cos(E))', '+    u = el.argp + true_anomaly(E, el.e)', '+    cO, sO = math.cos(el.raan), math.sin(el.raan)', '+    ci, si = math.cos(el.i), math.sin(el.i)', '+    x = r * (cO * math.cos(u) - sO * math.sin(u) * ci)', '+    y = r * (sO * math.cos(u) + cO * math.sin(u) * ci)', '+    z = r * math.sin(u) * si', '+    return x, y, z'],
+        nums: { kind: 'table', rows: [['E = 0', 'r = a(1 − e)'], ['100 points, a(1 − e·cos E)', 'max |Δr| = 1e−12 km'], ['i = 0', 'z = 0 at every t']] } },
+      { title: 'Energy is kept', file: 'tests/test_orbit.py', tf: 'tests/test_orbit.py', fn: 'test_energy', where: 'tests/test_orbit.py · test_energy() · lines 30–37', n: 7, test: 'v²/2 − μ/r the same at 1,000 times', add: 8, del: 0, claim: 'the drift stays under 1e−12', doubt: 'e = 0.99 near perigee drifts 4e−13',
+        hunk: ['@@ -29,0 +30,8 @@', '+@pytest.mark.parametrize("e", [0.1, 0.9, 0.99])', '+def test_energy(e):', '+    el = Elements(a=7000, e=e, i=0.5, raan=1, argp=2, M0=0)', '+    want = -MU / (2 * el.a)', '+    for t in random_times(1000, seed=7):', '+        r, v = state(el, t)', '+        got = v @ v / 2 - MU / norm(r)', '+        assert abs(got - want) <= 1e-12 * abs(want)'],
+        nums: { kind: 'table', rows: [['e = 0.1, 1,000 times', 'drift 3e−15'], ['e = 0.9', 'drift 8e−14'], ['e = 0.99', 'drift 4e−13'], ['the limit', '1e−12']] } },
+      { title: 'Print the orbit', file: 'cli.py', tf: 'tests/test_cli.py', fn: 'main', where: 'cli.py · main() · lines 1–7', n: 4, test: 'prints x, y, z to 12 digits', add: 7, del: 0, claim: 'the output is the same each run', doubt: 'two runs print the same 12 digits',
+        hunk: ['@@ -0,0 +1,7 @@', '+import argparse', '+from orbit import position', '+', '+def main():', '+    args = parse()', '+    x, y, z = position(args.elements, args.t)', '+    print(f"x = {x:.12g} km  y = {y:.12g} km  z = {z:.12g} km")'],
+        nums: { kind: 'table', rows: [['digits printed', '12'], ['two runs', 'the same'], ['reference case 1', 'within 0.1 km']] } },
+    ],
+    stuckMiss: (t) => `${t.test}: off by 4e−9`,
+    redWhy: (t) => `ImportError: cannot import name '${t.fn}'`,
+    testHunk: (t) => [`@@ ${t.tf} @@`, `+def test_${slug(t.test)}():`, `+    """${t.test}"""`, `+    ...  # the check from tasks/plan.md`],
+    testOut(t, mode, miss) {
+      const head = [`$ python3 -m pytest ${t.tf}`, '============ test session starts ============', `collected ${t.n} items`, ''];
+      const fail = mode !== 'pass';
+      const why = mode === 'red' ? this.redWhy(t) : t.missErr && !t.stuckNow ? t.missErr : `AssertionError: ${miss}`;
+      return [...head.map((x, i) => [x, i ? 'c-dim' : 'c-white']),
+        [`${t.tf} ${'.'.repeat(t.n - (fail ? 1 : 0))}${fail ? 'F' : ''}`, 'c-fg'],
+        ...(fail ? [['', ''], [`_______ test_${slug(t.test)} _______`, 'c-bad'], [`E   ${why}`, 'c-bad']] : []),
+        [fail ? `====== 1 failed, ${t.n - 1} passed in 0.21s ======` : `============ ${t.n} passed in 0.19s ============`, fail ? 'c-bad' : 'c-accent']];
+    },
+    suiteOut(files, total) {
+      return [['$ python3 -m pytest', 'c-white'], ['============ test session starts ============', 'c-dim'], [`collected ${total} items`, 'c-dim'], ['', ''],
+        ...files.map(([f, n]) => [`${f.padEnd(24)} ${'.'.repeat(n)}`, 'c-fg']), ['', ''], [`============ ${total} passed in 0.8s ============`, 'c-accent']];
+    },
+    suiteBase: 0,
+    verify: [
+      { title: 'The whole suite', s: ['python3 -m pytest', '23 passed in 0.8 s'], r: ['python3 cli.py --example ref-1', 'x = −6,045.0 km, y = −3,490.4 km: the reference, to 0.1 km'],
+        rOut: [['$ python3 cli.py --example ref-1', 'c-white'], ['elements: a = 7,200 km · e = 0.10 · i = 28.5°', 'c-dim'], ['t = 3,600 s → M = 3.71 rad → E = 3.66 rad', 'c-dim'], ['x = −6,045.0 km  y = −3,490.4 km  z = 2,500.1 km', 'c-fg'], ['the reference answer: the same to 0.1 km', 'c-accent']],
+        x: ['Newton against bisection at 10,000 points', 'largest |ΔE| = 2e−15'], p: 'before: task 3’s test failed · now: 23 passed' },
+      { title: 'Edge orbits', s: ['python3 -m pytest -k edge', '6 passed'], r: ['python3 cli.py --e 0.999 --t 0', 'at perigee, r = a(1 − e) exactly'],
+        rOut: [['$ python3 cli.py --e 0.999 --t 0', 'c-white'], ['E = 0.000000000000 rad (perigee)', 'c-dim'], ['r = 7.2 km = a(1 − e)', 'c-fg'], ['exact to 12 digits', 'c-accent']],
+        x: ['the closed form at e = 0, a circle', 'E = M exactly'], p: 'e = 0, e → 1, t < 0 and one whole period: all shown' },
+    ],
+    areas: [
+      { title: 'Correctness', f: null },
+      { title: 'Stability', f: { lvl: 'important', at: 'kepler.py:27', text: '1 − e·cos E nears 0 as e → 1: cap the Newton step at ±1',
+        case: ['$ python3 -c "solve_kepler(1e-6, 0.99999)"', 'step 1: ΔE = 41.7 rad (1 − e·cos E = 2e−5)', 'it lands far off, then needs 31 steps to come back'],
+        code: [' 25          f = E - e * math.sin(E) - M', ' 26          if abs(f) <= tol: return E', '▶27          E -= f / (1 - e * math.cos(E))', ' 28      raise ArithmeticError(…)'] } },
+      { title: 'Precision', f: { lvl: 'suggestion', at: 'kepler.py:19', text: 'n·t loses digits when t is huge: take t modulo the period first',
+        case: ['t = 1e12 s → M off by 4e−6 rad', 't modulo the period first → off by 2e−16'],
+        code: [' 17  def mean_anomaly(el, t):', ' 18      n = math.sqrt(MU / el.a**3)', '▶19      return (el.M0 + n * t) % (2 * math.pi)'] } },
+      { title: 'Speed', f: { lvl: 'suggestion', at: 'kepler.py:21', text: '50 steps at most, when 8 reach 1e−12',
+        case: ['10,000 random (M, e): at most 8 steps', 'steps=50 is never reached'], code: ['▶21  def solve_kepler(M, e, tol=1e-12, steps=50):'] } },
+      { title: 'Readability', f: null },
+    ],
+    ship: { code: 'no blockers; 1 important from Review', security: 'no input reaches a shell or a file path', tests: '23 tests; each SPEC.md check has one' },
+    report: ['Quality: each task has its test; 0 critical open', 'Security: no input reaches a shell or a file path', 'Performance: at most 8 Newton steps on 10,000 cases', 'Accessibility: output is text only; nothing to check', 'Infra: standard library only; no new packages', 'Docs: SPEC.md and tasks/plan.md match the code'],
+    stops: {
+      tol: { chip: 'Tolerance loosened', title: 'Math guard', detail: 'tests/test_kepler.py:18 changes the tolerance from 1e−12 to 1e−6.', opts: ['Put it back and try another way', 'Allow it this once', 'Tell it what to do'], tell: 'keep 1e−12; start Newton from a better guess' },
+      pkg: { title: 'New package', detail: 'It wants to add numpy. CONSTRAINTS.md says standard library only.', opts: ['No: use what is installed', 'I will install it: wait for me', 'Tell it what to do'], tell: 'use math only and write the bisection yourself' },
+      big: { title: 'Big diff', detail: 'This task is at 138 lines in 4 files (the limit: 100 lines, 3 files).', opts: ['Split the task in two', 'Allow it this once', 'Tell it what to do'], tell: 'move the bisection check to a task of its own' },
+      list: { chip: 'Deletes a file', title: 'Deletion', detail: 'It wants to delete old_solver.py, which notebook.py still imports.', opts: ['Keep the file', 'Delete it', 'Tell it what to do'], tell: 'keep it; notebook.py still uses it' },
+      stuck: { title: 'Test won’t pass', detail: '3 tries, and the covering test still fails by 4e−9.', opts: ['Give it a hint', 'Leave the task open and go on', 'Stop /agents'], tell: 'for e > 0.8, start at E0 = π' },
+    },
+    critical: { at: 'kepler.py:27', text: 'e = 0.9999 never ends: the step does not shrink', fix: 'Fix: the step never shrinks', file: 'kepler.py', tf: 'tests/test_kepler.py', fn: 'solve_kepler', where: 'kepler.py · solve_kepler() · line 27', n: 10,
+      test: 'e = 0.9999 ends within 50 steps', claim: 'every e < 1 ends', doubt: 'e = 0.99999 ends in 31 steps',
+      case: ['$ python3 -c "solve_kepler(3.14159, 0.9999)"', 'E jumps between 0.03 and 6.25 rad', 'ArithmeticError after 50 steps'],
+      code: [' 25          f = E - e * math.sin(E) - M', '▶27          E -= f / (1 - e * math.cos(E))'],
+      hunk: ['@@ -27,1 +27,2 @@', '-        E -= f / (1 - e * math.cos(E))', '+        step = f / (1 - e * math.cos(E))', '+        E -= max(-1.0, min(1.0, step))  # never over 1 rad'],
+      nums: { kind: 'table', rows: [['e = 0.9999', 'ends in 23 steps'], ['e = 0.99999', 'ends in 31 steps']] } },
+  },
+  code: {
+    title: 'Upload retry',
+    request: 'make the upload client retry on 5xx, with a backoff capped at 30 s',
+    test: (f) => `bun test ./${f}`,
+    suite: 'bun test',
+    checkAct: 'the whole suite and the build',
+    checkMore: 'build ok',
+    numsTitle: 'NUMBERS',
+    guard: { tol: 'expected values', list: 'secrets' },
+    define: [
+      { q: 'Which failures retry?', opts: ['5xx and network errors, not 4xx', 'every error', 'Something else: I will type it'], part: 'Scope', short: '5xx + network' },
+      { q: 'How many tries?', opts: ['6, then give up with the last error', 'until it works', 'Something else: I will type it'], part: 'Limits', short: '6 tries' },
+      { q: 'How long between tries?', opts: ['1 s doubling, at most 30 s, ±10% jitter', 'always 5 s', 'Something else: I will type it'], part: 'Backoff', short: '1 s ×2, ≤ 30 s' },
+      { q: 'How is it checked?', opts: ['bun test with fake timers', 'against a real server', 'Something else: I will type it'], part: 'Checks', short: 'fake timers' },
+    ],
+    specDone: 'SPEC.md: 5 parts · CONSTRAINTS.md: no new packages',
+    constraints: ['no new packages', 'a 4xx never retries', 'tests use fake timers, no real waits', 'no commits: one rewind point per task', 'stop and ask: the stop list', 'Bun 1.4 or newer'],
+    plan: [
+      { title: 'Scope', look: 'Scope', n: 1 },
+      { title: 'Backoff', look: 'Backoff', n: 3 },
+      { title: 'Limits', look: 'Limits', n: 1 },
+      { title: 'Abort', look: 'Checks', n: 1 },
+    ],
+    replan: 'test a 429 too',
+    tasks: [
+      { title: 'Retry on 5xx', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', fn: 'upload', where: 'src/upload.mjs · upload() · lines 12–23', n: 4, test: 'retries a 503, not a 404', add: 10, del: 2, claim: 'a 4xx never retries', doubt: 'a 429 is not retried, as SPEC.md says',
+        hunk: ['@@ -12,2 +12,10 @@ export async function upload(file, opts = {}) {', '-  const res = await send(file, opts);', '-  return res;', '+  for (let attempt = 1; ; attempt++) {', '+    try {', '+      const res = await send(file, opts);', '+      if (res.status < 500) return res;', '+      if (attempt >= opts.tries) throw new HttpError(res);', '+    } catch (err) {', '+      if (!retryable(err) || attempt >= opts.tries) throw err;', '+    }', '+    await wait(backoff(attempt), opts.signal);', '+  }'],
+        nums: { kind: 'table', rows: [['503', 'retried'], ['500', 'retried'], ['404', 'not retried'], ['ECONNRESET', 'retried']] } },
+      { title: 'Doubling backoff', file: 'src/backoff.mjs', tf: 'test/backoff.test.mjs', fn: 'backoff', where: 'src/backoff.mjs · backoff() · lines 1–6', n: 3, test: 'waits 1, 2, 4 s, ±10%', add: 6, del: 0, claim: 'the first wait is about 1 s', doubt: 'with fake timers the first wait is 1.0 s',
+        hunk: ['@@ -0,0 +1,6 @@', '+const BASE_MS = 1000;', '+', '+export function backoff(attempt, rand = Math.random) {', '+  const raw = BASE_MS * 2 ** (attempt - 1);', '+  return raw * (1 + (rand() * 0.2 - 0.1));  // ±10%', '+}'],
+        nums: { kind: 'bars', label: 'wait before each try, in seconds', tries: [[1.0, 2.1, 3.9]] } },
+      { title: 'Cap at 30 s', file: 'src/backoff.mjs', tf: 'test/backoff.test.mjs', fn: 'backoff', where: 'src/backoff.mjs · backoff() · lines 2–6', n: 4, test: 'never waits more than 30 s', add: 2, del: 1,
+        miss: 'waited 32.1 s on try 6 (wants ≤ 30)', missErr: 'expected: <= 30000 · received: 32100', fix: 'apply the cap after the jitter, not before', claim: 'no wait is over 30 s', doubt: '+10% jitter at the cap still waits 30 s',
+        hunk: ['@@ -1,4 +1,5 @@', ' const BASE_MS = 1000;', '+const MAX_MS = 30000;', ' export function backoff(attempt, rand = Math.random) {', '-  const raw = BASE_MS * 2 ** (attempt - 1);', '+  const raw = Math.min(MAX_MS, BASE_MS * 2 ** (attempt - 1));', '   return raw * (1 + (rand() * 0.2 - 0.1));'],
+        hunk2: ['@@ -5,2 +5,2 @@ export function backoff(attempt, rand = Math.random) {', '-  const raw = Math.min(MAX_MS, BASE_MS * 2 ** (attempt - 1));', '-  return raw * (1 + (rand() * 0.2 - 0.1));', '+  const raw = BASE_MS * 2 ** (attempt - 1);', '+  return Math.min(MAX_MS, raw * (1 + (rand() * 0.2 - 0.1)));'],
+        nums: { kind: 'bars', label: 'wait before each try, in seconds', limit: 30, limitLabel: 'cap', tries: [[1.0, 2.1, 3.9, 8.2, 16.4, 32.1], [1.0, 2.1, 3.9, 8.2, 16.4, 30.0]] } },
+      { title: 'Seeded jitter', file: 'src/backoff.mjs', tf: 'test/backoff.test.mjs', fn: 'seeded', where: 'src/backoff.mjs · seeded() · lines 8–14', n: 5, test: 'the same seed gives the same waits', add: 7, del: 0, claim: 'the same seed gives the same waits', doubt: 'two runs with seed 7 wait the same',
+        hunk: ['@@ -7,0 +8,7 @@', '+export function seeded(seed) {', '+  let s = seed >>> 0;', '+  return () => {', '+    s = (s * 1664525 + 1013904223) >>> 0;', '+    return s / 2 ** 32;', '+  };', '+}'],
+        nums: { kind: 'table', rows: [['seed 7, run 1', '1.04 2.07 3.86 …'], ['seed 7, run 2', 'the same'], ['jitter range', '−9.8% … +9.9%']] } },
+      { title: 'Give up after 6', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', fn: 'upload', where: 'src/upload.mjs · upload() · lines 13–18', n: 6, test: 'gives up with the last error', add: 2, del: 1, claim: 'the last error is the one thrown', doubt: 'the error of try 6 is thrown',
+        hunk: ['@@ -13,1 +13,2 @@', '+  const tries = opts.tries ?? 6;', '   for (let attempt = 1; ; attempt++) {', '-      if (attempt >= opts.tries) throw new HttpError(res);', '+      if (attempt >= tries) throw new HttpError(res);'],
+        nums: { kind: 'table', rows: [['six 503s', 'throws after try 6'], ['the error thrown', 'the one from try 6']] } },
+      { title: 'Abort stops waiting', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', fn: 'wait', where: 'src/upload.mjs · wait() · lines 41–49', n: 8, test: 'abort during a wait ends it', add: 9, del: 0, claim: 'no timer is left behind', doubt: 'a timer still fired after an abort: cleared, then it passed', doubtFix: true,
+        hunk: ['@@ -40,0 +41,9 @@', '+function wait(ms, signal) {', '+  return new Promise((resolve, reject) => {', '+    const timer = setTimeout(resolve, ms);', '+    signal?.addEventListener("abort", () => {', '+      clearTimeout(timer);', '+      reject(signal.reason);', '+    }, { once: true });', '+  });', '+}'],
+        nums: { kind: 'table', rows: [['abort at 1.5 s', 'ends at once'], ['timers left', '0']] } },
+    ],
+    stuckMiss: (t) => `${t.test}: expected 30000, got 32100`,
+    redWhy: (t) => `TypeError: ${t.fn} is not a function`,
+    testHunk: (t) => [`@@ ${t.tf} @@`, `+test("${t.test}", async () => {`, '+  // the check from tasks/plan.md, with fake timers', '+});'],
+    testOut(t, mode, miss) {
+      const fail = mode !== 'pass';
+      const why = mode === 'red' ? this.redWhy(t) : t.missErr && !t.stuckNow ? t.missErr : miss;
+      return [[`$ bun test ./${t.tf}`, 'c-white'], ['bun test v1.4.2', 'c-dim'], ['', ''], [`${t.tf}:`, 'c-fg'],
+        ...(t.n > 1 ? [[`✓ ${t.n - 1} earlier test${t.n > 2 ? 's' : ''}`, 'c-accentDim']] : []),
+        [`${fail ? '✗' : '✓'} ${t.test} [0.${fail ? 88 : 41}ms]`, fail ? 'c-bad' : 'c-accent'],
+        ...(fail ? [[`  ${why}`, 'c-bad']] : []), ['', ''],
+        [` ${t.n - (fail ? 1 : 0)} pass`, 'c-accent'], [` ${fail ? 1 : 0} fail`, fail ? 'c-bad' : 'c-dim'], [`Ran ${t.n} tests across 1 file. [41.00ms]`, 'c-dim']];
+    },
+    suiteOut(files, total) {
+      return [['$ bun test', 'c-white'], ['bun test v1.4.2', 'c-dim'], ['', ''], ...files.map(([f, n]) => [`${f.padEnd(24)} ✓ ${n}`, 'c-fg']),
+        [`${'test/ (the other 5 files)'.padEnd(24)} ✓ 35`, 'c-fg'], ['', ''], [` ${total} pass`, 'c-accent'], [' 0 fail', 'c-dim'], [`Ran ${total} tests across ${files.length + 5} files.`, 'c-dim']];
+    },
+    suiteBase: 35,
+    verify: [
+      { title: 'The whole suite', s: ['bun test', '48 pass · 0 fail'], r: ['bun run upload --fake 503,503,200', 'tried 3 times, waited 1.0 s and 2.1 s, then 200'],
+        rOut: [['$ bun run upload --fake 503,503,200', 'c-white'], ['try 1 → 503 · waiting 1.0 s', 'c-dim'], ['try 2 → 503 · waiting 2.1 s', 'c-dim'], ['try 3 → 200 · done in 3.1 s', 'c-accent']],
+        x: ['a 4xx, an abort mid-wait, 0 tries', 'each as SPEC.md says'], p: 'before: no retry · now: 48 pass and the pretend 503s retried' },
+      { title: 'The old callers', s: ['bun test ./test/compat.test.mjs', '9 pass'], r: ['bun run upload --fake 200', 'one call, no wait, as before'],
+        rOut: [['$ bun run upload --fake 200', 'c-white'], ['try 1 → 200 · done in 0.0 s', 'c-accent'], ['no wait, as before', 'c-dim']],
+        x: ['every caller of upload()', 'the same results'], p: 'nothing changed for a first-try success' },
+    ],
+    areas: [
+      { title: 'Correctness', f: null },
+      { title: 'Readability', f: { lvl: 'suggestion', at: 'src/upload.mjs:20', text: 'the loop ends in three places: one exit at the end reads easier',
+        case: ['3 returns or throws inside the loop'], code: [' 16        if (res.status < 500) return res;', '▶17        if (attempt >= tries) throw new HttpError(res);', ' 20        if (!retryable(err) || attempt >= tries) throw err;'] } },
+      { title: 'Architecture', f: null },
+      { title: 'Security', f: { lvl: 'important', at: 'src/upload.mjs:31', text: 'the retry log prints the auth header: leave it out',
+        case: ['$ DEBUG=upload bun run upload --fake 503,200', 'retry 1: {"authorization": "Bearer …"}'], code: [' 30      if (DEBUG) log("retry", attempt,', '▶31        opts.headers);', ' 32      await wait(backoff(attempt), opts.signal);'] } },
+      { title: 'Performance', f: { lvl: 'suggestion', at: 'src/upload.mjs:15', text: 'the body is read again each try: keep the buffer',
+        case: ['a 40 MB file, 3 tries: read 3 times (120 MB)'], code: ['▶15        const res = await send(file, opts);'] } },
+    ],
+    ship: { code: 'no blockers; 1 important from Review', security: 'the auth header in a log line (important, listed)', tests: '48 tests; fake timers, no real waits' },
+    report: ['Quality: each task has its test', 'Security: 1 important (the auth header in a log line), listed', 'Performance: 1 suggestion (the body read each try)', 'Accessibility: no UI change', 'Infra: no new packages', 'Docs: the README’s backoff numbers updated'],
+    stops: {
+      tol: { chip: 'Expected value changed', title: 'Test guard', detail: 'test/backoff.test.mjs:31 changes the expected wait from 30000 to 32000.', opts: ['Put it back and try another way', 'Allow it this once', 'Tell it what to do'], tell: 'keep 30000; cap after the jitter' },
+      pkg: { title: 'New package', detail: 'It wants to add p-retry. CONSTRAINTS.md says no new packages.', opts: ['No: use what is installed', 'I will install it: wait for me', 'Tell it what to do'], tell: 'write the loop yourself, it is twenty lines' },
+      big: { title: 'Big diff', detail: 'This task is at 138 lines in 4 files (the limit: 100 lines, 3 files).', opts: ['Split the task in two', 'Allow it this once', 'Tell it what to do'], tell: 'keep the client change and the logger change apart' },
+      list: { chip: 'Reads .env', title: 'Secrets', detail: 'It wants to read .env for the upload token.', opts: ['Don’t read it', 'Allow it this once', 'Tell it what to do'], tell: 'use the pretend token in test/fixtures' },
+      stuck: { title: 'Test won’t pass', detail: '3 tries, and the covering test still waits 32.1 s.', opts: ['Give it a hint', 'Leave the task open and go on', 'Stop /agents'], tell: 'cap the wait after adding the jitter' },
+    },
+    critical: { at: 'src/upload.mjs:30', text: 'a 503 with Retry-After: 3600 waits an hour', fix: 'Fix: cap Retry-After at 30 s', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', fn: 'upload', where: 'src/upload.mjs · upload() · line 30', n: 9,
+      test: 'Retry-After: 3600 waits 30 s', claim: 'no header makes it wait over 30 s', doubt: 'Retry-After as a date waits 30 s too',
+      case: ['$ bun run upload --fake "503 Retry-After: 3600"', 'waiting 3600.0 s …'], code: ['▶30      const ms = retryAfter(res) ?? backoff(attempt);'],
+      hunk: ['@@ -30,1 +30,1 @@', '-    const ms = retryAfter(res) ?? backoff(attempt);', '+    const ms = Math.min(MAX_MS, retryAfter(res) ?? backoff(attempt));'],
+      nums: { kind: 'table', rows: [['Retry-After: 3600', 'waits 30 s'], ['Retry-After as a date', 'waits 30 s']] } },
+  },
+};
+
+// ---------- what is drawn ----------
+const MODEL = 'qwen3-coder-next', WHERE = '203.0.113.7:60009';
+const ORBIT = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const STAGES = [
+  { name: 'Define', nodes: ['ASK', 'ANSWER', 'WRITE', 'CHECK'], cls: ['c-plan', 'c-white', 'c-edits', 'c-accent'], unit: 'questions', color: 'c-plan' },
+  { name: 'Plan', nodes: ['LOOK', 'SPLIT', 'CHECKS', 'WRITE'], cls: ['c-plan', 'c-white', 'c-auto', 'c-edits'], unit: 'parts', color: 'c-auto' },
+  { name: 'Build', nodes: ['RED', 'GREEN', 'CHECK', 'SAVE'], cls: ['c-bad', 'c-accent', 'c-plan', 'c-edits'], unit: 'tasks', color: 'c-accent' },
+  { name: 'Verify', nodes: ['SUITE', 'RUN', 'CROSS', 'PROOF'], cls: ['c-plan', 'c-white', 'c-auto', 'c-accent'], unit: 'checks', color: 'c-plan' },
+  { name: 'Review', nodes: ['READ', 'FIND', 'SHOW', 'GRADE'], cls: ['c-plan', 'c-auto', 'c-white', 'c-edits'], unit: 'areas', color: 'c-edits' },
+  { name: 'Ship', nodes: ['CODE', 'SECURITY', 'TESTS', 'MERGE'], cls: ['c-plan', 'c-bad', 'c-auto', 'c-accent'], unit: 'reviewers', color: 'c-accent' },
+];
+const TAGCLS = { STOP: 'c-warn', DOUBT: 'c-auto', YOU: 'c-white', PLAN: 'c-accent', STAGE: 'c-plan', SHIP: 'c-accent' };
+const LVL = { critical: 'Critical', important: 'Important', suggestion: 'Suggestion' };
+const LVLCLS = { critical: 'c-bad', important: 'c-warn', suggestion: 'c-dim' };
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const X = () => SCEN[S.scen];
+const nodesOf = (k) => (k === 3 && S.scen === 'code' ? ['SUITE', 'RUN', 'EDGES', 'PROOF'] : STAGES[k].nodes);
+const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 28);
+
+const S = {
+  cols: 80, rows: 24, home: [80, 24], fits: [160, 70], phase: 'open', ver: 2, fit: 'fit', scen: 'math', speed: 1, paused: false, chat: false, auto: false,
+  stage: 0, item: 0, items: [[], [], [], [], [], []], stageT: [],
+  nodes: ['todo', 'todo', 'todo', 'todo'], edges: [false, false, false, false], active: [],
+  stepT0: 0, stepDur: 1, act: '', cmd: '', noteA: [], noteC: [], lastRun: [], where: '', proves: '',
+  out: null, hunk: null, answers: {}, tripped: null, files: 0,
+  tries: 1, diff: 0, stops: 0, rewind: 0, find: { critical: 0, important: 0, suggestion: 0, fixed: 0 },
+  log: [], queue: [], gate: null, verdict: null, vt0: 0, base: 0, endVT: null, comet: 0, notice: '',
+};
+
+// ---------- small helpers ----------
+const g = (t, c = '') => ({ t: String(t), c });
+const len = (s) => [...s].length;
+const width = (segs) => segs.reduce((n, s) => n + len(s.t), 0);
+const spaces = (n) => g(' '.repeat(Math.max(0, n)));
+const L_ = (segs = [], cls = '') => ({ segs, cls });
+function cut(segs, w) {
+  if (width(segs) <= w) return segs;
+  if (w <= 0) return [];
+  const out = []; let n = 0;
+  for (const s of segs) {
+    const cs = [...s.t];
+    if (n + cs.length <= w - 1) { out.push(s); n += cs.length; continue; }
+    out.push(g(cs.slice(0, w - 1 - n).join('') + '…', s.c)); break;
+  }
+  return out;
+}
+const padTo = (segs, w) => { const c = cut(segs, w); return [...c, spaces(w - width(c))]; };
+function lr(left, right, w) {
+  const r = cut(right, w);
+  const l = cut(left, Math.max(0, w - width(r) - (width(r) ? 2 : 0)));
+  return [...l, spaces(w - width(l) - width(r)), ...r];
+}
+function fit(parts, w, gap = '   ') {
+  for (let k = parts.length; k > 0; k--) {
+    const segs = parts.slice(0, k).flatMap((p, i) => (i ? [g(gap), ...p] : p));
+    if (width(segs) <= w) return segs;
+  }
+  return cut(parts[0] ?? [], w);
+}
+function wrap(text, w) {
+  const out = []; let line = '';
+  for (const word of String(text).split(' ')) {
+    if (!line) line = word;
+    else if (len(line) + 1 + len(word) <= w) line += ` ${word}`;
+    else { out.push(line); line = word; }
+  }
+  if (line) out.push(line);
+  return out;
+}
+const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const msShort = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const elapsed = () => Math.max(0, ((S.endVT ?? VT) - S.vt0) * 6 + S.base);
+function stamp() {
+  const s = 12 * 3600 + 4 * 60 + elapsed();
+  return [Math.floor(s / 3600), Math.floor(s / 60) % 60, Math.floor(s) % 60].map((n) => String(n).padStart(2, '0')).join(':');
+}
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const spinGlyph = () => (S.paused || S.gate ? '·' : ORBIT[Math.floor(now() / 90) % ORBIT.length]);
+const pulse = () => (REDUCED || S.paused || Math.floor(now() / 450) % 2 ? 'c-accent' : 'c-accentDim');
+const stopped = () => S.gate?.kind === 'stop';
+const ok = (cmd, res) => [g('✓ ', 'c-accent'), g(`${cmd} · ${res}`, 'c-dim')];
+const bar = (frac, n, on = 'c-accent', off = 'c-faint') => { const k = Math.max(0, Math.min(n, Math.round(frac * n))); return [g('█'.repeat(k), on), g('░'.repeat(n - k), off)]; };
+const hstat = (h) => `+${h.filter((l) => l[0] === '+').length} −${h.filter((l) => l[0] === '-').length}`;
+const sup = (n) => (n < 0 ? `−${-n}` : `+${n}`);
+const sci = (v) => { const e = Math.floor(Math.log10(v)); const m = v / 10 ** e; return `${m >= 9.95 ? 1 : Math.round(m)}e${e < 0 ? '−' : ''}${Math.abs(m >= 9.95 ? e + 1 : e)}`; };
+
+// ---------- the pretend clock: it runs at the chosen speed, and stops at a pause or a question ----------
+const CANCEL = Symbol('cancel'), STOPPED = Symbol('stopped');
+let VT = 0, RUNID = 0, WAITERS = [];
+function vsleep(secs, id) {
+  return new Promise((res, rej) => { if (id !== RUNID) return rej(CANCEL); WAITERS.push({ at: VT + secs, res, rej, id }); });
+}
+function flush() {
+  const keep = [];
+  for (const w of WAITERS) {
+    if (w.id !== RUNID) w.rej(CANCEL);
+    else if (w.at <= VT) w.res();
+    else keep.push(w);
+  }
+  WAITERS = keep;
+}
+function ask(id, gate) {
+  return new Promise((res, rej) => {
+    if (id !== RUNID) return rej(CANCEL);
+    S.gate = { ...gate, sel: 0, res, rej, t0: now() };
+    render();
+  });
+}
+function answer(n) {
+  const G = S.gate;
+  if (!G || n < 0 || n >= G.opts.length) return;
+  S.gate = null; G.res(n); render();
+}
+const later = (id, secs, fn) => vsleep(secs, id).then(fn, () => {});
+const take = (k) => { const i = S.queue.indexOf(k); if (i < 0) return false; S.queue.splice(i, 1); return true; };
+
+// ---------- the run ----------
+function resetRing() { S.nodes = ['todo', 'todo', 'todo', 'todo']; S.edges = [false, false, false, false]; S.active = []; }
+function enter(k, items) {
+  S.stage = k; S.item = 0;
+  S.items[k] = items.map((x) => ({ state: 'todo', flag: '', flagCls: 'c-dim', ...x }));
+  resetRing(); S.act = ''; S.cmd = ''; S.noteA = []; S.noteC = []; S.lastRun = []; S.tries = 1; S.diff = 0; S.files = 0;
+}
+function begin(i) { S.item = i; const it = S.items[S.stage][i]; it.state = 'now'; it.t0 = VT; resetRing(); S.tries = 1; }
+function startNode(n, total) { S.nodes[n] = 'now'; S.active = [n]; S.stepT0 = VT; S.stepDur = total; }
+function nodeDone(n, state = 'done') { S.nodes[n] = state; if (state === 'done') S.edges[n] = true; S.active = S.active.filter((x) => x !== n); }
+async function work(id, secs, o = {}) {
+  if (o.act !== undefined) S.act = o.act;
+  S.cmd = o.cmd ?? '';
+  if (o.out) S.out = { title: o.title ?? (o.cmd ? `OUTPUT · ${o.cmd}` : 'OUTPUT'), lines: o.out, t0: VT, dur: secs };
+  if (o.hunk) S.hunk = { title: o.hunkTitle, lines: o.hunk, t0: VT, dur: secs };
+  await vsleep(secs, id);
+  S.cmd = '';
+  await stopPoint(id);
+}
+function log(tag, text, cls = 'c-fg') {
+  const i = typeof tag === 'number' ? tag : -1;
+  S.log.push({ t: stamp(), s: S.stage, tag: i >= 0 ? nodesOf(S.stage)[i] : tag, tc: i >= 0 ? STAGES[S.stage].cls[i] : TAGCLS[tag] ?? 'c-dim', text, cls });
+  if (S.log.length > 120) S.log.splice(0, S.log.length - 120);
+}
+const GUARD_OF = { tol: 'tol', pkg: 'pkg', big: 'diff', list: 'list', stuck: 'tries' };
+
+async function stopPoint(id) {
+  for (const k of ['tol', 'pkg', 'big', 'list']) if (take(k)) await stopGate(id, k);
+}
+async function stopGate(id, k) {
+  const st = X().stops[k], held = S.active.slice(), t = S.stage === 2 ? S.items[2][S.item] : null;
+  for (const n of held) S.nodes[n] = 'stop';
+  const before = { diff: S.diff, files: S.files };
+  if (k === 'big') { S.diff = 138; S.files = 4; }
+  S.tripped = GUARD_OF[k]; S.stops++;
+  log('STOP', `${st.title}: ${st.detail}`, 'c-warn');
+  const n = await ask(id, { kind: 'stop', title: `Stop · ${st.title}`, detail: st.detail, opts: st.opts });
+  S.tripped = null;
+  for (const x of held) if (S.nodes[x] === 'stop') S.nodes[x] = 'now';
+  log('YOU', n === 2 ? `“${st.tell}”` : st.opts[n], 'c-white');
+  if (k === 'big') {
+    S.diff = before.diff; S.files = before.files;
+    if (n === 0 && t) {
+      const half = Math.ceil(t.add / 2);
+      S.items[2].splice(S.item + 1, 0, { ...t, title: `${t.title} (2 of 2)`, add: t.add - half, state: 'todo', miss: null, missed: false, doubt: null, tries: 1, t0: null, t1: null, runs: 0 });
+      t.title = `${t.title} (1 of 2)`; t.add = half; S.diff = t.add + t.del;
+      log('PLAN', 'split in two; tasks/plan.md updated', 'c-fg');
+    }
+  }
+  return n;
+}
+
+async function runDefine(id) {
+  const D = X().define;
+  enter(0, D.map((d) => ({ title: d.part, q: d.q })));
+  S.answers = {};
+  for (let i = 0; i < D.length; i++) {
+    const d = D[i]; begin(i);
+    S.where = `SPEC.md ## ${d.part}`; S.proves = `the goal: ${X().request}`;
+    startNode(0, 1.0); await work(id, 1.0, { act: `Ask: ${d.q}` });
+    log(0, `“${d.q}”`); nodeDone(0);
+    startNode(1, 1); S.act = 'waiting for your answer';
+    const n = await ask(id, { kind: 'ask', title: `Question ${i + 1} of ${D.length}`, detail: d.q, opts: d.opts });
+    const ans = n === 2 ? `${d.opts[0]} (typed)` : d.opts[n];
+    S.answers[d.part] = ans;
+    const it = S.items[0][i]; it.answer = ans; it.flag = n === 0 ? d.short : n === 1 ? d.opts[1] : 'typed';
+    log(1, ans, 'c-white');
+    S.noteA = [g('you: ', 'c-dim'), g(ans, 'c-white')];
+    nodeDone(1);
+    startNode(2, 1.0); await work(id, 1.0, { act: `Write SPEC.md ## ${d.part}`, hunk: ['@@ SPEC.md @@', `+## ${d.part}`, `+${ans}`], hunkTitle: 'DIFF · SPEC.md' });
+    log(2, `SPEC.md ## ${d.part}`); S.lastRun = [g('✎ ', 'c-edits'), g(`SPEC.md ## ${d.part}`, 'c-dim')]; nodeDone(2);
+    startNode(3, 0.7); await work(id, 0.7, { act: 'Check it against the goal' });
+    log(3, 'it matches the goal'); nodeDone(3);
+    it.state = 'done'; it.t1 = VT;
+    S.noteC = [g(`SPEC.md: ${i + 1} of ${D.length + 1} parts`, 'c-dim')];
+  }
+  S.noteC = [g(X().specDone, 'c-dim')];
+  log('STAGE', X().specDone, 'c-dim');
+}
+
+async function runPlan(id) {
+  const P = X().plan, T = X().tasks;
+  enter(1, P.map((p) => ({ title: p.title, look: p.look, n: p.n })));
+  let at = 0;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i]; begin(i);
+    S.where = 'tasks/plan.md'; S.proves = 'each task gets the test that proves it, in the order they depend on';
+    startNode(0, 0.9); await work(id, 0.9, { act: `Read SPEC.md ## ${p.look}` }); log(0, `Read SPEC.md ## ${p.look}`); nodeDone(0);
+    startNode(1, 0.9); await work(id, 0.9, { act: `${p.n} task${p.n > 1 ? 's' : ''} for ${p.title.toLowerCase()}` }); log(1, `${p.n} task${p.n > 1 ? 's' : ''} for ${p.title.toLowerCase()}`); nodeDone(1);
+    startNode(2, 0.8); await work(id, 0.8, { act: 'a check for each task' }); log(2, 'each task gets the test that proves it'); nodeDone(2);
+    const add = T.slice(at, at + p.n).map((t, j) => `+${at + j + 1}. ${t.title} · check: ${t.test}`);
+    startNode(3, 0.6); await work(id, 0.6, { act: 'tasks/plan.md, tasks/todo.md', hunk: [`@@ tasks/plan.md · ${p.title} @@`, ...add], hunkTitle: 'DIFF · tasks/plan.md' }); log(3, 'tasks/plan.md · tasks/todo.md'); nodeDone(3);
+    at += p.n;
+    const it = S.items[1][i]; it.state = 'done'; it.t1 = VT; it.flag = `${p.n} task${p.n > 1 ? 's' : ''}`;
+    S.noteA = [g(`${at} tasks so far, in the order they depend on`, 'c-dim')];
+  }
+  let detail = `${T.length} tasks in tasks/plan.md, each with its check. Only 1 builds it: “looks fine” is not a yes.`;
+  S.act = 'waiting for your yes';
+  for (;;) {
+    const n = await ask(id, { kind: 'plan', title: 'Approve the plan', detail, opts: ['Yes, build it', 'Change it: say what', 'Show the plan'] });
+    if (n === 0) { log('PLAN', 'approved by you: the one gate', 'c-accent'); break; }
+    if (n === 1) {
+      log('YOU', `“${X().replan}”`, 'c-white');
+      startNode(3, 0.8); await work(id, 0.8, { act: 'tasks/plan.md again' }); log(3, 'tasks/plan.md, changed'); nodeDone(3);
+      detail = `Changed: ${X().replan}. Only 1 builds it.`;
+      continue;
+    }
+    detail = T.map((t, j) => `${j + 1} ${t.title}`).join(' · ');
+  }
+}
+
+function doubtNote() {
+  const done = S.items[2].map((t, i) => ({ t, i })).filter((x) => x.t.doubt);
+  S.noteC = [g('doubt · ', 'c-dim'), ...done.slice(-3).flatMap(({ t, i }) => [g(`task ${i + 1} `, 'c-dim'), t.doubt === 'wait' ? g('◌ checking  ', 'c-auto') : g(`✓ ${t.doubt}  `, t.doubt === 'fixed' ? 'c-auto' : 'c-accentDim')])];
+}
+async function buildTask(id, i) {
+  const x = X(), t = S.items[2][i];
+  begin(i); S.diff = 0; S.files = 1; S.lastRun = []; t.runs = 0; t.tries = 1;
+  S.where = t.where; S.proves = `“${t.test}”`;
+  S.noteA = [g('loop 1', 'c-white'), g(` · ${t.title}`, 'c-dim')];
+  S.hunk = null;
+  startNode(0, 2.4);
+  await work(id, 1.3, { act: `Write test “${t.test}”`, hunk: x.testHunk(t), hunkTitle: `DIFF · ${t.tf}` });
+  await work(id, 1.1, { cmd: x.test(t.tf), out: x.testOut(t, 'red') });
+  log(0, `test “${t.test}” fails, as it should`);
+  S.lastRun = ok(x.test(t.tf), '1 failed, as it should');
+  nodeDone(0);
+  let stuck = take('stuck') ? 3 : 0;
+  for (;;) {
+    startNode(1, 2.8);
+    const hunk = t.missed && t.hunk2 ? t.hunk2 : t.hunk, hs = hstat(hunk);
+    await work(id, 1.5, { act: `Edit ${t.file}  ${hs}`, hunk, hunkTitle: `DIFF · ${t.file}  ${hs}` });
+    S.diff = t.add + t.del; log(1, `Edit ${t.file}  ${hs}`);
+    if (!stuck && take('stuck')) stuck = 3;
+    let miss = null;
+    if (stuck) { miss = t.miss ?? x.stuckMiss(t); t.stuckNow = true; }
+    else if (t.miss && !t.missed) { t.missed = true; miss = t.miss; }
+    await work(id, 1.3, { cmd: x.test(t.tf), out: x.testOut(t, miss ? 'miss' : 'pass', miss) });
+    t.runs++; t.stuckNow = false;
+    if (!miss) break;
+    S.nodes[1] = 'miss'; S.active = [];
+    log(1, `1 failed: ${miss}`, 'c-bad');
+    S.lastRun = [g('✗ ', 'c-bad'), g(`${x.test(t.tf)} · 1 failed`, 'c-dim')];
+    S.noteA = [g(`loop ${S.tries}`, 'c-white'), g(' · last miss: ', 'c-dim'), g(miss, 'c-bad')];
+    await vsleep(0.9, id);
+    if (stuck && --stuck === 0) {
+      S.nodes[1] = 'stop';
+      const n = await stopGate(id, 'stuck');
+      if (n === 2) throw STOPPED;
+      if (n === 1) { t.state = 'open'; t.t1 = VT; log('STOP', `task ${i + 1} left open; it goes on`, 'c-warn'); return; }
+      t.missed = true; t.miss = null;
+      S.tries++; t.tries = S.tries; log(1, `try ${S.tries}: with your hint`);
+      S.noteA = [g(`loop ${S.tries}`, 'c-white'), g(' · last miss: ', 'c-dim'), g(miss, 'c-bad')];
+      continue;
+    }
+    S.tries++; t.tries = S.tries;
+    log(1, `try ${S.tries}: ${stuck ? 'another way' : t.fix}`);
+    S.noteA = [g(`loop ${S.tries}`, 'c-white'), g(' · last miss: ', 'c-dim'), g(miss, 'c-bad')];
+  }
+  log(1, `${x.test(t.tf)} passes`, 'c-accent');
+  S.lastRun = ok(x.test(t.tf), 'passed');
+  nodeDone(1);
+  t.passed = true;
+  startNode(2, 1.6);
+  await work(id, 1.6, { act: x.checkAct, cmd: x.suite, out: suiteOut() });
+  log(2, `${x.suite}: all pass · ${x.checkMore}`);
+  S.lastRun = ok(x.suite, `all pass · ${x.checkMore}`);
+  nodeDone(2);
+  S.rewind++;
+  startNode(3, 0.9);
+  await work(id, 0.9, { act: `rewind point ${S.rewind}` });
+  log(3, `rewind point ${S.rewind} · nothing committed`);
+  nodeDone(3);
+  t.state = 'done'; t.t1 = VT; t.doubt = 'wait';
+  log('DOUBT', `task ${i + 1}: is it true that ${t.claim}? checking`);
+  doubtNote();
+  later(id, 2.6, () => { t.doubt = t.doubtFix ? 'fixed' : 'held'; log('DOUBT', `task ${i + 1} ${t.doubt}: ${t.doubt_}`, t.doubtFix ? 'c-auto' : 'c-fg'); doubtNote(); });
+}
+function suiteOut() {
+  const files = new Map();
+  for (const t of S.items[2]) if (t.state === 'done' || t.passed) files.set(t.tf, Math.max(files.get(t.tf) ?? 0, t.n));
+  const list = [...files];
+  return X().suiteOut(list, X().suiteBase + list.reduce((n, [, k]) => n + k, 0));
+}
+async function runBuild(id) {
+  enter(2, X().tasks.map((t) => ({ ...t, doubt_: t.doubt, doubt: null, tries: 1, runs: 0 })));
+  for (let i = 0; i < S.items[2].length; i++) if (S.items[2][i].state === 'todo') await buildTask(id, i);
+}
+
+async function runVerify(id) {
+  const V = X().verify;
+  enter(3, V.map((v) => ({ title: v.title, cmd: v.s[0], v })));
+  S.hunk = null;
+  for (let i = 0; i < V.length; i++) {
+    const v = V[i]; begin(i);
+    S.where = v.s[0]; S.proves = v.p;
+    startNode(0, 1.3); await work(id, 1.3, { act: 'the whole suite', cmd: v.s[0], out: i === 0 ? suiteOut() : [[`$ ${v.s[0]}`, 'c-white'], [v.s[1], 'c-accent']] }); log(0, `${v.s[0]}: ${v.s[1]}`); S.lastRun = ok(v.s[0], v.s[1]); nodeDone(0);
+    startNode(1, 1.3); S.where = v.r[0]; await work(id, 1.3, { act: 'run it the way you would', cmd: v.r[0], out: v.rOut }); log(1, `${v.r[0]}: ${v.r[1]}`); S.lastRun = ok(v.r[0], v.r[1]); S.noteA = [g(v.r[1], 'c-fg')]; nodeDone(1);
+    startNode(2, 1.2); await work(id, 1.2, { act: v.x[0] }); log(2, `${v.x[0]}: ${v.x[1]}`); S.noteA = [g(`${v.x[0]}: `, 'c-dim'), g(v.x[1], 'c-fg')]; nodeDone(2);
+    startNode(3, 0.8); await work(id, 0.8, { act: 'the same command, before and after' }); log(3, v.p, 'c-accent'); S.noteC = [g('proof · ', 'c-dim'), g(v.p, 'c-fg')]; nodeDone(3);
+    const it = S.items[3][i]; it.state = 'done'; it.t1 = VT; it.flag = 'proved'; it.flagCls = 'c-accentDim'; it.result = v.s[1];
+  }
+}
+
+const findingsLine = () => [g('Critical ', 'c-bad'), g(`${S.find.critical}${S.find.fixed ? ' (fixed)' : ''}`, 'c-fg'), g(' · Important ', 'c-warn'), g(`${S.find.important}`, 'c-fg'), g(' · Suggestion ', 'c-dim'), g(`${S.find.suggestion}`, 'c-fg')];
+async function fixLoop(id, back) {
+  const c = X().critical, keep = { items: S.items[back], item: S.item };
+  log('STAGE', `Critical: back to Build for one fix, then ${STAGES[back].name} again`, 'c-bad');
+  S.items[2].push({ ...c, title: c.fix, add: c.hunk.filter((l) => l[0] === '+' && !l.startsWith('+++')).length, del: c.hunk.filter((l) => l[0] === '-').length, doubt_: c.doubt, doubt: null, state: 'todo', tries: 1, runs: 0 });
+  S.stage = 2;
+  await buildTask(id, S.items[2].length - 1);
+  S.find.fixed++;
+  log('STAGE', `${X().suite}: all pass · back to ${STAGES[back].name}`, 'c-accent');
+  S.stage = back; S.items[back] = keep.items; S.item = keep.item;
+  resetRing(); S.nodes = ['done', 'done', 'done', 'done']; S.noteC = findingsLine();
+}
+async function runReview(id) {
+  const A = X().areas;
+  enter(4, A.map((a) => ({ title: a.title })));
+  S.noteC = findingsLine(); S.hunk = null;
+  for (let i = 0; i < A.length; i++) {
+    const a = A[i], what = a.title.toLowerCase(); begin(i);
+    S.where = 'git diff'; S.proves = `${a.title}: a finding needs an input that shows it`;
+    startNode(0, 0.9); await work(id, 0.9, { act: `Read the change for ${what}`, cmd: 'git diff', out: diffStat() }); log(0, `git diff, for ${what}`); nodeDone(0);
+    startNode(1, 1.0); await work(id, 1.0, { act: `Try to break it: ${what}` });
+    let f = a.f;
+    if (take('critical')) { const c = X().critical; f = { lvl: 'critical', at: c.at, text: c.text, case: c.case, code: c.code }; }
+    const it = S.items[4][i]; it.f = f;
+    log(1, f ? `${f.at}: ${f.text}` : 'nothing found', f ? LVLCLS[f.lvl] : 'c-dim'); nodeDone(1);
+    if (f) S.where = f.at;
+    startNode(2, 0.8); await work(id, 0.8, { act: f ? `${f.at}: an input that shows it` : 'nothing to show' }); nodeDone(2);
+    startNode(3, 0.6); await work(id, 0.6, { act: f ? `${LVL[f.lvl]}, with its fix` : 'clean' });
+    if (f) {
+      S.find[f.lvl]++; it.flag = f.lvl; it.flagCls = LVLCLS[f.lvl];
+      S.noteA = [g(`${LVL[f.lvl]} `, LVLCLS[f.lvl]), g(`${f.at} `, 'c-path'), g(f.text, 'c-fg')];
+      log(3, `${LVL[f.lvl]} · ${f.at}`, LVLCLS[f.lvl]);
+    } else { it.flag = 'none'; it.flagCls = 'c-faint'; log(3, 'clean', 'c-dim'); }
+    S.noteC = findingsLine();
+    nodeDone(3); it.state = 'done'; it.t1 = VT;
+    if (f?.lvl === 'critical') await fixLoop(id, 4);
+  }
+}
+function diffStat() {
+  const by = new Map();
+  for (const t of S.items[2]) if (t.state === 'done') { const e = by.get(t.file) ?? [0, 0]; by.set(t.file, [e[0] + t.add, e[1] + t.del]); }
+  const rows = [...by].map(([f, [a, d]]) => [`${f.padEnd(22)} | ${String(a + d).padStart(3)} ${'+'.repeat(Math.min(24, a))}${'-'.repeat(Math.min(8, d))}`, 'c-fg']);
+  const A = [...by.values()].reduce((n, x) => n + x[0], 0), D = [...by.values()].reduce((n, x) => n + x[1], 0);
+  return [['$ git diff --stat', 'c-white'], ...rows, [`${by.size} files changed, ${A} insertions(+), ${D} deletions(−)`, 'c-dim']];
+}
+
+async function runShip(id) {
+  const sh = X().ship;
+  enter(5, [{ title: 'code-reviewer' }, { title: 'security-auditor' }, { title: 'test-engineer' }, { title: 'merged report' }]);
+  for (const j of [0, 1, 2]) { S.items[5][j].state = 'now'; S.items[5][j].t0 = VT; }
+  S.nodes = ['now', 'now', 'now', 'todo']; S.active = [0, 1, 2]; S.stepT0 = VT; S.stepDur = 3.2;
+  S.act = 'three reviewers at once, each fresh'; S.cmd = ''; S.where = 'the whole change'; S.proves = 'GO needs 0 critical';
+  S.noteA = [g('code-reviewer · security-auditor · test-engineer', 'c-dim')];
+  S.noteC = findingsLine();
+  log('SHIP', 'code-reviewer, security-auditor and test-engineer start together');
+  // A critical finding pressed while they work is the security reviewer's, the last to finish.
+  let crit = false;
+  for (const [n, secs] of [[0, 1.3], [2, 0.9], [1, 1.0]]) {
+    await vsleep(secs, id);
+    if (n === 1) crit = take('critical');
+    const bad = n === 1 && crit;
+    const text = bad ? `${X().critical.at}: ${X().critical.text}` : [sh.code, sh.security, sh.tests][n];
+    nodeDone(n, bad ? 'miss' : 'done');
+    const it = S.items[5][n]; it.state = 'done'; it.t1 = VT; it.result = text; it.flag = bad ? 'critical' : 'ok'; it.flagCls = bad ? 'c-bad' : 'c-accentDim';
+    log(n, text, bad ? 'c-bad' : 'c-fg');
+    await stopPoint(id);
+  }
+  S.item = 3; S.items[5][3].state = 'now'; S.items[5][3].t0 = VT;
+  startNode(3, 1.0); await work(id, 1.0, { act: 'one report: quality · security · perf · tests · docs' });
+  log(3, 'one report: quality · security · perf · accessibility · infra · docs'); nodeDone(3);
+  S.items[5][3].state = 'done'; S.items[5][3].t1 = VT;
+  if (!crit && take('critical')) { crit = true; log(3, `${X().critical.at}: ${X().critical.text}`, 'c-bad'); }
+  if (crit) {
+    S.find.critical++;
+    const c = X().critical;
+    S.items[5][3].flag = 'NO-GO'; S.items[5][3].flagCls = 'c-bad'; S.items[5][3].result = 'NO-GO';
+    const n = await ask(id, { kind: 'stop', title: 'NO-GO', detail: `${c.at}: ${c.text}.`, opts: ['Fix it, then run Ship again', 'Stop here: NO-GO', 'Tell it what to do'] });
+    if (n === 1) { S.verdict = { kind: 'nogo', why: `${c.at}: ${c.text}` }; log('SHIP', 'NO-GO, by you', 'c-bad'); return; }
+    if (n === 2) log('YOU', '“cap it, and add the test from Review”', 'c-white');
+    await fixLoop(id, 5);
+    return runShip(id);
+  }
+  S.items[5][3].flag = 'GO'; S.items[5][3].flagCls = 'c-accent'; S.items[5][3].result = 'GO';
+  S.verdict = { kind: 'go' };
+  log('SHIP', 'GO · rollback: /rewind to point 0 · nothing committed', 'c-accent');
+}
+
+// What the stages before a jump leave behind, as if they had run.
+function prefill(from) {
+  const x = X();
+  S.items = [[], [], [], [], [], []];
+  S.stageT = STAGES.map((_, k) => (k < from ? { t0: VT - 14 - k, t1: VT - 13 - k, pre: [42, 31, 0, 0, 0][k] + (k === 2 ? 410 : k === 3 ? 64 : k === 4 ? 58 : 0) } : {}));
+  S.stops = 0; S.rewind = 0; S.find = { critical: 0, important: 0, suggestion: 0, fixed: 0 };
+  S.queue = []; S.verdict = null; S.endVT = null; S.vt0 = VT; S.base = [0, 42, 73, 483, 547, 605][from]; S.comet = 0;
+  S.log = []; S.gate = null; S.out = null; S.hunk = null; S.tripped = null; S.answers = {};
+  if (from > 0) { S.items[0] = x.define.map((d) => ({ title: d.part, q: d.q, answer: d.opts[0], state: 'done', flag: d.short, flagCls: 'c-dim' })); for (const d of x.define) S.answers[d.part] = d.opts[0]; }
+  if (from > 1) S.items[1] = x.plan.map((p) => ({ title: p.title, look: p.look, n: p.n, state: 'done', flag: `${p.n} task${p.n > 1 ? 's' : ''}`, flagCls: 'c-dim' }));
+  if (from > 2) { S.items[2] = x.tasks.map((t, i) => ({ ...t, state: 'done', passed: true, doubt: t.doubtFix ? 'fixed' : 'held', doubt_: t.doubt, tries: t.miss ? 2 : 1, runs: t.miss ? 2 : 1, missed: !!t.miss, pre: 40 + ((i * 37) % 30) })); S.rewind = x.tasks.length; }
+  if (from > 3) S.items[3] = x.verify.map((v) => ({ title: v.title, cmd: v.s[0], v, result: v.s[1], state: 'done', flag: 'proved', flagCls: 'c-accentDim' }));
+  if (from > 4) {
+    S.items[4] = x.areas.map((a) => ({ title: a.title, f: a.f, state: 'done', flag: a.f ? a.f.lvl : 'none', flagCls: a.f ? LVLCLS[a.f.lvl] : 'c-faint' }));
+    for (const a of x.areas) if (a.f) S.find[a.f.lvl]++;
+  }
+  if (from > 0) log('STAGE', `jumped to ${STAGES[from].name}; the stages before it are filled in`, 'c-dim');
+}
+async function run(from) {
+  const id = ++RUNID;
+  for (const w of WAITERS) w.rej(CANCEL);
+  WAITERS = [];
+  if (S.gate) { const G = S.gate; S.gate = null; G.rej(CANCEL); }
+  prefill(from);
+  enter(from, []);
+  S.phase = 'open'; S.chat = false;
+  const stages = [runDefine, runPlan, runBuild, runVerify, runReview, runShip];
+  try {
+    await vsleep(1.2, id);
+    S.phase = 'run';
+    for (let k = from; k < 6; k++) {
+      S.stage = k; S.stageT[k] = { t0: VT };
+      log('STAGE', `${String(k + 1).padStart(2, '0')} ${STAGES[k].name}`, 'c-plan');
+      await stages[k](id);
+      S.stageT[k].t1 = VT;
+    }
+  } catch (e) {
+    if (e === CANCEL) return;
+    if (e !== STOPPED) throw e;
+    S.verdict = { kind: 'stopped', why: `you stopped it at task ${S.item + 1}` };
+    log('STOP', 'stopped by you · nothing committed', 'c-warn');
+  }
+  if (id === RUNID) {
+    S.endVT = VT; S.active = []; S.cmd = '';
+    // The run has ended: a few seconds on the result, then the window goes back to your size.
+    later(id, 4, () => { if (S.phase === 'run') { S.phase = 'closed'; S.chat = false; } });
+  }
+}
+
+// ---------- the ring ----------
+const MARK = { todo: '○', now: '●', done: '✓', miss: '✗', stop: '■' };
+const LABEL_CLS = { todo: 'c-dim', now: 'c-white', done: 'c-fg', miss: 'c-bad', stop: 'c-warn' };
+const markCls = (s) => ({ todo: 'c-faint', now: pulse(), done: 'c-accent', miss: 'c-bad', stop: 'c-warn' }[s]);
+
+// h rows (5 or 9), the left side at column L, inner columns between the corners.
+function ring(L, inner, fx, h = 5) {
+  const labels = nodesOf(S.stage), R = L + inner + 1, W = R + 7, mid = (h - 1) / 2;
+  const G = Array.from({ length: h }, () => Array.from({ length: W }, () => ({ ch: ' ', c: '' })));
+  const put = (r, c, ch, cl) => { if (r >= 0 && r < h && c >= 0 && c < W) G[r][c] = { ch, c: cl }; };
+  for (let c = L + 1; c < R; c++) { put(0, c, '─', 'c-border'); put(h - 1, c, '─', 'c-border'); }
+  put(0, L, '┌', 'c-border'); put(0, R, '┐', 'c-border'); put(h - 1, L, '└', 'c-border'); put(h - 1, R, '┘', 'c-border');
+  for (let r = 1; r < h - 1; r++) if (r !== mid) { put(r, L, '│', 'c-border'); put(r, R, '│', 'c-border'); }
+  put(mid - 1, R, '▼', 'c-border'); put(mid + 1, L, '▲', 'c-border');
+  const place = (r, start, i, padded) => {
+    const s = S.nodes[i]; let c = start;
+    if (padded) put(r, c++, ' ', '');
+    for (const ch of labels[i]) put(r, c++, ch, LABEL_CLS[s]);
+    put(r, c++, ' ', ''); put(r, c++, MARK[s], markCls(s));
+    if (padded) put(r, c++, ' ', '');
+    return [start, c - 1];
+  };
+  const tw = (i, padded) => len(labels[i]) + 2 + (padded ? 2 : 0);
+  const cx = (L + R) / 2;
+  const [ts, te] = place(0, Math.round(cx - tw(0, true) / 2), 0, true);
+  const [bs, be] = place(h - 1, Math.round(cx - tw(2, true) / 2), 2, true);
+  const [rs, re] = place(mid, R - Math.floor(tw(1, false) / 2), 1, false);
+  const [, le] = place(mid, L - Math.floor(tw(3, false) / 2), 3, false);
+  // the four ways out, each from its step to the next, clockwise
+  const e = [[], [], [], []];
+  for (let c = te + 1; c < R; c++) e[0].push([0, c]); e[0].push([0, R]); for (let r = 1; r < mid; r++) e[0].push([r, R]);
+  for (let r = mid + 1; r < h - 1; r++) e[1].push([r, R]); e[1].push([h - 1, R]); for (let c = R - 1; c > be; c--) e[1].push([h - 1, c]);
+  for (let c = bs - 1; c > L; c--) e[2].push([h - 1, c]); e[2].push([h - 1, L]); for (let r = h - 2; r > mid; r--) e[2].push([r, L]);
+  for (let r = mid - 1; r > 0; r--) e[3].push([r, L]); e[3].push([0, L]); for (let c = L + 1; c < ts; c++) e[3].push([0, c]);
+  const paint = (cells, cl) => { for (const [r, c] of cells) G[r][c] = { ch: G[r][c].ch, c: cl }; };
+  e.forEach((cells, i) => { if (S.edges[i]) paint(cells, 'c-accentDim'); });
+  if (fx === 'comet' && !REDUCED) {
+    if (!S.verdict) {
+      const P = e.flat(), head = Math.floor(S.comet) % P.length;
+      const tail = stopped() ? ['c-warn', 'c-warn', 'c-warn', 'c-warn'] : S.paused || S.gate ? ['c-dim', 'c-dim', 'c-faint', 'c-faint'] : ['c-white', 'c-accent', 'c-accent', 'c-accent', 'c-accentDim', 'c-accentDim'];
+      tail.forEach((cl, j) => { const [r, c] = P[(head - j + P.length) % P.length]; G[r][c] = { ch: G[r][c].ch, c: cl }; });
+    }
+  } else {
+    const p = Math.max(0, Math.min(1, (VT - S.stepT0) / Math.max(0.1, S.stepDur)));
+    for (const a of S.active) {
+      const cells = e[a], k = Math.floor(p * cells.length);
+      cells.forEach(([r, c], j) => { if (j < k) G[r][c] = { ch: G[r][c].ch, c: stopped() ? 'c-warn' : 'c-accent' }; else if (j === k && !S.gate && !S.paused) G[r][c] = { ch: G[r][c].ch, c: 'c-white' }; });
+    }
+  }
+  // text inside the ring, centred on row r (between the side labels on the middle row)
+  const text = (r, segs) => {
+    const from = r === mid ? le + 2 : L + 2, to = r === mid ? rs - 2 : R - 2, room = to - from + 1;
+    const c = cut(segs, room); let col = from + Math.floor((room - width(c)) / 2);
+    for (const s of c) for (const ch of s.t) put(r, col++, ch, s.c);
+  };
+  const segs = (r, from = 0, to = W) => {
+    const out = [];
+    for (const x of G[r].slice(from, to)) { const last = out[out.length - 1]; if (last && last.c === x.c) last.t += x.ch; else out.push(g(x.ch, x.c)); }
+    return out;
+  };
+  return { segs, text, R, W, re, le, rs, h, mid };
+}
+
+// ---------- shared pieces ----------
+function stageMark(k) {
+  if (S.verdict?.kind === 'go') return ['✓', 'c-accent', 'c-fg'];
+  if (k < S.stage) return ['✓', 'c-accent', 'c-fg'];
+  if (k > S.stage) return ['○', 'c-faint', 'c-dim'];
+  if (S.verdict?.kind === 'nogo') return ['✗', 'c-bad', 'c-bad'];
+  if (S.verdict || stopped()) return ['■', 'c-warn', 'c-warn'];
+  return ['●', pulse(), 'c-white'];
+}
+const stageLine = () => [g(' '), ...STAGES.flatMap((st, k) => { const [m, mc, nc] = stageMark(k); return [g(`${st.name} `, nc), g(m, mc), g('  ')]; })];
+const ITEM_MARK = { done: ['✓', 'c-accent'], todo: ['○', 'c-faint'], open: ['◌', 'c-warn'] };
+const itemMark = (it) => (it.state === 'now' ? (stopped() ? ['■', 'c-warn'] : ['●', pulse()]) : ITEM_MARK[it.state] ?? ['○', 'c-faint']);
+const marks = (items) => items.map((it) => { const [m, c] = itemMark(it); return g(m, c); });
+const curItem = () => S.items[S.stage][S.item];
+function title() {
+  if (S.verdict) return { go: 'done · GO', nogo: 'done · NO-GO', stopped: 'stopped by you' }[S.verdict.kind];
+  const k = S.stage, list = S.items[k], it = list[S.item], n = list.length, i = S.item + 1;
+  if (!it) return STAGES[k].name;
+  return [`question ${i}/${n} · ${it.title}`, `plan · part ${i}/${n} · ${it.title}`, `task ${i}/${n} · ${it.title}`, `verify ${i}/${n} · ${it.title}`, `review ${i}/${n} · ${it.title}`, 'ship · three reviewers'][k];
+}
+const nodeNow = () => (S.gate ? 'waiting for you' : S.active.map((n) => nodesOf(S.stage)[n]).join(' + '));
+const keysHint = () => [g(S.paused ? 'paused · p goes on' : 'p pause · esc chat', S.paused ? 'c-warn' : 'c-dim')];
+const stepSecs = () => (S.active.length ? Math.max(0, (VT - S.stepT0) * 6) : 0);
+const itemSecs = (it) => (it.t0 == null ? it.pre ?? null : ((it.t1 ?? (S.endVT ?? VT)) - it.t0) * 6);
+const stageSecs = (k) => { const s = S.stageT[k]; if (!s || s.t0 == null) return null; return s.pre ?? ((s.t1 ?? (S.endVT ?? VT)) - s.t0) * 6; };
+
+function verdictBox(w, indent) {
+  const v = S.verdict, inner = w - 4;
+  const b = v.kind === 'go' ? 'c-accentDim' : v.kind === 'nogo' ? 'c-bad' : 'c-warn';
+  const head = v.kind === 'go' ? [g('GO', 'c-accent'), g(' · ', 'c-dim'), ...findingsLine()]
+    : v.kind === 'nogo' ? [g('NO-GO', 'c-bad'), g(` · ${v.why}`, 'c-fg')] : [g('STOPPED', 'c-warn'), g(` · ${v.why}`, 'c-fg')];
+  const rows = [head, [g('Rollback: /rewind to point 0, before /agents', 'c-fg')], [g('Nothing committed: read git diff, then commit it yourself', 'c-dim')]];
+  const pad = spaces(indent);
+  return [
+    [pad, g(`┌${'─'.repeat(w - 2)}┐`, b)],
+    ...rows.map((r) => { const c = cut(r, inner); return [pad, g('│ ', b), ...c, spaces(inner - width(c)), g(' │', b)]; }),
+    [pad, g(`└${'─'.repeat(w - 2)}┘`, b)],
+  ];
+}
+
+// The model's numbers, as on the remote footer picked on 2 Oct: speed, context, GPU.
+function gauges() {
+  const n = Math.floor(VT * 2), busy = S.active.length && !S.gate && !S.paused && !S.verdict;
+  const tpsAt = (k) => 38 + ((k * 7919) % 97) % 10;
+  return { tps: busy ? tpsAt(n) : 0, spark: Array.from({ length: 8 }, (_, j) => tpsAt(n - 7 + j)), ctx: Math.min(68, Math.round(18 + S.log.length * 0.45)), gpu: 61.2, gpuMax: 65.4, ttft: 1.1 };
+}
+const SPARK = '▁▂▃▄▅▆▇█';
+
+// ---------- version 1: the compact ring and log ----------
+function blockV1(avail) {
+  const w = S.cols, st = STAGES[S.stage], out = [];
+  out.push(L_(lr([g(' ▌', st.color), g(`0${S.stage + 1} ${st.name.toUpperCase()}`, 'c-white'), g(` · ${title()}`, 'c-dim')], [g(`${MODEL} · ${mmss(elapsed())}`, 'c-dim')], w)));
+  out.push(L_());
+  if (S.verdict) out.push(...verdictBox(Math.min(w - 6, 64), 3).map((r) => L_(r)));
+  else {
+    const RG = ring(6, 15, 'comet');
+    const tries = S.tries > 1 ? [g(` · try ${S.tries}`, 'c-warn')] : [];
+    const so = S.stage === 2 ? [g(`diff ${S.diff}/100 · rewind ${S.rewind} · stops ${S.stops}`, S.diff > 100 ? 'c-warn' : 'c-dim')] : [g(`${st.unit} `, 'c-dim'), ...marks(S.items[S.stage]), g(` · stops ${S.stops}`, 'c-dim')];
+    const box = [
+      ['step', [g(nodeNow() || '·', stopped() ? 'c-warn' : 'c-white'), ...tries]],
+      ['doing', [g(S.act || '·', 'c-fg')]],
+      ['run', S.cmd ? [g(S.cmd, 'c-path'), g(` ${spinGlyph()}`, 'c-accent')] : S.lastRun.length ? S.lastRun : [g('·', 'c-faint')]],
+      [S.stage === 2 ? 'doubt' : S.stage >= 4 ? 'found' : 'note', S.stage === 2 ? S.noteC.slice(1) : S.stage >= 4 ? findingsLine() : S.noteA.length ? S.noteA : [g('·', 'c-faint')]],
+      ['so far', so],
+    ];
+    const at = Math.max(RG.W + 2, 31);
+    box.forEach(([k, v], r) => out.push(L_(cut([...RG.segs(r), spaces(at - RG.W), g(k.padEnd(7), 'c-dim'), ...v], w))));
+  }
+  out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  const N = Math.max(2, avail - 10);
+  const tail = S.log.slice(-N);
+  for (const e of tail) out.push(L_(cut([g(`  ${e.t}  `, 'c-faint'), g(e.tag.padEnd(9), e.tc), g(e.text, e.cls)], w)));
+  for (let i = tail.length; i < N; i++) out.push(L_());
+  out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  out.push(L_(lr(stageLine(), keysHint(), w)));
+  return out;
+}
+
+// ---------- version 2: the full ring and log ----------
+const head = (label, sub = '', right = []) => ({ label, sub, right });
+function headSegs(h, w) {
+  return lr([g(` ${h.label}`, 'c-head'), ...(h.sub ? [g(`  ${h.sub}`, 'c-faint')] : [])], h.right, w);
+}
+function trackLine(w) {
+  const build = (lvl) => [g(' '), ...STAGES.flatMap((st, k) => {
+    const [m, mc, nc] = stageMark(k), secs = stageSecs(k), done = k < S.stage || S.verdict?.kind === 'go';
+    const extra = [];
+    if (k === S.stage && !S.verdict && S.items[k].length) extra.push(g(` ${S.items[k].filter((x) => x.state === 'done').length}/${S.items[k].length}`, 'c-dim'));
+    if (lvl === 0 && secs != null && k <= S.stage) extra.push(g(` ${msShort(secs)}`, 'c-faint'));
+    const join = k < 5 ? [g(lvl < 2 ? (done ? ' ━━ ' : ' ── ') : ' ─ ', done ? 'c-accentDim' : 'c-faint')] : [];
+    return [...(lvl < 2 ? [g(`0${k + 1} `, 'c-faint')] : []), g(st.name, nc), g(' '), g(m, mc), ...extra, ...join];
+  })];
+  for (const lvl of [0, 1, 2]) { const t = build(lvl); if (width(t) <= w) return t; }
+  return cut(build(2), w);
+}
+function progress() {
+  const x = X(), sizes = [x.define.length, x.plan.length, Math.max(S.items[2].length, x.tasks.length), x.verify.length, x.areas.length, 4];
+  const total = sizes.reduce((a, b) => a + b, 0) * 4;
+  let done = 0;
+  for (let k = 0; k < 6; k++) {
+    if (S.verdict?.kind === 'go' || k < S.stage) done += sizes[k] * 4;
+    else if (k === S.stage) done += S.items[k].filter((x) => x.state === 'done' || x.state === 'open').length * 4 + S.nodes.filter((n) => n === 'done').length;
+  }
+  return { done: Math.min(done, total), total };
+}
+function progressLine(w) {
+  const p = progress(), frac = p.done / p.total, bw = Math.min(56, w - 50);
+  const left = Math.max(0, Math.round((p.total - p.done) * 7.5));
+  return [g(' '), ...bar(frac, bw, S.verdict?.kind === 'nogo' ? 'c-bad' : 'c-accent'), g(` ${String(Math.round(frac * 100)).padStart(3)}%`, 'c-white'), g(` · step ${p.done} of ${p.total}`, 'c-dim'), g(S.verdict ? ' · finished' : ` · about ${Math.max(1, Math.round(left / 60))} min left`, 'c-faint')];
+}
+function nowRows(PW, RH) {
+  const kv = (k, v) => [g(k.padEnd(8), 'c-dim'), ...v];
+  const gz = gauges();
+  const tries = S.tries > 1 ? [g(` · try ${S.tries}`, 'c-warn')] : [];
+  const rows = {
+    title: [g('NOW', 'c-head'), g(`  ${title()}`, 'c-faint')],
+    step: kv('step', [g(nodeNow() || '·', stopped() ? 'c-warn' : 'c-white'), ...tries, ...(S.active.length ? [g(` · ${msShort(stepSecs())} in this step`, 'c-faint')] : [])]),
+    doing: kv('doing', [g(S.act || '·', 'c-fg')]),
+    run: kv('run', S.cmd ? [g(S.cmd, 'c-path'), g(` ${spinGlyph()}`, 'c-accent')] : S.lastRun.length ? S.lastRun : [g('·', 'c-faint')]),
+    where: kv('where', [g(S.where || '·', 'c-path')]),
+    proves: kv('proves', [g(S.proves || '·', 'c-fg')]),
+    doubt: kv(S.stage >= 4 ? 'found' : 'doubt', S.stage >= 4 ? findingsLine() : S.noteC.length ? (S.noteC[0].t === 'doubt · ' ? S.noteC.slice(1) : S.noteC) : [g('·', 'c-faint')]),
+    model: kv('model', [g(`↓ ${gz.tps || '·'} tok/s`, gz.tps ? 'c-fg' : 'c-faint'), g(` · first token ${gz.ttft} s · context ${gz.ctx}% of 128k`, 'c-dim')]),
+    saved: kv('saved', [g(`${S.rewind} rewind point${S.rewind === 1 ? '' : 's'} · nothing committed`, 'c-dim'), g(` · ${S.stops} stop${S.stops === 1 ? '' : 's'}`, S.stops ? 'c-warn' : 'c-dim')]),
+  };
+  const order = RH >= 9 ? ['title', 'step', 'doing', 'run', 'where', 'proves', 'doubt', 'model', 'saved'] : ['step', 'doing', 'run', 'doubt', 'saved'];
+  return order.map((k) => cut(rows[k], PW));
+}
+function hub(RG) {
+  if (RG.h < 9) {
+    const p = S.active.length ? Math.max(0, Math.min(1, (VT - S.stepT0) / Math.max(0.1, S.stepDur))) : 0;
+    RG.text(RG.mid, bar(p, 6, stopped() ? 'c-warn' : 'c-accent'));
+    return;
+  }
+  const it = curItem(), k = S.stage;
+  const label = nodeNow() || (S.verdict ? '' : '·');
+  RG.text(2, [g(label, stopped() ? 'c-warn' : 'c-white'), ...(S.tries > 1 ? [g(` · try ${S.tries}`, 'c-warn')] : [])]);
+  if (it) RG.text(3, [g(k === 5 ? 'three at once' : `${STAGES[k].unit.replace(/s$/, '')} ${S.item + 1} of ${S.items[k].length}`, 'c-dim')]);
+  const p = S.active.length ? Math.max(0, Math.min(1, (VT - S.stepT0) / Math.max(0.1, S.stepDur))) : 0;
+  RG.text(RG.mid, bar(p, 9, stopped() ? 'c-warn' : 'c-accent'));
+  RG.text(RG.mid + 1, [g(S.active.length ? `${msShort(stepSecs())} of ~${msShort(S.stepDur * 6)}` : S.gate ? 'waiting for you' : '', 'c-faint')]);
+  RG.text(RG.mid + 2, [g(`stops ${S.stops} · rewind ${S.rewind}`, S.stops ? 'c-warn' : 'c-faint')]);
+}
+function guardsLines(w) {
+  const x = X(), t = S.stage === 2 ? curItem() : null, tr = S.tripped;
+  const meter = (key, label, v, max, n) => { const over = v > max || tr === key; return [g(`${label} `, over ? 'c-warn' : 'c-dim'), ...bar(v / max, n, over ? 'c-warn' : 'c-accentDim'), g(` ${v}/${max}`, over ? 'c-warn' : 'c-dim')]; };
+  const flag = (key, label) => [g(`${label} `, tr === key ? 'c-warn' : 'c-dim'), g(tr === key ? '■' : '✓', tr === key ? 'c-warn' : 'c-accentDim')];
+  const listKey = (name) => (name === x.guard.list ? 'list' : `-${name}`);
+  return [
+    fit([[g(' GUARDS  ', 'c-head')], meter('diff', 'diff', t ? S.diff : 0, 100, 12), meter('diff', 'files', t ? S.files : 0, 3, 3), meter('tries', 'tries', t ? Math.min(3, S.tries) : 0, 3, 3), flag('tol', x.guard.tol)], w, '   '),
+    fit([[g(' ASKS FIRST', 'c-head')], flag('pkg', 'packages'), ...['deletions', 'secrets', 'auth', 'payments', 'deploys', 'migrations'].map((n) => flag(listKey(n), n))], w, '   '),
+  ];
+}
+// Columns marked 1 go first, the last of them first, until the flexible ones have 12 columns each.
+function layoutCols(spec, tw) {
+  let keep = spec.map((_, i) => i);
+  const fixedOf = (ks) => ks.reduce((n, i) => n + (spec[i][1] || 0) + 1, 0) + 4;
+  const flexN = spec.filter((c) => !c[1]).length;
+  while (tw - fixedOf(keep) < 12 * flexN) {
+    const j = [...keep].reverse().find((i) => spec[i][2]);
+    if (j === undefined) break;
+    keep = keep.filter((i) => i !== j);
+  }
+  const flexW = Math.max(6, Math.floor((tw - fixedOf(keep)) / Math.max(1, flexN)));
+  return { keep, cols: keep.map((i) => [spec[i][0], spec[i][1] || flexW]) };
+}
+function tableRows(TW, M) {
+  const k = S.stage, items = S.items[k], x = X();
+  const doubtCell = (it) => (it.state === 'open' ? [g('open', 'c-warn')] : it.doubt === 'wait' ? [g('◌ …', 'c-auto')] : it.doubt === 'held' ? [g('held', 'c-accentDim')] : it.doubt === 'fixed' ? [g('fixed', 'c-auto')] : [g('·', 'c-faint')]);
+  const time = (it) => { const s = itemSecs(it); return [g(s == null ? '·' : msShort(s), 'c-faint')]; };
+  const SPEC = {
+    0: { head: head('INTERVIEW', 'becomes SPEC.md'), cols: [['part', 10], ['question', 0], ['your answer', 0]], row: (it) => [[g(it.title)], [g(it.q, 'c-dim')], [g(it.answer ?? '·', it.answer ? 'c-white' : 'c-faint')]] },
+    1: { head: head('PLAN', 'parts of SPEC.md, split into tasks'), cols: [['part', 18], ['reads', 0], ['tasks', 6]], row: (it) => [[g(it.title)], [g(`SPEC.md ## ${it.look}`, 'c-dim')], [g(it.state === 'done' ? String(it.n) : '·', 'c-fg')]] },
+    2: { head: head('TASKS', 'tasks/todo.md', [g(`${items.filter((x2) => x2.state === 'done').length} of ${items.length} done `, 'c-dim')]), cols: [['task', 18], ['check', 0], ['try', 3], ['diff', 7, 1], ['doubt', 5, 1], ['time', 4, 1]],
+      row: (it) => [[g(it.title)], [g(it.test, 'c-dim')], [g(String(it.tries ?? 1), (it.tries ?? 1) > 1 ? 'c-warn' : 'c-faint')], it.state === 'todo' ? [g('·', 'c-faint')] : [g(`+${it.add}`, 'c-add'), g(it.del ? ` −${it.del}` : '', 'c-del')], doubtCell(it), time(it)] },
+    3: { head: head('CHECKS', 'the same commands, before and after'), cols: [['check', 16], ['command', 0], ['result', 0]], row: (it) => [[g(it.title)], [g(it.cmd, 'c-path')], [g(it.result ?? '·', it.result ? 'c-accent' : 'c-faint')]] },
+    4: { head: head('REVIEW', 'five areas, each finding with file:line and a fix'), cols: [['area', 12], ['finding', 0], ['level', 10, 1]],
+      row: (it) => [[g(it.title)], it.f ? [g(`${it.f.at} `, 'c-path'), g(it.f.text, 'c-dim')] : [g(it.state === 'done' ? 'nothing found' : '·', 'c-faint')], [g(it.f ? LVL[it.f.lvl] : it.state === 'done' ? 'none' : '·', it.f ? LVLCLS[it.f.lvl] : 'c-faint')]] },
+    5: { head: head('REVIEWERS', 'three at once, then one report'), cols: [['reviewer', 18], ['result', 0], ['time', 5, 1]], row: (it) => [[g(it.title)], [g(it.result ?? (it.state === 'now' ? `working ${spinGlyph()}` : '·'), it.flagCls === 'c-bad' ? 'c-bad' : it.result ? 'c-fg' : 'c-faint')], time(it)] },
+  }[k];
+  const { keep, cols } = layoutCols(SPEC.cols, TW);
+  const line = (mark, cells, cls) => { const out = [g(' '), ...mark]; cells.forEach((c, j) => { out.push(...padTo(c.map((s) => (cls && !s.c ? g(s.t, cls) : s)), cols[j][1]), g(' ')); }); return out; };
+  const rows = [headSegs(SPEC.head, TW), line([g('  ')], cols.map((c) => [g(c[0], 'c-faint')]))];
+  const room = M - 2;
+  const start = Math.max(0, Math.min(S.item - Math.floor(room / 2), items.length - room));
+  items.slice(start, start + room).forEach((it, j0) => {
+    const [m, mc] = itemMark(it);
+    rows.push(line([g(m, mc), g(' ')], keep.map((j) => SPEC.row(it, start + j0)[j]), it.state === 'now' ? 'c-white' : it.state === 'todo' ? 'c-dim' : 'c-fg'));
+  });
+  return rows;
+}
+function numsRows(t, PW, H) {
+  const nums = t?.nums;
+  if (!nums) return [];
+  const shown = t.state === 'done' || t.passed ? Infinity : t.runs ?? 0;
+  if (nums.kind === 'table') return nums.rows.map(([a, b]) => { const has = shown > 0 || t.passed; return [g('  '), g(a.padEnd(26), 'c-fg'), g(has ? b : '…', has ? 'c-white' : 'c-faint'), g(has ? '  ✓' : '', 'c-accent')]; }).slice(0, H);
+  if (nums.kind === 'log') {
+    const bands = [0, -3, -6, -9, -12, -15], tries = nums.tries.slice(0, Math.min(nums.tries.length, shown === Infinity ? nums.tries.length : shown));
+    const steps = Math.max(...nums.tries.map((v) => v.length)), x0 = 8, sp = PW >= 46 ? 3 : 2;
+    const rows = [[g(`  ${nums.label}`, 'c-dim')]];
+    const limB = bands.indexOf(Math.round(Math.log10(nums.limit) / 3) * 3);
+    bands.forEach((b, bi) => {
+      const cells = Array.from({ length: steps * sp + 1 }, () => g(bi === limB ? '┄' : ' ', bi === limB ? 'c-warn' : ''));
+      tries.forEach((vals, ti) => vals.forEach((v, s) => { const vb = Math.max(0, Math.min(5, Math.round(-Math.log10(v) / 3))); if (vb === bi) cells[s * sp + ti] = g('●', ti === nums.tries.length - 1 && tries.length === nums.tries.length ? 'c-accent' : nums.tries.length > 1 ? 'c-bad' : 'c-accent'); }));
+      const lab = b === 0 ? '1e+0' : `1e−${-b}`;
+      rows.push([g(lab.padStart(6), 'c-faint'), g(bi === limB ? ' ┼' : ' ┤', 'c-faint'), ...cells, ...(bi === limB ? [g(sp === 3 ? ` ${nums.limitLabel}` : ' tol', 'c-warn')] : [])]);
+    });
+    rows.push([g(' '.repeat(x0), ''), g(Array.from({ length: steps }, (_, s) => String(s + 1).padEnd(sp)).join(''), 'c-faint'), g(' step', 'c-faint')]);
+    const legend = [g('  ')];
+    nums.tries.forEach((vals, ti) => {
+      if (ti >= tries.length) return;
+      const last = vals[vals.length - 1], good = last <= nums.limit;
+      legend.push(g('● ', ti === nums.tries.length - 1 && good ? 'c-accent' : 'c-bad'), g(`try ${ti + 1}: ${sci(last)} ${good ? '✓' : '✗'}   `, good ? 'c-fg' : 'c-bad'));
+    });
+    if (!tries.length) legend.push(g('the first run fills this in', 'c-faint'));
+    rows.push(legend);
+    return rows.slice(0, H);
+  }
+  // bars
+  const tries = nums.tries.slice(0, Math.min(nums.tries.length, shown === Infinity ? nums.tries.length : Math.max(1, shown)));
+  const cur = tries[tries.length - 1], prev = tries.length > 1 ? tries[tries.length - 2] : null;
+  const maxV = Math.max(nums.limit ? nums.limit * 1.15 : 0, ...nums.tries.flat()), bw = Math.max(10, PW - 22);
+  const rows = [[g(`  ${nums.label}${nums.limit ? `, ${nums.limitLabel} ${nums.limit} s` : ''}`, 'c-dim')]];
+  const capAt = nums.limit ? Math.round((nums.limit / maxV) * bw) : -1;
+  cur.forEach((v, i) => {
+    const has = shown > 0 || t.passed, n = Math.round((v / maxV) * bw), over = nums.limit && v > nums.limit + 1e-9;
+    const cells = Array.from({ length: bw }, (_, c) => (c < n && has ? g('█', over && c >= capAt ? 'c-bad' : 'c-accentDim') : g(c === capAt ? '┆' : ' ', 'c-warn')));
+    rows.push([g(`  try ${i + 1}  `, 'c-faint'), ...cells, g(has ? ` ${v.toFixed(1)}` : ' …', over ? 'c-bad' : 'c-fg')]);
+  });
+  if (prev) rows.push([g('  ', ''), g(`before the fix: ${prev[prev.length - 1].toFixed(1)} s ✗ → now ${cur[cur.length - 1].toFixed(1)} s ✓`, 'c-dim')]);
+  return rows.slice(0, H);
+}
+function panelRows(PW, M) {
+  const k = S.stage, x = X(), it = curItem(), rows = [];
+  const listTail = (lines) => lines.slice(-(M - 1));
+  if (k === 0) {
+    rows.push(headSegs(head('SPEC.md', 'written as you answer'), PW));
+    const lines = [];
+    for (const d of x.define) { const a = S.answers[d.part]; lines.push([g(`## ${d.part}`, a ? 'c-plan' : 'c-faint')], [g(a ? `   ${a}` : '   …', a ? 'c-fg' : 'c-faint')]); }
+    rows.push(...listTail(lines));
+  } else if (k === 1) {
+    rows.push(headSegs(head('tasks/plan.md', 'in the order they depend on'), PW));
+    let at = 0; const lines = [];
+    for (const p of S.items[1]) { if (p.state === 'done') x.tasks.slice(at, at + p.n).forEach((t, j) => lines.push([g(`${String(at + j + 1).padStart(2)}. `, 'c-faint'), g(t.title, 'c-fg'), g(` · ${t.test}`, 'c-dim')])); at += p.n; }
+    if (!lines.length) lines.push([g('   the first part fills this in', 'c-faint')]);
+    rows.push(...listTail(lines));
+  } else if (k === 2) {
+    rows.push(headSegs(head(x.numsTitle, it ? `task ${S.item + 1} · ${it.title}` : ''), PW));
+    rows.push(...numsRows(it, PW, M - 1));
+  } else if (k === 3) {
+    rows.push(headSegs(head('PROOF', 'what was shown, not "should work"'), PW));
+    const lines = [];
+    S.items[3].forEach((v) => { if (v.state === 'todo') return; lines.push([g(v.state === 'done' ? '✓ ' : '● ', v.state === 'done' ? 'c-accent' : pulse()), g(v.title, 'c-white')], [g(`   ${v.v.x[0]}: `, 'c-dim'), g(v.v.x[1], 'c-fg')], [g(`   ${v.v.p}`, 'c-dim')]); });
+    rows.push(...listTail(lines));
+  } else if (k === 4) {
+    rows.push(headSegs(head('FINDINGS', 'by level, each with its fix'), PW));
+    rows.push([g('  '), ...findingsLine()]);
+    const lines = [];
+    S.items[4].forEach((a) => { if (a.f) lines.push([g(`${LVL[a.f.lvl].padEnd(11)}`, LVLCLS[a.f.lvl]), g(a.f.at, 'c-path')], [g(`   ${a.f.text}`, 'c-dim')]); });
+    if (!lines.length) lines.push([g('   none yet', 'c-faint')]);
+    rows.push(...lines.slice(-(M - 2)));
+  } else {
+    rows.push(headSegs(head('REVIEWERS', 'fresh context, side by side'), PW));
+    S.items[5].forEach((r) => { const [m, mc] = itemMark(r); rows.push([g(`${m} `, r.flagCls === 'c-bad' ? 'c-bad' : mc), g(r.title.padEnd(18), 'c-white'), g(r.result ?? (r.state === 'now' ? `working ${spinGlyph()}` : 'waits'), r.flagCls === 'c-bad' ? 'c-bad' : r.result ? 'c-fg' : 'c-faint')]); });
+  }
+  return rows.map((r) => cut(r, PW));
+}
+function reveal(p, n) { if (!p) return n; return Math.max(1, Math.min(n, Math.ceil(((VT - p.t0) / Math.max(0.1, p.dur)) * n + 0.5))); }
+function lowerPanes(OW, DW, O) {
+  const k = S.stage, x = X(), it = curItem();
+  let L = { h: head('OUTPUT'), lines: [] }, R = { h: head('DIFF'), lines: [] };
+  const outPane = () => {
+    if (!S.out) return { h: head('OUTPUT', 'nothing run yet'), lines: [] };
+    const n = S.cmd ? reveal(S.out, S.out.lines.length) : S.out.lines.length;
+    const lines = S.out.lines.slice(0, n).map(([t, c]) => [g(` ${t}`, c)]);
+    if (S.cmd) lines.push([g(` ${spinGlyph()}`, 'c-accent')]);
+    return { h: head(S.out.title.split(' · ')[0], S.out.title.split(' · ').slice(1).join(' · '), S.cmd ? [g('running ', 'c-accent')] : [g('done ', 'c-faint')]), lines };
+  };
+  const diffPane = () => {
+    if (!S.hunk) return { h: head('DIFF', 'no change yet'), lines: [] };
+    const writing = S.active.length && (VT - S.hunk.t0) < S.hunk.dur;
+    const n = writing ? reveal(S.hunk, S.hunk.lines.length) : S.hunk.lines.length;
+    const lines = S.hunk.lines.slice(0, n).map((l) => [g(` ${l}`, l[0] === '+' ? 'c-add' : l[0] === '-' ? 'c-del' : l[0] === '@' ? 'c-plan' : 'c-dim')]);
+    const [t1, ...rest] = S.hunk.title.split(' · ');
+    return { h: head(t1, rest.join(' · '), writing ? [g('writing ', 'c-edits')] : []), lines };
+  };
+  if (k === 0) {
+    const lines = [];
+    S.items[0].forEach((q) => { if (q.state === 'todo') return; lines.push([g(' ? ', 'c-plan'), g(q.q, 'c-fg')]); lines.push([g(q.answer ? `   ${q.answer}` : '   …', q.answer ? 'c-white' : 'c-faint')]); });
+    L = { h: head('THE INTERVIEW', 'one question at a time'), lines };
+    R = { h: head('CONSTRAINTS.md', 'your quality bar, enforced later'), lines: x.constraints.map((c) => [g(' · ', 'c-faint'), g(c, 'c-fg')]) };
+  } else if (k === 1) {
+    const p = it?.look ?? x.plan[0].look;
+    L = { h: head('READING', `SPEC.md ## ${p}`), lines: [[g(` ## ${p}`, 'c-plan')], [g(`   ${S.answers[p] ?? ''}`, 'c-fg')]] };
+    let at = 0; const lines = [];
+    for (const part of S.items[1]) { x.tasks.slice(at, at + part.n).forEach((t, j) => lines.push([g(' - [ ] ', part.state === 'done' ? 'c-dim' : 'c-faint'), g(`${at + j + 1} ${t.title}`, part.state === 'done' ? 'c-fg' : 'c-faint')])); at += part.n; }
+    R = { h: head('tasks/todo.md', 'ticked as Build finishes each'), lines };
+  } else if (k === 2 || k === 3) {
+    L = outPane();
+    R = k === 2 ? diffPane() : { h: head('git diff --stat', 'the whole change'), lines: diffStat().slice(1).map(([t, c]) => [g(` ${t}`, c)]) };
+  } else if (k === 4) {
+    L = outPane();
+    const f = it?.f;
+    R = f ? { h: head('THE CASE', f.at), lines: [...f.case.map((l) => [g(` ${l}`, l.startsWith('$') ? 'c-white' : 'c-fg')]), [g('')], ...f.code.map((l) => [g(` ${l}`, l.startsWith('▶') ? 'c-warn' : 'c-dim')])] }
+      : { h: head('THE CASE', it ? it.title.toLowerCase() : ''), lines: [[g(it?.state === 'done' ? ' nothing found' : ' looking…', 'c-faint')]] };
+  } else {
+    L = { h: head('MERGED REPORT', 'quality · security · perf · accessibility · infra · docs'), lines: (S.items[5][3].state === 'done' ? x.report : []).map((l) => [g(' · ', 'c-faint'), g(l, 'c-fg')]) };
+    if (!L.lines.length) L.lines.push([g(' the three reviewers fill this in', 'c-faint')]);
+    const pts = S.items[2].filter((t) => t.state === 'done').map((t, j) => [g(` point ${j + 1}`.padEnd(10), 'c-edits'), g(`after ${t.title}`, 'c-dim')]);
+    R = { h: head('ROLLBACK', 'nothing committed'), lines: [[g(' point 0  ', 'c-edits'), g('before /agents', 'c-fg')], ...pts] };
+  }
+  const box = (P, w) => [headSegs(P.h, w), ...P.lines.slice(-(O - 1)).map((l) => cut(l, w))];
+  return [box(L, OW), box(R, DW)];
+}
+function blockV2(avail) {
+  const w = S.cols, out = [], st = STAGES[S.stage], n = S.items[S.stage].length;
+  // Ring + NOW and Tasks + math check always stay (the user's pick, 2 Oct); the rest shrink, then go.
+  let RH = 9, M = Math.min(11, Math.max(10, n + 2));
+  const core = (rh, m) => 3 + rh + m; // the header, the track and the keys, with the ring and the table
+  if (core(RH, M) > avail) RH = 5;
+  if (core(RH, M) > avail) M = Math.max(4, avail - core(RH, 0));
+  let left = avail - core(RH, M);
+  const A = { progress: 0, g1: 0, g2: 0, O: 0, T: 0, rule: 0, rule2: 0, gap1: 0, gap2: 0, gap3: 0, gap4: 0 };
+  // Given out in this order, so the last given is the first to go when rows run out.
+  const grant = (k, want, min = want) => { if (want > 0 && left >= min) { const v = Math.min(want, left); A[k] += v; left -= v; } };
+  grant('progress', 1); grant('g1', 1); grant('O', 4); grant('T', 3); grant('g2', 1);
+  if (A.O) grant('O', 4, 1); if (A.T) grant('T', 5, 1); if (A.O) grant('O', 3, 1);
+  grant('rule', 1); grant('rule2', 1); grant('gap1', 1); grant('gap2', 1); grant('gap3', 1); grant('gap4', 1);
+  if (A.T) grant('T', left, 1);
+  const blank = (k) => { if (A[k]) out.push(L_()); };
+  out.push(L_(lr([g(' ▌', st.color), g(`0${S.stage + 1} ${st.name.toUpperCase()}`, 'c-white'), g(` · ${title()}`, 'c-dim')], [g(`/agents · ${X().title} · ${mmss(elapsed())}`, 'c-dim')], w)));
+  if (A.rule) out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  out.push(L_(trackLine(w)));
+  if (A.progress) out.push(L_(cut(progressLine(w), w)));
+  blank('gap1');
+  if (S.verdict) {
+    const vb = verdictBox(Math.min(w - 8, 72), 3);
+    for (let r = 0; r < RH; r++) out.push(L_(cut(vb[r - Math.floor((RH - 5) / 2)] ?? [], w)));
+  } else {
+    const RG = RH === 9 ? ring(8, 31, 'comet', 9) : ring(4, 19, 'comet', 5);
+    hub(RG);
+    const at = RG.W + 3, nr = nowRows(w - at, RH);
+    for (let r = 0; r < RH; r++) out.push(L_(cut([...RG.segs(r), spaces(at - RG.W), ...(nr[r] ?? [])], w)));
+  }
+  blank('gap2');
+  const gl = guardsLines(w);
+  if (A.g1) out.push(L_(gl[0]));
+  if (A.g2) out.push(L_(gl[1]));
+  blank('gap3');
+  const TW = Math.floor(w * (w >= 100 ? 0.59 : 0.56)), PW = w - TW - 2;
+  const tb = tableRows(TW, M), pn = panelRows(PW, M);
+  for (let i = 0; i < M; i++) out.push(L_([...padTo(tb[i] ?? [], TW), g('  '), ...(pn[i] ?? [])]));
+  blank('gap4');
+  if (A.O) {
+    const OW = Math.floor((w - 2) / 2), DW = w - OW - 2;
+    const [ol, dl] = lowerPanes(OW, DW, A.O);
+    for (let i = 0; i < A.O; i++) out.push(L_([...padTo(ol[i] ?? [], OW), g('  '), ...(dl[i] ?? [])]));
+  }
+  if (A.T) {
+    out.push(L_(headSegs(head('TIMELINE', 'every step, newest last', [g(`${S.log.length} steps `, 'c-faint')]), w)));
+    const tail = A.T > 1 ? S.log.slice(-(A.T - 1)) : [];
+    for (const e of tail) out.push(L_(cut([g(`  ${e.t}  `, 'c-faint'), g(`0${e.s + 1} `, STAGES[e.s].color), g(e.tag.padEnd(9), e.tc), g(e.text, e.cls)], w)));
+    for (let i = tail.length; i < A.T - 1; i++) out.push(L_());
+  }
+  if (A.rule2) out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  const keys = fit([[g(' '), g(S.paused ? 'paused · p goes on' : 'p pause', S.paused ? 'c-warn' : 'c-dim')],
+    [g(S.verdict ? 'esc closes /agents and gives the window back' : 'esc back to the chat', 'c-dim')], ...(S.verdict ? [] : [[g('1–3 answer a stop', 'c-dim')]])], w, ' · ');
+  const note = S.queue.length ? [g(`${S.queue.length} stop on its way `, 'c-warn')] : w >= 100 ? [g('it asks before anything on the stop list ', 'c-faint')] : [];
+  out.push(L_(lr(keys, note, w)));
+  return out;
+}
+
+// ---------- the rest of the window ----------
+const strip = () => [L_([], 'strip'), L_([g(' '), g('›', 'c-accent'), g(' '), g(`/agents ${X().request}`, 'c-white')], 'strip'), L_([], 'strip')];
+function promptBox(w) {
+  const inner = w - 4, ph = 'Add a note for the next task, or esc for the chat';
+  const mid = [g('> '), g(ph[0], 'inv'), g(ph.slice(1), 'c-dim')];
+  const m = cut(mid, inner);
+  return [L_([g(`╭${'─'.repeat(w - 2)}╮`, 'c-border')]), L_([g('│ ', 'c-border'), ...m, spaces(inner - width(m)), g(' │', 'c-border')]), L_([g(`╰${'─'.repeat(w - 2)}╯`, 'c-border')])];
+}
+function gatePanel(w) {
+  const G = S.gate, inner = w - 4;
+  const bc = G.kind === 'stop' ? 'c-warn' : G.kind === 'plan' ? 'c-accent' : 'c-plan';
+  const row = (segs) => { const c = cut(segs, inner); return L_([g('│ ', bc), ...c, spaces(inner - width(c)), g(' │', bc)]); };
+  const icon = G.kind === 'stop' ? '■ ' : G.kind === 'plan' ? '▶ ' : '? ';
+  const hint = G.kind === 'ask' ? 'enter picks · the pretend you picks 1 in 2 s'
+    : S.auto ? 'Answer for me is on: 1 in 2 s' : G.kind === 'plan' ? '1–3 or ↑↓ enter · it waits for your yes' : '1–3 or ↑↓ enter · it waits for you';
+  const out = [L_([g(`╭${'─'.repeat(w - 2)}╮`, bc)]), row([g(icon + G.title, bc)])];
+  for (const line of wrap(G.detail, inner).slice(0, 3)) out.push(row([g(line, 'c-fg')]));
+  G.opts.forEach((o, i) => out.push(row([g(i === G.sel ? '› ' : '  ', 'c-accent'), g(`${i + 1}. `, i === G.sel ? 'c-white' : 'c-dim'), g(o, i === G.sel ? 'c-white' : 'c-dim')])));
+  out.push(row([g(hint, 'c-faint')]));
+  out.push(L_([g(`╰${'─'.repeat(w - 2)}╯`, bc)]));
+  return out;
+}
+// The remote footer picked on 2 Oct (2 · Gauges on the left): speed with the last eight replies, context and GPU as bars.
+function footerRow(w) {
+  const gz = gauges();
+  const spark = gz.spark.map((v) => SPARK[Math.max(0, Math.min(7, v - 38))]).join('');
+  const left = fit([
+    [g('  ↓', 'c-dim'), g(`${gz.tps || '·'}`, gz.tps ? 'c-fg' : 'c-faint'), g(' tok/s ', 'c-dim'), g(spark, 'c-accentDim')],
+    [g('ctx ', 'c-dim'), ...bar(gz.ctx / 100, 8, gz.ctx >= 70 ? 'c-warn' : 'c-accentDim'), g(` ${gz.ctx}%`, 'c-dim')],
+    [g('GPU ', 'c-dim'), ...bar(gz.gpu / gz.gpuMax, 6, 'c-accentDim'), g(` ${gz.gpu}/${gz.gpuMax} GB`, 'c-dim')],
+  ], Math.max(20, w - 52), '  ');
+  return lr(left, [g(`${MODEL} on ${WHERE}`, 'c-dim'), g(' · ', 'c-faint'), g('⏵⏵ accept edits on', 'c-edits')], w);
+}
+function miniLine() {
+  const lead = g('  ╰─ ', 'c-rail');
+  if (S.verdict) return [lead, g('/agents', 'c-accent'), g(` · ${title()}`, S.verdict.kind === 'go' ? 'c-accent' : 'c-warn')];
+  return [lead, g(spinGlyph(), 'c-accent'), g(` ${STAGES[S.stage].name.toUpperCase()} `, 'c-white'), g(nodeNow(), stopped() ? 'c-warn' : 'c-accent'), g(` · ${title()}`, 'c-dim'), g(S.cmd ? ` · ${S.cmd}` : '', 'c-faint')];
+}
+function chatLines() {
+  return [...strip(), L_(),
+    L_([g('  ● ', 'c-accent'), g('/agents', 'c-white'), g(' started: Define → Plan → Build → Verify → Review → Ship', 'c-dim')]),
+    L_([g('  │', 'c-rail')]),
+    L_([g('  ※ ', 'c-faint'), g('it keeps going behind the chat · esc or /agents opens it again', 'c-dim')]),
+    L_([g('  │', 'c-rail')]),
+    L_(cut(miniLine(), S.cols)), L_()];
+}
+const TARGET = [112, 59];
+const runSize = () => [Math.min(S.fits[0], Math.max(S.home[0], TARGET[0])), Math.min(S.fits[1], Math.max(S.home[1], TARGET[1]))];
+const homeSize = () => [Math.min(S.home[0], S.fits[0]), Math.min(S.home[1], S.fits[1])];
+const sizeNow = () => (S.phase === 'run' ? runSize() : homeSize());
+// Before the run opens and after it ends: the chat, at your own size.
+function chatFrame() {
+  const w = S.cols, box = promptBox(w), avail = S.rows - 1 - box.length, [rc, rr] = runSize();
+  const lines = [...strip(), L_()];
+  if (S.phase === 'open') {
+    lines.push(L_([g('  ● ', 'c-accent'), g('/agents', 'c-white'), g(` opening: the window grows to ${rc} × ${rr}${rc < TARGET[0] || rr < TARGET[1] ? ', the most this screen fits' : ''}`, 'c-dim')]));
+  } else {
+    const v = S.verdict, good = v?.kind === 'go';
+    lines.push(L_([g('  ● ', good ? 'c-accent' : 'c-warn'), g('/agents', 'c-white'), g(` finished · ${title()}`, good ? 'c-accent' : 'c-warn')]));
+    lines.push(L_([g('  │ ', 'c-rail'), ...findingsLine()]));
+    lines.push(L_([g('  │ ', 'c-rail'), g(`${S.items[2].filter((t) => t.state === 'done').length} tasks · ${S.rewind} rewind points · nothing committed: read git diff, then commit it yourself`, 'c-dim')]));
+    lines.push(L_([g('  ※ ', 'c-faint'), g(`the window went back to ${w} × ${S.rows} · /agents opens this run again`, 'c-dim')]));
+  }
+  let body = lines.map((l) => L_(cut(l.segs, w), l.cls)).slice(-avail);
+  while (body.length < avail) body.push(L_());
+  return [...body, ...box, L_(footerRow(w))];
+}
+function frame() {
+  [S.cols, S.rows] = sizeNow();
+  if (S.phase !== 'run') return chatFrame();
+  const w = S.cols;
+  const box = S.gate ? gatePanel(w) : promptBox(w);
+  const avail = S.rows - 1 - box.length;
+  let body;
+  if (S.chat) body = chatLines();
+  else {
+    const blk = S.ver === 2 ? blockV2(avail) : blockV1(avail);
+    body = avail - blk.length >= 4 ? [...strip(), L_(), ...blk] : blk;
+  }
+  body = body.slice(-avail);
+  while (body.length < avail) body.unshift(L_());
+  return [...body, ...box, L_(footerRow(w))];
+}
+
+// ---------- the page ----------
+const DOM = typeof document !== 'undefined' && !!document.getElementById('t1');
+const escHTML = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const lineHTML = (l, w) => `<div class="ln ${l.cls}">${[...l.segs, spaces(w - width(l.segs))].map((s) => (s.c ? `<span class="${s.c}">${escHTML(s.t)}</span>` : escHTML(s.t))).join('')}</div>`;
+// Only the lines that changed are written again (what Ink's incrementalRendering does in the app).
+let LINES = [], LASTHTML = [];
+function render() {
+  if (!DOM) return;
+  syncControls();
+  const screen = document.querySelector('#t1 .screen');
+  const html = frame().map((l) => lineHTML(l, S.cols));
+  if (LINES.length !== html.length) {
+    screen.innerHTML = html.join('');
+    LINES = [...screen.children]; LASTHTML = html;
+    return;
+  }
+  for (let i = 0; i < html.length; i++) if (LASTHTML[i] !== html[i]) { LINES[i].outerHTML = html[i]; LINES[i] = screen.children[i]; LASTHTML[i] = html[i]; }
+}
+function fitText() {
+  if (!DOM) return;
+  let fs = 13;
+  if (S.fit === 'fit') {
+    const [rc, rr] = runSize();
+    const byH = (window.innerHeight - 70) / (rr * 1.34), byW = (document.querySelector('.wrap').clientWidth - 40) / (rc * 0.61);
+    fs = Math.max(8, Math.min(13, Math.floor(Math.min(byH, byW) * 2) / 2));
+  }
+  document.documentElement.style.setProperty('--fs', `${fs}px`);
+}
+function syncControls() {
+  const press = (sel, on) => document.querySelectorAll(sel).forEach((b) => b.setAttribute('aria-pressed', String(on(b))));
+  press('[data-ver]', (b) => Number(b.dataset.ver) === S.ver);
+  press('[data-home]', (b) => b.dataset.home === S.home.join('x'));
+  press('[data-fits]', (b) => b.dataset.fits === S.fits.join('x'));
+  press('[data-fit]', (b) => b.dataset.fit === S.fit);
+  press('[data-scen]', (b) => b.dataset.scen === S.scen);
+  press('[data-speed]', (b) => Number(b.dataset.speed) === S.speed);
+  press('[data-jump]', (b) => Number(b.dataset.jump) === S.stage && !S.verdict);
+  document.getElementById('autoChip').setAttribute('aria-pressed', String(S.auto));
+  document.getElementById('pauseChip').lastChild.textContent = S.paused ? 'Go on' : 'Pause';
+  document.getElementById('escChip').lastChild.textContent = S.phase === 'closed' ? 'Open /agents again' : S.phase === 'run' && S.verdict && !S.chat ? 'Close /agents' : S.chat ? 'Open the loop' : 'Back to the chat';
+  const [hc, hr] = homeSize(), [rc, rr] = runSize();
+  document.getElementById('sizeNote').textContent = `Your window ${hc} × ${hr} → ${rc} × ${rr} while /agents runs${rc < TARGET[0] || rr < TARGET[1] ? ' (the most this screen fits)' : ''} → back to ${hc} × ${hr} when it ends. Now: ${S.phase === 'open' ? 'opening' : S.phase === 'run' ? 'running' : 'back to your size'}.`;
+  document.getElementById('listChip').textContent = X().stops.list.chip;
+  document.getElementById('tolChip').textContent = X().stops.tol.chip;
+  document.getElementById('termTitle').textContent = `coding — ${S.cols}×${S.rows}`;
+  document.getElementById('notice').textContent = S.notice;
+}
+let NOTICE_T = null;
+function note(text) {
+  S.notice = text;
+  clearTimeout(NOTICE_T);
+  NOTICE_T = setTimeout(() => { S.notice = ''; render(); }, 3200);
+  render();
+}
+function queueStop(k) {
+  if (S.verdict) return note('The run is over: Restart, or jump to a stage.');
+  if (['tol', 'big', 'stuck'].includes(k) && S.stage !== 2) return note('That stop comes while it builds: jump to Build.');
+  if (k === 'critical' && S.stage < 4) return note('A critical finding comes from Review or Ship: jump to Review.');
+  if (S.queue.includes(k)) return note('Already on its way.');
+  S.queue.push(k);
+  note(k === 'stuck' ? 'The covering test will fail three times, then it asks you.' : k === 'critical' ? 'The next review step finds it.' : 'It stops at the end of this step.');
+}
+function act(a) {
+  if (a === 'pause') S.paused = !S.paused;
+  else if (a === 'first') { if (S.gate) answer(S.gate.sel); else note('Nothing to answer right now.'); }
+  else if (a === 'esc') {
+    if (S.phase === 'closed') { S.phase = 'run'; S.chat = false; } // /agents opens the finished run again
+    else if (S.phase === 'run' && S.verdict && !S.chat) S.phase = 'closed'; // closing a finished run gives the window back
+    else if (S.phase === 'run') S.chat = !S.chat;
+  }
+  else if (a === 'restart') run(0);
+  render();
+}
+let LAST = now();
+function tick(dtOverride) {
+  const t = now(), dt = dtOverride ?? Math.min(0.25, (t - LAST) / 1000);
+  LAST = t;
+  if (!S.paused && !S.gate) { VT += dt * S.speed; if (!S.verdict) S.comet += dt * S.speed * (S.cmd ? 6 : 15); }
+  flush();
+  if (S.gate && !S.paused && (S.gate.kind === 'ask' || S.auto) && t - S.gate.t0 > 2000 / Math.max(1, S.speed / 2)) answer(0);
+  render();
+}
+
+if (DOM) {
+  document.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => { S.ver = Number(b.dataset.ver); render(); }));
+  document.querySelectorAll('[data-home]').forEach((b) => b.addEventListener('click', () => { S.home = b.dataset.home.split('x').map(Number); fitText(); render(); }));
+  document.querySelectorAll('[data-fits]').forEach((b) => b.addEventListener('click', () => { S.fits = b.dataset.fits.split('x').map(Number); fitText(); render(); }));
+  document.querySelectorAll('[data-fit]').forEach((b) => b.addEventListener('click', () => { S.fit = b.dataset.fit; fitText(); render(); }));
+  document.querySelectorAll('[data-scen]').forEach((b) => b.addEventListener('click', () => { if (S.scen === b.dataset.scen) return; S.scen = b.dataset.scen; run(S.verdict ? 0 : S.stage); render(); }));
+  document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => { S.speed = Number(b.dataset.speed); render(); }));
+  document.querySelectorAll('[data-jump]').forEach((b) => b.addEventListener('click', () => { S.chat = false; run(Number(b.dataset.jump)); render(); }));
+  document.querySelectorAll('[data-stop]').forEach((b) => b.addEventListener('click', () => queueStop(b.dataset.stop)));
+  document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
+  document.getElementById('autoChip').addEventListener('click', () => { S.auto = !S.auto; if (S.gate) S.gate.t0 = now(); render(); });
+  document.querySelectorAll('.term[tabindex]').forEach((t) => t.addEventListener('mousedown', () => setTimeout(() => t.focus(), 0)));
+  document.addEventListener('keydown', (e) => {
+    const t = document.activeElement;
+    if (!t || !t.classList.contains('term')) return;
+    const k = e.key, G = S.gate;
+    if (G) {
+      if (/^[1-9]$/.test(k) && Number(k) <= G.opts.length) { e.preventDefault(); answer(Number(k) - 1); return; }
+      if (k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); G.sel = (G.sel + (k === 'ArrowUp' ? G.opts.length - 1 : 1)) % G.opts.length; G.t0 = now(); render(); return; }
+      if (k === 'Enter') { e.preventDefault(); answer(G.sel); return; }
+    }
+    if (k === 'p' || k === 'P') { e.preventDefault(); act('pause'); return; }
+    if (k === 'Escape') { e.preventDefault(); act('esc'); }
+  });
+  let RESIZE = null;
+  window.addEventListener('resize', () => { clearTimeout(RESIZE); RESIZE = setTimeout(() => { fitText(); render(); }, 80); });
+  fitText();
+  setInterval(tick, 80);
+  run(0);
+  render();
+} else if (typeof globalThis !== 'undefined') {
+  globalThis.__agents = { S, tick, frame, answer, run, queueStop, width, get VT() { return VT; } };
+}
+</script>
+</body>
+</html>

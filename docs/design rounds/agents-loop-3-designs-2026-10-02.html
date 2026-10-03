@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agents loop designs</title>
+<style>
+/* Layout: one column. The controls, then the three designs as live terminals, all from one pretend run.
+   One dark look on purpose, like the other design rounds: the subject is a dark terminal. */
+:root{
+  color-scheme:dark;
+  --bg:#0f1113; --panel:#161a1d; --raise:#1c2125; --line:#2a3036; --text:#e6e8ea; --dim:#9aa3ad; --accent:#87d787; --ink:#0b0d0e;
+  --term:#1d1f21; --bar:#26292c;
+  /* the app's xterm-256 colours (terminal/src/ui/theme.mjs, rail.jsx) */
+  --t-fg:#d0d0d0; --t-white:#eeeeee; --t-accent:#87d787; --t-accentDim:#5faf5f; --t-dim:#8a8a8a; --t-faint:#585858;
+  --t-border:#6c6c6c; --t-rail:#767676; --t-strip:#303030; --t-path:#bcbcbc; --t-warn:#ffaf5f; --t-bad:#ff5f5f;
+  --t-edits:#af87ff; --t-plan:#5fafaf; --t-auto:#d7af5f; --t-wait:#5f875f;
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:14px/1.5 var(--ui);padding-block:20px 40px;padding-inline:16px}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-direction:column;gap:4px}
+header .top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0;font-weight:650;letter-spacing:-.02em;text-wrap:balance}
+h2{font-size:16px;margin:0;font-weight:650;letter-spacing:-.01em;text-wrap:balance}
+.date{color:var(--dim);font-size:13px}
+.lede{color:var(--dim);margin:0;max-width:80ch}
+kbd{background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:0 5px;font:12px var(--mono);color:var(--text)}
+code{font:12.5px var(--mono);color:#cfe3d5}
+
+/* controls */
+.controls{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center}
+.controls .k{color:var(--dim);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.chip{background:var(--raise);color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:4px 11px;font:inherit;font-size:13px;cursor:pointer;line-height:1.35}
+.chip:hover{color:var(--text);border-color:#3a434b}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:600}
+.chip.stop{color:#f3c79a;border-color:#4a3a2a}
+.chip.stop:hover{border-color:#7a5a3a}
+.chip:focus-visible,.term:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chip kbd{background:transparent;border-color:currentColor;margin-right:5px;font-size:11px}
+.chip.do{color:var(--text)}
+.hint{grid-column:1/-1;color:var(--dim);font-size:12.5px;margin:2px 0 0}
+.notice{grid-column:1/-1;color:#f3c79a;font-size:12.5px;margin:0;min-height:1.5em}
+@media (min-width:900px) and (min-height:860px){.controls{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 8px 24px #0009}}
+@media (max-width:640px){.controls{grid-template-columns:1fr}.controls .k{margin-top:6px}}
+
+/* a design */
+.design{display:flex;flex-direction:column;gap:10px}
+.design .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.design .num{font:600 13px var(--mono);color:var(--ink);background:var(--accent);border-radius:6px;padding:1px 7px}
+.design .tag{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:0 8px}
+.design p{margin:0;color:var(--dim);max-width:80ch}
+.notes{margin:0;padding-left:18px;color:var(--dim);font-size:13.5px;max-width:90ch;display:flex;flex-direction:column;gap:3px}
+.notes b{color:var(--text);font-weight:600}
+.shared{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.shared h2{margin-bottom:6px}
+
+/* the terminal */
+.termwrap{min-width:0;overflow-x:auto}
+.term{background:var(--term);border:1px solid var(--line);border-radius:10px;width:max-content;max-width:none;cursor:text}
+.term .bar{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid #2b2e31;background:var(--bar);border-radius:10px 10px 0 0;font:11.5px var(--ui);color:#8d949b}
+.term .bar i{width:10px;height:10px;border-radius:50%;background:#3c4044;display:inline-block}
+.term .bar span{flex:1;text-align:center;margin-right:46px}
+.screen{font:13px/1.34 var(--mono);color:var(--t-fg);padding:6px 1ch 4px;white-space:pre}
+.ln{min-height:1.34em;overflow:hidden}
+.strip{background:var(--t-strip)}
+.c-fg{color:var(--t-fg)}.c-white{color:var(--t-white)}.c-accent{color:var(--t-accent)}.c-accentDim{color:var(--t-accentDim)}
+.c-dim{color:var(--t-dim)}.c-faint{color:var(--t-faint)}.c-border{color:var(--t-border)}.c-rail{color:var(--t-rail)}
+.c-path{color:var(--t-path)}.c-warn{color:var(--t-warn)}.c-bad{color:var(--t-bad)}.c-wait{color:var(--t-wait)}
+.c-edits{color:var(--t-edits)}.c-plan{color:var(--t-plan)}.c-auto{color:var(--t-auto)}
+.inv{background:var(--t-fg);color:var(--term)}
+.foot{color:var(--dim);font-size:13.5px;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top"><h1>/agents · the live loop</h1><span class="date">2 Oct 2026 · three designs of the loop ring on a pretend service · not picked yet</span></div>
+    <p class="lede">/agents takes one request through six stages: Define → Plan → Build → Verify → Review → Ship. Each stage is a ring of four steps that goes round once per item: a question, a part of the plan, a task, a check, a review area, the reviewers. It never commits: each finished task saves a rewind point. The plan gate is the one yes it needs, and it stops and asks when something on the stop list comes up. All three designs below are drawn from the same live run. Pick the work, press a stop, and answer in any terminal.</p>
+  </header>
+
+  <section class="controls" aria-label="Controls">
+    <span class="k">Window</span>
+    <div class="chips">
+      <button class="chip" data-cols="80">80 cols</button><button class="chip" data-cols="100">100</button><button class="chip" data-cols="120">120</button>
+    </div>
+    <span class="k">Work</span>
+    <div class="chips">
+      <button class="chip" data-scen="math">Math · Kepler solver (Python)</button>
+      <button class="chip" data-scen="code">Coding · upload retry (JavaScript)</button>
+    </div>
+    <span class="k">Speed</span>
+    <div class="chips">
+      <button class="chip" data-speed="1">1×</button><button class="chip" data-speed="2">2×</button><button class="chip" data-speed="4">4×</button>
+    </div>
+    <span class="k">Jump to</span>
+    <div class="chips">
+      <button class="chip" data-jump="0">01 Define</button><button class="chip" data-jump="1">02 Plan</button><button class="chip" data-jump="2">03 Build</button>
+      <button class="chip" data-jump="3">04 Verify</button><button class="chip" data-jump="4">05 Review</button><button class="chip" data-jump="5">06 Ship</button>
+    </div>
+    <span class="k">Make it stop</span>
+    <div class="chips">
+      <button class="chip stop" data-stop="tol" id="tolChip">Tolerance loosened</button>
+      <button class="chip stop" data-stop="pkg">New package</button>
+      <button class="chip stop" data-stop="big">Big diff</button>
+      <button class="chip stop" data-stop="list" id="listChip">Deletes a file</button>
+      <button class="chip stop" data-stop="stuck">Test won't pass</button>
+      <button class="chip stop" data-stop="critical">Critical finding</button>
+    </div>
+    <span class="k">Do</span>
+    <div class="chips">
+      <button class="chip do" data-act="pause" id="pauseChip"><kbd>p</kbd>Pause</button>
+      <button class="chip do" data-act="first"><kbd>1</kbd>First choice</button>
+      <button class="chip do" data-act="esc" id="escChip"><kbd>esc</kbd>Back to the chat</button>
+      <button class="chip do" data-act="restart">Restart</button>
+      <button class="chip" id="autoChip" aria-pressed="false">Answer for me</button>
+    </div>
+    <p class="hint">Click a terminal to type in it: <kbd>1</kbd>–<kbd>3</kbd>, or <kbd>↑</kbd><kbd>↓</kbd> and <kbd>enter</kbd>, answer a stop or the plan gate; <kbd>p</kbd> pauses; <kbd>esc</kbd> goes back to the chat while the run keeps going. The interview's answers are pretend: the first choice is picked after 2 s. The plan gate and the stops wait for you, unless Answer for me is on.</p>
+    <p class="notice" id="notice" aria-live="polite"></p>
+  </section>
+
+  <section class="design" aria-label="Design 1">
+    <div class="head"><span class="num">1</span><h2>The ring</h2><span class="tag">as picked</span></div>
+    <p>Your pick, as drawn: the ring, with an arrow from the step it is on to what it is doing, then three lines under it and the stages at the bottom.</p>
+    <div class="termwrap"><div class="term" id="t1" tabindex="0" aria-label="Design 1, a live terminal"><div class="bar"><i></i><i></i><i></i><span>coding</span></div><div class="screen"></div></div></div>
+    <ul class="notes">
+      <li><b>The way out of a step fills as the step goes,</b> so you can see how far along it is. The steps it has finished stay lit for this time round; a miss turns its node red with ✗ and adds one to the loop count.</li>
+      <li><b>The three lines under the ring:</b> the loop and its last miss (or your last answer), the command running now, and the doubt review of the latest tasks.</li>
+      <li><b>The shortest of the three</b> (13 rows), so the request stays in view above it.</li>
+    </ul>
+  </section>
+
+  <section class="design" aria-label="Design 2">
+    <div class="head"><span class="num">2</span><h2>Ring and rail</h2></div>
+    <p>A rail on the left holds the six stages and every item of the current one (questions, parts, tasks, checks, areas, reviewers), each with its result. A smaller ring on the right shows the step it is on.</p>
+    <div class="termwrap"><div class="term" id="t2" tabindex="0" aria-label="Design 2, a live terminal"><div class="bar"><i></i><i></i><i></i><span>coding</span></div><div class="screen"></div></div></div>
+    <ul class="notes">
+      <li><b>The whole run at a glance:</b> which tasks are done, which one is on its second try, which doubt reviews held, which task was left open or split in two.</li>
+      <li><b>Each stage gives a summary when it ends:</b> SPEC.md, the number of tasks, the review's critical · important · suggestion counts, and GO.</li>
+      <li><b>The tallest</b> (18 rows). When a stop opens, the list scrolls so the current item stays in view.</li>
+    </ul>
+  </section>
+
+  <section class="design" aria-label="Design 3">
+    <div class="head"><span class="num">3</span><h2>Ring and log</h2></div>
+    <p>A comet keeps going round the ring while it works. Beside the ring is a "now" box, and under it a log of every step with its time, the way a CI run reads.</p>
+    <div class="termwrap"><div class="term" id="t3" tabindex="0" aria-label="Design 3, a live terminal"><div class="bar"><i></i><i></i><i></i><span>coding</span></div><div class="screen"></div></div></div>
+    <ul class="notes">
+      <li><b>The comet shows it is working:</b> quick while the model writes, slow while a command runs. It stops in amber at a stop and in grey when paused.</li>
+      <li><b>The log keeps everything:</b> each step, each miss, each stop with your answer, and each doubt review, so you can read back what happened when you get back.</li>
+      <li><b>The "now" box</b> has the step and try, what it is doing, the command, the doubt review and the counts.</li>
+    </ul>
+  </section>
+
+  <section class="shared" aria-label="In all three">
+    <h2>The same in all three</h2>
+    <ul class="notes">
+      <li><b>Never commits.</b> SAVE leaves a rewind point after each task; at the end, GO comes with "Rollback: /rewind to point 0" and "nothing committed: read git diff, then commit it yourself".</li>
+      <li><b>The stop list:</b> the poster's list (auth, migrations, payments, deploys, secrets, deletions, a test that won't pass), the math guards (an expected value or a tolerance changed in a test, a constant from your MATH notes edited), a new package, and a big diff (over 100 lines or 3 files in one task). A stop takes the prompt box's place and waits for you.</li>
+      <li><b>The plan gate</b> takes only "1 Yes, build it": "looks fine" is not a yes. "Change it" goes back to WRITE and asks again; "Show the plan" lists the tasks in the box.</li>
+      <li><b>Doubt review</b> after each task: the second-opinion model tries to disprove that task's claim while the next task starts, and the result ("held" or "fixed") comes in when it is ready.</li>
+      <li><b>A critical finding</b> in Review goes back to Build for one fix task, then on again (the poster's "fix and re-run"); in Ship it is NO-GO until it is fixed.</li>
+    </ul>
+  </section>
+
+  <p class="foot">Pick 1, 2 or 3 in the chat, or a mix, such as design 2's rail with design 3's comet.</p>
+</div>
+
+<script>
+// ---------- the two pieces of work ----------
+const SCEN = {
+  math: {
+    title: 'Kepler solver',
+    request: 'build a Kepler solver: where an orbit is at time t',
+    test: (f) => `python3 -m pytest ${f}`,
+    suite: 'python3 -m pytest',
+    checkAct: 'the whole suite, then Newton against bisection',
+    checkMore: 'bisection agrees to 1e−13',
+    define: [
+      { q: 'What does it take in?', opts: ['a, e, i, Ω, ω, M0 and a time t', 'a position and a velocity', 'Something else: I will type it'], part: 'Inputs', short: 'a e i Ω ω M0 t' },
+      { q: 'Which orbits?', opts: ['ellipses only: 0 ≤ e < 1', 'ellipses and hyperbolas', 'Something else: I will type it'], part: 'Scope', short: '0 ≤ e < 1' },
+      { q: 'How exact must E be?', opts: ['|E − e·sin E − M| ≤ 1e−12', '1e−9 is enough', 'Something else: I will type it'], part: 'Tolerance', short: '≤ 1e−12' },
+      { q: 'What is it checked against?', opts: ['known values and a slow bisection', 'known values only', 'Something else: I will type it'], part: 'Checks', short: 'values + bisection' },
+    ],
+    specDone: 'SPEC.md: 5 parts · CONSTRAINTS.md: 1e−12, standard library only',
+    plan: [
+      { title: 'Inputs', look: 'SPEC.md ## Inputs', n: 1 },
+      { title: 'Solver', look: 'SPEC.md ## Tolerance', n: 2 },
+      { title: 'Position', look: 'SPEC.md ## Scope', n: 2 },
+      { title: 'Checks and output', look: 'SPEC.md ## Checks', n: 2 },
+    ],
+    replan: 'add a check at e = 0, a circle',
+    tasks: [
+      { title: 'Parse the elements', file: 'kepler.py', tf: 'tests/test_elements.py', test: 'rejects e ≥ 1', add: 24, del: 0, claim: 'e = 1 exactly is rejected', doubt: 'e = 1.0 raises ValueError' },
+      { title: 'Mean anomaly at t', file: 'kepler.py', tf: 'tests/test_kepler.py', test: 'M wraps to [0, 2π)', add: 18, del: 2, claim: 'a negative t wraps too', doubt: 't = −1 day gives M in [0, 2π)' },
+      { title: 'Kepler solver', file: 'kepler.py', tf: 'tests/test_kepler.py', test: 'solves e = 0.9 within 1e−12', add: 38, del: 4, miss: '|E − M − e·sin E| = 3e−9 (wants ≤ 1e−12)', fix: 'start Newton at E0 = π when e > 0.8', claim: 'it converges for every e < 1', doubt: 'e = 0.999, M = 1e−6 converges in 9 steps' },
+      { title: 'True anomaly', file: 'kepler.py', tf: 'tests/test_kepler.py', test: 'ν matches the atan2 form at 8 points', add: 16, del: 0, claim: 'ν is in [0, 2π)', doubt: 'E = π exactly gives ν = π' },
+      { title: 'Position vector', file: 'orbit.py', tf: 'tests/test_orbit.py', test: 'r = a(1 − e·cos E)', add: 31, del: 0, claim: 'i = 0 needs no special case', doubt: 'i = 0 leaves Ω undefined: a test added, then it passed', doubtFix: true },
+      { title: 'Energy is kept', file: 'tests/test_orbit.py', tf: 'tests/test_orbit.py', test: 'v²/2 − μ/r the same at 1,000 times', add: 22, del: 0, claim: 'the drift stays under 1e−12', doubt: 'e = 0.99 near perigee drifts 4e−13' },
+      { title: 'Print the orbit', file: 'cli.py', tf: 'tests/test_cli.py', test: 'prints x, y, z to 12 digits', add: 27, del: 0, claim: 'the output is the same each run', doubt: 'two runs, the same 12 digits' },
+    ],
+    stuckMiss: (t) => `${t.test}: off by 4e−9`,
+    verify: [
+      { title: 'The whole suite', s: ['python3 -m pytest', '23 passed in 0.8 s'], r: ['python3 cli.py --example vallado-2-4', 'x = −6,045.0 km, y = −3,490.4 km: the book’s, to 0.1 km'], x: ['Newton against bisection at 10,000 points', 'largest |ΔE| = 2e−15'], p: 'before: task 3’s test failed · now: 23 passed' },
+      { title: 'Edge orbits', s: ['python3 -m pytest -k edge', '6 passed'], r: ['python3 cli.py --e 0.999 --t 0', 'at perigee, r = a(1 − e) exactly'], x: ['the closed form at e = 0, a circle', 'E = M exactly'], p: 'e = 0, e → 1, t < 0 and one whole period: all shown' },
+    ],
+    areas: [
+      { title: 'Correctness', f: null },
+      { title: 'Stability', f: { lvl: 'important', at: 'kepler.py:41', text: '1 − e·cos E nears 0 as e → 1: cap the Newton step at ±1' } },
+      { title: 'Precision', f: { lvl: 'suggestion', at: 'kepler.py:12', text: 'wrap M with math.fmod, not %, for t < 0' } },
+      { title: 'Speed', f: { lvl: 'suggestion', at: 'kepler.py:30', text: '50 steps at most, when 8 reach 1e−12' } },
+      { title: 'Readability', f: null },
+    ],
+    ship: { code: 'no blockers; 1 important from Review', security: 'no input reaches a shell or a file path', tests: '23 tests; each SPEC.md check has one' },
+    stops: {
+      tol: { chip: 'Tolerance loosened', title: 'Math guard', detail: 'tests/test_kepler.py:18 changes the tolerance from 1e−12 to 1e−6.', opts: ['Put it back and try another way', 'Allow it this once', 'Tell it what to do'], tell: 'keep 1e−12; start Newton from a better guess' },
+      pkg: { title: 'New package', detail: 'It wants to add numpy. CONSTRAINTS.md says standard library only.', opts: ['No: use what is installed', 'I will install it: wait for me', 'Tell it what to do'], tell: 'use math only and write the bisection yourself' },
+      big: { title: 'Big diff', detail: 'This task is at 138 lines in 4 files (the limit: 100 lines, 3 files).', opts: ['Split the task in two', 'Allow it this once', 'Tell it what to do'], tell: 'move the bisection check to a task of its own' },
+      list: { chip: 'Deletes a file', title: 'Deletion', detail: 'It wants to delete old_solver.py, which notebook.py still imports.', opts: ['Keep the file', 'Delete it', 'Tell it what to do'], tell: 'keep it; notebook.py still uses it' },
+      stuck: { title: 'Test won’t pass', detail: '3 tries, and the covering test still fails by 4e−9.', opts: ['Give it a hint', 'Leave the task open and go on', 'Stop /agents'], tell: 'for e > 0.8, start at E0 = π' },
+    },
+    critical: { at: 'kepler.py:44', text: 'e = 0.9999 loops for ever: the step never shrinks', fix: 'Fix: the step never shrinks', file: 'kepler.py', tf: 'tests/test_kepler.py', test: 'e = 0.9999 ends in 50 steps', claim: 'every e < 1 ends', doubt: 'e = 0.99999 ends in 14 steps' },
+  },
+  code: {
+    title: 'Upload retry',
+    request: 'make the upload client retry on 5xx, with a backoff capped at 30 s',
+    test: (f) => `bun test ./${f}`,
+    suite: 'bun test',
+    checkAct: 'the whole suite and the build',
+    checkMore: 'build ok',
+    define: [
+      { q: 'Which failures retry?', opts: ['5xx and network errors, not 4xx', 'every error', 'Something else: I will type it'], part: 'Scope', short: '5xx + network' },
+      { q: 'How many tries?', opts: ['6, then give up with the last error', 'until it works', 'Something else: I will type it'], part: 'Limits', short: '6 tries' },
+      { q: 'How long between tries?', opts: ['1 s doubling, at most 30 s, ±10% jitter', 'always 5 s', 'Something else: I will type it'], part: 'Backoff', short: '1 s ×2, ≤ 30 s' },
+      { q: 'How is it checked?', opts: ['bun test with fake timers', 'against a real server', 'Something else: I will type it'], part: 'Checks', short: 'fake timers' },
+    ],
+    specDone: 'SPEC.md: 5 parts · CONSTRAINTS.md: no new packages',
+    plan: [
+      { title: 'Scope', look: 'src/upload.mjs', n: 1 },
+      { title: 'Backoff', look: 'SPEC.md ## Backoff', n: 3 },
+      { title: 'Limits', look: 'SPEC.md ## Limits', n: 1 },
+      { title: 'Abort', look: 'src/client.mjs', n: 1 },
+    ],
+    replan: 'test a 429 too',
+    tasks: [
+      { title: 'Retry on 5xx', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', test: 'retries a 503, not a 404', add: 22, del: 3, claim: 'a 4xx never retries', doubt: 'a 429 is not retried, as SPEC.md says' },
+      { title: 'Doubling backoff', file: 'src/backoff.mjs', tf: 'test/backoff.test.mjs', test: 'waits 1, 2, 4 s', add: 15, del: 0, claim: 'the first wait is 1 s', doubt: 'with fake timers the first wait is 1.0 s' },
+      { title: 'Cap at 30 s', file: 'src/backoff.mjs', tf: 'test/backoff.test.mjs', test: 'never waits more than 30 s', add: 12, del: 2, miss: 'waited 32.1 s on try 6 (wants ≤ 30)', fix: 'apply the cap after the jitter, not before', claim: 'no wait is over 30 s', doubt: '+10% jitter at the cap still waits 30 s' },
+      { title: 'Jitter', file: 'src/backoff.mjs', tf: 'test/backoff.test.mjs', test: 'jitter stays in ±10% (seed 7)', add: 19, del: 1, claim: 'the same seed gives the same waits', doubt: 'two runs with seed 7 wait the same' },
+      { title: 'Give up after 6', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', test: 'gives up with the last error', add: 17, del: 0, claim: 'the last error is the one thrown', doubt: 'the error of try 6 is thrown' },
+      { title: 'Abort stops waiting', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', test: 'abort during a wait ends it', add: 26, del: 1, claim: 'no timer is left behind', doubt: 'abort, then 60 s of fake time: a timer still fired; cleared, then it passed', doubtFix: true },
+    ],
+    stuckMiss: (t) => `${t.test}: expected 30000, got 32100`,
+    verify: [
+      { title: 'The whole suite', s: ['bun test', '48 pass · 0 fail'], r: ['bun run upload --fake 503,503,200', 'tried 3 times, waited 1.0 s and 2.1 s, then 200'], x: ['a 4xx, an abort mid-wait, 0 tries', 'each as SPEC.md says'], p: 'before: no retry · now: 48 pass and the pretend 503s retried' },
+      { title: 'The old callers', s: ['bun test ./test/compat.test.mjs', '9 pass'], r: ['bun run upload --fake 200', 'one call, no wait, as before'], x: ['every caller of upload()', 'the same results'], p: 'nothing changed for a first-try success' },
+    ],
+    areas: [
+      { title: 'Correctness', f: null },
+      { title: 'Readability', f: { lvl: 'suggestion', at: 'src/backoff.mjs:8', text: 'name 30000 MAX_WAIT_MS' } },
+      { title: 'Architecture', f: null },
+      { title: 'Security', f: { lvl: 'important', at: 'src/upload.mjs:52', text: 'the retry log prints the auth header: leave it out' } },
+      { title: 'Performance', f: { lvl: 'suggestion', at: 'src/upload.mjs:40', text: 'the body is read again each try: keep the buffer' } },
+    ],
+    ship: { code: 'no blockers; 1 important from Review', security: 'the auth header in a log line (important, listed)', tests: '48 tests; fake timers, no real waits' },
+    stops: {
+      tol: { chip: 'Expected value changed', title: 'Test guard', detail: 'test/backoff.test.mjs:31 changes the expected wait from 30000 to 32000.', opts: ['Put it back and try another way', 'Allow it this once', 'Tell it what to do'], tell: 'keep 30000; cap after the jitter' },
+      pkg: { title: 'New package', detail: 'It wants to add p-retry. CONSTRAINTS.md says no new packages.', opts: ['No: use what is installed', 'I will install it: wait for me', 'Tell it what to do'], tell: 'write the loop yourself, it is twenty lines' },
+      big: { title: 'Big diff', detail: 'This task is at 138 lines in 4 files (the limit: 100 lines, 3 files).', opts: ['Split the task in two', 'Allow it this once', 'Tell it what to do'], tell: 'keep the client change and the logger change apart' },
+      list: { chip: 'Reads .env', title: 'Secrets', detail: 'It wants to read .env for the upload token.', opts: ['Don’t read it', 'Allow it this once', 'Tell it what to do'], tell: 'use the fake token in test/fixtures' },
+      stuck: { title: 'Test won’t pass', detail: '3 tries, and the covering test still waits 32.1 s.', opts: ['Give it a hint', 'Leave the task open and go on', 'Stop /agents'], tell: 'cap the wait after adding the jitter' },
+    },
+    critical: { at: 'src/upload.mjs:47', text: 'a 503 with Retry-After: 3600 waits an hour', fix: 'Fix: cap Retry-After at 30 s', file: 'src/upload.mjs', tf: 'test/upload.test.mjs', test: 'Retry-After: 3600 waits 30 s', claim: 'no header makes it wait over 30 s', doubt: 'Retry-After as a date waits 30 s too' },
+  },
+};
+
+// ---------- what is drawn ----------
+const MODEL = 'qwen3-coder-next', WHERE = '203.0.113.7:60009', ROWS = 24;
+const ORBIT = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const STAGES = [
+  { name: 'Define', nodes: ['ASK', 'ANSWER', 'WRITE', 'CHECK'], cls: ['c-plan', 'c-white', 'c-edits', 'c-accent'], unit: 'questions' },
+  { name: 'Plan', nodes: ['LOOK', 'SPLIT', 'CHECKS', 'WRITE'], cls: ['c-plan', 'c-white', 'c-auto', 'c-edits'], unit: 'parts' },
+  { name: 'Build', nodes: ['RED', 'GREEN', 'CHECK', 'SAVE'], cls: ['c-bad', 'c-accent', 'c-plan', 'c-edits'], unit: 'tasks' },
+  { name: 'Verify', nodes: ['SUITE', 'RUN', 'CROSS', 'PROOF'], cls: ['c-plan', 'c-white', 'c-auto', 'c-accent'], unit: 'checks' },
+  { name: 'Review', nodes: ['READ', 'FIND', 'SHOW', 'GRADE'], cls: ['c-plan', 'c-auto', 'c-white', 'c-edits'], unit: 'areas' },
+  { name: 'Ship', nodes: ['CODE', 'SECURITY', 'TESTS', 'MERGE'], cls: ['c-plan', 'c-bad', 'c-auto', 'c-accent'], unit: 'reviewers' },
+];
+const TAGCLS = { STOP: 'c-warn', DOUBT: 'c-auto', YOU: 'c-white', PLAN: 'c-accent', STAGE: 'c-plan', SHIP: 'c-accent' };
+const LVL = { critical: 'Critical', important: 'Important', suggestion: 'Suggestion' };
+const LVLCLS = { critical: 'c-bad', important: 'c-warn', suggestion: 'c-dim' };
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const X = () => SCEN[S.scen];
+const nodesOf = (k) => (k === 3 && S.scen === 'code' ? ['SUITE', 'RUN', 'EDGES', 'PROOF'] : STAGES[k].nodes);
+
+const S = {
+  cols: 80, scen: 'math', speed: 1, paused: false, chat: false, auto: false,
+  stage: 0, item: 0, items: [[], [], [], [], [], []],
+  nodes: ['todo', 'todo', 'todo', 'todo'], edges: [false, false, false, false], active: [],
+  stepT0: 0, stepDur: 1, act: '', cmd: '', noteA: [], noteC: [], lastRun: [],
+  tries: 1, diff: 0, stops: 0, rewind: 0, find: { critical: 0, important: 0, suggestion: 0, fixed: 0 },
+  log: [], queue: [], gate: null, verdict: null, vt0: 0, base: 0, endVT: null, comet: 0, notice: '',
+};
+
+// ---------- small helpers ----------
+const g = (t, c = '') => ({ t: String(t), c });
+const len = (s) => [...s].length;
+const width = (segs) => segs.reduce((n, s) => n + len(s.t), 0);
+const spaces = (n) => g(' '.repeat(Math.max(0, n)));
+const L_ = (segs = [], cls = '') => ({ segs, cls });
+function cut(segs, w) {
+  if (width(segs) <= w) return segs;
+  if (w <= 0) return [];
+  const out = []; let n = 0;
+  for (const s of segs) {
+    const cs = [...s.t];
+    if (n + cs.length <= w - 1) { out.push(s); n += cs.length; continue; }
+    out.push(g(cs.slice(0, w - 1 - n).join('') + '…', s.c)); break;
+  }
+  return out;
+}
+// left and right halves of one row, the left cut first
+function lr(left, right, w) {
+  const r = cut(right, w);
+  const l = cut(left, Math.max(0, w - width(r) - (width(r) ? 2 : 0)));
+  return [...l, spaces(w - width(l) - width(r)), ...r];
+}
+// parts joined by a gap, the last ones left out until they fit
+function fit(parts, w, gap = '   ') {
+  for (let k = parts.length; k > 0; k--) {
+    const segs = parts.slice(0, k).flatMap((p, i) => (i ? [g(gap), ...p] : p));
+    if (width(segs) <= w) return segs;
+  }
+  return cut(parts[0] ?? [], w);
+}
+function wrap(text, w) {
+  const out = []; let line = '';
+  for (const word of String(text).split(' ')) {
+    if (!line) line = word;
+    else if (len(line) + 1 + len(word) <= w) line += ` ${word}`;
+    else { out.push(line); line = word; }
+  }
+  if (line) out.push(line);
+  return out;
+}
+const mmss = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const elapsed = () => Math.max(0, ((S.endVT ?? VT) - S.vt0) * 6 + S.base);
+function stamp() {
+  const s = 12 * 3600 + 4 * 60 + elapsed();
+  return [Math.floor(s / 3600), Math.floor(s / 60) % 60, Math.floor(s) % 60].map((n) => String(n).padStart(2, '0')).join(':');
+}
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const spinGlyph = () => (S.paused || S.gate ? '·' : ORBIT[Math.floor(now() / 90) % ORBIT.length]);
+const pulse = () => (REDUCED || S.paused || Math.floor(now() / 450) % 2 ? 'c-accent' : 'c-accentDim');
+const stopped = () => S.gate?.kind === 'stop';
+const ok = (cmd, res) => [g('✓ ', 'c-accent'), g(`${cmd} · ${res}`, 'c-dim')];
+
+// ---------- the pretend clock: it runs at the chosen speed, and stops at a pause or a question ----------
+const CANCEL = Symbol('cancel'), STOPPED = Symbol('stopped');
+let VT = 0, RUNID = 0, WAITERS = [];
+function vsleep(secs, id) {
+  return new Promise((res, rej) => { if (id !== RUNID) return rej(CANCEL); WAITERS.push({ at: VT + secs, res, rej, id }); });
+}
+function flush() {
+  const keep = [];
+  for (const w of WAITERS) {
+    if (w.id !== RUNID) w.rej(CANCEL);
+    else if (w.at <= VT) w.res();
+    else keep.push(w);
+  }
+  WAITERS = keep;
+}
+function ask(id, gate) {
+  return new Promise((res, rej) => {
+    if (id !== RUNID) return rej(CANCEL);
+    S.gate = { ...gate, sel: 0, res, rej, t0: now() };
+    render();
+  });
+}
+function answer(n) {
+  const G = S.gate;
+  if (!G || n < 0 || n >= G.opts.length) return;
+  S.gate = null; G.res(n); render();
+}
+const later = (id, secs, fn) => vsleep(secs, id).then(fn, () => {});
+const take = (k) => { const i = S.queue.indexOf(k); if (i < 0) return false; S.queue.splice(i, 1); return true; };
+
+// ---------- the run ----------
+function resetRing() { S.nodes = ['todo', 'todo', 'todo', 'todo']; S.edges = [false, false, false, false]; S.active = []; }
+function enter(k, items) {
+  S.stage = k; S.item = 0;
+  S.items[k] = items.map((x) => ({ state: 'todo', flag: '', flagCls: 'c-dim', ...x }));
+  resetRing(); S.act = ''; S.cmd = ''; S.noteA = []; S.noteC = []; S.lastRun = []; S.tries = 1; S.diff = 0;
+}
+function begin(i) { S.item = i; S.items[S.stage][i].state = 'now'; resetRing(); S.tries = 1; }
+function startNode(n, total) { S.nodes[n] = 'now'; S.active = [n]; S.stepT0 = VT; S.stepDur = total; }
+function nodeDone(n, state = 'done') { S.nodes[n] = state; if (state === 'done') S.edges[n] = true; S.active = S.active.filter((x) => x !== n); }
+async function work(id, secs, o = {}) {
+  if (o.act !== undefined) S.act = o.act;
+  S.cmd = o.cmd ?? '';
+  await vsleep(secs, id);
+  S.cmd = '';
+  await stopPoint(id);
+}
+function log(tag, text, cls = 'c-fg') {
+  const i = typeof tag === 'number' ? tag : -1;
+  S.log.push({ t: stamp(), tag: i >= 0 ? nodesOf(S.stage)[i] : tag, tc: i >= 0 ? STAGES[S.stage].cls[i] : TAGCLS[tag] ?? 'c-dim', text, cls });
+  if (S.log.length > 80) S.log.splice(0, S.log.length - 80);
+}
+
+// A stop: the node it is on turns amber, the box asks, and the answer is acted on.
+async function stopPoint(id) {
+  for (const k of ['tol', 'pkg', 'big', 'list']) if (take(k)) await stopGate(id, k);
+}
+async function stopGate(id, k) {
+  const st = X().stops[k], held = S.active.slice(), t = S.stage === 2 ? S.items[2][S.item] : null;
+  for (const n of held) S.nodes[n] = 'stop';
+  if (k === 'big') S.diff = 138;
+  S.stops++;
+  log('STOP', `${st.title}: ${st.detail}`, 'c-warn');
+  const n = await ask(id, { kind: 'stop', title: `Stop · ${st.title}`, detail: st.detail, opts: st.opts });
+  for (const x of held) if (S.nodes[x] === 'stop') S.nodes[x] = 'now';
+  log('YOU', n === 2 ? `“${st.tell}”` : st.opts[n], 'c-white');
+  if (k === 'big' && t) {
+    S.diff = t.add + t.del;
+    if (n === 0) {
+      const half = Math.ceil(t.add / 2);
+      S.items[2].splice(S.item + 1, 0, { ...t, title: `${t.title} (2 of 2)`, add: t.add - half, state: 'todo', miss: null, missed: false, doubt: null, flag: '' });
+      t.title = `${t.title} (1 of 2)`; t.add = half; S.diff = t.add + t.del;
+      log('PLAN', 'split in two; tasks/plan.md updated', 'c-fg');
+    }
+  }
+  return n;
+}
+
+async function runDefine(id) {
+  const D = X().define;
+  enter(0, D.map((d) => ({ title: d.part })));
+  for (let i = 0; i < D.length; i++) {
+    const d = D[i]; begin(i);
+    startNode(0, 1.0); await work(id, 1.0, { act: `Ask: ${d.q}` });
+    log(0, `“${d.q}”`); nodeDone(0);
+    startNode(1, 1); S.act = 'waiting for your answer';
+    const n = await ask(id, { kind: 'ask', title: `Question ${i + 1} of ${D.length}`, detail: d.q, opts: d.opts });
+    const ans = n === 2 ? `${d.opts[0]} (typed)` : d.opts[n];
+    S.items[0][i].flag = n === 0 ? d.short : n === 1 ? d.opts[1] : 'typed';
+    log(1, ans, 'c-white');
+    S.noteA = [g('you: ', 'c-dim'), g(ans, 'c-white')];
+    nodeDone(1);
+    startNode(2, 1.0); await work(id, 1.0, { act: `Write SPEC.md ## ${d.part}` });
+    log(2, `SPEC.md ## ${d.part}`); S.lastRun = [g('✎ ', 'c-edits'), g(`SPEC.md ## ${d.part}`, 'c-dim')]; nodeDone(2);
+    startNode(3, 0.7); await work(id, 0.7, { act: 'Check it against the goal' });
+    log(3, 'it matches the goal'); nodeDone(3);
+    S.items[0][i].state = 'done';
+    S.noteC = [g(`SPEC.md: ${i + 1} of ${D.length + 1} parts`, 'c-dim')];
+  }
+  S.noteC = [g(X().specDone, 'c-dim')];
+  log('STAGE', X().specDone, 'c-dim');
+}
+
+async function runPlan(id) {
+  const P = X().plan, T = X().tasks;
+  enter(1, P.map((p) => ({ title: p.title })));
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i]; begin(i);
+    startNode(0, 0.9); await work(id, 0.9, { act: `Read ${p.look}`, cmd: '' }); log(0, `Read ${p.look}`); nodeDone(0);
+    startNode(1, 0.9); await work(id, 0.9, { act: `${p.n} task${p.n > 1 ? 's' : ''} for ${p.title.toLowerCase()}` }); log(1, `${p.n} task${p.n > 1 ? 's' : ''} for ${p.title.toLowerCase()}`); nodeDone(1);
+    startNode(2, 0.8); await work(id, 0.8, { act: 'a check for each task' }); log(2, 'each task gets the test that proves it'); nodeDone(2);
+    startNode(3, 0.6); await work(id, 0.6, { act: 'tasks/plan.md, tasks/todo.md' }); log(3, 'tasks/plan.md · tasks/todo.md'); nodeDone(3);
+    S.items[1][i].state = 'done'; S.items[1][i].flag = `${p.n} task${p.n > 1 ? 's' : ''}`;
+    S.noteA = [g(`${P.slice(0, i + 1).reduce((n, x) => n + x.n, 0)} tasks so far, in the order they depend on`, 'c-dim')];
+  }
+  let detail = `${T.length} tasks in tasks/plan.md, each with its check. Only 1 builds it: “looks fine” is not a yes.`;
+  S.act = 'waiting for your yes';
+  for (;;) {
+    const n = await ask(id, { kind: 'plan', title: 'Approve the plan', detail, opts: ['Yes, build it', 'Change it: say what', 'Show the plan'] });
+    if (n === 0) { log('PLAN', 'approved by you: the one gate', 'c-accent'); break; }
+    if (n === 1) {
+      log('YOU', `“${X().replan}”`, 'c-white');
+      startNode(3, 0.8); await work(id, 0.8, { act: 'tasks/plan.md again' }); log(3, 'tasks/plan.md, changed'); nodeDone(3);
+      detail = `Changed: ${X().replan}. Only 1 builds it.`;
+      continue;
+    }
+    detail = T.map((t, j) => `${j + 1} ${t.title}`).join(' · ');
+  }
+}
+
+function doubtNote() {
+  const done = S.items[2].map((t, i) => ({ t, i })).filter((x) => x.t.doubt);
+  S.noteC = [g('doubt · ', 'c-dim'), ...done.slice(-3).flatMap(({ t, i }) => [g(`task ${i + 1} `, 'c-dim'), t.doubt === 'wait' ? g('◌ checking  ', 'c-auto') : g(`✓ ${t.doubt}  `, t.doubt === 'fixed' ? 'c-auto' : 'c-accentDim')])];
+}
+async function buildTask(id, i) {
+  const x = X(), t = S.items[2][i];
+  begin(i); S.diff = 0; S.lastRun = [];
+  S.noteA = [g('loop 1', 'c-white'), g(` · ${t.title}`, 'c-dim')];
+  startNode(0, 2.4);
+  await work(id, 1.3, { act: `Write test “${t.test}”` });
+  await work(id, 1.1, { cmd: x.test(t.tf) });
+  log(0, `test “${t.test}” fails, as it should`);
+  S.lastRun = ok(x.test(t.tf), '1 failed, as it should');
+  nodeDone(0);
+  let stuck = take('stuck') ? 3 : 0;
+  for (;;) {
+    startNode(1, 2.8);
+    await work(id, 1.5, { act: `Edit ${t.file}  +${t.add} −${t.del}` });
+    S.diff = t.add + t.del; log(1, `Edit ${t.file}  +${t.add} −${t.del}`);
+    if (!stuck && take('stuck')) stuck = 3;
+    await work(id, 1.3, { cmd: x.test(t.tf) });
+    let miss = null;
+    if (stuck) miss = t.miss ?? x.stuckMiss(t);
+    else if (t.miss && !t.missed) { t.missed = true; miss = t.miss; }
+    if (!miss) break;
+    S.nodes[1] = 'miss'; S.active = [];
+    log(1, `1 failed: ${miss}`, 'c-bad');
+    S.lastRun = [g('✗ ', 'c-bad'), g(`${x.test(t.tf)} · 1 failed`, 'c-dim')];
+    S.noteA = [g(`loop ${S.tries}`, 'c-white'), g(' · last miss: ', 'c-dim'), g(miss, 'c-bad')];
+    await vsleep(0.9, id);
+    if (stuck && --stuck === 0) {
+      S.nodes[1] = 'stop';
+      const n = await stopGate(id, 'stuck');
+      if (n === 2) throw STOPPED;
+      if (n === 1) { t.state = 'open'; t.flag = 'open'; t.flagCls = 'c-warn'; log('STOP', `task ${i + 1} left open; it goes on`, 'c-warn'); return; }
+      t.missed = true; t.miss = null;
+      S.tries++; log(1, `try ${S.tries}: with your hint`);
+      S.noteA = [g(`loop ${S.tries}`, 'c-white'), g(' · last miss: ', 'c-dim'), g(miss, 'c-bad')];
+      continue;
+    }
+    S.tries++;
+    log(1, `try ${S.tries}: ${stuck ? 'another way' : t.fix}`);
+    S.noteA = [g(`loop ${S.tries}`, 'c-white'), g(' · last miss: ', 'c-dim'), g(miss, 'c-bad')];
+  }
+  log(1, `${x.test(t.tf)} passes`, 'c-accent');
+  S.lastRun = ok(x.test(t.tf), 'passed');
+  nodeDone(1);
+  startNode(2, 1.6);
+  await work(id, 1.6, { act: x.checkAct, cmd: x.suite });
+  log(2, `${x.suite}: all pass · ${x.checkMore}`);
+  S.lastRun = ok(x.suite, `all pass · ${x.checkMore}`);
+  nodeDone(2);
+  S.rewind++;
+  startNode(3, 0.9);
+  await work(id, 0.9, { act: `rewind point ${S.rewind}` });
+  log(3, `rewind point ${S.rewind} · nothing committed`);
+  nodeDone(3);
+  t.state = 'done'; t.doubt = 'wait';
+  log('DOUBT', `task ${i + 1}: is it true that ${t.claim}? checking`);
+  doubtNote();
+  later(id, 2.6, () => { t.doubt = t.doubtFix ? 'fixed' : 'held'; log('DOUBT', `task ${i + 1} ${t.doubt}: ${t.doubt_}`, t.doubtFix ? 'c-auto' : 'c-fg'); doubtNote(); });
+}
+async function runBuild(id) {
+  enter(2, X().tasks.map((t) => ({ ...t, doubt_: t.doubt, doubt: null })));
+  for (let i = 0; i < S.items[2].length; i++) if (S.items[2][i].state === 'todo') await buildTask(id, i);
+}
+
+async function runVerify(id) {
+  const V = X().verify;
+  enter(3, V.map((v) => ({ title: v.title })));
+  for (let i = 0; i < V.length; i++) {
+    const v = V[i]; begin(i);
+    startNode(0, 1.3); await work(id, 1.3, { act: 'the whole suite', cmd: v.s[0] }); log(0, `${v.s[0]}: ${v.s[1]}`); S.lastRun = ok(v.s[0], v.s[1]); nodeDone(0);
+    startNode(1, 1.3); await work(id, 1.3, { act: 'run it the way you would', cmd: v.r[0] }); log(1, `${v.r[0]}: ${v.r[1]}`); S.lastRun = ok(v.r[0], v.r[1]); S.noteA = [g(v.r[1], 'c-fg')]; nodeDone(1);
+    startNode(2, 1.2); await work(id, 1.2, { act: v.x[0] }); log(2, `${v.x[0]}: ${v.x[1]}`); S.noteA = [g(`${v.x[0]}: `, 'c-dim'), g(v.x[1], 'c-fg')]; nodeDone(2);
+    startNode(3, 0.8); await work(id, 0.8, { act: 'the same command, before and after' }); log(3, v.p, 'c-accent'); S.noteC = [g('proof · ', 'c-dim'), g(v.p, 'c-fg')]; nodeDone(3);
+    S.items[3][i].state = 'done'; S.items[3][i].flag = 'proved'; S.items[3][i].flagCls = 'c-accentDim';
+  }
+}
+
+const findingsLine = () => [g('Critical ', 'c-bad'), g(`${S.find.critical}${S.find.fixed ? ' (fixed)' : ''}`, 'c-fg'), g(' · Important ', 'c-warn'), g(`${S.find.important}`, 'c-fg'), g(' · Suggestion ', 'c-dim'), g(`${S.find.suggestion}`, 'c-fg')];
+async function fixLoop(id, back) {
+  const c = X().critical, keep = { items: S.items[back], item: S.item };
+  log('STAGE', `Critical: back to Build for one fix, then ${STAGES[back].name} again`, 'c-bad');
+  S.items[2].push({ title: c.fix, file: c.file, tf: c.tf, test: c.test, add: 9, del: 2, claim: c.claim, doubt_: c.doubt, doubt: null, state: 'todo', flag: '', flagCls: 'c-dim' });
+  S.stage = 2;
+  await buildTask(id, S.items[2].length - 1);
+  S.find.fixed++;
+  log('STAGE', `${X().suite}: all pass · back to ${STAGES[back].name}`, 'c-accent');
+  S.stage = back; S.items[back] = keep.items; S.item = keep.item;
+  resetRing(); S.nodes = ['done', 'done', 'done', 'done']; S.noteC = findingsLine();
+}
+async function runReview(id) {
+  const A = X().areas;
+  enter(4, A.map((a) => ({ title: a.title })));
+  S.noteC = findingsLine();
+  for (let i = 0; i < A.length; i++) {
+    const a = A[i], what = a.title.toLowerCase(); begin(i);
+    startNode(0, 0.9); await work(id, 0.9, { act: `Read the change for ${what}`, cmd: 'git diff' }); log(0, `git diff, for ${what}`); nodeDone(0);
+    startNode(1, 1.0); await work(id, 1.0, { act: `Try to break it: ${what}` });
+    let f = a.f;
+    if (take('critical')) { const c = X().critical; f = { lvl: 'critical', at: c.at, text: c.text }; }
+    log(1, f ? `${f.at}: ${f.text}` : 'nothing found', f ? LVLCLS[f.lvl] : 'c-dim'); nodeDone(1);
+    startNode(2, 0.8); await work(id, 0.8, { act: f ? `${f.at}: an input that shows it` : 'nothing to show' }); nodeDone(2);
+    startNode(3, 0.6); await work(id, 0.6, { act: f ? `${LVL[f.lvl]}, with its fix` : 'clean' });
+    const it = S.items[4][i];
+    if (f) {
+      S.find[f.lvl]++; it.flag = f.lvl; it.flagCls = LVLCLS[f.lvl];
+      S.noteA = [g(`${LVL[f.lvl]} `, LVLCLS[f.lvl]), g(`${f.at} `, 'c-path'), g(f.text, 'c-fg')];
+      log(3, `${LVL[f.lvl]} · ${f.at}`, LVLCLS[f.lvl]);
+    } else { it.flag = 'none'; it.flagCls = 'c-faint'; log(3, 'clean', 'c-dim'); }
+    S.noteC = findingsLine();
+    nodeDone(3); it.state = 'done';
+    if (f?.lvl === 'critical') await fixLoop(id, 4);
+  }
+}
+
+async function runShip(id) {
+  const sh = X().ship;
+  enter(5, [{ title: 'code-reviewer' }, { title: 'security-auditor' }, { title: 'test-engineer' }, { title: 'merged report' }]);
+  for (const j of [0, 1, 2]) S.items[5][j].state = 'now';
+  S.nodes = ['now', 'now', 'now', 'todo']; S.active = [0, 1, 2]; S.stepT0 = VT; S.stepDur = 3.2;
+  S.act = 'three reviewers at once, each fresh'; S.cmd = '';
+  S.noteA = [g('code-reviewer · security-auditor · test-engineer', 'c-dim')];
+  S.noteC = findingsLine();
+  log('SHIP', 'code-reviewer, security-auditor and test-engineer start together');
+  // A critical finding pressed while they work is the security reviewer's, the last to finish.
+  let crit = false;
+  for (const [n, secs] of [[0, 1.3], [2, 0.9], [1, 1.0]]) {
+    await vsleep(secs, id);
+    if (n === 1) crit = take('critical');
+    const bad = n === 1 && crit;
+    const text = bad ? `${X().critical.at}: ${X().critical.text}` : [sh.code, sh.security, sh.tests][n];
+    nodeDone(n, bad ? 'miss' : 'done');
+    const it = S.items[5][n]; it.state = 'done'; it.flag = bad ? 'critical' : 'ok'; it.flagCls = bad ? 'c-bad' : 'c-accentDim';
+    log(n, text, bad ? 'c-bad' : 'c-fg');
+    await stopPoint(id);
+  }
+  S.item = 3; S.items[5][3].state = 'now';
+  startNode(3, 1.0); await work(id, 1.0, { act: 'one report: quality · security · perf · tests · docs' });
+  log(3, 'one report: quality · security · perf · accessibility · infra · docs'); nodeDone(3);
+  S.items[5][3].state = 'done';
+  if (!crit && take('critical')) { crit = true; log(3, `${X().critical.at}: ${X().critical.text}`, 'c-bad'); }
+  if (crit) {
+    S.find.critical++;
+    const c = X().critical;
+    S.items[5][3].flag = 'NO-GO'; S.items[5][3].flagCls = 'c-bad';
+    const n = await ask(id, { kind: 'stop', title: 'NO-GO', detail: `${c.at}: ${c.text}.`, opts: ['Fix it, then run Ship again', 'Stop here: NO-GO', 'Tell it what to do'] });
+    if (n === 1) { S.verdict = { kind: 'nogo', why: `${c.at}: ${c.text}` }; log('SHIP', 'NO-GO, by you', 'c-bad'); return; }
+    if (n === 2) log('YOU', '“cap it, and add the test from Review”', 'c-white');
+    await fixLoop(id, 5);
+    return runShip(id);
+  }
+  S.items[5][3].flag = 'GO'; S.items[5][3].flagCls = 'c-accent';
+  S.verdict = { kind: 'go' };
+  log('SHIP', 'GO · rollback: /rewind to point 0 · nothing committed', 'c-accent');
+}
+
+// What the stages before a jump leave behind, as if they had run.
+function prefill(from) {
+  const x = X();
+  S.items = [[], [], [], [], [], []];
+  S.stops = 0; S.rewind = 0; S.find = { critical: 0, important: 0, suggestion: 0, fixed: 0 };
+  S.queue = []; S.verdict = null; S.endVT = null; S.vt0 = VT; S.base = from * 95; S.comet = 0;
+  S.log = []; S.gate = null;
+  if (from > 0) S.items[0] = x.define.map((d) => ({ title: d.part, state: 'done', flag: d.short, flagCls: 'c-dim' }));
+  if (from > 1) S.items[1] = x.plan.map((p) => ({ title: p.title, state: 'done', flag: `${p.n} task${p.n > 1 ? 's' : ''}`, flagCls: 'c-dim' }));
+  if (from > 2) { S.items[2] = x.tasks.map((t) => ({ ...t, state: 'done', doubt: t.doubtFix ? 'fixed' : 'held', doubt_: t.doubt })); S.rewind = x.tasks.length; }
+  if (from > 3) S.items[3] = x.verify.map((v) => ({ title: v.title, state: 'done', flag: 'proved', flagCls: 'c-accentDim' }));
+  if (from > 4) {
+    S.items[4] = x.areas.map((a) => ({ title: a.title, state: 'done', flag: a.f ? a.f.lvl : 'none', flagCls: a.f ? LVLCLS[a.f.lvl] : 'c-faint' }));
+    for (const a of x.areas) if (a.f) S.find[a.f.lvl]++;
+  }
+  if (from > 0) log('STAGE', `jumped to ${STAGES[from].name}; the stages before it are filled in`, 'c-dim');
+}
+async function run(from) {
+  const id = ++RUNID;
+  for (const w of WAITERS) w.rej(CANCEL);
+  WAITERS = [];
+  if (S.gate) { const G = S.gate; S.gate = null; G.rej(CANCEL); }
+  prefill(from);
+  enter(from, []);
+  const stages = [runDefine, runPlan, runBuild, runVerify, runReview, runShip];
+  try {
+    for (let k = from; k < 6; k++) { S.stage = k; log('STAGE', `${String(k + 1).padStart(2, '0')} ${STAGES[k].name}`, 'c-plan'); await stages[k](id); }
+  } catch (e) {
+    if (e === CANCEL) return;
+    if (e !== STOPPED) throw e;
+    S.verdict = { kind: 'stopped', why: `you stopped it at task ${S.item + 1}` };
+    log('STOP', 'stopped by you · nothing committed', 'c-warn');
+  }
+  if (id === RUNID) { S.endVT = VT; S.active = []; S.cmd = ''; }
+}
+
+// ---------- drawing ----------
+const MARK = { todo: '○', now: '●', done: '✓', miss: '✗', stop: '■' };
+const LABEL_CLS = { todo: 'c-dim', now: 'c-white', done: 'c-fg', miss: 'c-bad', stop: 'c-warn' };
+const markCls = (s) => ({ todo: 'c-faint', now: pulse(), done: 'c-accent', miss: 'c-bad', stop: 'c-warn' }[s]);
+
+// The ring: five rows, the left side at column L, inner columns between the corners.
+function ring(L, inner, fx) {
+  const labels = nodesOf(S.stage), R = L + inner + 1, W = R + 7;
+  const G = Array.from({ length: 5 }, () => Array.from({ length: W }, () => ({ ch: ' ', c: '' })));
+  const put = (r, c, ch, cl) => { if (c >= 0 && c < W) G[r][c] = { ch, c: cl }; };
+  for (let c = L + 1; c < R; c++) { put(0, c, '─', 'c-border'); put(4, c, '─', 'c-border'); }
+  put(0, L, '┌', 'c-border'); put(0, R, '┐', 'c-border'); put(4, L, '└', 'c-border'); put(4, R, '┘', 'c-border');
+  put(1, L, '│', 'c-border'); put(1, R, '▼', 'c-border'); put(3, L, '▲', 'c-border'); put(3, R, '│', 'c-border');
+  const place = (r, start, i, padded) => {
+    const s = S.nodes[i]; let c = start;
+    if (padded) put(r, c++, ' ', '');
+    for (const ch of labels[i]) put(r, c++, ch, LABEL_CLS[s]);
+    put(r, c++, ' ', ''); put(r, c++, MARK[s], markCls(s));
+    if (padded) put(r, c++, ' ', '');
+    return [start, c - 1];
+  };
+  const tw = (i, padded) => len(labels[i]) + 2 + (padded ? 2 : 0);
+  const mid = (L + R) / 2;
+  const [ts, te] = place(0, Math.round(mid - tw(0, true) / 2), 0, true);
+  const [bs, be] = place(4, Math.round(mid - tw(2, true) / 2), 2, true);
+  const [rs, re] = place(2, R - Math.floor(tw(1, false) / 2), 1, false);
+  const [, le] = place(2, L - Math.floor(tw(3, false) / 2), 3, false);
+  // the four ways out, each from its step to the next, clockwise
+  const e = [[], [], [], []];
+  for (let c = te + 1; c < R; c++) e[0].push([0, c]); e[0].push([0, R], [1, R]);
+  e[1].push([3, R], [4, R]); for (let c = R - 1; c > be; c--) e[1].push([4, c]);
+  for (let c = bs - 1; c > L; c--) e[2].push([4, c]); e[2].push([4, L], [3, L]);
+  e[3].push([1, L], [0, L]); for (let c = L + 1; c < ts; c++) e[3].push([0, c]);
+  const paint = (cells, cl) => { for (const [r, c] of cells) G[r][c] = { ch: G[r][c].ch, c: cl }; };
+  e.forEach((cells, i) => { if (S.edges[i]) paint(cells, 'c-accentDim'); });
+  if (fx === 'comet' && !REDUCED) {
+    if (!S.verdict) {
+      const P = e.flat(), head = Math.floor(S.comet) % P.length;
+      const tail = stopped() ? ['c-warn', 'c-warn', 'c-warn', 'c-warn'] : S.paused || S.gate ? ['c-dim', 'c-dim', 'c-faint', 'c-faint'] : ['c-white', 'c-accent', 'c-accent', 'c-accent', 'c-accentDim', 'c-accentDim'];
+      tail.forEach((cl, j) => { const [r, c] = P[(head - j + P.length) % P.length]; G[r][c] = { ch: G[r][c].ch, c: cl }; });
+    }
+  } else {
+    const p = Math.max(0, Math.min(1, (VT - S.stepT0) / Math.max(0.1, S.stepDur)));
+    for (const a of S.active) {
+      const cells = e[a], k = Math.floor(p * cells.length);
+      cells.forEach(([r, c], j) => { if (j < k) G[r][c] = { ch: G[r][c].ch, c: stopped() ? 'c-warn' : 'c-accent' }; else if (j === k && !S.gate && !S.paused) G[r][c] = { ch: G[r][c].ch, c: 'c-white' }; });
+    }
+  }
+  const segs = (r, from = 0, to = W) => {
+    const out = [];
+    for (const x of G[r].slice(from, to)) { const last = out[out.length - 1]; if (last && last.c === x.c) last.t += x.ch; else out.push(g(x.ch, x.c)); }
+    return out;
+  };
+  return { segs, R, W, re, le, rs };
+}
+
+function stageMark(k) {
+  if (S.verdict?.kind === 'go') return ['✓', 'c-accent', 'c-fg'];
+  if (k < S.stage) return ['✓', 'c-accent', 'c-fg'];
+  if (k > S.stage) return ['○', 'c-faint', 'c-dim'];
+  if (S.verdict?.kind === 'nogo') return ['✗', 'c-bad', 'c-bad'];
+  if (S.verdict || stopped()) return ['■', 'c-warn', 'c-warn'];
+  return ['●', pulse(), 'c-white'];
+}
+const stageLine = () => [g(' '), ...STAGES.flatMap((st, k) => { const [m, mc, nc] = stageMark(k); return [g(`${st.name} `, nc), g(m, mc), g('  ')]; })];
+const ITEM_MARK = { done: ['✓', 'c-accent'], todo: ['○', 'c-faint'], open: ['◌', 'c-warn'] };
+const itemMark = (it) => (it.state === 'now' ? (stopped() ? ['■', 'c-warn'] : ['●', pulse()]) : ITEM_MARK[it.state] ?? ['○', 'c-faint']);
+const marks = (items) => items.map((it) => { const [m, c] = itemMark(it); return g(m, c); });
+
+function title() {
+  if (S.verdict) return { go: 'done · GO', nogo: 'done · NO-GO', stopped: 'stopped by you' }[S.verdict.kind];
+  const k = S.stage, list = S.items[k], it = list[S.item], n = list.length, i = S.item + 1;
+  if (!it) return STAGES[k].name;
+  return [`question ${i}/${n} · ${it.title}`, `plan · part ${i}/${n} · ${it.title}`, `task ${i}/${n} · ${it.title}`, `verify ${i}/${n} · ${it.title}`, `review ${i}/${n} · ${it.title}`, 'ship · three reviewers'][k];
+}
+const nodeNow = () => (S.gate ? 'waiting for you' : S.active.map((n) => nodesOf(S.stage)[n]).join(' + '));
+function lineB() {
+  if (S.cmd) return [g('› ', 'c-accent'), g('Run ', 'c-white'), g(S.cmd, 'c-path'), g('  '), g(spinGlyph(), 'c-accent')];
+  if (S.lastRun.length) return S.lastRun;
+  return [g(S.act, 'c-dim')];
+}
+const keysHint = () => [g(S.paused ? 'paused · p goes on' : 'p pause · esc chat', S.paused ? 'c-warn' : 'c-dim')];
+function counts(withUnit = true) {
+  const parts = [];
+  if (withUnit) parts.push([g(`${STAGES[S.stage].unit} `, 'c-dim'), ...marks(S.items[S.stage])]);
+  parts.push([g(`stops ${S.stops}`, S.stops ? 'c-warn' : 'c-dim')]);
+  if (S.stage === 2 && !S.verdict) parts.push([g('diff ', 'c-dim'), g(`${S.diff}/100`, S.diff > 100 ? 'c-warn' : 'c-dim')]);
+  parts.push([g(`rewind ${S.rewind}`, 'c-dim')], [g('no commits', 'c-dim')]);
+  return parts;
+}
+
+function verdictBox(w, indent) {
+  const v = S.verdict, inner = w - 4;
+  const b = v.kind === 'go' ? 'c-accentDim' : v.kind === 'nogo' ? 'c-bad' : 'c-warn';
+  const head = v.kind === 'go' ? [g('GO', 'c-accent'), g(' · ', 'c-dim'), ...findingsLine()]
+    : v.kind === 'nogo' ? [g('NO-GO', 'c-bad'), g(` · ${v.why}`, 'c-fg')] : [g('STOPPED', 'c-warn'), g(` · ${v.why}`, 'c-fg')];
+  const rows = [head, [g('Rollback: /rewind to point 0, before /agents', 'c-fg')], [g('Nothing committed: read git diff, then commit it yourself', 'c-dim')]];
+  const pad = spaces(indent);
+  return [
+    [pad, g(`┌${'─'.repeat(w - 2)}┐`, b)],
+    ...rows.map((r) => { const c = cut(r, inner); return [pad, g('│ ', b), ...c, spaces(inner - width(c)), g(' │', b)]; }),
+    [pad, g(`└${'─'.repeat(w - 2)}┘`, b)],
+  ];
+}
+
+// Design 1: the ring as picked.
+function block1() {
+  const w = S.cols, out = [];
+  out.push(L_(lr([g(' /agents', 'c-accent'), g(` · ${title()}`, 'c-white')], [g(`${MODEL} · ${mmss(elapsed())}`, 'c-dim')], w)));
+  out.push(L_());
+  if (S.verdict) {
+    out.push(...verdictBox(Math.min(w - 6, 64), 3).map((r) => L_(r)));
+    out.push(L_(), L_(), L_(), L_());
+  } else {
+    const RG = ring(14, 23, 'fill');
+    const rows = [0, 1, 2, 3, 4].map((r) => RG.segs(r));
+    const a = S.active.length === 1 ? S.active[0] : null;
+    if (a !== null && S.act) {
+      const ptr = [g('◀ ', 'c-accent'), g(S.act, 'c-white')];
+      if (a === 0) rows[0] = [...RG.segs(0, 0, RG.R + 1), spaces(2), ...ptr];
+      else if (a === 1) rows[2] = [...RG.segs(2, 0, RG.re + 1), spaces(2), ...ptr];
+      else if (a === 2) rows[4] = [...RG.segs(4, 0, RG.R + 1), spaces(2), ...ptr];
+      else { const room = RG.rs - RG.le - 3, p = cut(ptr, room); rows[2] = [...RG.segs(2, 0, RG.le + 1), g(' '), ...p, spaces(room - width(p) + 1), ...RG.segs(2, RG.rs)]; }
+    }
+    out.push(...rows.map((r) => L_(cut(r, w))));
+    out.push(L_());
+    out.push(L_(cut([spaces(3), ...S.noteA], w)), L_(cut([spaces(3), ...lineB()], w)), L_(cut([spaces(3), ...S.noteC], w)));
+  }
+  out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  out.push(L_(cut(stageLine(), w)));
+  out.push(L_(lr([g(' '), ...fit(counts(), w - 22)], keysHint(), w)));
+  return out;
+}
+
+// Design 2: ring and rail.
+function itemFlag(it, j) {
+  if (S.stage === 2 || it.doubt !== undefined) {
+    if (it.state === 'now' && S.tries > 1) return [`try ${S.tries}`, 'c-warn'];
+    if (it.state === 'open') return ['open', 'c-warn'];
+    if (it.doubt === 'wait') return ['doubt', 'c-auto'];
+    if (it.doubt === 'held') return ['held', 'c-accentDim'];
+    if (it.doubt === 'fixed') return ['fixed', 'c-auto'];
+    return ['', ''];
+  }
+  return [it.flag ?? '', it.flagCls ?? 'c-dim'];
+}
+function stageSum(k) {
+  const list = S.items[k], done = list.filter((x) => x.state === 'done').length;
+  if (k > S.stage && !(S.verdict?.kind === 'go')) return '';
+  if (k === 0) return k < S.stage ? 'SPEC.md' : `${done}/${list.length}`;
+  if (k === 1) return k < S.stage ? `${S.items[2].length || X().tasks.length} tasks` : `${done}/${list.length}`;
+  if (k === 2) return `${done}/${list.length}`;
+  if (k === 3) return k < S.stage ? 'proved' : `${done}/${list.length}`;
+  if (k === 4) return `${S.find.critical}c ${S.find.important}i ${S.find.suggestion}s`;
+  return S.verdict ? { go: 'GO', nogo: 'NO-GO', stopped: '' }[S.verdict.kind] : '';
+}
+function block2(avail) {
+  const w = S.cols, RW = 27 + Math.floor((w - 80) / 2), CW = w - RW - 1;
+  const H = Math.max(8, Math.min(avail - 4, 14));
+  const left = STAGES.map((st, k) => { const [m, mc, nc] = stageMark(k); return [g('  '), g(m, mc), g(` 0${k + 1} `, 'c-dim'), g(st.name.padEnd(8), nc), g(stageSum(k), 'c-dim')]; });
+  left.push([]);
+  const items = S.items[S.stage], room = H - left.length;
+  const start = Math.max(0, Math.min(S.item - Math.floor(room / 2), items.length - room));
+  items.slice(start, start + room).forEach((it, j0) => {
+    const j = start + j0, [m, mc] = itemMark(it), [f, fc] = itemFlag(it, j);
+    const head = [g('  '), g(m, mc), g(` ${j + 1} `, 'c-dim')];
+    const t = cut([g(it.title, it.state === 'now' ? 'c-white' : it.state === 'todo' ? 'c-dim' : 'c-fg')], RW - width(head) - len(f) - 2);
+    left.push([...head, ...t, spaces(RW - width(head) - width(t) - len(f) - 1), g(f, fc)]);
+  });
+  const right = [];
+  if (S.verdict) {
+    right.push([g(' '), g(title(), 'c-white')], []);
+    right.push(...verdictBox(Math.min(CW - 2, 58), 1));
+  } else {
+    const it = S.items[S.stage][S.item];
+    right.push([g(' '), g(S.stage === 2 && it ? `Task ${S.item + 1} of ${S.items[2].length} · ${it.title}` : title(), 'c-white')]);
+    if (H >= 13) right.push([]);
+    const RG = ring(6, 17, 'fill');
+    for (let r = 0; r < 5; r++) right.push(RG.segs(r));
+    if (H >= 12) right.push([]);
+    right.push([g(' '), g('› ', 'c-accent'), g(S.act || nodeNow(), 'c-white')]);
+    right.push([g('   '), ...lineB()]);
+    right.push([g('   '), ...S.noteA]);
+    right.push([g('   '), ...S.noteC]);
+  }
+  const out = [];
+  out.push(L_(lr([g(' /agents', 'c-accent'), g(` · ${X().title}`, 'c-white')], [g(`${MODEL} · ${mmss(elapsed())}`, 'c-dim')], w)));
+  out.push(L_([g(` ${'─'.repeat(RW - 1)}┬${'─'.repeat(CW - 1)}`, 'c-faint')]));
+  for (let i = 0; i < H; i++) {
+    const l = cut(left[i] ?? [], RW), r = cut(right[i] ?? [], CW);
+    out.push(L_([...l, spaces(RW - width(l)), g('│', 'c-faint'), ...r]));
+  }
+  out.push(L_([g(` ${'─'.repeat(RW - 1)}┴${'─'.repeat(CW - 1)}`, 'c-faint')]));
+  out.push(L_(lr([g('  '), ...fit(counts(false), w - 22, ' · ')], keysHint(), w)));
+  return out;
+}
+
+// Design 3: ring and log.
+function block3(avail) {
+  const w = S.cols, st = STAGES[S.stage], out = [];
+  out.push(L_(lr([g(' ▌', st.cls[1] === 'c-white' ? 'c-plan' : st.cls[1]), g(`0${S.stage + 1} ${st.name.toUpperCase()}`, 'c-white'), g(` · ${title()}`, 'c-dim')], [g(`${MODEL} · ${mmss(elapsed())}`, 'c-dim')], w)));
+  out.push(L_());
+  if (S.verdict) out.push(...verdictBox(Math.min(w - 6, 64), 3).map((r) => L_(r)));
+  else {
+    const RG = ring(6, 15, 'comet');
+    const tries = S.tries > 1 ? [g(` · try ${S.tries}`, 'c-warn')] : [];
+    const so = S.stage === 2 ? [g(`diff ${S.diff}/100 · rewind ${S.rewind} · stops ${S.stops}`, S.diff > 100 ? 'c-warn' : 'c-dim')] : [g(`${st.unit} `, 'c-dim'), ...marks(S.items[S.stage]), g(` · stops ${S.stops}`, 'c-dim')];
+    const box = [
+      ['step', [g(nodeNow() || '·', stopped() ? 'c-warn' : 'c-white'), ...tries]],
+      ['doing', [g(S.act || '·', 'c-fg')]],
+      ['run', S.cmd ? [g(S.cmd, 'c-path'), g(` ${spinGlyph()}`, 'c-accent')] : S.lastRun.length ? S.lastRun : [g('·', 'c-faint')]],
+      [S.stage === 2 ? 'doubt' : S.stage >= 4 ? 'found' : 'note', S.stage === 2 ? S.noteC.slice(1) : S.stage >= 4 ? findingsLine() : S.noteA.length ? S.noteA : [g('·', 'c-faint')]],
+      ['so far', so],
+    ];
+    const at = Math.max(RG.W + 2, 31);
+    box.forEach(([k, v], r) => out.push(L_(cut([...RG.segs(r), spaces(at - RG.W), g(k.padEnd(7), 'c-dim'), ...v], w))));
+  }
+  out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  const N = Math.max(2, avail - 10);
+  const tail = S.log.slice(-N);
+  for (const e of tail) out.push(L_(cut([g(`  ${e.t}  `, 'c-faint'), g(e.tag.padEnd(9), e.tc), g(e.text, e.cls)], w)));
+  for (let i = tail.length; i < N; i++) out.push(L_());
+  out.push(L_([g(` ${'─'.repeat(w - 2)}`, 'c-faint')]));
+  out.push(L_(lr(stageLine(), keysHint(), w)));
+  return out;
+}
+
+// ---------- the rest of the window ----------
+const strip = () => [L_([], 'strip'), L_([g(' '), g('›', 'c-accent'), g(' '), g(`/agents ${X().request}`, 'c-white')], 'strip'), L_([], 'strip')];
+function promptBox(w) {
+  const inner = w - 4, ph = 'Add a note for the next task, or esc for the chat';
+  const mid = [g('> '), g(ph[0], 'inv'), g(ph.slice(1), 'c-dim')];
+  const m = cut(mid, inner);
+  return [L_([g(`╭${'─'.repeat(w - 2)}╮`, 'c-border')]), L_([g('│ ', 'c-border'), ...m, spaces(inner - width(m)), g(' │', 'c-border')]), L_([g(`╰${'─'.repeat(w - 2)}╯`, 'c-border')])];
+}
+function gatePanel(w) {
+  const G = S.gate, inner = w - 4;
+  const bc = G.kind === 'stop' ? 'c-warn' : G.kind === 'plan' ? 'c-accent' : 'c-plan';
+  const row = (segs) => { const c = cut(segs, inner); return L_([g('│ ', bc), ...c, spaces(inner - width(c)), g(' │', bc)]); };
+  const icon = G.kind === 'stop' ? '■ ' : G.kind === 'plan' ? '▶ ' : '? ';
+  const hint = G.kind === 'ask' ? 'enter picks · the pretend you picks 1 in 2 s'
+    : S.auto ? 'Answer for me is on: 1 in 2 s' : G.kind === 'plan' ? '1–3 or ↑↓ enter · it waits for your yes' : '1–3 or ↑↓ enter · it waits for you';
+  const out = [L_([g(`╭${'─'.repeat(w - 2)}╮`, bc)]), row([g(icon + G.title, bc)])];
+  for (const line of wrap(G.detail, inner).slice(0, 3)) out.push(row([g(line, 'c-fg')]));
+  G.opts.forEach((o, i) => out.push(row([g(i === G.sel ? '› ' : '  ', 'c-accent'), g(`${i + 1}. `, i === G.sel ? 'c-white' : 'c-dim'), g(o, i === G.sel ? 'c-white' : 'c-dim')])));
+  out.push(row([g(hint, 'c-faint')]));
+  out.push(L_([g(`╰${'─'.repeat(w - 2)}╯`, bc)]));
+  return out;
+}
+function footerRow(w) {
+  const left = fit([[g('  ⏵⏵ accept edits on', 'c-edits')], [g('(shift+tab to cycle)', 'c-dim')]], w - 44, ' ');
+  return lr(left, [g(`● ${MODEL} on ${WHERE}`, 'c-dim')], w);
+}
+function miniLine(d) {
+  const lead = g('  ╰─ ', 'c-rail');
+  if (S.verdict) return [lead, g('/agents', 'c-accent'), g(` · ${title()}`, S.verdict.kind === 'go' ? 'c-accent' : 'c-warn')];
+  if (d === 1) return [lead, g(spinGlyph(), 'c-accent'), g(' /agents', 'c-accent'), g(` · ${STAGES[S.stage].name} · ${title()} · ${nodeNow()}${S.tries > 1 ? ` · try ${S.tries}` : ''} · ${mmss(elapsed())}`, 'c-dim')];
+  if (d === 2) return [lead, g('/agents ', 'c-accent'), ...STAGES.map((_, k) => { const [m, mc] = stageMark(k); return g(m, mc); }), g('  '), ...marks(S.items[S.stage]), g(`  ${title()}`, 'c-dim')];
+  return [lead, g(spinGlyph(), 'c-accent'), g(` ${STAGES[S.stage].name.toUpperCase()} `, 'c-white'), g(nodeNow(), stopped() ? 'c-warn' : 'c-accent'), g(S.cmd ? ` · ${S.cmd}` : S.act ? ` · ${S.act}` : '', 'c-dim')];
+}
+function chatLines(d) {
+  return [...strip(), L_(),
+    L_([g('  ● ', 'c-accent'), g('/agents', 'c-white'), g(' started: Define → Plan → Build → Verify → Review → Ship', 'c-dim')]),
+    L_([g('  │', 'c-rail')]),
+    L_([g('  ※ ', 'c-faint'), g('it keeps going behind the chat · esc or /agents opens it again', 'c-dim')]),
+    L_([g('  │', 'c-rail')]),
+    L_(cut(miniLine(d), S.cols)), L_()];
+}
+function frame(d) {
+  const w = S.cols;
+  const box = S.gate ? gatePanel(w) : promptBox(w);
+  const avail = ROWS - 1 - box.length;
+  let body;
+  if (S.chat) body = chatLines(d);
+  else {
+    const blk = d === 1 ? block1(avail) : d === 2 ? block2(avail) : block3(avail);
+    body = avail - blk.length >= 4 ? [...strip(), L_(), ...blk] : blk;
+  }
+  body = body.slice(-avail);
+  while (body.length < avail) body.unshift(L_());
+  return [...body, ...box, L_(footerRow(w))];
+}
+
+// ---------- the page ----------
+const DOM = typeof document !== 'undefined' && !!document.getElementById('t1');
+const escHTML = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const lineHTML = (l, w) => `<div class="ln ${l.cls}">${[...l.segs, spaces(w - width(l.segs))].map((s) => (s.c ? `<span class="${s.c}">${escHTML(s.t)}</span>` : escHTML(s.t))).join('')}</div>`;
+const LASTHTML = {};
+function render() {
+  if (!DOM) return;
+  syncControls();
+  for (const d of [1, 2, 3]) {
+    const html = frame(d).map((l) => lineHTML(l, S.cols)).join('');
+    if (LASTHTML[d] === html) continue;
+    LASTHTML[d] = html;
+    document.querySelector(`#t${d} .screen`).innerHTML = html;
+  }
+}
+function syncControls() {
+  const press = (sel, on) => document.querySelectorAll(sel).forEach((b) => b.setAttribute('aria-pressed', String(on(b))));
+  press('[data-cols]', (b) => Number(b.dataset.cols) === S.cols);
+  press('[data-scen]', (b) => b.dataset.scen === S.scen);
+  press('[data-speed]', (b) => Number(b.dataset.speed) === S.speed);
+  press('[data-jump]', (b) => Number(b.dataset.jump) === S.stage && !S.verdict);
+  document.getElementById('autoChip').setAttribute('aria-pressed', String(S.auto));
+  document.getElementById('pauseChip').lastChild.textContent = S.paused ? 'Go on' : 'Pause';
+  document.getElementById('escChip').lastChild.textContent = S.chat ? 'Open the loop' : 'Back to the chat';
+  document.getElementById('listChip').textContent = X().stops.list.chip;
+  document.getElementById('tolChip').textContent = X().stops.tol.chip;
+  document.getElementById('notice').textContent = S.notice;
+}
+let NOTICE_T = null;
+function note(text) {
+  S.notice = text;
+  clearTimeout(NOTICE_T);
+  NOTICE_T = setTimeout(() => { S.notice = ''; render(); }, 3200);
+  render();
+}
+function queueStop(k) {
+  if (S.verdict) return note('The run is over: Restart, or jump to a stage.');
+  if (['tol', 'big', 'stuck'].includes(k) && S.stage !== 2) return note('That stop comes while it builds: jump to Build.');
+  if (k === 'critical' && S.stage < 4) return note('A critical finding comes from Review or Ship: jump to Review.');
+  if (S.queue.includes(k)) return note('Already on its way.');
+  S.queue.push(k);
+  note(k === 'stuck' ? 'The covering test will fail three times, then it asks you.' : k === 'critical' ? 'The next review step finds it.' : 'It stops at the end of this step.');
+}
+function act(a) {
+  if (a === 'pause') S.paused = !S.paused;
+  else if (a === 'first') { if (S.gate) answer(S.gate.sel); else note('Nothing to answer right now.'); }
+  else if (a === 'esc') S.chat = !S.chat;
+  else if (a === 'restart') run(0);
+  render();
+}
+let LAST = now();
+function tick(dtOverride) {
+  const t = now(), dt = dtOverride ?? Math.min(0.25, (t - LAST) / 1000);
+  LAST = t;
+  if (!S.paused && !S.gate) { VT += dt * S.speed; if (!S.verdict) S.comet += dt * S.speed * (S.cmd ? 6 : 15); }
+  flush();
+  if (S.gate && !S.paused && (S.gate.kind === 'ask' || S.auto) && t - S.gate.t0 > 2000 / Math.max(1, S.speed / 2)) answer(0);
+  render();
+}
+
+if (DOM) {
+  document.querySelectorAll('[data-cols]').forEach((b) => b.addEventListener('click', () => { S.cols = Number(b.dataset.cols); render(); }));
+  document.querySelectorAll('[data-scen]').forEach((b) => b.addEventListener('click', () => { if (S.scen === b.dataset.scen) return; S.scen = b.dataset.scen; run(S.verdict ? 0 : S.stage); render(); }));
+  document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => { S.speed = Number(b.dataset.speed); render(); }));
+  document.querySelectorAll('[data-jump]').forEach((b) => b.addEventListener('click', () => { S.chat = false; run(Number(b.dataset.jump)); render(); }));
+  document.querySelectorAll('[data-stop]').forEach((b) => b.addEventListener('click', () => queueStop(b.dataset.stop)));
+  document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
+  document.getElementById('autoChip').addEventListener('click', () => { S.auto = !S.auto; if (S.gate) S.gate.t0 = now(); render(); });
+  document.querySelectorAll('.term[tabindex]').forEach((t) => t.addEventListener('mousedown', () => setTimeout(() => t.focus(), 0)));
+  document.addEventListener('keydown', (e) => {
+    const t = document.activeElement;
+    if (!t || !t.classList.contains('term')) return;
+    const k = e.key, G = S.gate;
+    if (G) {
+      if (/^[1-9]$/.test(k) && Number(k) <= G.opts.length) { e.preventDefault(); answer(Number(k) - 1); return; }
+      if (k === 'ArrowUp' || k === 'ArrowDown') { e.preventDefault(); G.sel = (G.sel + (k === 'ArrowUp' ? G.opts.length - 1 : 1)) % G.opts.length; G.t0 = now(); render(); return; }
+      if (k === 'Enter') { e.preventDefault(); answer(G.sel); return; }
+    }
+    if (k === 'p' || k === 'P') { e.preventDefault(); act('pause'); return; }
+    if (k === 'Escape') { e.preventDefault(); act('esc'); }
+  });
+  setInterval(tick, 80);
+  run(0);
+  render();
+} else if (typeof globalThis !== 'undefined') {
+  globalThis.__agents = { S, tick, frame, answer, run, queueStop, width, get VT() { return VT; } };
+}
+</script>
+</body>
+</html>

@@ -97,6 +97,37 @@ coding -p "what does x do" # answer once and exit
 coding --way model         # the model decides, like Claude Code (/effort shows it as Who decides)
 ```
 
+### /agents: spec, plan, test-first build, verify, review, ship
+
+`/agents build a Kepler solver: where an orbit is at time t` takes one request through six stages
+(after Addy Osmani's agent setup), drawn live as an agent tree (after the agent-tree screen of
+Claude Code's /advisor): the main model at the top, the stage's four steps as bars, three helpers,
+the second opinion on call down the left, the session log and one status line.
+
+| Stage | Its four steps | What it leaves |
+|---|---|---|
+| 01 Define | ask · answer · write · check | a short interview, then `SPEC.md` and `CONSTRAINTS.md` |
+| 02 Plan | look · split · checks · write | `tasks/plan.md` and `tasks/todo.md`; the second opinion reads it, then your one yes ("looks fine" is not a yes) |
+| 03 Build | red · green · check · save | per task: a failing test, the least code to pass it (three tries, then it asks), the whole suite, a rewind point and the second opinion |
+| 04 Verify | suite · run · cross · proof | the request run the way you would, and checked a second way (for math: another method) |
+| 05 Review | read · find · show · grade | five areas (math gets correctness, stability, precision, speed, readability), each finding with file:line and a fix; a critical one goes back to Build |
+| 06 Ship | code · security · tests · merge | three reviewers, `tasks/ship.md`, GO or NO-GO and how to roll it back |
+
+It never commits: every step is a /rewind point, and the report says to read `git diff`. It stops
+and asks on the stop list: auth, payments, deploys, migrations, secrets, deletions, a test's
+expected value or tolerance changed, a new package, a task over 100 lines or 3 files, and a test
+that will not pass after three tries. Verify, Review and Ship only read. The second opinion is the
+review model from `/subagents`; without one, the main model with a fresh context.
+
+While its tree is open: 1–3 or ↑↓ enter answer, p pauses, esc shows the chat with one live line
+(esc or `/agents` opens the tree again), and a message you type goes with its next step. In
+Terminal or iTerm2 the window grows to 112 × 59 while it runs and goes back after
+(`AGENTIC_AGENTS_RESIZE=off` leaves it); under 38 rows the tree is drawn as lines. `/agents demo`
+shows it on a pretend run, `/agents stop` ends a run, `/agents resume` picks up one that did not
+finish (`.agentic/agents/run.json`). `coding -p --agents "…"` runs it with no screen. The Arena's
+**Agents check** (`/test agents`) measures it against a plain request. `/morning` gave /agents its
+row in the `/` menu and is typed in full now.
+
 ### Pictures and PDFs
 
 Drag a screenshot or a PDF into the window, name it with `@shot.png`, or copy a screenshot

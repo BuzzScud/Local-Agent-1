@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit, quitTyped } from './app-setup.mjs';
-import { COMMANDS, SETTINGS, IN_SETTINGS, matchCommands } from '../src/app/commands.mjs';
+import { COMMANDS, SETTINGS, IN_SETTINGS, TYPED_ONLY, matchCommands } from '../src/app/commands.mjs';
 import { helpData, cliHelpText, setupModels } from '../src/app/help.mjs';
 
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
@@ -24,7 +24,7 @@ test('coding setup --model names every other model in /model, from the model lis
 
 test('the / menu holds 18 commands and /settings the other 18; every one is still a command, and the Help page lists both parts', () => {
   const menu = matchCommands('/').map((c) => c.name);
-  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'test', 'morning', 'settings', 'exit']);
+  expect(menu).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'test', 'settings', 'exit']);
   expect([...IN_SETTINGS]).toEqual(['permissions', 'meters', 'mouse', 'autostart', 'helpers', 'hooks', 'rules', 'instructions', 'memory', 'web', 'weights', 'docs', 'arena', 'tests', 'stats', 'doctor', 'init', 'update']);
   expect(SETTINGS.map((g) => g.group)).toEqual(['Setup', 'Pages · the hub in the browser', 'Tools']);
   for (const n of IN_SETTINGS) {
@@ -33,9 +33,11 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   }
   // On an Ollama service /subagents takes the place of /start and /stop: 17, so it still fits.
   const onService = matchCommands('/', { service: true }).map((c) => c.name);
-  expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'test', 'morning', 'settings', 'exit']);
+  expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'test', 'settings', 'exit']);
   expect(COMMANDS.some((c) => c.name === 'subagents')).toBe(true);
-  expect(menu.length + IN_SETTINGS.size + 1).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
+  // /agents took /morning's row (2 Oct 2026): /morning is typed only, and still a command on /help
+  expect([...TYPED_ONLY]).toEqual(['morning']);
+  expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
   expect(matchCommands('/doc')).toEqual([]); // half a hidden name finds nothing
   expect(matchCommands('/se').map((c) => c.name)).toEqual(['settings']);
   expect(matchCommands('/te').map((c) => c.name)).toEqual(['test', 'remote']); // /tests (the record) is in /settings; remote holds "te"

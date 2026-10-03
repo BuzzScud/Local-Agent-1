@@ -64,6 +64,11 @@ import { complete } from '../flows/llm.mjs';
 import { askAside, sendToMain } from '../agent/btw.mjs';
 import { readLimits, limitsToSave, moveLimit, limitChanges, modelWithLimits, applyLimits, applySearch, searchModels, defaultLimits, showLimit, effortNote, defaultLevelId, OWN_ROWS, ownOf, shownLimits } from './limits.mjs';
 import { isQuit } from '../flows/words.mjs';
+import { AgentsRun, STAGES as AGENT_STAGES } from '../agent/agents-run.mjs';
+import { agentDriver, savedRun } from '../agent/agents-driver.mjs';
+import { demoDriver } from '../agent/agents-demo.mjs';
+import { agentsLine } from './agents-tree.mjs';
+import { growTo, canResize, resizeSeq } from './agents-window.mjs';
 
 // The spinner's verb for a turn and its past tense for the line left behind
 // when the turn ends ("⠿ Baked for 41s · done 12:58 PM"), as Claude Code does.
@@ -217,6 +222,13 @@ export function App({ opts, win, onRestart }) {
   const [live, setLive] = useState(IDLE);
   const [perm, setPerm] = useState(null);
   const [picker, setPicker] = useState(null);
+  // /agents (agents-run.mjs): the run, its state as last drawn, and where it shows: 'tree' (the
+  // whole window), 'chat' (one live line above the prompt box) or null (not open).
+  const agentsRef = useRef(null);
+  const [agentsState, setAgentsState] = useState(null);
+  const [agentsView, setAgentsView] = useState(null);
+  const [agentsNow, setAgentsNow] = useState(() => Date.now());
+  const agentsSize = useRef(null); // the window's size before /agents grew it
   // /model's Effort row is the highlighted model's own levels (1 Oct 2026: K2 Horizon and Bonsai have Medium, Gemma
   // and Qwen do not). The level you chose is kept by name (levelId, on), so moving the cursor never changes it; a model
   // without it shows its nearest (thinkingLevel: Medium is High there). A remote's row has no levels: the model in use's.
@@ -528,7 +540,7 @@ export function App({ opts, win, onRestart }) {
 
   // Everything the key handler needs, always current.
   const S = useRef({});
-  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState };
+  S.current = { input, perm, picker, popup, menuIndex, mode, starting, live, queued, tooSmall, meters, mouse, btw, answerWait, remoteState, agentsView, agentsState };
 
   const flash = useCallback((text, ms = 2000) => { setNotice(text); setTimeout(() => setNotice((n) => (n === text ? null : n)), ms); }, []);
   // Text selected in the prompt (shift + arrows) is copied as soon as the
@@ -2351,6 +2363,75 @@ export function App({ opts, win, onRestart }) {
     });
   }, [agent, columns, rows, model, opts.url, push, starting]);
 
+  // /agents: the window grows while its tree is open and goes back after (agents-window.mjs).
+  const agentsGrow = () => {
+    if (!canResize() || agentsSize.current) return;
+    const cur = { columns: process.stdout.columns, rows: process.stdout.rows };
+    const to = growTo(cur);
+    if (!to) return;
+    agentsSize.current = cur;
+    try { process.stdout.write(resizeSeq(to[0], to[1])); } catch { /* the window stays as it is */ }
+  };
+  const agentsGiveBack = () => {
+    const was = agentsSize.current;
+    agentsSize.current = null;
+    if (!was || !canResize()) return;
+    try { process.stdout.write(resizeSeq(was.columns, was.rows)); } catch { /* it stays big */ }
+  };
+  const openAgentsTree = () => { setAgentsView('tree'); agentsGrow(); };
+  const closeAgents = () => { setAgentsView(null); agentsGiveBack(); };
+  const startAgents = (request, { demo = false, saved = null } = {}) => {
+    const driver = demo ? demoDriver() : agentDriver(agent);
+    const run = new AgentsRun({ request, driver, saved });
+    agentsRef.current = run;
+    // Accept edits for the run: the stop list asks about what matters; your mode comes back after.
+    const before = agent.mode;
+    if (!demo && before === 'ask') setMode('edits');
+    run.on('state', (st) => setAgentsState({ ...st }));
+    run.on('end', (st) => {
+      if (!demo && before === 'ask') setMode('ask');
+      setAgentsState({ ...st });
+      const v = st.verdict ?? {};
+      const files = demo ? 'a pretend run: nothing was written' : 'SPEC.md, CONSTRAINTS.md, tasks/plan.md, tasks/todo.md, tasks/review.md and tasks/ship.md';
+      push({ type: 'note', text: `/agents ${v.kind === 'go' ? 'GO' : v.kind === 'nogo' ? 'NO-GO' : v.kind === 'failed' ? 'stopped by an error' : 'stopped'}${v.why ? `: ${v.why}` : ''} · ${st.items[2]?.filter((t) => t.state === 'done').length ?? 0} tasks done · ${files} · nothing committed (read git diff, then commit). /agents opens the tree again.`, tone: v.kind === 'go' ? 'dim' : 'warn' });
+      // A few seconds on the result, then the window is yours again.
+      setTimeout(() => { if (agentsRef.current === run && !run.running) closeAgents(); }, 4000);
+    });
+    setAgentsState({ ...run.state });
+    push({ type: 'note', text: `/agents${demo ? ' demo (a pretend run, nothing is written)' : ''}: ${request}`, tone: 'dim' });
+    openAgentsTree();
+    run.start(saved?.stage ?? 0);
+  };
+  // The answer to the question the run waits on; "type it" takes your next line in the chat.
+  const agentsAnswer = (n) => {
+    const run = agentsRef.current, g = run?.state.gate;
+    if (!g || n < 0 || n >= g.opts.length) return;
+    if (g.typeAt === n) {
+      setAgentsView('chat');
+      answerRef.current = ({ text }) => { run.answer(n, text); setAgentsView('tree'); };
+      setAnswerWait(true);
+      setPlaceholder('Type your answer for /agents, then enter');
+      return;
+    }
+    run.answer(n);
+  };
+  const agentsKey = (ch, key) => {
+    const run = agentsRef.current, st = run?.state;
+    if (!run) return false;
+    if (key.ctrl && ch === 'c') return false;
+    if (key.escape) { if (run.running) setAgentsView('chat'); else closeAgents(); return true; }
+    const g = st.gate;
+    if (g) {
+      if (/^[1-9]$/.test(ch) && Number(ch) <= g.opts.length) { agentsAnswer(Number(ch) - 1); return true; }
+      if (key.upArrow || key.downArrow) { g.sel = (g.sel + (key.upArrow ? g.opts.length - 1 : 1)) % g.opts.length; setAgentsState({ ...st }); return true; }
+      if (key.return) { agentsAnswer(g.sel); return true; }
+    }
+    if (ch === 'p' && !key.ctrl && !key.meta) { if (st.paused) run.resume(); else run.pause(); return true; }
+    // Typing anything else goes to the chat, where it is a note for the next step.
+    if (ch && !key.ctrl && !key.meta && !key.return && !key.tab) { setAgentsView('chat'); return false; }
+    return true;
+  };
+
   const runSlash = useCallback(async (line) => {
     const [cmd, ...rest] = line.slice(1).trim().split(/\s+/);
     const arg = rest.join(' ').trim();
@@ -2395,6 +2476,30 @@ export function App({ opts, win, onRestart }) {
         // and throw away its reading.
         if (agent.slots?.side === undefined) { push({ type: 'note', text: '/btw needs the model server\'s side lane, and this one has a single lane (with --url, add --slots 2).', tone: 'warn' }); break; }
         askBtw(arg);
+        break;
+      }
+      case 'agents': {
+        // /agents <request>: spec, plan, test-first build, verify, review and ship, on the agent tree.
+        const run = agentsRef.current;
+        const sub = arg.toLowerCase();
+        if (sub === 'stop') { if (run?.running) { run.stop(); push({ type: 'note', text: 'Stopping /agents after this step. Nothing was committed.', tone: 'dim' }); } else push({ type: 'note', text: 'No /agents run is going.', tone: 'dim' }); break; }
+        if (!arg || sub === 'open') {
+          if (run) { openAgentsTree(); break; }
+          const saved = savedRun(agent.cwd);
+          push({ type: 'note', text: saved ? `An unfinished /agents run here: "${saved.request}". /agents resume goes on from ${AGENT_STAGES[saved.stage]?.name ?? 'where it stopped'}.` : 'Give it a request: /agents build a Kepler solver (/agents demo shows the tree on a pretend run).', tone: 'dim' });
+          break;
+        }
+        if (run?.running) { push({ type: 'note', text: 'A /agents run is going: /agents opens it, /agents stop ends it.', tone: 'dim' }); break; }
+        if (sub === 'demo') { startAgents('build a Kepler solver: where an orbit is at time t', { demo: true }); break; }
+        if (busy || S.current.starting) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
+        if (modelOffNow()) { push({ type: 'note', text: 'The model is off: /start loads it, then /agents again.', tone: 'dim' }); break; }
+        if (sub === 'resume') {
+          const saved = savedRun(agent.cwd);
+          if (!saved) { push({ type: 'note', text: 'No unfinished /agents run in this folder.', tone: 'dim' }); break; }
+          startAgents(saved.request, { saved });
+          break;
+        }
+        startAgents(arg);
         break;
       }
       case 'morning': {
@@ -2855,6 +2960,12 @@ export function App({ opts, win, onRestart }) {
     }
     if (value.startsWith('/')) { runSlash(value); return; }
     if (value.startsWith('!')) { runShell(value.slice(1).trim()); return; }
+    // While /agents runs, a message is a note for its next step (the model is busy with the run).
+    if (agentsRef.current?.running && !isQuit(value)) {
+      agentsRef.current.note(value);
+      push({ type: 'note', text: `Noted for /agents: "${value}" goes with its next step. esc opens the tree.`, tone: 'dim' });
+      return;
+    }
     // "exit" or "quit" typed as a plain message quits, like /exit.
     if (isQuit(value)) { quit(); return; }
     addHistory(cwd, value);
@@ -3069,6 +3180,10 @@ export function App({ opts, win, onRestart }) {
     if (cur.popup) {
       setPopup(null);
       if (key.escape || key.return || (key.ctrl && ch === 'c')) return;
+    }
+    // /agents' tree has the window: its keys first (a permission prompt or a question shows over it).
+    if (cur.agentsView === 'tree' && agentsRef.current && !cur.perm && !cur.picker && !cur.answerWait) {
+      if (agentsKey(ch, key)) return;
     }
     // Permission prompt
     if (cur.perm) {
@@ -3371,6 +3486,8 @@ export function App({ opts, win, onRestart }) {
       if (menu) { setMenuClosedFor(cur.input.value); return; }
       if (showShortcuts) { setShowShortcuts(false); return; }
       if (selectedText(cur.input)) { setInput((s) => withUndo(s, { value: s.value, cursor: s.cursor })); return; } // drops the selection only
+      // /agents goes on behind the chat: esc opens its tree again (/agents stop ends it).
+      if (agentsRef.current?.running && cur.agentsView === 'chat' && !cur.input.value && !cur.perm) { openAgentsTree(); return; }
       if (agent.busy || cur.live.phase === 'working') { interrupt(); return; }
       if (cur.input.value) {
         if (Date.now() - escArmed.current < 1500) { setInput((s) => withUndo(s, { value: '', cursor: 0 })); return; } // ctrl+z brings it back
@@ -3506,7 +3623,25 @@ export function App({ opts, win, onRestart }) {
   // What the running start has left (start-times.mjs), from how long each part has run so far.
   const tm = timing.current;
   const startLeftNow = starting && tm ? startLeft(timesRef.current[tm.id], { phase: startPhase, cold: tm.cold, sinceLoad: (now - tm.loadAt) / 1000, sinceWarm: tm.warmAt ? (now - tm.warmAt) / 1000 : 0 }) : null;
+  // /agents: its tree takes the whole window (a permission prompt, a menu or a typed answer shows
+  // over it, in the chat), and each switch draws the window again, as a resize does.
+  const agentsShown = agentsView === 'tree' && Boolean(agentsState) && !perm && !picker && !answerWait && !popup;
+  const agentsWas = useRef(false);
+  useEffect(() => {
+    if (agentsWas.current === agentsShown) return;
+    agentsWas.current = agentsShown;
+    win?.clear();
+  }, [agentsShown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Its dots and spinners move about 8 times a second while it works (twice a second in the chat's line).
+  const agentsMoving = Boolean(agentsState) && !agentsState.verdict && !agentsState.paused && !agentsState.gate;
+  useEffect(() => {
+    if (!agentsMoving || !agentsView) return undefined;
+    const id = setInterval(() => setAgentsNow(Date.now()), agentsShown ? 125 : 500);
+    return () => clearInterval(id);
+  }, [agentsMoving, agentsView, agentsShown]);
+  const agentsLiveLine = agentsState && !agentsShown && agentsView === 'chat' ? agentsLine(agentsState, agentsNow) : null;
   const app = {
+    agentsTree: agentsShown ? agentsState : null, agentsNow, agentsLine: agentsLiveLine,
     btw: btwShown ? btw : null, btwWaiting: Boolean(btw && !btwShown), argHint, leaving,
     items, live, perm, picker, popup, input, mode, width, rows: rows ?? 40, columns: columns ?? 100, tooSmall, redraw, cwd, cwdShort: short(cwd), loaded: opts.loaded ?? '', start, hold: holdRef.current, tip,
     modelName: model.name, modelOff, modelState, gauges, gaugeList: settings.footer?.remote, server: model.remote ? server : null, now, spinner: spinStyle((process.env.AGENTIC_SPINNER ?? process.env.BONSAI_SPINNER)), stats: { ...stats, ctxUsed: stats.ctxUsed ?? agent.ctxUsed }, ctx, ramGb, mac, meters, starting, startedAt, notice, queued, showShortcuts, placeholder,
