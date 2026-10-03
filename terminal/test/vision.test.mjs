@@ -3,6 +3,7 @@
 // OpenAI-compatible, the Claude API), Read of a picture and of a PDF (tools.mjs),
 // and the model's vision add-on (registry, memory, server). The app: app-vision.test.mjs.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -22,7 +23,7 @@ const dir = mkdtempSync(join(tmpdir(), 'agentic-vision-'));
 const shot = join(dir, 'shot.png');
 const pdf = join(dir, 'doc.pdf');
 
-test('the helper, built on first use with the Mac’s own Swift: a picture made smaller for the model, a PDF’s text by page, a page drawn as a picture', () => {
+test.skipIf(needs('pictures', media.mediaTool))('the helper, built on first use with the Mac’s own Swift: a picture made smaller for the model, a PDF’s text by page, a page drawn as a picture', () => {
   media.textImage(shot, 'HELLO 42', { w: 2400, h: 900 });
   const img = media.preparedImage(shot);
   expect([img.mime, img.srcW, img.srcH, img.w, img.h]).toEqual(['image/jpeg', 2400, 900, media.MAX_SIDE, 480]);
@@ -36,7 +37,7 @@ test('the helper, built on first use with the Mac’s own Swift: a picture made 
   expect(() => media.preparedImage(pdf.replace('.pdf', '.txt'))).toThrow();
 });
 
-test('the test clipboard stands in for yours: a picture there is pasted, none says so', () => {
+test.skipIf(needs('pictures', media.mediaTool))('the test clipboard stands in for yours: a picture there is pasted, none says so', () => {
   const out = join(dir, 'pasted.png');
   process.env.AGENTIC_TEST_CLIPBOARD = shot;
   expect(media.clipboardImage(out)).toEqual({ w: 2400, h: 900 });
@@ -45,7 +46,7 @@ test('the test clipboard stands in for yours: a picture there is pasted, none sa
   delete process.env.AGENTIC_TEST_CLIPBOARD;
 });
 
-test('a file dragged into the window: its path with escaped spaces and brackets, the screenshot’s narrow space, in quotes, from ~; not a file that is not there', () => {
+test.skipIf(needs('pictures', media.mediaTool))('a file dragged into the window: its path with escaped spaces and brackets, the screenshot’s narrow space, in quotes, from ~; not a file that is not there', () => {
   const home = mkdtempSync(join(homedir(), '.agentic-vision-test-'));
   try {
     const name = 'Screenshot 2026-09-30 at 3.57.51 PM (2).png';
@@ -99,7 +100,7 @@ test('on the Claude API: your pictures as image blocks, a tool result’s inside
   expect(r.messages[2].content.at(-1)).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'DATA4' } });
 });
 
-test('Read of a picture: shown to the model when it can see, explained when it cannot; Read of a PDF: its text by page, find, a page as a picture', async () => {
+test.skipIf(needs('pictures', media.mediaTool))('Read of a picture: shown to the model when it can see, explained when it cannot; Read of a PDF: its text by page, find, a page as a picture', async () => {
   const proj = join(dir, 'proj');
   mkdirSync(proj, { recursive: true });
   copyFileSync(shot, join(proj, 'shot.png'));

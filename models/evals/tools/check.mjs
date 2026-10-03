@@ -473,7 +473,9 @@ async function unitTests() {
   const pass = Number(/^\s*(\d+) pass$/m.exec(tail)?.[1] ?? NaN), fail = Number(/^\s*(\d+) fail$/m.exec(tail)?.[1] ?? NaN);
   if (Number.isNaN(pass)) return wrong('the unit tests did not run', lines(r.err || r.out).slice(-3));
   if (fail || r.code !== 0) return wrong(`${fail || 'some'} of ${pass + (fail || 0)} unit tests fail`, lines(r.out).filter((l) => l.startsWith('(fail)')).slice(0, 6));
-  return fine(`${pass} of ${pass} unit tests pass`);
+  // Tests skipped for want of a tool on this Mac (run-suite.mjs): green, and said.
+  const skipped = /^\s*skipped for want of a tool: (.+)$/m.exec(tail)?.[1];
+  return fine(`${pass} of ${pass} unit tests pass`, skipped ? [`skipped for want of a tool on this Mac: ${skipped}`] : []);
 }
 
 // ---- the run ---------------------------------------------------------------------------------

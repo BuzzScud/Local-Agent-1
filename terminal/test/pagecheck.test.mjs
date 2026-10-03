@@ -2,6 +2,7 @@
 // opened, what the browser's findings become, and the whole path against the
 // scripted model with a real browser.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -132,7 +133,7 @@ const PAIR = { text: JSON.stringify({ pair: '1' }) };
 const edit = (from, to) => ({ text: `### style.css\n<<<<<<< OLD\n${from}\n=======\n${to}\n>>>>>>> NEW` });
 const BAR = '.bar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; height: 40px; }';
 
-test.skipIf(!PW)('a layout bug: the browser finds what covers what, the check fails, you approve it, the fix is scored by it', async () => {
+test.skipIf(needs('playwright', () => PW))('a layout bug: the browser finds what covers what, the check fails, you approve it, the fix is scored by it', async () => {
   const cwd = pageProject();
   const { reason, events, fake } = await run(cwd, REQUEST, [STEPS, PAIR, edit(BAR, BAR.replace('z-index: 2', 'z-index: 1')), edit(BAR, BAR.replace('z-index: 2', 'z-index: 3')), { text: 'Raises the bar above the legend.' }]);
   expect(reason).toBe('done');
@@ -157,7 +158,7 @@ test.skipIf(!PW)('a layout bug: the browser finds what covers what, the check fa
   expect(events.at(-1).text ?? events.findLast((e) => e.type === 'assistant').text).toMatch(/Fixed style\.css; node checks\/results-on-top\.mjs passes\. The check stays in your project \(checks\/results-on-top\.mjs\)/);
 }, 120_000);
 
-test.skipIf(!PW)('a fix that hides the covering thing does not pass, and with no passing try the check and the findings go on step by step', async () => {
+test.skipIf(needs('playwright', () => PW))('a fix that hides the covering thing does not pass, and with no passing try the check and the findings go on step by step', async () => {
   const cwd = pageProject();
   const LEGEND = '  z-index: 2;\n  top: 44px;';
   const { reason, events, fake } = await run(cwd, REQUEST, [STEPS, PAIR,
@@ -175,7 +176,7 @@ test.skipIf(!PW)('a fix that hides the covering thing does not pass, and with no
   expect(loop.content).toContain('raise the z-index of .bar above 2');
 }, 120_000);
 
-test.skipIf(!PW)('not approving the check changes nothing', async () => {
+test.skipIf(needs('playwright', () => PW))('not approving the check changes nothing', async () => {
   const cwd = pageProject();
   const { reason, events } = await run(cwd, REQUEST, [STEPS, PAIR], { answer: 'no' });
   expect(reason).toBe('declined');

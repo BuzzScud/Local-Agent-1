@@ -4,6 +4,7 @@
 // line saying so; with the stand-in model, the first picture turns its vision
 // add-on on (a reload with --mmproj), and a missing add-on is offered first.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdirSync, symlinkSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
@@ -13,7 +14,7 @@ import { ENGINE, MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
 
 const D = MODELS[DEFAULT_MODEL];
 const CLI = join(import.meta.dir, '..', 'src', 'cli.jsx');
-const { textImage, textPdf } = await import('../src/tools/media.mjs');
+const { textImage, textPdf, mediaTool } = await import('../src/tools/media.mjs');
 
 // A project with a picture and a PDF in it.
 function project() {
@@ -35,7 +36,7 @@ function standIn(base, { vision }) {
 const imageParts = (req) => (req?.messages ?? []).flatMap((m) => (Array.isArray(m.content) ? m.content.filter((c) => c.type === 'image_url') : []));
 const chatWith = (fake, word) => fake.requests.find((q) => q.stream && JSON.stringify(q.messages).includes(word));
 
-test('@shot.png and a PDF go with the message to a server that can see: the picture as a picture, the PDF as its text', async () => {
+test.skipIf(needs('pictures', mediaTool))('@shot.png and a PDF go with the message to a server that can see: the picture as a picture, the PDF as its text', async () => {
   const { cwd, env } = project();
   const fake = await startFakeServer([{ text: 'It says HELLO 42.' }], { vision: true });
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -50,7 +51,7 @@ test('@shot.png and a PDF go with the message to a server that can see: the pict
   expect(JSON.stringify(req.messages)).toContain('Total due: 1,240 dollars');
 }, T);
 
-test('a server that cannot see: the message goes with a line saying a picture was attached, and a note says why', async () => {
+test.skipIf(needs('pictures', mediaTool))('a server that cannot see: the message goes with a line saying a picture was attached, and a note says why', async () => {
   const { cwd, env } = project();
   const fake = await startFakeServer([{ text: 'I cannot see it.' }], { vision: false });
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -63,7 +64,7 @@ test('a server that cannot see: the message goes with a line saying a picture wa
   expect(JSON.stringify(req.messages)).toContain('(The user attached a picture (shot.png), but this model is not looking at pictures now.)');
 }, T);
 
-test('ctrl+v pastes the clipboard’s picture as [Image #1] (a test clipboard: yours is never read), and it goes with the message', async () => {
+test.skipIf(needs('pictures', mediaTool))('ctrl+v pastes the clipboard’s picture as [Image #1] (a test clipboard: yours is never read), and it goes with the message', async () => {
   const { cwd, env } = project();
   const fake = await startFakeServer([{ text: 'A pasted picture.' }], { vision: true });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_TEST_CLIPBOARD: join(cwd, 'shot.png') }, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -76,7 +77,7 @@ test('ctrl+v pastes the clipboard’s picture as [Image #1] (a test clipboard: y
   expect(imageParts(chatWith(fake, 'look at [Image #1]'))).toHaveLength(1);
 }, T);
 
-test('the first picture turns the model’s vision on: it reloads with its add-on (--mmproj), the conversation stays, and the message goes once it can see', async () => {
+test.skipIf(needs('pictures', mediaTool))('the first picture turns the model’s vision on: it reloads with its add-on (--mmproj), the conversation stays, and the message goes once it can see', async () => {
   const { cwd, env, base } = project();
   standIn(base, { vision: true });
   const args = join(base, 'server-args.jsonl');
@@ -94,7 +95,7 @@ test('the first picture turns the model’s vision on: it reloads with its add-o
   expect(r.snapshots.stats).toMatch(/pictures\s+on: it can look at pictures/);
 }, 150_000);
 
-test('the add-on not downloaded yet: it asks first; "Send without the picture" sends it now with a line saying so', async () => {
+test.skipIf(needs('pictures', mediaTool))('the add-on not downloaded yet: it asks first; "Send without the picture" sends it now with a line saying so', async () => {
   const { cwd, env, base } = project();
   standIn(base, { vision: false });
   const r = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 120_000, steps: [
@@ -109,7 +110,7 @@ test('the add-on not downloaded yet: it asks first; "Send without the picture" s
   expect(existsSync(join(base, 'home', 'models', D.vision.file))).toBe(false); // nothing downloaded
 }, 150_000);
 
-test('coding -p with a picture in the prompt: sent to a server that can see', async () => {
+test.skipIf(needs('pictures', mediaTool))('coding -p with a picture in the prompt: sent to a server that can see', async () => {
   const { cwd, env } = project();
   const fake = await startFakeServer([{ text: 'HELLO 42' }], { vision: true });
   const p = Bun.spawn(['bun', CLI, '-p', 'what does @shot.png say?', '--url', fake.url, '--no-flows'], { cwd, env: { ...process.env, ...env, AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_NO_MEMORY: '1' }, stdout: 'pipe', stderr: 'pipe' });
@@ -119,7 +120,7 @@ test('coding -p with a picture in the prompt: sent to a server that can see', as
   expect(imageParts(chatWith(fake, 'what does @shot.png say'))).toHaveLength(1);
 }, T);
 
-test('a picture the model reads by itself turns its vision on in the middle of the reply: a reload with the add-on, and the picture goes with Read’s result', async () => {
+test.skipIf(needs('pictures', mediaTool))('a picture the model reads by itself turns its vision on in the middle of the reply: a reload with the add-on, and the picture goes with Read’s result', async () => {
   const { cwd, env, base } = project();
   standIn(base, { vision: true });
   const args = join(base, 'server-args.jsonl');
@@ -135,7 +136,7 @@ test('a picture the model reads by itself turns its vision on in the middle of t
   expect(r.text.replace(/\s+/g, ' ')).toContain(`${D.name} can look at pictures now`);
 }, 150_000);
 
-test('coding -p: a picture the model reads by itself reloads it with its add-on, once', async () => {
+test.skipIf(needs('pictures', mediaTool))('coding -p: a picture the model reads by itself reloads it with its add-on, once', async () => {
   const { cwd, env, base } = project();
   standIn(base, { vision: true });
   const args = join(base, 'server-args.jsonl');

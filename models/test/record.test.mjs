@@ -4,7 +4,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, sideByMost, pathOf, taskSteps, SNAPSHOT, REAL_RECORD } from '../evals/record.mjs';
+import { recordTest, readRecord, recordData, writeSnapshot, codeLabel, recordFile, rawPlace, modelOf, installedModels, gradeOf, overviewTests, sideBySide, sideByMost, pathOf, taskSteps, SNAPSHOT, REAL_RECORD, skipsIn, skipWords } from '../evals/record.mjs';
 import { RUN_TESTS } from '../evals/run-tests.mjs';
 import { MODELS } from '../registry.mjs';
 
@@ -331,4 +331,18 @@ test('side by side: each task says which path it took and whether it went on ste
   const old = sideBySide(['gemma', 'qwen'], { file, top: dir, home: join(dir, 'no-arena') }).run;
   expect(old.models.gemma.tasks['2-fix-bug']).toMatchObject({ path: null, thenLoop: false });
   expect(old.example).toBe(null);
+});
+
+test('tests skipped for want of a tool are counted by their reason, said the most first, and kept on the run\'s line', () => {
+  const out = ['terminal/test/vision.test.mjs:', '(skipped: no picture helper)', '\x1b[2m(skipped: no picture helper)\x1b[0m', '(skipped: no pytest)', 'it said (skipped: no pytest) in a sentence', ' 3 pass', ' 3 skip'].join('\n');
+  const why = skipsIn(out);
+  expect(why).toEqual({ 'no picture helper': 2, 'no pytest': 1 }); // a whole line only, colours aside
+  expect(skipsIn('(skipped: no pytest)\n', why)).toEqual({ 'no picture helper': 2, 'no pytest': 2 }); // added up, file after file
+  expect(skipWords({ 'no pytest': 9, 'no picture helper': 16, 'no Chrome': 2 })).toBe('16 no picture helper, 9 no pytest, 2 no Chrome');
+  expect(skipWords({})).toBe('');
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-record-skips-'));
+  const file = join(dir, 'record.jsonl');
+  const line = recordTest({ kind: 'suite', name: 'Unit tests, both parts', passed: 10, total: 10, secs: 1, skipped: { 'no pytest': 3 } }, { file, snapshot: false, quiet: true });
+  expect(line.skipped).toEqual({ 'no pytest': 3 });
+  expect(recordTest({ kind: 'suite', name: 'Unit tests, both parts', passed: 10, total: 10, secs: 1, skipped: {} }, { file, snapshot: false, quiet: true }).skipped).toBeUndefined();
 });

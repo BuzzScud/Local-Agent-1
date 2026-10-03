@@ -129,6 +129,15 @@ export function panelSettings(env = process.env) {
 
 // Adds one run to the record. It never throws: a test must not fail because
 // its result could not be written down. Returns the line, or null.
+// A test that needs a tool this Mac lacks is skipped and prints "(skipped: no pytest)" (terminal/test/needs.mjs).
+// skipsIn counts those lines by reason, so a run's last lines and its record say what was not run and why;
+// skipWords says it: "16 no picture helper, 9 no pytest", the most first ('' when nothing was skipped).
+export function skipsIn(text, into = {}) {
+  for (const m of String(text ?? '').replace(/\x1b\[[0-9;]*m/g, '').matchAll(/^\(skipped: ([^)\n]+)\)$/gm)) into[m[1]] = (into[m[1]] ?? 0) + 1;
+  return into;
+}
+export const skipWords = (why) => Object.entries(why ?? {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${n} ${k}`).join(', ');
+
 export function recordTest(row, { file = recordFile(), snapshot = true, quiet = false } = {}) {
   try {
     if (!KINDS[row?.kind] || !row.name) throw new Error('a line needs a kind (tasks, sets, requests, bug, suite, check, other) and a name');
@@ -137,6 +146,8 @@ export function recordTest(row, { file = recordFile(), snapshot = true, quiet = 
     const line = { id: row.id ?? `${row.kind}:${at}`, at, kind: row.kind, name: row.name, code: row.code ?? codeLabel(), model: row.model ?? null, effort: row.effort ?? null, ctx: row.ctx ?? null,
       passed: row.passed ?? null, total: row.total ?? null, secs: row.secs == null ? null : Math.round(row.secs), result, part: Boolean(row.part), note: row.note ?? '', raw: rawPlace(row.raw), page: row.page ?? '',
       ...(row.bar ? { bar: String(row.bar) } : {}), ...(Array.isArray(row.failed) && row.failed.length ? { failed: row.failed.map(String).slice(0, 50) } : {}),
+      // Tests skipped for want of a tool on this Mac, by reason: { 'no pytest': 9 } (run-suite.mjs).
+      ...(row.skipped && Object.keys(row.skipped).length ? { skipped: Object.fromEntries(Object.entries(row.skipped).map(([k, n]) => [String(k), Number(n) || 0])) } : {}),
       // A run of your own tests: its level (Easy, Medium, Hard) and the points it got of those it could.
       ...(row.level ? { level: String(row.level) } : {}), ...(row.points && Number.isFinite(row.points.got) && Number.isFinite(row.points.of) ? { points: { got: row.points.got, of: row.points.of } } : {}),
       ...(() => { const s = row.settings ?? panelSettings(); return s ? { settings: s } : {}; })() };

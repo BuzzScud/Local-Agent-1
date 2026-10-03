@@ -87,6 +87,18 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   that are on the Mac but not yet in the record. A saved copy of the record page is written to
   `docs/tests/agentic-coder-test-record.html` (the main folder's), so it goes out with the next commit of pages.
 
+- **A tool a test needs that the Mac lacks is a named skip** (3 Oct 2026, the owner's pick; one Mac had no pytest and
+  could not build the picture helper, so about 25 tests always failed there and two new failures went unseen).
+  `terminal/test/needs.mjs`: `test.skipIf(needs('pytest'))(…)`, with `python3`, `pytest`, `chrome`, `pictures`
+  (`needs('pictures', media.mediaTool)`: the file's own build), `playwright` and `sandbox`. A tool that is here is
+  never skipped. Each skipped test prints "(skipped: no pytest)"; `run-suite.mjs` counts them by reason (`skipsIn` in
+  record.mjs), ends with "skipped for want of a tool: 16 no picture helper, 9 no pytest", and the record's line keeps
+  them (`skipped`); `bun run check` is green only at 0 fail and lists them. A models test reaches it as
+  `globalThis.needs` (the preload puts it there: the two parts meet at one file each way). `AGENTIC_TEST_HIDE=pytest`
+  hides a tool for a test of the skips. Which tests need what was measured, not guessed: the suite run with python and
+  the picture helper taken away.
+- **Every test process has a throwaway home** (test-env.mjs, 3 Oct 2026) and removes its own when it ends.
+
 ## The memory
 
 - **The memory** (`terminal/src/agent/facts.mjs`, `recall.mjs`, `lessons.mjs`) keeps what Agentic Coder

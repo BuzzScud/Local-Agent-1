@@ -3,6 +3,7 @@
 // calls (WebFetch, WebSearch in tools.mjs), with who is asked first (permissions.mjs).
 // Nothing here goes on the internet: every page and service is a server on this Mac.
 import { test, expect, beforeAll, afterAll } from 'bun:test';
+import { needs } from './needs.mjs';
 import { createServer } from 'node:http';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,10 +24,14 @@ thing --version</code></pre>
 <img src="x.png" alt="A chart of speed"><p>Contact: <a href="mailto:a@b.c">write to us</a>.</p></main>
 <footer>© 2026 Thing Inc.</footer></body></html>`;
 let server, base;
+const noPictures = needs('pictures', media.mediaTool);
 const hits = [];
 beforeAll(async () => {
-  media.textPdf(join(dir, 'doc.pdf'), ['Invoice 7731\nTotal due: 1,240 dollars']);
-  media.textImage(join(dir, 'pic.png'), 'HELLO 42');
+  // The PDF and the picture are made by the picture helper: without it, only the test that reads them is skipped.
+  if (!noPictures) {
+    media.textPdf(join(dir, 'doc.pdf'), ['Invoice 7731\nTotal due: 1,240 dollars']);
+    media.textImage(join(dir, 'pic.png'), 'HELLO 42');
+  }
   server = createServer((req, res) => {
     hits.push({ url: req.url, method: req.method, headers: req.headers });
     let body = '';
@@ -86,7 +91,7 @@ test('a page as text: the main part, headings, lists, code, tables and links; no
   expect(web.decodeEntities('&#x2014;&#8212;&nbsp;&bogus;')).toBe('—— &bogus;'.replace(' ', ' '));
 });
 
-test('fetchPage: HTML, a redirect on the same site followed, one to another site not, a PDF as text, a picture, JSON, a cap on size and on time', async () => {
+test.skipIf(noPictures)('fetchPage: HTML, a redirect on the same site followed, one to another site not, a PDF as text, a picture, JSON, a cap on size and on time', async () => {
   const page = await web.fetchPage(`${base}/page`);
   expect([page.status, page.type, page.title]).toEqual([200, 'text/html', 'Release notes & more']);
   expect(page.text).toContain('# Version 4.2');
