@@ -15,7 +15,7 @@ import { listFiles, searchFiles, walk } from '../tools/fs.mjs';
 import { mathPathFor, mathDir } from './expertise.mjs';
 import { designPathFor, designDir, inDesignDir } from './design.mjs';
 import { studioPathFor, studioDir, inStudioDir, hideBuilt, realBuilt } from './studio.mjs';
-import { readSkillPath, readSkills, readGuidePath, readGuides } from './prompt-files.mjs';
+import { readSkillPath, readSkills, readNearPath, readGuidePath, readGuides } from './prompt-files.mjs';
 import { permissionsTable } from './permissions.mjs';
 
 const str = (description) => ({ type: 'string', description });
@@ -170,6 +170,12 @@ const READ_MANY = {
 // screen: the Screen tool joins them (a model that can look at pictures, on a Mac).
 export const toolDefs = (way = 'app', web = null, { agents = false, screen = false, helpers = [] } = {}) => [...(way === 'model' ? [READ_MANY, ...TOOL_DEFS.slice(1), ...MODEL_TOOL_DEFS] : TOOL_DEFS), ...webDefs(web), ...(screen ? [SCREEN_TOOL_DEF] : []), ...(agents ? [agentToolDef(helpers)] : [])];
 export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way, web, opts).map((d) => ({ type: 'function', function: d }));
+
+// Other agents' names for a tool here that takes the same arguments (Claude Code's Glob, Grep and
+// LS): a big model trained on them calls Glob, and on 2 Oct 2026 was told "There is no tool called
+// Glob" twice in one task. The call runs as the tool here; a name this way has is never changed.
+export const TOOL_NAME_ALIASES = { Glob: 'List', Grep: 'Search', LS: 'List' };
+export const toolNameOf = (name, way = 'app') => (TOOL_NAME_ALIASES[name] && !defOf(name, way) ? TOOL_NAME_ALIASES[name] : name);
 
 // Small models reach for other common argument names; accept them.
 const ALIASES = {
@@ -718,14 +724,22 @@ export async function execute(name, args, prepared, env) {
     case 'Read': {
       // "SKILLS/<name>": one of the user's skills (terminal/rules/SKILLS.md, prompt-files.mjs).
       // "RULES/<NAME>.md": one of the guides of the remote set (terminal/rules/remote/).
-      const guide = readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents }));
+      // A path near those ("SKILLS.md", ".SKILLS/<name>", "RULES.md"…), when the project has no such file.
+      const guides = readGuides(env.rulesSet, { agents: env.agents });
+      const skills = readSkills(undefined, env.rulesSet);
+      const near = readNearPath(env.cwd, args.path, { skills, guides });
+      if (near && !existsSync(resolvePath(env.cwd, args.path).abs)) {
+        if (near.error) return { text: near.error, error: true, view: { kind: 'error', message: 'No such skill' } };
+        return { text: near.text, view: { kind: 'read', lines: near.text.split('\n').length, total: near.text.split('\n').length, content: near.text } };
+      }
+      const guide = readGuidePath(env.cwd, args.path, guides);
       if (guide?.error) return { text: guide.error, error: true, view: { kind: 'error', message: 'No such guide' } };
       if (guide) {
         // PERMISSIONS: with the table of what runs, asks or is refused right now (permissions.mjs).
         const text = guide.name === 'PERMISSIONS' && env.permissionsNow ? `${guide.text}\n\n${permissionsTable(env.permissionsNow())}` : guide.text;
         return { text, view: { kind: 'read', lines: text.split('\n').length, total: text.split('\n').length, content: text } };
       }
-      const skill = readSkillPath(env.cwd, args.path, readSkills(undefined, env.rulesSet));
+      const skill = readSkillPath(env.cwd, args.path, skills);
       if (skill?.error) return { text: skill.error, error: true, view: { kind: 'error', message: 'No such skill' } };
       if (skill) return { text: skill.text, view: { kind: 'read', lines: skill.text.split('\n').length, total: skill.text.split('\n').length, content: skill.text } };
       let p = resolvePath(env.cwd, args.path);

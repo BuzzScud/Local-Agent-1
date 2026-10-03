@@ -95,6 +95,15 @@ test('bad arguments come back as an error the model can fix', async () => {
   expect(agent.messages.find((m) => m.role === 'tool').content).toContain('Edit needs "old_text"');
 });
 
+test('Claude Code\'s tool names run as the tools here: Glob as List, Grep as Search (not "There is no tool called Glob")', async () => {
+  const replies = [{ tool: { name: 'Glob', args: { pattern: '**/*.mjs' } } }, { tool: { name: 'Grep', args: { pattern: 'toCsv', path: '.' } } }, { text: 'Found it.' }];
+  const { events, agent } = await run(replies);
+  expect(events.filter((e) => e.type === 'tool').map((e) => [e.name, Boolean(e.error)])).toEqual([['List', false], ['Search', false]]);
+  const results = agent.messages.filter((m) => m.role === 'tool').map((m) => m.content);
+  expect(results[0]).toContain('export.mjs');
+  expect(results[1]).toContain('toCsv');
+});
+
 test('no room on the service\'s GPU is said as it is: the conversation is not summarized away (that error ends "a smaller Context")', async () => {
   const { createServer } = await import('node:http');
   const { setEndpoint, dropEndpoint } = await import('../../models/index.mjs');

@@ -2,7 +2,7 @@ import { test, expect, beforeAll } from 'bun:test';
 import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { findEdit, parseArgs, prepare, execute, display, resolvePath, didYouMean } from '../src/agent/tools.mjs';
+import { findEdit, parseArgs, prepare, execute, display, resolvePath, didYouMean, toolNameOf } from '../src/agent/tools.mjs';
 import { diffLines } from '../src/tools/edit.mjs';
 
 let dir;
@@ -52,6 +52,8 @@ test('arguments: aliases, bad JSON, missing fields, unknown tool', () => {
   expect(parseArgs('Read', '{"path": "a.js"').error).toContain('not valid JSON');
   expect(parseArgs('Bash', '{}').error).toContain('needs "command"');
   expect(parseArgs('Nope', '{}').error).toContain('no tool called');
+  // other agents' names for the same tools; a name a way has is kept, an unknown one stays unknown
+  expect(['Glob', 'Grep', 'LS', 'List', 'Read', 'Nope'].map((n) => toolNameOf(n))).toEqual(['List', 'Search', 'List', 'List', 'Read', 'Nope']);
   expect(parseArgs('TodoWrite', JSON.stringify({ todos: ['one', { content: 'two', status: 'completed' }] })).args.todos).toEqual([{ text: 'one', status: 'pending' }, { text: 'two', status: 'done' }]);
 });
 

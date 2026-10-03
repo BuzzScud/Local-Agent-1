@@ -7,7 +7,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -2314,6 +2314,7 @@ export class Agent extends EventEmitter {
   }
 
   async runTool(call, signal) {
+    call = { ...call, name: toolNameOf(call.name, this.way) };
     let parsed = parseArgs(call.name, call.args, this.way);
     if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
     const shown = display(call.name, parsed.args ?? {});
