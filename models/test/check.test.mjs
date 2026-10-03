@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv } from '../evals/tools/check.mjs';
+import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv, namedModelFiles } from '../evals/tools/check.mjs';
 
 const real = 'Zk3vQ9xT7mB2nL5cR8wY1dF6hJ4s';
 const what = (text) => findSecrets(text).map((s) => s.what);
@@ -139,3 +139,10 @@ test('the check runs the unit tests with colours off by NO_COLOR alone, never wi
   expect(suiteEnv({})).toEqual({ NO_COLOR: '1' });
 });
 
+
+test('a model\'s picture add-on is a file the code uses', async () => {
+  const { MODELS, modelPath, draftPath, visionPath } = await import('../index.mjs');
+  const names = namedModelFiles(MODELS, { modelPath, draftPath, visionPath }).map((f) => f.split('/').pop());
+  for (const m of Object.values(MODELS).filter((x) => x.vision)) expect(names).toContain(m.vision.file);
+  expect(names).toContain('mmproj-qwen3.5-9b-F16.gguf');
+});
