@@ -267,7 +267,7 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
   const [first, second] = a.filter((x, i) => at < 0 || (i !== at && i !== at + 1));
   const list = listBackground();
   const say = (t) => process.stdout.write(`${t}\n`);
-  const pick = async (rows, title) => { process.stderr.write(`${title}\n`); return pickOnTerminal(rows, { hint: 'Enter to open · Esc to leave' }); };
+  const pick = async (rows, title, more = {}) => { process.stderr.write(`${title}\n`); return pickOnTerminal(rows, { hint: 'Enter to open · Esc to leave', ...more }); };
   const remote = async (host, name, listOnly) => {
     const { attachRemote, DOOR_PORT } = await import('./app/door.mjs');
     try { return await attachRemote({ host, name, port: port || DOOR_PORT, pick, listOnly }); } catch (e) { process.stderr.write(`${e.message}\n`); return 1; }

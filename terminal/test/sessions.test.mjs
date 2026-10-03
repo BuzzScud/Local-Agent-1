@@ -3,13 +3,14 @@
 // and end to end in a pseudo-terminal: ctrl+b, coding sessions, coding attach, two windows
 // at once, closing the window a session started in, and a window through the door.
 import { test, expect, afterEach } from 'bun:test';
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, utimesSync, symlinkSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
+import { PassThrough } from 'node:stream';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { runInPty } from './pty.mjs';
-import { T, setup } from './app-setup.mjs';
+import { T, setup, quit } from './app-setup.mjs';
 import { startFakeServer } from './fake-server.mjs';
 
 // A throwaway home before the models part is imported (it reads AGENTIC_HOME once).
@@ -17,7 +18,7 @@ const unitHome = mkdtempSync(join(tmpdir(), 'agentic-sessions-'));
 process.env.AGENTIC_HOME = join(unitHome, 'home');
 const S = await import('../src/app/sessions.mjs');
 const D = await import('../src/app/door.mjs');
-const { HOME } = await import('../../models/index.mjs');
+const { HOME, ENGINE, MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
 const cli = join(import.meta.dir, '..', 'src', 'cli.jsx');
 const CTRL_B = '\x02';
 
@@ -250,7 +251,10 @@ test.skipIf(!S.canHost())('through the door: another window lists and opens a se
   // The door runs in this test, over the sessions of the app's home.
   const before = process.env.AGENTIC_HOME;
   process.env.AGENTIC_HOME = env.AGENTIC_HOME;
-  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-test-key' });
+  // This Mac is "server-1" to the other one, which the door knows as "mac-mini"; a window it
+  // would open here is noted, not opened.
+  const windows = [];
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-test-key', mac: 'server-1', peerName: () => 'mac-mini', show: (name, size) => windows.push({ name, ...size }) });
   const port = String(door.address().port);
   // AGENTIC_REMOTE_KEY stands in for the key the Keychain would keep.
   const viaDoor = { ...env, AGENTIC_REMOTE_KEY: 'acd-test-key', AGENTIC_REMOTE_KEYSTORE: 'file' };
@@ -262,15 +266,23 @@ test.skipIf(!S.canHost())('through the door: another window lists and opens a se
     const listed = await codingAsync(['sessions', '127.0.0.1', '--port', port], { cwd, env: viaDoor });
     expect(listed.stdout).toContain('demo-project-1 · ');
 
+    // By its name, as on a real pair of Macs (the name led to this Mac for the test).
+    const named = await codingAsync(['sessions', 'server-1', '--port', port], { cwd, env: { ...viaDoor, AGENTIC_DOOR_AT: 'server-1=127.0.0.1' } });
+    expect(named.stdout).toContain('demo-project-1 · ');
+
     const wrong = await codingAsync(['sessions', '127.0.0.1', '--port', port], { cwd, env: { ...viaDoor, AGENTIC_REMOTE_KEY: 'acd-nope' } });
     expect(wrong.status).not.toBe(0);
     expect(wrong.stderr).toContain('does not open');
 
     const r = await runInPty({ cwd, env: viaDoor, cols: 110, rows: 32, args: ['attach', '127.0.0.1', 'demo-project-1', '--port', port], steps: [
-      { wait: '? for shortcuts', ms: 30_000 }, { type: 'over the door' }, { sleep: 500 }, { snapshot: 'open' }, { key: CTRL_B },
+      { wait: '? for shortcuts', ms: 30_000 }, { type: 'over the door' }, { wait: '⇄ on server-1' }, { sleep: 300 }, { snapshot: 'open' }, { key: CTRL_B },
       { wait: 'Still running in the background: demo-project-1' },
     ] });
     expect(r.snapshots.open).toContain('over the door');
+    // Lower right, which Mac the keys go to; the session's list names who is in it.
+    expect(r.snapshots.open).toContain('⇄ on server-1');
+    // It had no window on this Mac (coding --bg), so one was opened here, at the other window's size.
+    expect(windows).toEqual([{ name: 'demo-project-1', cols: 110, rows: 32 }]);
     expect(r.text).toContain('coding attach 127.0.0.1 demo-project-1');
     expect(r.code).toBe(0);
     expect(records(env)).toEqual(['demo-project-1.json']);
@@ -280,12 +292,14 @@ test.skipIf(!S.canHost())('through the door: another window lists and opens a se
     const first = { ...env, AGENTIC_REMOTE_KEY: '', AGENTIC_REMOTE_KEYSTORE: 'file' };
     const k = await runInPty({ cwd, env: first, cols: 110, rows: 32, args: ['attach', '127.0.0.1', '--port', port], steps: [
       { wait: "The key for 127.0.0.1's door" }, { type: 'acd-test-key' }, { key: 'enter' },
-      { wait: 'Start a new session on 127.0.0.1' }, { snapshot: 'menu' }, { key: 'enter' },
+      { wait: 'New session in… (type a folder)' }, { snapshot: 'menu' }, { key: 'enter' },
       { wait: '? for shortcuts', ms: 30_000 }, { type: 'typed after the menus' }, { sleep: 500 }, { snapshot: 'typed' }, { key: CTRL_B },
       { wait: 'Still running in the background: demo-project-1' },
     ] });
     expect(k.snapshots.menu).not.toContain('acd-test-key'); // the key is never shown
     expect(k.snapshots.menu).toContain('demo-project-1 · ');
+    // What runs there, a rule, then what can be started there.
+    expect(k.snapshots.menu).toMatch(/1\. demo-project-1 · [\s\S]*?\n\s+─{20,}\n\s+2\. New session in ~ \(home\)\n\s+3\. New session in… \(type a folder\)/);
     expect(k.snapshots.typed).toContain('typed after the menus');
     expect(k.code).toBe(0);
     // Kept for next time (here in the test home's file; the Keychain on a Mac).
@@ -307,3 +321,235 @@ test('the door after a restart: the login item opens Terminal on a script that s
   expect(D.doorRunning({})).toBe(false);
   expect(D.doorRunning({ pid: process.pid })).toBe(false);
 });
+
+// ---- 3 Oct 2026, the audit's gaps: a stalled window, wrong keys together, a folder for a new session, a lost link ----
+
+test('the door: wrong keys sent together on connections opened first are not all looked at', async () => {
+  const seen = [];
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-right', log: (t) => seen.push(t) });
+  const port = door.address().port;
+  try {
+    const socks = [];
+    for (let i = 0; i < 30; i++) { const s = net.connect({ host: '127.0.0.1', port }); await new Promise((r) => s.on('connect', r)); s.on('error', () => {}); socks.push(s); }
+    for (const [i, s] of socks.entries()) s.write(S.frame(S.F.HELLO, { key: `acd-guess-${i}`, op: 'list' }));
+    await new Promise((r) => setTimeout(r, 1500));
+    // Five were looked at; the address was then refused and the other 25 never compared.
+    expect(seen.filter((t) => t.startsWith('wrong key')).length).toBe(5);
+    for (const s of socks) s.destroy();
+  } finally { door.close(); }
+});
+
+test('the folders conversations were had in, latest first: none that is gone or a throwaway one', async () => {
+  const dir = join(unitHome, 'convs');
+  const repo = join(import.meta.dir, '..', '..');
+  const conv = (slug, id, cwd, title, at) => {
+    mkdirSync(join(dir, slug), { recursive: true });
+    const f = join(dir, slug, `${id}.json`);
+    writeFileSync(f, JSON.stringify({ id, cwd, title, updated: new Date(at).toISOString(), messages: [] }));
+    utimesSync(f, at / 1000, at / 1000);
+  };
+  const t = Date.parse('2026-10-03T10:00:00Z');
+  conv('terminal', 'a', join(repo, 'terminal'), 'older in terminal', t - 9000);
+  conv('terminal', 'b', join(repo, 'terminal'), 'the menu', t - 1000);
+  conv('models', 'a', join(repo, 'models'), 'the bench', t - 5000);
+  conv('home', 'a', homedir(), 'a question', t - 7000);
+  conv('gone', 'a', join(repo, 'no-such-folder'), 'gone', t - 100);
+  conv('tmp', 'a', unitHome, 'a test project', t - 50);
+  const { recentFolders } = await import('../src/app/store.mjs');
+  expect(recentFolders({ dir }).map((f) => [f.folder, f.title, f.convs])).toEqual([
+    [join(repo, 'terminal'), 'the menu', 2], [join(repo, 'models'), 'the bench', 1], [homedir(), 'a question', 1],
+  ]);
+  expect(recentFolders({ dir, max: 1 }).length).toBe(1);
+  expect(recentFolders({ dir: join(unitHome, 'nothing-here') })).toEqual([]);
+});
+
+test('the rows that start a session on the other Mac: its folders, its home, a typed one, its last conversation; an older door only its home', () => {
+  const folders = [{ path: '~/Desktop/a' }, { path: '~' }, { path: '~/b' }, { path: '~/c' }, { path: '~/d' }, { path: '~/e' }];
+  const rows = D.newRows({ host: 'server-1', v: 2, folders, last: { path: '~/Desktop/a', title: 'fix the tests' } });
+  expect(rows.map((r) => r.text)).toEqual([
+    'New session in ~/Desktop/a', 'New session in ~/b', 'New session in ~/c', 'New session in ~/d',
+    'New session in ~ (home)', 'New session in… (type a folder)', 'Continue the last conversation there (~/Desktop/a · fix the tests)',
+  ]);
+  expect(rows[0].hello).toEqual({ op: 'new', folder: '~/Desktop/a' });
+  expect(rows[4].hello).toEqual({ op: 'new', folder: '~' });
+  expect(rows[5].type).toBe(true);
+  expect(rows[6].hello).toEqual({ op: 'new', last: true });
+  expect(D.newRows({ host: 'server-1', v: 2 }).map((r) => r.text)).toEqual(['New session in ~ (home)', 'New session in… (type a folder)']);
+  expect(D.newRows({ host: 'server-1', v: 1, folders })).toEqual([{ text: 'Start a new session on server-1', hello: { op: 'new' } }]);
+});
+
+test('the window opened on this Mac for a session another Mac works in: its size, then coding attach', () => {
+  const text = D.windowFileText(['/Users/x/.agentic-coder/app/agentic-coder'], 'demo-1', { cols: 120, rows: 40 }, '');
+  expect(text.startsWith('#!/bin/sh\n')).toBe(true);
+  expect(text).toContain("printf '\\033[8;%d;%dt' 40 120\n");
+  expect(text.trimEnd().endsWith("exec '/Users/x/.agentic-coder/app/agentic-coder' attach 'demo-1'")).toBe(true);
+  // No size known: none set. A test home comes along.
+  expect(D.windowFileText(['/a/b'], 'demo-1', {}, "/tmp/it's")).not.toContain('printf');
+  expect(D.windowFileText(['/a/b'], 'demo-1', {}, "/tmp/it's")).toContain("export AGENTIC_HOME='/tmp/it'\\''s'");
+});
+
+// A session whose program is not the app: `cmd` in a host of its own, in the throwaway home.
+async function plainHost(name, cmd, home) {
+  const spec = { name, folder: unitHome, cmd, cols: 100, rows: 30 };
+  const p = spawn('bun', [cli, 'session-host'], { cwd: unitHome, stdio: 'ignore', env: { ...process.env, AGENTIC_HOME: home, AGENTIC_HOST_SPEC: JSON.stringify(spec) } });
+  const file = join(home, 'background', `${name}.json`);
+  const ok = await until(() => { try { const r = JSON.parse(readFileSync(file, 'utf8')); return r.socket && existsSync(r.socket); } catch { return false; } });
+  if (!ok) { p.kill('SIGKILL'); throw new Error('the host did not start'); }
+  return { stop: () => p.kill('SIGKILL'), record: () => { try { return JSON.parse(readFileSync(file, 'utf8')); } catch { return null; } } };
+}
+
+test.skipIf(!S.canHost())('a window through the door that stops checking in is let go: no longer counted, no longer what the session is sized to; an older window (no check-in) is kept', async () => {
+  const home = process.env.AGENTIC_HOME;
+  const h = await plainHost('quiet-1', ['/bin/sh', '-c', 'sleep 60'], home);
+  const said = [];
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-k', mac: 'server-1', peerName: () => 'mac-mini', show: () => {}, staleMs: 700, log: (t) => said.push(t) });
+  const port = door.address().port;
+  const open = (hello) => new Promise((res) => {
+    const s = net.connect({ host: '127.0.0.1', port });
+    const got = [];
+    const read = S.frameReader((kind, body) => got.push([kind, S.json(body)]));
+    s.on('data', (c) => read(c));
+    s.on('error', () => {});
+    s.on('connect', () => { s.write(S.frame(S.F.HELLO, { key: 'acd-k', op: 'attach', name: 'quiet-1', cols: 60, rows: 20, ...hello })); res({ s, got }); });
+  });
+  try {
+    // Checks in (v 2), then says nothing: gone within the limit, and the record forgets it.
+    const a = await open({ v: 2 });
+    expect(await until(() => a.got.some(([k]) => k === S.F.NAMED), 5000)).toBe(true);
+    expect(a.got.find(([k]) => k === S.F.NAMED)[1]).toEqual({ name: 'quiet-1', v: 2, beats: true, mac: 'server-1' });
+    expect(await until(() => h.record()?.viewers === 1, 5000)).toBe(true);
+    expect(h.record().shared).toEqual({ mac: 'server-1', with: ['mac-mini'] });
+    expect(h.record().local).toBe(0);
+    expect(await until(() => a.s.destroyed || a.s.readableEnded, 5000)).toBe(true);
+    expect(await until(() => h.record()?.viewers === 0, 5000)).toBe(true);
+    expect(h.record().shared).toBeUndefined();
+    expect(said.some((t) => t.includes('went quiet'))).toBe(true);
+    // One that keeps checking in stays, and each check-in is answered.
+    const b = await open({ v: 2 });
+    const beat = setInterval(() => b.s.write(S.frame(S.F.PING)), 150);
+    await new Promise((r) => setTimeout(r, 1600));
+    clearInterval(beat);
+    expect(b.s.destroyed).toBe(false);
+    expect(b.got.filter(([k]) => k === S.F.PONG).length).toBeGreaterThan(5);
+    b.s.destroy();
+    // An app from before the check-in says no v: it is never let go for being quiet.
+    const c = await open({});
+    await new Promise((r) => setTimeout(r, 1600));
+    expect(c.s.destroyed).toBe(false);
+    c.s.destroy();
+  } finally { door.close(); h.stop(); }
+}, 40_000);
+
+test('a window whose link goes quiet opens the same session again by itself, and says so meanwhile; a session that ended meanwhile is said', async () => {
+  // A door of the test's own: it names the session and answers check-ins until told to go quiet.
+  let quietNow = false;
+  let hellos = [];
+  let gone = false;
+  const server = net.createServer((sock) => {
+    const read = S.frameReader((kind, body) => {
+      if (kind === S.F.HELLO) {
+        const h = S.json(body);
+        hellos.push(h);
+        if (gone) { sock.end(S.frame(S.F.NOTE, { text: 'No session called demo-1 here.', gone: true })); return; }
+        sock.write(S.frame(S.F.NAMED, { name: 'demo-1', v: 2, beats: true, mac: 'server-1' }));
+        sock.write(S.frame(S.F.OUTPUT, `screen ${hellos.length}`));
+      } else if (kind === S.F.PING && !quietNow) sock.write(S.frame(S.F.PONG));
+    });
+    sock.on('data', (c) => read(c));
+    sock.on('error', () => {});
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.columns = 90; output.rows = 28;
+  let shown = '';
+  output.on('data', (c) => { shown += c; });
+  try {
+    const view = S.viewSession({
+      name: 'a new session on server-1', where: 'server-1', input, output,
+      connect: () => net.connect({ host: '127.0.0.1', port }),
+      hello: { key: 'k', v: 2, op: 'new', folder: '~/x' },
+      again: (n) => ({ key: 'k', v: 2, op: 'attach', name: n, again: true }),
+      beatMs: 120, retryMs: 150,
+    });
+    expect(await until(() => shown.includes('screen 1'), 5000)).toBe(true);
+    expect(hellos[0]).toMatchObject({ op: 'new', folder: '~/x', cols: 90, rows: 28 });
+    // The link stalls: nothing closes, nothing answers. The window notices, says so, and opens demo-1 again.
+    quietNow = true;
+    expect(await until(() => shown.includes('Connection to server-1 lost, reconnecting'), 5000)).toBe(true);
+    quietNow = false;
+    expect(await until(() => shown.includes('screen 2'), 5000)).toBe(true);
+    expect(hellos[1]).toMatchObject({ op: 'attach', name: 'demo-1', again: true, key: 'k' });
+    // The session ends on the other Mac while the link is down: said, and the window is given back.
+    gone = true;
+    quietNow = true;
+    expect(await view).toBe(0);
+    expect(shown).toContain('demo-1 ended on server-1 while the link was down');
+  } finally { server.close(); }
+}, 30_000);
+
+test.skipIf(!S.canHost())('through the door, a new session in a folder typed there: it starts in that folder, a window for it opens on that Mac, and a lost link comes back by itself', async () => {
+  const { cwd, env } = sessionsEnv();
+  const fake = await startFakeServer([]);
+  const before = process.env.AGENTIC_HOME;
+  process.env.AGENTIC_HOME = env.AGENTIC_HOME;
+  const windows = [];
+  // A session started through the door gets what the door's Mac has: here a stand-in model, off
+  // until /start (as shipped), the test home and its own memory folder, like an app the tests drive.
+  mkdirSync(join(env.AGENTIC_HOME, 'engine', ENGINE.tag), { recursive: true });
+  mkdirSync(join(env.AGENTIC_HOME, 'models'), { recursive: true });
+  symlinkSync(join(import.meta.dir, 'fake-llama-server.mjs'), join(env.AGENTIC_HOME, 'engine', ENGINE.tag, 'llama-server'));
+  writeFileSync(join(env.AGENTIC_HOME, 'models', MODELS[DEFAULT_MODEL].file), 'stand-in');
+  const startEnv = { ...process.env, ...env, AGENTIC_MODEL_AT_START: 'off', AGENTIC_MEMORY: join(cwd, '..', 'memory-about-you'), AGENTIC_NO_OPEN: '1', AGENTIC_HUB_PORT: '0', AGENTIC_FETCH_EVERY: '0', AGENTIC_CLAUDE_NOTES: 'off', AGENTIC_TIPS: 'off', TERM: 'xterm-256color' };
+  // The door runs inside this test, so the app it starts is named: the code's own.
+  const opts = { host: '127.0.0.1', key: 'acd-test-key', mac: 'server-1', peerName: () => 'mac-mini', show: (name, size) => windows.push({ name, ...size }), startEnv, start: (o) => S.startHost({ ...o, self: ['bun', cli] }) };
+  let door = await D.openDoor({ ...opts, port: 0 });
+  const port = door.address().port;
+  const links = new Set();
+  const track = (d) => d.on('connection', (s) => { links.add(s); s.on('close', () => links.delete(s)); });
+  track(door);
+  const viaDoor = { ...env, AGENTIC_REMOTE_KEY: 'acd-test-key', AGENTIC_REMOTE_KEYSTORE: 'file' };
+  try {
+    // A folder that is not there is said, and nothing starts.
+    const none = await runInPty({ cwd, env: viaDoor, cols: 110, rows: 32, args: ['attach', '127.0.0.1', '--port', String(port)], steps: [
+      { wait: 'New session in… (type a folder)' }, { key: '2' }, { wait: 'Folder on 127.0.0.1' }, { type: '~/no-such-folder-here' }, { key: 'enter' },
+      { wait: 'No folder ~/no-such-folder-here on server-1' },
+    ] });
+    expect(none.code).toBe(1);
+    expect(records(env)).toEqual([]);
+
+    const r = await runInPty({ cwd, env: viaDoor, cols: 110, rows: 32, timeoutMs: 80_000, args: ['attach', '127.0.0.1', '--port', String(port)], steps: [
+      { wait: 'New session in… (type a folder)' }, { key: '2' }, { wait: 'Folder on 127.0.0.1' }, { snapshot: 'ask' }, { type: cwd }, { key: 'enter' },
+      { wait: '⇄ on server-1', ms: 40_000 }, { type: 'typed from afar' }, { sleep: 500 }, { snapshot: 'open' },
+      // The link drops (the door stops, its connections cut): said on the last line, tried again.
+      { fn: async () => { for (const s of links) s.destroy(); await new Promise((res) => door.close(res)); } },
+      { wait: 'Connection to 127.0.0.1 lost, reconnecting' }, { snapshot: 'lost' },
+      // The door is back: the window opens the same session again, with what was typed still there.
+      { fn: async () => { door = await D.openDoor({ ...opts, port }); track(door); } },
+      { waitGone: 'reconnecting', ms: 20_000 }, { wait: 'typed from afar' }, { wait: '⇄ on server-1' }, { type: ' and back' }, { sleep: 500 }, { snapshot: 'back' },
+      ...quit, { sleep: 200 }, { key: 'ctrlC' },
+      { wait: 'Continue this conversation with', ms: 20_000 },
+    ] });
+    expect(r.snapshots.ask).toContain('Folder on 127.0.0.1 (~ is its home):');
+    expect(r.snapshots.open).toContain('typed from afar');
+    expect(r.snapshots.open).toContain('demo-project');
+    expect(r.snapshots.lost).toContain('ctrl+b to stop');
+    expect(r.snapshots.back).toContain('typed from afar and back');
+    expect(r.snapshots.back).not.toContain('reconnecting');
+    // One session, started in the folder typed; a window for it was opened on that Mac, once
+    // (not again when the same window came back), at the other window's size.
+    expect(windows).toEqual([{ name: 'demo-project-1', cols: 110, rows: 32 }]);
+    expect(r.code).toBe(0);
+    expect(await until(() => records(env).length === 0)).toBe(true);
+    // The keeper's log says what happened, where before nothing was kept.
+    const logged = readFileSync(join(env.AGENTIC_HOME, 'logs', 'sessions.log'), 'utf8');
+    expect(logged).toContain('demo-project-1 started in');
+    expect(logged).toContain('a window joined from mac-mini');
+    expect(logged).toContain('demo-project-1 ended (code 0)');
+  } finally {
+    door.close();
+    process.env.AGENTIC_HOME = before;
+    await fake.close();
+  }
+}, 150_000);

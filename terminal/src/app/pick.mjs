@@ -16,9 +16,10 @@ const OFF = '\x1b[0m';
 
 // page(i), when given, draws the whole block with row i marked (the safety check's two columns,
 // start.jsx) in place of the plain list; it is redrawn whole when the mark moves.
-export function pickOnTerminal(options, { input = process.stdin, output = process.stderr, index = 0, hint = 'Enter to confirm · Esc to exit', page = null } = {}) {
+// rule: a row's index; a dim line is drawn above it (what runs, then what can be started: coding attach <mac>).
+export function pickOnTerminal(options, { input = process.stdin, output = process.stderr, index = 0, hint = 'Enter to confirm · Esc to exit', page = null, rule = -1 } = {}) {
   const n = options.length;
-  const text = (i) => (page ? page(i) : options.map((o, k) => `${k === i ? `${MARK}❯` : ' '} ${k + 1}. ${o}${k === i ? OFF : ''}\n`).join('') + (hint ? `\n\x1b[2m${hint}\x1b[0m\n` : ''));
+  const text = (i) => (page ? page(i) : options.map((o, k) => `${k === rule ? `\x1b[2m  ${'─'.repeat(44)}\x1b[0m\n` : ''}${k === i ? `${MARK}❯` : ' '} ${k + 1}. ${o}${k === i ? OFF : ''}\n`).join('') + (hint ? `\n\x1b[2m${hint}\x1b[0m\n` : ''));
   let rows = 0;
   const draw = (i) => { const t = text(i); rows = (t.match(/\n/g) ?? []).length; output.write(t); };
   // Rows are redrawn in place: move up, clear below, and print them again.

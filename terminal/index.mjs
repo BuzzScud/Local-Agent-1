@@ -54,4 +54,7 @@ export { layoutCheck, findChrome, PASSES as LAYOUT_PASSES } from './src/flows/la
 // Pictures and PDFs drawn for the Vision check (models/evals/tools/vision-check.mjs), and the
 // real app in a pseudo-terminal for its window check (loaded only when a check calls it).
 export { textImage, textPdf, pdfText, mediaTool } from './src/tools/media.mjs';
+// Background sessions and the door between Macs, for the Door check (models/evals/tools/door-check.mjs).
+export { F as SESSION_FRAMES, frame as sessionFrame, frameReader as sessionFrameReader, json as sessionJson, startHost, viewSession } from './src/app/sessions.mjs';
+export { openDoor } from './src/app/door.mjs';
 export const runInPty = async (o) => (await import('./test/pty.mjs')).runInPty(o);

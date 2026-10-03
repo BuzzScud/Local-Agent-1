@@ -20,7 +20,7 @@
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync, renameSync, lstatSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync, renameSync, lstatSync, openSync, closeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { HOME } from '../../../models/index.mjs';
@@ -34,8 +34,14 @@ export const DETACH_LABEL = 'ctrl+b';
 // (JSON), LEAVE (this window goes, the app stays), END (the window it started
 // in closed: the app ends). Host → window: OUTPUT (what the app drew), ENDED
 // (JSON: the app quit, its exit code), NOTE (JSON: a line to show), LIST (JSON:
-// the door's list of sessions), NAMED (JSON: the session the door opened).
-export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14 };
+// the door's list of sessions), NAMED (JSON: the session the door opened). PING (window) and
+// PONG (its answer) are the check-in of a window on another Mac: a link that stalled says
+// nothing, so each side learns it from the silence (door.mjs).
+export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15 };
+// What a window and a door say they speak (v in their hello, list and named). 2: the check-in,
+// a folder for a new session, opening the same session again after a lost link. One without it
+// is an app from before 3 Oct 2026: it is served as before.
+export const PROTO = 2;
 const MAX_FRAME = 8 * 1024 * 1024;
 
 export function frame(kind, body = {}) {
@@ -168,11 +174,11 @@ export function describe(s, now = Date.now(), { mac = true } = {}) {
 // What the host runs in its pretend terminal: the `coding` launcher when this
 // is the installed app (so /update can restart it there), else this same
 // program (bun cli.jsx while developing).
-export function appCommand(args, env = process.env) {
+export function appCommand(args, env = process.env, self = selfCommand()) {
   if (env.AGENTIC_LAUNCHER && existsSync(env.AGENTIC_LAUNCHER)) return [env.AGENTIC_LAUNCHER, ...args];
   const launcher = join(homedir(), '.local', 'bin', 'coding');
   if (process.execPath === join(homedir(), '.agentic-coder', 'app', 'agentic-coder') && existsSync(launcher)) return [launcher, ...args];
-  return [...selfCommand(), ...args];
+  return [...self, ...args];
 }
 // This program: the built app, or bun with cli.jsx.
 export function selfCommand() {
@@ -218,14 +224,22 @@ export async function runHost(spec, env = process.env) {
   let asks = 0; // cursor-position questions the app asked and no window answered yet
   let ended = false;
 
-  const rec = { name, pid: process.pid, folder, started: new Date().toISOString(), socket, viewers: 0, args: spec.args ?? [] };
+  const rec = { name, pid: process.pid, folder, started: new Date().toISOString(), socket, viewers: 0, local: 0, args: spec.args ?? [] };
   let gone = false; // the record is removed: nothing writes it again
   let first = true;
+  // local: the windows on this Mac. shared: this Mac's name and the other Macs with a window
+  // open (through the door), which the app shows lower right so a window there says where it types.
+  const who = () => {
+    const away = [...viewers].filter((v) => v.via === 'door');
+    return { viewers: viewers.size, local: viewers.size - away.length, shared: away.length ? { mac: away[0].mac || 'this Mac', with: [...new Set(away.map((v) => v.from).filter(Boolean))] } : undefined };
+  };
   const note = () => {
     if (gone) return;
     // The first write replaces the name's reservation; later ones keep what the app noted (its folder).
-    try { writeRecord(first ? rec : { ...rec, ...readRecord(name), viewers: viewers.size, pid: process.pid, socket, starting: undefined }); first = false; } catch {}
+    try { writeRecord(first ? rec : { ...rec, ...readRecord(name), ...who(), pid: process.pid, socket, starting: undefined }); first = false; } catch {}
   };
+  // One line per thing that happened, in ~/.agentic-coder/logs/sessions.log (startHost points this process's output there).
+  const log = (text) => { try { process.stdout.write(`${new Date().toISOString()} ${name} ${text}\n`); } catch {} };
 
   const childEnv = { ...env, AGENTIC_IN_HOST: name, TERM: env.TERM || 'xterm-256color' };
   for (const k of ['AGENTIC_HOST_SPEC', 'AGENTIC_RESTART_FILE', 'BONSAI_RESTART_FILE']) delete childEnv[k];
@@ -263,8 +277,8 @@ export async function runHost(spec, env = process.env) {
   };
 
   const server = net.createServer((sock) => {
-    const v = { sock, cols: 0, rows: 0, owner: false, hello: false, left: false };
-    const drop = () => { if (viewers.delete(v)) { note(); fit(); } };
+    const v = { sock, cols: 0, rows: 0, owner: false, hello: false, left: false, via: '', from: '', mac: '' };
+    const drop = () => { if (viewers.delete(v)) { note(); fit(); log(`a window left${v.from ? ` (${v.from})` : ''}; ${viewers.size} open`); } };
     // The window it started in gone without a word (killed, crashed): the
     // session ends, as the app did with its window before.
     const lost = () => { const owned = v.owner && !v.left; drop(); if (owned) end(); };
@@ -275,8 +289,11 @@ export async function runHost(spec, env = process.env) {
         v.owner = Boolean(h.owner);
         v.cols = Number(h.cols) || 0;
         v.rows = Number(h.rows) || 0;
+        // A window on another Mac: the door says so, with that Mac's name and this one's.
+        if (h.via === 'door') { v.via = 'door'; v.from = String(h.from ?? '').slice(0, 80); v.mac = String(h.mac ?? '').slice(0, 80); }
         viewers.add(v);
         note();
+        log(`a window joined${v.from ? ` from ${v.from}` : ''}${v.owner ? ' (the one it started in)' : ''}; ${viewers.size} open`);
         // The modes the app has on, then the screen at this window's size.
         const m = modes.replay();
         if (m) sock.write(frame(F.OUTPUT, m));
@@ -294,6 +311,8 @@ export async function runHost(spec, env = process.env) {
         v.cols = Number(s.cols) || v.cols;
         v.rows = Number(s.rows) || v.rows;
         fit();
+      } else if (kind === F.PING) {
+        sock.write(frame(F.PONG));
       } else if (kind === F.LEAVE) {
         v.left = true;
         drop();
@@ -325,9 +344,11 @@ export async function runHost(spec, env = process.env) {
   await new Promise((res, rej) => { server.once('error', rej); server.listen(socket, res); });
   try { chmodSync(socket, 0o600); } catch {}
   note();
+  log(`started in ${tilde(folder)}`);
 
   const code = await proc.exited;
   ended = true;
+  log(`ended (code ${code ?? 0})`);
   const bye = frame(F.ENDED, { code: code ?? 0 });
   for (const v of viewers) { try { v.sock.end(bye); } catch {} }
   server.close();
@@ -339,15 +360,20 @@ export async function runHost(spec, env = process.env) {
 }
 
 // Starts a host with no window and waits until it answers. Answers its record.
-export async function startHost({ folder, args = [], cols, rows, env = process.env }) {
+// self: this program's own command (a test whose door runs inside the test gives the app's).
+export async function startHost({ folder, args = [], cols, rows, env = process.env, self = selfCommand() }) {
   const name = reserveName(folder);
-  const spec = { name, folder, args, cmd: appCommand(args, env), cols, rows };
+  const spec = { name, folder, args, cmd: appCommand(args, env, self), cols, rows };
   let child;
   try {
-    child = spawn(selfCommand()[0], [...selfCommand().slice(1), 'session-host'], {
-      cwd: folder, detached: true, stdio: 'ignore',
+    // What the host says (and anything that goes wrong in it) is kept, where before it was lost.
+    let out = 'ignore';
+    try { mkdirSync(join(home(), 'logs'), { recursive: true }); out = openSync(join(home(), 'logs', 'sessions.log'), 'a'); } catch {}
+    child = spawn(self[0], [...self.slice(1), 'session-host'], {
+      cwd: folder, detached: true, stdio: ['ignore', out, out],
       env: { ...env, AGENTIC_HOST_SPEC: JSON.stringify(spec) },
     });
+    if (out !== 'ignore') { try { closeSync(out); } catch {} }
     child.unref();
     const t0 = Date.now();
     while (Date.now() - t0 < 10_000) {
@@ -368,23 +394,39 @@ export async function startHost({ folder, args = [], cols, rows, env = process.e
 // Shows a session in this terminal until it ends or you press ctrl+b. connect():
 // a socket (to this Mac's host, or through the door). owner: the window it was
 // started in (closing it ends the session). Answers the exit code to leave with.
-export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {} }) {
+//
+// again(name): given for a window on another Mac (door.mjs): the hello that opens the same
+// session again. With it the window checks in every beatMs, and a link that is lost (this Mac
+// slept, the network dropped, the other Mac's door restarted) is tried again every retryMs until
+// it is back; the last line of the window says so meanwhile, and ctrl+b, ctrl+c or esc stops.
+export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000 }) {
   let name = named;
   return new Promise((resolve) => {
-    const sock = connect();
     const modes = modeTracker();
+    let sock = null;
     let done = false;
-    let started = false;
+    let started = false; // a session was on this screen
+    let wired = false; // the keyboard, the resize and the signals are listened to
+    let opened = false; // the door named the session: it can be opened again
+    let beats = false; // the other side answers check-ins
+    let heard = 0; // when it last said anything
+    let lostAt = 0; // when the link was lost; 0 while it is up
+    let retry = null;
     const raw = input.isTTY;
+    // The last line of the window, over what the app drew there; the app draws everything again when the link is back.
+    const status = (text) => { try { output.write(`\x1b7\x1b[999;1H\x1b[2K${text}\x1b8`); } catch {} };
     // closed: the window is gone, so nothing is written to it.
     const finish = (code, line, { closed = false } = {}) => {
       if (done) return;
       done = true;
+      clearInterval(beat);
+      clearTimeout(retry);
       input.off('readable', onReadable);
       output.off?.('resize', onResize);
       for (const s of ['SIGHUP', 'SIGTERM']) process.off(s, onClose);
       if (raw) { try { input.setRawMode(false); } catch {} }
       try {
+        if (lostAt && !closed) status('');
         // What the app had on is turned off again, so this terminal types and scrolls as before.
         if (started && !closed) output.write(`${RESET_MODES}${modes.altScreen() ? '\x1b[?1049l' : ''}`);
         // Under everything the app drew (the cursor sits inside its prompt box), on a line of its own.
@@ -392,19 +434,24 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       } catch {}
       // The last frame (LEAVE, END) reaches the host before this process ends.
       const go = () => resolve(code);
-      if (sock.destroyed) return go();
+      if (!sock || sock.destroyed) return go();
       sock.once('close', go);
       try { sock.end(); } catch {}
       setTimeout(() => { try { sock.destroy(); } catch {} go(); }, 500);
     };
     const send = (kind, body) => { try { sock.write(frame(kind, body)); } catch {} };
+    const reopen = () => (where ? `coding attach ${where} ${name}` : `coding attach ${name}`);
     const onKeys = (chunk) => {
       const keys = Buffer.from(chunk);
+      // While the link is down nothing typed can arrive; ctrl+b, ctrl+c or esc stops the waiting.
+      if (lostAt) {
+        if (keys.length === 1 && [DETACH_KEY.charCodeAt(0), 3, 27].includes(keys[0])) finish(0, `\x1b[2m  Stopped waiting. If ${where} is only out of reach, ${name} still runs there: ${reopen()}\x1b[0m`);
+        return;
+      }
       // ctrl+b alone: this window goes, the app keeps running.
       if (keys.length === 1 && keys[0] === DETACH_KEY.charCodeAt(0)) {
         send(F.LEAVE);
-        const again = where ? `coding attach ${where} ${name}` : `coding attach ${name}`;
-        finish(0, `\x1b[2m  Still running in the background: ${name}. Open it again with: ${again}\x1b[0m`);
+        finish(0, `\x1b[2m  Still running in the background: ${name}. Open it again with: ${reopen()}\x1b[0m`);
         return;
       }
       send(F.INPUT, keys);
@@ -415,27 +462,78 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       let chunk;
       while (!done && (chunk = input.read()) !== null) onKeys(chunk);
     };
-    const onResize = () => send(F.SIZE, { cols: output.columns, rows: output.rows });
+    const onResize = () => { if (!lostAt) send(F.SIZE, { cols: output.columns, rows: output.rows }); };
     // The window closed: the one it started in ends the session (as closing a
     // window always did); one that attached only leaves.
-    const onClose = () => { for (const s of ['SIGHUP', 'SIGTERM']) process.off(s, onClose); send(owner ? F.END : F.LEAVE); finish(0, '', { closed: true }); };
-    sock.on('connect', () => {
-      started = true;
-      send(F.HELLO, { ...hello, cols: output.columns, rows: output.rows, owner, fresh });
-      if (raw) input.setRawMode(true);
-      input.on('readable', onReadable);
-      output.on?.('resize', onResize);
-      for (const s of ['SIGHUP', 'SIGTERM']) process.on(s, onClose);
-    });
-    const read = frameReader((kind, body) => {
-      if (kind === F.OUTPUT) { modes.see(body); output.write(body); }
-      else if (kind === F.NAMED) name = json(body).name || name;
-      else if (kind === F.ENDED) finish(json(body).code ?? 0);
-      else if (kind === F.NOTE) finish(1, `  ${json(body).text ?? 'The session could not be opened.'}`);
-    });
-    sock.on('data', (chunk) => { try { read(chunk); } catch { finish(1, '  The session sent something odd; this window left it.'); } });
-    sock.on('error', (e) => finish(1, `  Could not open ${name}: ${e.message}`));
-    sock.on('close', () => finish(started ? 0 : 1, started ? '\x1b[2m  The session closed.\x1b[0m' : `  Could not open ${name}.`));
+    const onClose = () => { for (const s of ['SIGHUP', 'SIGTERM']) process.off(s, onClose); if (!lostAt) send(owner ? F.END : F.LEAVE); finish(0, '', { closed: true }); };
+    // The link is gone: said on the last line, and tried again until it is back.
+    const lost = () => {
+      if (done) return;
+      if (!lostAt) lostAt = Date.now();
+      const secs = Math.round((Date.now() - lostAt) / 1000);
+      status(`\x1b[33m  Connection to ${where} lost, reconnecting…${secs >= 2 ? ` (${secs} s)` : ''}\x1b[0m\x1b[2m · ${DETACH_LABEL} to stop\x1b[0m`);
+      clearTimeout(retry);
+      retry = setTimeout(() => open({ ...again(name), cols: output.columns, rows: output.rows }), retryMs);
+    };
+    // One connection. Whatever an older one still says is not listened to.
+    function open(first) {
+      if (done) return;
+      const mine = connect();
+      sock = mine;
+      let up = false;
+      // A Mac that is asleep takes no connection and refuses none: 5 s is enough to know.
+      const slow = again ? setTimeout(() => { if (!up) mine.destroy(); }, Math.max(5000, retryMs)) : null;
+      const gone = (line) => {
+        clearTimeout(slow);
+        if (done || sock !== mine) return;
+        // A session the door named can be opened again; before that there is nothing to come back to.
+        if (again && opened) lost();
+        else finish(started ? 0 : 1, line);
+      };
+      mine.on('connect', () => {
+        up = true;
+        clearTimeout(slow);
+        heard = Date.now();
+        send(F.HELLO, first);
+        if (wired) return;
+        wired = true;
+        started = true;
+        if (raw) input.setRawMode(true);
+        input.on('readable', onReadable);
+        output.on?.('resize', onResize);
+        for (const s of ['SIGHUP', 'SIGTERM']) process.on(s, onClose);
+      });
+      const read = frameReader((kind, body) => {
+        if (sock !== mine) return;
+        if (kind === F.OUTPUT) { modes.see(body); output.write(body); }
+        else if (kind === F.NAMED) {
+          const n = json(body);
+          name = n.name || name;
+          opened = true;
+          beats = Boolean(n.beats);
+          // Back after a lost link: the line goes, and the app draws the window again (the host's nudge).
+          if (lostAt) { lostAt = 0; status(''); }
+        } else if (kind === F.ENDED) finish(json(body).code ?? 0);
+        else if (kind === F.NOTE) {
+          const n = json(body);
+          const text = n.text ?? 'The session could not be opened.';
+          // Gone while the link was down: it ended there (quit, or that Mac restarted).
+          if (lostAt && (n.gone || /^No session called/.test(text))) finish(0, `\x1b[2m  ${name} ended on ${where} while the link was down.\x1b[0m`);
+          else finish(1, `  ${text}`);
+        }
+      });
+      mine.on('data', (chunk) => { heard = Date.now(); try { read(chunk); } catch { if (sock === mine) finish(1, '  The session sent something odd; this window left it.'); } });
+      mine.on('error', (e) => gone(`  Could not open ${name}: ${e.message}`));
+      mine.on('close', () => gone(started && up ? '\x1b[2m  The session closed.\x1b[0m' : `  Could not open ${name}.`));
+    }
+    // The check-in: a word every beatMs, and a link that has said nothing for two and a half of
+    // them is taken for lost (a Mac that slept wakes to exactly that).
+    const beat = again ? setInterval(() => {
+      if (done || lostAt || !sock || sock.connecting) return;
+      if (beats && Date.now() - heard > beatMs * 2.5) { sock.destroy(); return; }
+      send(F.PING);
+    }, beatMs) : null;
+    open({ ...hello, cols: output.columns, rows: output.rows, owner, fresh });
   });
 }
 

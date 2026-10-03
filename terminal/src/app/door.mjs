@@ -15,9 +15,10 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, statSync, openSync, closeSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models/index.mjs';
-import { F, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
+import { F, PROTO, BG_DIR, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
+import { recentFolders } from './store.mjs';
 
 const home = () => process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? HOME;
 export const DOOR_PORT = 7790;
@@ -59,8 +60,61 @@ export function tailscaleName() {
   }
   return hostname().split('.')[0].toLowerCase();
 }
+const TAILSCALE = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale'];
+// The Tailscale name of the Mac at an address (what coding attach takes), else the address.
+// Asked without stopping the door: other windows are served meanwhile.
+export function tailscalePeer(addr, { bins = TAILSCALE } = {}) {
+  const tryBin = (bin) => new Promise((done) => {
+    let out = '';
+    let p;
+    try { p = spawn(bin, ['status', '--json'], { stdio: ['ignore', 'pipe', 'ignore'] }); } catch { done(null); return; }
+    const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch {} }, 4000);
+    p.stdout.on('data', (c) => { out += c; });
+    p.on('error', () => { clearTimeout(t); done(null); });
+    p.on('close', () => {
+      clearTimeout(t);
+      try {
+        const st = JSON.parse(out);
+        const peer = [st.Self, ...Object.values(st.Peer ?? {})].find((x) => (x?.TailscaleIPs ?? []).includes(addr));
+        done(peer?.DNSName?.split('.')[0] || null);
+      } catch { done(null); }
+    });
+  });
+  return (async () => { for (const b of bins) { const n = await tryBin(b); if (n) return n; } return addr; })();
+}
 // What the other Mac is shown of a session (not its socket, process or prompt).
 const shown = (s) => ({ name: s.name, folder: s.folder, started: s.started, viewers: s.viewers });
+const tilde = (p) => (p === homedir() ? '~' : p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p);
+// A folder as the other Mac names it (~ is this Mac's home), as a path here.
+const untilde = (p) => resolve(homedir(), p === '~' ? '.' : p.startsWith('~/') ? p.slice(2) : p);
+// The folders worked in here, newest first, for the other Mac's "New session in" rows: where
+// conversations were had (store.mjs), with this Mac's home as ~. Nothing inside them is read.
+export const doorFolders = (max = 5) => recentFolders({ dir: join(home(), 'sessions'), max }).map((f) => ({ path: tilde(f.folder), title: f.title, updated: f.updated, convs: f.convs }));
+
+// A session another Mac started, or opened while no window here showed it, is shown on this Mac
+// too (the owner's pick, 3 Oct 2026: "seeing it both in my terminal and the server 1 terminal"):
+// a Terminal window opens on it, set to the other window's size so neither is drawn smaller.
+// Closing that window only leaves the session.
+export function windowFileText(cmd, name, { cols, rows } = {}, agenticHome = process.env.AGENTIC_HOME) {
+  const q = (x) => `'${String(x).replace(/'/g, `'\\''`)}'`;
+  const size = Number(cols) >= 20 && Number(rows) >= 5 ? `printf '\\033[8;%d;%dt' ${Math.round(rows)} ${Math.round(cols)}\n` : '';
+  return `#!/bin/sh
+# Opened in Terminal by Agentic Coder's door: another Mac of yours works in this session, and this
+# window shows it too. What is typed in either window reaches it; closing this one only leaves.
+${size}${agenticHome ? `export AGENTIC_HOME=${q(agenticHome)}\n` : ''}exec ${cmd.map(q).join(' ')} attach ${q(name)}
+`;
+}
+function showHere(name, size) {
+  if (process.platform !== 'darwin' || process.env.AGENTIC_NO_OPEN || !validName(name)) return;
+  const file = join(BG_DIR(), `${name}.command`);
+  try {
+    writeFileSync(file, windowFileText(doorCommand(), name, size), { mode: 0o700 });
+    chmodSync(file, 0o700);
+    // -g: it opens behind whatever is in front on this Mac.
+    spawn('/usr/bin/open', ['-g', '-a', 'Terminal', file], { stdio: 'ignore', detached: true }).unref();
+    setTimeout(() => { try { unlinkSync(file); } catch {} }, 15_000).unref();
+  } catch {}
+}
 
 // ---- this Mac's side: the listener --------------------------------------------------------------------
 
@@ -83,67 +137,111 @@ export function limiter({ tries = 5, windowMs = 60_000, now = () => Date.now() }
 // gives 127.0.0.1). key: what a window must give. startEnv: the environment a
 // session started from here gets (the PATH saved by `coding door on`).
 // key: a fixed key (a test), else the key file, read at each knock so a new key counts at once.
-export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {} }) {
+// mac: this Mac's name, as the other one knows it. peerName(address): the other Mac's.
+// show(name, size): opens a window here on a session, and start(...): starts one (a test gives
+// its own of both). staleMs: how long a window that checks in may say nothing before it is let go.
+export function openDoor({ host, port = DOOR_PORT, key = null, startEnv = process.env, log = () => {}, mac = '', peerName = tailscalePeer, show = showHere, start = startHost, folders = doorFolders, staleMs = 35_000 }) {
   const limit = limiter();
   const server = net.createServer((sock) => {
     const from = sock.remoteAddress ?? '?';
     if (limit.blocked(from)) { sock.destroy(); return; }
+    // Keys go at once (no waiting to fill a packet), and a link that died is noticed by the system too.
+    try { sock.setNoDelay(true); sock.setKeepAlive(true, 15_000); } catch {}
     let state = 'hello';
     let piped = null;
+    let heard = Date.now();
+    let watch = null;
     // Keys typed while a session starts wait for it.
     const waiting = [];
     // A window that says nothing within 10 s is let go.
     const quiet = setTimeout(() => sock.destroy(), 10_000);
-    const say = (text) => { sock.end(frame(F.NOTE, { text })); };
+    const say = (text, more = {}) => { sock.end(frame(F.NOTE, { text, ...more })); };
     const read = frameReader((kind, body) => {
+      // The check-in is answered here, so it works on a session whose host is from before it.
+      if (kind === F.PING && (state === 'piped' || state === 'busy')) { sock.write(frame(F.PONG)); return; }
       if (state === 'piped') { piped.write(frame(kind, body)); return; }
+      if (state === 'refused') return;
       if (state === 'busy') { if (waiting.length < 1000) waiting.push(frame(kind, body)); return; }
       if (kind !== F.HELLO) { sock.destroy(); return; }
-      state = 'busy';
       clearTimeout(quiet);
+      // Refused meanwhile (wrong keys on other connections from there): its key is not looked at.
+      if (limit.blocked(from)) { sock.destroy(); return; }
+      state = 'busy';
       const h = json(body);
       if (!same(h.key ?? '', key ?? doorKey())) {
+        state = 'refused';
         limit.wrong(from);
         log(`wrong key from ${from}`);
         // A moment before the answer, so keys cannot be tried quickly.
         setTimeout(() => say('wrong key'), 1000);
         return;
       }
-      if (h.op === 'list') { sock.end(frame(F.LIST, { sessions: listBackground().map(shown) })); return; }
-      const join = (rec) => {
+      if (h.op === 'list') {
+        let recent = [];
+        try { recent = folders(); } catch {}
+        sock.end(frame(F.LIST, { v: PROTO, mac, sessions: listBackground().map(shown), folders: recent, last: recent[0] ?? null }));
+        return;
+      }
+      // A window that checks in (PROTO 2) and then says nothing for staleMs has lost its link (its
+      // Mac sleeps, the network dropped): it is let go, so the session is no longer drawn at its
+      // size or counted as open there. It opens the session again by itself when it is back.
+      if (Number(h.v) >= 2) watch = setInterval(() => { if (Date.now() - heard > staleMs) { log(`${from} went quiet; its window was let go`); sock.destroy(); } }, Math.min(5000, Math.max(250, staleMs / 3)));
+      const join = async (rec, { window = false } = {}) => {
+        const who = await Promise.resolve(peerName(from)).catch(() => from);
         if (sock.destroyed) return; // the window left while its session started
-        log(`${from} opened ${rec.name}`);
+        log(`${who} opened ${rec.name}`);
         piped = net.connect(rec.socket);
         piped.on('connect', () => {
           state = 'piped';
-          sock.write(frame(F.NAMED, { name: rec.name }));
+          sock.write(frame(F.NAMED, { name: rec.name, v: PROTO, beats: true, mac }));
           // The window's own hello, without its key; a window from another Mac never owns the session.
-          piped.write(frame(F.HELLO, { cols: h.cols, rows: h.rows, fresh: Boolean(h.fresh), owner: false, via: 'door' }));
+          piped.write(frame(F.HELLO, { cols: h.cols, rows: h.rows, fresh: Boolean(h.fresh), owner: false, via: 'door', from: who, mac }));
           for (const f of waiting.splice(0)) piped.write(f);
+          if (window) { try { show(rec.name, { cols: h.cols, rows: h.rows }); } catch {} }
         });
-        piped.on('data', (c) => sock.write(c));
+        // A window too slow to take the screen (16 MB behind) is let go rather than kept in memory, as the host does.
+        piped.on('data', (c) => { if (sock.writableLength > 16 * 1024 * 1024) { log(`${who} fell 16 MB behind; its window was let go`); sock.destroy(); } else sock.write(c); });
         piped.on('close', () => sock.end());
         piped.on('error', () => sock.destroy());
         sock.on('close', () => piped.destroy());
       };
       if (h.op === 'attach') {
         const rec = validName(h.name) ? readRecord(h.name) : null;
-        if (!rec || !listBackground().some((s) => s.name === rec.name)) { say(`No session called ${h.name ?? ''} here. coding sessions <this Mac> lists them.`); return; }
-        join(rec);
+        if (!rec || !listBackground().some((s) => s.name === rec.name)) { say(`No session called ${h.name ?? ''} here. coding sessions <this Mac> lists them.`, { gone: true }); return; }
+        // No window here shows it (sent to the background, or started with --bg): one opens. Not
+        // when the same window only comes back after a lost link.
+        join(rec, { window: rec.local === 0 && !h.again });
         return;
       }
       if (h.op === 'new') {
         if (!sessionsOn(startEnv)) { say('That Mac cannot keep sessions yet: its Bun is too old (run bun upgrade there).'); return; }
-        startHost({ folder: homedir(), args: [], cols: h.cols, rows: h.rows, env: startEnv })
-          .then((rec) => { h.fresh = true; join(rec); })
+        // Where: the folder named (~ is this Mac's home), the folder of the last conversation here
+        // (continued, with -c), or as before the home folder, where the app asks.
+        let folder = homedir();
+        let args = [];
+        if (h.last) {
+          let recent = [];
+          try { recent = folders(); } catch {}
+          if (!recent.length) { say(`No conversation was had on ${mac || 'that Mac'} yet.`); return; }
+          folder = untilde(recent[0].path);
+          args = ['-c'];
+        } else if (typeof h.folder === 'string' && h.folder.trim()) {
+          folder = untilde(h.folder.trim());
+          args = ['--folder', folder];
+        }
+        let isDir = false;
+        try { isDir = statSync(folder).isDirectory(); } catch {}
+        if (!isDir) { say(`No folder ${h.folder ?? folder} on ${mac || 'that Mac'}.`); return; }
+        start({ folder, args, cols: h.cols, rows: h.rows, env: startEnv })
+          .then((rec) => { h.fresh = true; return join(rec, { window: true }); })
           .catch((e) => say(`the session did not start: ${e.message}`));
         return;
       }
       say('the door does not know that');
     });
-    sock.on('data', (c) => { try { read(c); } catch { sock.destroy(); } });
+    sock.on('data', (c) => { heard = Date.now(); try { read(c); } catch { sock.destroy(); } });
     sock.on('error', () => {});
-    sock.on('close', () => clearTimeout(quiet));
+    sock.on('close', () => { clearTimeout(quiet); clearInterval(watch); });
   });
   return new Promise((res, rej) => {
     server.once('error', rej);
@@ -191,7 +289,7 @@ export async function runDoor({ port = readState().port ?? DOOR_PORT } = {}) {
     const at = tailscaleAddress();
     if (!at) { await wait(); continue; }
     let server;
-    try { server = await openDoor({ host: at, port, startEnv, log }); } catch (e) { log(`could not listen on ${at}:${port}: ${e.message}`); await wait(); continue; }
+    try { server = await openDoor({ host: at, port, startEnv, log, mac: tailscaleName() }); } catch (e) { log(`could not listen on ${at}:${port}: ${e.message}`); await wait(); continue; }
     log(`open on ${at}:${port}`);
     while (tailscaleAddress() === at && built() === at0) await wait();
     await new Promise((r) => server.close(r));
@@ -333,10 +431,15 @@ export async function doorCli(args, { say = (t) => process.stdout.write(`${t}\n`
 
 // ---- the other Mac's side: going through the door -------------------------------------------------------
 
+// Where a Mac's name leads: the system looks it up (Tailscale's names). AGENTIC_DOOR_AT
+// ("server-1=127.0.0.1") stands in for that in the tests and the preview pages, whose other Mac
+// is this one.
+const addressOf = (host) => (process.env.AGENTIC_DOOR_AT ?? '').split(',').map((x) => x.split('=')).find(([n]) => n === host)?.[1] ?? host;
+
 // One question through the door, then the answer frame: { kind, body }.
 function ask({ host, port, hello, timeoutMs = 8000 }) {
   return new Promise((resolve, reject) => {
-    const sock = net.connect({ host, port });
+    const sock = net.connect({ host: addressOf(host), port });
     const t = setTimeout(() => { sock.destroy(); reject(new Error('timeout')); }, timeoutMs);
     sock.on('connect', () => sock.write(frame(F.HELLO, hello)));
     const read = frameReader((kind, body) => { clearTimeout(t); sock.destroy(); resolve({ kind, body: json(body) }); });
@@ -354,8 +457,9 @@ export function reachProblem(e, host) {
   return `Could not reach ${host}: ${e.message}`;
 }
 
-// A key typed without showing it. Read with 'readable' and read(), never paused (pick.mjs says why).
-async function typeKey(prompt, { input = process.stdin, output = process.stderr } = {}) {
+// A key typed without showing it (show: a line typed in plain sight, a folder's path). Read with
+// 'readable' and read(), never paused (pick.mjs says why).
+export async function typeKey(prompt, { input = process.stdin, output = process.stderr, show = false } = {}) {
   output.write(prompt);
   if (!input.isTTY) return null;
   input.setRawMode(true);
@@ -368,8 +472,8 @@ async function typeKey(prompt, { input = process.stdin, output = process.stderr 
         for (const ch of Buffer.from(c).toString('utf8')) {
           if (ch === '\r' || ch === '\n') { done(k.trim()); return; }
           if (ch === '\x03' || ch === '\x1b') { done(null); return; }
-          if (ch === '\x7f') { k = k.slice(0, -1); continue; }
-          if (ch >= ' ') k += ch;
+          if (ch === '\x7f') { if (show && k) output.write('\b \b'); k = k.slice(0, -1); continue; }
+          if (ch >= ' ') { k += ch; if (show) output.write(ch); }
         }
       }
     };
@@ -390,10 +494,11 @@ export async function remoteList({ host, port = DOOR_PORT, askKey = typeKey }) {
       if (!key) throw new Error('No key given; nothing was opened.');
     }
     let r;
-    try { r = await ask({ host, port, hello: { key, op: 'list' } }); } catch (e) { throw new Error(reachProblem(e, host)); }
+    try { r = await ask({ host, port, hello: { key, op: 'list', v: PROTO } }); } catch (e) { throw new Error(reachProblem(e, host)); }
     if (r.kind === F.LIST) {
       if (readKey(id) !== key) { try { saveKey(key, id, `Agentic Coder door (${host})`); } catch {} }
-      return { sessions: r.body.sessions ?? [], key };
+      // v: what that Mac's door speaks (none: an app from before folders and the check-in).
+      return { sessions: r.body.sessions ?? [], key, v: Number(r.body.v) || 1, folders: r.body.folders ?? [], last: r.body.last ?? null };
     }
     if (r.body?.text === 'wrong key') {
       if (readKey(id) === key) removeKey(id);
@@ -406,26 +511,53 @@ export async function remoteList({ host, port = DOOR_PORT, askKey = typeKey }) {
   throw new Error('Three wrong keys; nothing was opened.');
 }
 
+// The rows under the other Mac's sessions: a new session in a folder worked in there (four at
+// most, then its home), one in a folder you type, and its last conversation carried on. A door
+// from before folders (v 1) starts one in its home folder only, as it did.
+export function newRows({ host, v, folders = [], last = null }) {
+  if (v < 2) return [{ text: `Start a new session on ${host}`, hello: { op: 'new' } }];
+  const rows = folders.filter((f) => f.path !== '~').slice(0, 4).map((f) => ({ text: `New session in ${f.path}`, hello: { op: 'new', folder: f.path } }));
+  rows.push({ text: 'New session in ~ (home)', hello: { op: 'new', folder: '~' } });
+  rows.push({ text: 'New session in… (type a folder)', type: true, hello: { op: 'new' } });
+  if (last) rows.push({ text: `Continue the last conversation there (${last.path}${last.title ? ` · ${String(last.title).slice(0, 40)}` : ''})`, hello: { op: 'new', last: true } });
+  return rows;
+}
+
 // `coding attach <host> [name]` and `coding sessions <host>`: through the door.
-export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnly = false, say = (t) => process.stdout.write(`${t}\n`) }) {
-  const { sessions, key } = await remoteList({ host, port });
+export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnly = false, say = (t) => process.stdout.write(`${t}\n`), typeLine = (p) => typeKey(p, { show: true }), beatMs, retryMs }) {
+  const { sessions, key, v, folders, last } = await remoteList({ host, port });
   if (listOnly) {
     if (!sessions.length) say(`Nothing is running on ${host}. coding attach ${host} starts a session there.`);
     for (const s of sessions) say(`  ${describe(s, Date.now(), { mac: false })}`);
     return 0;
   }
-  let op = 'attach';
-  let want = name;
-  if (!want) {
-    const rows = [...sessions.map((s) => describe(s, Date.now(), { mac: false })), `Start a new session on ${host}`];
-    const i = await pick(rows, `Sessions on ${host}`);
+  let hello = { op: 'attach', name };
+  if (!name) {
+    const fresh = newRows({ host, v, folders, last });
+    const rows = [...sessions.map((s) => describe(s, Date.now(), { mac: false })), ...fresh.map((r) => r.text)];
+    // A rule between what runs there and what can be started.
+    const i = await pick(rows, `Sessions on ${host}`, { rule: sessions.length ? sessions.length : -1 });
     if (i === null) return 0;
-    if (i === sessions.length) op = 'new';
-    else want = sessions[i].name;
+    if (i < sessions.length) hello = { op: 'attach', name: sessions[i].name };
+    else {
+      const row = fresh[i - sessions.length];
+      hello = { ...row.hello };
+      if (row.type) {
+        const folder = await typeLine(`Folder on ${host} (~ is its home): `);
+        if (!folder) return 0;
+        hello.folder = folder;
+      }
+    }
+    if (v < 2) process.stderr.write(`\x1b[2m${host} runs an older Agentic Coder: update it there (git pull, then coding) to pick a folder or carry on a conversation.\x1b[0m\n`);
   }
+  // Keys go at once, and a dead link is noticed by the system too; the window's own check-in is faster.
+  const connect = () => { const s = net.connect({ host: addressOf(host), port }); try { s.setNoDelay(true); s.setKeepAlive(true, 15_000); } catch {} return s; };
   return viewSession({
-    name: want ?? `a new session on ${host}`, where: host,
-    connect: () => net.connect({ host, port }),
-    hello: { key, op, name: want },
+    name: hello.name ?? `a new session on ${host}`, where: host,
+    connect,
+    hello: { key, v: PROTO, ...hello },
+    // After a lost link: the same session, by the name the door gave it.
+    again: (n) => ({ key, v: PROTO, op: 'attach', name: n, again: true }),
+    ...(beatMs ? { beatMs } : {}), ...(retryMs ? { retryMs } : {}),
   });
 }

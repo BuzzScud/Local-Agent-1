@@ -1,5 +1,6 @@
 // Settings, saved sessions and prompt history, all under ~/.agentic-coder.
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HOME, DEFAULT_MODEL } from '../../../models/index.mjs';
 import { isTrusted } from './trust.mjs';
@@ -70,6 +71,42 @@ export function listSessions(cwd) {
       return { id: s.id, title: s.title ?? '(untitled)', updated: s.updated, turns: (s.messages ?? []).filter((m) => m.role === 'user').length };
     } catch { return null; }
   }).filter(Boolean).sort((a, b) => b.updated.localeCompare(a.updated));
+}
+
+// The folders conversations were had in, the latest first: [{ folder, title, updated, convs }],
+// for another Mac's "New session in" rows (door.mjs). Only the latest conversation of each is
+// opened, for its folder and title. A folder that is gone is left out, and so is a throwaway one
+// (a test's project under the temp folders).
+const THROWAWAY = [tmpdir(), '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'];
+export function recentFolders({ dir = SESSIONS, max = 6 } = {}) {
+  let slugs = [];
+  try { slugs = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+  const latest = [];
+  for (const s of slugs) {
+    let best = null;
+    let convs = 0;
+    try {
+      for (const f of readdirSync(join(dir, s))) {
+        if (!f.endsWith('.json')) continue;
+        convs++;
+        const at = statSync(join(dir, s, f)).mtimeMs;
+        if (!best || at > best.at) best = { file: join(dir, s, f), at };
+      }
+    } catch { continue; }
+    if (best) latest.push({ ...best, convs });
+  }
+  latest.sort((a, b) => b.at - a.at);
+  const out = [];
+  for (const l of latest) {
+    if (out.length >= max) break;
+    try {
+      const c = JSON.parse(readFileSync(l.file, 'utf8'));
+      if (!c.cwd || THROWAWAY.some((t) => c.cwd === t || c.cwd.startsWith(`${t}/`)) || !statSync(c.cwd).isDirectory()) continue;
+      if (out.some((o) => o.folder === c.cwd)) continue;
+      out.push({ folder: c.cwd, title: c.title ?? '', updated: c.updated ?? new Date(l.at).toISOString(), convs: l.convs });
+    } catch {}
+  }
+  return out;
 }
 
 export function loadSession(cwd, id) {
