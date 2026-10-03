@@ -7,7 +7,7 @@
 // Checked here for real, with a pretend $HOME: two files in one process, no AGENTIC_HOME, and a
 // settings.json planted where the "real" home would be.
 import { test, expect } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -49,3 +49,14 @@ test('a test process has a throwaway home before anything loads, and the models 
   const o = spawnSync(process.execPath, ['-e', "const { HOME } = await import('./models/index.mjs'); console.log(HOME);"], { cwd: REPO, env: outside, encoding: 'utf8', timeout: 30_000 });
   expect(o.stdout.trim()).toBe(join(home, '.agentic-coder'));
 });
+
+test('a test run takes its own throwaway home away with it when it ends', () => {
+  // A temp folder of its own for the child, so only what that run leaves is counted.
+  const tmp = mkdtempSync(join(tmpdir(), 'agentic-own-tmp-'));
+  const env = { ...process.env, TMPDIR: tmp, NO_COLOR: '1', FORCE_COLOR: '0' };
+  for (const k of ['AGENTIC_HOME', 'BONSAI_HOME', 'AGENTIC_TEST_HOME']) delete env[k];
+  const r = spawnSync('bun', ['test', './terminal/test/words.test.mjs'], { cwd: REPO, env, encoding: 'utf8', timeout: 60_000 });
+  expect(`${r.stdout}${r.stderr}`).toMatch(/^\s*0 fail$/m);
+  expect(readdirSync(tmp).filter((n) => n.startsWith('agentic-test-home-'))).toEqual([]);
+}, 90_000);
+

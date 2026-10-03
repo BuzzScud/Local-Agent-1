@@ -2,6 +2,7 @@
 // takes any free port, never 8757, the real hub's: an open Agentic Coder hub tab in
 // the browser would otherwise be answered by the test's hub, which has no
 // model file, and Weights would say the model is not on this Mac (27 Sep).
+import { afterAll } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,9 +17,10 @@ process.env.AGENTIC_HUB_PORT = '0';
 // run: models/registry.mjs.)
 process.env.AGENTIC_TEST_HOME = mkdtempSync(join(tmpdir(), 'agentic-test-home-'));
 process.env.AGENTIC_HOME ??= process.env.AGENTIC_TEST_HOME;
-// This process's own throwaway goes when the process ends (a full run made about 170 of them and left
-// them in the temp folder). Only the one made here: never a home the process was given.
-{ const own = process.env.AGENTIC_TEST_HOME; process.on('exit', () => { try { rmSync(own, { recursive: true, force: true }); } catch { /* the temp folder is cleared by macOS anyway */ } }); }
+// This process's own throwaway goes when its tests are over (a full run made about 170 of them and left
+// them in the temp folder). Only the one made here: never a home the process was given. A preload's
+// afterAll runs once, after the last file's tests; under bun test the process's 'exit' never fires.
+{ const own = process.env.AGENTIC_TEST_HOME; afterAll(() => { try { rmSync(own, { recursive: true, force: true }); } catch { /* the temp folder is cleared by macOS anyway */ } }); }
 // A tool a test needs that this Mac lacks is a named skip (needs.mjs); a test of the models part
 // reaches it here, since it cannot import a file of the terminal's.
 globalThis.needs = needs;
