@@ -128,7 +128,9 @@ test('one model in full: its settings, template, license and build facts (no tok
 test('Try it runs the app\'s own try-out in the background and keeps it where /model reads it; Load and Unload change what is loaded; another site cannot press them', () => {
   const o = inChild(`
     const { fakeOllama } = await import(${JSON.stringify(join(import.meta.dir, 'fake-ollama.mjs'))});
-    const pf = await fakeOllama();
+    // words:7b's try is held until both presses are answered: on a busy Mac it had ended before the second arrived.
+    let letGo; const held = new Promise((r) => { letGo = r; });
+    const pf = await fakeOllama({ hold: { model: 'words:7b', until: held } });
     const svc = { source: 'openai', kind: 'openai', address: pf.url, connect: 'http', model: 'coder:30b', key: false };
     writeFileSync(home + '/settings.json', JSON.stringify({ remote: { ...svc, use: true }, remotes: { openai: svc } }));
     const { readTryouts } = await import(${JSON.stringify(join(import.meta.dir, '../src/app/tryouts.mjs'))});
@@ -137,6 +139,8 @@ test('Try it runs the app\'s own try-out in the background and keeps it where /m
     const tryOne = async (id) => { const r = await post('/remote/try', { service: 'openai', id }); await until(async () => !(await get('/remote.json')).models.find((m) => m.id === id).busy); return r; };
     out.start = await tryOne('coder:30b');
     out.again = await Promise.all([post('/remote/try', { service: 'openai', id: 'words:7b' }), post('/remote/try', { service: 'openai', id: 'words:7b' })]);
+    out.heldBusy = (await get('/remote.json')).models.find((m) => m.id === 'words:7b').busy?.what;
+    letGo();
     await until(async () => !(await get('/remote.json')).models.find((m) => m.id === 'words:7b').busy);
     await tryOne('jsontext:14b');
     const now = await get('/remote.json');
@@ -155,6 +159,7 @@ test('Try it runs the app\'s own try-out in the background and keeps it where /m
   `, { settings: SAVED });
   expect(o.start).toEqual({ status: 200, ok: true, started: 'try' });
   expect(o.again.map((r) => r.status).sort()).toEqual([200, 409]); // a second press while it runs
+  expect(o.heldBusy).toBe('try'); // and the card says so until it ends
   expect(o.cards).toEqual({ 'coder:30b': [true, null], 'jsontext:14b': [true, null], 'words:7b': [false, 'answered in words, no call'] });
   expect(Object.keys(o.kept).sort()).toEqual(['coder:30b', 'jsontext:14b', 'words:7b']); // the store /remote and /model read
   expect(o.steps).toEqual(['read a file', 'fixed one line', 'ran a command']);

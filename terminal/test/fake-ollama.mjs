@@ -87,6 +87,8 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
       if (body.tools && !m?.caps.includes('tools')) return json(400, { error: `registry.ollama.ai/library/${body.model} does not support tools` });
       // opts.stuck: models the service never gets loaded (no room beside the main one): no answer, ever.
       if (opts.stuck?.includes(body.model) && !loaded.has(body.model)) return;
+      // opts.hold: { model, until }: that model's chat waits for the promise (a job kept running until the test lets it end).
+      if (opts.hold?.model === body.model) await opts.hold.until;
       // opts.sideDelay: ms a side question waits (a service that takes one request at a time, busy with a reply).
       if (opts.sideDelay && /asked with \/btw/.test(String(body.messages?.[0]?.content ?? ''))) await new Promise((r) => setTimeout(r, opts.sideDelay));
       loaded.set(body.model, body.options?.num_ctx ?? 32768);
