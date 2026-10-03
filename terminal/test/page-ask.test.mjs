@@ -1,6 +1,7 @@
 // Look first, check after (agent.mjs askPage; the user's pick, 1 Oct 2026): a page saved for a
 // request stops the turn, opens, and asks before anything checks it.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -120,7 +121,7 @@ test('the answers: looks good, check it, or words for the model; a page\'s missi
 
 // "Check it for me" runs the real layout check; what it finds is shown, and fixing it is asked too.
 const chrome = findChrome();
-test.skipIf(!chrome)('in a real browser: "Check it for me" finds the dead Download button and asks before fixing; "Fix it" sends it back', async () => {
+test.skipIf(needs('chrome', () => chrome))('in a real browser: "Check it for me" finds the dead Download button and asks before fixing; "Fix it" sends it back', async () => {
   const keep = process.env.AGENTIC_LAYOUT;
   process.env.AGENTIC_LAYOUT = 'on';
   try {

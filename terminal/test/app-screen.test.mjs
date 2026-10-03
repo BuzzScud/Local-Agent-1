@@ -3,6 +3,7 @@
 // what is allowed; without macOS's Screen Recording it asks nothing and says /screen setup.
 // AGENTIC_SCREEN_FAKE stands in for the screen. The tool itself: screen.test.mjs.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +21,7 @@ function screenFolder(allowed) {
 }
 const look = { tool: { name: 'Screen', args: { app: 'TextEdit' } } };
 
-test('a model that sees asks to look at TextEdit once; "for this session" lets it look, the picture goes with the next request; /screen lists it', async () => {
+test.skipIf(needs('pictures', media.mediaTool))('a model that sees asks to look at TextEdit once; "for this session" lets it look, the picture goes with the next request; /screen lists it', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([look, { text: 'Your note says SHIP FRIDAY.' }, look, { text: 'Still SHIP FRIDAY.' }], { vision: true });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_SCREEN_FAKE: screenFolder(true) }, args: ['--url', fake.url, '--no-flows'], steps: [
@@ -41,7 +42,7 @@ test('a model that sees asks to look at TextEdit once; "for this session" lets i
   expect(r.snapshots.status).toContain('Allowed: Screen(TextEdit) (this session).');
 }, T);
 
-test('without Screen Recording nothing is asked: the model is told it cannot look and the window says /screen setup', async () => {
+test.skipIf(needs('pictures', media.mediaTool))('without Screen Recording nothing is asked: the model is told it cannot look and the window says /screen setup', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([look, { text: 'I cannot see your screen yet.' }], { vision: true });
   const r = await runInPty({ cwd, env: { ...env, AGENTIC_SCREEN_FAKE: screenFolder(false) }, args: ['--url', fake.url, '--no-flows'], steps: [

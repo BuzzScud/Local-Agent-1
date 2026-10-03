@@ -4,13 +4,14 @@
 // opinion after a change, the summary on the side model, the main model kept loaded
 // (keep_alive -1), and what the window used let go as it closes.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
 import { T, setup, quit } from './app-setup.mjs';
 import { fakeOllama } from './fake-ollama.mjs';
 
-const { textImage } = await import('../src/tools/media.mjs');
+const { textImage, mediaTool } = await import('../src/tools/media.mjs');
 const NO_ENV_KEYS = { AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', ANTHROPIC_API_KEY: '' };
 const onService = (base, url, model = 'coder:30b') => {
   const r0 = { source: 'openai', address: url, port: null, connect: 'http', kind: 'openai', model, context: 0, key: false, keyEnd: '', keyId: 'openai' };
@@ -18,7 +19,7 @@ const onService = (base, url, model = 'coder:30b') => {
 };
 const settingsOf = (base) => JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8'));
 
-test('on an Ollama service: the try-out on first use, /subagents (one switched off, saved), a picture described by llava, the second opinion after a change, the summary on the small model, and the models let go at quit', async () => {
+test.skipIf(needs('pictures', mediaTool))('on an Ollama service: the try-out on first use, /subagents (one switched off, saved), a picture described by llava, the second opinion after a change, the summary on the small model, and the models let go at quit', async () => {
   const { cwd, env, base } = setup();
   const svc = await fakeOllama({ review: '- notes.txt: check the second line', describe: 'A login form; the Save button is cut off.' });
   onService(base, svc.url);

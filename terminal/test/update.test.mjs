@@ -3,6 +3,7 @@
 // was already built in, and pushes not yet in this folder are told apart.
 // /update restarts the app on the new code with the conversation kept.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, symlinkSync, chmodSync, realpathSync, statSync, lstatSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -71,7 +72,7 @@ test("a push to GitHub's main from elsewhere (not in this folder) asks for a pul
   expect((await checkUpdate(repo, start, Date.now() - 60_000))?.kind).toBe('ready');
 });
 
-test('the real app shows the badge in the lower right when a code commit lands while it runs', async () => {
+test.skipIf(needs('python3'))('the real app shows the badge in the lower right when a code commit lands while it runs', async () => {
   const repo = makeRepo();
   const base = mkdtempSync(join(tmpdir(), 'agentic-update-app-'));
   const cwd = join(base, 'demo-project');
@@ -126,7 +127,7 @@ function trustedProject() {
   return { base, cwd };
 }
 
-test('/update without the launcher (run from the source): up to date says so; an update says to start again', async () => {
+test.skipIf(needs('python3'))('/update without the launcher (run from the source): up to date says so; an update says to start again', async () => {
   const repo = makeRepo();
   const { base, cwd } = trustedProject();
   const fake = await startFakeServer([{ text: 'Hello.' }]);
@@ -144,7 +145,7 @@ test('/update without the launcher (run from the source): up to date says so; an
 
 // The whole path as you use it: the real launcher script, a repo made from
 // this working tree (so the launcher builds this code), the compiled app.
-test('/update through the coding launcher: rebuilt, restarted in the same window, conversation back, every key arrives', async () => {
+test.skipIf(needs('python3'))('/update through the coding launcher: rebuilt, restarted in the same window, conversation back, every key arrives', async () => {
   const src = join(import.meta.dir, '..', '..');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-update-repo-')));
   const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
@@ -244,7 +245,7 @@ test('an http:// or git:// origin is never fetched from or brought in', async ()
   expect(git(local, 'rev-parse', 'refs/remotes/origin/main')).toBe(before);
 });
 
-test('git runs without a terminal: nothing it starts can open /dev/tty to ask for a password', async () => {
+test.skipIf(needs('python3'))('git runs without a terminal: nothing it starts can open /dev/tty to ask for a password', async () => {
   // Run inside a real pty, so the direct run below does have a terminal to open.
   const repo = makeRepo();
   const probe = join(mkdtempSync(join(tmpdir(), 'agentic-tty-')), 'probe.mjs');
@@ -298,7 +299,7 @@ test("commands Agentic Coder runs do not see where the restart file goes, under 
   }
 });
 
-test('the real app asks GitHub on its own: a push from another machine lights "Update on GitHub", and /update brings it in', async () => {
+test.skipIf(needs('python3'))('the real app asks GitHub on its own: a push from another machine lights "Update on GitHub", and /update brings it in', async () => {
   const { local, other } = github();
   const { base, cwd } = trustedProject();
   const fake = await startFakeServer([{ text: 'Hello.' }]);

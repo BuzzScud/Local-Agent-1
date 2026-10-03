@@ -3,6 +3,7 @@
 // greetings without tools, a blank answer retried, and thinking on the
 // coding paths.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -66,7 +67,7 @@ test('"rename test to check" leaves the tests passing', async () => {
 });
 
 // 6 · the fence
-test.skipIf(!sandboxAvailable())('commands cannot read the home folder or write outside the project', async () => {
+test.skipIf(needs('sandbox', sandboxAvailable))('commands cannot read the home folder or write outside the project', async () => {
   const cwd = dir({ 'a.txt': 'inside\n' });
   const home = await runCommand('ls ~/Desktop', { cwd });
   expect(home.lines.join('\n')).toMatch(/Operation not permitted/);
@@ -83,7 +84,7 @@ test.skipIf(!sandboxAvailable())('commands cannot read the home folder or write 
   rmSync(probe, { force: true });
 });
 
-test.skipIf(!sandboxAvailable())('commands cannot signal or connect to what already runs on this Mac', async () => {
+test.skipIf(needs('sandbox', sandboxAvailable))('commands cannot signal or connect to what already runs on this Mac', async () => {
   const cwd = dir({});
   // Stand-ins for a database and a desk server: a process and a listener started outside.
   const other = spawn('/bin/sleep', ['60'], { stdio: 'ignore' });

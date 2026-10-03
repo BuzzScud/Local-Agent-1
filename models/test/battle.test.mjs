@@ -152,7 +152,8 @@ test('what the app says while a battle holds the memory names no model (the vote
 
 // Each set: every test fails as given and passes with its known-good answer (no model).
 for (const [suite, kindsWanted] of [['new28', { code: 16, question: 5, page: 5, writing: 2 }], ['work28', { code: 16, question: 5, page: 5, writing: 2 }], ['practice', { code: 21, question: 4, writing: 3 }]]) {
-  test(`the ${suite === 'new28' ? 'New 28' : suite === 'work28' ? 'Work 28' : 'Practice 28'}: every one fails as given and passes with its known-good answer (no model)`, () => {
+  // Each set holds Python tasks, checked with pytest (needs: terminal/test/needs.mjs, put on globalThis by the tests' preload).
+  test.skipIf(globalThis.needs('pytest'))(`the ${suite === 'new28' ? 'New 28' : suite === 'work28' ? 'Work 28' : 'Practice 28'}: every one fails as given and passes with its known-good answer (no model)`, () => {
     const list = allTests().filter((t) => t.suite === suite);
     expect(list).toHaveLength(28);
     expect(list.map((t) => t.id.slice(0, 3))).toEqual(Array.from({ length: 28 }, (_, i) => `${suite[0]}${String(i + 1).padStart(2, '0')}`));

@@ -1,6 +1,7 @@
 // The Mac's memory, live in the footer only: the words, this Mac's own
 // numbers, and the real app (no panel beside the start page since 28 Sep).
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import React from 'react';
 import { renderToString } from 'ink';
 import { footerLabel, pressureWord } from '../src/app/mac-memory.mjs';
@@ -39,7 +40,7 @@ test('measured on this Mac: the numbers add up', () => {
   expect([1, 2, 4]).toContain(m.level);
 });
 
-test('the real app: no memory panel beside the start page; the memory is live in the footer, and a narrow window does not cut the footer short', async () => {
+test.skipIf(needs('python3'))('the real app: no memory panel beside the start page; the memory is live in the footer, and a narrow window does not cut the footer short', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([]);
   const t = openTerm({ cwd, cols: 155, rows: 43, env, args: ['--url', fake.url] });

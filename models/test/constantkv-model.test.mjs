@@ -25,7 +25,7 @@ test('it is in /model beside Bonsai, on the MLX engine whatever AGENTIC_ENGINE s
   expect(m.effortAtTop).toBe(true);
 });
 
-test('its server is mlx-server.py on the model folder, with the context and the thinking cap; no llama.cpp flags', () => {
+test.skipIf(globalThis.needs('python3'))('its server is mlx-server.py on the model folder, with the context and the thinking cap; no llama.cpp flags', () => {
   const a = serverArgs(m, { ctx: 65_536, port: 17600 });
   expect(a[0]).toBe(mlxServerScript());
   expect(existsSync(a[0])).toBe(true);

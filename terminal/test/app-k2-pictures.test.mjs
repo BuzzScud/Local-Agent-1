@@ -4,6 +4,7 @@
 // Mac) takes this message: it loads in K2's place with its add-on, answers, and
 // K2 comes back. Esc puts the message back in the prompt, unsent.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdirSync, symlinkSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInPty } from './pty.mjs';
@@ -28,9 +29,9 @@ function project() {
   return { ...s, home };
 }
 
-const { textImage } = await import('../src/tools/media.mjs');
+const { textImage, mediaTool } = await import('../src/tools/media.mjs');
 
-test('K2 and a picture: asked first; Qwen takes the message with its add-on, then K2 comes back', async () => {
+test.skipIf(needs('pictures', mediaTool))('K2 and a picture: asked first; Qwen takes the message with its add-on, then K2 comes back', async () => {
   const { cwd, env, base } = project();
   textImage(join(cwd, 'shot.png'), 'HELLO 42');
   const args = join(base, 'server-args.jsonl');
@@ -58,7 +59,7 @@ test('K2 and a picture: asked first; Qwen takes the message with its add-on, the
   expect(JSON.parse(readFileSync(join(base, 'home', 'settings.json'), 'utf8')).model).toBe('k2');
 }, 180_000);
 
-test('K2 and a picture, esc: nothing is sent and the message is back in the prompt', async () => {
+test.skipIf(needs('pictures', mediaTool))('K2 and a picture, esc: nothing is sent and the message is back in the prompt', async () => {
   const { cwd, env } = project();
   textImage(join(cwd, 'shot.png'), 'HELLO 42');
   const r = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 120_000, steps: [

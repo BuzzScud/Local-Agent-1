@@ -4,6 +4,7 @@
 // DESIGN/; the page the model made opened in a real browser and what is broken
 // sent back once. Built against a fixture folder, never the real one.
 import { test, expect, afterAll } from 'bun:test';
+import { needs } from './needs.mjs';
 import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -297,7 +298,7 @@ const BAD = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewpo
 <body><div class="grid"><div>Revenue</div><div>Costs</div></div><p class="meta">Updated 3 min ago</p></body></html>`;
 const GOOD = BAD.replace('grid-template-columns:300px 300px', 'grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr))').replace('color:#c8c8c8', 'color:#595959');
 
-test.skipIf(!chrome)('in a real browser: a page too wide for a phone and faint text are found; the fixed page is clean', async () => {
+test.skipIf(needs('chrome', () => chrome))('in a real browser: a page too wide for a phone and faint text are found; the fixed page is clean', async () => {
   const dir = join(tmpdir(), `agentic-design-real-${process.pid}`); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'bad.html'), BAD);
   writeFileSync(join(dir, 'good.html'), GOOD);
@@ -331,7 +332,7 @@ document.getElementById('back').onclick = function () { if (card > 0) { card--; 
 document.getElementById('oops').onclick = function () { nothere(); };
 </script></body></html>`;
 
-test.skipIf(!chrome)('in a real browser: the click pass finds the dead button and the one that throws, and leaves the working ones alone', async () => {
+test.skipIf(needs('chrome', () => chrome))('in a real browser: the click pass finds the dead button and the one that throws, and leaves the working ones alone', async () => {
   const dir = join(tmpdir(), `agentic-design-clicks-${process.pid}`); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'weather.html'), BUTTONS);
   const r = await L.layoutCheck(join(dir, 'weather.html'), { chrome });
@@ -352,14 +353,14 @@ const QUIET = `<!doctype html><html><head><meta charset="utf-8"><meta name="view
 <form id="f"><input type="email" required><input type="password" required><button>Sign in</button></form><p id="said"></p>
 <script>document.getElementById('f').onsubmit = function (e) { e.preventDefault(); document.getElementById('said').textContent = 'Signing in'; };</script></body></html>`;
 
-test.skipIf(!chrome)('in a real browser: screen-reader-only text is not "overlapping" or "cut", and a sign-in button counts once its password box is filled', async () => {
+test.skipIf(needs('chrome', () => chrome))('in a real browser: screen-reader-only text is not "overlapping" or "cut", and a sign-in button counts once its password box is filled', async () => {
   const dir = join(tmpdir(), `agentic-design-quiet-${process.pid}`); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'signin.html'), QUIET);
   const r = await L.layoutCheck(join(dir, 'signin.html'), { chrome });
   expect(r.problems).toEqual([]);
 }, 60_000);
 
-test.skipIf(!chrome)('the agent: a page request brings the cards; the page it wrote is checked, sent back once, and checked again after the fix', async () => {
+test.skipIf(needs('chrome', () => chrome))('the agent: a page request brings the cards; the page it wrote is checked, sent back once, and checked again after the fix', async () => {
   const { Agent } = await import('../src/agent/agent.mjs');
   const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
   const { startFakeServer } = await import('./fake-server.mjs');
@@ -398,7 +399,7 @@ test.skipIf(!chrome)('the agent: a page request brings the cards; the page it wr
 }, 90_000);
 
 // Qwen, 30 Sep: "Changed the button text to meet the 4.5:1 contrast", and it was 4.1:1.
-test.skipIf(!chrome)('the agent: a "fix" the layout check does not agree with ends the turn with a "Still broken" line, after the answer', async () => {
+test.skipIf(needs('chrome', () => chrome))('the agent: a "fix" the layout check does not agree with ends the turn with a "Still broken" line, after the answer', async () => {
   const { Agent } = await import('../src/agent/agent.mjs');
   const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
   const { startFakeServer } = await import('./fake-server.mjs');

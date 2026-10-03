@@ -2,6 +2,7 @@
 // read back by a terminal emulator that re-wraps lines as Terminal does).
 // Every resize must end in one clean screen at the new size.
 import { test, expect } from 'bun:test';
+import { needs } from './needs.mjs';
 import { cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,7 +28,7 @@ async function clean(t, what) {
 }
 async function settle(t, c, r) { t.resize(c, r); await sleep(150); await t.idle(400, 5000); }
 
-test('shrink, grow, drag and height-only resizes each end in one clean screen', async () => {
+test.skipIf(needs('python3'))('shrink, grow, drag and height-only resizes each end in one clean screen', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: LONG }], { delayMs: 2 });
   const t = openTerm({ cwd, env, cols: 155, rows: 43, args: ['--url', fake.url, '--no-flows'] });
@@ -44,7 +45,7 @@ test('shrink, grow, drag and height-only resizes each end in one clean screen', 
   } finally { await t.close(); await fake.close(); }
 }, T);
 
-test('below 80×24 a note replaces the screen and keys wait; it all comes back', async () => {
+test.skipIf(needs('python3'))('below 80×24 a note replaces the screen and keys wait; it all comes back', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'Hi.' }], { delayMs: 2 });
   const t = openTerm({ cwd, env, cols: 100, rows: 30, args: ['--url', fake.url, '--no-flows'] });
@@ -61,7 +62,7 @@ test('below 80×24 a note replaces the screen and keys wait; it all comes back',
   } finally { await t.close(); await fake.close(); }
 }, T);
 
-test('esc closes the "/" menu first and keeps Agentic Coder working; the next esc stops it', async () => {
+test.skipIf(needs('python3'))('esc closes the "/" menu first and keeps Agentic Coder working; the next esc stops it', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ reasoning: 'Thinking it over at length. '.repeat(400) }], { delayMs: 10 });
   const t = openTerm({ cwd, env, cols: 120, rows: 36, args: ['--url', fake.url, '--no-flows'] });
@@ -76,7 +77,7 @@ test('esc closes the "/" menu first and keeps Agentic Coder working; the next es
   } finally { await t.close(); await fake.close(); }
 }, T);
 
-test('text and enter arriving together (a busy app) still send the message', async () => {
+test.skipIf(needs('python3'))('text and enter arriving together (a busy app) still send the message', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([{ text: 'Got it.' }], { delayMs: 2 });
   const t = openTerm({ cwd, env, cols: 100, rows: 30, args: ['--url', fake.url, '--no-flows'] });
@@ -88,7 +89,7 @@ test('text and enter arriving together (a busy app) still send the message', asy
   } finally { await t.close(); await fake.close(); }
 }, T);
 
-test('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"', async () => {
+test.skipIf(needs('python3'))('the footer fits narrow windows: the right side drops words, never runs into "? for shortcuts"', async () => {
   const { footerRight } = await import('../src/app/screen.jsx');
   expect(footerRight('edits', 200)).toEqual({ cycle: true });
   expect(footerRight('edits', 30)).toEqual({ cycle: false }); // the mode stays, the "(shift+tab to cycle)" hint goes
@@ -118,7 +119,7 @@ test('a reply being written is cut to the lines it takes on screen, not its sour
   expect(tailToFit('x'.repeat(2000), 3, 50).length).toBeLessThanOrEqual(150);
 });
 
-test('a long reply being written never spills into the scrollback (it once printed its first line 249 times)', async () => {
+test.skipIf(needs('python3'))('a long reply being written never spills into the scrollback (it once printed its first line 249 times)', async () => {
   const { cwd, env } = setup();
   // Paragraphs with blank lines between them: rendered taller than their source lines.
   const reply = ['FIRST-LINE-MARKER: I checked the file four ways.', ...Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1} of the answer, long enough to wrap once at eighty columns in a small window like this one.`)].join('\n\n');
