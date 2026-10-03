@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff } from '../evals/tools/check.mjs';
+import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv } from '../evals/tools/check.mjs';
 
 const real = 'Zk3vQ9xT7mB2nL5cR8wY1dF6hJ4s';
 const what = (text) => findSecrets(text).map((s) => s.what);
@@ -132,3 +132,10 @@ test("a package the repo holds itself, installed as a copy, is compared with the
   expect(localCopyDiff(dir, join(dir, 'node_modules'), links)).toContain("stand-in/more.js is in the repo's own copy (shims/stand-in) but not installed");
   expect(localCopyDiff(dir, join(dir, 'node_modules'), { gone: 'shims/gone' })).toEqual([]); // not installed as a copy: npm's link is checked by npm
 });
+
+test('the check runs the unit tests with colours off by NO_COLOR alone, never with FORCE_COLOR beside it (node then warns on stderr in a command a test expects to be quiet)', () => {
+  expect(suiteEnv({ PATH: '/bin', FORCE_COLOR: '3', OTHER: 'kept' })).toEqual({ PATH: '/bin', NO_COLOR: '1', OTHER: 'kept' });
+  expect(suiteEnv({ FORCE_COLOR: '0' })).toEqual({ NO_COLOR: '1' });
+  expect(suiteEnv({})).toEqual({ NO_COLOR: '1' });
+});
+

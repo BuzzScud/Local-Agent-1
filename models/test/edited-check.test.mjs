@@ -41,7 +41,11 @@ async function server(answer, tps) {
 const RIGHT = (q) => (/17 × 23/.test(q) ? '391' : /capital of Japan/.test(q) ? 'Tokyo' : /2, 4, 8, 16/.test(q) ? '32' : /console\.log/.test(q) ? '2-4-6' : /backwards/.test(q) ? 'thgiew' : /Tokyo a big city/.test(q) ? '**Japan**' : /Repeat this exactly/.test(q) ? q.split(': ').pop() : 'function parse() {}');
 function run(h, extra) {
   return new Promise((resolve) => {
-    const c = spawn('node', [SCRIPT, '--model', 'gemma', '--out', join(h, 'raw'), ...extra], { env: { ...process.env, AGENTIC_HOME: h, AGENTIC_DOCS: join(h, 'docs'), AGENTIC_TEST_RECORD: join(h, 'record.jsonl'), FORCE_COLOR: '' }, cwd: repo });
+    // No colour setting of either kind goes to the command: with both set (the repo check runs the tests
+    // under NO_COLOR, and this passed FORCE_COLOR: ''), node warns on stderr, which must stay empty.
+    const env = { ...process.env, AGENTIC_HOME: h, AGENTIC_DOCS: join(h, 'docs'), AGENTIC_TEST_RECORD: join(h, 'record.jsonl') };
+    for (const k of ['FORCE_COLOR', 'NO_COLOR']) delete env[k];
+    const c = spawn('node', [SCRIPT, '--model', 'gemma', '--out', join(h, 'raw'), ...extra], { env, cwd: repo });
     let out = '', err = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { err += d; }); c.on('exit', (code) => resolve({ code, out, err }));
   });
 }
