@@ -7,25 +7,24 @@
 // Nothing in ~/.agentic-coder is written but this run's line in the test record.
 //   node models/evals/tools/picture-tokens.mjs --model qwen [--out dir] [--no-record]
 //   node models/evals/tools/picture-tokens.mjs --rebuild <a run's folder>: draws that run's page again
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
-import { tmpdir, loadavg, homedir } from 'node:os';
-import { MODELS, DEFAULT_MODEL, HOME, modelFolder, contextCheck, hasDraft, recordTest, codeLabel, withVision, visionPath, serverArgs, serverBinOf } from '../../index.mjs';
-import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
+import { tmpdir, loadavg } from 'node:os';
+import { MODELS, DEFAULT_MODEL, modelFolder, contextCheck, hasDraft, recordTest, codeLabel, withVision, visionPath, serverArgs, serverBinOf } from '../../index.mjs';
+import { DOCS_DIR } from '../../../docs/tools/to-docs.mjs';
 import { picturePage } from './picture-tokens-page.mjs';
+import { BUN, CLI, options, pad, previousRun, rawOf, rebuildIfAsked, short, stampOf, writeResultsPage } from './check-kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
-const CLI = join(root, 'terminal', 'src', 'cli.jsx');
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+const { opt } = options(args);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 if (!model) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const CTX = 16_384;
-const pad = (n) => String(n).padStart(2, '0');
 // The pictures: black text on white, and what a right answer holds.
 const PICTURES = [
   { file: 'hello.png', text: 'HELLO 42', want: [/HELLO/i, /\b42\b/] },
@@ -34,34 +33,10 @@ const PICTURES = [
   { file: 'total.png', text: 'Total due: 1,240', size: { w: 900, h: 240 }, want: [/total/i, /1,?240/] },
 ];
 
-// The run before this one on the same model, for the page's Before column.
-function previous(out, summary) {
-  let best = null;
-  for (const d of readdirSync(dirname(out))) {
-    const dir = join(dirname(out), d);
-    if (!d.startsWith('picture-tokens-') || dir === out || !existsSync(join(dir, 'summary.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written: skipped */ }
-  }
-  return best;
-}
-const rawOf = (dir) => (dir.startsWith(`${root}/`) ? relative(root, dir) : /\/(models\/[^/]+\/results\/.+)$/.exec(dir)?.[1] ?? dir.replace(homedir(), '~'));
-function writePage(out, rows, summary, prev) {
-  mkdirSync(dirname(docsPath(summary.page)), { recursive: true });
-  writeFileSync(docsPath(summary.page), picturePage({ summary, rows, prev, raw: [rawOf(out)] }));
-}
+const previous = (out, summary) => previousRun(out, summary, 'picture-tokens-');
+const writePage = (out, rows, summary, prev) => writeResultsPage(picturePage, out, rows, summary, prev);
 
-if (args.includes('--rebuild')) {
-  const dir = opt('rebuild');
-  const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-  if (!summary.page) { console.error(`${dir} has no results page to draw again`); process.exit(2); }
-  writePage(dir, JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')), summary, previous(dir, summary));
-  console.log(`results page drawn again: ${summary.page}`);
-  process.exit(0);
-}
+rebuildIfAsked(options(args), (dir, rows, summary) => writePage(dir, rows, summary, previous(dir, summary)));
 
 if (!model.vision) { console.error(`${model.name} has no vision add-on`); process.exit(2); }
 if (!existsSync(visionPath(model))) { console.error(`refused: ${model.name}'s vision add-on is not downloaded yet (${visionPath(model)}). Attach a picture in Agentic Coder once, or run coding setup, then try again.`); process.exit(4); }
@@ -72,13 +47,12 @@ const vm = withVision(model);
 for (let i = 0; i < 24 && !contextCheck(vm, CTX, { draft: hasDraft(model) }).fits; i++) { if (!i) console.log('waiting for memory to free up (up to 2 minutes)…'); await new Promise((r) => setTimeout(r, 5000)); }
 const fit = contextCheck(vm, CTX, { draft: hasDraft(model) });
 if (!fit.fits) { console.error(`refused: ${fit.note}`); process.exit(4); }
-const BUN = process.versions.bun ? process.execPath : [join(process.env.HOME ?? '', '.bun', 'bin', 'bun'), '/opt/homebrew/bin/bun', '/usr/local/bin/bun'].find((p) => existsSync(p)) ?? 'bun';
 const portOpen = (port) => new Promise((ok) => { const s = createConnection({ port, host: '127.0.0.1' }); s.once('connect', () => { s.destroy(); ok(true); }); s.once('error', () => ok(false)); });
 let PORT = Number(opt('port', 18240));
 while (await portOpen(PORT)) PORT++;
 
 const now = new Date();
-const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+const stamp = stampOf(now);
 const out = opt('out') ?? join(modelFolder(model), 'results', `picture-tokens-${stamp}`);
 mkdirSync(out, { recursive: true });
 
@@ -103,7 +77,6 @@ const SETTINGS = [
 
 let stopping = false;
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { if (stopping) process.exit(130); stopping = true; console.log('stopping: finishing the question under way…'); });
-const short = (s, n = 90) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 const t0 = Date.now();
 console.log(`${model.name} · ${PICTURES.length} pictures at ${SETTINGS.length} setting${SETTINGS.length === 1 ? '' : 's'} · port ${PORT}`);

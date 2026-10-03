@@ -14,7 +14,7 @@
 //   --no-record: a look only; no line in the test record and no results page
 //   node models/evals/tools/sort-check.mjs --rebuild <a run's folder>: draws that run's page again
 //   from its saved results (no model, no new line in the record)
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
@@ -23,11 +23,12 @@ import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, hasDraft
 import { modelSort, SORT_LINES, SORT_KINDS, testSettings } from '../../../terminal/index.mjs';
 import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
 import { buildSortPage } from './sort-page.mjs';
+import { options, pad, previousRun, stampOf } from './check-kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+const { opt } = options(args);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 if (!model) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const MAX_WRONG = 4;
@@ -36,25 +37,10 @@ const LINES = SORT_LINES.filter((l) => SORT_KINDS.includes(l.path) || l.path ===
 const wantOf = (l) => (SORT_KINDS.includes(l.path) ? l.path : l.want ?? null);
 const total = LINES.filter(wantOf).length;
 
-const pad = (n) => String(n).padStart(2, '0');
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 
 // The run before this one on the same model (a finished one, in a sort-check-* folder beside
-// this run's), for the page's Before column.
-function previous(out, summary) {
-  let best = null;
-  const beside = dirname(out);
-  for (const d of readdirSync(beside)) {
-    const dir = join(beside, d);
-    if (!d.startsWith('sort-check-') || dir === out || !existsSync(join(dir, 'summary.json')) || !existsSync(join(dir, 'rows.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written, or a broken one: skipped */ }
-  }
-  return best;
-}
+const previous = (out, summary) => previousRun(out, summary, 'sort-check-');
 
 // A run's results page, from what it saved (rows.json, summary.json), with the run before it.
 function writePage(out, rows, summary, prev) {
@@ -91,7 +77,7 @@ if (args.includes('--rebuild')) {
 }
 
 const now = new Date();
-const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+const stamp = stampOf(now);
 const out = opt('out') ?? join(modelFolder(model), 'results', `sort-check-${stamp}`); // modelFolder is the model's own folder, whole
 mkdirSync(out, { recursive: true });
 

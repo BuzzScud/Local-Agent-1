@@ -12,23 +12,22 @@
 //   node models/evals/tools/skills-check.mjs --model qwen [--out dir] [--no-record]
 //   node models/evals/tools/skills-check.mjs --rebuild <a run's folder>: draws that run's page again
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync, cpSync, rmSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { tmpdir, loadavg, homedir } from 'node:os';
+import { tmpdir, loadavg } from 'node:os';
 import { MODELS, DEFAULT_MODEL, HOME, modelFolder, contextCheck, hasDraft, recordTest, codeLabel } from '../../index.mjs';
-import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
+import { DOCS_DIR } from '../../../docs/tools/to-docs.mjs';
 import { skillsPage } from './skills-page.mjs';
+import { BUN, CLI, llamaServers, options, pad, previousRun, rawOf, short, stampOf, toolsOf as tools, writeResultsPage } from './check-kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
-const CLI = join(root, 'terminal', 'src', 'cli.jsx');
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+const { opt } = options(args);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 if (!model) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const CTX = 32_768;
-const pad = (n) => String(n).padStart(2, '0');
 // The three tasks, each without and with the skill, then the one without its words.
 export const TASKS = [
   { id: 'withtax', ask: 'add a test for withTax in src/cart.mjs', fn: 'withTax', file: 'src/cart.mjs' },
@@ -56,24 +55,8 @@ export function verdictOf(rows) {
   return { off: a, on: b, slower, holds, opened: list ? Boolean(list.opened) : null };
 }
 
-function previous(out, summary) {
-  let best = null;
-  for (const d of readdirSync(dirname(out))) {
-    const dir = join(dirname(out), d);
-    if (!d.startsWith('skills-check-') || dir === out || !existsSync(join(dir, 'summary.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written: skipped */ }
-  }
-  return best;
-}
-const rawOf = (dir) => (dir.startsWith(`${root}/`) ? relative(root, dir) : /\/(models\/[^/]+\/results\/.+)$/.exec(dir)?.[1] ?? dir.replace(homedir(), '~'));
-function writePage(out, rows, summary, prev) {
-  mkdirSync(dirname(docsPath(summary.page)), { recursive: true });
-  writeFileSync(docsPath(summary.page), skillsPage({ summary, rows, prev, raw: [rawOf(out)] }));
-}
+const previous = (out, summary) => previousRun(out, summary, 'skills-check-');
+const writePage = (out, rows, summary, prev) => writeResultsPage(skillsPage, out, rows, summary, prev);
 
 const main = import.meta.main ?? (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]);
 if (main && args.includes('--rebuild')) {
@@ -93,10 +76,9 @@ async function run() {
   for (let i = 0; i < 24 && !contextCheck(model, CTX, { draft: hasDraft(model) }).fits; i++) { if (!i) console.log('waiting for memory to free up (up to 2 minutes)…'); await new Promise((r) => setTimeout(r, 5000)); }
   const fit = contextCheck(model, CTX, { draft: hasDraft(model) });
   if (!fit.fits) { console.error(`refused: ${fit.note}`); process.exit(4); }
-  const BUN = process.versions.bun ? process.execPath : [join(process.env.HOME ?? '', '.bun', 'bin', 'bun'), '/opt/homebrew/bin/bun', '/usr/local/bin/bun'].find((p) => existsSync(p)) ?? 'bun';
-
+  
   const now = new Date();
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const stamp = stampOf(now);
   const out = opt('out') ?? join(modelFolder(model), 'results', `skills-check-${stamp}`);
   mkdirSync(out, { recursive: true });
 
@@ -130,9 +112,7 @@ async function run() {
   spawnSync('git', ['-c', 'user.name=check', '-c', 'user.email=check@example.invalid', 'commit', '-qm', 'start'], { cwd: base });
   const quiet = { AGENTIC_NO_UPDATE: '1', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_NO_MEMORY: '1', AGENTIC_HELPERS: 'off', AGENTIC_NO_OPEN: '1', AGENTIC_HOME: home };
 
-  const short = (s, n = 90) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
-  const tools = (err) => err.split('\n').filter((l) => /^[⏺✗] /.test(l)).map((l) => l.slice(2));
-  const testCount = (dir) => readdirSync(join(dir, 'test')).filter((f) => f.endsWith('.mjs') && f !== 'shipping.test.mjs').reduce((n, f) => n + (readFileSync(join(dir, 'test', f), 'utf8').match(/\btest\s*\(/g) ?? []).length, 0);
+      const testCount = (dir) => readdirSync(join(dir, 'test')).filter((f) => f.endsWith('.mjs') && f !== 'shipping.test.mjs').reduce((n, f) => n + (readFileSync(join(dir, 'test', f), 'utf8').match(/\btest\s*\(/g) ?? []).length, 0);
   const testsText = (dir) => readdirSync(join(dir, 'test')).filter((f) => f.endsWith('.mjs') && f !== 'shipping.test.mjs').map((f) => readFileSync(join(dir, 'test', f), 'utf8')).join('\n');
   function codingP(cwd, prompt, rulesDir, ms = 480_000) {
     return new Promise((ok) => {
@@ -145,7 +125,7 @@ async function run() {
       p.on('exit', (code) => { clearTimeout(timer); ok({ code, out: o.trim(), err: e.trim(), secs: (Date.now() - t) / 1000 }); });
     });
   }
-  const servers = () => spawnSync('ps', ['-axwwo', 'pid=,command='], { encoding: 'utf8' }).stdout.split('\n').map((l) => /^\s*(\d+)\s+(.*)$/.exec(l)).filter((m) => m && /llama-server\s/.test(m[2]) && m[2].includes(home)).map((m) => ({ pid: Number(m[1]) }));
+  const servers = () => llamaServers(home);
 
   let stopping = false;
   for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { if (stopping) process.exit(130); stopping = true; console.log('stopping: finishing the run under way…'); });
