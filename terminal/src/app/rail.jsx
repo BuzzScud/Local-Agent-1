@@ -175,6 +175,20 @@ export function ToolNode({ it }) {
         {v.items.map((t, i) => <Pipe key={i}><Text color={t.status === 'done' ? C.dim : undefined} strikethrough={t.status === 'done'} bold={t.status === 'in_progress'}>{t.status === 'done' ? '☒' : '☐'} {t.text}</Text></Pipe>)}
       </Box>
     );
+    // A tool of an MCP server: its server and name, its arguments in a few words, then the first lines it answered.
+    case 'mcp': {
+      const lines = String(v.content ?? '').split('\n').filter((l) => l.trim());
+      const shown = v.looked ? [] : lines.slice(0, 3);
+      const c = it.error ? C.bad : C.accent;
+      return (
+        <Box flexDirection="column">
+          <Node g="◈" c={c}><Head verb={it.label} c={c} what={it.arg} detail={v.looked ? 'its arguments, nothing ran' : [it.error ? 'the tool reported an error' : null, v.pictures ? `${plural(v.pictures, 'picture')}${v.shown ? '' : ' not shown'}` : null, v.ms >= 1000 ? fmtSecs(v.ms / 1000) : null].filter(Boolean).join(' · ') || 'MCP'} hint={v.looked ? 'ctrl+o to expand' : undefined} /></Node>
+          {shown.map((l, i) => <Pipe key={i}><Text color={it.error ? C.bad : undefined} wrap="truncate-end">{l}</Text></Pipe>)}
+          {lines.length > shown.length && !v.looked ? <Pipe><Text color={C.dim}>… +{lines.length - shown.length} lines <Text color={C.faint}>(ctrl+o to expand)</Text></Text></Pipe> : null}
+        </Box>
+      );
+    }
+    case 'toolsearch': return <Node g="○" c={C.dim}><Head verb="Searched the tools" c="ansi256(250)" what={it.arg} detail={v.tools?.length ? `loaded ${v.tools.join(', ')}` : 'nothing found'} /></Node>;
     case 'denied': return <Node g="⊘" c={C.warn}><Head verb="Not allowed" c={C.warn} what={`${it.label}(${it.arg})`} /><Text color={C.warn}>{v.message}</Text></Node>;
     case 'declined': return <Node g="⊘" c={C.dim}><Head verb="You said no" c={C.dim} what={`${it.label}(${it.arg})`} detail={v.feedback || ''} /></Node>;
     case 'answer': return <Node g="›" c={C.accent}><Head verb={it.label} c={C.accent} what={it.arg} /><Text><Text color={C.dim}>You: </Text>{v.text}</Text></Node>;

@@ -206,6 +206,63 @@ place on the first and goes on without reading everything again; on the Claude A
 one reply run side by side. `"subagents": false` in settings.json leaves them out. The Subagent
 check in the Arena tests them with the real model.
 
+### MCP servers (tools from outside the app)
+
+MCP (the Model Context Protocol) lets the model use tools that live outside Agentic Coder: a program
+on this Mac, or a service at an address (GitHub, a database, a docs server, a script of your own).
+Type `/mcp`: the list of your servers, and **+ Add a server** opens one form. **Name**, **Runs**
+(a command here, or an address), then that kind's rows: the **Command** as you would type it, the
+variable its **Key** goes in (the key itself is kept in the Keychain), its **Sandbox**, **Internet**
+and **Local services**; or the **Address** and how it signs in (no key, or a key in a header).
+**Test** starts the server once and lists its tools, with what each says about itself, before
+anything is saved; **Save** keeps it in `~/.agentic-coder/mcp.json`, for every folder. In the list,
+enter opens a server's tools, `e` its form, space switches it on or off, `r` starts it again, `d`
+twice removes it. `/doctor` has a row per server, and each server's own messages go to
+`~/.agentic-coder/logs/mcp-<name>.log`.
+
+- **A program runs behind the fence.** A server started as a program runs in the project folder
+  with a clean environment (PATH, HOME and the like, plus its key), in the same sandbox as the
+  model's commands: no internet, none of your files outside the project, no service already
+  running on this Mac. The form opens what one server needs: Internet on, and Local services
+  (`5432` for your Postgres, or `any`). Sandbox off runs it with all your permissions, and says so.
+- **Each tool asks before its first use**, in every mode but Bypass: yes, don't ask again this
+  session, or always allow, saved in `/permissions` as `Mcp(server:tool)`. In a server's tools you
+  can switch a tool off (the model never sees it) and mark one as **reads**: your own mark that it
+  only reads, which lets it run in Auto and in plan mode and gives it to explore helpers. What a
+  server says about its own tools ("read-only") is shown beside it and never trusted. A tool whose
+  description or arguments change after you allowed or marked it asks again (the app keeps its
+  fingerprint). Plan mode refuses a tool you did not mark; a request read as a question, and a
+  skill that only reads, ask even for an allowed one; `/agents` asks before one while it builds
+  and turns it away in Verify, Review and Ship. `Mcp(server:*)` on the never-list blocks a server.
+- **A project's own servers wait for your yes.** A `.agentic/mcp.json` in a project is shown
+  (each server's command) before anything in it starts, in every mode, and asked about again
+  whenever the file changes. `coding -p --yes` never says yes to it, and the model cannot change
+  that file without asking (in Bypass it is refused).
+- **What a tool returns is data.** Text comes back marked as data from an MCP server, not
+  instructions, and cut at the size a web page is; a picture as a picture; a tool's error as its
+  error. A server that stops, or a call past its time limit, is said plainly to the model, and
+  the server is started once more at its next use. esc stops a call.
+- **The model gets the tools the way it handles best.** Each tool goes by its own name
+  (`mcp__server__tool`) while the MCP tools fit 8% of the model's context; past that, a server is
+  listed by name and one line a tool, with one tool, `Mcp`, that gives a tool's arguments and
+  then runs it (GitHub's tools alone are over 16,000 tokens). On the Claude API they go by name,
+  and past 10,000 tokens they are deferred behind Anthropic's tool search. The tools run on this
+  Mac whichever model asks: a model on a service, on the Claude API or here uses the same servers.
+- **A conversation keeps the tool list it started with.** A server that changes its tools, or
+  connects late, changes nothing in the conversation under way (a model on a service would read
+  the whole conversation again): a line says so, and `/clear` or the next conversation takes the
+  new list. What you change yourself in `/mcp` is taken at your next message.
+
+- **A server's own question.** A question of the server's own while its tool runs (which project?)
+  comes in the ask box headed with the server's name; your answer goes to that server only.
+
+Both MCP versions are spoken (2026-07-28, and 2025-11-25 for older servers) through the official
+client, `@modelcontextprotocol/client`. `coding -p` uses the same servers; with `--yes` a tool does
+not ask. Models on another machine get a guide, `RULES/MCP.md`, and the MCP lines of their
+`TOOLS.md`, only while a server is on. The **MCP check** in the Arena (`/test mcp`, and
+`/test mcp-remote` for the model on your service) runs nine checks on two stand-in servers with
+the real model, and reads what the servers really received from their own log.
+
 ### A model on another machine
 
 The model can run on another computer: a bigger Mac, a PC with a GPU, a rented GPU server, a

@@ -82,3 +82,12 @@ test('turned away without asking: an edit in Verify, Review or Ship, and the tes
   expect(edit('tests/test_k.py', 'x', 'x', 'y', { stage: 2, cover: 'tests/test_k.py', node: 1 })).toMatchObject({ title: 'The test stays' });
   expect(edit('tests/test_k.py', 'x', 'x', 'y', { stage: 2, cover: 'tests/test_k.py', node: 0, task: { lines: 0 } })).toBeNull(); // RED writes it
 });
+
+test('an MCP tool: one marked as reading goes on; any other asks first while it builds, and is turned away where a stage only reads', () => {
+  const step = (reads, args = { title: 'Checkout rounds down' }) => ({ name: 'mcp__github__create_issue', args, mcp: { server: 'github', tool: 'create_issue', reads } });
+  expect(guardStep(step(true), { stage: 2 })).toBeNull();
+  expect(guardStep(step(true), { stage: 4 })).toBeNull();
+  expect(guardStep(step(false), { stage: 2 })).toMatchObject({ key: 'mcp', title: 'MCP tool', detail: 'It wants to use github · create_issue, which can change things outside this project (title: Checkout rounds down).' });
+  expect(guardStep(step(false), { stage: 0 })).toMatchObject({ key: 'mcp' });
+  for (const [stage, name] of [[3, 'Verify'], [4, 'Review'], [5, 'Ship']]) expect(guardStep(step(false), { stage })).toMatchObject({ title: 'This stage only reads', deny: expect.stringContaining(`${name} only reads and runs: github · create_issue is an MCP tool`) });
+});

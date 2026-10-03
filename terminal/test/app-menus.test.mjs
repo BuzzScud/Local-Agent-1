@@ -185,7 +185,7 @@ test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /bt
     ...quitTyped,
   ] });
   // The tests' own window (155 × 43): the same 18, /jumptomac under /remote, and with its room
-  // /loop and /loops under that (3 Oct 2026: in the menu where two more rows fit).
+  // /loop and /loops under that (3 Oct 2026: in the menu where two more rows fit), then /mcp.
   const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
     { wait: '? for shortcuts' }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 200 }, { snapshot: 'all' },
     { type: 'model' }, { wait: 'Pick the model and its effort' }, { sleep: 200 }, { snapshot: 'mo' },
@@ -201,9 +201,11 @@ test('"/" menu like Claude Code: the 18 commands of a window on this Mac (no /bt
   expect(small.snapshots.all).not.toMatch(/^\s{2}\/loops?\s/m); // no room for them at 80 × 24: typed, they are found
   expect(rows(small.snapshots.j)).toHaveLength(1);
   expect(small.snapshots.j).toMatch(/\/jumptomac\s+Jump this window to your other/);
-  expect(rows(r.snapshots.all)).toHaveLength(20);
+  expect(rows(r.snapshots.all)).toHaveLength(21);
   expect(r.snapshots.all).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
   expect(r.snapshots.all).toMatch(/\/jumptomac\s+[^\n]*\n\s{2}\/loop\s+Send a message again by itself[^\n]*\n\s{2}\/loops\s+Open the loop board/);
+  expect(r.snapshots.all).toMatch(/^\s{2}\/mcp\s+Your MCP servers: tools from programs on this Mac/m);
+  expect(small.snapshots.all).not.toMatch(/^\s{2}\/mcp\s/m); // 80 × 24 has no row for it: typed in full it opens
   expect(r.snapshots.all).not.toMatch(/^\s{2}\/btw\s/m);
   expect(r.snapshots.all).toMatch(/\/settings\s+Everything else in one menu/);
   expect(r.snapshots.all).toMatch(/\/exit\s+Quit Agentic Coder/); // the last one shows too: nothing scrolls

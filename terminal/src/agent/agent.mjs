@@ -52,6 +52,8 @@ import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
 import { openingRead, openingOn, memorySent } from './opening.mjs';
+import { isMcpCall, MCP_TOOL, mcpPlan, mcpToolDefs, mcpBrief, requestNote, unwrapArgs, gateCall, madeUpCall, mcpCallInText, findEntry, describeEntry, describeServer, checkArgs, argsPreview, resultParts, resultText, catalogStamp, mcpRule } from './mcp.mjs';
+import { pictureFor } from '../tools/mcp.mjs';
 
 const MAX_STEPS = 40;
 const newConversation = () => randomUUID().slice(0, 8);
@@ -407,6 +409,14 @@ export function bareCallInText(text, names = []) {
   try { j = JSON.parse(body); } catch { return null; }
   const fn = j?.function && typeof j.function === 'object' ? j.function : j;
   const a = fn?.arguments ?? fn?.parameters ?? fn?.args ?? fn?.input;
+  // {"tool": "mcp__shop__sales_report", "arguments": {…}}: an MCP call the way the Mcp tool takes
+  // one, written out (Qwen3.6, 3 Oct 2026). By the tool's own name when it was given one, else
+  // through Mcp, which reaches every MCP tool of the conversation.
+  if (typeof fn?.tool === 'string' && typeof fn?.name !== 'string' && isMcpCall(fn.tool) && (a === undefined || typeof a === 'object' || typeof a === 'string')) {
+    const before = t.slice(0, at).trim();
+    if (names.includes(fn.tool)) return { name: fn.tool, args: typeof a === 'string' ? a : JSON.stringify(a ?? {}), before };
+    if (names.includes(MCP_TOOL)) return { name: MCP_TOOL, args: JSON.stringify(fn), before };
+  }
   // A name of its own for one of the tools ("read_files", "run_command": Qwen3.6, 3 Oct 2026), or none:
   // a reply that is only the arguments, of a tool that only looks ({"file": "convert.mjs"}).
   const name = typeof fn?.name === 'string' ? toolNamed(fn.name, names) : at === 0 || fenced ? argsTool(fn, names) : null;
@@ -459,6 +469,8 @@ const LOOKS = new Set(['Read', 'Search', 'List', 'Glob', 'Grep', 'Bash']);
 
 // A helper's steps at most (its own limit, under the conversation's).
 const HELPER_STEPS = 30;
+// How long a conversation's first message waits for MCP servers that are still starting.
+const MCP_WAIT_MS = 8000;
 // A helper's instructions: the conversation's (the project, its rules), then what a helper is.
 // own: one of your helper agent files (prompt-files.mjs parseHelperAgent): its instructions follow,
 // and it reports as an explore helper does when it only reads.
@@ -474,7 +486,9 @@ export function helperToolFilter(tools, names) {
   if (tools === 'look') return EXPLORE_TOOLS;
   if (!Array.isArray(tools)) return null;
   const want = new Set(tools.map((t) => t.toLowerCase()));
-  return new Set(names.filter((n) => want.has(n.toLowerCase())));
+  // A name ending in * names several (mcp__github__get_*: every tool of that server that starts so).
+  const starts = [...want].filter((t) => t.endsWith('*')).map((t) => t.slice(0, -1));
+  return new Set(names.filter((n) => want.has(n.toLowerCase()) || starts.some((s) => n.toLowerCase().startsWith(s))));
 }
 // The context a helper agent on another model of the service is loaded at (as /subagents' helpers).
 const OWN_HELPER_CTX = 32_768;
@@ -500,7 +514,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -510,6 +524,8 @@ export class Agent extends EventEmitter {
     this.web = web;
     // The Agent tool (helpers): "subagents": false in settings.json leaves it out.
     this.subagents = subagents !== false;
+    // /mcp: the hub of the user's MCP servers (tools/mcp.mjs), or null (a practice run, a test): no MCP tools.
+    this.mcp = mcp;
     Object.assign(this, { url, model, cwd, thinking, effort: effort ?? model?.thinkingEffort, ctx, mode, ask, waitForServer, verify, flows, maxTries, testTimeoutMs, checkIns, confirmPlan, trimAt, fullAt, maxSteps, bash, whenFull, rewarm, permissions, thinkBudgetSecs });
     // The small model that ranks files by meaning (rank.mjs): the memory's,
     // or one given on its own (the practice bench runs without the memory).
@@ -588,7 +604,70 @@ export class Agent extends EventEmitter {
   tools() {
     const agents = this.agentsOn();
     const all = toolSchemas(this.way, this.webTools(), { agents, screen: this.screenOn(), helpers: agents ? this.helperAgents() : [] });
-    return this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all;
+    const own = this.toolFilter ? all.filter((t) => this.toolFilter.has(t.function.name)) : all;
+    // The tools of the user's MCP servers go last, in one order, so the list above them never moves.
+    const mcp = this.mcpDefs();
+    return mcp.length ? [...own, ...mcp] : own;
+  }
+  // ---- MCP tools (agent/mcp.mjs; the servers themselves: tools/mcp.mjs) ----
+  // A conversation's MCP tools are taken once, before its first message, and kept until the next
+  // conversation: a server that changes its tools, or one that connects late, would otherwise
+  // change the top of the prompt, and a model on a service would read the whole conversation
+  // again (15.7 s for 15.6k tokens, measured 3 Oct 2026). What you change yourself in /mcp
+  // (mcpStale) is taken at your next message, with a line saying so.
+  mcpFrozen = null;
+  mcpStale = false;
+  mcpPrints = new Map(); // "don't ask again this session": tool id → the fingerprint it was given for
+  // settled: only when no server is still starting (before the model's warm-up, so what it reads
+  // ahead holds the tools; a server not there yet must not be shut out of the conversation for that).
+  async mcpTake({ settled = false } = {}) {
+    if (!this.mcp || this.isHelper || (this.mcpFrozen && !this.mcpStale)) return;
+    if (settled && this.mcp.status().some((s) => s.state === 'starting')) return;
+    const late = await this.mcp.ready(MCP_WAIT_MS);
+    const entries = this.mcp.catalog();
+    const stamp = catalogStamp(entries);
+    const had = this.mcpFrozen?.stamp ?? catalogStamp([]);
+    this.mcpStale = false;
+    this.mcpFrozen = { entries, stamp, notes: this.mcp.notes?.() ?? {} };
+    this.mcpPlans = new Map();
+    if (late.length) this.emit('note', { text: `MCP: ${late.join(', ')} ${late.length === 1 ? 'is' : 'are'} still starting, so ${late.length === 1 ? 'its' : 'their'} tools are not in this conversation. They join at the next one (/clear), or when you save in /mcp.`, tone: 'warn' });
+    if (had !== stamp && this.messages.length > 1) this.emit('note', { text: 'The MCP tools changed (/mcp): the model reads the conversation again with the new list.', tone: 'dim' });
+    // The MCP guide and TOOLS.md's MCP lines are in the instructions only while a tool is offered
+    // (a prompt this app built; a caller's own is left as it is).
+    if ((this.mcpInPrompt ?? '') !== this.mcpPrompt() && typeof this.messages[0]?.content === 'string' && this.messages[0].content.includes('\nTool use\n')) this.refreshNotes();
+  }
+  // The MCP tools this agent may use, of the conversation's list: every one that is on; an explore
+  // helper those the user marked as reading; one of the user's helper agents those its file names.
+  // off: with the ones switched off too (a call to one is told it is off, not that it does not exist).
+  mcpEntries({ off = false } = {}) {
+    const all = (this.mcpFrozen?.entries ?? []).filter((e) => off || e.on);
+    if (!this.toolFilter) return all;
+    return this.toolFilter === EXPLORE_TOOLS ? all.filter((e) => e.reads) : all.filter((e) => this.toolFilter.has(e.name));
+  }
+  mcpOn() { return this.mcpEntries().length > 0; }
+  // What the instructions say of the MCP tools: '' (none on), or the servers' list (agent/mcp.mjs
+  // mcpBrief), which also brings TOOLS.md's MCP lines.
+  mcpPrompt() {
+    const entries = this.mcpEntries();
+    if (!entries.length) return '';
+    return mcpBrief(entries, { listed: this.mcpListed(), notes: this.mcpFrozen?.notes ?? {} });
+  }
+  // The tools listed inside the Mcp tool (by name only), of this conversation's plan.
+  mcpListed() {
+    this.mcpDefs();
+    return this.mcpPlans?.get(`${endpointOf(this.url)?.kind === 'claude' ? 'claude' : 'other'}|${this.ctx}`)?.plan?.listed ?? [];
+  }
+  // As tool definitions (agent/mcp.mjs mcpPlan): by name, by name and one line with the Mcp tool,
+  // or deferred on the Claude API. Worked out once per conversation, kind of server and context
+  // size, so the list a model is sent stays the same, letter for letter (another context size, or
+  // another kind of server, has the model read everything again anyway).
+  mcpDefs() {
+    if (!this.mcpFrozen) return [];
+    const kind = endpointOf(this.url)?.kind === 'claude' ? 'claude' : 'other';
+    const key = `${kind}|${this.ctx}`;
+    const plans = (this.mcpPlans ??= new Map());
+    if (!plans.has(key)) { const plan = mcpPlan(this.mcpEntries(), { kind, ctx: this.ctx }); plans.set(key, { plan, defs: mcpToolDefs(plan, { kind }) }); }
+    return plans.get(key).defs;
   }
   // The Agent tool (a helper, tools.mjs AGENT_TOOL_DEF): when the model decides, on the Claude
   // API, and on the remote set once you have a helper agent file (prompt-files.mjs ownDir);
@@ -659,7 +738,7 @@ export class Agent extends EventEmitter {
     this.notesRoomUsed = this.notesRoomNow;
     this.promptStampUsed = this.promptStamp();
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn() }));
+    this.setSystem(systemPrompt({ cwd: this.cwd, notes: projectNotes(this.cwd, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(this.cwd), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
   }
   // The prompt files as they are now: the rules files (AGENTS.md or CLAUDE.md, whole, without
@@ -670,8 +749,9 @@ export class Agent extends EventEmitter {
     try {
       const set = this.rulesSet();
       const agents = this.agentsOn();
-      const remote = set === 'remote' ? `${JSON.stringify(harnessOf())}\u0000${guidesList(readGuides(set, { agents }), { path: guidePath(this.cwd) })}` : '';
-      return `${set}\u0000${set === 'remote' ? agents : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set)}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
+      const mcp = this.mcpInPrompt ?? '';
+      const remote = set === 'remote' ? `${JSON.stringify(harnessOf())}\u0000${guidesList(readGuides(set, { agents, mcp: Boolean(mcp) }), { path: guidePath(this.cwd) })}` : '';
+      return `${set}\u0000${set === 'remote' ? agents : ''}\u0000${projectNotes(this.cwd, Infinity, { memory: false }).text}\u0000${toolUseFor(set, undefined, { mcp })}\u0000${skillsList(readSkills(undefined, set), { path: skillPath(this.cwd) })}\u0000${remote}`;
     } catch { return null; }
   }
   promptFilesChanged() {
@@ -689,7 +769,7 @@ export class Agent extends EventEmitter {
     this.testCmd = this.verify ? testCommand(dir) : null;
     this.notesRoomUsed = this.notesRoomNow;
     this.rulesSetUsed = this.rulesSet();
-    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn() }));
+    this.setSystem(systemPrompt({ cwd: dir, notes: projectNotes(dir, this.notesRoomUsed, this.notesFrom()).text, git: gitSummary(dir), instructions: this.workingInstructions, set: this.rulesSetUsed, agents: this.agentsOn(), mcp: (this.mcpInPrompt = this.mcpPrompt()) }));
     this.ctxUsed += tokensOf(this.messages[0].content) - before;
     this.promptStampUsed = this.promptStamp();
     this.readFiles = new Set();
@@ -933,7 +1013,7 @@ export class Agent extends EventEmitter {
   withTurnNotes(messages) {
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {
@@ -962,7 +1042,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -1120,6 +1200,8 @@ export class Agent extends EventEmitter {
       try { point = await this.rewind.begin({ cwd: this.cwd, text: shown ?? String(text), at: happened.at }); } catch { point = null; } finally { clearTimeout(slow); }
     }
     let reason;
+    // This conversation's MCP tools, taken before its first message (mcpTake).
+    try { await this.mcpTake(); } catch { /* no MCP tools in this conversation */ }
     try { reason = await this.work(text, { signal, images }); } finally {
       this.off('note', warn);
       if (point) { try { await this.rewind.finish(point, { files: happened.files, message: happened.message }); } catch { /* this message cannot be rewound */ } }
@@ -1347,6 +1429,9 @@ export class Agent extends EventEmitter {
     if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.web = { request, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
     }
+    // A request about what one of the user's MCP servers reaches: a line naming its tools (mcp.mjs requestNote).
+    const mcpSays = this.mcpFrozen && request?.role === 'user' && typeof request.content === 'string' ? requestNote(text, this.mcpEntries(), { listed: this.mcpListed() }) : '';
+    if (mcpSays) this.turn.mcp = { request, notes: mcpSays };
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
         this.turn.math = { request, notes: mathNotes(math, text) };
@@ -1411,6 +1496,7 @@ export class Agent extends EventEmitter {
     let correctedAlready = false;
     let blankRetry = false;
     let leakBacks = 0; // a reply that was only thinking written out as text, sent back (twice at most)
+    let mcpBack = false; // a request about an MCP server's data, answered with no MCP tool tried: sent back once
     try {
       for (let step = 0; step < this.maxSteps; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
@@ -1444,6 +1530,9 @@ export class Agent extends EventEmitter {
           // Bare JSON naming one of its tools (older models on an Ollama service) counts too.
           const inText = toolCallInText(turn.text) ?? (!turn.text.trim() ? toolCallInText(turn.reasoning) : null) ?? bareCallInText(turn.text, (this.tools() ?? []).map((t) => t.function?.name ?? t.name));
           if (inText) { calls = [{ id: `call_${Date.now()}`, name: inText.name, args: inText.args }]; text = turn.text.trim() ? inText.before : ''; }
+          // An MCP tool's call written the way code calls a function: mcp__warehouse__stock_level(item="mug").
+          const written = !inText && this.mcpFrozen ? mcpCallInText(turn.text, this.mcpEntries()) : null;
+          if (written) { calls = [{ id: `call_${Date.now()}`, name: MCP_TOOL, args: JSON.stringify(written.call) }]; text = written.before; }
         }
         // Only the first call runs, so only the first is kept in the history
         // (otherwise the model waits for results that never come). When the model
@@ -1509,6 +1598,19 @@ export class Agent extends EventEmitter {
             this.emit('note', { text: 'The reply was only thinking, written out as text; asked it to take the next step.', tone: 'dim' });
             this.messages.push({ role: 'user', content: auto('Your last reply was only your thinking, with no tool call and no answer. Take the next step now with a tool, or give your answer.') });
             continue;
+          }
+          // A request about what an MCP server holds (its note, turn.mcp), answered with no MCP tool
+          // tried: the answer cannot have come from the server (Qwen3.6, 3 Oct 2026: "42 mugs were
+          // sold", with no call; or "what would you like me to do instead?"). Sent back once, on both
+          // ways, as the leaked thinking is: what it says is the server's or it is made up.
+          if (this.turn.mcp && !this.turn.mcpTried) {
+            if (!mcpBack) {
+              mcpBack = true;
+              this.emit('note', { text: 'It answered without calling the MCP tool the request is about; asked it to call it.', tone: 'dim' });
+              this.messages.push({ role: 'user', content: auto(`You answered without calling an MCP tool, so your answer did not come from the user's server. ${this.turn.mcp.notes}`) });
+              continue;
+            }
+            this.emit('note', { text: 'This answer did not come from your MCP server: no MCP tool was called for it.', tone: 'warn' });
           }
           // A reply that asks you something ends the turn: it waits for you.
           if (asksTheUser(text)) break;
@@ -2347,8 +2449,8 @@ export class Agent extends EventEmitter {
             : `The service is busy: too many requests right now. Trying again in ${secs} s (try ${ev.next} of ${ev.of}). Your conversation stays as it is.`, tone: 'warn' });
           this.emit('busy', { waitMs: ev.waitMs, until: Date.now() + ev.waitMs, next: ev.next, of: ev.of });
         } else if (ev.type === 'server') {
-          // A web search or page done on the server's side (the Claude API): shown as a finished step.
-          this.emit('tool', { id: ev.id, name: ev.name, ...display(ev.name, ev.args), view: ev.view, error: ev.error });
+          // A web search or page, or a search for tools, done on the server's side (the Claude API): shown as a finished step.
+          this.emit('tool', { id: ev.id, name: ev.name, ...(ev.shown ?? display(ev.name, ev.args)), view: ev.view, error: ev.error });
         } else if (ev.type === 'done') {
           turn.finish = ev.finish;
           if (ev.usage) this.ctxUsed = (ev.usage.prompt_tokens ?? 0) + (ev.usage.completion_tokens ?? 0);
@@ -2464,13 +2566,27 @@ export class Agent extends EventEmitter {
 
   async runTool(call, signal) {
     call = { ...call, name: toolNameOf(call.name, this.way) };
+    // A tool of an MCP server: by its name here, through Mcp, or by the tool's own name when
+    // that is no tool of the app's and only one server has it (runMcp).
+    if (this.mcpFrozen && (isMcpCall(call.name) || (!this.tools().some((t) => t.function.name === call.name) && findEntry(this.mcpEntries(), call.name).entry))) return this.runMcp(call, signal);
+    // A wrapper of its own making with a server's tool inside ("call_mcp", agent/mcp.mjs madeUpCall):
+    // run through Mcp, as the call it means.
+    if (this.mcpFrozen && !this.tools().some((t) => t.function.name === call.name)) {
+      let raw = null;
+      try { raw = JSON.parse(call.args || '{}'); } catch { /* not one */ }
+      const made = madeUpCall(call.name, raw);
+      if (made && findEntry(this.mcpEntries(), made.tool).entry) return this.runMcp({ ...call, name: MCP_TOOL, args: JSON.stringify(made) }, signal);
+    }
     let parsed = parseArgs(call.name, call.args, this.way);
     if (call.name === 'Write') parsed = this.keepWrite(call, parsed);
     const shown = display(call.name, parsed.args ?? {});
     const id = call.id;
     if (parsed.error) {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: parsed.shown ?? parsed.error }, error: true });
-      return { text: parsed.error, error: true };
+      // A name that is no tool at all, with MCP tools on: they are named too (Qwen3.6 made up
+      // "Shop_get_note", was told only the app's tools, and said the server was not there).
+      const mcpNames = /^There is no tool called/.test(parsed.error) && this.mcpFrozen ? this.mcpDefs().map((t) => t.function.name) : [];
+      return { text: mcpNames.length ? `${parsed.error} And the MCP tools: ${mcpNames.slice(0, 12).join(', ')}${mcpNames.length > 12 ? ', …' : ''}.` : parsed.error, error: true };
     }
     const args = parsed.args;
     // A helper refuses a tool it was not given (an explore helper does not change anything).
@@ -2479,6 +2595,17 @@ export class Agent extends EventEmitter {
       const reads = this.toolFilter === EXPLORE_TOOLS;
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: reads ? 'this helper only reads' : `not one of this helper's tools` }, error: true });
       return { text: reads ? `${call.name} is not one of this helper's tools: it only reads. Report what should change instead.` : `${call.name} is not one of this helper's tools (it has ${[...this.toolFilter].join(', ') || 'none'}). Do the work with those, or report what should be done instead.`, error: true };
+    }
+    // A command that names one of the conversation's MCP tools ("claude mcp__shop__create_ticket …":
+    // Qwen3.6 in the window, 3 Oct 2026, which then waited on your yes): the tool is no program, so
+    // nothing runs and it is told how the tool is called.
+    if (call.name === 'Bash' && this.mcpFrozen) {
+      const named = this.mcpEntries().find((e) => String(args.command ?? '').includes(e.name));
+      if (named) {
+        const gated = this.mcpListed().some((e) => e.name === named.name);
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'error', message: `${named.name} is an MCP tool, not a command` }, error: true });
+        return { text: `Nothing ran: ${named.name} is a tool of the user's MCP server "${named.server}", not a command. Call it as a tool${gated ? `: ${MCP_TOOL} with "tool": "${named.name}" and its "arguments"` : ', with its arguments as JSON'}.`, error: true };
+      }
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
     if (call.name === 'Ask') return this.askUser(id, args, shown, signal);
@@ -2507,7 +2634,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -2707,6 +2834,137 @@ export class Agent extends EventEmitter {
     return { text: parts.join('\n\n'), error: failed === paths.length, readKeys, ...(images.length ? { images } : {}) };
   }
 
+  // A call to a tool of one of the user's MCP servers (agent/mcp.mjs): by its own name, or through
+  // Mcp for a tool listed by name only (Mcp with only "tool" answers with that tool's arguments and
+  // runs nothing). The steps: which tool, its arguments made to fit, whether it may run (asked
+  // before a tool's first use; a tool that changed since you allowed it asks again; a question, or
+  // a skill that only reads, asks even for an allowed tool you did not mark as reading; /agents'
+  // stop list), then the call, and its answer as text and pictures, marked as data.
+  async runMcp(call, signal) {
+    const id = call.id;
+    if (this.turn) this.turn.mcpTried = true;
+    const fail = (shown, text, view) => { this.emit('tool', { id, name: call.name, ...shown, view: view ?? { kind: 'error', message: String(text).split('\n')[0].slice(0, 200) }, error: true }); return { text, error: true }; };
+    let raw = null;
+    try { raw = call.args && String(call.args).trim() ? JSON.parse(call.args) : {}; } catch { /* said below */ }
+    const gate = call.name === MCP_TOOL;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail({ label: 'MCP', arg: call.name }, 'The arguments were not valid JSON. Write the call again with a valid JSON object.');
+    const sent = gate ? gateCall(raw) : null;
+    const asked = gate ? sent.asked : call.name;
+    const found = findEntry(this.mcpEntries({ off: true }), asked);
+    if (found.error) {
+      // A helper asking for a tool it was not given: said as for the app's own tools.
+      const other = this.toolFilter ? findEntry((this.mcpFrozen?.entries ?? []).filter((e) => e.on), asked).entry : null;
+      return fail({ label: 'MCP', arg: String(asked ?? '') }, other ? `${other.name} is not one of this helper's tools${this.toolFilter === EXPLORE_TOOLS ? ': it only reads, and the user has not marked that tool as one that only reads' : ''}. Report what should be done instead.` : found.error, other ? { kind: 'denied', message: this.toolFilter === EXPLORE_TOOLS ? 'this helper only reads' : "not one of this helper's tools" } : undefined);
+    }
+    if (found.tools) {
+      const text = describeServer(found.server, found.tools);
+      this.emit('tool', { id, name: call.name, label: 'MCP', arg: `${found.server}'s tools`, view: { kind: 'list', count: found.tools.length, content: text } });
+      return { text };
+    }
+    const entry = found.entry;
+    const given = gate ? sent.given : unwrapArgs(entry, raw);
+    const label = `${entry.server} · ${entry.tool}`;
+    if (gate && given === undefined) {
+      const text = describeEntry(entry);
+      this.emit('tool', { id, name: call.name, label, arg: 'its arguments', view: { kind: 'mcp', looked: true, lines: text.split('\n').length, content: text } });
+      return { text };
+    }
+    const checked = checkArgs(entry, given);
+    if (checked.error) return fail({ label, arg: '' }, checked.error);
+    const args = checked.args;
+    const shown = { label, arg: argsPreview(args) };
+    // The tool as its server lists it now. One that is no longer the tool this conversation's list
+    // was taken with, or the one you allowed, counts as changed: it asks again, and your "reads"
+    // mark (made for the tool as it was) does not hold.
+    const live = this.mcp.printOf(entry.server, entry.tool);
+    const server = this.mcp.stateOf(entry.server);
+    if (live === null && server?.state === 'connected') return fail(shown, `${entry.name} is gone: the MCP server "${entry.server}" no longer lists it. Use another tool, or tell the user.`);
+    const now = live ?? entry.print;
+    const rule = mcpRule(entry.server, entry.tool);
+    const rules = this.savedRules();
+    const has = (list) => [...(list ?? [])].some((r) => String(r).toLowerCase() === rule.toLowerCase());
+    let savedPrint = has(rules?.allow) ? this.mcp.allowed?.print(entry.id) ?? null : null;
+    // A rule typed in /permissions has no fingerprint yet: it takes the tool as it is at its first use.
+    if (has(rules?.allow) && !savedPrint) { savedPrint = now; try { this.mcp.allowed?.remember(entry.id, now); } catch { /* it holds for this run */ } }
+    const allowedNow = (has(rules?.allow) && savedPrint === now) || (has(this.allowedPrefixes) && this.mcpPrints.get(entry.id) === now);
+    const moved = now !== entry.print;
+    const changed = !allowedNow && (moved || has(rules?.allow) || has(this.allowedPrefixes));
+    const reads = entry.reads && !moved;
+    // A call by another form of the tool's name (shop__get_ticket) is judged as the tool it is.
+    let d = decide(gate ? MCP_TOOL : entry.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, rules, mcp: { server: entry.server, tool: entry.tool, reads, changed } });
+    // A question changes nothing, and a skill that only reads stays that way: a tool you did not
+    // mark as reading asks here even when a rule allows it (not in Bypass, where nothing asks).
+    let note = null;
+    if (!reads && d.decision === 'allow' && this.mode !== 'bypass' && (this.turn?.question || this.turn?.fence?.has('read'))) {
+      note = this.turn?.question ? 'This was read as a question, and the tool is not one you marked as only reading.' : 'This skill only reads, and the tool is not one you marked as only reading.';
+      d = { decision: 'ask', rule, once: true };
+    }
+    // /agents' stop list (agents-guards.mjs): a tool that may change things asks first while it
+    // builds, and is turned away where a stage only reads.
+    if (this.toolGuard) {
+      const stop = await this.toolGuard({ name: entry.name, args, before: '', cwd: this.cwd, mcp: { server: entry.server, tool: entry.tool, reads } });
+      if (stop) return fail(shown, stop.text, { kind: 'denied', message: stop.denied });
+    }
+    if (d.decision === 'deny') return fail(shown, `Not allowed: ${d.reason}. Do something else.`, { kind: 'denied', message: d.reason });
+    if (d.decision === 'ask') {
+      this.emit('tool-ask', { id, name: call.name, ...shown });
+      const answer = await this.ask({ id, name: MCP_TOOL, args, ...shown, ...(d.once ? { once: true } : { rule }), mcp: { id: entry.id, server: entry.server, tool: entry.tool, name: entry.name, print: now, says: entry.says, changed, note, where: server?.where ?? null, runs: server?.runs ?? null } });
+      if (signal?.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+      if (answer.choice === 'no') {
+        this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'declined', feedback: answer.feedback }, error: true });
+        return { text: `The user said no to this${answer.feedback ? ` and wrote: ${answer.feedback}` : '. Wait for their next message.'}`, error: true, stop: answer.feedback ? null : 'declined' };
+      }
+      if (answer.choice === 'always' && !d.once) { this.allowedPrefixes.add(rule); this.mcpPrints.set(entry.id, now); }
+    }
+    const t0 = Date.now();
+    this.emit('tool-running', { id, name: call.name, ...shown });
+    let result;
+    try {
+      result = await this.mcp.call(entry.server, entry.tool, args, { signal, ask: (params) => this.mcpAsked(entry, params, signal) });
+    } catch (e) {
+      if (signal?.aborted || e.aborted) return { text: 'Interrupted.', stop: 'interrupted' };
+      const down = this.mcp.stateOf(entry.server)?.state !== 'connected';
+      return fail(shown, `${label} did not run: ${e.message}.${down ? ` The MCP server "${entry.server}" is not running now: its tools are not there until the user looks at it in /mcp. Go on with what you can do without it, and say so.` : ''}`, { kind: 'error', message: `${e.message}`.slice(0, 200) });
+    }
+    const parts = resultParts(result);
+    // A picture, for a model that is not looking at pictures yet: its vision is turned on where it can be, as for Screen.
+    if (parts.pictures.length && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the result says the picture is not shown */ } }
+    const images = this.canSee ? parts.pictures.map((pic, i) => pictureFor(pic, `${label}${parts.pictures.length > 1 ? `, picture ${i + 1}` : ''}`)).filter(Boolean) : [];
+    if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${entry.name} ${argsPreview(args, 200)}`.slice(0, 300));
+    // A tool that may have changed something counts as a command run (the "nothing changed" checks).
+    if (this.turn && !reads) this.turn.ranCommand = true;
+    this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'mcp', lines: parts.body ? parts.body.split('\n').length : 0, pictures: parts.pictures.length, shown: images.length, content: parts.body, ms: Date.now() - t0 }, error: parts.error });
+    return { text: resultText(entry, parts, { max: this.maxResultChars, seen: images.length > 0 }), error: parts.error, ...(images.length ? { images } : {}) };
+  }
+
+  // A question of an MCP server's own while one of its tools runs (elicitation): it is the
+  // server's question, shown as such, one line at a time; your answer goes to the server only.
+  // { action: 'accept', content } · { action: 'decline' } · { action: 'cancel' }
+  async mcpAsked(entry, params, signal) {
+    if (!this.ask) return { action: 'decline' };
+    const who = { kind: 'mcp', asker: entry.server, tool: entry.tool };
+    const asked = async (question, options = []) => {
+      const answer = await this.ask({ id: `mcp-ask-${randomUUID().slice(0, 8)}`, name: 'Ask', ...who, args: { question, options, about: [], recommended: -1, several: false }, prepared: {}, label: 'Ask', arg: question });
+      if (signal?.aborted) return { stop: 'cancel' };
+      return answer.choice === 'no' || answer.text === undefined ? { stop: 'decline' } : { text: String(answer.text).trim() };
+    };
+    // It wants a page opened (a sign-in, a payment): the address is shown; you open it yourself.
+    if (params?.mode === 'url') {
+      const got = await asked(`${String(params.message ?? 'Open this page to go on').trim()}\n${params.url}`, ['I opened it']);
+      return got.stop ? { action: got.stop } : { action: 'accept' };
+    }
+    const props = Object.entries(params?.requestedSchema?.properties ?? {});
+    if (!props.length) { const got = await asked(String(params?.message ?? 'Go on?').trim(), ['Yes']); return got.stop ? { action: got.stop } : { action: 'accept', content: {} }; }
+    const content = {};
+    for (const [key, p] of props) {
+      const choices = Array.isArray(p?.enum) ? p.enum.map(String) : Array.isArray(p?.oneOf ?? p?.anyOf) ? (p.oneOf ?? p.anyOf).map((o) => String(o.const ?? o.title ?? '')).filter(Boolean) : p?.type === 'boolean' ? ['yes', 'no'] : [];
+      const got = await asked(`${String(params.message ?? '').trim()}${props.length > 1 ? `\n${p?.title ?? key}${p?.description ? `: ${p.description}` : ''}` : ''}`.trim() || key, choices.slice(0, 8));
+      if (got.stop) return { action: got.stop };
+      content[key] = p?.type === 'boolean' ? /^(y|yes|true|1)$/i.test(got.text) : (p?.type === 'number' || p?.type === 'integer') && Number.isFinite(Number(got.text)) ? Number(got.text) : got.text;
+    }
+    return { action: 'accept', content };
+  }
+
   // A helper (Agent): a second agent with a fresh conversation, the same model, folder, mode,
   // permissions and web, on the side slot when the server has one (the conversation's place
   // on the main slot stays), and no Agent of its own. Its steps show on one line as it goes;
@@ -2728,12 +2986,15 @@ export class Agent extends EventEmitter {
       // On a model of its own it has that model's room (OWN_HELPER_CTX), so it summarizes in time.
       url: this.url, model: this.model, cwd: this.cwd, system: helperPrompt(this.messages[0].content, kind, own), thinking: this.thinking, effort: this.effort, ctx: ownUse ? Math.min(this.ctx, OWN_HELPER_CTX) : this.ctx,
       mode: this.mode, flows: false, verify: false, confirmPlan: false, checkIns: false, maxSteps: HELPER_STEPS, slots: slot, bash: this.bash,
-      way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
+      way: this.way, hooks: [...(this.hooks ?? [])], web: this.web, mcp: this.mcp, permissions: this.permissions, waitForServer: this.waitForServer, instructions: this.rulesSet(),
       // Its questions to you come one at a time, as the conversation's do (several helpers may ask at once on the Claude API).
       ask: (req) => (this.askLine = (this.askLine ?? Promise.resolve()).then(() => this.ask({ ...req, helper: kind }), () => this.ask({ ...req, helper: kind }))),
     });
-    const toolFilter = own ? helperToolFilter(own.tools, this.tools().map((t) => t.function.name)) : kind === 'explore' ? EXPLORE_TOOLS : null;
+    // Its tools: the app's, and of the MCP tools those its file names (mcp__github__get_* names several).
+    const toolFilter = own ? helperToolFilter(own.tools, [...this.tools().map((t) => t.function.name), ...this.mcpEntries().map((e) => e.name)]) : kind === 'explore' ? EXPLORE_TOOLS : null;
     Object.assign(helper, { isHelper: true, parentTurn: () => this.turn, look: 'off', toolFilter, ownUse, canSee: this.canSee, visionOn: this.visionOn, allowedPrefixes: this.allowedPrefixes, setMode: () => {} });
+    // The same MCP servers and this conversation's list of their tools (worked out for its own room), and what you allowed.
+    if (this.mcpFrozen) Object.assign(helper, { mcpFrozen: this.mcpFrozen, mcpPlans: new Map(), mcpPrints: this.mcpPrints });
     // Its edits and commands can be put back with /rewind as part of your message (no point of its own).
     if (this.rewind) helper.rewind = { begin: async () => null, edited: (...a) => this.rewind.edited(...a), around: (fn) => this.rewind.around(fn) };
     const steps = [];

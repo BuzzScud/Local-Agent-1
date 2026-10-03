@@ -91,3 +91,53 @@ test('the Agents check: 6 runs, each task as a plain request and through /agents
     expect(r.status).toBe(1);
   } finally { await fake.close(); }
 }, 300_000);
+
+// The MCP check (mcp-check.mjs): 9 checks on two stand-in MCP servers, through the real `coding -p`
+// and the real window. The stand-in model here uses the right tool for each request, so the check's
+// own machinery is what is tested: the servers start from the throwaway home's mcp.json, the calls
+// are read from the servers' own log, "nobody to say yes" really runs nothing, a server that stops
+// and one that never answers are reported, and the window asks first.
+const mcpScript = (req) => {
+  if (!req.tools?.length) return { text: '{}' };
+  const q = String(req.messages.filter((m) => m.role === 'user').at(-1)?.content ?? '');
+  const last = req.messages.at(-1);
+  const back = last?.role === 'tool' ? String(last.content) : null;
+  const names = req.tools.map((t) => t.function.name);
+  if (/ticket 142/.test(q)) return back ? { text: 'Checkout total rounds 19.995 down to 19.99' } : { tool: { name: 'mcp__shop__get_ticket', args: { number: 142 } } };
+  if (/Open a ticket/.test(q)) {
+    const title = /titled "([^"]+)"/.exec(q)?.[1] ?? 'x';
+    if (!back) return { tool: { name: 'mcp__shop__create_ticket', args: { title } } };
+    return { text: /Ticket #(\d+) created/.test(back) ? `Ticket ${/Ticket #(\d+)/.exec(back)[1]} was created.` : 'I could not open it: nobody said yes.' };
+  }
+  if (/shelf code/.test(q)) return back ? { text: 'QUARTZ-4' } : { tool: { name: 'mcp__shop__get_note', args: { number: 7 } } };
+  if (/logo/.test(q)) return back ? { text: /attached for you to look at/.test(back) ? 'red' : 'I cannot see it: the picture was not shown to me.' } : { tool: { name: 'mcp__shop__logo', args: {} } };
+  if (/Sync the shop/.test(q)) return back ? { text: 'It did not work: the shop server stopped in the middle of the sync.' } : { tool: { name: 'mcp__shop__sync_inventory', args: {} } };
+  if (/sales report/.test(q)) return back ? { text: 'I did not get it: the tool did not answer in time.' } : { tool: { name: 'mcp__shop__sales_report', args: {} } };
+  if (/mugs/.test(q)) {
+    // The warehouse's tools are listed by name only: the Mcp tool is there, the stock tool is not.
+    if (names.includes('mcp__warehouse__stock_level') || !names.includes('Mcp')) return { text: 'the list was not as expected' };
+    if (!back) return { tool: { name: 'Mcp', args: { tool: 'mcp__warehouse__stock_level' } } };
+    if (/Nothing ran yet/.test(back)) return { tool: { name: 'Mcp', args: { tool: 'mcp__warehouse__stock_level', arguments: { item: 'mug' } } } };
+    return { text: '3' };
+  }
+  return { text: 'Done.' };
+};
+
+test('the MCP check: 9 checks on the stand-in servers; what the servers received decides, and the window asks first', async () => {
+  const fake = await startFakeServer([], { delayMs: 0, route: mcpScript });
+  try {
+    const r = await runCheck('mcp-check.mjs', fake.url, { ms: 280_000 });
+    expect(r.stdout.split('\n').filter((l) => /^(PASS|FAIL)\s/.test(l))).toHaveLength(9);
+    expect(r.rows.map((x) => x.id)).toEqual(['tool', 'no', 'yes', 'orders', 'picture', 'down', 'slow', 'listed', 'window']);
+    expect(r.rows.filter((x) => !x.ok).map((x) => `${x.id}: ${x.detail}`)).toEqual([]);
+    const by = Object.fromEntries(r.rows.map((x) => [x.id, x.detail]));
+    expect(by.tool).toContain('the server got get_ticket(142)');
+    expect(by.no).toContain('the server got no create_ticket');
+    expect(by.yes).toContain('the server got create_ticket("Order more mugs")');
+    expect(by.listed).toContain('the server got stock_level("mug")');
+    expect(by.window).toContain('it asked “Let shop run create_ticket?” before the server got the call');
+    expect(r.summary).toMatchObject({ checks: 9, of: 9, passed: 9, pass: true, page: '', remote: false });
+    expect(r.stdout).toContain('a look only: no results page, no line in the test record');
+    expect(r.status).toBe(0);
+  } finally { await fake.close(); }
+}, 300_000);

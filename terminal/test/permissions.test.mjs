@@ -351,3 +351,65 @@ test('the screen question: this time, for this session, always (saved), no', asy
   const { permissionOptions } = await import('../src/app/screen.jsx');
   expect(permissionOptions({ name: 'Screen', rule: 'Screen(Mail)' }, 'Screen(Mail)').map((o) => [o.label, o.choice])).toEqual([['This time', 'yes'], ['For this session', 'always'], ['Always (saved for this folder)', 'save'], ['No (esc)', 'no']]);
 });
+
+// ---- MCP tools (agent/mcp.mjs): asked before first use; "reads" is the user's mark, never the server's ----
+
+const mcpTool = (more = {}) => ({ server: 'github', tool: 'create_issue', reads: false, changed: false, ...more });
+const dm = (mode, mcp, ctx = {}) => judge('mcp__github__create_issue', { title: 'x' }, { mode, mcp, ...ctx });
+
+test('an MCP tool asks before its first use in every mode but Bypass, and plan mode refuses one that is not marked as reading', () => {
+  for (const mode of ['ask', 'edits', 'auto']) expect(dm(mode, mcpTool())).toMatchObject({ decision: 'ask', rule: 'Mcp(github:create_issue)' });
+  expect(dm('plan', mcpTool())).toMatchObject({ decision: 'deny' });
+  expect(dm('plan', mcpTool()).reason).toContain('not one you marked as only reading');
+  expect(dm('bypass', mcpTool()).decision).toBe('allow');
+  // The gateway tool is judged the same way, by the tool it reaches.
+  expect(judge('Mcp', { tool: 'mcp__github__create_issue' }, { mode: 'ask', mcp: mcpTool() }).decision).toBe('ask');
+  // A call the app could not match to a tool is turned away, whatever the mode.
+  expect(judge('mcp__nope__x', {}, { mode: 'bypass' }).decision).toBe('deny');
+});
+
+test('a tool you marked as reading: asked once in Manual, let through in Auto and in plan mode once allowed', () => {
+  const reads = mcpTool({ tool: 'get_issue', reads: true });
+  expect(dm('ask', reads)).toMatchObject({ decision: 'ask', rule: 'Mcp(github:get_issue)' });
+  expect(dm('auto', reads).decision).toBe('allow');
+  expect(dm('plan', reads).decision).toBe('ask');
+  expect(dm('plan', reads, { allowedPrefixes: new Set(['Mcp(github:get_issue)']) }).decision).toBe('allow');
+});
+
+test('a rule allows one MCP tool, for the session or saved; the never-list holds in every mode, Bypass too', () => {
+  const rule = 'Mcp(github:create_issue)';
+  expect(dm('ask', mcpTool(), { allowedPrefixes: new Set([rule]) })).toMatchObject({ decision: 'allow', why: `"${rule}" is allowed (this session)` });
+  expect(dm('edits', mcpTool(), { rules: { allow: [rule] } })).toMatchObject({ decision: 'allow', why: `"${rule}" is allowed (saved)` });
+  // Allowed, but plan mode still refuses a tool that is not marked as reading.
+  expect(dm('plan', mcpTool(), { rules: { allow: [rule] } }).decision).toBe('deny');
+  for (const mode of MODES) {
+    expect(dm(mode, mcpTool(), { rules: { never: [rule] }, allowedPrefixes: new Set([rule]) }).decision).toBe('deny');
+    expect(dm(mode, mcpTool(), { rules: { never: ['Mcp(github:*)'] } }).reason).toContain('Mcp(github:*)');
+  }
+  // Another server's star does not reach this one.
+  expect(dm('bypass', mcpTool(), { rules: { never: ['Mcp(gitlab:*)'] } }).decision).toBe('allow');
+});
+
+test('a tool that changed since you allowed it asks again, and says so', () => {
+  const rule = 'Mcp(github:create_issue)';
+  const changed = mcpTool({ changed: true });
+  expect(dm('ask', changed, { rules: { allow: [rule] } })).toMatchObject({ decision: 'ask', changed: true, why: 'the tool changed since you allowed it' });
+  expect(dm('auto', mcpTool({ reads: false, changed: true }), { allowedPrefixes: new Set([rule]) }).decision).toBe('ask');
+  expect(dm('bypass', changed).why).toContain('the tool changed since you allowed it');
+});
+
+test('an MCP rule as /permissions takes it: one tool to allow, a whole server only to block', () => {
+  expect(checkRule('allow', 'Mcp(github:create_issue)')).toEqual({ rule: 'Mcp(github:create_issue)' });
+  expect(checkRule('allow', 'mcp(shop:notes.link)')).toEqual({ rule: 'Mcp(shop:notes.link)' });
+  expect(checkRule('never', 'Mcp(github:*)')).toEqual({ rule: 'Mcp(github:*)' });
+  expect(checkRule('allow', 'Mcp(github:*)').error).toContain('Allow one tool at a time');
+  expect(checkRule('allow', 'Mcp(github)').error).toContain('Mcp(github:create_issue)');
+});
+
+test('a project\'s MCP file is protected: a change to it always asks, and Bypass refuses it', () => {
+  expect(protectedBy('.agentic/mcp.json')).toBe('.agentic/mcp.json');
+  expect(decide('Write', { path: '.agentic/mcp.json' }, { mode: 'edits', rel: '.agentic/mcp.json' })).toMatchObject({ decision: 'ask', once: true });
+  expect(decide('Write', { path: '.agentic/mcp.json' }, { mode: 'auto', rel: '.agentic/mcp.json' }).decision).toBe('ask');
+  expect(decide('Edit', { path: '.agentic/mcp.json' }, { mode: 'bypass', rel: '.agentic/mcp.json' }).decision).toBe('deny');
+  expect(decide('Bash', { command: 'echo "{}" > .agentic/mcp.json' }, { mode: 'bypass', cwd: '/tmp/x' }).decision).toBe('deny');
+});

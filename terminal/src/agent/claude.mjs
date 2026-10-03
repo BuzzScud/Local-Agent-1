@@ -26,6 +26,9 @@ const WEB_SERVER = {
   basic: { WebSearch: { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }, WebFetch: { type: 'web_fetch_20250910', name: 'web_fetch', max_uses: 5 } },
 };
 const SERVER_BLOCK = /^(server_tool_use|web_search_tool_result|web_fetch_tool_result|.*_tool_result)$/;
+// Anthropic's tool search: with many MCP tools (agent/mcp.mjs marks them defer: true), their
+// definitions stay out of the context until Claude searches for one; the search runs on Anthropic's side.
+const TOOL_SEARCH = { type: 'tool_search_tool_bm25_20251119', name: 'tool_search_tool_bm25' };
 
 // Thinking blocks by the reply they came with: its first tool call's id, or its text.
 const THOUGHTS = new Map();
@@ -135,7 +138,9 @@ export function claudeParams({ model, messages, tools, toolChoice = 'auto', thin
     const server = drop.has('web') ? {} : WEB_SERVER[drop.has('webnew') || caps.webTools !== '20260209' ? 'basic' : '20260209'];
     const own = tools.filter((t) => t.function.name !== 'WebSearch' && t.function.name !== 'WebFetch');
     const web = tools.map((t) => server[t.function.name]).filter(Boolean);
-    params.tools = [...own.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(drop.has('eager') ? {} : { eager_input_streaming: true }) })), ...web];
+    // A deferred tool (many MCP tools) is found with the tool search tool; a model that refuses that gets them all up front.
+    const defer = own.some((t) => t.defer) && !drop.has('toolsearch');
+    params.tools = [...own.map((t) => ({ name: t.function.name, description: t.function.description ?? '', input_schema: t.function.parameters ?? { type: 'object', properties: {} }, ...(defer && t.defer ? { defer_loading: true } : {}), ...(drop.has('eager') ? {} : { eager_input_streaming: true }) })), ...web, ...(defer ? [TOOL_SEARCH] : [])];
     // Several calls a reply only when the model decides (agent/way.mjs), as with the local models.
     params.tool_choice = toolChoice === 'none' ? { type: 'none' } : { type: 'auto', disable_parallel_tool_use: !parallel };
   }
@@ -168,6 +173,7 @@ function refusedField(message, params) {
   if (params.thinking && /thinking|budget_tokens|adaptive/i.test(m)) return 'thinking';
   if (params.output_config?.effort && /effort/i.test(m)) return 'effort';
   if (params.output_config?.format && /format|json_schema|schema/i.test(m)) return 'format';
+  if (params.tools?.some((t) => t.defer_loading) && /defer_loading|tool_search/i.test(m)) return 'toolsearch';
   if (params.tools?.some((t) => t.type) && /web_(search|fetch)/i.test(m)) return params.tools.some((t) => /_2026/.test(t.type ?? '')) ? 'webnew' : 'web';
   if (params.tools?.[0]?.eager_input_streaming && /eager_input_streaming/i.test(m)) return 'eager';
   if (params.cache_control && /cache_control/i.test(m)) return 'cache';
@@ -228,6 +234,14 @@ export async function* streamClaude({ url, ep, messages, tools, toolChoice, thin
           yield b.type === 'web_search_tool_result'
             ? { type: 'server', id: b.tool_use_id, name: 'WebSearch', args: { query: input.query ?? '' }, view: err ? { kind: 'error', message: `the search did not work (${err})` } : { kind: 'websearch', count: Array.isArray(b.content) ? b.content.length : 0, service: 'Anthropic' }, error: Boolean(err) }
             : { type: 'server', id: b.tool_use_id, name: 'WebFetch', args: { url: input.url ?? b.content?.url ?? '' }, view: err ? { kind: 'error', message: `the page could not be read (${err})` } : { kind: 'fetched', url: b.content?.url ?? input.url ?? '', status: 200 }, error: Boolean(err) };
+        } else if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_search_tool_result') {
+          // A search for tools done on Anthropic's side: shown as a finished step, with what it loaded.
+          const b = ev.content_block;
+          let input = {};
+          try { input = JSON.parse(server.get(b.tool_use_id)?.json || '{}'); } catch {}
+          const found = (b.content?.tool_references ?? []).map((r) => r.tool_name).filter(Boolean);
+          const err = String(b.content?.type ?? '').endsWith('_error') ? b.content.error_code ?? 'error' : null;
+          yield { type: 'server', id: b.tool_use_id, name: 'ToolSearch', shown: { label: 'Tool search', arg: String(input.query ?? input.pattern ?? '') }, view: err ? { kind: 'error', message: `the tool search did not work (${err})` } : { kind: 'toolsearch', tools: found }, error: Boolean(err) };
         } else if (ev.type === 'content_block_delta' && ev.delta?.type === 'input_json_delta' && [...server.values()].some((c) => c.index === ev.index)) {
           const c = [...server.values()].find((x) => x.index === ev.index);
           c.json += ev.delta.partial_json ?? '';

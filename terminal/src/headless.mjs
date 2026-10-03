@@ -24,7 +24,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -49,8 +49,10 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     helpers: on, embedder: mem?.embedder ?? embedder ?? own,
     way: wayOf(way ?? wayEnv() ?? 'app'), hooks: hooksEnv() !== undefined ? hooksOn(hooksEnv()) : hooksOn(hooks ?? []),
     // The web tools (/web) and helpers (the Agent tool): coding -p passes them; the benches pass
-    // none, so their runs measure the same every time.
-    web, subagents,
+    // none, so their runs measure the same every time. mcp: the hub of the user's MCP servers
+    // (coding -p passes it; a tool asks, or --yes allows; a project's own servers are never
+    // started by a run with nobody there to be asked).
+    web, subagents, mcp,
     // Starting over from its notes: the instructions come back from their saved reading.
     rewarm: warm && slots ? (sig) => warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: agent.tools(), thinking, effort: agent.effort, slot: slots.main, signal: sig }) : undefined,
     // approve(req) → false says no to one request even when auto-approving.
@@ -61,6 +63,9 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     ask: async (req) => {
       if (askUser) { const r = await askUser(req); if (r) return r; }
       if (req.name === 'Ask') {
+        // A question of an MCP server's own (agent.mjs mcpAsked): answered only by someone who is
+        // there; with nobody, it is declined, never guessed.
+        if (req.kind === 'mcp') { const text = answers ? await answers(req.args.question, req) : null; return text != null ? { choice: 'answer', text: String(text) } : { choice: 'no' }; }
         // A plan to confirm or a check-in goes to answers only when it steers
         // (answers.steers = true); otherwise the plan is approved and the
         // check-in carries on, as when no one is watching.
@@ -84,6 +89,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   // A way given to the run (bench --way, coding -p --way, AGENTIC_WAY) wins over the limits' row.
   if (way ?? wayEnv()) agent.setWay(way ?? wayEnv());
   // coding -p started the server itself: restore (or read) the instructions first (the prompt and tools of its way).
+  // The MCP tools are taken before the instructions are read ahead, so that reading holds them.
+  await agent.mcpTake().catch(() => {});
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: agent.tools(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
   const log = [];
   let finalText = '';

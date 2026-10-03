@@ -21,6 +21,7 @@ import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, can
 import { triedWord } from './tryouts.mjs';
 import { statusOf as statusOfJob, roomLine as subRoomLine, MAIN } from './subagents.mjs';
 import { WEB_ROWS, showWebValue, webRowNote, webWarning } from './web-form.mjs';
+import { listRows, serverLine, projectLine, formRows, showMcpValue, mcpRowNote, mcpRowChanged, mcpWarning, testLines, toolState, toolWindow, toolNote } from './mcp-form.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
 import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
 import { StartPage } from './start.jsx';
@@ -84,6 +85,22 @@ function ToolView({ it, width }) {
         </Result>
       </Box>
     );
+    // A tool of an MCP server (agent.mjs runMcp): the first lines of what it answered.
+    case 'mcp': {
+      const lines = String(v.content ?? '').split('\n').filter((l) => l.trim());
+      const shown = v.looked ? [] : lines.slice(0, 3);
+      body = (
+        <Box flexDirection="column">
+          {v.looked ? <Text>Its arguments; nothing ran <Text color={C.dim}>(ctrl+o to expand)</Text></Text> : null}
+          {shown.map((l, i) => <Text key={i} color={it.error ? C.bad : undefined} wrap="truncate-end">{l}</Text>)}
+          {!v.looked && !lines.length ? <Text color={C.dim}>(it returned nothing)</Text> : null}
+          {lines.length > shown.length && !v.looked ? <Text color={C.dim}>… +{lines.length - shown.length} lines (ctrl+o to expand)</Text> : null}
+          {v.pictures ? <Text color={C.dim}>{v.pictures} picture{v.pictures === 1 ? '' : 's'}{v.shown ? '' : ', not shown to this model'}</Text> : null}
+        </Box>
+      );
+      break;
+    }
+    case 'toolsearch': body = <Text>{v.tools?.length ? <>Loaded <Text bold>{v.tools.length}</Text> tool{v.tools.length === 1 ? '' : 's'}: {v.tools.join(', ')}</> : 'Nothing found'}</Text>; break;
     case 'denied': body = <Text color={C.warn}>Not allowed: {v.message}</Text>; break;
     case 'declined': body = <Text color={C.dim}>You said no{v.feedback ? `: ${v.feedback}` : ''}</Text>; break;
     case 'answer': body = <Text><Text color={C.dim}>You: </Text>{v.text}</Text>; break;
@@ -491,7 +508,7 @@ function LiveRail({ app, maxLines }) {
   return <Box flexDirection="column">{blocks}</Box>;
 }
 
-const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen' };
+const PERM_TITLE = { Edit: 'Edit file', Write: 'Create file', Bash: 'Bash command', Rename: 'Rename', Test: 'Approve this test', Ask: 'Agentic Coder asks', WebSearch: 'Web search', WebFetch: 'Read a web page', Screen: 'Look at the screen', Mcp: 'MCP tool', McpProject: 'A project brings its own MCP servers' };
 
 // prefix: the rule "don't ask again" would remember (null: none can, the
 // command's words cannot be trusted); saveRule: what "always allow" would save
@@ -516,6 +533,13 @@ export function permissionOptions(req, prefix, saveRule = null) {
     const what = req.name === 'WebSearch' ? 'web searches' : String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1');
     return req.rule ? [yes, { label: `Yes, and don't ask again for ${what} this session`, choice: 'always' }, { label: `Yes, and always allow ${what} in this folder`, choice: 'save' }, no] : [yes, no];
   }
+  // A tool of an MCP server: this once, this session, or saved for this folder (with the tool's fingerprint).
+  if (req.name === 'Mcp') {
+    const what = `${req.mcp?.server}:${req.mcp?.tool}`;
+    return req.rule ? [yes, { label: `Yes, and don't ask again for ${what} this session`, choice: 'always' }, ...(saveRule ? [{ label: `Yes, and always allow ${what} in this folder`, choice: 'save' }] : []), no] : [yes, no];
+  }
+  // A project's own MCP servers (.agentic/mcp.json): before they may start.
+  if (req.name === 'McpProject') return [{ label: `Yes, start ${req.servers.length === 1 ? req.servers[0].name : 'them'} (asked again if .agentic/mcp.json changes)`, choice: 'yes' }, { label: 'Not now (this session)', choice: 'no' }, { label: 'Never for this project', choice: 'never' }];
   // The screen: once per app (the user's pick, 1 Oct 2026): this time, this session, or saved.
   if (req.name === 'Screen') return [{ label: 'This time', choice: 'yes' }, { label: 'For this session', choice: 'always' }, { label: 'Always (saved for this folder)', choice: 'save' }, { label: 'No (esc)', choice: 'no' }];
   // A protected file asks every time (permissions.mjs), so it has no "allow all edits".
@@ -530,11 +554,13 @@ const screenWhat = (args) => (String(args?.app ?? '').trim() ? `${String(args.ap
 function PermissionPrompt({ app }) {
   const { perm, width } = app;
   const req = perm.req;
-  const title = req.name === 'Write' && !req.prepared?.created ? 'Overwrite file' : PERM_TITLE[req.name] ?? req.name;
+  // A question of an MCP server's own (agent.mjs mcpAsked) is headed as the server's, not the app's.
+  const title = req.kind === 'mcp' ? `${req.asker} asks` : req.name === 'Mcp' ? `MCP tool · ${req.mcp?.server}` : req.name === 'Write' && !req.prepared?.created ? 'Overwrite file' : PERM_TITLE[req.name] ?? req.name;
+  const argLines = req.name === 'Mcp' ? Object.entries(req.args ?? {}).map(([k, v]) => { const t = typeof v === 'string' ? v : JSON.stringify(v); const n = t.split('\n').length; return `${k}: ${n > 1 ? `${n} lines` : t.length > Math.max(20, width - k.length - 12) ? `${t.slice(0, Math.max(19, width - k.length - 13))}…` : t}`; }) : [];
   const hunk = req.prepared?.hunk ?? [];
   // The whole prompt fits the window with a line to spare: a live area as
   // tall as the window makes Ink clear and redraw the screen on every frame.
-  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1 + (req.protectedBy ? 1 : 0) + (req.autoReason ? 1 : 0); // …, the status line, a spare line, the protected-file and Auto lines
+  const fixed = 2 + 1 + 1 + perm.options.length + 1 + 1 + (req.protectedBy ? 1 : 0) + (req.autoReason ? 1 : 0) + (req.mcp?.changed ? 1 : 0) + (req.mcp?.note ? 1 : 0); // …, the status line, a spare line, the protected-file, Auto and MCP lines
   const room = Math.max(3, app.rows - fixed);
   const cap = Math.max(2, room - 4); // the diff box: its border, file name and "more lines"
   const files = req.prepared?.files ?? [];
@@ -544,8 +570,27 @@ function PermissionPrompt({ app }) {
   const cmdLines = String(req.args?.command ?? '').split('\n');
   return (
     <Box borderStyle="round" borderColor={C.ask} flexDirection="column" paddingX={1} width={width}>
-      <Text bold color={C.ask}>{title}{req.helper ? <Text color={C.dim}>  · asked by the {req.helper} helper</Text> : null}</Text>
-      {req.name === 'Ask' ? (
+      <Text bold color={C.ask}>{title}{req.helper ? <Text color={C.dim}>  · asked by the {req.helper} helper</Text> : null}{req.kind === 'mcp' ? <Text color={C.dim}>  · while {req.tool} runs · your answer goes to that server</Text> : null}</Text>
+      {req.name === 'Mcp' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text bold wrap="truncate-end">{req.mcp.tool}</Text>
+          {argLines.slice(0, Math.max(1, room - 6)).map((l, i) => <Text key={i} wrap="truncate-end">{l}</Text>)}
+          {argLines.length > Math.max(1, room - 6) ? <Text color={C.dim}>… +{argLines.length - Math.max(1, room - 6)} more</Text> : null}
+          {!argLines.length ? <Text color={C.dim}>(no arguments)</Text> : null}
+          <Text color={C.dim} wrap="truncate-end">{req.mcp.runs === 'address' ? `a service at ${String(req.mcp.where ?? '').split(' · ')[0]}` : `a program on this Mac (${req.mcp.where ?? 'its server'})`}{req.mcp.says ? <Text color={C.faint}> · the server says: {req.mcp.says}</Text> : null}</Text>
+        </Box>
+      ) : req.name === 'McpProject' ? (
+        <Box flexDirection="column" paddingX={2} marginY={1}>
+          <Text wrap="truncate-end">.agentic/mcp.json in {app.cwdShort}{req.changed ? <Text color={C.warn}> · changed since you allowed it</Text> : null}</Text>
+          {req.servers.slice(0, Math.max(1, Math.floor((room - 5) / 2))).map((s) => (
+            <React.Fragment key={s.name}>
+              <Text wrap="truncate-end"><Text bold>{s.name.padEnd(12)}</Text>{s.line}</Text>
+              <Text color={C.dim} wrap="truncate-end">{' '.repeat(12)}{s.where}</Text>
+            </React.Fragment>
+          ))}
+          <Text color={C.dim} wrap="truncate-end">A server is a program: it runs on this Mac with what its sandbox allows.</Text>
+        </Box>
+      ) : req.name === 'Ask' ? (
         <Box paddingX={1} marginY={1}>
           <Text bold>{req.args.question}{req.args.step ? <Text bold={false} color={C.dim}>   ({req.args.step.at} of {req.args.step.of})</Text> : null}</Text>
         </Box>
@@ -583,11 +628,15 @@ function PermissionPrompt({ app }) {
       )}
       {req.protectedBy ? <Text color={C.warn}>Protected: {req.protectedBy} always asks before a change, even in Accept edits and Auto.</Text> : null}
       {req.autoReason ? <Text color={C.auto} wrap="truncate-end">Auto asks you: {req.autoReason}</Text> : null}
+      {req.mcp?.changed ? <Text color={C.warn} wrap="truncate-end">This tool changed since you allowed it: its description or its arguments are not what they were.</Text> : null}
+      {req.mcp?.note ? <Text color={C.warn} wrap="truncate-end">{req.mcp.note}</Text> : null}
       {req.name === 'Ask' ? null
         : req.name === 'Bash' ? <Text>Do you want to proceed?</Text>
         : req.name === 'WebSearch' ? <Text>Search the web for this?</Text>
         : req.name === 'WebFetch' ? <Text>Read this page from <Text bold>{String(req.rule ?? '').replace(/^WebFetch\((.*)\)$/, '$1')}</Text>?</Text>
         : req.name === 'Screen' ? <Text>Let the model look at <Text bold>{String(req.args?.app ?? '').trim() || 'the whole screen'}</Text>?</Text>
+        : req.name === 'Mcp' ? <Text>Let <Text bold>{req.mcp.server}</Text> run <Text bold>{req.mcp.tool}</Text>?</Text>
+        : req.name === 'McpProject' ? <Text>Start this project’s server{req.servers.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Rename' ? <Text>Rename <Text bold>{req.args.from}</Text> to <Text bold>{req.args.to}</Text>: {req.prepared.total} use{req.prepared.total === 1 ? '' : 's'} in {req.prepared.files.length} file{req.prepared.files.length === 1 ? '' : 's'}?</Text>
         : req.name === 'Test' ? <Text>Use this test to decide when the change is done? <Text color={C.dim}>(it fails today, as it should)</Text></Text>
         : <Text>Do you want to {req.name === 'Write' && req.prepared.created ? 'create' : 'make this edit to'} <Text bold>{req.prepared.rel}</Text>?</Text>}
@@ -1191,6 +1240,139 @@ function RemotePicker({ app }) {
   );
 }
 
+// /mcp (mcp-form.mjs): your MCP servers. The list (each server: connected or not, where it runs,
+// its tools), the form for one (as /web's: a choice between ◀ ▶, a text row edited in place, Test
+// and Save), and one server's tools with your marks: on or off, and "reads".
+function McpPicker({ app }) {
+  const pk = app.picker;
+  const W = app.width - 4;
+  const cut = (s, n) => { const t = String(s ?? ''); return t.length > n ? `${t.slice(0, Math.max(0, n - 1))}…` : t; };
+  if (pk.view === 'tools') {
+    // The whole picker fits the window: its frame, title, header, the two lines under the list and the keys.
+    const win = toolWindow(pk, Math.max(3, (app.rows ?? 24) - 12));
+    const nameW = Math.min(28, Math.max(12, ...pk.tools.map((t) => t.name.length)) + 1);
+    const descW = Math.max(10, W - nameW - 30);
+    const at = pk.tools[pk.toolIndex];
+    const s = pk.status.find((x) => x.name === pk.server.name);
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+        <Text wrap="truncate-end"><Text bold>{pk.server.name} · its tools</Text><Text color={C.dim}>   {pk.tools.length} tool{pk.tools.length === 1 ? '' : 's'} · {pk.tools.length - pk.marks.off.filter((n) => pk.tools.some((t) => t.name === n)).length} on{s?.version ? ` · speaks ${s.version}` : ''}</Text></Text>
+        <Text color={C.dim} wrap="truncate-end">{'   on  yours  '}{'tool'.padEnd(nameW)}{'what it says about itself'.padEnd(descW + 2)}its own label</Text>
+        {win.above ? <Text color={C.dim}>   … {win.above} more above (↑)</Text> : null}
+        {win.shown.map((t, i) => {
+          const on = win.start + i === pk.toolIndex;
+          const st = toolState(pk, t);
+          return (
+            <Text key={t.name} wrap="truncate-end">
+              <Text color={C.accent} bold>{on ? '❯  ' : '   '}</Text>
+              <Text color={st.on ? C.accent : C.faint}>{st.on ? '●   ' : '○   '}</Text>
+              <Text color={st.reads ? C.plan : C.faint}>{st.reads ? 'reads  ' : '—      '}</Text>
+              <Text bold={on} color={st.on ? undefined : C.dim}>{cut(t.name, nameW - 1).padEnd(nameW)}</Text>
+              <Text color={C.dim}>{cut(String(t.description).replace(/\s+/g, ' '), descW).padEnd(descW + 2)}</Text>
+              <Text color={st.changed ? C.warn : C.faint}>{st.changed ? '⚠ changed' : t.says ?? '—'}</Text>
+            </Text>
+          );
+        })}
+        {win.below ? <Text color={C.dim}>   … {win.below} more (↓)</Text> : null}
+        {!pk.tools.length ? <Text color={C.dim}>   This server lists no tools{s && s.state !== 'connected' ? `: it is ${s.state === 'off' ? 'switched off' : 'not running'}` : ''}.</Text> : null}
+        <Text> </Text>
+        {pk.open && at ? <Text wrap="wrap">{String(at.description || '(it has no description)').slice(0, Math.max(200, W * 4))}</Text> : <Text wrap="truncate-end">{at ? <><Text bold>{at.name}: </Text><Text color={toolState(pk, at).changed ? C.warn : C.dim}>{toolNote(pk, at)}</Text></> : ' '}</Text>}
+        {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
+        <Text color={C.dim} wrap="truncate-end">space on/off · r mark reads · enter its whole description · esc back</Text>
+      </Box>
+    );
+  }
+  if (pk.view === 'form') {
+    const ROWS = formRows(pk);
+    const lw = 16, vw = 26;
+    const warn = mcpWarning(pk);
+    const lines = testLines(pk.test);
+    const typing = (e) => {
+      const shown = e.id === 'key' ? '•'.repeat(e.value.length) : e.value;
+      const room = Math.max(8, app.width - lw - 12);
+      const from = Math.max(0, e.cursor - room + 1);
+      const before = shown.slice(from, e.cursor), at = shown[e.cursor] ?? ' ', after = shown.slice(e.cursor + 1, from + room);
+      return <><Text>{from ? '…' : ''}{before}</Text><Text inverse>{at}</Text><Text>{after}</Text>{e.id === 'key' ? <Text color={C.dim}>  {e.value.length} characters</Text> : null}</>;
+    };
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+        <Text bold>{pk.was ? `MCP server · ${pk.was}` : 'Add an MCP server'}</Text>
+        <Text color={C.dim} wrap="truncate-end">A program on this Mac or an address. Test lists its tools; nothing is kept until Save.</Text>
+        {ROWS.map((r, i) => {
+          const on = i === pk.index;
+          const e = pk.editing?.id === r.id ? pk.editing : null;
+          const off = (r.id === 'net' || r.id === 'local') && !pk.values.sandbox;
+          const choice = r.type === 'choice' && !off;
+          const unsaved = r.type !== 'action' && mcpRowChanged(pk, r.id);
+          const v = showMcpValue(pk, r.id);
+          const wide = r.id === 'command' || r.id === 'url';
+          const done = r.id === 'test' && pk.test && !pk.test.running;
+          const tone = done ? (pk.test.ok ? C.ok : C.bad) : undefined;
+          return (
+            <React.Fragment key={r.id}>
+              {r.id === 'test' ? <Text> </Text> : null}
+              <Text wrap="truncate-end">
+                <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.label.padEnd(lw)}</Text>
+                {e ? typing(e) : (
+                  <>
+                    <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '◀ ' : '  '}</Text>
+                    <Text color={tone ?? (unsaved ? C.accent : r.type === 'action' ? C.dim : undefined)} bold={unsaved}>{wide ? v : v.padEnd(vw)}</Text>
+                    {wide ? null : <Text color={choice ? (on ? C.accent : C.faint) : undefined}>{choice ? '▶ ' : '  '}</Text>}
+                    <Text color={unsaved ? C.accent : C.faint}>{unsaved ? ' •' : '  '}</Text>
+                    <Text color={C.dim}>{' '}{wide && v !== '—' ? '' : mcpRowNote(pk, r.id)}</Text>
+                  </>
+                )}
+              </Text>
+              {done ? lines.map((l, k) => (
+                <Box key={k} paddingLeft={lw + 4}>
+                  {l.tool ? <Text wrap="truncate-end"><Text>{cut(l.tool.name, 20).padEnd(21)}</Text><Text color={C.dim}>{cut(String(l.tool.description).replace(/\s+/g, ' '), Math.max(10, W - lw - 50)).padEnd(Math.max(10, W - lw - 50) + 2)}</Text><Text color={C.faint}>{l.tool.says ? `says: ${l.tool.says}` : ''}</Text></Text>
+                    : l.more ? <Text color={C.dim}>… and {l.more} more</Text>
+                    : l.note ? <Text color={C.dim} wrap="truncate-end">{l.note}</Text>
+                    : <Text color={l.ok ? C.ok : C.bad} wrap="wrap">{l.ok ? '✔' : '✗'} {l.text}</Text>}
+                </Box>
+              )) : null}
+            </React.Fragment>
+          );
+        })}
+        {pk.values.runs === 'command' && !pk.values.sandbox ? <Text color={C.warn} wrap="truncate-end">Without its sandbox it runs with all your permissions: your files, your keys, the internet.</Text> : null}
+        {warn ? <Text color={warn.tone === 'error' ? C.bad : C.warn} wrap="wrap">{warn.text}</Text> : null}
+        {pk.error ? <Text color={C.bad} wrap="truncate-end">{pk.error}</Text> : null}
+        <Text color={C.dim} wrap="truncate-end">{pk.editing ? 'enter keeps it · esc puts it back · paste works · ctrl+u clears' : '↑↓ choose · ←→ change · enter edits a row, runs Test, or saves · esc back to the list'}</Text>
+      </Box>
+    );
+  }
+  const rows = listRows(pk);
+  const nameW = Math.min(20, Math.max(8, ...pk.status.map((s) => s.name.length)) + 2);
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Text bold>MCP servers</Text>
+      <Text color={C.dim} wrap="truncate-end">Tools from programs on this Mac and services on the internet. Each tool asks before its first use.</Text>
+      <Text> </Text>
+      {rows.map((r, i) => {
+        const on = i === pk.index;
+        if (r.id === 'add') return <Text key="add"><Text color={C.accent} bold>{on ? '❯ ' : '  '}</Text><Text color={on ? C.accent : C.dim} bold={on}>+ Add a server</Text></Text>;
+        if (r.id === 'project') return <Text key="project" wrap="truncate-end"><Text color={C.accent} bold>{on ? '❯ ' : '  '}</Text><Text color={on ? C.accent : C.warn} bold={on}>{projectLine(pk.project)}</Text></Text>;
+        const l = serverLine(r.server);
+        const live = r.server.state === 'connected';
+        return (
+          <Text key={r.id} wrap="truncate-end">
+            <Text color={C.accent} bold>{on ? '❯ ' : '  '}</Text>
+            <Text color={on ? C.accent : undefined} bold={on}>{cut(r.server.name, nameW - 1).padEnd(nameW)}</Text>
+            <Text color={live ? C.accent : r.server.state === 'starting' ? C.warn : C.faint}>{l.dot} </Text>
+            <Text color={live ? undefined : r.server.state === 'off' ? C.dim : C.warn}>{l.state.padEnd(15)}</Text>
+            <Text color={C.dim}>{cut(l.where, 38).padEnd(40)}</Text>
+            <Text color={live ? undefined : C.dim}>{l.tools}</Text>
+          </Text>
+        );
+      })}
+      {!pk.status.length ? <Text color={C.dim}>  None yet. A server gives the model tools the app does not have: GitHub, a database, your own scripts.</Text> : null}
+      <Text> </Text>
+      {pk.confirm ? <Text color={C.warn} wrap="truncate-end">Remove {pk.confirm}? d again removes it (its key too); any other key keeps it.</Text> : pk.note ? <Text color={pk.note.tone === 'warn' ? C.warn : C.dim} wrap="truncate-end">{pk.note.text}</Text> : null}
+      <Text color={C.dim} wrap="truncate-end">↑↓ choose · enter its tools · e edit · space on/off · r start again · d remove · esc closes</Text>
+    </Box>
+  );
+}
+
 // The list Connect opens on an Ollama service (remote-form.mjs openModelPick):
 // /model's groups, each model with its size, what it can do, its weight and its
 // try-out; the copies of one model on one row (←→ picks the copy). 2 Oct 2026.
@@ -1717,6 +1899,8 @@ export function Screen({ app }) {
         <LimitsPicker app={app} />
       ) : app.picker?.kind === 'remote' || app.picker?.kind === 'web' ? (
         <RemotePicker app={app} />
+      ) : app.picker?.kind === 'mcp' ? (
+        <McpPicker app={app} />
       ) : app.picker?.kind === 'settings' ? (
         <SettingsPicker app={app} />
       ) : app.picker?.kind === 'rewind' ? (

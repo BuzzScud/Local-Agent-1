@@ -57,6 +57,10 @@ import { openBoardWindow } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
 import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
+import { openMcp, reloadMcp } from './mcp-start.mjs';
+import { readProject, answerProject, saveServer, removeServer, saveMarks, saveServerKey, removeServerKey, serverKey, rememberAllowed, mcpLogFile, commandLine } from './mcp-store.mjs';
+import { openMcpList, listRows as mcpListRows, openMcpForm, formRows as mcpFormRows, moveMcpRow, startMcpEdit, commitMcpEdit, mcpWarning, formServer, savedNote as mcpSavedNote, openMcpTools, toggleTool } from './mcp-form.mjs';
+import { whereOf as mcpWhere } from '../tools/mcp.mjs';
 import { changePermissions, summary as permSummary, settingsValue, modeWord } from './perms.mjs';
 import { countTries } from './live.mjs';
 import { spinStyle } from '../ui/theme.mjs';
@@ -468,8 +472,11 @@ export function App({ opts, win, onRestart }) {
   const rewindRef = useRef(undefined);
   if (rewindRef.current === undefined) rewindRef.current = (process.env.AGENTIC_REWIND ?? process.env.BONSAI_REWIND) === 'off' ? null : new Rewind({ home: HOME, session: sessionRef.current.id });
 
-  // The agent lives for the whole session.
+  // The agent lives for the whole session, and so does the hub of your MCP servers (/mcp):
+  // they start now, in the background, so their tools are there for the first message.
   const agentRef = useRef(null);
+  const mcpRef = useRef(undefined);
+  if (mcpRef.current === undefined) { try { mcpRef.current = openMcp(cwd); } catch { mcpRef.current = null; } }
   if (!agentRef.current) {
     // The memory: your two rules and an older notes file are carried in at
     // the first start; the small model that finds the facts is started with
@@ -494,6 +501,8 @@ export function App({ opts, win, onRestart }) {
       web: webSettings(settings.web),
       // Helpers the model can hand work to (the Agent tool), unless "subagents": false.
       subagents: settings.subagents !== false,
+      // Your MCP servers' tools (/mcp), each asked about before its first use.
+      mcp: mcpRef.current?.hub ?? null,
       // The same small model ranks the files Read first gives (rank.mjs), with the memory on or off.
       helpers, embedder, ranker: embedder, rewind: rewindRef.current,
       // The design examples and the layout check (/design), as saved.
@@ -534,6 +543,7 @@ export function App({ opts, win, onRestart }) {
     applySearch(agentRef.current, limitsRef.current);
   }
   const agent = agentRef.current;
+  const mcpHub = mcpRef.current?.hub ?? null;
   // Saving on its own (autosave.mjs): a little after a task, and on quit.
   const autoRef = useRef(null);
   // Before a save, the facts are listed and a Save / Skip menu opens (the
@@ -727,6 +737,8 @@ export function App({ opts, win, onRestart }) {
       agent.syncRules(); // rules that follow the Context are read again before the warm-up below
       if (st.slots > 1) agent.slots = { main: 0, side: 1 };
       setStartPhase('reading');
+      // The MCP tools go into what the model reads ahead, when every server has settled (agent.mjs mcpTake).
+      await agent.mcpTake({ settled: true }).catch(() => {});
       timeWarmed(await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model: next, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: setStartPhase }));
       timeDone();
       const n = next.edited?.edits.length ?? 0;
@@ -884,6 +896,8 @@ export function App({ opts, win, onRestart }) {
     agent.ctx = conn.ctx; setCtx(conn.ctx);
     agent.slots = conn.slots > 1 ? { main: 0, side: 1 } : null;
     setStartPhase('reading');
+    // The MCP tools go into what the model reads ahead, when every server has settled (agent.mjs mcpTake).
+    await agent.mcpTake({ settled: true }).catch(() => {});
     try { await warmUp({ sessionMark: SESSION_MARK, url: conn.url, model: m, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, onPhase: setStartPhase }); } catch {}
     setStarting(false);
     push({ type: 'note', text: `On the remote: ${m.name} · ${kindWord(r.kind)} · answered in ${conn.info.ms ?? '?'} ms · ${Math.round(conn.ctx / 1024)}k context. Your prompts, your code and the files it reads now go to ${remoteLabel(r)}; /remote switches back.`, tone: 'dim' });
@@ -1394,6 +1408,165 @@ export function App({ opts, win, onRestart }) {
     agent.web = webSettings(settings.web);
     push({ type: 'note', text: `Web saved: ${w.search === 'off' ? 'no search' : `search with ${PROVIDER_NAMES[w.search]}${w.keys[w.search] ? '' : ' (no key yet)'}`} · ${w.fetch ? 'pages can be read, each site asked about first' : 'no pages read'}${model.remote?.kind === 'claude' ? ` · on the Claude API: ${w.claude ? 'Claude’s own web tools' : 'none'}` : ''}.`, tone: 'dim' });
   };
+
+  // ---- /mcp: your MCP servers (mcp-form.mjs keeps the picker, mcp-store.mjs the files, tools/mcp.mjs runs them) ----
+  // The Level 1 rows (sign-in in the browser, Anthropic's connector) are offered once they are built.
+  const MCP_EXTRAS = false;
+  const mcpProjectNow = () => { try { return readProject(agent.cwd); } catch { return null; } };
+  const mcpList = (more = {}) => openMcpList({ status: mcpHub.status(), project: mcpProjectNow(), extras: MCP_EXTRAS, ...more });
+  const openMcpPicker = () => {
+    if (!mcpHub) { push({ type: 'note', text: 'MCP is switched off for this window (AGENTIC_MCP=off where it started).', tone: 'warn' }); return; }
+    setPicker(mcpList());
+  };
+  // The servers as the files have them now, handed to the hub; the model gets the new list at your next message.
+  const applyMcp = () => { const r = reloadMcp(mcpHub, agent.cwd); agent.mcpStale = true; return r; };
+  const mcpTests = useRef(0);
+  const runMcpTest = (pk) => {
+    if (mcpWarning(pk)) { setPicker({ ...pk, error: 'Nothing to test yet: fix the line above first.' }); return; }
+    const id = ++mcpTests.current;
+    const server = formServer(pk, { cwd: agent.cwd });
+    // The key as the form has it now: typed, taken away, or the kept one.
+    const key = pk.key !== null ? pk.key || null : pk.server?.hasKey ? serverKey(pk.server) : null;
+    setPicker({ ...pk, test: { running: true, id }, error: null });
+    mcpHub.test(server, { key }).then((res) => setPicker((p) => (p?.kind !== 'mcp' || p.view !== 'form' || p.test?.id !== id ? p : { ...p, test: { ...res, id } })));
+  };
+  // Save: the key to the Keychain (its own entry), the rest to mcp.json; the server starts (again) with it.
+  const saveMcp = (pk) => {
+    if (mcpWarning(pk)) { setPicker({ ...pk, error: 'Nothing was saved: fix the line above first.' }); return; }
+    const server = formServer(pk, { cwd: agent.cwd });
+    try {
+      if (pk.key) { server.keyEnd = saveServerKey(server, pk.key); server.hasKey = true; }
+      else if (pk.key === '' && pk.server) removeServerKey(pk.server);
+      // Renamed: its kept key goes with it.
+      else if (pk.was && pk.was !== server.name && pk.server?.hasKey) { const k = serverKey(pk.server); if (k) { saveServerKey(server, k); removeServerKey(pk.server); } }
+    } catch (e) { setPicker({ ...pk, error: `Nothing was saved: the key could not be kept (${e.message}).` }); return; }
+    const r = saveServer(server, { was: pk.was });
+    if (!r.ok) { setPicker({ ...pk, error: `Nothing was saved: ${r.error}` }); return; }
+    applyMcp();
+    // A new key under the same settings: started again so it is used.
+    if (pk.key !== null && pk.was === server.name) mcpHub.start(server.name);
+    const list = mcpList();
+    setPicker({ ...list, index: Math.max(0, list.status.findIndex((s) => s.name === server.name)), note: { text: mcpSavedNote(server) } });
+  };
+  // /mcp's keys. The list: ↑↓, enter (a server's tools; the form when it is not running), e edit,
+  // space on/off, r start again, d d remove. The form: as /web's. The tools: space on/off, r "reads".
+  const mcpKeys = (pk, ch, key) => {
+    if (key.ctrl && ch === 'c') { setPicker(null); return; }
+    const cfgOf = (name) => mcpHub.servers.get(name)?.cfg ?? null;
+    const at = (name) => Math.max(0, mcpHub.status().findIndex((s) => s.name === name));
+    if (pk.view === 'tools') {
+      const n = pk.tools.length;
+      if (key.escape) setPicker(mcpList({ index: at(pk.server.name) }));
+      else if (key.upArrow && n) setPicker({ ...pk, toolIndex: (pk.toolIndex + n - 1) % n, open: false });
+      else if ((key.downArrow || key.tab) && n) setPicker({ ...pk, toolIndex: (pk.toolIndex + 1) % n, open: false });
+      else if (key.return && n) setPicker({ ...pk, open: !pk.open });
+      else if ((ch === ' ' || ch === 'r') && n) {
+        // Your marks are kept at once, and the model gets the list with them at your next message.
+        const next = toggleTool(pk, ch === ' ' ? 'on' : 'reads');
+        const r = saveMarks(pk.server, next.marks, agent.cwd);
+        if (!r.ok) { setPicker({ ...pk, error: 'That could not be kept: mcp.json cannot be read or no longer has this server.' }); return; }
+        mcpHub.setMarks(pk.server.name, next.marks);
+        agent.mcpStale = true;
+        setPicker({ ...next, server: { ...pk.server, marks: next.marks }, status: mcpHub.status(), error: null });
+      }
+      return;
+    }
+    if (pk.view === 'form') {
+      if (pk.editing) {
+        if (key.return) setPicker(commitMcpEdit(pk));
+        else if (key.escape) setPicker({ ...pk, editing: null });
+        else setPicker({ ...pk, editing: editField(pk.editing, ch, key) });
+        return;
+      }
+      const rows = mcpFormRows(pk);
+      const n = rows.length;
+      const i = Math.min(pk.index, n - 1);
+      const row = rows[i];
+      const greyed = (row.id === 'net' || row.id === 'local') && !pk.values.sandbox;
+      const text = (row.type === 'text' || row.type === 'secret') && !greyed;
+      const typed = ch && !key.ctrl && !key.meta && !key.escape && !key.return && !key.tab && ch >= ' ';
+      if (key.upArrow) setPicker({ ...pk, index: (i + n - 1) % n });
+      else if (key.downArrow || key.tab) setPicker({ ...pk, index: (i + 1) % n });
+      else if ((key.leftArrow || key.rightArrow) && row.type === 'choice' && !greyed) { const next = moveMcpRow(pk, row.id, key.rightArrow ? 1 : -1); setPicker({ ...next, index: Math.max(0, mcpFormRows(next).findIndex((r) => r.id === row.id)) }); }
+      else if (key.return && text) setPicker(startMcpEdit(pk, row.id));
+      else if (key.return && row.id === 'test') { if (!pk.test?.running) runMcpTest(pk); }
+      else if (key.return && row.id === 'save') saveMcp(pk);
+      else if (key.return) setPicker({ ...pk, index: Math.min(n - 1, i + 1) });
+      // Typing on a text row starts it over with what you type (enter keeps the old text to change it).
+      else if (typed && text) setPicker({ ...startMcpEdit(pk, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, ch) });
+      else if (key.escape) setPicker(mcpList({ index: pk.was ? at(pk.was) : pk.status.length, note: { text: pk.was ? `${pk.was} kept as it was.` : 'No server was added.' } }));
+      return;
+    }
+    const rows = mcpListRows(pk);
+    const n = rows.length;
+    const row = rows[Math.min(pk.index, n - 1)];
+    const cfg = row.server ? cfgOf(row.server.name) : null;
+    const theirs = cfg?.from === 'project';
+    const say = (text, tone) => setPicker({ ...pk, confirm: null, note: { text, tone } });
+    if (pk.confirm) {
+      if (ch === 'd' && cfg && pk.confirm === cfg.name) {
+        removeServer(cfg.name);
+        try { removeServerKey(cfg); } catch { /* no key was kept */ }
+        applyMcp();
+        setPicker(mcpList({ index: Math.min(pk.index, mcpHub.status().length), note: { text: `${cfg.name} removed.` } }));
+      } else setPicker({ ...pk, confirm: null });
+      return;
+    }
+    const edit = () => setPicker({ ...openMcpForm(pk, cfg), names: pk.status.map((s) => s.name) });
+    const tools = () => setPicker(openMcpTools(pk, cfg, mcpHub.toolsOf(cfg.name)));
+    if (key.upArrow) setPicker({ ...pk, index: (Math.min(pk.index, n - 1) + n - 1) % n, note: null });
+    else if (key.downArrow || key.tab) setPicker({ ...pk, index: (Math.min(pk.index, n - 1) + 1) % n, note: null });
+    else if (key.escape) setPicker(null);
+    else if (row.id === 'add') { if (key.return || ch === ' ') setPicker({ ...openMcpForm(pk), names: pk.status.map((s) => s.name) }); }
+    else if (row.id === 'project') { if (key.return) askMcpProject(mcpProjectNow()); }
+    else if (!cfg) return;
+    else if (key.return) { if (row.server.state === 'connected') tools(); else if (theirs) say(`${cfg.name} is this project's own (.agentic/mcp.json): it is changed in that file. It is ${row.server.state === 'off' ? 'off' : `not running: ${row.server.error ?? ''}`}.`, 'warn'); else edit(); }
+    else if (ch === 't') tools();
+    else if (ch === 'e') { if (theirs) say(`${cfg.name} is this project's own: it is changed in .agentic/mcp.json (and asked about again after).`, 'warn'); else edit(); }
+    else if (ch === ' ') {
+      if (theirs) { say(`${cfg.name} follows this project's file. To stop the project's servers, answer "never" (the project's line, or /mcp after a change).`, 'warn'); return; }
+      const r = saveServer({ ...cfg, on: cfg.on === false });
+      if (!r.ok) { say(r.error ?? 'That could not be kept.', 'warn'); return; }
+      applyMcp();
+      setPicker(mcpList({ index: pk.index, note: { text: cfg.on === false ? `${cfg.name} switched on: starting it. Its tools join at your next message.` : `${cfg.name} switched off: stopped, and its tools leave at your next message.` } }));
+    } else if (ch === 'r') { mcpHub.start(cfg.name); agent.mcpStale = true; setPicker({ ...pk, status: mcpHub.status(), note: { text: `Starting ${cfg.name} again… Its tools join at your next message.` } }); }
+    else if (ch === 'd') { if (theirs) say(`${cfg.name} is this project's own: remove it from .agentic/mcp.json.`, 'warn'); else setPicker({ ...pk, confirm: cfg.name, note: null }); }
+    else if (ch === 'l') say(`${cfg.name}'s own messages: ${short(mcpLogFile(cfg.name))}`);
+  };
+  // A project's own servers (.agentic/mcp.json): asked before they may start, in every mode, and
+  // again when the file changes. Yes starts them; never is kept; "not now" asks again next time.
+  const askMcpProject = (project) => {
+    if (!project?.servers.length || S.current.perm) return;
+    const req = { name: 'McpProject', args: {}, changed: project.changed, servers: project.servers.map((s) => ({ name: s.name, line: s.runs === 'command' ? commandLine(s) : s.url, where: mcpWhere(s) })) };
+    setPerm({ req, selected: 0, options: permissionOptions(req, null), offer: null, resolve: ({ choice }) => {
+      if (choice === 'yes') { answerProject(agent.cwd, project.print, 'yes'); applyMcp(); push({ type: 'note', text: `This project's MCP server${project.servers.length === 1 ? '' : 's'} (${project.servers.map((s) => s.name).join(', ')}) may start. Each tool still asks before its first use; /mcp lists them.`, tone: 'dim' }); }
+      else if (choice === 'never') { answerProject(agent.cwd, project.print, 'never'); push({ type: 'note', text: "This project's MCP servers will not be started. /mcp can change that.", tone: 'dim' }); }
+      else push({ type: 'note', text: "This project's MCP servers are not started. /mcp shows them when you want to look.", tone: 'dim' });
+      setPicker((p) => (p?.kind === 'mcp' ? mcpList({ index: p.index }) : p));
+    } });
+  };
+  // The hub's news: a server that stopped or would not start, and one that changed its tools (the
+  // conversation keeps the list it started with: agent.mjs mcpTake).
+  useEffect(() => {
+    if (!mcpHub) return undefined;
+    if (mcpRef.current.broken) push({ type: 'note', text: `MCP: ${mcpRef.current.broken}. No server of that file is started until it is fixed.`, tone: 'warn' });
+    const onState = ({ name, state, error }) => {
+      setPicker((p) => (p?.kind === 'mcp' ? { ...p, status: mcpHub.status() } : p));
+      if (state === 'failed') push({ type: 'note', text: `MCP: ${name} is not running: ${error}. /mcp shows it; its log is ${short(mcpLogFile(name))}.`, tone: 'warn' });
+      if (state === 'signin') push({ type: 'note', text: `MCP: ${name} needs you to sign in, which this version cannot do yet.`, tone: 'warn' });
+    };
+    const onChanged = ({ name, added, removed, changed }) => {
+      const parts = [added.length ? `${added.length} new` : '', changed.length ? `${changed.length} changed` : '', removed.length ? `${removed.length} gone` : ''].filter(Boolean).join(', ');
+      setPicker((p) => (p?.kind === 'mcp' ? { ...p, status: mcpHub.status() } : p));
+      push({ type: 'note', text: `MCP: ${name} changed its tools (${parts}). This conversation keeps the list it started with; /clear or the next conversation uses the new one.${changed.length ? ' A changed tool you had allowed asks again.' : ''}`, tone: 'dim' });
+    };
+    mcpHub.on('state', onState);
+    mcpHub.on('changed', onChanged);
+    // A project's own servers, when its file has not been answered (or changed since).
+    const p = mcpRef.current.project;
+    const t = p?.servers.length && p.answer === null ? setTimeout(() => askMcpProject(mcpProjectNow()), 50) : null;
+    return () => { mcpHub.off('state', onState); mcpHub.off('changed', onChanged); clearTimeout(t); };
+  }, []);
 
   // ---- pictures: the model's vision add-on, loaded when a picture is first attached ----
   // The other models on this Mac that can look at pictures (their file and their add-on here).
@@ -1981,7 +2154,12 @@ export function App({ opts, win, onRestart }) {
       // Which path the request took, under the request.
       on('sorted', ({ text }) => { if (railOn.current) addPre({ sorted: text }); else push({ type: 'sorted', text }); }),
       // Saying yes to "Work in <project>?" counts as trusting that folder.
-      on('cwd', ({ cwd: dir }) => { setCwd(dir); try { saveTrust(dir); } catch {} }),
+      on('cwd', ({ cwd: dir }) => {
+        setCwd(dir);
+        try { saveTrust(dir); } catch {}
+        // Its MCP servers are that folder's from now on (yours stay; a project's own wait for your yes).
+        if (mcpHub) { try { const r = reloadMcp(mcpHub, dir); agent.mcpStale = true; if (r.project?.servers.length && r.project.answer === null) push({ type: 'note', text: `This project brings its own MCP server${r.project.servers.length === 1 ? '' : 's'} (${r.project.servers.map((s) => s.name).join(', ')}): not started. /mcp to look at ${r.project.servers.length === 1 ? 'it' : 'them'}.`, tone: 'dim' }); } catch { /* the servers stay as they were */ } }
+      }),
       // Focused paths: the live try counter, its finished line, the current step.
       on('tries', (t) => setLive((l) => countTries(l, t))),
       on('tries-done', (t) => { push({ type: 'tries', ...t }); setLive((l) => ({ ...l, tries: null })); }),
@@ -2154,6 +2332,8 @@ export function App({ opts, win, onRestart }) {
     // this folder too (instant when nothing changed). Another window's is left alone.
     if (!st.shared || st.idle) try {
       agent.warmed = true; // this window's own reading of the instructions: a restart from notes restores it
+      // The MCP tools go into what the model reads ahead, when every server has settled (agent.mjs mcpTake).
+      await agent.mcpTake({ settled: true }).catch(() => {});
       timeWarmed(await warmUp({ sessionMark: SESSION_MARK, url: srv.url, model, system: agent.messages[0].content, tools: agent.tools(), thinking: agent.thinking, effort: agent.effort, slot: agent.slots?.main, helper: srv.draft, onPhase: (p) => { if (stillOn()) setStartPhase(p); } }));
     } catch {}
     if (!stillOn()) return;
@@ -2331,6 +2511,8 @@ export function App({ opts, win, onRestart }) {
       await Promise.all([letGo(srv).done.catch(() => {}), ...small]);
     }
     remoteRef.current.conn?.stop();
+    // Your MCP servers stop with the session (a program is ended, a connection closed).
+    await Promise.race([mcpHub?.stopAll().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
     exit();
   }, [exit, saveNow, agent]);
 
@@ -2425,6 +2607,8 @@ export function App({ opts, win, onRestart }) {
 
   const doctor = useCallback(() => {
     const ok = (b) => (b ? '✓' : '✗');
+    // Your MCP servers (/mcp), one row each: connected with its tools, off, or why it is not running and where its log is.
+    const mcpRows = (mcpHub?.status() ?? []).map((s) => [`${s.state === 'connected' ? '✓' : s.state === 'off' || s.state === 'starting' ? '·' : '✗'} mcp ${s.name}`.slice(0, 21), s.state === 'connected' ? `${s.tools} tool${s.tools === 1 ? '' : 's'} · ${s.version ?? s.era ?? ''} · ${s.where}` : s.state === 'off' ? 'off · /mcp switches it on' : s.state === 'starting' ? 'starting…' : `${s.error ?? s.state} · its log: ${short(mcpLogFile(s.name))}`]);
     // On a remote: where it is, how it connects, how it answered; this Mac's model files do not matter.
     if (model.remote) {
       const c = remoteRef.current.conn;
@@ -2435,6 +2619,7 @@ export function App({ opts, win, onRestart }) {
         [`${ok(Boolean(c))} model`, c ? `${c.info.model ?? model.name} · context ${Math.round(agent.ctx / 1024)}k${c.slots > 1 ? ` · ${c.slots} slots` : ''}` : '—'],
         [`${ok(!remoteRisk(r))} privacy`, remoteRisk(r) ?? (r.connect === 'ssh' ? 'through ssh' : r.connect === 'https' ? 'https' : 'http on a private network')],
         [`${ok(true)} terminal`, `${process.env.TERM_PROGRAM ?? 'unknown'} · ${process.env.COLORTERM === 'truecolor' ? 'true colour' : '256 colours'} · ${columns}×${rows}`],
+        ...mcpRows,
       ] });
       return;
     }
@@ -2455,6 +2640,7 @@ export function App({ opts, win, onRestart }) {
         [`${ok(avail > needBytes(model, 16384))} free memory`, `${(avail / 1e9).toFixed(1)} GB (32k needs ${(needBytes(model, 32768) / 1e9).toFixed(1)} GB, 16k ${(needBytes(model, 16384) / 1e9).toFixed(1)} GB)`],
         [`${ok(disk === null || disk > 2)} disk space`, disk === null ? 'unknown' : `${disk.toFixed(1)} GB free`],
         [`${ok(true)} terminal`, `${process.env.TERM_PROGRAM ?? 'unknown'} · ${process.env.COLORTERM === 'truecolor' ? 'true colour' : '256 colours'} · ${columns}×${rows}`],
+        ...mcpRows,
       ],
     });
   }, [agent, columns, rows, model, opts.url, push, starting]);
@@ -2929,6 +3115,7 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'web': openWebPicker(); break;
+      case 'mcp': openMcpPicker(); break;
       case 'screen': {
         // /screen: whether the model can look (macOS's Screen Recording, a model that sees
         // pictures) and the apps it may; /screen setup asks macOS, then opens its Settings page.
@@ -3159,6 +3346,15 @@ export function App({ opts, win, onRestart }) {
     setPopup(null); // a paste closes the /help box, like any key
     // /remote: a paste goes into the row being edited (an API key, an address), or starts editing a text row.
     const rp = S.current.picker;
+    // /mcp's form: a paste goes into the row being edited, or starts editing a text row (a key, a command, an address).
+    if (rp?.kind === 'mcp') {
+      if (rp.view !== 'form') return;
+      const row = mcpFormRows(rp)[Math.min(rp.index, mcpFormRows(rp).length - 1)];
+      const greyed = (row?.id === 'net' || row?.id === 'local') && !rp.values.sandbox;
+      if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
+      else if ((row?.type === 'text' || row?.type === 'secret') && !greyed) setPicker({ ...startMcpEdit(rp, row.id), editing: pasteField({ id: row.id, value: '', cursor: 0 }, text) });
+      return;
+    }
     if (rp?.kind === 'remote' || rp?.kind === 'web') {
       const row = (rp.kind === 'web' ? WEB_ROWS : remoteRows(rp))[rp.index];
       if (rp.editing) setPicker({ ...rp, editing: pasteField(rp.editing, text) });
@@ -3361,12 +3557,14 @@ export function App({ opts, win, onRestart }) {
         // "Always allow": saved for this folder, and it runs now. If it cannot be saved it still holds for this session.
         if (choice === 'save') {
           const r = addRule(agentRef.current.cwd, 'allow', p.offer.rule);
+          // An MCP tool is allowed as the tool it is now: one that changes later asks again (its fingerprint).
+          if (p.req.mcp && (r.ok || r.duplicate)) { try { rememberAllowed(p.req.mcp.id, p.req.mcp.print); } catch { /* it asks again next time */ } }
           push({ type: 'note', text: r.ok ? `Saved for this folder: "${p.offer.rule}" runs without asking. /permissions lists it; /permissions remove allow <n> takes it back.` : r.duplicate ? `"${p.offer.rule}" is already saved.` : `${r.error} It holds for this session only.`, tone: r.ok || r.duplicate ? 'dim' : 'warn' });
           p.resolve({ choice: r.ok || r.duplicate ? 'yes' : 'always' });
           return;
         }
         p.resolve({ choice });
-        if (choice === 'no') setPlaceholder('Tell Agentic Coder what to do instead');
+        if (choice === 'no' && p.req.name !== 'McpProject') setPlaceholder('Tell Agentic Coder what to do instead');
       };
       const always = p.options.findIndex((o) => o.choice === 'always');
       const no = p.options.findIndex((o) => o.choice === 'no');
@@ -3481,6 +3679,8 @@ export function App({ opts, win, onRestart }) {
     // letter) edits a text row, opens or folds More, runs Connect or Save only,
     // and on a choice row goes to the next row; while a row is being edited, its
     // keys only. /web: the same form keys, its own rows (web-form.mjs), Test and Save.
+    // /mcp: the list of your MCP servers, one server's form, its tools (mcpKeys).
+    if (cur.picker?.kind === 'mcp') { mcpKeys(cur.picker, ch, key); return; }
     if (cur.picker?.kind === 'remote' || cur.picker?.kind === 'web') {
       const pk = cur.picker;
       const web = pk.kind === 'web';

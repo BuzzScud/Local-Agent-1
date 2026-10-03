@@ -4,6 +4,9 @@
 // big diff (over 100 lines or 3 files in one task). Verify, Review and Ship only read, so an edit
 // there is turned away without asking, and so is a change to the test a task is making pass; a
 // command there that is not plain reading (permissions.mjs isReadOnly) asks first (3 Oct 2026).
+// A tool of an MCP server (agent/mcp.mjs) that the owner has not marked as only reading can change
+// things outside the project (an issue, a database row, a deploy): it asks first while it builds,
+// each time, and is turned away in Verify, Review and Ship (3 Oct 2026).
 // guardStep → null (go on), { key, title, detail } (ask you) or { deny, title } (turned away).
 import { basename } from 'node:path';
 import { isReadOnly } from './permissions.mjs';
@@ -15,6 +18,7 @@ export const GUARD_OPTS = {
   list: ['No: keep the file', 'Allow it this once', 'Tell it what to do (type it)'],
   secret: ["No: don't touch it", 'Allow it this once', 'Tell it what to do (type it)'],
   run: ['No: only read here', 'Allow it this once', 'Tell it what to do (type it)'],
+  mcp: ['No: do it without that tool', 'Allow it this once', 'Tell it what to do (type it)'],
 };
 
 const TEST_FILE = (rel) => /(^|\/)(tests?|__tests__|spec)\//.test(rel) || /[._-](test|spec)\.[a-z]+$/i.test(rel) || /^test_.*\.py$/.test(basename(rel));
@@ -75,7 +79,16 @@ export function newPackages(rel, before, after) {
 }
 
 export function guardStep(step, ctx = {}) {
-  const { name, args = {}, before = '' } = step ?? {};
+  const { name, args = {}, before = '', mcp = null } = step ?? {};
+  // A tool of an MCP server: one marked as reading goes on; any other is turned away where a stage
+  // only reads, and asks first while it builds.
+  if (mcp) {
+    if (mcp.reads) return null;
+    const what = `${mcp.server} · ${mcp.tool}`;
+    if (ctx.stage >= 3) return { deny: `${ctx.stage === 3 ? 'Verify' : ctx.stage === 4 ? 'Review' : 'Ship'} only reads and runs: ${what} is an MCP tool the user has not marked as only reading, so it is not used here. Report what should be done instead.`, title: 'This stage only reads' };
+    const said = Object.entries(args).map(([k, v]) => `${k}: ${typeof v === 'string' ? v.replace(/\s+/g, ' ').slice(0, 40) : JSON.stringify(v)?.slice(0, 40)}`).join(' · ').slice(0, 120);
+    return { key: 'mcp', title: 'MCP tool', detail: `It wants to use ${what}, which can change things outside this project${said ? ` (${said})` : ''}.` };
+  }
   const rel = String(args.path ?? '').replace(/^\.\//, '');
   const writes = name === 'Edit' || name === 'Write';
   const cmd = name === 'Bash' ? String(args.command ?? '') : '';

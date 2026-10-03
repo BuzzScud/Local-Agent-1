@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { resolve, relative, isAbsolute } from 'node:path';
+import { isMcpCall, mcpRule, parseMcpRule } from './mcp.mjs';
 
 // Which tool calls run straight away, which ask you first, and which are
 // never allowed. Modes, as /mode lists them (Claude Code's five):
@@ -298,10 +299,12 @@ export function neverRule(command, never = []) {
 // "edits" there would turn Auto-edit on for itself; started in the home
 // folder, .agentic-coder/ with the saved rules is inside the project). Yours
 // come on top. Names match whatever their case: on a Mac .ENV is .env.
-export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.bonsai/settings.json', '.agentic-coder/**'];
+export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.agentic/mcp.json', '.bonsai/settings.json', '.agentic-coder/**'];
 // The app's own settings and rules: in Bypass, where nothing asks, a change to one is
 // refused instead (a model that could write them could change its own mode or rules).
-export const OWN = ['.agentic/settings.json', '.bonsai/settings.json', '.agentic-coder/**'];
+// .agentic/mcp.json names programs that start with the next window (a project's MCP servers): a model
+// that could write it could give itself a command to run.
+export const OWN = ['.agentic/settings.json', '.agentic/mcp.json', '.bonsai/settings.json', '.agentic-coder/**'];
 // * is any run of characters within one name, ** any run across folders, ? one character.
 const globText = (g) => g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*').replace(/\?/g, '[^/]');
 const globRe = (g) => new RegExp(`(?:^|/)${globText(g)}$`, 'i');
@@ -332,6 +335,14 @@ export function checkRule(kind, text, { protect = [] } = {}) {
   // A screen rule: Screen(TextEdit), or Screen(whole screen).
   const scr = SCREEN_RULE.exec(t);
   if (scr) return { rule: `Screen(${scr[1].trim()})` };
+  // An MCP rule: Mcp(server:tool) for one tool; Mcp(server:*) for a whole server, on the never-list only
+  // (to let a server's tools run unasked, mark them as reading in /mcp, one by one).
+  if (/^mcp\(/i.test(t)) {
+    const m = parseMcpRule(t);
+    if (!m) return { error: 'An MCP rule names one tool of one server: Mcp(github:create_issue).' };
+    if (m.tool === '*' && kind === 'allow') return { error: `Allow one tool at a time: Mcp(${m.server}:its_tool). A whole server (Mcp(${m.server}:*)) can only go on the never-list.` };
+    return { rule: m.rule };
+  }
   // A web rule: WebSearch, or WebFetch(site).
   const web = WEB_RULE.exec(t);
   if (web) return { rule: web[2] ? `WebFetch(${web[2].toLowerCase()})` : 'WebSearch' };
@@ -373,8 +384,27 @@ const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerC
 // The decision for one tool call, with the reason (the /permissions test
 // panel prints it). decide() below is the same without the reason.
 //   rules: { allow, never, protect } from /permissions; rel: the path from the project folder.
-export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel } = {}) {
+//   mcp: for a tool of an MCP server, what the app knows of it: { server, tool, reads, changed }.
+export function judge(name, args, { mode, allowedPrefixes, inside = true, cwd, rules, rel, mcp } = {}) {
   const bypass = mode === 'bypass';
+  // A tool of an MCP server (agent/mcp.mjs): a program or a service of the user's, which can do
+  // whatever its server lets it. Each tool asks before its first use, in every mode but Bypass,
+  // until a rule allows it. reads: the user marked it in /mcp as one that only reads (the server's
+  // own label is never taken for that); such a tool is let through where reading is (plan mode,
+  // Auto). changed: its description or arguments are not what they were when it was allowed or
+  // marked, so the old yes does not count.
+  if (isMcpCall(name)) {
+    if (!mcp?.server) return { decision: 'deny', reason: 'that is not one of this conversation\'s MCP tools' };
+    const rule = mcpRule(mcp.server, mcp.tool);
+    const blocked = [rule, mcpRule(mcp.server, '*')].find((r) => hasRule(rules?.never, r));
+    if (blocked) return { decision: 'deny', reason: `blocked by your rule "${blocked}" (/permissions)` };
+    if (mode === 'plan' && !mcp.reads) return { decision: 'deny', reason: 'plan mode is on, and this MCP tool is not one you marked as only reading (/mcp)' };
+    const saved = hasRule(rules?.allow, rule);
+    if ((saved || hasRule(allowedPrefixes, rule)) && !mcp.changed) return { decision: 'allow', why: `"${rule}" is allowed (${saved ? 'saved' : 'this session'})` };
+    if (bypass) return { decision: 'allow', why: `Bypass permissions is on${mcp.changed ? ' (the tool changed since you allowed it)' : ''}` };
+    if (mode === 'auto' && mcp.reads) return { decision: 'allow', why: 'Auto: you marked this tool as one that only reads' };
+    return { decision: 'ask', rule, ...(mcp.changed ? { changed: true } : {}), why: mcp.changed ? 'the tool changed since you allowed it' : mode === 'auto' ? 'Auto cannot tell what an MCP tool changes, so it asks' : `no rule allows ${mcp.server}'s ${mcp.tool} yet` };
+  }
   if (name === 'TodoWrite' || name === 'Ask') return { decision: 'allow', why: 'it changes nothing' };
   // The model's own tools when it decides (agent/way.mjs): two read, one writes to the memory,
   // and two run a focused path, whose every change asks as your mode says (so plan mode refuses them).
@@ -473,6 +503,7 @@ const STEPS = {
   cmd: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'refused', bypass: 'runs' },
   commit: { ask: 'always asks', edits: 'always asks', auto: 'always asks', plan: 'refused', bypass: 'runs' },
   web: { ask: 'asks first', edits: 'asks first', auto: 'the app checks it against the request: runs, or asks', plan: 'asks first', bypass: 'runs' },
+  mcp: { ask: 'asks first', edits: 'asks first', auto: 'asks first, unless the user marked the tool as only reading', plan: 'refused, unless the user marked the tool as only reading', bypass: 'runs' },
 };
 // "Right now": a table of what runs, asks or is refused in this mode, with the user's own rules,
 // added to PERMISSIONS.md when the model reads it, so the guide never disagrees with the app.
@@ -488,6 +519,7 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [] } = 
     ['Any other command', `${STEPS.cmd[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', unless a rule below allows it' : ''}`],
     ['git commit', STEPS.commit[m]],
     ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
+    ['A tool of the user\'s MCP servers (mcp__server__tool, when offered)', `${STEPS.mcp[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', or a rule allows it' : ''}`],
     ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
     ['Other files or commands outside the project, the internet from a command', 'refused (the sandbox)'],
     ['Agentic Coder\'s own settings and rules', 'refused'],

@@ -105,7 +105,7 @@ export function fileInfo(which, folder, { state } = {}) {
   const out = { ...base, text, starter: builtIn, rulesDir: tilde(rulesDir()), fromDisk: disk !== null, set: isRemote(which) ? 'remote' : 'local' };
   if (which === 'remote:harness') return { ...out, tokens: estimate(HARNESS_PARTS.map((h) => sectionOf(text, h) ?? '').join('\n')) };
   if (isRemote(which) && !['remote:tools', 'remote:skills'].includes(which)) {
-    const g = readGuides('remote', { agents: true }).find((x) => `remote:${x.name}` === which);
+    const g = readGuides('remote', { agents: true, mcp: true }).find((x) => `remote:${x.name}` === which);
     return { ...out, guide: inner(which), about: g?.about ?? '', tokens: estimate(g?.body ?? '') };
   }
   if (inner(which) === 'tools') {

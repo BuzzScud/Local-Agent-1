@@ -139,6 +139,9 @@ export const PLACES = [
   ['~/.agentic-coder/door.key', 'the key coding door asks your other Macs for (readable by you only)'],
   ['~/.agentic-coder/logs/sessions.log', 'what the background sessions did: started, a window joined or left (and from which Mac), ended'],
   ['~/.agentic-coder/serve.key', 'the API key coding serve asks other machines for (readable by you only)'],
+  ['~/.agentic-coder/mcp.json', 'your MCP servers (/mcp), for every folder: each one’s command or address, its sandbox, and your marks on its tools (off, and “reads”). Never a key: the Keychain holds those, under mcp-<server>'],
+  ['.agentic/mcp.json', 'a project’s own MCP servers: never started before you said yes to that very file, and asked about again when it changes; the model cannot change it without asking'],
+  ['~/.agentic-coder/logs/mcp-<server>.log', 'what an MCP server printed, and when it started, stopped or changed its tools'],
   ['~/.agentic-coder/permissions.json', 'what you saved with /permissions, by folder: commands that run without asking or never run, protected files, the start-up mode'],
   ['~/.agentic-coder/sessions', 'saved conversations, for coding -c and /resume'],
   ['~/.agentic-coder/logs', 'the model server and update logs'],
@@ -159,6 +162,7 @@ export const SAFETY = [
   '/permissions adds your own rules on top (commands that run without asking, commands that never run, more protected files). They never lift the ones above.',
   'Commands run fenced in: they cannot read your home folder beyond the project, signal other programs, reach services already running, or open a connection off this Mac.',
   'Everything runs on this Mac. Nothing you type is sent anywhere, unless you turn on /remote: then your prompts, your code and the files it reads go to the machine you named, and it says so when it switches.',
+  'MCP servers (/mcp) give the model tools from outside the app: a program on this Mac, or a service. A program runs behind the same fence as the model’s commands, with the internet and local services opened only as you set them for that server. Each tool asks before its first use (Mcp(server:tool) in /permissions); “reads” is your own mark, never the server’s word; a tool that changes after you allowed it asks again; what a tool returns is marked as data, never instructions; a project’s own servers wait for your yes.',
   'The web: a search sends its words to the search service you picked in /web, and a page is read from its site. Each asks first (a site once, if you say so); a redirect to another site is not followed. What comes back is marked as data, never instructions.',
 ];
 

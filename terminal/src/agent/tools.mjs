@@ -611,7 +611,7 @@ export function prepare(name, args, env) {
     if (!p.inside && !env.outsideOk?.(name, p.abs)) return { error: `${args.path} is outside the project folder, which is not allowed.` };
     if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
     if (readSkillPath(env.cwd, args.path, [])) return { error: `${args.path} is one of the user's skills (SKILLS.md), which are read-only here. Read them; never change them.` };
-    if (readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents }))) return { error: `${args.path} is one of the user's guides (terminal/rules/remote), which are read-only here. Read them; never change them.` };
+    if (readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents, mcp: env.mcp }))) return { error: `${args.path} is one of the user's guides (terminal/rules/remote), which are read-only here. Read them; never change them.` };
     let exists = existsSync(p.abs);
     if (!exists && name === 'Edit') {
       const alt = didYouMean(env.cwd, args.path);
@@ -748,7 +748,7 @@ export async function execute(name, args, prepared, env) {
       // "SKILLS/<name>": one of the user's skills (terminal/rules/SKILLS.md, prompt-files.mjs).
       // "RULES/<NAME>.md": one of the guides of the remote set (terminal/rules/remote/).
       // A path near those ("SKILLS.md", ".SKILLS/<name>", "RULES.md"…), when the project has no such file.
-      const guides = readGuides(env.rulesSet, { agents: env.agents });
+      const guides = readGuides(env.rulesSet, { agents: env.agents, mcp: env.mcp });
       const skills = readSkills(undefined, env.rulesSet);
       const near = readNearPath(env.cwd, args.path, { skills, guides });
       if (near && !existsSync(resolvePath(env.cwd, args.path).abs)) {

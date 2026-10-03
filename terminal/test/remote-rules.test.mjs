@@ -90,8 +90,10 @@ test('the remote instructions: HARNESS.md\'s parts, the remote Tool use, the gui
   expect(p).toContain(`\nTool use\n${toolUseFor('remote')}\n`);
   expect(toolUseFor('remote')).not.toBe(toolUseText());
   expect(p).toContain(`Guides\n${h.guides}\n- RULES/PLANNING.md: for a task with three or more steps`);
-  for (const g of GUIDES.filter((x) => x !== 'SUBAGENTS')) expect(p).toContain(`- RULES/${g}.md: `);
+  for (const g of GUIDES.filter((x) => x !== 'SUBAGENTS' && x !== 'MCP')) expect(p).toContain(`- RULES/${g}.md: `);
   expect(p).not.toContain('RULES/SUBAGENTS.md'); // no Agent tool offered
+  expect(p).not.toContain('RULES/MCP.md'); // no MCP tool offered
+  expect(p).not.toContain('mcp__'); // nor TOOLS.md's MCP lines
   expect(p).toContain('- SKILLS/review-code: read a change or a file and report real problems, most serious first');
   expect(p).toContain(h.rules);
   expect(p).toContain('- Stay inside the project folder.');
@@ -102,6 +104,13 @@ test('the remote instructions: HARNESS.md\'s parts, the remote Tool use, the gui
   expect(promptSetOf(p)).toBe('remote');
   // with the Agent tool, the helpers guide is listed
   expect(systemPrompt({ cwd: proj, git: 'g', set: 'remote', agents: true })).toContain('- RULES/SUBAGENTS.md: before you hand work to a helper with the Agent tool');
+  // MCP (3 Oct 2026): its guide and TOOLS.md's MCP lines join only while a tool of an MCP server is offered.
+  const withMcp = systemPrompt({ cwd: proj, git: 'g', set: 'remote', mcp: true });
+  expect(withMcp).toContain('- RULES/MCP.md: before you use a tool of the user\'s MCP servers');
+  expect(withMcp).toContain('- Tools named mcp__server__tool come from the user\'s MCP servers, listed below.');
+  expect(withMcp.indexOf('- Tools named mcp__server__tool')).toBeLessThan(withMcp.indexOf('\nHow you work\n'));
+  expect(systemPrompt({ cwd: proj, git: 'g', mcp: true })).toContain('- Tools named mcp__server__tool (and Mcp) are the user\'s own MCP servers');
+  expect(systemPrompt({ cwd: proj, git: 'g' })).not.toContain('mcp__');
 });
 
 test('a file missing from the remote folder: TOOLS and SKILLS fall back to the local file, HARNESS to its built-in copy, a guide is left out', () => {
@@ -294,7 +303,7 @@ test('a helper (the Agent tool) under a forced row keeps its parent\'s set: remo
 
 
 test('the second round (2 Oct): CONTEXT, PERMISSIONS, DEBUGGING, RECOVERY and SECURITY listed; verification, handoff, style and packages merged in', () => {
-  expect(GUIDES).toEqual(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MEMORY', 'GIT', 'ANSWERS']);
+  expect(GUIDES).toEqual(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MCP', 'MEMORY', 'GIT', 'ANSWERS']);
   const p = systemPrompt({ cwd: proj, git: 'g', set: 'remote' });
   for (const g of ['CONTEXT', 'PERMISSIONS', 'DEBUGGING', 'RECOVERY', 'SECURITY']) expect(p).toContain(`- RULES/${g}.md: `);
   expect(p).toContain('- RULES/DEBUGGING.md: when the cause of a problem is not known yet');

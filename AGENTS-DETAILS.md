@@ -332,6 +332,63 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   kept and put back, the app with its board in a second pseudo-terminal). `/loop` and `/loops` are in the / menu
   where the window has room (`WHEN_ROOM`, after /jumptomac).
 
+## MCP servers (3 Oct 2026)
+
+- **What it is.** `/mcp` gives the model tools from outside the app (the Model Context Protocol): a program on this
+  Mac, or a service at an address. The owner's picks: a full MCP host (tools first, then sign-in, resources, prompts and
+  a server's own questions), the official client (`@modelcontextprotocol/client`, 13 packages, both protocol eras:
+  2026-07-28 and 2025-11-25), "balanced" safety, and big models on a service, the Claude API and the other Mac as the
+  remote setups that must work. The plan and the preview the build followed: `docs/design rounds/mcp-preview-2026-10-03.html`.
+- **The files.** `terminal/src/tools/mcp.mjs` is the hub: one connection a server for the session (the conversation and
+  its helpers share it), started in the background, stopped at quit; a program server runs in the project folder with
+  a clean environment behind `sandboxProfile` (`net` and `local` open the internet and named local ports for that one
+  server); its era is remembered a week so its start is not probed twice (the probe starts the program once more).
+  `terminal/src/agent/mcp.mjs` has no connection in it: names (`mcp__server__tool`, cleaned, at most 64), the
+  fingerprint (description + arguments, hashed), the catalog with the owner's marks, `mcpPlan` (how the tools are
+  shown), argument checks, results. `terminal/src/app/mcp-store.mjs` keeps `~/.agentic-coder/mcp.json`, a project's
+  `.agentic/mcp.json` (never started before a yes to that very file: its fingerprint), and `mcp-state.json` (the
+  yes, the marks on a project's tools, the fingerprint each "always allow" was given for, the eras). A key is never
+  in a file: Keychain entry `mcp-<server>` (`AGENTIC_REMOTE_KEY` does not stand in for it). `mcp-form.mjs` is the
+  picker; `mcp-start.mjs` opens the hub for the app and `coding -p` (`AGENTIC_MCP=off`: none).
+- **How the tools are shown** (`mcpPlan`): a model that is not Claude gets them by name while they fit 8% of its
+  context (`BUDGET_SHARE`), whole servers, the smallest first; a server past that is listed by name and one line a
+  tool inside the `Mcp` tool, which gives a tool's arguments (a call with only `tool`) and runs it (with `arguments`).
+  A call by a listed tool's own name runs too (an Ollama service passes it through; `runMcp`), and arguments sent
+  wrapped as Mcp takes them are unwrapped (`unwrapArgs`). The instructions list the servers on (`mcpBrief`): a small
+  server's tools by name, a big one pointed to the Mcp tool's list (naming only its first tools sent Qwen3.6 to the
+  wrong one); without that list, Qwen3.6 searched the project for "ticket 142" while holding the ticket tool. A request
+  that names a server, or what one of its tools is about, carries a line naming the tools to call (`requestNote`); an
+  answer to it with no MCP tool tried is sent back once, then marked as not from the server. The names a model makes up
+  are read as the tool they mean: `shop__get_ticket`, `Shop_get_note`, a wrapper like `call_mcp` with the server and the
+  tool inside (`madeUpCall`), arguments beside "tool" in an Mcp call (`gateCall`), the call written out as JSON text
+  or as `mcp__warehouse__stock_level(item="mug")` (`mcpCallInText`), and a one-argument tool's argument under another
+  name. A Bash command naming one of the tools does not run (it waited on a yes in the window) and is told it is a tool. Qwen3.6 35B on a service, 3 Oct 2026: 10 of 12 questions
+  answered from the right tool with these, 3 or 4 of 8 without. On the Claude API: by name up to 10,000 tokens
+  (`CLAUDE_BY_NAME`), past it every MCP tool carries `defer_loading` and `tool_search_tool_bm25_20251119` is added
+  (`claude.mjs`). A schema is cut down for servers that are not Claude's (`simplifySchema`: llama.cpp turns a schema
+  into a grammar and refuses what it does not know).
+- **The list is kept for a conversation** (`agent.mjs mcpTake`): taken before the first message (it waits up to 8 s
+  for servers still starting; before a warm-up only when all have settled), then the same letter for letter until
+  `/clear`. A server's own change (list_changed) is a note; a late server joins the next conversation. What the owner
+  changes in `/mcp` sets `mcpStale`: taken at the next message, with a line. Why: on a service the tools sit at the
+  top of the prompt, and any change there is a whole re-read (15.7 s for 15.6k tokens, 3 Oct 2026).
+- **Permissions** (`permissions.mjs judge`, `agent.mjs runMcp`): a tool asks before its first use in every mode but
+  Bypass; rules are `Mcp(server:tool)` (a colon: a tool's name may hold dots), `Mcp(server:*)` on the never-list only.
+  "reads" is the owner's mark, bound to the tool's fingerprint; the server's own annotations are shown (`says`) and
+  never decide anything. A tool that is no longer the one allowed, marked, or listed when the conversation began
+  counts as changed and asks again. Plan mode refuses an unmarked tool; a question and a skill's read fence ask even
+  for an allowed one; `/agents`' stop list (`agents-guards.mjs`) asks while it builds and turns it away in Verify,
+  Review and Ship; an explore helper gets only marked tools; `.agentic/mcp.json` is in `PROTECTED` and `OWN`.
+- **Instructions.** Both TOOLS.md files have an `## MCP tools` section that joins the Tool use lines only while a
+  tool is offered, and the remote set has a guide, `MCP.md`, listed the same way (`MCP_GUIDE`, as `SUBAGENTS` is for
+  the Agent tool). With no server, the instructions are the same letter for letter.
+- **Tests.** `terminal/test/fake-mcp.mjs` is the stand-in server (a program or an address, either era; it can crash,
+  hang, change its tools, ask a question, return a picture). `mcp.test.mjs` (the pure parts, the files, the hub),
+  `mcp-agent.test.mjs` (whole conversations on a scripted model, and the Claude path on the stand-in Claude API: the
+  owner's pick is no real Claude runs), `app-mcp.test.mjs` (the real window). The Arena's **MCP check**
+  (`models/evals/tools/mcp-check.mjs`, `/test mcp`, `/test mcp-remote`): nine checks with the real model on two
+  stand-in servers, judged by the servers' own log.
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

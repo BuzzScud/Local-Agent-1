@@ -3,7 +3,8 @@
 // /v1/messages streaming the same events the real one does (message_start,
 // content blocks for thinking, text and tool_use, message_delta, message_stop).
 // Each reply: { delayMs?, tools?: [{ name, args }, …], thinking?, search?: { query, results: [{ url, title }] }, fetch?: { url, text }, text?, tool?: { name, args },
-// stop? ('refusal', 'pause_turn'), error?: { status, type, message } }. search and fetch: Anthropic's own web tools, done on its side.
+// stop? ('refusal', 'pause_turn'), error?: { status, type, message } }. search and fetch: Anthropic's own web tools, done on its side;
+// toolSearch: { query, found }: its tool search, loading deferred tools.
 // seen: every request's path, its key, beta and version headers, and its body.
 import { createServer } from 'node:http';
 
@@ -40,6 +41,11 @@ export function startFakeAnthropic(replies, { key = 'test-anthropic-key-01234567
     if (reply.fetch) {
       blocks.push({ type: 'server_tool_use', id: `srvtoolu_f${n}`, name: 'web_fetch', input: { url: reply.fetch.url } });
       blocks.push({ type: 'web_fetch_tool_result', tool_use_id: `srvtoolu_f${n}`, content: { type: 'web_fetch_result', url: reply.fetch.url, content: { type: 'document', source: { type: 'text', media_type: 'text/plain', data: reply.fetch.text } }, retrieved_at: '2026-09-30T00:00:00Z' } });
+    }
+    // toolSearch: { query, found: [tool names] }: Anthropic's tool search, done on its side, loading deferred tools.
+    if (reply.toolSearch) {
+      blocks.push({ type: 'server_tool_use', id: `srvtoolu_t${n}`, name: 'tool_search_tool_bm25', input: { query: reply.toolSearch.query } });
+      blocks.push({ type: 'tool_search_tool_result', tool_use_id: `srvtoolu_t${n}`, content: { type: 'tool_search_tool_search_result', tool_references: reply.toolSearch.found.map((name) => ({ type: 'tool_reference', tool_name: name })) } });
     }
     if (reply.text) blocks.push({ type: 'text', text: reply.text });
     for (const [i, t] of [...(reply.tool ? [reply.tool] : []), ...(reply.tools ?? [])].entries()) blocks.push({ type: 'tool_use', id: `toolu_${n}${i ? `_${i}` : ''}`, name: t.name, input: t.args });
