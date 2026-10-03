@@ -155,6 +155,8 @@ test.skipIf(!S.canHost())('ctrl+b leaves the app running; coding sessions lists 
     ] });
     expect(a.code).toBe(0);
     expect(a.text).toContain('coding attach demo-project-1');
+    // On a line of its own, under the prompt box, not over its edge.
+    expect(a.text.split('\n').find((l) => l.includes('Still running in the background'))).not.toMatch(/[─╯╰]/);
     expect(records(env)).toEqual(['demo-project-1.json']);
 
     // A second one, so coding attach must open the one named.
@@ -294,3 +296,14 @@ test.skipIf(!S.canHost())('through the door: another window lists and opens a se
     await fake.close();
   }
 }, 90_000);
+
+test('the door after a restart: the login item opens Terminal on a script that starts it from there', () => {
+  const text = D.startFileText(['/Users/x/.agentic-coder/app/agentic-coder'], "/tmp/it's home");
+  expect(text.startsWith('#!/bin/sh\n')).toBe(true);
+  expect(text).toContain("'/Users/x/.agentic-coder/app/agentic-coder' door start");
+  expect(text).toContain("export AGENTIC_HOME='/tmp/it'\\''s home'");
+  expect(D.startFileText(['/a/b'], '').includes('AGENTIC_HOME')).toBe(false); // no test home: none set
+  // No door recorded, or a pid that is not a door: not running.
+  expect(D.doorRunning({})).toBe(false);
+  expect(D.doorRunning({ pid: process.pid })).toBe(false);
+});

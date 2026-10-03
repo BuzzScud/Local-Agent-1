@@ -96,7 +96,7 @@ export function cliRows(lingerMins = 30, models = []) {
       ['coding --bg ["prompt"]', 'start in the background, with no window (a prompt is worked on at once); ctrl+b in any window sends it there too'],
       ['coding sessions [mac]', 'what runs in the background on this Mac, or on another Mac through its door'],
       ['coding attach [name]', 'open a background session in this window (ctrl+b leaves it running); coding attach <mac> opens or starts one on another Mac'],
-      ['coding door on|off', 'let your other Macs open the sessions here, over Tailscale only, with a key (new-key makes a new one)'],
+      ['coding door on|off', 'let your other Macs open the sessions here, over Tailscale only, with a key (type it in Terminal; after a restart a Terminal window opens to start it again; start starts it, new-key makes a new key)'],
       ['coding hub [tab]', 'the hub in the browser (ctrl+c here closes it), on a tab: weights (the default), docs, arena (tests opens it on the record), builder (the Arena with the Test builder open over it), remote (the models on the services saved with /remote), memory, instructions, help'],
       ['coding memory-review', 'read the day’s conversations again and tidy the memory (--install runs it at night, --status says if it would run now)'],
       ['coding morning', 'the morning brief on your repos, opened in the browser (--plain: no model)'],

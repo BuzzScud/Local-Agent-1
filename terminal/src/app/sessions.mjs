@@ -387,7 +387,8 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       try {
         // What the app had on is turned off again, so this terminal types and scrolls as before.
         if (started && !closed) output.write(`${RESET_MODES}${modes.altScreen() ? '\x1b[?1049l' : ''}`);
-        if (line && !closed) output.write(`${started ? '\r\n' : ''}${line}\n`);
+        // Under everything the app drew (the cursor sits inside its prompt box), on a line of its own.
+        if (line && !closed) output.write(`${started ? '\x1b[999B\r\n' : ''}${line}\n`);
       } catch {}
       // The last frame (LEAVE, END) reaches the host before this process ends.
       const go = () => resolve(code);
