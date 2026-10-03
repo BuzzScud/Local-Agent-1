@@ -18,20 +18,20 @@ const dir = opt('dir', join(root, 'models', 'bonsai-2-27b', 'results', 'night', 
 const stopAt = opt('stop-at', '06:40');
 const only = opt('only', null)?.split(',');
 mkdirSync(dir, { recursive: true });
-const BIN = join(homedir(), '.local', 'bin', 'bonsai');
+const BIN = join(homedir(), '.local', 'bin', 'coding');
 const logFile = join(dir, 'night.log');
 const log = (s) => { const line = `[${new Date().toTimeString().slice(0, 8)}] ${s}`; console.log(line); appendFileSync(logFile, `${line}\n`); };
 const statusFile = join(dir, 'status.json');
 const status = existsSync(statusFile) ? JSON.parse(readFileSync(statusFile, 'utf8')) : { started: new Date().toISOString(), steps: {} };
 const save = () => writeFileSync(statusFile, JSON.stringify(status, null, 1));
 
-// Another model server (your own bonsai window) → wait, then skip.
+// Another model server (your own coding window) → wait, then skip.
 // By process name only: a shell or editor whose text mentions the name must not count.
 const otherModel = () => { try { return execFileSync('pgrep', ['-x', 'llama-server'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).length > 0; } catch { return false; } };
 async function modelFree(name) {
   const t0 = Date.now();
   while (otherModel()) {
-    if (Date.now() - t0 > 30 * 60_000) { log(`${name}: another model has been running for 30 min (your bonsai?) — skipping`); return false; }
+    if (Date.now() - t0 > 30 * 60_000) { log(`${name}: another model has been running for 30 min (your coding window?) — skipping`); return false; }
     await new Promise((r) => setTimeout(r, 60_000));
   }
   return true;
@@ -60,7 +60,7 @@ function run(name, cmd, cmdArgs, { env = {}, minutes }) {
 
 const STEPS = [
   ['words-quick', false, () => run('words-quick', 'node', ['terminal/test/sweep.mjs', '--json', join(dir, 'words-quick.json')], { minutes: 5 })],
-  ['screens', true, async () => { for (const [c, r] of [[80, 24], [109, 55], [155, 43], [200, 60]]) await run(`screens-${c}x${r}`, 'node', ['terminal/scripts/capture-ui.mjs', '--out', join(dir, `screens-${c}x${r}.json`)], { env: { BONSAI_BIN: BIN, COLS: String(c), ROWS: String(r) }, minutes: 8 }); }],
+  ['screens', true, async () => { for (const [c, r] of [[80, 24], [109, 55], [155, 43], [200, 60]]) await run(`screens-${c}x${r}`, 'node', ['terminal/scripts/capture-ui.mjs', '--out', join(dir, `screens-${c}x${r}.json`)], { env: { AGENTIC_BIN: BIN, COLS: String(c), ROWS: String(r) }, minutes: 8 }); }],
   ['soak', true, () => run('soak', 'node', ['models/evals/tools/soak.mjs', '--starts', '10', '--minutes', '35', '--out', join(dir, 'soak.json')], { minutes: 50 })],
   ['reread', true, () => run('reread', 'node', ['models/evals/tools/reread.mjs', '--minutes', '15', '--out', join(dir, 'reread.json')], { minutes: 25 })],
   ['speed', true, () => run('speed', 'node', ['models/evals/tools/speed.mjs', '--out', join(dir, 'speed.json')], { minutes: 80 })],

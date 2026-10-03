@@ -37,7 +37,7 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
       throw e;
     }
     const code = raw ? (r.text.trim() || null) : extractCode(r.text);
-    if ((process.env.AGENTIC_DEBUG_TRIES ?? process.env.BONSAI_DEBUG_TRIES)) (await import('node:fs')).appendFileSync((process.env.AGENTIC_DEBUG_TRIES ?? process.env.BONSAI_DEBUG_TRIES), `\n===== ${label} #${i}\n${r.text}\n`);
+    if (process.env.AGENTIC_DEBUG_TRIES) (await import('node:fs')).appendFileSync(process.env.AGENTIC_DEBUG_TRIES, `\n===== ${label} #${i}\n${r.text}\n`);
     if (!code) { marks.push('✗'); continue; }
     const applied = apply(code);
     // A refused try (it removed code the task keeps, broke the blocks) is shown to the next one too.

@@ -13,13 +13,13 @@ import { join } from 'node:path';
 import { pdfText, preparedImage } from './media.mjs';
 import { readKey } from '../../../models/index.mjs';
 
-export const FETCH_TIMEOUT = 20_000;
-export const FETCH_MAX_BYTES = 5 * 1024 * 1024;
-export const SEARCH_COUNT = 8;
+const FETCH_TIMEOUT = 20_000;
+const FETCH_MAX_BYTES = 5 * 1024 * 1024;
+const SEARCH_COUNT = 8;
 export const SEARCH_PROVIDERS = ['brave', 'tavily'];
 export const PROVIDER_NAMES = { brave: 'Brave Search', tavily: 'Tavily' };
 // Where each service answers, and where you get a key.
-export const PROVIDER_HOSTS = { brave: 'https://api.search.brave.com', tavily: 'https://api.tavily.com' };
+const PROVIDER_HOSTS = { brave: 'https://api.search.brave.com', tavily: 'https://api.tavily.com' };
 export const PROVIDER_KEYS = { brave: 'api-dashboard.search.brave.com', tavily: 'app.tavily.com' };
 // A service's key: in the Keychain beside /remote's (its own entry), or AGENTIC_SEARCH_KEY (a script, a test).
 export const searchKeyId = (provider) => `search-${provider}`;
@@ -27,7 +27,7 @@ export const searchKey = (provider) => process.env.AGENTIC_SEARCH_KEY || (SEARCH
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) AgenticCoder/1.0 Safari/605.1.15';
 
 // "x:" is a scheme when "//" follows, or it is one that never has it ("localhost:3000" is a site and a port).
-export const hasScheme = (t) => /^[a-z][a-z\d+.-]*:\/\//i.test(t) || /^(mailto|data|javascript|about|tel|file):/i.test(t);
+const hasScheme = (t) => /^[a-z][a-z\d+.-]*:\/\//i.test(t) || /^(mailto|data|javascript|about|tel|file):/i.test(t);
 // A web address from what the model sent: http or https only; "example.com/x" gets https://.
 export function webUrl(text) {
   const t = String(text ?? '').trim();

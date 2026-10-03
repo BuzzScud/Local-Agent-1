@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HOME } from '../../../models/index.mjs';
 
-export const IMAGE_EXT = /\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i;
 export const isImage = (p) => IMAGE_EXT.test(String(p ?? ''));
 export const isPdf = (p) => /\.pdf$/i.test(String(p ?? ''));
 // A picture goes to the model no larger than this on its long side: a Retina

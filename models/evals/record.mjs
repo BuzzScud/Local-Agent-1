@@ -43,7 +43,7 @@ const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // The record's real place. A record anywhere else (a test's, a scratch run's) is never
 // written into the DOCS folder: the saved copy there is of the real record only.
 export const REAL_RECORD = join(homedir(), '.agentic-coder', 'tests', 'record.jsonl');
-export const recordFile = () => (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD) ?? join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder'), 'tests', 'record.jsonl');
+export const recordFile = () => process.env.AGENTIC_TEST_RECORD ?? join(process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder'), 'tests', 'record.jsonl');
 
 // The commit a folder of code is at. A frozen copy has no git of its own (and
 // may sit inside another repo), so it is named by its folder: "main-7595055".
@@ -123,7 +123,7 @@ export function readRecord(file = recordFile()) {
 
 // The settings a run was started with from the Tests page's control panel (the runner passes them
 // as AGENTIC_TEST_SETTINGS), or null. Read here, not from the terminal part: the record is part of it.
-export function panelSettings(env = process.env) {
+function panelSettings(env = process.env) {
   try { const v = JSON.parse(env.AGENTIC_TEST_SETTINGS || 'null'); return v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length ? v : null; } catch { return null; }
 }
 
@@ -233,7 +233,7 @@ export function taskSteps(dir, task) {
 }
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 const middle = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
-export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top = (process.env.AGENTIC_REPO ?? process.env.BONSAI_REPO) ?? repo, home } = {}) {
+export function sideBySide(ids = Object.keys(MODELS), { file = recordFile(), top = process.env.AGENTIC_REPO ?? repo, home } = {}) {
   const rows = readRecord(file);
   const whole = (r) => r.result !== 'stopped';
   const sort = Object.fromEntries(ids.map((id) => { const r = rows.find((x) => x.name === 'Sorting check' && x.model === id && !x.part && whole(x) && x.total); return [id, r ? { right: r.passed, total: r.total, at: r.at } : null]; }));
@@ -301,9 +301,9 @@ export function sideByMost(ids = Object.keys(MODELS), opts = {}) {
 // the folder named (docsDir, or AGENTIC_DOCS).
 // The main folder's .git is a folder; a worktree's is a file.
 const isMainFolder = (dir) => { try { return statSync(join(dir, '.git')).isDirectory(); } catch { return false; } };
-export function writeSnapshot({ file = recordFile(), docsDir = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? (resolve(file) === REAL_RECORD && isMainFolder(repo) ? join(repo, 'docs') : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
+export function writeSnapshot({ file = recordFile(), docsDir = process.env.AGENTIC_DOCS ?? (resolve(file) === REAL_RECORD && isMainFolder(repo) ? join(repo, 'docs') : null), template = join(repo, 'terminal', 'src', 'app', 'tests.html') } = {}) {
   try {
-    if ((process.env.AGENTIC_NO_DOCS ?? process.env.BONSAI_NO_DOCS) || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
+    if (process.env.AGENTIC_NO_DOCS || !docsDir || !existsSync(template) || !existsSync(docsDir) || !statSync(docsDir).isDirectory()) return null;
     const html = readFileSync(template, 'utf8');
     if (!html.includes('<!--DATA-->')) return null;
     const out = join(docsDir, SNAPSHOT);

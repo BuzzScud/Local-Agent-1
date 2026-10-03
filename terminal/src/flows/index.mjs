@@ -164,7 +164,7 @@ export async function route(ctx, text) {
 export const KINDS = ['question', 'rename', 'fix', 'change', 'other'];
 // The meanings come before the request, so the server reads them once and keeps
 // them (only the request is new at each sort).
-export const KIND_MEANINGS = `Kinds: question (only wants an answer; nothing is changed), rename (rename one name in the code everywhere, not a file), fix (code in the project is broken and should be repaired), change (add to or change the project's code: a function, a flag, an option, a component or page inside the code), other (anything else: write a document, notes, a story or a self-contained web page; create a new file the request names; move, delete or rename files; run a command).`;
+const KIND_MEANINGS = `Kinds: question (only wants an answer; nothing is changed), rename (rename one name in the code everywhere, not a file), fix (code in the project is broken and should be repaired), change (add to or change the project's code: a function, a flag, an option, a component or page inside the code), other (anything else: write a document, notes, a story or a self-contained web page; create a new file the request names; move, delete or rename files; run a command).`;
 export const SORT_SYSTEM = `You sort a request to a coding assistant into one kind.\n\n${KIND_MEANINGS}`;
 export const sortQuestion = (text) => `Request: ${text}`;
 

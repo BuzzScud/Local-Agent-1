@@ -8,7 +8,7 @@ import { join, resolve, sep, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 
 // Read when used, not at import, so tests can point it at their own home.
-const home = () => (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');
+const home = () => process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
 const file = () => join(home(), 'trust.json');
 
 // The path with links resolved ("/var/…" on this Mac really is

@@ -198,6 +198,4 @@ export function changePermissions(cwd, arg, { mode, session } = {}) {
   return warn(`Unknown: /permissions ${word}. Try allow, never, protect, remove, everywhere, mode, forget, folders or test.`);
 }
 
-// What "always allow" will save, for the words on the permission question.
-export const offerLabel = (rule) => `Yes, and always allow ${rule} in this folder`;
 export { ruleFor, MAX_RULES };

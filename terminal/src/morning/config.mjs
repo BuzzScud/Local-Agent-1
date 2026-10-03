@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export const expand = (p) => (typeof p === 'string' ? p.replace(/^~(?=\/|$)/, homedir()) : p);
-export const MORNING_HOME = () => expand(process.env.REPO_MORNING_HOME ?? '~/.repo-morning');
+const MORNING_HOME = () => expand(process.env.REPO_MORNING_HOME ?? '~/.repo-morning');
 
 export const DEFAULTS = {
   name: null, // from git's user.name when unset

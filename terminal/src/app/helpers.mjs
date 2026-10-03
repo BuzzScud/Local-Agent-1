@@ -15,7 +15,7 @@ export const HELPER_INFO = [
 ].map((h) => ({ ...h, code: CODENAMES[h.name] }));
 const CODE_W = Math.max(...HELPER_INFO.map((h) => h.code.length));
 
-export const helpersEnv = (env = process.env) => env.AGENTIC_HELPERS ?? env.BONSAI_HELPERS;
+export const helpersEnv = (env = process.env) => env.AGENTIC_HELPERS;
 
 // Which are on: AGENTIC_HELPERS when set, else settings.json's "helpers", else all four.
 export function helpersFrom(settings = {}, env = process.env) {

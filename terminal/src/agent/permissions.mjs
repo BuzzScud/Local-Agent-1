@@ -77,7 +77,7 @@ export function outsidePath(command, cwd) {
 // The words of a command as the shell sees them: quoted text stays one word
 // ("=== byte count / line count ===" is text, not the folder /), unquoted
 // text splits on spaces and shell operators, and Desktop/"a b.txt" is one word.
-export function shellWords(cmd) {
+function shellWords(cmd) {
   const words = [];
   let cur = '';
   let has = false;
@@ -238,7 +238,7 @@ const RUNNERS = new Set(['npm', 'pnpm', 'yarn', 'bun', 'deno']);
 const RUN_WORDS = new Set(['run', 'exec', 'x', 'dlx', 'task']);
 // A rule that names a whole program ("make", "bun run"): it still covers only
 // that command and its options; /permissions says "make *" covers the rest.
-export const isBroad = (w) => w.length === 1 || (w.length === 2 && RUNNERS.has(w[0]) && RUN_WORDS.has(w[1]));
+const isBroad = (w) => w.length === 1 || (w.length === 2 && RUNNERS.has(w[0]) && RUN_WORDS.has(w[1]));
 
 // Does a rule cover one command (one part of a longer one)? The command must
 // start with the rule's words, whole words, and whatever follows must be
@@ -274,7 +274,7 @@ export function ruleFor(part) {
 // The protected file a command names, if any ("cp .env.example .env" → ".env"):
 // a word of it, or a piece after = (--out=.env). Reading one is fine; this is
 // for a part that can change things.
-export function namesProtected(part, protect = []) {
+function namesProtected(part, protect = []) {
   for (const w of shellWords(String(part ?? ''))) { const g = protectedBy(String(w), protect); if (g) return g; }
   return null;
 }
@@ -334,12 +334,12 @@ export function neverRule(command, never = []) {
 // "edits" there would turn Auto-edit on for itself; started in the home
 // folder, .agentic-coder/ with the saved rules is inside the project). Yours
 // come on top. Names match whatever their case: on a Mac .ENV is .env.
-export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.agentic/mcp.json', '.bonsai/settings.json', '.agentic-coder/**'];
+export const PROTECTED = ['.env', '.env.*', '*.pem', '*.key', 'id_rsa*', 'id_ed25519*', '.git', '.git/**', '.agentic/settings.json', '.agentic/mcp.json', '.agentic-coder/**'];
 // The app's own settings and rules: in Bypass, where nothing asks, a change to one is
 // refused instead (a model that could write them could change its own mode or rules).
 // .agentic/mcp.json names programs that start with the next window (a project's MCP servers): a model
 // that could write it could give itself a command to run.
-export const OWN = ['.agentic/settings.json', '.agentic/mcp.json', '.bonsai/settings.json', '.agentic-coder/**'];
+export const OWN = ['.agentic/settings.json', '.agentic/mcp.json', '.agentic-coder/**'];
 // * is any run of characters within one name, ** any run across folders, ? one character.
 const globText = (g) => g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*').replace(/\?/g, '[^/]');
 const globRe = (g) => new RegExp(`(?:^|/)${globText(g)}$`, 'i');
@@ -405,14 +405,14 @@ export const siteOf = (url) => {
   const scheme = /^[a-z][a-z\d+.-]*:\/\//i.test(t) || /^(mailto|data|javascript|about|tel|file):/i.test(t);
   try { const u = new URL(scheme ? t : `https://${t}`); return /^https?:$/.test(u.protocol) && u.hostname ? u.hostname.replace(/^www\./, '').toLowerCase() : null; } catch { return null; }
 };
-export const webRule = (name, args) => (name === 'WebSearch' ? 'WebSearch' : siteOf(args?.url) ? `WebFetch(${siteOf(args.url)})` : null);
+const webRule = (name, args) => (name === 'WebSearch' ? 'WebSearch' : siteOf(args?.url) ? `WebFetch(${siteOf(args.url)})` : null);
 const WEB_RULE = /^(WebSearch|WebFetch\((?:www\.)?([a-z0-9.-]+\.[a-z0-9-]+)\))$/i;
 
 // The screen (the Screen tool, tools/screen.mjs): what the model may look at, by app,
 // as /permissions keeps it: "Screen(TextEdit)", or "Screen(whole screen)" for all of it.
 // It only looks (a picture), so it is asked once per app in every mode but Bypass.
-export const screenTarget = (args) => String(args?.app ?? '').trim().replace(/\s+/g, ' ').slice(0, 60) || 'whole screen';
-export const screenRule = (args) => `Screen(${screenTarget(args)})`;
+const screenTarget = (args) => String(args?.app ?? '').trim().replace(/\s+/g, ' ').slice(0, 60) || 'whole screen';
+const screenRule = (args) => `Screen(${screenTarget(args)})`;
 const SCREEN_RULE = /^Screen\(([^()]{1,60})\)$/i;
 const hasRule = (list, rule) => [...(list ?? [])].some((r) => String(r).toLowerCase() === rule.toLowerCase());
 

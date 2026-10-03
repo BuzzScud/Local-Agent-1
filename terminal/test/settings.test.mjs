@@ -1,5 +1,5 @@
 // Settings, layered (src/app/store.mjs): a trusted folder's
-// .bonsai/settings.json sets mode, effort and layout over the global file;
+// .agentic/settings.json sets mode and effort over the global file;
 // anything else in it is ignored, and an untrusted folder sets nothing.
 import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -12,8 +12,8 @@ const { saveTrust } = await import('../src/app/trust.mjs');
 
 function project(fileBody) {
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-settings-'));
-  mkdirSync(join(cwd, '.bonsai'), { recursive: true });
-  writeFileSync(join(cwd, '.bonsai', 'settings.json'), fileBody);
+  mkdirSync(join(cwd, '.agentic'), { recursive: true });
+  writeFileSync(join(cwd, '.agentic', 'settings.json'), fileBody);
   return cwd;
 }
 

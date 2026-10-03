@@ -34,7 +34,7 @@ export const PAGE_GROUPS = ['diagrams', 'reports', 'tests', 'design rounds', 'ot
 // The owner's own folder inside docs/: on this Mac only, never in git.
 export const PRIVATE = 'private';
 export const published = (rel) => { const parts = String(rel).split('/'); return parts.length > 1 && PAGE_GROUPS.includes(parts[0]); };
-export const DOCS_DIR = (process.env.AGENTIC_DOCS ?? process.env.BONSAI_DOCS) ?? join(mainFolder(), 'docs');
+export const DOCS_DIR = process.env.AGENTIC_DOCS ?? join(mainFolder(), 'docs');
 export const PRIVATE_DIR = join(DOCS_DIR, PRIVATE);
 
 // What in a published page would point at this Mac's owner: the home folder's
@@ -67,7 +67,7 @@ export function docsPath(name) {
 // Copies a finished file into the DOCS folder; returns where it went, or null.
 // A missing folder is not recreated (it may have been moved): it says so instead.
 export function toDocs(file, name = basename(file)) {
-  if (process.env.AGENTIC_NO_DOCS ?? process.env.BONSAI_NO_DOCS) return null;
+  if (process.env.AGENTIC_NO_DOCS) return null;
   if (!existsSync(DOCS_DIR)) {
     console.log(`not copied to ${DOCS_DIR.replace(homedir(), '~')}: the folder is not there (moved? set AGENTIC_DOCS)`);
     return null;

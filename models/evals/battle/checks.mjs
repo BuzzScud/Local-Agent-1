@@ -47,7 +47,7 @@ export function labelOf(c) {
   if (c?.type === 'count') { const k = countOf(v); if (k) return k.n === 1 ? `The page has ${THINGS[k.what][0]}` : `The page has at least ${k.n} ${THINGS[k.what][1]}`; }
   return `${CHECKS[c?.type]?.label ?? c?.type}${v ? `: ${v}` : ''}`;
 }
-const SKIP = new Set(['node_modules', '.git', '.DS_Store', '.agentic', '.bonsai', '.agentic-check', '__pycache__', '.pytest_cache']);
+const SKIP = new Set(['node_modules', '.git', '.DS_Store', '.agentic', '.agentic-check', '__pycache__', '.pytest_cache']);
 
 // Every file under a folder with a hash of its bytes: { 'src/a.mjs': 'sha…' }.
 export function snapshot(dir) {

@@ -22,8 +22,8 @@ export const DEFAULT_INSTRUCTIONS = Object.freeze({
 export const INSTRUCTION_LIMITS = Object.freeze({ general: 8000, planning: 6000 });
 export const INSTRUCTION_START = 'Shared working instructions\n';
 export const INSTRUCTION_END = '\nEnd shared working instructions';
-export const PROJECT_MARK = '\nProject notes\n';
-export function instructionHome() { return process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME ?? join(homedir(), '.agentic-coder'); }
+const PROJECT_MARK = '\nProject notes\n';
+export function instructionHome() { return process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder'); }
 export const instructionFile = (home = instructionHome()) => join(home, 'instructions.json');
 const digest = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const failure = (message, status = 400) => Object.assign(new Error(message), { status });

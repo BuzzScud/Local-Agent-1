@@ -46,7 +46,7 @@ export const pointsOf = (meta) => LEVELS[meta?.level]?.points ?? 0;
 export const NEW28_DIR = join(HERE, 'new28');
 export const WORK28_DIR = join(HERE, 'work28');
 export const PRACTICE_DIR = join(HERE, '..', 'bench', 'tasks');
-export const PRACTICE_LIST = join(HERE, 'practice28.json');
+const PRACTICE_LIST = join(HERE, 'practice28.json');
 export const KINDS = { code: 'Code change', question: 'Question', page: 'Page', writing: 'Writing' };
 // The sets in the order the page shows them (yours, 'mine', come last).
 export const SUITES = { new28: 'New 28', work28: 'Work 28', practice: 'Practice 28', mine: 'My tests' };

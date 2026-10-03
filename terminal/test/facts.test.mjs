@@ -51,7 +51,8 @@ test('saving: facts added once, a secret refused, the index rebuilt, the folder 
   const index = readFileSync(join(project, 'index.md'), 'utf8');
   expect(index).toContain('- Run the tests with `bun run test`.');
   expect(index).toContain('- Worked: lowering the legend\'s z-index in legend.js.');
-  expect(readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8')).toContain('.bonsai/');
+  expect(readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8')).toContain('.agentic/');
+  expect(readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8')).not.toContain('.bonsai/'); // the old name, not written since 3 Oct
   for (const s of ['token = abcdef123456', 'ghp_abcdefghijklmnop', '-----BEGIN RSA PRIVATE KEY-----', '0123456789abcdef0123456789abcdef01234567']) expect([s, looksSecret(s)]).toEqual([s, true]);
   for (const s of ['The token count is shown in /stats', 'Commit and push only when the user says so.', 'The password field is in login.jsx']) expect([s, looksSecret(s)]).toEqual([s, false]);
 });
@@ -129,21 +130,21 @@ test('keeping clean: repeats merge, a fact about a file that is gone and one unu
 
 test('first use: your two rules are saved once, and an older notes file is carried over line by line', () => {
   const { home, repo, you, project } = place();
-  mkdirSync(join(repo, '.bonsai'), { recursive: true });
-  writeFileSync(join(repo, '.bonsai', 'notes.md'), '# Agentic Coder memory\nKept by Agentic Coder.\n\n- Tests run with bun run test\n- Deploys go through ssh orbit\n');
+  mkdirSync(join(repo, '.agentic'), { recursive: true });
+  writeFileSync(join(repo, '.agentic', 'notes.md'), '# Agentic Coder memory\nKept by Agentic Coder.\n\n- Tests run with bun run test\n- Deploys go through ssh orbit\n');
   const o = openMemory(join(repo, 'src'), { home, today: '2026-09-26' });
   expect(o.first.map((f) => f.text)).toEqual(FIRST_FACTS.map((f) => f.text));
   expect(o.notes.map((f) => f.text)).toEqual(['Tests run with bun run test', 'Deploys go through ssh orbit']);
   expect(readFacts(you).every((f) => f.always && f.kind === 'you')).toBe(true);
-  expect(readFileSync(join(repo, '.bonsai', 'notes.md'), 'utf8')).toContain('- Tests run with bun run test'); // the notes file is left as it was
+  expect(readFileSync(join(repo, '.agentic', 'notes.md'), 'utf8')).toContain('- Tests run with bun run test'); // the notes file is left as it was
   // a rule the user removed does not come back at the next start
   applyChanges(you, { retire: [{ id: readFacts(you)[0].id, reason: 'removed by the user' }] });
   const again = openMemory(join(repo, 'src'), { home, today: '2026-09-27' });
   expect([again.first, again.notes]).toEqual([[], []]);
   expect(readFacts(you)).toHaveLength(1);
-  // an older .bonsai/notes.md keeps its project's memory beside it, in .bonsai/memory
+  // the project's memory sits beside the notes file, in .agentic/memory
   const old = memoryDirs(join(repo, 'src'), home).project;
-  expect(old).toBe(join(repo, '.bonsai', 'memory'));
+  expect(old).toBe(join(repo, '.agentic', 'memory'));
   expect(readFacts(old)).toHaveLength(2);
 });
 

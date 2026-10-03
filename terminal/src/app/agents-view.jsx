@@ -11,7 +11,7 @@ const COLOURS = {
   'c-rail': C.border, 'c-orange': 'ansi256(209)', 'c-blue': 'ansi256(111)',
 };
 const HL = 'ansi256(236)';
-export function styleOf(s) {
+function styleOf(s) {
   const p = {};
   for (const k of String(s ?? '').split(' ')) {
     if (k === 'b') p.bold = true;

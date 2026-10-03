@@ -6,7 +6,7 @@
 // check stays in the project so the bug cannot come back (bug-fixing.md,
 // steps 1, 7 and 9).
 //   the page          named in the request, or the model's pick of the project's pages
-//   how to open it    a "page" entry in .agentic/settings.json (or the old .bonsai/), the way the
+//   how to open it    a "page" entry in .agentic/settings.json, the way the
 //                     project's own page checks do it (their comments), a
 //                     script in package.json, or the folder as plain files
 //   what to do        the model picks steps from what is on the page
@@ -109,7 +109,7 @@ export function serveFromPackage(cwd, pageRel) {
 export function waysToOpen(cwd, pageRel, files) {
   const ways = [];
   try {
-    const where = ['.agentic', '.bonsai'].find((d) => existsSync(join(cwd, d, 'settings.json'))) ?? '.agentic';
+    const where = '.agentic';
     const s = JSON.parse(readFileSync(join(cwd, where, 'settings.json'), 'utf8')).page;
     if (s?.serve) ways.push({ serve: { cmd: String(s.serve), dir: String(s.in ?? '.'), ...(typeof s.port === 'number' ? { port: s.port } : { portEnv: String(s.port ?? 'PORT') }) }, url: String(s.url ?? '/'), how: `${s.serve}, from ${where}/settings.json` });
   } catch {}

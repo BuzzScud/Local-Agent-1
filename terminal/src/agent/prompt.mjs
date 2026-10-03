@@ -251,13 +251,13 @@ ${math ? `${math}\n\n` : ''}${sessionPart({ cwd, notes, git, today, tests, now: 
 }
 
 // Which set a prompt was built with: the remote one has its own "How you work" part.
-export const REMOTE_PART = '\nHow you work\n';
+const REMOTE_PART = '\nHow you work\n';
 export const promptSetOf = (system) => (typeof system === 'string' && system.includes(REMOTE_PART) ? 'remote' : 'local');
 
 // toolUse and skills: terminal/rules/TOOLS.md and SKILLS.md as they are now
 // (prompt-files.mjs); the old prompt keeps the Tool use lines it had and no skills.
 // set 'remote': the remote set's instructions (remotePrompt); AGENTIC_PROMPT=old keeps the old local one.
-export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = (process.env.AGENTIC_EXAMPLE ?? process.env.BONSAI_EXAMPLE) === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, mcp = false }) {
+export function systemPrompt({ cwd, notes = '', git = 'unknown', date = new Date(), tests = testCommand(cwd), example = process.env.AGENTIC_EXAMPLE === '1', math = '', instructions, toolUse, skills, set = 'local', agents = false, mcp = false }) {
   const today = localDay(date);
   const now = promptVersion() !== 'old';
   if (set === 'remote' && now) return remotePrompt({ cwd, notes, git, today, tests, example, math, instructions, toolUse, skills, agents, mcp });

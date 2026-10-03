@@ -35,7 +35,7 @@ function newest(model) {
 }
 
 // One run → the numbers the page shows.
-export function analyse(run) {
+function analyse(run) {
   const given = new Set(run.events.filter((e) => e.type === 'tool' && e.given).map((e) => e.id));
   const reqs = run.requests.filter((q) => q.timings && q.end != null);
   const main = reqs.filter((q) => q.tools && q.toolChoice !== 'none' && (q.slot ?? 0) === 0);

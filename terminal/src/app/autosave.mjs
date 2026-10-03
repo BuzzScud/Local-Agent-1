@@ -20,21 +20,21 @@ import { memoryDirs, countDay, readFacts } from '../agent/facts.mjs';
 
 const normText = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-export const memoryOn = (settings = {}) => settings.memory !== false && (process.env.AGENTIC_NO_MEMORY ?? process.env.BONSAI_NO_MEMORY) !== '1';
+export const memoryOn = (settings = {}) => settings.memory !== false && process.env.AGENTIC_NO_MEMORY !== '1';
 // How a save is made: 'ask' (the default, the user's pick on 28 Sep 2026),
 // 'auto' (saves unasked) or 'off'. AGENTIC_MEMORY_SAVE wins over settings.json.
 export function saveModeOf(settings = {}) {
-  const env = process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE;
+  const env = process.env.AGENTIC_MEMORY_SAVE;
   return env === 'on' || env === 'auto' ? 'auto' : env === 'ask' ? 'ask' : env === 'off' ? 'off' : (settings.memorySave ?? 'ask');
 }
-const savingOn = () => (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off';
-const JOBS = () => join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? HOME, 'memory-jobs');
-export const WAIT_MS = 10_000; // a pause this long after a task starts a save
+const savingOn = () => process.env.AGENTIC_MEMORY_SAVE !== 'off';
+const JOBS = () => join(process.env.AGENTIC_HOME ?? HOME, 'memory-jobs');
+const WAIT_MS = 10_000; // a pause this long after a task starts a save
 
 // The conversation as the save reads it: what was said, without tool output.
 const slim = (messages) => messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim()).slice(-40).map((m) => ({ role: m.role, content: m.content.slice(0, 1200) }));
 // How this program starts itself again: the one-file app, or bun with the source.
-const self = () => ((process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN) ? [(process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN)] : /(^|\/)bun$/.test(process.execPath) ? [process.execPath, process.argv[1]] : [process.execPath]);
+const self = () => (process.env.AGENTIC_BIN ? [process.env.AGENTIC_BIN] : /(^|\/)bun$/.test(process.execPath) ? [process.execPath, process.argv[1]] : [process.execPath]);
 
 export class AutoSave {
   // say(text): one dim line on the screen. sessions: where this folder's

@@ -48,7 +48,7 @@ export const REMOTE_DIR = 'remote';
 // Listed in this order, roughly as a task goes: plan, look, change, check, recover, report.
 export const GUIDES = Object.freeze(['PLANNING', 'CONTEXT', 'PERMISSIONS', 'TESTING', 'REVIEW', 'DEBUGGING', 'BUG-FIXING', 'RECOVERY', 'DESIGN', 'SECURITY', 'SUBAGENTS', 'MCP', 'MEMORY', 'GIT', 'ANSWERS']);
 // Listed only when the Agent tool is offered (agent.mjs agentsOn).
-export const AGENTS_GUIDE = 'SUBAGENTS';
+const AGENTS_GUIDE = 'SUBAGENTS';
 // Listed only while a tool of an MCP server is offered (agent.mjs mcpOn).
 export const MCP_GUIDE = 'MCP';
 export const instructionsEnv = (env = process.env) => env.AGENTIC_INSTRUCTIONS;
@@ -104,7 +104,7 @@ export const BUILT_IN_REMOTE = Object.freeze(await loadRemote());
 // one); AGENTIC_RULES_DIR for tests. null: the built-in copies only.
 export function rulesDir() {
   if (process.env.AGENTIC_RULES_DIR) return process.env.AGENTIC_RULES_DIR;
-  for (const repo of [process.env.AGENTIC_REPO, process.env.BONSAI_REPO]) {
+  for (const repo of [process.env.AGENTIC_REPO]) {
     if (repo && existsSync(join(repo, 'terminal', 'rules', 'bug-fixing.md'))) return join(repo, 'terminal', 'rules');
   }
   try {
@@ -168,7 +168,7 @@ const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 //   read     Edit and Write are refused
 //   check    one command must run before the turn may end as done
 //   scratch  a failed check puts the message's edits back (the free loop does this either way)
-export const FENCES = ['read', 'check', 'scratch'];
+const FENCES = ['read', 'check', 'scratch'];
 
 // SKILLS.md: each "## Name" is a skill with its "- Words:" and "- About:"
 // lines, an optional "- Fence:" line, and the rest of its section as its steps.
@@ -298,7 +298,7 @@ export function guidePath(cwd) {
 }
 
 // A guide's or helper's name: letters, digits and hyphens (it opens at RULES/<NAME>.md).
-export const FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+const FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
 
 // The .md files of a folder as { file, name }: the name is the file's in capitals, each name
 // once, by name. [] when the folder is not there.
@@ -357,9 +357,9 @@ export function readGuides(set = 'local', { dir = rulesDir(), agents = false, mc
 //   - Tools: all                        all (the default), look (it only reads), or a list
 //   - Model: main                       main (the default), or a model on the same Ollama service
 //   ## Instructions …                   what the helper is given, from the first ## on
-export const AGENTS_FOLDER = 'agents';
+const AGENTS_FOLDER = 'agents';
 // Kinds the Agent tool already has: a file of that name is left out.
-export const BUILT_IN_KINDS = ['explore', 'general'];
+const BUILT_IN_KINDS = ['explore', 'general'];
 
 export function parseHelperAgent(name, text) {
   const t = String(text ?? '').replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*\n/, '').trimStart();

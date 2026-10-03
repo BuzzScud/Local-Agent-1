@@ -18,7 +18,7 @@ const MAP_DIR = () => join(HOME, 'maps');
 
 // Code nobody works on: old copies, other people's libraries, test
 // snapshots. Left out while the project has other code.
-export const SET_ASIDE = /(^|\/)(archive[sd]?|backups?|vendor|third[_-]party|__snapshots__|older versions)\//i;
+const SET_ASIDE = /(^|\/)(archive[sd]?|backups?|vendor|third[_-]party|__snapshots__|older versions)\//i;
 const WALK_MAX = 2000; // outside git: the code files looked at, in the folder's order
 const LOG_MAX = 1000; // the newest commits read for how much each file was worked on
 const HALF_LIFE = 100; // commits: a change 100 commits back counts half as much as the newest
@@ -134,7 +134,7 @@ export function repoMap(cwd, { maxFiles = 400, maxChars = 5000 } = {}) {
 // One line per file, in the folder's order. Over the budget, names are cut
 // first, then files: the least recently worked on (entries come most
 // recently worked on first).
-export function mapText(entries, maxChars = 5000) {
+function mapText(entries, maxChars = 5000) {
   const line = (e, n) => `${e.rel} (${e.lines})${n && e.names.length ? `: ${e.names.slice(0, n).join(', ')}${e.names.length > n ? ', …' : ''}` : ''}`;
   const inOrder = (list) => [...list].sort((a, b) => byPath(a.rel, b.rel));
   for (const n of [12, 6, 3, 0]) {

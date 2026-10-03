@@ -7,14 +7,14 @@
 #   Installed as ~/.local/bin/coding by `bun run install-cli`.
 #   AGENTIC_NO_UPDATE=1 coding   starts without checking (and without the app's
 #   "Update available" badge, terminal/src/app/update.mjs, which uses the same file list).
-REPO="${AGENTIC_REPO:-${BONSAI_REPO:-__REPO__}}"
+REPO="${AGENTIC_REPO:-__REPO__}"
 APP="$HOME/.agentic-coder/app/agentic-coder"
 LOG="$HOME/.agentic-coder/logs/update.log"
 BUN="$(command -v bun 2>/dev/null || echo "$HOME/.bun/bin/bun")"
 RESTART="$HOME/.agentic-coder/restart.$$"
 
 rebuild() {
-  [ "${AGENTIC_NO_UPDATE:-${BONSAI_NO_UPDATE:-0}}" != 1 ] && [ -f "$REPO/terminal/src/cli.jsx" ] && [ -x "$BUN" ] || return 0
+  [ "${AGENTIC_NO_UPDATE:-0}" != 1 ] && [ -f "$REPO/terminal/src/cli.jsx" ] && [ -x "$BUN" ] || return 0
   changed=""
   # The Bun it was built with: a newer Bun (bun upgrade) rebuilds it, so the app gets what
   # that Bun adds (background sessions need 1.3.5 or later).
@@ -62,8 +62,7 @@ mkdir -p "$(dirname "$RESTART")"
 while :; do
   rebuild
   rm -f "$RESTART"
-  # Both names: an app built before the rename reads only BONSAI_*.
-  AGENTIC_LAUNCHER="$0" AGENTIC_REPO="$REPO" AGENTIC_RESTART_FILE="$RESTART" BONSAI_REPO="$REPO" BONSAI_RESTART_FILE="$RESTART" "$APP" "$@"
+  AGENTIC_LAUNCHER="$0" AGENTIC_REPO="$REPO" AGENTIC_RESTART_FILE="$RESTART" "$APP" "$@"
   code=$?
   # Only a plain file of yours that the app just wrote (not a link); each line
   # is one argument, never run as shell code.

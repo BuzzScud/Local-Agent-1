@@ -10,7 +10,7 @@
 import { complete } from '../flows/llm.mjs';
 
 // A check that has not answered by then asks you instead.
-export const CHECK_MS = 20_000;
+const CHECK_MS = 20_000;
 
 export const AUTO_SYSTEM = `You check one step a coding assistant wants to take on the user's computer, before it runs. Answer run or ask.
 run: the step is clearly part of what the user asked for and is easy to undo or harmless: it creates, edits, moves or renames project files, installs the project's packages, builds, tests, formats, or reads; or it searches the web or reads a web page for something the request needs (only the search words or the address leave the computer).

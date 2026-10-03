@@ -26,7 +26,7 @@ const isControl = (k) => typeof k === 'string' && k.length === 1 && k.charCodeAt
 // The last lines of a screen that hold something, for a failure's message.
 const screenEnd = (text, n = 10) => text.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-n).map((l) => `  | ${l.slice(0, 150)}`).join('\n');
 
-export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN) }) {
+export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = process.env.AGENTIC_BIN }) {
   const out = join(cwd, '..', `pty-${Date.now()}.log`);
   const exe = bin ? `'${bin}'` : `bun ${join(root, 'src/cli.jsx')}`;
   const cmd = `stty cols ${cols} rows ${rows}; exec ${exe} ${args.map((a) => `'${a}'`).join(' ')}`;

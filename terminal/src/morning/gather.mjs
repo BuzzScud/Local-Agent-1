@@ -91,7 +91,7 @@ async function githubJson(route) {
   }
 }
 
-export function parseGithub(url) {
+function parseGithub(url) {
   const m = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(url ?? '');
   return m ? { owner: m[1], repo: m[2], web: `https://github.com/${m[1]}/${m[2]}` } : null;
 }

@@ -46,15 +46,15 @@ const ORANGE = 'c-orange', BLUE = 'c-blue', PURPLE = 'c-edits';
 const SPIN4 = ['◐', '◓', '◑', '◒'];
 
 // The names the tree uses for the run as it is now.
-export const nodesOf = (s, k = s.stage) => (k === 3 && !s.math ? ['SUITE', 'RUN', 'EDGES', 'PROOF'] : STAGES[k].nodes);
-export const advisorOf = (s) => s.reviewer ?? `${s.model} · fresh`;
+const nodesOf = (s, k = s.stage) => (k === 3 && !s.math ? ['SUITE', 'RUN', 'EDGES', 'PROOF'] : STAGES[k].nodes);
+const advisorOf = (s) => s.reviewer ?? `${s.model} · fresh`;
 export function titleOf(s) {
   if (s.verdict) return { go: 'done · GO', nogo: 'done · NO-GO', stopped: 'stopped', failed: 'stopped: an error' }[s.verdict.kind] ?? 'done';
   const k = s.stage, list = s.items?.[k] ?? [], it = list[s.item], n = list.length, i = s.item + 1;
   if (!it) return STAGES[k].name;
   return [`question ${i}/${n}`, `part ${i}/${n}`, `task ${i}/${n}`, `check ${i}/${n}`, `${String(it.title).toLowerCase()} ${i}/${n}`, 'three reviewers'][k];
 }
-export const nodeNow = (s) => (s.gate ? 'waiting for you' : (s.active ?? []).map((n) => nodesOf(s)[n]).join(' + '));
+const nodeNow = (s) => (s.gate ? 'waiting for you' : (s.active ?? []).map((n) => nodesOf(s)[n]).join(' + '));
 const findingsLine = (s) => { const f = s.findings ?? {}; return [g('Critical ', 'c-bad'), g(`${f.critical ?? 0}${f.fixed ? ' (fixed)' : ''}`, 'c-fg'), g(' · Important ', 'c-warn'), g(`${f.important ?? 0}`, 'c-fg'), g(' · Suggestion ', 'c-dim'), g(`${f.suggestion ?? 0}`, 'c-fg')]; };
 
 // What each step does, per stage, on the loop's bars.
@@ -81,7 +81,7 @@ function noteSegs(k) {
 const BACK = ['SPEC.md, then the plan', 'your yes, then Build', 'a rewind point, then the next task', 'the proof, then Review', 'the findings, then Ship', 'one report: GO or NO-GO'];
 
 // When the second opinion is lit: just asked (4 s), the plan, a task on its second try, a doubt review.
-export function railActive(s, now) {
+function railActive(s, now) {
   if (s.verdict) return null;
   if (s.adv?.at && now - (s.adv.atTime ?? 0) < 4000) return s.adv.at;
   if (s.stage === 1) return 'plan';

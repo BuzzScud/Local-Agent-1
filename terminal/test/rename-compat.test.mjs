@@ -1,7 +1,6 @@
-// The rename from Bonsai Code to Agentic Coder: the old names still work (a BONSAI_*
-// switch, the old state-folder switch), the new name wins when both are set, and the
-// places that used to know only the old name know both now. (An old .bonsai/ project
-// folder is covered where it is read: memory.test, facts.test, settings.test.)
+// The rename from Bonsai Code to Agentic Coder: since 3 Oct 2026 the old names are no longer read
+// (the owner's pick in the clean-up plan of 30 Sep): a BONSAI_* switch, the old state-folder switch
+// and folder, and a .bonsai/ project folder do nothing, and the new names work as before.
 import { test, expect } from 'bun:test';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -16,18 +15,15 @@ const withEnv = (vars, fn) => {
   try { put(vars); return fn(); } finally { put(was); }
 };
 
-test('a BONSAI_* switch still works, and its AGENTIC_* twin wins when both are set', () => {
-  withEnv({ AGENTIC_NO_MEMORY: undefined, BONSAI_NO_MEMORY: '1' }, () => expect(memoryOn({})).toBe(false));
+test('a BONSAI_* switch is no longer read; its AGENTIC_* name works', () => {
+  withEnv({ AGENTIC_NO_MEMORY: undefined, BONSAI_NO_MEMORY: '1' }, () => expect(memoryOn({})).toBe(true));
   withEnv({ AGENTIC_NO_MEMORY: '1', BONSAI_NO_MEMORY: undefined }, () => expect(memoryOn({})).toBe(false));
-  withEnv({ AGENTIC_NO_MEMORY: '0', BONSAI_NO_MEMORY: '1' }, () => expect(memoryOn({})).toBe(true));
   withEnv({ AGENTIC_NO_MEMORY: undefined, BONSAI_NO_MEMORY: undefined }, () => expect(memoryOn({})).toBe(true));
 });
 
-test('the update timers answer to both names (they knew only the old ones)', () => {
+test('the update timers answer to their AGENTIC_* names only', () => {
   withEnv({ AGENTIC_UPDATE_EVERY: '123', BONSAI_UPDATE_EVERY: undefined }, () => expect(msEnv('UPDATE_EVERY', 20000)).toBe(123));
-  withEnv({ AGENTIC_UPDATE_EVERY: undefined, BONSAI_UPDATE_EVERY: '456' }, () => expect(msEnv('UPDATE_EVERY', 20000)).toBe(456));
-  withEnv({ AGENTIC_UPDATE_EVERY: '123', BONSAI_UPDATE_EVERY: '456' }, () => expect(msEnv('UPDATE_EVERY', 20000)).toBe(123));
-  withEnv({ AGENTIC_UPDATE_EVERY: undefined, BONSAI_UPDATE_EVERY: undefined }, () => expect(msEnv('UPDATE_EVERY', 20000)).toBe(20000));
+  withEnv({ AGENTIC_UPDATE_EVERY: undefined, BONSAI_UPDATE_EVERY: '456' }, () => expect(msEnv('UPDATE_EVERY', 20000)).toBe(20000));
   withEnv({ AGENTIC_FETCH_EVERY: '0', BONSAI_FETCH_EVERY: undefined }, () => expect(msEnv('FETCH_EVERY', 300000)).toBe(0)); // 0 = never
 });
 
@@ -40,8 +36,8 @@ const homeWith = (env) => {
   return r.stdout.trim();
 };
 
-test('the state folder: AGENTIC_HOME wins, and the old BONSAI_HOME still works', () => {
-  expect(homeWith({ BONSAI_HOME: '/tmp/old-home' })).toBe('/tmp/old-home');
+test('the state folder: AGENTIC_HOME sets it, and the old BONSAI_HOME is not read', () => {
+  expect(homeWith({ BONSAI_HOME: '/tmp/old-home' })).not.toBe('/tmp/old-home');
   expect(homeWith({ AGENTIC_HOME: '/tmp/new-home', BONSAI_HOME: '/tmp/old-home' })).toBe('/tmp/new-home');
 });
 

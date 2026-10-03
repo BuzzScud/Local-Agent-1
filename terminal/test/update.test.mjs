@@ -285,7 +285,7 @@ test('the restart file is written fresh for you only; a link planted in its plac
   writeFileSync(target, 'keep me\n');
   const file = join(dir, 'restart.123');
   symlinkSync(target, file);
-  const keep = (process.env.AGENTIC_RESTART_FILE ?? process.env.BONSAI_RESTART_FILE);
+  const keep = process.env.AGENTIC_RESTART_FILE;
   try {
     process.env.AGENTIC_RESTART_FILE = file;
     leaveRestart(['--resume', 'abc', '--url', 'http://127.0.0.1:1\nevil']);
@@ -296,16 +296,14 @@ test('the restart file is written fresh for you only; a link planted in its plac
   expect(readFileSync(file, 'utf8')).toBe('--resume\nabc\n--url\nhttp://127.0.0.1:1 evil\n');
 });
 
-test("commands Agentic Coder runs do not see where the restart file goes, under either name", async () => {
-  const keep = { now: process.env.AGENTIC_RESTART_FILE, old: process.env.BONSAI_RESTART_FILE };
+test("commands Agentic Coder runs do not see where the restart file goes", async () => {
+  const keep = process.env.AGENTIC_RESTART_FILE;
   process.env.AGENTIC_RESTART_FILE = '/tmp/x';
-  process.env.BONSAI_RESTART_FILE = '/tmp/y'; // an app started by a launcher from before the rename sets this one
   try {
-    const r = await runCommand('echo "now=${AGENTIC_RESTART_FILE:-none} old=${BONSAI_RESTART_FILE:-none}"', { cwd: tmpdir(), sandbox: false });
-    expect(r.output ?? r.lines?.join('\n') ?? String(r)).toContain('now=none old=none');
+    const r = await runCommand('echo "now=${AGENTIC_RESTART_FILE:-none}"', { cwd: tmpdir(), sandbox: false });
+    expect(r.output ?? r.lines?.join('\n') ?? String(r)).toContain('now=none');
   } finally {
-    if (keep.now === undefined) delete process.env.AGENTIC_RESTART_FILE; else process.env.AGENTIC_RESTART_FILE = keep.now;
-    if (keep.old === undefined) delete process.env.BONSAI_RESTART_FILE; else process.env.BONSAI_RESTART_FILE = keep.old;
+    if (keep === undefined) delete process.env.AGENTIC_RESTART_FILE; else process.env.AGENTIC_RESTART_FILE = keep;
   }
 });
 

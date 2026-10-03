@@ -8,7 +8,7 @@ import { paramsB } from '../../../models/index.mjs';
 
 // [pattern on the name (or family), what the family is, what it is best at]. First match wins,
 // so a narrower name (qwen3-coder) comes before its family (qwen3).
-export const FAMILY_NOTES = [
+const FAMILY_NOTES = [
   [/qwen3-coder/i, 'Qwen 3 Coder (Alibaba)', 'Made for coding agents: reading a repository, calling tools, editing files over many steps.'],
   [/qwen2\.5-coder/i, 'Qwen 2.5 Coder (Alibaba)', 'Code writing, completion and fixes; an older model that often writes tool calls as plain text.'],
   [/qwen3-vl|qwen2\.5vl|qwen2\.5-vl/i, 'Qwen VL (Alibaba)', 'Reading pictures: screenshots, documents and charts, then answering about them.'],
@@ -81,7 +81,7 @@ export const specialtiesOf = (m) => ({ note: familyNote(m), tags: workedOut(m) }
 // a helper (search, or under a billion parameters), one whose abilities the
 // service does not list, coding, thinking, pictures, else general chat. None
 // starts folded: the list is wide enough to show every model (their ask, 2 Oct).
-export const CATEGORIES = [
+const CATEGORIES = [
   { id: 'coding', text: 'Coding', note: 'trained for code' },
   { id: 'thinking', text: 'Thinking', note: 'reasons before answering' },
   { id: 'pictures', text: 'Pictures', note: 'can look at images' },
@@ -99,7 +99,7 @@ export function categoryOf(m) {
   return 'general';
 }
 // Biggest first: by parameters, else by file size, then by name.
-export const bySize = (a, b) => (paramsB(b.params ?? '') - paramsB(a.params ?? '')) || ((b.bytes ?? 0) - (a.bytes ?? 0)) || String(a.id).localeCompare(String(b.id));
+const bySize = (a, b) => (paramsB(b.params ?? '') - paramsB(a.params ?? '')) || ((b.bytes ?? 0) - (a.bytes ?? 0)) || String(a.id).localeCompare(String(b.id));
 export function categoryGroups(models = []) {
   return CATEGORIES.map((c) => ({ ...c, ranked: true, ids: models.filter((m) => categoryOf(m) === c.id).sort(bySize).map((m) => m.id) })).filter((g) => g.ids.length);
 }

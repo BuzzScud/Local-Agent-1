@@ -40,7 +40,6 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
     // (npm → node → test workers), not just the shell.
     const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', CI: '1' };
     delete env.AGENTIC_RESTART_FILE; // where /update leaves its restart: the app's alone
-    delete env.BONSAI_RESTART_FILE; // (its old name, set by an older launcher)
     const fenced = sandbox !== false && sandboxAvailable();
     const child = fenced
       ? spawn(...sandboxed(command, cwd, sandbox), { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })

@@ -86,7 +86,7 @@ export function listDocs(dir) {
 // window) → any free port. AGENTIC_HUB_PORT overrides; 0 = any free port, which
 // every test run uses: a test's hub (no model file) on 8757 answered the tab
 // the real hub had opened, and Weights said the model was missing (27 Sep).
-const envPort = Number((process.env.AGENTIC_HUB_PORT ?? process.env.BONSAI_HUB_PORT) || NaN);
+const envPort = Number(process.env.AGENTIC_HUB_PORT || NaN);
 export const HUB_PORT = Number.isInteger(envPort) && envPort >= 0 ? envPort : 8757;
 
 // onEdits: called after a save or revert of an edited copy (the app shows a

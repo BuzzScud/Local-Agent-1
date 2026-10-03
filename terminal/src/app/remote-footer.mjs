@@ -11,7 +11,7 @@
 // the CPU, GPU goes last of all. Pure: screen.jsx draws what this returns, and the tests read it.
 import { ctxWord, gbWord } from './remote-models.mjs';
 
-export const GAUGES = ['speed', 'ttft', 'ctx', 'gpu'];
+const GAUGES = ['speed', 'ttft', 'ctx', 'gpu'];
 
 // The gauges to show, in their order: settings.json footer.remote, else all four. A name not
 // known is skipped; an empty list shows none ("? for shortcuts" stays).
@@ -99,7 +99,7 @@ export function fitRemote({ avail, g, list = GAUGES, right }) {
 }
 
 // Cut to n cells, ending in … as Ink's truncate-end does.
-export function cutSegs(segs, n) {
+function cutSegs(segs, n) {
   if (widthOf(segs) <= n) return segs;
   if (n <= 0) return [];
   const out = [];

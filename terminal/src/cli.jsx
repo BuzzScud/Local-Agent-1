@@ -169,7 +169,7 @@ if (process.argv[2] === 'hub' || OLD_HUB.includes(process.argv[2])) {
   const s = startWeightsServer({ path, cwd: process.cwd() });
   const url = `${s.url}?tab=${HUB_TABS[name]}`;
   process.stdout.write(`Agentic Coder hub: ${here.length ? `the weights of ${here.map((m) => m.name).join(' and ')}` : 'no model file yet'}, and the pages in ${s.docsDir ? s.docsDir.replace(process.env.HOME, '~') : 'no DOCS folder (not found)'} at ${url}\nThe page reads the files through this window. Press ctrl+c to close it.\n`);
-  if (!(process.env.AGENTIC_NO_OPEN ?? process.env.BONSAI_NO_OPEN)) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
+  if (!process.env.AGENTIC_NO_OPEN) Bun.spawn(['open', url], { stdout: 'ignore', stderr: 'ignore' });
   process.on('SIGINT', () => { s.stop(); process.exit(0); });
   await new Promise(() => {});
 }
@@ -467,7 +467,7 @@ if (opts.print) {
       // The design examples and the layout check: as /design left them (AGENTIC_DESIGN… wins).
       design: settings.design ?? {},
       // The memory: facts brought back, and what the run taught saved before it ends.
-      memory: memoryOn(settings) ? { save: (process.env.AGENTIC_MEMORY_SAVE ?? process.env.BONSAI_MEMORY_SAVE) !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
+      memory: memoryOn(settings) ? { save: process.env.AGENTIC_MEMORY_SAVE !== 'off', claude: claudeOn(settings) ? settings.claudeNotes ?? true : false } : false,
       // Agentic Coder's questions: asked on the terminal when there is one; otherwise unanswered.
       answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
       // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent

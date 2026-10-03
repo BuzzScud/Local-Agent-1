@@ -24,16 +24,16 @@ import { isHomeFolder } from '../agent/prompt.mjs';
 
 export const KEEP_DAYS = 7; // a conversation's copies go 7 days after it was last used
 export const MAX_FILES = 25_000; // more than this in a folder: its edits only
-export const BIG_FILE = 25 * 1024 * 1024; // a file bigger than this is never copied
+const BIG_FILE = 25 * 1024 * 1024; // a file bigger than this is never copied
 const LIST_MS = 10_000; // listing a folder for the first copy may take this long
 // Never worth a copy: what a package manager or a build puts back by itself.
-const EXCLUDE = ['.git', '.agentic/', '.bonsai/', 'node_modules/', '.venv/', 'venv/', '__pycache__/', '.next/', '.nuxt/', '.parcel-cache/', '.turbo/', '.DS_Store', '*.gguf', '.agentic-check/'];
+const EXCLUDE = ['.git', '.agentic/', 'node_modules/', '.venv/', 'venv/', '__pycache__/', '.next/', '.nuxt/', '.parcel-cache/', '.turbo/', '.DS_Store', '*.gguf', '.agentic-check/'];
 // Stored byte for byte: no line-ending change, no LFS or other filter.
 const ATTRIBUTES = '* -text -eol -filter -ident -working-tree-encoding -diff\n';
 const NONE = '0000000000000000000000000000000000000000';
 // A message waits this long at most for its copy; past it, only the model's
 // own edits are kept for it (the copy finishes in the background).
-export const BEGIN_WAIT_MS = 20_000;
+const BEGIN_WAIT_MS = 20_000;
 const LATE = Symbol('late');
 const within = (p, ms) => new Promise((resolve, reject) => {
   const t = setTimeout(() => resolve(LATE), ms);

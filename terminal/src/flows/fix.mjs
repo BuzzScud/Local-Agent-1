@@ -36,7 +36,7 @@ export async function fixFlow(ctx, task) {
   const kind = sortBug(task);
   if (kind) ctx.note(`This looks like a ${kind.name} bug (${kind.looks}), so it follows the ${kind.name} steps.`, 'dim');
   const unseen = Boolean(kind && !check && !kind.testsSeeIt);
-  const checkFirst = unseen && canPageCheck(kind) && (process.env.AGENTIC_CHECK_FIRST ?? process.env.BONSAI_CHECK_FIRST) !== 'off';
+  const checkFirst = unseen && canPageCheck(kind) && process.env.AGENTIC_CHECK_FIRST !== 'off';
   if (unseen && !checkFirst) return { handled: false, stepByStep: true, why: `the test suite can't see a ${kind.name} bug (it needs ${kind.tool})` };
   // With every try go the steps for its kind of bug, and what the memory
   // holds about this request (what worked here, what did not).

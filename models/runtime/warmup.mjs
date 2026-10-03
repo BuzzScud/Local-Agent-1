@@ -17,7 +17,7 @@ import { endpointOf, authHeaders } from './remote.mjs';
 export const KEEP_SAVED = 2; // ~210 MB each (off/medium share one; high adds a line)
 // Whole first reads, this session's part included (folder, date, git, notes):
 // a second start with the same instructions skips even that part. ~225 MB each.
-export const KEEP_WHOLE = 4;
+const KEEP_WHOLE = 4;
 
 async function post(url, path, body, signal) {
   const r = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders(url) }, body: JSON.stringify(body), signal });

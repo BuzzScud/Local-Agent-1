@@ -21,7 +21,7 @@ test('two test files in one process, with no AGENTIC_HOME: the "real" home\'s se
   const planted = JSON.stringify({ planted: 'by test-home.test.mjs', layout: 'classic' });
   writeFileSync(join(real, 'settings.json'), planted);
   const env = { ...process.env, HOME: home };
-  for (const k of ['AGENTIC_HOME', 'BONSAI_HOME', 'FORCE_COLOR']) delete env[k];
+  for (const k of ['AGENTIC_HOME', 'FORCE_COLOR']) delete env[k];
   // sort.test.mjs imports the models part at its top without a home of its own; remote-rules.test.mjs comes after.
   const r = spawnSync(process.execPath, ['test', './terminal/test/sort.test.mjs', './terminal/test/remote-rules.test.mjs'], { cwd: REPO, env, encoding: 'utf8', timeout: 170_000 });
   const out = `${r.stdout}${r.stderr}`;
@@ -38,7 +38,7 @@ test('a test process has a throwaway home before anything loads, and the models 
   const home = mkdtempSync(join(tmpdir(), 'agentic-pretend-home-'));
   mkdirSync(join(home, '.agentic-coder'));
   const env = { ...process.env, HOME: home, NODE_ENV: 'test' };
-  for (const k of ['AGENTIC_HOME', 'BONSAI_HOME']) delete env[k];
+  for (const k of ['AGENTIC_HOME']) delete env[k];
   const r = spawnSync(process.execPath, ['-e', "const { HOME } = await import('./models/index.mjs'); console.log(HOME);"], { cwd: REPO, env, encoding: 'utf8', timeout: 30_000 });
   const got = r.stdout.trim();
   expect(got).not.toBe(join(home, '.agentic-coder'));
@@ -54,7 +54,7 @@ test('a test run takes its own throwaway home away with it when it ends', () => 
   // A temp folder of its own for the child, so only what that run leaves is counted.
   const tmp = mkdtempSync(join(tmpdir(), 'agentic-own-tmp-'));
   const env = { ...process.env, TMPDIR: tmp, NO_COLOR: '1', FORCE_COLOR: '0' };
-  for (const k of ['AGENTIC_HOME', 'BONSAI_HOME', 'AGENTIC_TEST_HOME']) delete env[k];
+  for (const k of ['AGENTIC_HOME', 'AGENTIC_TEST_HOME']) delete env[k];
   const r = spawnSync('bun', ['test', './terminal/test/words.test.mjs'], { cwd: REPO, env, encoding: 'utf8', timeout: 60_000 });
   expect(`${r.stdout}${r.stderr}`).toMatch(/^\s*0 fail$/m);
   expect(readdirSync(tmp).filter((n) => n.startsWith('agentic-test-home-'))).toEqual([]);

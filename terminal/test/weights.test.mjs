@@ -152,7 +152,7 @@ test('edits: save builds the copy + manifest and tells the app; a bad edit chang
 
 test('the test record: the page is built in (the Arena shows it), and /tests.json is the record read live, newest first', async () => {
   const { dir, path } = standIn();
-  const was = (process.env.AGENTIC_TEST_RECORD ?? process.env.BONSAI_TEST_RECORD);
+  const was = process.env.AGENTIC_TEST_RECORD;
   process.env.AGENTIC_TEST_RECORD = join(dir, 'tests', 'record.jsonl');
   const s = startWeightsServer({ path, docsDir: null, port: 0 });
   try {
@@ -201,9 +201,9 @@ test('the Arena tab: /arena starts the runner when it is not up and sends the ta
 });
 
 test('the DOCS folder is the repo\'s docs/, from a worktree the main folder\'s, and the design cards are in its private/', () => {
-  const was = { docs: process.env.AGENTIC_DOCS, bdocs: process.env.BONSAI_DOCS, repo: process.env.AGENTIC_REPO };
+  const was = { docs: process.env.AGENTIC_DOCS, repo: process.env.AGENTIC_REPO };
   try {
-    delete process.env.AGENTIC_DOCS; delete process.env.BONSAI_DOCS;
+    delete process.env.AGENTIC_DOCS;
     const repo = mkdtempSync(join(tmpdir(), 'agentic-docsdir-'));
     process.env.AGENTIC_REPO = repo;
     mkdirSync(join(repo, 'cli docs')); // the old name is not looked for any more
@@ -220,7 +220,7 @@ test('the DOCS folder is the repo\'s docs/, from a worktree the main folder\'s, 
     writeFileSync(join(tree, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', 'w')}\n`);
     process.env.AGENTIC_REPO = tree;
     expect(findDocsDir()).toBe(join(repo, 'docs'));
-  } finally { for (const [k, v] of [['AGENTIC_DOCS', was.docs], ['BONSAI_DOCS', was.bdocs], ['AGENTIC_REPO', was.repo]]) { if (v == null) delete process.env[k]; else process.env[k] = v; } }
+  } finally { for (const [k, v] of [['AGENTIC_DOCS', was.docs], ['AGENTIC_REPO', was.repo]]) { if (v == null) delete process.env[k]; else process.env[k] = v; } }
 });
 
 test('the /docs pages: the index and the tools are no pages, private/ keeps its memory to itself, and a page moved to older versions still opens from its old link', async () => {

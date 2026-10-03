@@ -26,7 +26,7 @@ import { realFolder } from './trust.mjs';
 import { SERVER_NAME } from '../agent/mcp.mjs';
 
 // Read when used, not at import, so tests can point it at their own home.
-const home = () => (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');
+const home = () => process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
 export const mcpFile = () => join(home(), 'mcp.json');
 export const mcpStateFile = () => join(home(), 'mcp-state.json');
 export const projectMcpFile = (cwd) => join(cwd, '.agentic', 'mcp.json');

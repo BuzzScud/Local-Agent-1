@@ -61,7 +61,7 @@ export const draftBytes = (m) => (m.draft ? filePart(m, m.draft.bytes) + m.draft
 // in use), the cache, each slot's running state and checkpoints (the cache is
 // shared), a server's own fixed state (stateBytes, once), the helper, the working space. The helper is counted whenever the
 // model has one (coding setup fetches it) unless it is switched off with AGENTIC_HELPER=off.
-export const needBytes = (m, ctx, { draft = Boolean(m.draft) && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (m.stateBytes ?? 0) + (draft ? draftBytes(m) : 0) + visionBytes(m) + OVERHEAD;
+export const needBytes = (m, ctx, { draft = Boolean(m.draft) && process.env.AGENTIC_HELPER !== 'off' } = {}) => filePart(m, m.bytes) + kvBytesPerToken(m) * ctx + (m.slots ?? 1) * ((m.fixedStateBytes ?? 0) + (m.checkpoints ?? 0) * (m.checkpointBytes ?? 0)) + (m.stateBytes ?? 0) + (draft ? draftBytes(m) : 0) + visionBytes(m) + OVERHEAD;
 // The vision add-on, when the model is loaded with it (withVision): its file, whole, and its working space.
 export const visionBytes = (m) => (m?.visionOn && m.vision ? m.vision.bytes + (m.vision.computeBytes ?? 0) : 0);
 
@@ -146,7 +146,7 @@ export function chooseContext(m, { want = m?.ctxWant ?? 32_768, floor = m?.ctxFl
   const gb = (b) => (b / 1e9).toFixed(1);
   const kb = (c) => `${Math.round(c / 1024)}k`;
   if (available >= needBytes(m, want)) return { ctx: want, available, reason: null };
-  if (effort === 'high' && m.draft && !m.draft.helpsThinking && (process.env.AGENTIC_HELPER ?? process.env.BONSAI_HELPER) !== 'off') {
+  if (effort === 'high' && m.draft && !m.draft.helpsThinking && process.env.AGENTIC_HELPER !== 'off') {
     if (available >= needBytes(m, want, { draft: false })) {
       return { ctx: want, helper: false, available, reason: `${gb(available)} GB free: High effort keeps ${kb(want)} of memory and leaves the speed helper off (with it, ${kb(want)} needs ${gb(needBytes(m, want))} GB)` };
     }

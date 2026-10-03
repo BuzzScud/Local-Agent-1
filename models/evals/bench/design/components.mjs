@@ -71,13 +71,13 @@ export const pickWords = (k) => (!k.page ? 'not seen as a page request, so no ca
   : `${[...k.rules, k.example].join(' + ')}${k.look ? `, in the ${basename(k.look).replace(/^look-/, '')} look` : ''}${k.fits ? '' : ' (the fallback card: none fits its words)'} · ${k.chars.toLocaleString('en-US')} characters`);
 
 // models/<model>/results/design-components-<date>/ for every model that has one.
-export function battleDirs(home, date) {
+function battleDirs(home, date) {
   const models = join(home, 'models');
   return readdirSync(models).map((m) => join(models, m, 'results', RESULTS(date))).filter((d) => existsSync(join(d, 'runs.json')));
 }
 
 // The page of a day, from every model's saved runs. null: nothing saved.
-export function writeBattlePage({ home, docsDir, date, requests }) {
+function writeBattlePage({ home, docsDir, date, requests }) {
   const dirs = battleDirs(home, date);
   if (!dirs.length || !existsSync(docsDir)) return null;
   const html = buildBattlePage({ dirs, date, requests, rule: RULE });

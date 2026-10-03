@@ -23,10 +23,8 @@ import { memoryOn, jobsDir, saveModeOf, keepOrSave } from './autosave.mjs';
 export const HOURS = [1, 2, 3, 4, 5];
 export const IDLE_MINS = 30;
 const LABEL = 'com.agentic-coder.memory-review';
-const OLD_LABEL = 'com.bonsai-code.memory-review'; // the job's name before the rename: still cleaned up (leave this one as it is)
 const plist = () => join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
-const oldPlist = () => join(homedir(), 'Library', 'LaunchAgents', `${OLD_LABEL}.plist`);
-const stateFile = () => join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? HOME, 'memory-review.json');
+const stateFile = () => join(process.env.AGENTIC_HOME ?? HOME, 'memory-review.json');
 const readState = () => { try { return JSON.parse(readFileSync(stateFile(), 'utf8')); } catch { return { sessions: {} }; } };
 const say = (text) => { try { mkdirSync(LOG_DIR, { recursive: true }); appendFileSync(join(LOG_DIR, 'memory-review.log'), `${new Date().toISOString()} ${text}\n`); } catch { /* no log, no harm */ } };
 
@@ -56,7 +54,7 @@ export function whyNot(s, { now = false } = {}) {
 }
 
 // The conversations of the last day that were not read yet (or changed since).
-export function sessionsToRead({ sessionsDir = join((process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? HOME, 'sessions'), since = Date.now() - 24 * 3600_000, read = readState().sessions } = {}) {
+export function sessionsToRead({ sessionsDir = join(process.env.AGENTIC_HOME ?? HOME, 'sessions'), since = Date.now() - 24 * 3600_000, read = readState().sessions } = {}) {
   const out = [];
   if (!existsSync(sessionsDir)) return out;
   for (const folder of readdirSync(sessionsDir)) {
@@ -144,16 +142,8 @@ export function plistText(bin) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>Label</key><string>${LABEL}</string>\n  <key>ProgramArguments</key>\n  <array><string>${bin}</string><string>memory-review</string></array>\n  <key>StartCalendarInterval</key>\n  <array>\n${times}\n  </array>\n  <key>EnvironmentVariables</key>\n  <dict><key>AGENTIC_NO_UPDATE</key><string>1</string></dict>\n  <key>ProcessType</key><string>Background</string>\n  <key>LowPriorityIO</key><true/>\n  <key>StandardOutPath</key><string>/dev/null</string>\n  <key>StandardErrorPath</key><string>/dev/null</string>\n</dict>\n</plist>\n`;
 }
 
-// A job left under the old name would run a second time (and points at an app that is gone).
-function removeOld() {
-  spawnSync('/bin/launchctl', ['bootout', `gui/${String(process.getuid())}/${OLD_LABEL}`], { encoding: 'utf8' });
-  const was = existsSync(oldPlist());
-  rmSync(oldPlist(), { force: true });
-  return was;
-}
 export function install({ bin = join(homedir(), '.agentic-coder', 'app', 'agentic-coder') } = {}) {
   if (!existsSync(bin)) throw new Error(`the Agentic Coder app is not installed at ${bin} (bun run install-cli)`);
-  removeOld();
   mkdirSync(join(plist(), '..'), { recursive: true });
   writeFileSync(plist(), plistText(bin));
   const uid = String(process.getuid());
@@ -166,6 +156,6 @@ export function uninstall() {
   spawnSync('/bin/launchctl', ['bootout', `gui/${String(process.getuid())}/${LABEL}`], { encoding: 'utf8' });
   const was = existsSync(plist());
   rmSync(plist(), { force: true });
-  return removeOld() || was;
+  return was;
 }
 export const installed = () => existsSync(plist());

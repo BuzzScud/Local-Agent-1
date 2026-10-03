@@ -22,9 +22,9 @@ test('the right file: the home folder\'s, the git repo\'s top, or the folder its
   expect(memoryFile(join(repo, 'src', 'deep'), home)).toBe(join(repo, '.agentic', 'notes.md'));
   const plain = join(home, 'plain'); mkdirSync(plain);
   expect(memoryFile(plain, home)).toBe(join(plain, '.agentic', 'notes.md'));
-  // a project that already has the old .bonsai/notes.md keeps using it
+  // the old .bonsai/notes.md is not read since 3 Oct 2026
   mkdirSync(join(plain, '.bonsai')); writeFileSync(join(plain, '.bonsai', 'notes.md'), '# old\n');
-  expect(memoryFile(plain, home)).toBe(join(plain, '.bonsai', 'notes.md'));
+  expect(memoryFile(plain, home)).toBe(join(plain, '.agentic', 'notes.md'));
 });
 
 test('the digest: what was said, without tool output', () => {

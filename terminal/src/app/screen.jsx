@@ -1815,7 +1815,7 @@ export const holdRoom = (items, ctx, rows) => rows - (itemHeights.get(rowsKey(it
 // Rows the conversation fills from the top of the window (at most the
 // window). An item not measured yet counts as a full window: no space, never
 // a prompt box pushed below the window.
-export function usedRows(app) {
+function usedRows(app) {
   let n = 0;
   for (const it of app.hold ? [] : app.items) {
     const h = heightOf(it, app);

@@ -43,7 +43,7 @@ const plain = (e) => {
 };
 
 // What the counting answer must say (commas, dots and line breaks between the numbers are fine).
-export const COUNT_ASK = 'Count from 1 to 20, with a space between each number. Reply with the numbers only.';
+const COUNT_ASK = 'Count from 1 to 20, with a space between each number. Reply with the numbers only.';
 export const countedRight = (said) => /\b1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20\b/.test(String(said ?? '').replace(/[,.;\n\r\t]+/g, ' ').replace(/\s+/g, ' '));
 
 export function remoteHub({ cwd = process.cwd(), home = HOME } = {}) {

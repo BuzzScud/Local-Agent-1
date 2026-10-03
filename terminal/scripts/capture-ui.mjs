@@ -24,7 +24,7 @@ const cols = Number(process.env.COLS ?? 155);
 const rows = Number(process.env.ROWS ?? 43);
 const t0 = Date.now();
 const r = await runInPty({
-  cwd, cols, rows, env: { AGENTIC_HOME: home }, timeoutMs: 300_000, bin: (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN),
+  cwd, cols, rows, env: { AGENTIC_HOME: home }, timeoutMs: 300_000, bin: process.env.AGENTIC_BIN,
   steps: [
     { wait: 'Starting', ms: 60_000 }, { sleep: 1200 }, { snapshot: 'starting' },
     { waitGone: 'Starting ', ms: 180_000 }, { sleep: 800 },

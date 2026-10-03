@@ -200,7 +200,7 @@ test('"always allow" offers the first part nothing covers, and nothing when the 
 });
 
 test('protected files always ask, even in Auto-edit, and the question has no "allow all edits"', () => {
-  for (const p of ['.env', '.env.local', 'config/.env', 'server.pem', 'keys/id_rsa', 'keys/id_rsa.pub', 'id_ed25519', 'deploy.key', '.git', '.git/config', '.git/hooks/pre-commit', 'sub/.git/config', '.agentic/settings.json', 'pkg/.agentic/settings.json', '.bonsai/settings.json'])
+  for (const p of ['.env', '.env.local', 'config/.env', 'server.pem', 'keys/id_rsa', 'keys/id_rsa.pub', 'id_ed25519', 'deploy.key', '.git', '.git/config', '.git/hooks/pre-commit', 'sub/.git/config', '.agentic/settings.json', 'pkg/.agentic/settings.json'])
     expect([p, protectedBy(p) !== null]).toEqual([p, true]);
   for (const p of ['src/app.js', '.gitignore', '.gitattributes', 'environment.md', 'src/env.js', 'docs/git.md', '.agentic/memory/x.md', 'my.keyboard.js', 'README.md', 'src/.github/x.yml'])
     expect([p, protectedBy(p)]).toEqual([p, null]);

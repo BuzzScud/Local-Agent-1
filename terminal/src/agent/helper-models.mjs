@@ -36,7 +36,7 @@ export function useOf(job, id) {
 }
 
 // One answer from a helper, as text: { text, secs, tokS }.
-export async function helperText({ url, use, messages, maxTokens = 600, thinking = false, effort, model, signal }) {
+async function helperText({ url, use, messages, maxTokens = 600, thinking = false, effort, model, signal }) {
   const t0 = Date.now();
   let text = '', tokS;
   for await (const ev of streamChat({ url, use, messages, maxTokens, thinking, effort, model, sampling: { temperature: 0.2 }, signal })) {

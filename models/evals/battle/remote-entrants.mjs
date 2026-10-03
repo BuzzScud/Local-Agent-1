@@ -17,9 +17,9 @@ import { loadSettings, readyRemote } from '../../../terminal/index.mjs';
 
 const KEEP_MS = 3 * 60_000;
 // The longest a run waits for the service to load its model (the runner's own guard allows 15 more).
-export const LOAD_MINS = Number(process.env.AGENTIC_ARENA_LOAD_MINS ?? 12);
+const LOAD_MINS = Number(process.env.AGENTIC_ARENA_LOAD_MINS ?? 12);
 export const isRemoteId = (id) => /^remote:(claude|machine|openai):./.test(String(id ?? ''));
-export const remoteIdOf = (source, model) => `remote:${source}:${model}`;
+const remoteIdOf = (source, model) => `remote:${source}:${model}`;
 // { source, model } of an entrant's id, or null.
 export function parseRemoteId(id) {
   const m = /^remote:(claude|machine|openai):(.+)$/.exec(String(id ?? ''));

@@ -148,9 +148,9 @@ export function sideMessages({ messages, question, now, room }) {
 // share of the main one's memory, but a long copy is slow to read.
 export const SIDE_COPY = 12_000;
 // How long the lowest model may take over its first word, the one time a session it is tried cold.
-export const TRY_MS = 8000;
+const TRY_MS = 8000;
 // After this long with no word from a busy main model, the panel says what it waits for.
-export const WAIT_NOTE_MS = 3000;
+const WAIT_NOTE_MS = 3000;
 
 const weights = (p) => { const m = /([\d.]+)\s*([MB])/i.exec(String(p ?? '')); return m ? Number(m[1]) * (m[2].toUpperCase() === 'B' ? 1e9 : 1e6) : 0; };
 // The service's models that can take a side question, smallest first: they chat, are not

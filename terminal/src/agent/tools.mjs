@@ -116,7 +116,7 @@ export const MODEL_TOOL_DEFS = [
 // The web (/web): WebSearch when a search service is set, WebFetch when reading pages is on.
 // What a page or a search brings back is data, never instructions: each result says so.
 // On the Claude API both go as Anthropic's own web tools instead (claude.mjs).
-export const WEB_TOOL_DEFS = [
+const WEB_TOOL_DEFS = [
   {
     name: 'WebSearch',
     description: 'Search the web. Returns the top results: title, address and a line or two each. For what you do not know or what changes (a library\'s current version, an error message, documentation). Then WebFetch the result worth reading.',
@@ -157,7 +157,7 @@ export function agentToolDef(helpers = []) {
 }
 // The screen (tools/screen.mjs): a picture of one app's window, or of the whole screen, for a
 // model that can look at pictures. It only looks; each app asks once (permissions.mjs).
-export const SCREEN_TOOL_DEF = {
+const SCREEN_TOOL_DEF = {
   name: 'Screen',
   description: "Take a picture of the user's screen to look at: one app's window (app: its name, like Safari, Mail or TextEdit), or the whole screen (no app). It only looks; nothing is clicked or typed. When the user asks about an app, a window or what is on their screen, use this first: other apps' files are outside the project and cannot be read. If that app has no window open, the answer lists the apps that do. The user is asked before you see an app the first time.",
   parameters: { type: 'object', properties: { app: str("Optional: the app whose front window to look at (Safari, TextEdit, Google Chrome…); leave it out for the whole screen") }, required: [] },
@@ -181,7 +181,7 @@ export const toolSchemas = (way = 'app', web = null, opts = {}) => toolDefs(way,
 // Other agents' names for a tool here that takes the same arguments (Claude Code's Glob, Grep and
 // LS): a big model trained on them calls Glob, and on 2 Oct 2026 was told "There is no tool called
 // Glob" twice in one task. The call runs as the tool here; a name this way has is never changed.
-export const TOOL_NAME_ALIASES = { Glob: 'List', Grep: 'Search', LS: 'List' };
+const TOOL_NAME_ALIASES = { Glob: 'List', Grep: 'Search', LS: 'List' };
 export const toolNameOf = (name, way = 'app') => (TOOL_NAME_ALIASES[name] && !defOf(name, way) ? TOOL_NAME_ALIASES[name] : name);
 
 // Small models reach for other common argument names; accept them.
@@ -663,7 +663,7 @@ function projectFiles(cwd, max = 40) {
 // The lines (from 0) of a file that hold a word or name: as plain text
 // first, whatever its case; then as a pattern. regex: a Search pattern, so
 // the pattern comes first.
-export function matchLines(lines, want, { regex = false } = {}) {
+function matchLines(lines, want, { regex = false } = {}) {
   const asText = () => { const low = want.toLowerCase(); return lines.flatMap((l, i) => (l.length <= 1500 && l.toLowerCase().includes(low) ? [i] : [])); };
   const asPattern = () => { try { const re = new RegExp(want, regex ? '' : 'i'); return lines.flatMap((l, i) => (l.length <= 1500 && re.test(l) ? [i] : [])); } catch { return []; } };
   const first = regex ? asPattern() : asText();

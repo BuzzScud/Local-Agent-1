@@ -50,7 +50,7 @@ export function knownFolders(cwd, { home = homedir(), state = instructionHome() 
 }
 
 // Reading speed on this Mac, measured 29 Sep 2026 (server.log): 120–200 tokens a second.
-export const READ_SPEED = 150;
+const READ_SPEED = 150;
 const estimate = (text) => Math.ceil((text?.length ?? 0) / 3.6);
 
 // The prompt cut into the parts it is built from, in order: where each comes
@@ -153,7 +153,7 @@ export function instructionsData(cwd, home, { folder } = {}) {
 // so a test file could otherwise write the real one.
 export const settingsHooks = { load: (cwd) => loadSettings(cwd), save: (patch) => saveSettings(patch) };
 // The saved set (auto, local or remote) and AGENTIC_INSTRUCTIONS when it decides instead.
-export function instructionsChoice() {
+function instructionsChoice() {
   const saved = settingsHooks.load().instructions;
   return { saved: RULE_SETS.includes(saved) ? saved : 'auto', env: instructionsEnv() ?? null };
 }

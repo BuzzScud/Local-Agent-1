@@ -118,7 +118,7 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   learns as small files, on the Mac only: `~/.agentic/memory` about the user (on this Mac a link to
   `docs/private/memory-about-you/`), `<project>/.agentic/memory` about a project. Work on the tests' own
   starter files (`models/evals/battle/<set>/<id>/project/`, `models/evals/bench/tasks/<id>/project/`
-  and their answers) is practice: no lesson is saved from it (`practiceWork` in `lessons.mjs`). A test never touches the real one: with `AGENTIC_HOME` (or `BONSAI_HOME`) set the user's memory
+  and their answers) is practice: no lesson is saved from it (`practiceWork` in `lessons.mjs`). A test never touches the real one: with `AGENTIC_HOME` set the user's memory
   is kept inside it, and the app tests run with `AGENTIC_MEMORY_SAVE=off` unless they test saving.
   A practice run (`bun run eval`) runs without the memory, so it measures the same thing every
   time; `memory: true` in `runHeadless` turns it on. `bun run eval:recall` is the check that the

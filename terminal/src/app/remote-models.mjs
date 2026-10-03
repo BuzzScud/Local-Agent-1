@@ -159,7 +159,7 @@ export function rowDetail(row, { inUse, used = 0 } = {}) {
 // Big-model mode (models/runtime/remote.mjs): a model with 30B parameters or more
 // that can call tools. /model marks it "big"; the line under the list says what that means.
 export const isBig = (m) => Boolean(bigHarness(m));
-export const bigWords = (m) => {
+const bigWords = (m) => {
   const h = bigHarness(m);
   return `Big model: it reads ${h.read.whole} lines at a time, up to ${h.steps} steps and ${h.tries} tries a fix.`;
 };
