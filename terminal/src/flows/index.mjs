@@ -12,7 +12,7 @@ import { fixFlow } from './fix.mjs';
 import { changeFlow } from './change.mjs';
 import { planFiles, multiFlow, MAX_FILES } from './multi.mjs';
 import { projectFiles } from './localize.mjs';
-import { isMoreTalk, isCommand, isPageRequest } from './words.mjs';
+import { isMoreTalk, isCommand, isPageRequest, wantsDesktop } from './words.mjs';
 
 const ID = '[`\'"]?([A-Za-z_$][\\w$]*)[`\'"]?';
 // A whole request that is one file operation: "delete trades.json",
@@ -56,6 +56,11 @@ function byWords(t) {
   // code change: it goes step by step, where the command asks you first.
   // ("delete trades.json" once became code that deleted the file on every run.)
   if (FILE_OP.test(t) && !/^\W*\w+\s+console\.\w+/i.test(t)) return { kind: 'other' };
+  // A file to make on the Desktop is a file, not a change to the project's code, even with a
+  // question mark: "create the helper agent file for me and add it to my desktop when you are
+  // done?" was a question, so each Write was turned away (3 Oct 2026). "What is on my desktop?"
+  // makes nothing and stays a question.
+  if (wantsDesktop(t) && /\b(add|make|create|write|build|put|save|copy|move|export|generate|place|download|drop)\b/i.test(t)) return { kind: 'other' };
   // Writing (a story, notes, a letter, a text or Markdown file) and creating a
   // new file are not code changes: no test can define "done", so work step by
   // step. Asking for code (a function, a field, a bug) keeps a request on the
@@ -73,7 +78,10 @@ function byWords(t) {
   // edits it needed were turned away, 2026-09-28). "Can you explain …?" and
   // the like still only want an answer.
   const pleaseDo = /\b(can|could|would|will) you\b/i.test(t) && !/\b(can|could|would|will) you\s+(?:please\s+|just\s+)?(explain|tell|describe|show me|summari[sz]e|clarify|walk me|help)\b/i.test(t);
-  if (/\?\s*$/.test(t) && !pleaseDo) return { kind: 'question' };
+  // A request that opens with what to do is one, whatever mark it ends with ("make me a page
+  // about the data?").
+  const opensWithDo = /^\W*(?:(?:ok(?:ay)?|now|so|and|then|also|please)[,\s]+)*(?:add|fix|change|make|implement|create|rename|remove|delete|update|refactor|write|build|put|save|generate)\b/i.test(t);
+  if (/\?\s*$/.test(t) && !pleaseDo && !opensWithDo) return { kind: 'question' };
   // A question on the first line with pasted output under it ("Here is a log,
   // what went wrong?" + the log) is still a question, whatever the log says.
   const first = t.split('\n')[0];

@@ -378,7 +378,7 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   expect(s.menu).toMatch(/Thinking\s+◀ None\s+▶\s+answers straight away: this model cannot think first/);
   expect(s.menu).toMatch(/Steps per request\s+◀ 80\s+▶\s+default/); // a big model's
   expect(s.menu).toMatch(/Thinking cap\s+not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer/);
-  expect(s.menu).toMatch(/Reply length\s+◀ auto\s+▶\s+default · 2,048 tokens a reply/);
+  expect(s.menu).toMatch(/Reply length\s+◀ auto\s+▶\s+default · up to 32k a reply/);
   expect(s.menu).toMatch(/Temperature\s+◀ its own\s+▶/);
   expect(s.menu).toMatch(/Keep loaded\s+◀ while open\s+▶/);
   expect(s.menu).not.toContain('Embedder');
@@ -561,7 +561,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   expect(s.menu).toMatch(/Steps per request\s+◀ 80\s+▶\s+✓ suggested · default · stops a request after 80 tool steps/);
   expect(s.menu).toMatch(/Command timeout\s+◀ 2 min\s+▶\s+suggested 10 min · default/);
   expect(s.menu).toMatch(/Thinking cap\s+not on a service: Ollama has no thinking limit, so Reply length holds the thinking and the answer/);
-  expect(s.menu).toMatch(/Reply length\s+◀ auto\s+▶\s+suggested 32k tokens · default · 2,048 tokens a reply/);
+  expect(s.menu).toMatch(/Reply length\s+◀ auto\s+▶\s+suggested 32k tokens · default · up to 32k a reply/);
   expect(s.menu).toContain('s suggested · enter switches to it · esc back to the list');
   expect(lagunaLoadsAtMenu).toBe(0);
   // s: every suggested value filled in, marked as not saved yet
@@ -588,7 +588,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   const tinyAt = srv.chats.findIndex((c) => c.model === 'tiny:3b');
   expect(tinyAt).toBeGreaterThan(0);
   expect(srv.thinks[tinyAt]).toBe(undefined); // tiny cannot think: nothing asked
-  expect(srv.predicts[tinyAt]).toBe(2048); // …and no room for thinking either
+  expect(srv.predicts[tinyAt]).toBe(32768); // Reply length auto on a service: 32k (SERVICE_REPLY), room for a file
   expect(srv.keeps[tinyAt]).toBe(-1);
   // laguna's own came back with it; esc went back to the list, and nothing switched
   expect(s.again).toMatch(/Thinking\s+◀ Max\s+▶ \s/);

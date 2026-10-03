@@ -110,6 +110,16 @@ test('plain commands and page requests are sorted by a rule; ones that name code
   expect(routeByRules('create a new file called slug.mjs with a slugify(text) function').kind).toBe('other'); // as before
 });
 
+test('a file to make on the Desktop, or a request that opens with what to do, is work even with a question mark', () => {
+  // 3 Oct 2026: sorted as questions, so each Write was turned away ("A question changes no files").
+  for (const t of ['create the helper agent file for me and add it to my desktop when you are done?', 'write a summary of this repo and save it to my desktop?', 'make me a page about the data and put it on my desktop?']) {
+    expect([t, routeByRules(t)?.kind]).toEqual([t, 'other']);
+  }
+  for (const t of ['make me a chart of the trades?', 'ok, add a --json flag to export.mjs?', 'create a notes file?']) expect([t, routeByRules(t)?.kind]).not.toEqual([t, 'question']);
+  // Asking about the Desktop makes nothing: still a question.
+  for (const t of ['what is on my desktop?', 'which files are in my desktop folder?', 'is the page on my desktop?']) expect([t, routeByRules(t)?.kind]).toEqual([t, 'question']);
+});
+
 test('a short request the rules understand is not asked about; a lone word still is', () => {
   for (const t of ['rename test to check', 'explain the tests', 'update the readme', 'describe the project']) expect([t, needsClarifying(t)]).toEqual([t, null]);
   for (const t of ['api', 'cleanup', 'make it faster', 'dark mode', 'why']) expect([t, needsClarifying(t)]).toEqual([t, 'model']);

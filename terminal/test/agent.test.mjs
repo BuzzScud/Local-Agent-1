@@ -754,6 +754,59 @@ test('three cut-off calls in a row stop the turn instead of looping for half an 
   expect(fake.remaining()).toBe(1);
 });
 
+// 3 Oct 2026, qwen3-coder-next on an Ollama service writing a page: the reply hit the 2,048-token limit
+// mid-call, Ollama handed back nothing of it, and "You ran out of room while thinking. Think less"
+// went back three times running, until esc.
+test('a reply cut off at the limit with nothing of it arrived is told to build the file in parts; three in a row stop', async () => {
+  const empty = { finish: 'length', tokens: 2048 };
+  const cwd = project();
+  const fake = await startFakeServer([empty, empty, empty, { text: 'never reached' }]);
+  const notes = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  const reason = await agent.send('make big.html');
+  await fake.close();
+  expect(reason).toBe('stuck');
+  const told = fake.requests[1].messages.at(-1).content;
+  expect(told).toStartWith(AUTO);
+  expect(told).toContain('none of it arrived: most likely a file too long for one reply. Build the file in parts instead.');
+  expect(told).not.toContain('Think less');
+  expect(notes.filter((t) => /nothing of it arrived/.test(t)).length).toBe(2);
+  expect(notes.at(-1)).toMatch(/^Three replies in a row were cut off at the reply limit \(2\.0k of .+ tokens\), so it stopped/);
+  expect(fake.remaining()).toBe(1);
+});
+
+test('a reply whose thinking took the room is still told to think less', async () => {
+  const thought = Array.from({ length: 300 }, (_, i) => `Step ${i} weighs part ${i * 7} of the layout.`).join(' ');
+  const cwd = project();
+  const fake = await startFakeServer([{ reasoning: thought, finish: 'length', tokens: 3500 }, { text: 'I will keep it short.' }], { chunk: 800 });
+  const notes = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: true, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+  agent.on('note', (e) => notes.push(e.text));
+  await agent.send('make big.html');
+  await fake.close();
+  expect(fake.requests[1].messages.at(-1).content).toContain('You ran out of room while thinking. Think less and take the next step.');
+  expect(notes.some((t) => /^The model ran out of room while thinking \(3\.5k of .+ tokens\); asked it to act\.$/.test(t))).toBe(true);
+});
+
+test('a model on an Ollama service gets room for a file when Reply length is auto: 32k, never past the context', async () => {
+  const room = async (m, ctx) => {
+    const cwd = project();
+    const fake = await startFakeServer([{ text: 'Hello.' }]);
+    const agent = new Agent({ url: fake.url, model: m, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, ctx, mode: 'edits', flows: false, confirmPlan: false, ask: async () => ({ choice: 'yes' }) });
+    await agent.send('say hello');
+    await fake.close();
+    return fake.requests[0].max_tokens;
+  };
+  const service = { ...model, remote: { kind: 'openai', label: 'the service', ollama: '0.12.0' } };
+  expect(await room(service, 65536)).toBe(32768);
+  const tight = await room(service, 32768);
+  expect(tight).toBeGreaterThan(8192);
+  expect(tight).toBeLessThan(Math.floor(32768 * 0.78)); // never past what the context has left
+  expect(await room({ ...service, replyTokens: 8192 }, 65536)).toBe(8192); // its own Reply length still wins
+  expect(await room(model, 65536)).toBe(2048); // a model on this Mac: as before
+});
+
 // Qwen, 30 Sep, started from the home folder: "download it to my desktop" was saved as
 // ~/media-player-card.html, "copied" onto itself, `open` was stopped by the fence, and the
 // answer said it was on the Desktop. The Desktop step: sent back once with the command that
@@ -818,6 +871,46 @@ test('from a project, a page asked for on the Desktop is offered to be copied th
   expect(readFileSync(join(home, 'Desktop', 'card.html'), 'utf8')).toBe('the first one'); // the original is kept
   expect(readFileSync(join(home, 'Desktop', 'card-v2.html'), 'utf8')).toBe(CARD);
   expect(opened).toEqual([join(home, 'Desktop', 'card-v2.html')]);
+});
+
+// 3 Oct 2026, from ~/Desktop/agentic-coder: "create the helper agent file for me and add it to my
+// desktop" went into the project as Desktop/CodeIndex-Helper.md, every mv out was refused, and the
+// whole test suite ran for a .md. Now a new file asked for there is written right on the Desktop.
+test('from a project, a new file asked for on the Desktop is written right there; nothing else outside opens, and the tests do not run for it', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-home-'));
+  const cwd = join(home, 'shop');
+  const desk = join(home, 'Desktop');
+  mkdirSync(cwd); mkdirSync(join(desk, 'other-project'), { recursive: true });
+  writeFileSync(join(desk, 'mine.md'), 'my own notes');
+  const fake = await startFakeServer([
+    { tool: { name: 'Write', args: { path: join(desk, 'other-project', 'x.md'), content: '# no' } } }, // a folder on it: your other projects
+    { tool: { name: 'Edit', args: { path: join(desk, 'mine.md'), old_text: 'my own', new_text: 'no' } } }, // a file of yours
+    { tool: { name: 'Write', args: { path: join(desk, 'helper.md'), content: '# Helper\n' } } },
+    { tool: { name: 'Read', args: { path: join(desk, 'helper.md') } } },
+    { tool: { name: 'Edit', args: { path: join(desk, 'helper.md'), old_text: '# Helper', new_text: '# Helper agent' } } },
+    { text: 'Wrote ~/Desktop/helper.md.' },
+    { text: 'never sent' },
+  ]);
+  const agent = desktopAgent(fake, { cwd, home, ask: async () => ({ choice: 'yes' }) });
+  agent.testCmd = 'echo checked'; // a project with tests: they would run after a change in it
+  const events = [];
+  for (const t of ['tool', 'note']) agent.on(t, (e) => events.push({ type: t, ...e }));
+  const reason = await agent.send('create the helper agent file for me and add it to my desktop when you are done?');
+  await fake.close();
+  expect(reason).toBe('done');
+  const tools = events.filter((e) => e.type === 'tool');
+  expect(tools.map((t) => [t.name, Boolean(t.error)])).toEqual([['Write', true], ['Edit', true], ['Write', false], ['Read', false], ['Edit', false]]);
+  expect(existsSync(join(desk, 'other-project', 'x.md'))).toBe(false);
+  expect(readFileSync(join(desk, 'mine.md'), 'utf8')).toBe('my own notes');
+  expect(readFileSync(join(desk, 'helper.md'), 'utf8')).toBe('# Helper agent\n');
+  expect(existsSync(join(cwd, 'Desktop'))).toBe(false);
+  expect(events.some((e) => e.type === 'note' && /Checking the change/.test(e.text))).toBe(false);
+  // A request that does not ask for the Desktop does not open it.
+  const fake2 = await startFakeServer([{ tool: { name: 'Write', args: { path: join(desk, 'stray.md'), content: '# stray' } } }, { text: 'Done.' }, { text: 'never sent' }]);
+  const other = desktopAgent(fake2, { cwd, home, ask: async () => ({ choice: 'yes' }) });
+  await other.send('create a stray.md file with a title');
+  await fake2.close();
+  expect(existsSync(join(desk, 'stray.md'))).toBe(false);
 });
 
 test('without the app\'s screen (coding -p, the benches) nothing is offered, copied or opened; a no leaves it where it is', async () => {

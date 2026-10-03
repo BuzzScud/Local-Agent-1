@@ -69,3 +69,12 @@ export function sortLine(kind, { shortcut = false, skill = null } = {}) {
   if (skill) return `Sorted as: ${name} · skill "${skill}" · step by step`;
   return `Sorted as: ${name} · ${shortcut && ['rename', 'fix', 'change'].includes(kind) ? 'shortcut' : 'step by step'}`;
 }
+
+// A request that wants its file on the Desktop: "download it to my desktop",
+// "on the Desktop", "save to desktop", "in ~/Desktop". Not the screen size
+// ("broken on desktop", "the desktop view", "on desktop and mobile") or "a
+// desktop app".
+const DESKTOP_PLACE = /\b(?:(?:to|onto|into)\s+(?:(?:my|the|your)\s+|~\/)?|(?:on|in|at)\s+(?:(?:my|the|your)\s+|~\/))desktop\b(?!\s*(?:view|version|layout|size|width|apps?|mode|screens?|browsers?|site|breakpoint)\b|\s+(?:and|or)\s+(?:on\s+)?(?:mobile|phones?|tablets?)\b)/i;
+export function wantsDesktop(text) {
+  return DESKTOP_PLACE.test(String(text ?? ''));
+}
