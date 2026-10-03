@@ -5,7 +5,7 @@
 // the model, the path shows under the request, and the question before
 // starting comes with answers to pick.
 import { test, expect } from 'bun:test';
-import { cpSync, mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent } from '../src/agent/agent.mjs';
@@ -123,6 +123,39 @@ test('a file to make on the Desktop, or a request that opens with what to do, is
 test('a short request the rules understand is not asked about; a lone word still is', () => {
   for (const t of ['rename test to check', 'explain the tests', 'update the readme', 'describe the project']) expect([t, needsClarifying(t)]).toEqual([t, null]);
   for (const t of ['api', 'cleanup', 'make it faster', 'dark mode', 'why']) expect([t, needsClarifying(t)]).toEqual([t, 'model']);
+});
+
+test('what a request protects decides it, not the verbs: everything kept is a question; one named thing kept is a limit on a change (3 Oct 2026)', () => {
+  // Everything protected: a question, whatever else the request says ("Use simple words" and "Write a list" are not work).
+  for (const t of [
+    "Explain how the parser works. Use simple words. Don't change anything.",
+    'Look at auth.mjs and tell me what is wrong. Make it short. Do not change any files.',
+    'Review my code. Write a list of the problems. No changes.',
+    "Check the tests. Update me on which fail. Don't touch the code.",
+    "Make a list of every place we call fetch. Don't edit anything.",
+    'Write a summary of what this module does. Change nothing.',
+    "Don't change anything, just explain the bug.",
+    'Add a section on errors to the docs page. Read only.',
+    'Add a --json flag to export.mjs without changing anything.',
+  ]) expect([t, routeByRules(t)?.kind]).toEqual([t, 'question']);
+  // One named thing protected: a limit. The rest is sorted as if it were not there.
+  expect(routeByRules('Tighten the three slow queries in report.mjs without changing their results.')?.kind).toBe('change'); // was a question: "Tighten" was on no list
+  expect(routeByRules('Add a --json flag. No changes to the output format.')?.kind).toBe('change');
+  expect(routeByRules("Move it into one shared function in validate.mjs. Don't change what any handler returns.")?.kind).toBe('change');
+  expect(routeByRules("Fix the rounding bug in totals.py. Don't touch the tests.")?.kind).toBe('fix');
+  expect(routeByRules('Rename getUser to fetchUser everywhere. Do not edit the docs folder.')).toEqual({ kind: 'rename', from: 'getUser', to: 'fetchUser' });
+  expect(routeByRules("Don't touch the tests, just fix the bug in totals.py.")?.kind).toBe('fix');
+  // "Don't change it" with nothing else asking for work: a question, as before; with work, the work.
+  expect(routeByRules("What does this function do? Don't change it.")?.kind).toBe('question');
+  expect(routeByRules("Don't change it.")?.kind).toBe('question');
+  expect(routeByRules("Add a test for parse() in parse.mjs. Don't change it.")?.kind).toBe('change');
+  // A read-only thing to build is a change, not "read only".
+  expect(routeByRules('Add a read-only flag to the database connection in db.mjs.')?.kind).toBe('change');
+  // The hard tasks that protect one thing are changes (every Edit of them was turned away as a question).
+  for (const n of ['31-hard-refactor-dedupe', '36-hard-perf']) {
+    const t = readFileSync(join(import.meta.dir, '..', '..', 'models', 'evals', 'bench', 'tasks', n, 'task.txt'), 'utf8');
+    expect([n, routeByRules(t)?.kind]).toEqual([n, 'change']);
+  }
 });
 
 test('the line under the request', () => {

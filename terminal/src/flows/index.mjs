@@ -38,11 +38,52 @@ export function isSmallTalk(text) {
 // code named is no change for the test-first path, and a plain command with no
 // rule of its own goes step by step instead of to the model for sorting.
 export function routeByRules(text) {
-  const t = text.trim();
+  const whole = text.trim();
+  if (KEEPS_ALL.test(whole)) return { kind: 'question' };
+  const { rest, onIt } = setAside(whole);
+  const r = sortWords(rest);
+  if (rest === whole) return r;
+  if (!rest) return { kind: 'question' }; // only a limit, nothing asked for
+  if (r && r.kind !== 'question') return r;
+  return { kind: onIt || r ? 'question' : 'change' };
+}
+
+function sortWords(t) {
   const r = byWords(t);
   if (r?.kind === 'change' && isPageRequest(t)) return { kind: 'other' };
   if (!r && isCommand(t)) return { kind: 'other' };
   return r;
+}
+
+// What a request protects decides whether it may change files, not its verbs (3 Oct 2026; before, a
+// sentence opening with one of 22 verbs switched "don't change" off, so "Use simple words. Don't change
+// anything." was a change and "Tighten … without changing their results" a question).
+// Everything kept ("don't change anything", "no changes", "change nothing", "read only"): a question,
+// always. One named thing kept ("don't touch the tests", "without changing their results", "no changes
+// to the output format"): a limit, set aside so the rest is sorted on its own (the model still gets the
+// whole request); a limit on one thing means the rest may change, so a rest the words leave open is a
+// change. "Don't change it" with nothing else asking for work stays a question.
+const DONT = String.raw`(?:don['’]?t|do not)\s+(?:change|edit|touch|modify|alter)`;
+const WITHOUT = String.raw`without\s+(?:changing|editing|touching|modifying|altering)`;
+const ALL = String.raw`(?:anything|any\s+(?:files?|code)|the\s+(?:code|files)|files|code)`;
+const SAID = String.raw`(?=\s*(?:$|[.!?;:,)\n]|(?:and|just|then|instead|please|yet|for now|at all)\b))`; // nothing named after it
+const KEEPS_ALL = new RegExp([
+  String.raw`\b${DONT}\s+${ALL}${SAID}`,
+  String.raw`\b${WITHOUT}\s+${ALL}${SAID}`,
+  String.raw`\b(?:change|edit|touch|modify|alter)\s+nothing${SAID}`,
+  String.raw`\bno\s+(?:code\s+)?changes?${SAID}`,
+  String.raw`(?:^|[.!?;:,(\n]\s*|\b(?:is|be|stay|stays|keep it|just)\s+)read[- ]only${SAID}`,
+].join('|'), 'i');
+// A limit runs to the end of its clause; a sentence that is only a limit goes whole.
+const LIMIT = new RegExp(String.raw`(^|[.!?]\s+|\n\s*)?((?:[\s,;:]*(?:\b(?:but|and|so|while)\s+)?)\b(?:${DONT}|${WITHOUT}|(?:change|edit|touch|modify|alter)\s+nothing|(?<=^|[.!?;:,(\n]\s*|\b(?:and|but|with)\s+)no\s+(?:code\s+)?changes?\s+(?:to|in|on|of|for))\b([^.!?;,\n]*))([.!?]*)`, 'gi');
+function setAside(t) {
+  let onIt = false;
+  const rest = t.replace(LIMIT, (all, start, clause, what, end) => {
+    if (/^\s*(?:it|them|this|that|these|those)\s*(?:at all|yet|please)?\s*$/i.test(what)) onIt = true;
+    return start !== undefined ? (start.match(/^[.!?]/)?.[0] ?? '') : end;
+  });
+  if (rest === t) return { rest: t, onIt };
+  return { rest: rest.replace(/^[\s,;:]+/, '').replace(/([.!?])\s*,\s*/g, '$1 ').replace(/\s*,\s*([.!?]|$)/g, '$1').replace(/([.!?])[\s.!?]*$/, '$1').trim(), onIt };
 }
 
 function byWords(t) {
@@ -51,12 +92,8 @@ function byWords(t) {
   // Greetings and thanks go straight to the conversation: asking the model to
   // sort them cost a request, and with a big model a re-read of its instructions.
   if (isSmallTalk(t)) return { kind: 'question', chat: true };
-  // "Don't change …" asks for no change only when nothing in the request opens with a thing to do:
-  // "Move it into one shared function in validate.mjs … Don't change what any handler returns" is a
-  // change with a limit, and sorted as a question every Edit of it was turned away (3 Oct 2026, hard
-  // task 31). "Just explain" is a question whatever else it says.
-  const opensWithWork = /(?:^|[.!?]\s+|\n\s*)(?:please\s+)?(?:add|fix|change|make|implement|create|rename|remove|delete|update|refactor|write|move|extract|split|merge|replace|use|build|convert|rewrite|simplify)\b(?!\s+(?:nothing|anything)\b)/i.test(t);
-  if (/\bjust (explain|tell|describe|show)\b/i.test(t) || (!opensWithWork && /\b(don'?t|do not|without|no)\s+(change|chang|edit|touch|modif)|\b(change|edit|touch|modify)\s+nothing\b|\bno (code )?changes?\b/i.test(t))) return { kind: 'question' };
+  // "Just explain" is a question whatever else it says. (What a request protects: routeByRules.)
+  if (/\bjust (explain|tell|describe|show)\b/i.test(t)) return { kind: 'question' };
   // Deleting, moving, renaming or copying a file is a file operation, not a
   // code change: it goes step by step, where the command asks you first.
   // ("delete trades.json" once became code that deleted the file on every run.)
