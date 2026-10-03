@@ -12,10 +12,12 @@
 // model that was cold on an Ollama service is let go of again when its run ends.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { HOME, CLAUDE_MODELS, claudeName, sourceOf, keyIdOf, readKey, remoteLabel, directUrl, openTunnel, SERVE_PORT, ollamaCatalog, connectRemote, preloadOllama, unloadOllama, endpointOf, setEndpoint } from '../../index.mjs';
+import { HOME, CLAUDE_MODELS, claudeName, sourceOf, keyIdOf, readKey, remoteLabel, directUrl, openTunnel, SERVE_PORT, ollamaCatalog, connectRemote, preloadOllama, unloadOllama, endpointOf, setEndpoint, modelFetch } from '../../index.mjs';
 import { loadSettings, readyRemote } from '../../../terminal/index.mjs';
 
 const KEEP_MS = 3 * 60_000;
+// The longest a run waits for the service to load its model (the runner's own guard allows 15 more).
+export const LOAD_MINS = Number(process.env.AGENTIC_ARENA_LOAD_MINS ?? 12);
 export const isRemoteId = (id) => /^remote:(claude|machine|openai):./.test(String(id ?? ''));
 export const remoteIdOf = (source, model) => `remote:${source}:${model}`;
 // { source, model } of an entrant's id, or null.
@@ -32,7 +34,8 @@ export function connectedRemote(settings = loadSettings()) {
 
 // The names the service's models go by in the Arena: "Opus 5.5" for Claude, else the service's own name.
 const nameOf = (source, model) => (source === 'claude' ? claudeName(model) : model);
-const shortOf = (source, model) => (source === 'claude' ? claudeName(model).split(' ')[0] : String(model).split(':')[0].split('/').pop());
+// Its tag stays (a service has qwen2.5-coder:32b and :14b, laguna-xs-2.1 at three precisions); only :latest goes.
+const shortOf = (source, model) => (source === 'claude' ? claudeName(model).split(' ')[0] : String(model).split('/').pop().replace(/:latest$/, ''));
 const entrant = (r, model) => ({ id: remoteIdOf(r.source, model), name: `${nameOf(r.source, model)} · ${remoteLabel(r)}`, short: shortOf(r.source, model), remote: true, here: true });
 
 // An Ollama service's models that can do a test: chat and call tools, no embedders, nothing under 1B.
@@ -87,8 +90,21 @@ export async function connectEntrant(id, { ctx = null, onLoading = () => {} } = 
     if (ctx && ctx !== ep.numCtx) setEndpoint(conn.url, { ...ep, numCtx: ctx });
     cold = !conn.info.ollama?.loaded;
     if (cold) {
-      onLoading(`loading ${want.model} on the service`);
-      try { await preloadOllama({ url: conn.url, key: ep.key, model: conn.info.model ?? want.model, numCtx: ctx ?? ep.numCtx, keepAlive: -1 }); } catch (e) { conn.stop(); throw new Error(`${want.model} did not load on the service: ${e.message}`); }
+      // A model this run loads is kept 15 minutes past its last request, not for good (the app's -1): a run
+      // killed part way (Stop while it loads) never leaves it filling the service. done() lets go of it at once.
+      setEndpoint(conn.url, { ...endpointOf(conn.url), keepAlive: '15m' });
+      // The models loaded there now. Where the new one does not fit beside them, the service waits until they are
+      // idle, then puts them aside (3 Oct 2026, the real service: Qwen3.6 in use filled its 23 GB, and llama3.2:3b
+      // waited behind it): the run says so, and stops after LOAD_MINS with that reason, never loading in silence.
+      let others = [];
+      try { others = ((await (await modelFetch(conn.url, '/api/ps', { signal: AbortSignal.timeout(5000) })).json())?.models ?? []).map((m) => m.name).filter((n) => n !== want.model); } catch {}
+      const them = others.length > 1 ? `${others.slice(0, -1).join(', ')} and ${others.at(-1)} are` : `${others[0]} is`;
+      onLoading(`loading ${want.model} on the service${others.length ? ` · ${them} loaded there too: if both do not fit, the service waits until ${others.length > 1 ? 'they are' : 'it is'} idle, then puts ${others.length > 1 ? 'them' : 'it'} aside` : ''}`);
+      try { await preloadOllama({ url: conn.url, key: ep.key, model: conn.info.model ?? want.model, numCtx: ctx ?? ep.numCtx, keepAlive: '15m', timeoutMs: LOAD_MINS * 60_000 }); } catch (e) {
+        conn.stop();
+        const late = e?.name === 'TimeoutError' || /timed? ?out|aborted/i.test(e?.message ?? '');
+        throw new Error(late ? `${want.model} did not load on the service in ${LOAD_MINS} minutes${others.length ? `: ${them} loaded there, likely busy, with no room for both` : ''}` : `${want.model} did not load on the service: ${e.message}`);
+      }
     }
   }
   return {

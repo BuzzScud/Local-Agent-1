@@ -72,6 +72,8 @@ export const fakeOllama = (opts = {}) => new Promise((ok) => {
     if (req.url === '/v1/models') return json(200, { object: 'list', data: FAKE_MODELS.map((x) => ({ id: x.name, object: 'model' })) });
     if (req.url === '/api/generate') {
       if (body.keep_alive === 0) { loaded.delete(body.model); return json(200, { model: body.model, done: true, done_reason: 'unload' }); }
+      // opts.noRoom: a load never answers (a busy service with no room beside its model; the Arena's remote runs).
+      if (opts.noRoom) return;
       await new Promise((r) => setTimeout(r, 100));
       loaded.set(body.model, body.options?.num_ctx ?? Math.min(m?.ctx ?? 32768, 65536));
       return json(200, { model: body.model, response: '', done: true, done_reason: 'load' });

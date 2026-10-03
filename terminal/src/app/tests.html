@@ -211,7 +211,8 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   // In the hub a results page opens in the hub; in the saved copy it is a file beside this one.
   const href = (page) => (live ? `/?tab=docs&page=${encodeURIComponent(page)}` : `../${page.split('/').map(encodeURIComponent).join('/')}`);
   const RETIRED = { bonsai: 'Bonsai 27B' }; // a model whose file is no longer on this Mac: its runs are kept, it has no row in the panel
-  const modelName = (id) => models.find((m) => m.id === id)?.name ?? RETIRED[id] ?? id ?? '';
+  // A model on a /remote service, run from the Arena (remote:<service>:<name>): its name on the service.
+  const modelName = (id) => models.find((m) => m.id === id)?.name ?? RETIRED[id] ?? (String(id ?? '').startsWith('remote:') ? `${id.replace(/^remote:[a-z]+:/, '')} (remote)` : id) ?? '';
   // A run's settings: its effort and memory, and the rows of the Run tab's panel it changed (`settings`, since 30 Sep).
   const ROWS = { embedder: ['Embedder'], retriever: ['Retriever'], reranker: ['Reranker'], context: ['Context', (v) => `${Math.round(v / 1024)}k`], thinking: ['Thinking cap', (v) => `${v.toLocaleString()} tokens`], tries: ['Tries per fix'], steps: ['Steps per request'], rulesRoom: ['Rules room', (v) => `${v.toLocaleString()} chars`], upFront: ['Up-front reading', (v) => `${v.toLocaleString()} chars`], outputLines: ['Command output', (v) => `${v} lines`], timeoutSecs: ['Command timeout', (v) => `${v} s`], trimAt: ['Trim at', (v) => `${Math.round(v * 100)}%`], summarizeAt: ['Summarize at', (v) => `${Math.round(v * 100)}%`] };
   const changedRows = (r) => Object.entries(r.settings ?? {}).map(([k, v]) => `${ROWS[k]?.[0] ?? k} ${ROWS[k]?.[1] && typeof v === 'number' ? ROWS[k][1](v) : v}`).join(', ');
@@ -239,12 +240,13 @@ code{font:12px ui-monospace,Menlo,monospace;color:var(--mute);overflow-wrap:anyw
   function side() {
     const latest = (id) => all.find((r) => r.model === id && r.kind === 'tasks' && r.total === 28 && !r.part && r.result !== 'stopped');
     const item = (id, name, n, sub) => `<button type="button" data-model="${esc(id)}" aria-pressed="${id === pick}"><span class="top"><b>${esc(name)}</b><span>${n}</span></span><span class="s">${esc(sub)}</span></button>`;
-    const none = all.filter((r) => !r.model).length, gone = all.filter((r) => r.model && !models.some((m) => m.id === r.model));
+    const none = all.filter((r) => !r.model).length, gone = all.filter((r) => r.model && !models.some((m) => m.id === r.model) && !String(r.model).startsWith('remote:'));
+    const remote = all.filter((r) => String(r.model ?? '').startsWith('remote:')).length;
     $('models').innerHTML = item('all', 'All models', all.length, 'every run')
       + models.map((m) => { const l = latest(m.id); return item(m.id, m.name, all.filter((r) => r.model === m.id).length, l ? `28 tasks: ${l.passed} of 28 · ${day(l.at)}` : 'no full 28-task run yet'); }).join('')
       + (none ? `<hr>${item('none', 'Not model-specific', none, 'unit tests and checks')}` : '');
     const names = [...new Set(gone.map((r) => modelName(r.model)))];
-    const note = gone.length ? `${gone.length} run${gone.length === 1 ? '' : 's'} of ${names.join(' and ')}, no longer on this Mac, show under All models only.` : '';
+    const note = [gone.length ? `${gone.length} run${gone.length === 1 ? '' : 's'} of ${names.join(' and ')}, no longer on this Mac, show under All models only.` : '', remote ? `${remote} run${remote === 1 ? '' : 's'} on remote models show under All models only.` : ''].filter(Boolean).join(' ');
     $('sidenote').textContent = note; $('models').title = note;
   }
   $('models').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; pick = b.dataset.model; page = 0; sel = 0; try { localStorage.setItem('agentic-tests-model', pick); } catch { /* no storage */ } draw(); };
