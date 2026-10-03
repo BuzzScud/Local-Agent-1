@@ -2,7 +2,19 @@
 // takes any free port, never 8757, the real hub's: an open Agentic Coder hub tab in
 // the browser would otherwise be answered by the test's hub, which has no
 // model file, and Weights would say the model is not on this Mac (27 Sep).
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 process.env.AGENTIC_HUB_PORT = '0';
+// Every test process has a throwaway home before anything loads (3 Oct 2026). The models part reads
+// its home once; with several files in one `bun test`, a file that imported it first with no
+// AGENTIC_HOME froze the real ~/.agentic-coder for the files after it, and one of them deleted the real
+// settings.json after each test. AGENTIC_TEST_HOME names this process's own, for a test that must know
+// a folder is its own before it deletes in it. (The models part also refuses the real home in a test
+// run: models/registry.mjs.)
+process.env.AGENTIC_TEST_HOME = mkdtempSync(join(tmpdir(), 'agentic-test-home-'));
+process.env.AGENTIC_HOME ??= process.env.AGENTIC_TEST_HOME;
 // The context helpers (src/agent/helpers.mjs) are off in the tests unless a
 // test turns them on: each test checks the steps it expects, and a helper's
 // test run or read would add steps of its own.

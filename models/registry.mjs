@@ -1,14 +1,19 @@
 // The models Agentic Coder can run (one folder each), and where their files
 // live on this Mac (~/.agentic-coder).
-import { homedir } from 'node:os';
-import { existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { existsSync, statSync, mkdtempSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 // The state folder: ~/.agentic-coder once it exists; until the migration
 // runs, the old ~/.agentic-coder keeps working. AGENTIC_HOME overrides.
 const NEW_HOME = join(homedir(), '.agentic-coder');
 const OLD_HOME = join(homedir(), '.bonsai-code'); // the folder's name before the rename: used only while ~/.agentic-coder does not exist
-export const HOME = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? (existsSync(NEW_HOME) || !existsSync(OLD_HOME) ? NEW_HOME : OLD_HOME);
+const CHOSEN = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? (existsSync(NEW_HOME) || !existsSync(OLD_HOME) ? NEW_HOME : OLD_HOME);
+// Inside a test run (bun test sets NODE_ENV=test, and its children keep it) the home is never the real
+// one, whatever the order the files load in: a throwaway takes its place (3 Oct 2026: a test file run
+// after another in one process deleted the real settings.json). terminal/test/test-env.mjs gives every
+// test process its own throwaway first, so this is the last line, not the usual one.
+export const HOME = process.env.NODE_ENV === 'test' && [NEW_HOME, OLD_HOME].includes(resolve(CHOSEN)) ? mkdtempSync(join(tmpdir(), 'agentic-test-home-')) : CHOSEN;
 // The model servers (engines) Agentic Coder builds from source, one folder
 // each under ~/.agentic-coder/engine/<tag>, so a new build never replaces the
 // one in use (models/runtime/engine). A model names the one it runs on
