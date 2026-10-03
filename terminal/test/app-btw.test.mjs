@@ -19,8 +19,9 @@ test('/btw mid-reply: answered in the panel on the side lane, esc closes it with
     { type: 'tell me a story' }, { key: 'enter' }, { wait: 'Once upon a time' },
     { type: '/btw ' }, { wait: '[question]' }, { snapshot: 'hint' },
     { type: 'eta?' }, { key: 'enter' },
-    { wait: 'about one more minute' }, { sleep: 150 }, { snapshot: 'panel' },
-    { key: 'esc' }, { sleep: 200 }, { snapshot: 'closed' },
+    // has: a snapshot in the middle of a redraw holds half a screen (pty.mjs); these are asked of it below
+    { wait: 'about one more minute' }, { sleep: 150 }, { snapshot: 'panel', has: ['/btw eta?', 'about one more minute', 'Esc to close', 'esc to interrupt'] },
+    { key: 'esc' }, { sleep: 200 }, { snapshot: 'closed', has: ['? for shortcuts'] },
     { wait: 'The end.', ms: 20_000 }, { waitGone: 'esc to interrupt', ms: 20_000 },
     { type: 'thanks' }, { key: 'enter' }, { wait: 'You are welcome.' },
     ...quit,

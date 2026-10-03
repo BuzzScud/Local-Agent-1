@@ -11,7 +11,8 @@ const slotDir = arg('--slot-save-path');
 const t0 = Date.now();
 // A test that checks how it was started names a file to note its arguments in;
 // one that needs a reply still running sets FAKE_LLAMA_REPLY_MS (below), one that
-// needs the start-up to last longer sets FAKE_LLAMA_LOAD_MS (default 1500).
+// needs the start-up to last longer sets FAKE_LLAMA_LOAD_MS (default 1500), or FAKE_LLAMA_WARM_MS (default
+// 2500) for the step after the model is up, while it takes in the instructions.
 if (process.env.FAKE_LLAMA_ARGS) appendFileSync(process.env.FAKE_LLAMA_ARGS, `${JSON.stringify(process.argv.slice(2))}\n`);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // --api-key-file (coding serve): everything but /health asks for that key, as the real one does.
@@ -30,7 +31,8 @@ createServer(async (req, res) => {
     res.end(JSON.stringify({ prompt: `<|im_start|>system\n# Tools\n${JSON.stringify(j.tools ?? [])}\n\n${sys.content}<|im_end|>\n<|im_start|>user\n${user.content}<|im_end|>\n<|im_start|>assistant\n` }));
     return;
   }
-  if (req.url === '/completion') { await wait(j.prompt.includes('This session') ? 200 : 2500); res.end('{}'); return; }
+  // FAKE_LLAMA_WARM_MS: how long taking in the instructions lasts (the start page's "instructions" step).
+  if (req.url === '/completion') { await wait(j.prompt.includes('This session') ? 200 : Number(process.env.FAKE_LLAMA_WARM_MS ?? 2500)); res.end('{}'); return; }
   const m = /^\/slots\/\d+\?action=(save|restore)$/.exec(req.url);
   if (m?.[1] === 'save') { writeFileSync(join(slotDir, j.filename), 'state'); res.end('{"n_saved":1}'); return; }
   if (m?.[1] === 'restore') { await wait(1500); if (!existsSync(join(slotDir, j.filename))) { res.statusCode = 400; res.end('{"error":{"message":"no file"}}'); return; } res.end('{"n_restored":1}'); return; }

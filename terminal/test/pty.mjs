@@ -19,6 +19,9 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 // own files, never in the real ~/.agentic; and nothing is saved on its own
 // unless the test asks for it (AGENTIC_MEMORY_SAVE). AGENTIC_TIPS=off: the line under the prompt box
 // says "? for shortcuts" from the start, not a tip picked at random.
+// The last lines of a screen that hold something, for a failure's message.
+const screenEnd = (text, n = 10) => text.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-n).map((l) => `  | ${l.slice(0, 150)}`).join('\n');
+
 export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = [], env = {}, timeoutMs = 30_000, bin = (process.env.AGENTIC_BIN ?? process.env.BONSAI_BIN) }) {
   const out = join(cwd, '..', `pty-${Date.now()}.log`);
   const exe = bin ? `'${bin}'` : `bun ${join(root, 'src/cli.jsx')}`;
@@ -40,7 +43,8 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   const waitFor = async (text, ms = 15_000) => {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) { if (await screenText(read(), cols, rows).then((s) => s.includes(text))) return true; await new Promise((r) => setTimeout(r, 100)); }
-    throw new Error(`timed out waiting for "${text}"`);
+    // What was on the screen instead, so a failure in a busy run explains itself.
+    throw new Error(`timed out waiting for "${text}"; the screen ended with:\n${screenEnd(await screenText(read(), cols, rows))}`);
   };
   const snapshots = {};
   const terms = {};
@@ -48,9 +52,21 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
   try {
     for (const s of steps) {
       // Wait until a text is no longer on the screen (a spinner or "Starting" gone).
-      if (s.waitGone) { const t0 = Date.now(); while ((await screenText(read(), cols, rows)).includes(s.waitGone)) { if (Date.now() - t0 > (s.ms ?? 15_000)) throw new Error(`timed out waiting for "${s.waitGone}" to go`); await new Promise((r) => setTimeout(r, 200)); } }
+      if (s.waitGone) { const t0 = Date.now(); while ((await screenText(read(), cols, rows)).includes(s.waitGone)) { if (Date.now() - t0 > (s.ms ?? 15_000)) throw new Error(`timed out waiting for "${s.waitGone}" to go; the screen ended with:\n${screenEnd(await screenText(read(), cols, rows))}`); await new Promise((r) => setTimeout(r, 200)); } }
       if (s.wait) await waitFor(s.wait, s.ms);
-      if (s.snapshot) { snapshots[s.snapshot] = await screenText(read(), cols, rows); terms[s.snapshot] = await emulate(read(), cols, rows); }
+      // has: the snapshot is taken at a moment the screen holds every one of these texts. The app clears and
+      // redraws the screen now and then, and a snapshot taken in the middle of that holds half a screen
+      // (3 Oct 2026: /btw's panel, read 150 ms after its answer came, was gone from one run in six on a busy Mac).
+      if (s.snapshot) {
+        let raw = read();
+        let text = await screenText(raw, cols, rows);
+        if (s.has) {
+          const t0 = Date.now();
+          while (!s.has.every((x) => text.includes(x)) && Date.now() - t0 < (s.ms ?? 5000)) { await new Promise((r) => setTimeout(r, 60)); raw = read(); text = await screenText(raw, cols, rows); }
+        }
+        snapshots[s.snapshot] = text;
+        terms[s.snapshot] = await emulate(raw, cols, rows);
+      }
       if (s.sleep) await new Promise((r) => setTimeout(r, s.sleep));
       // a check while the app runs, given the screen so far; write sends keys (or what a terminal would answer) worked out from that screen
       if (s.fn) await s.fn({ text: await screenText(read(), cols, rows), raw: read, screen: () => emulate(read(), cols, rows), write: stdin.write });
