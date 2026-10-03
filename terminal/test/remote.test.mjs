@@ -462,3 +462,11 @@ test('the agent connects again only when the connection broke: a server that ans
     expect(waits).toBe(1); // a dropped connection: once, as before
   } finally { s.close(); }
 });
+
+test('while Connect checks: the line says what was found, what it waits for and for how long, not only "checking…"', () => {
+  const form = { ...openForm({}, {}), source: 'openai' };
+  expect(rowNote({ ...form, test: { running: true, id: 1 } }, 'go')).toBe('reaching it, checking the key, asking for one word…');
+  const waiting = { running: true, id: 1, steps: [{ ok: true, text: 'reached in 73 ms' }, { ok: true, text: 'model big:latest · 32k context' }], waiting: 'asking big:latest for one word (the service may first load it: up to 3 min)', secs: 42 };
+  expect(rowNote({ ...form, test: waiting }, 'go')).toBe('✔ reached in 73 ms · ✔ model big:latest · 32k context · asking big:latest for one word (the service may first load it: up to 3 min)… 42 s · esc stops');
+  expect(showValue({ ...form, test: waiting }, 'go')).toBe('checking…');
+});

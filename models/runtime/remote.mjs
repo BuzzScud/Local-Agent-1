@@ -245,6 +245,23 @@ async function getJson(url, path, { key, signal, timeoutMs }) {
   return { status: res.status, ok: res.ok, body };
 }
 
+// Why an Ollama service gave no word in time, from what it has loaded now (/api/ps).
+const GB = (b) => (b ? `${(b / 1e9).toFixed(0)} GB` : '');
+async function notLoaded({ url, key, model, bytes, limit, out }) {
+  const mins = `${Math.round(limit / 60_000) || 1} min`;
+  // Its size on the service's disk (the list says; the model's own entry only does once loaded).
+  if (!bytes) { try { bytes = ((await getJson(url, '/api/tags', { key, timeoutMs: 4000 })).body?.models ?? []).find((m) => m.name === model)?.size ?? 0; } catch {} }
+  const size = bytes ? ` (${GB(bytes)})` : '';
+  let held = [];
+  try { held = ((await getJson(url, '/api/ps', { key, timeoutMs: 4000 })).body?.models ?? []).filter((m) => m.name && m.name !== model); } catch {}
+  out.loaded = held.map((m) => m.name);
+  if (!held.length) return `no answer in ${mins}: the service did not get ${model}${size} loaded. Try again in a minute, or pick a smaller model`;
+  const big = held.sort((a, b) => (b.size ?? 0) - (a.size ?? 0))[0];
+  // Kept for ever: its "until" is years away (Ollama's keep_alive -1).
+  const forever = Date.parse(big.expires_at ?? '') - Date.now() > 365 * 86_400_000;
+  return `no answer in ${mins}: the service did not load ${model}${size}. It keeps ${big.name} loaded${big.size ? ` (${GB(big.size)}${forever ? ', set to stay for ever' : ''})` : ''}, which may leave no room: pick ${big.name}, which is ready, or free the service first`;
+}
+
 const why = (e) => {
   const m = `${e?.cause?.code ?? ''} ${e?.cause?.message ?? ''} ${e?.message ?? ''}`;
   if (/Timeout|timed out|aborted/i.test(m)) return 'no answer in time';
@@ -255,6 +272,7 @@ const why = (e) => {
   if (/socket connection was closed|ECONNRESET|socket hang up|other side closed/i.test(m)) return 'it closed the connection (the server may have stopped)';
   return (e?.message ?? String(e)).slice(0, 160);
 };
+const timedOut = (e) => why(e) === 'no answer in time';
 
 // The context a server gives each conversation, from what it reports: llama-server's
 // /props, else a model list's own field (OpenRouter, vLLM, LM Studio, llama.cpp's meta).
@@ -294,7 +312,10 @@ export function pickRemoteModel(ids) {
 // one (the CLI, connectRemote). The form passes false so you can pick from the list.
 // numCtx: on an Ollama service, the context the model is to run at (the word is asked
 // for at it, so the model is not loaded at the service's own just for the check).
-export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000 }) {
+// onStep({ steps, waiting }): told before the one word is asked for, the only long wait (a service
+// may first load the model): what was found so far, and what is waited for.
+// replyMs: how long the one word may take (a test gives less).
+export async function probe({ url, kind = 'llama', key = null, model = '', numCtx = null, reply = false, autoPick = true, signal, timeoutMs = 8000, onStep = null, replyMs = null }) {
   const steps = [];
   const out = { ok: false, steps, ctx: null, slots: 1, models: [], model: model || null, file: null, ms: null, error: null, needModel: false, vision: kind !== 'llama' };
   const fail = (text) => { steps.push({ ok: false, text }); out.error = text; return out; };
@@ -352,7 +373,9 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
     if (reply) {
       const t1 = Date.now();
       // An OpenAI-compatible service may first load the model (Ollama: tens of GB from its disk).
-      const t = AbortSignal.timeout(Math.max(timeoutMs, kind === 'openai' ? 180_000 : 60_000));
+      const limit = replyMs ?? Math.max(timeoutMs, kind === 'openai' ? 180_000 : 60_000);
+      const t = AbortSignal.timeout(limit);
+      onStep?.({ steps: steps.slice(), waiting: out.ollama ? `asking ${out.model} for one word (the service may first load it: up to ${Math.round(limit / 60_000) || 1} min)` : 'asking it for one word' });
       const headers = { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) };
       const words = [{ role: 'user', content: 'Reply with the single word: ready' }];
       let res, j, said;
@@ -360,10 +383,18 @@ export async function probe({ url, kind = 'llama', key = null, model = '', numCt
         // Ollama's own chat, the one that takes a context (the agent's requests go the same way):
         // no thinking first (gpt-oss cannot turn it off, so its least), a few words back.
         const gptoss = /gpt-?oss/i.test(`${out.ollama.family} ${out.model}`);
-        res = await fetch(`${norm(url)}/api/chat`, {
-          method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t, headers,
-          body: JSON.stringify({ model: out.model, messages: words, stream: false, ...(gptoss ? { think: 'low' } : out.ollama.thinking ? { think: false } : {}), options: { num_predict: gptoss ? 512 : 8, ...(numCtx ? { num_ctx: numCtx } : {}) } }),
-        });
+        try {
+          res = await fetch(`${norm(url)}/api/chat`, {
+            method: 'POST', signal: signal ? AbortSignal.any([signal, t]) : t, headers,
+            body: JSON.stringify({ model: out.model, messages: words, stream: false, ...(gptoss ? { think: 'low' } : out.ollama.thinking ? { think: false } : {}), options: { num_predict: gptoss ? 512 : 8, ...(numCtx ? { num_ctx: numCtx } : {}) } }),
+          });
+        } catch (e) {
+          if (signal?.aborted || !timedOut(e)) throw e;
+          // No word in time: the service did not get the model loaded. What it holds instead says
+          // why, and what would answer at once (3 Oct 2026: a 52 GB model asked of a service that
+          // kept a 23 GB one loaded for ever; the form only said "no answer in time").
+          return fail(await notLoaded({ url, key, model: out.model, bytes: out.ollama.bytes, limit, out }));
+        }
         j = await res.json().catch(() => null);
         const why = typeof j?.error === 'string' ? j.error : j?.error?.message ?? '';
         if (!res.ok) return fail(isOutOfMemory(why) ? `the service has no room to load ${out.model} (out of GPU memory): pick a smaller model or a smaller context` : `it would not answer: ${res.status} ${why.slice(0, 140)}`.trim());

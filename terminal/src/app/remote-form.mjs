@@ -223,7 +223,13 @@ export function rowNote(form, id) {
   const t = form.test && !form.test.running ? form.test : null;
   if (id === 'source') return ({ here: 'the model loads on this Mac · nothing leaves it', claude: 'Anthropic’s models · billed to your API key', machine: 'running coding serve or a llama-server', openai: 'OpenRouter, OpenAI, Ollama, LM Studio, vLLM…' })[form.source];
   if (id === 'go') {
-    if (form.test?.running) return 'reaching it, checking the key, asking for one word…';
+    // While it runs: what was found so far, what it waits for, and for how long (a model loading
+    // on a service can take minutes, and a line that never changes reads as stuck).
+    if (form.test?.running) {
+      const r = form.test;
+      if (!r.waiting) return 'reaching it, checking the key, asking for one word…';
+      return `${(r.steps ?? []).map((x) => `✔ ${x.text}`).join(' · ')}${r.steps?.length ? ' · ' : ''}${r.waiting}… ${r.secs ?? 0} s · esc stops`;
+    }
     if (t) return t.steps.map((s) => `${s.ok ? '✔' : '✗'} ${s.text}`).join(' · ');
     if (form.source === 'here') return form.inUse === 'here' ? 'this window runs here already' : 'back to the model here · the remotes stay saved';
     return form.source === 'claude' ? 'checks the key and asks for one word (a fraction of a cent), then switches' : 'checks it answers, then saves and switches';
@@ -397,7 +403,8 @@ export function commitEdit(form) {
 // (opened for the check and closed after), the address, the key, the model, one word.
 // autoPick: the CLI names a coder when several are listed; the form passes false
 // so Connect can open the list instead of guessing.
-export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, autoPick = true } = {}) {
+// onStep: what the check found so far and what it waits for (probe), for the form's line.
+export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, autoPick = true, onStep = null, replyMs = null } = {}) {
   const r = toProfile(form);
   const problem = remoteProblem(r);
   if (problem) return { ok: false, steps: [{ ok: false, text: problem }], models: [] };
@@ -411,7 +418,7 @@ export async function testForm(form, { signal, ssh = 'ssh', timeoutMs = 10_000, 
       tunnel = await openTunnel({ dest: r.address, remotePort: r.port ?? SERVE_PORT, ssh });
       url = tunnel.url;
     } else url = directUrl(r);
-    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, reply: true, autoPick, signal, timeoutMs });
+    const res = await probe({ url, kind: r.kind, key, model: r.kind === 'claude' ? r.model || DEFAULT_CLAUDE_MODEL : r.model, numCtx: r.kind === 'openai' ? ollamaCtxOf(r, r.model) : null, reply: true, autoPick, signal, timeoutMs, onStep, replyMs });
     // An Ollama service with several models: its whole list, so the list Connect opens says what each can do.
     if (r.kind === 'openai' && res.models?.length > 1) res.catalog = await ollamaCatalog({ url, key, signal, timeoutMs }).catch(() => null);
     if (tunnel) res.steps.unshift({ ok: true, text: 'ssh tunnel open' });

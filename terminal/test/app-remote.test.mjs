@@ -607,3 +607,40 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   // nothing of it in the shared limits
   expect(saved.limits ?? {}).toEqual({});
 }, T);
+
+test('Connect on a service that is slow to answer: the line says what was found, what it waits for and counts the seconds; esc stops the request', async () => {
+  const { cwd, env, base } = setup();
+  const here = await startFakeServer([]);
+  // A service that lists one model and takes 6 s over its one word (a model loading); it notes a request dropped before the answer.
+  let dropped = false;
+  const slow = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/v1/models') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ object: 'list', data: [{ id: 'slow-model' }] })); return; }
+    if (req.method === 'GET') { res.writeHead(404, { 'content-type': 'application/json' }); res.end('{}'); return; }
+    const t = setTimeout(() => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: 'ready' } }] })); }, 6000);
+    res.on('close', () => { if (!res.writableEnded) { dropped = true; clearTimeout(t); } });
+    req.resume();
+  });
+  await new Promise((r) => slow.listen(0, '127.0.0.1', r));
+  const svc = { source: 'openai', address: `http://127.0.0.1:${slow.address().port}`, connect: 'http', kind: 'openai', model: 'slow-model', key: false };
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remotes: { openai: svc } }));
+  const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--url', here.url, '--no-flows'], timeoutMs: 60_000, steps: [
+    { wait: '? for shortcuts' },
+    { type: '/remote' }, { key: 'enter' }, { wait: 'Remote model' }, { sleep: 150 },
+    ...right(3), { sleep: 150 }, { snapshot: 'service' }, // Run on: Another service, as saved
+    ...down(5), { sleep: 100 }, { key: 'enter' }, // Connect
+    { wait: 'esc stops', ms: 10_000 }, { sleep: 2300 }, { snapshot: 'waiting' },
+    { key: 'esc' }, { sleep: 2500 },
+    { fn: () => { if (!dropped) throw new Error('the request was not stopped when the form closed'); } },
+    ...quit,
+  ] });
+  await here.close();
+  slow.closeAllConnections?.();
+  slow.close();
+  expect(r.snapshots.service).toMatch(/Run on\s+◀ Another service/);
+  expect(r.snapshots.service).toContain('slow-model');
+  const line = r.snapshots.waiting.split('\n').find((l) => l.includes('esc stops')) ?? '';
+  expect(line).toMatch(/✔ reached in \d+ ms · ✔ model slow-model.* · asking it for one word… [2-5] s · esc stops/);
+  expect(r.snapshots.waiting).toMatch(/Connect\s+checking…/);
+  expect(dropped).toBe(true);
+  expect(r.code).toBe(0);
+}, T);
