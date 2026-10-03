@@ -145,7 +145,10 @@ test.skipIf(needs('python3'))('/update without the launcher (run from the source
 
 // The whole path as you use it: the real launcher script, a repo made from
 // this working tree (so the launcher builds this code), the compiled app.
-test.skipIf(needs('python3'))('/update through the coding launcher: rebuilt, restarted in the same window, conversation back, every key arrives', async () => {
+// keeper: the app runs inside a keeper (sessions.mjs), the way a window really runs it since 3 Oct 2026;
+// the keeper starts the app through the launcher, so /update restarts it there and the window only
+// keeps showing it. Without it the app runs in the window itself (AGENTIC_SESSIONS=off in the tests).
+async function updateThroughLauncher({ keeper = false } = {}) {
   const src = join(import.meta.dir, '..', '..');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'agentic-update-repo-')));
   const files = execFileSync('git', ['-C', src, 'ls-files', '--cached', '--others', '--exclude-standard', 'terminal/src', 'terminal/rules', 'terminal/app/agentic-coder-launcher.sh', 'models', 'package.json', 'bunfig.toml'], { encoding: 'utf8' })
@@ -158,7 +161,7 @@ test.skipIf(needs('python3'))('/update through the coding launcher: rebuilt, res
   writeFileSync(launcher, readFileSync(join(src, 'terminal/app/agentic-coder-launcher.sh'), 'utf8').replace('__REPO__', repo));
   chmodSync(launcher, 0o755);
   const fake = await startFakeServer([{ text: 'Hello from before the update.' }, { text: 'Hello from after.' }]);
-  const env = { HOME: join(base, 'user'), AGENTIC_HOME: join(base, 'home'), AGENTIC_UPDATE_EVERY: '300', AGENTIC_REPO: '' };
+  const env = { HOME: join(base, 'user'), AGENTIC_HOME: join(base, 'home'), AGENTIC_UPDATE_EVERY: '300', AGENTIC_REPO: '', ...(keeper ? { AGENTIC_SESSIONS: 'on' } : {}) };
   const t = openTerm({ cwd, bin: launcher, env, args: ['--url', fake.url, '--no-flows'] });
   try {
     await t.waitFor('? for shortcuts', 60_000);
@@ -184,9 +187,16 @@ test.skipIf(needs('python3'))('/update through the coding launcher: rebuilt, res
     await t.type('again'); t.key('enter');
     await t.waitFor('Hello from after.');
     const ps = execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8' }).split('\n').filter((l) => l.startsWith(join(env.HOME, '.agentic-coder/app/agentic-coder')));
-    expect(ps.length).toBe(1); // one app, not a chain of them
+    if (!keeper) expect(ps.length).toBe(1); // one app, not a chain of them
+    // In a keeper: the window, its keeper, and one app in it (the new one), not a chain of apps.
+    else expect([ps.filter((l) => / session-host$/.test(l.trim())).length, ps.length]).toEqual([1, 3]);
   } finally { await t.close(); await fake.close(); }
-}, 120_000);
+}
+
+test.skipIf(needs('python3'))('/update through the coding launcher: rebuilt, restarted in the same window, conversation back, every key arrives', () => updateThroughLauncher(), 120_000);
+
+const { canHost } = await import('../src/app/sessions.mjs');
+test.skipIf(needs('python3') || !canHost())('/update through the keeper: the app restarts inside it, the window keeps showing it, conversation back, every key arrives', () => updateThroughLauncher({ keeper: true }), 150_000);
 
 // ── The GitHub check (git fetch) and what keeps it safe ─────────────────────
 

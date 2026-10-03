@@ -3,7 +3,7 @@
 // Every resize must end in one clean screen at the new size.
 import { test, expect } from 'bun:test';
 import { needs } from './needs.mjs';
-import { cpSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFakeServer } from './fake-server.mjs';
@@ -144,3 +144,25 @@ test('memoryWarning: silent under 70%, then says what happens next', async () =>
   expect(memoryWarning(6_000, 16_384, 6_144)).toBe('Memory 37% used + 38% kept for the next reply: old tool output is trimmed soon');
   expect(memoryWarning(3_000, 16_384, 6_144)).toBeNull();
 });
+
+// The same through the keeper (sessions.mjs), the way a window really runs the app since 3 Oct 2026:
+// the window's new size goes to the keeper, which resizes the app's pretend terminal, and the app's
+// redraw comes back out. The other tests here run the app in the window itself (AGENTIC_SESSIONS=off).
+const { canHost } = await import('../src/app/sessions.mjs');
+test.skipIf(needs('python3') || !canHost())('through the keeper: shrinking and growing the window each end in one clean screen at its new size', async () => {
+  const { cwd, env } = setup();
+  const records = () => { try { return readdirSync(join(env.AGENTIC_HOME, 'background')).filter((f) => f.endsWith('.json')); } catch { return []; } };
+  const fake = await startFakeServer([{ text: LONG }], { delayMs: 2 });
+  const t = openTerm({ cwd, env: { ...env, AGENTIC_SESSIONS: 'on' }, cols: 155, rows: 43, args: ['--url', fake.url, '--no-flows'] });
+  try {
+    await t.waitFor('? for shortcuts'); await t.type('hi'); t.key('enter'); await t.waitFor('no dependencies'); await t.idle();
+    expect(records()).toEqual(['demo-project-1.json']); // the app is in a keeper
+    for (const [c, r] of [[80, 24], [200, 50], [120, 24], [155, 43]]) { await settle(t, c, r); await sleep(250); await t.idle(400, 5000); await clean(t, `${c}×${r}`); }
+    expect(await t.screen()).toContain('no dependencies'); // the conversation is still there
+  } finally { await t.close(); await fake.close(); }
+  // The window closed: its session ends with it, and no keeper is left.
+  const t0 = Date.now();
+  while (records().length && Date.now() - t0 < 15_000) await sleep(100);
+  expect(records()).toEqual([]);
+}, T);
+

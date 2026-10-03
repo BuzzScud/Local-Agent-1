@@ -3,8 +3,8 @@
 // AGENTIC_SESSIONS=off), so they drive the app in its own window. These drive the everyday things
 // through the keeper: a message and its reply, a paste, /clear, the menus before the app and typing
 // after them, a mouse drag. Each ends with the app quitting and no keeper left behind.
-// Not here: ctrl+b and coding attach (sessions.test.mjs), a resize (resize.test.mjs drives its own
-// terminal, which the keeper cannot sit in) and /update's restart (it needs the installed launcher).
+// Elsewhere, also through the keeper: ctrl+b and coding attach (sessions.test.mjs), a resize
+// (resize.test.mjs, on its own resizable terminal) and /update's restart (update.test.mjs, with the launcher).
 import { test, expect, afterEach } from 'bun:test';
 import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
