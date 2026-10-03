@@ -18,6 +18,9 @@
 // Before a model loads, the runner holds the memory (running.json): kept-loaded models nobody
 // uses are unloaded, an Agentic Coder window lets go of its model once its reply ends, and
 // anything else (coding -p, a run from Terminal) is waited for.
+// While Agentic Coder is connected to a service with /remote, that service's models join in
+// (remote-entrants.mjs): alone or in a battle, beside the models on this Mac or against each other.
+// They take no memory here, so a run on one never waits for it; the checks stay on this Mac's models.
 // Only the Arena page itself may change anything (its requests carry this address as their origin).
 // AGENTIC_BATTLE_FAKE=1: stand-in runs (fake-one.mjs, fake-test.mjs), no model, for the tests and previews.
 import http from 'node:http';
@@ -30,6 +33,7 @@ import { panelData } from '../../../terminal/index.mjs';
 import { paths, BATTLE_PORT, LIMIT_SECS, SUITES, LEVELS, limitSecsOf, pointsOf, readJson, writeJson, seedSuites, listTests, saveTest, trashTest, resetTest, trashBattles, readBattle, listBattles, latestByTest, writeHold, clearHold, inside, runnerPid } from './store.mjs';
 import { RUN_TESTS, runTestById, runCommand, countLines, cleanSettings, runCatalog } from '../run-tests.mjs';
 import { labelOf } from './checks.mjs';
+import { remoteEntrants, isRemoteId, parseRemoteId, connectedRemote } from './remote-entrants.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -42,8 +46,13 @@ const ORIGINS = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`];
 const IDS = Object.keys(MODELS);
 const PAIR = ['gemma', 'qwen'].every((id) => MODELS[id]) ? ['gemma', 'qwen'] : IDS.slice(0, 2);
 // A model's short name in a battle's record line: "Gemma vs Qwen", "K2 vs Bonsai" (a version after the name is dropped).
-const shortOf = (id) => MODELS[id].name.split(' ')[0].replace(/\d+\.\d+$/, '');
-const vsOf = (v) => (Array.isArray(v) && v.length === 2 && v[0] !== v[1] && v.every((id) => IDS.includes(id)) ? [...v] : PAIR);
+// A remote model (remote:<service>:<name>) is named by its entrant, else by its name on the service.
+const entrantOf = (id) => remoteEntrants().find((m) => m.id === id) ?? null;
+const shortOf = (id) => (isRemoteId(id) ? entrantOf(id)?.short ?? parseRemoteId(id).model : MODELS[id].name.split(' ')[0].replace(/\d+\.\d+$/, ''));
+const fullNameOf = (id) => (isRemoteId(id) ? entrantOf(id)?.name ?? parseRemoteId(id).model : MODELS[id].name);
+// Who may run now: a model on this Mac, or a model of the service /remote is connected to.
+const canRun = (id) => IDS.includes(id) || (isRemoteId(id) && connectedRemote()?.source === parseRemoteId(id).source);
+const vsOf = (v) => (Array.isArray(v) && v.length === 2 && v[0] !== v[1] && v.every(canRun) ? [...v] : PAIR);
 const IDLE_EXIT_MS = Number(process.env.AGENTIC_BATTLE_IDLE_SECS ?? 7200) * 1000;
 const GRACE_MS = 90_000; // a run that goes past 10 min + this (stuck loading, say) is stopped
 
@@ -89,7 +98,7 @@ const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/
 const newKey = () => `${stamp()}-${(seq++).toString(36)}`;
 // A folder name nothing has yet: two runs of one test can start within the same second.
 const freshId = (dir, base) => { let id = base; for (let n = 2; existsSync(join(dir, id)); n++) id = `${base}-${n}`; return id; };
-const whoOf = (w) => { if (w === 'both' || IDS.includes(w)) return w; throw new Error(`pick who runs it: ${IDS.join(', ')} or both`); };
+const whoOf = (w) => { if (w === 'both' || canRun(w)) return w; if (isRemoteId(w)) throw new Error('that remote model is on a service /remote is not connected to now: connect it with /remote first'); throw new Error(`pick who runs it: ${IDS.join(', ')} or both`); };
 // A battle's two models, kept on its item; a run on one model has none.
 const vsFor = (who, v) => (who === 'both' ? { vs: vsOf(v) } : {});
 
@@ -130,6 +139,7 @@ function makeItems(list) {
       if (!c) throw new Error('no such check');
       if (!c.model) { out.push({ key: newKey(), kind: 'check', test: c.id, title: c.name, who: null, think: false, settings: null }); continue; }
       const who = whoOf(b.who), pair = who === 'both' ? newKey() : null;
+      if ((who === 'both' ? vsOf(b.vs) : [who]).some(isRemoteId)) throw new Error(`${c.name} runs on the models on this Mac only: pick one of them for it`);
       for (const m of who === 'both' ? vsOf(b.vs) : [who]) {
         const cmd = runCommand(c.id, { model: m, think, models: IDS, settings }); // throws what is wrong with it
         out.push({ key: newKey(), kind: 'check', test: c.id, title: c.name, who: m, think: cmd.think, settings: cmd.settings, ...(pair ? { pair } : {}) });
@@ -193,7 +203,7 @@ function runOne(test, modelId, out, match, side, item) {
     const child = spawn(process.execPath, [script, '--model', modelId, '--test', join(P.tests, test.id), '--out', out, '--timeout', String(limit), ...(item.think ? ['--think', 'on'] : [])], { cwd: REPO, env, detached: true, stdio: ['ignore', fd, fd] });
     closeSync(fd);
     current = { match: match.id, test: test.id, side, child, startedAt: Date.now() };
-    const guard = setTimeout(() => { log(`${match.id} ${side}: past the limit, stopping it`); try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, limit * 1000 + GRACE_MS + (FAKE ? 0 : 60_000));
+    const guard = setTimeout(() => { log(`${match.id} ${side}: past the limit, stopping it`); try { process.kill(-child.pid, 'SIGKILL'); } catch {} }, limit * 1000 + GRACE_MS + (FAKE ? 0 : 60_000) + (isRemoteId(modelId) && !FAKE ? 15 * 60_000 : 0)); // a big model on a service can take minutes to load
     child.on('exit', (code, sig) => {
       clearTimeout(guard);
       current = null;
@@ -224,10 +234,13 @@ async function runMatch(item) {
   save();
   log(`${b.mode} ${b.id} started`);
   const sides = both ? ['A', 'B'] : ['A'];
-  const holdTitle = both ? test.title : `${test.title} on ${MODELS[order[0]].name}`;
+  const holdTitle = both ? test.title : `${test.title} on ${fullNameOf(order[0])}`;
   for (const [i, side] of sides.entries()) {
-    if (stopAsked || !(await waitForMemory(holdTitle, i + 1, sides.length, order[i], both ? 'battle' : 'test'))) { b.runs[side] = { skipped: true }; continue; }
-    writeHold({ pid: process.pid, state: 'running', kind: both ? 'battle' : 'test', test: test.id, title: holdTitle, run: i + 1, of: sides.length, startedAt: Date.now() });
+    // A remote model takes no memory on this Mac: it neither waits for it nor holds it.
+    const here = !isRemoteId(order[i]);
+    if (stopAsked || (here && !(await waitForMemory(holdTitle, i + 1, sides.length, order[i], both ? 'battle' : 'test')))) { b.runs[side] = { skipped: true }; continue; }
+    if (here) writeHold({ pid: process.pid, state: 'running', kind: both ? 'battle' : 'test', test: test.id, title: holdTitle, run: i + 1, of: sides.length, startedAt: Date.now() });
+    else clearHold();
     b.runs[side] = await runOne(test, order[i], join(P.battles, b.id, side), b, side, item);
     save();
   }
@@ -460,19 +473,22 @@ function view() {
     if (!open(b)) continue;
     for (const side of Object.keys(b.runs ?? {})) { const r = b.runs[side]; if (r && !r.skipped) (last[b.test] ??= {})[b.order[side]] = { match: b.id, side, at: b.at, think: Boolean(b.think), ...brief(r) }; }
   }
+  const remotes = remoteEntrants();
   const score = { votes: Object.fromEntries(IDS.map((id) => [id, 0])), ties: 0, passes: Object.fromEntries(IDS.map((id) => [id, 0])), battles: 0 };
   for (const b of Object.values(lastBattle)) {
     score.battles += 1;
     // A battle counts for a model only once you voted: before that, who passed would give the names away.
     if (!b.vote) continue;
-    for (const side of ['A', 'B']) if (passed(b.runs[side])) score.passes[b.order[side]] += 1;
-    if (b.vote === 'T') score.ties += 1; else score.votes[b.order[b.vote]] += 1;
+    // A remote model has its own count too (from 0: it may not be in the list now).
+    for (const side of ['A', 'B']) if (passed(b.runs[side])) score.passes[b.order[side]] = (score.passes[b.order[side]] ?? 0) + 1;
+    if (b.vote === 'T') score.ties += 1; else score.votes[b.order[b.vote]] = (score.votes[b.order[b.vote]] ?? 0) + 1;
   }
   const running = now ? { key: now.key, kind: now.kind, test: now.test, title: now.title, who: now.who, vs: now.who === 'both' ? vsOf(now.vs) : null, think: Boolean(now.think), group: now.group ?? null, groupName: now.groupName ?? null, groupOf: now.groupOf ?? null, pair: now.pair ?? null, batch: now.batch ?? null, startedAt: now.startedAt,
     match: current?.match ?? null, side: current?.side ?? null, sideStartedAt: current?.startedAt ?? null, job: now.kind === 'check' && job ? job.id : null, waiting: !current && !(jobLive() && job.status === 'running') ? (waiting ?? 'Getting the memory ready…') : null } : null;
   return {
     // Every model in /model, and whether its file is here (only those can run); the battle a pick of none means.
-    models: IDS.map((id) => ({ id, name: MODELS[id].name, here: FAKE || existsSync(join(MODELS_DIR, MODELS[id].file)) })), pair: PAIR, limit: LIMIT_SECS, fake: FAKE, paused: state.paused, waiting,
+    // The remote ones after them, while /remote is connected (remote: true, short: their short name).
+    models: [...IDS.map((id) => ({ id, name: MODELS[id].name, here: FAKE || existsSync(join(MODELS_DIR, MODELS[id].file)) })), ...remotes], pair: PAIR, limit: LIMIT_SECS, fake: FAKE, paused: state.paused, waiting,
     line: state.line, running, done: state.done.slice(0, 40), loaded: loadedNow(), batch: state.batches[0]?.id ?? null,
     sets: ['new28', 'work28', 'practice', 'mine', ...Object.keys(LEVELS).map((lv) => `mine-${lv}`)].map((id) => ({ id, name: SETS[id][0], ids: tests.filter(SETS[id][1]).map((t) => t.id), ...(id.startsWith('mine-') ? { level: id.slice(5) } : {}) })).filter((x) => !x.level || x.ids.length),
     checks: checkRows(), panel: runPanel(), score,

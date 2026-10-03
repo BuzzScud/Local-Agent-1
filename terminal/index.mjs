@@ -39,6 +39,8 @@ export { CodeIndex, partsOf, partKey, CUT as CODE_CUT, MARGIN as CODE_MARGIN } f
 // How the pieces that come along are chosen, for the code search check (models/evals/bench/code/).
 export { choose } from './src/agent/search.mjs';
 export { loadSettings } from './src/app/store.mjs';
+// The Arena's remote entrants (models/evals/battle/remote-entrants.mjs): whether a saved service is ready to use.
+export { readyRemote } from './src/app/remote-form.mjs';
 // The Weights tab's file reader, for the weights reader check (models/evals/tools/reader-check.mjs)
 // and the edited copy check, which reads the words an edit changes (models/evals/tools/edited-check.mjs).
 export { weightsCore } from './src/app/weights-core.mjs';

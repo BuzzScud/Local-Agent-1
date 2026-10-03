@@ -637,8 +637,13 @@ body.compact .term { font-size: 11.5px; line-height: 1.42; }
   let toastTimer = null;
   function toast(text, bad) { toastEl.textContent = text; toastEl.className = `on${bad ? ' bad' : ''}`; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastEl.className = ''; }, 5000); }
   // A model's short name: its first word, a version after it dropped (Qwen3.5 → Qwen), as the runner names a battle.
-  const nameOf = (id) => SHORT[id] ?? S.st?.models.find((m) => m.id === id)?.name.split(' ')[0].replace(/\d+\.\d+$/, '') ?? id;
-  const fullName = (id) => S.st?.models.find((m) => m.id === id)?.name ?? id;
+  // A remote model (while /remote is connected) has its own short name from the runner.
+  const modelOf = (id) => S.st?.models.find((m) => m.id === id);
+  const nameOf = (id) => SHORT[id] ?? modelOf(id)?.short ?? modelOf(id)?.name.split(' ')[0].replace(/\d+\.\d+$/, '') ?? String(id).replace(/^remote:[a-z]+:/, '');
+  const isRemote = (id) => String(id ?? '').startsWith('remote:');
+  // The models on this Mac (the checks run on these only).
+  const localModels = () => (S.st?.models ?? []).filter((m) => !m.remote);
+  const fullName = (id) => S.st?.models.find((m) => m.id === id)?.name ?? String(id).replace(/^remote:[a-z]+:/, '');
   const tests = () => S.st?.tests ?? [];
   const testById = (id) => tests().find((t) => t.id === id);
   const checks = () => S.st?.checks ?? [];
@@ -730,7 +735,8 @@ body.compact .term { font-size: 11.5px; line-height: 1.42; }
   // Context's note depends on the Search rows (their models sit in memory beside it).
   const ctxNote = (stp) => stp.bySearch?.[`${valOf('embedder')}|${valOf('reranker')}`] ?? stp.note;
   const freeWords = () => (S.st?.panel?.free ? `${(S.st.panel.free / 1e9).toFixed(1)} GB free for a run` : 'free memory not known');
-  const WHO_NOTE = () => Object.fromEntries(whoList().map((w) => [w, isVs(w) ? `${whoWords(w)}, one at a time · a battle: names hidden until you vote` : `${fullName(w)} alone · ${freeWords()}`]));
+  const whereWords = (w) => (isRemote(w) ? 'on the service /remote is connected to: nothing loads on this Mac' : freeWords());
+  const WHO_NOTE = () => Object.fromEntries(whoList().map((w) => [w, isVs(w) ? `${whoWords(w)}, one at a time · a battle: names hidden until you vote` : `${fullName(w)} alone · ${whereWords(w)}`]));
   function panelHtml() {
     if (!P()) return '<div class="panelmsg"><div class="none">The panel is not read yet.</div></div>';
     const ids = whoList(); let group = '';
@@ -897,10 +903,12 @@ body.compact .term { font-size: 11.5px; line-height: 1.42; }
   function wordsHtml() {
     const w = whoNow(), lv = levels().find((l) => l.id === effort()), ch = changed();
     const who = isVs(w) ? `<b>a battle of ${esc(vsOf(w).map(fullName).join(' and '))}</b>, one after the other, with the names hidden until you vote` : `<b>${esc(fullName(w))}</b> alone`;
-    const quick = [...hereIds(), ...(defPair() ? [defPair()] : [])];
+    // With /remote connected: the first remote model too, and a battle of it against the default pair's first.
+    const rem = hereIds().filter(isRemote), loc = hereIds().filter((id) => !isRemote(id));
+    const quick = [...loc, ...(defPair() ? [defPair()] : []), ...(rem.length ? [rem[0], ...(loc.length ? [pairKey((defPair() ? vsOf(defPair()) : loc)[0], rem[0])] : [])] : []), ...(isRemote(w) && w !== rem[0] ? [w] : [])];
     return `<h3>This run, in words</h3><div class="say">It runs on ${who}, at <b>${esc(lv.show)}</b> effort (${esc(lv.note)}), with ${ch.length ? `<b>${ch.length} row${ch.length > 1 ? 's' : ''} changed</b> (${esc(ch.map((r) => `${r.label} ${stepOf(r).show}`).join(', '))}): its results are kept with those settings` : '<b>every row at the tests’ defaults</b>, so its results compare with every earlier run'}.</div>
       <div class="k">Quick pick · the same as the Who row</div>
-      <div class="whoc">${quick.map((q) => `<button type="button" class="wc${q === w ? ' on' : ''}" data-who="${esc(q)}"><b>${esc(isVs(q) ? `${vsOf(q).map(nameOf).join(' vs ')} · a battle` : fullName(q))}</b><span>${esc(isVs(q) ? 'two models, one after the other' : freeWords())}</span></button>`).join('')}</div>
+      <div class="whoc">${quick.map((q) => `<button type="button" class="wc${q === w ? ' on' : ''}" data-who="${esc(q)}"><b>${esc(isVs(q) ? `${vsOf(q).map(nameOf).join(' vs ')} · a battle` : fullName(q))}</b><span>${esc(isVs(q) ? 'two models, one after the other' : whereWords(q))}</span></button>`).join('')}</div>
       <div class="note" style="margin:0">Next: pick the tests. You can come back here at any time; a run already going keeps the settings it started with.</div>`;
   }
 
@@ -1268,7 +1276,7 @@ body.compact .term { font-size: 11.5px; line-height: 1.42; }
     return `<div class="vote"><span class="q">Which did better?</span>${picked}<span class="fill"></span>${['A', 'T', 'B'].map((k) => `<button class="vbtn ${k}${v === k ? ' on' : ''}" data-act="vote" data-v="${k}">${k === 'T' ? 'Tie' : `<span class="sw ${k}"></span>Model ${k}`}</button>`).join('')}</div>`;
   }
   // The other models here that have no run of this test yet, in words ("K2 and Bonsai have…"), or nothing.
-  const noRunBeside = (id) => { const os = (S.st?.models ?? []).filter((m) => m.id !== id && m.here !== false).map((m) => nameOf(m.id)); return os.length ? ` ${esc(os.length > 1 ? `${os.slice(0, -1).join(', ')} and ${os.at(-1)} have` : `${os[0]} has`)} no run of this test to put beside it yet.` : ''; };
+  const noRunBeside = (id) => { const os = localModels().filter((m) => m.id !== id && m.here !== false).map((m) => nameOf(m.id)); return os.length ? ` ${esc(os.length > 1 ? `${os.slice(0, -1).join(', ')} and ${os.at(-1)} have` : `${os[0]} has`)} no run of this test to put beside it yet.` : ''; };
   function besideBar(t, ls, explicit) {
     const mine = ls[0], rs = S.runs[t.id] ?? [];
     if (explicit) return `<div class="vote"><span class="picked">${ls.length > 1 ? 'Two runs you picked, side by side: the names show, so there is no vote.' : 'A run you picked from Runs.'}</span><span class="fill"></span><button class="btn" data-act="latest">Back to the latest run</button></div>`;
@@ -1350,7 +1358,7 @@ body.compact .term { font-size: 11.5px; line-height: 1.42; }
   }
   function checkView(c) {
     const data = S.jobs[c.id] ?? { jobs: [], live: null };
-    const ms = c.model ? S.st.models.map((m) => m.id) : [null];
+    const ms = c.model ? localModels().map((m) => m.id) : [null];
     const qi = lineAt('check', c.id), isRun = runningIs('check', c.id);
     const col = (m) => {
       const live = data.live && (data.live.model ?? null) === m ? data.live : null;
@@ -1648,7 +1656,7 @@ body.compact .term { font-size: 11.5px; line-height: 1.42; }
           const d = await api(`/api/jobs?test=${encodeURIComponent(cur.id)}`);
           S.jobs[cur.id] = d;
           const c = checkById(cur.id);
-          for (const m of c.model ? S.st.models.map((x) => x.id) : [null]) { const j = d.jobs.find((x) => (x.model ?? null) === m); if (j && !S.jobLines[j.id]) { try { S.jobLines[j.id] = (await api(`/api/job?id=${encodeURIComponent(j.id)}`)).lines ?? []; } catch { S.jobLines[j.id] = []; } } }
+          for (const m of c.model ? localModels().map((x) => x.id) : [null]) { const j = d.jobs.find((x) => (x.model ?? null) === m); if (j && !S.jobLines[j.id]) { try { S.jobLines[j.id] = (await api(`/api/job?id=${encodeURIComponent(j.id)}`)).lines ?? []; } catch { S.jobLines[j.id] = []; } } }
         } catch { /* as it was */ }
       }
       draw();
