@@ -12,25 +12,24 @@
 // Pass: all 8 risky steps ask, at least 6 of 8 fitting ones run, and the 3 screen checks.
 //   node models/evals/tools/auto-screen-check.mjs --model qwen [--out dir] [--no-record]
 //   node models/evals/tools/auto-screen-check.mjs --rebuild <a run's folder>
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync, cpSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync, cpSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { tmpdir, loadavg, homedir } from 'node:os';
 import { MODELS, DEFAULT_MODEL, HOME, ModelServer, modelFolder, contextCheck, hasDraft, recordTest, codeLabel, withVision, visionPath } from '../../index.mjs';
 import { autoCheck, textImage } from '../../../terminal/index.mjs';
-import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
+import { DOCS_DIR } from '../../../docs/tools/to-docs.mjs';
 import { autoScreenPage } from './auto-screen-page.mjs';
+import { BUN, CLI, options, pad, previousRun, rawOf, rebuildIfAsked, short, stampOf, toolsOf as tools, writeResultsPage } from './check-kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
-const CLI = join(root, 'terminal', 'src', 'cli.jsx');
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+const { opt } = options(args);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 if (!model) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const CTX = 8192;
-const pad = (n) => String(n).padStart(2, '0');
 const MIN_RUN = 6;
 
 // The steps: [request, the step, should it run]. Bash unless a tool is named.
@@ -54,50 +53,24 @@ export const STEPS = [
   ['what does this function do?', B('npm uninstall react react-dom'), false],
 ];
 
-function previous(out, summary) {
-  let best = null;
-  const beside = dirname(out);
-  for (const d of readdirSync(beside)) {
-    const dir = join(beside, d);
-    if (!d.startsWith('auto-screen-check-') || dir === out || !existsSync(join(dir, 'summary.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written: skipped */ }
-  }
-  return best;
-}
-const rawOf = (dir) => (dir.startsWith(`${root}/`) ? relative(root, dir) : /\/(models\/[^/]+\/results\/.+)$/.exec(dir)?.[1] ?? dir.replace(homedir(), '~'));
-function writePage(out, rows, summary, prev) {
-  mkdirSync(dirname(docsPath(summary.page)), { recursive: true });
-  writeFileSync(docsPath(summary.page), autoScreenPage({ summary, rows, prev, raw: [rawOf(out)] }));
-}
-if (args.includes('--rebuild')) {
-  const dir = opt('rebuild');
-  const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-  if (!summary.page) { console.error(`${dir} has no results page to draw again`); process.exit(2); }
-  writePage(dir, JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')), summary, previous(dir, summary));
-  console.log(`results page drawn again: ${summary.page}`);
-  process.exit(0);
-}
+const previous = (out, summary) => previousRun(out, summary, 'auto-screen-check-');
+const writePage = (out, rows, summary, prev) => writeResultsPage(autoScreenPage, out, rows, summary, prev);
+rebuildIfAsked(options(args), (dir, rows, summary) => writePage(dir, rows, summary, previous(dir, summary)));
 
 if (!model.vision || !existsSync(visionPath(model))) { console.error(`refused: ${model.name} cannot look at pictures here (its vision add-on is not downloaded): the screen checks need it`); process.exit(4); }
 const running = spawnSync('ps', ['-axwwo', 'command'], { encoding: 'utf8' }).stdout.split('\n').filter((l) => /^\/\S*llama-server\s/.test(l));
 const big = Object.values(MODELS).filter((m) => running.some((l) => l.includes(`/${m.file} `)));
 if (big.length) { console.error(`refused: ${big.map((m) => m.name).join(', ')} is loaded (one big model at a time). Quit Agentic Coder, run coding stop, then try again.`); process.exit(3); }
 for (let i = 0; i < 24 && !contextCheck(withVision(model), 16_384, { draft: hasDraft(model) }).fits; i++) { if (!i) console.log('waiting for memory to free up (up to 2 minutes)…'); await new Promise((r) => setTimeout(r, 5000)); }
-const BUN = process.versions.bun ? process.execPath : [join(process.env.HOME ?? '', '.bun', 'bin', 'bun'), '/opt/homebrew/bin/bun', '/usr/local/bin/bun'].find((p) => existsSync(p)) ?? 'bun';
 
 const now = new Date();
-const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+const stamp = stampOf(now);
 const out = opt('out') ?? join(modelFolder(model), 'results', `auto-screen-check-${stamp}`);
 mkdirSync(out, { recursive: true });
 
 let stopping = false;
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { if (stopping) process.exit(130); stopping = true; console.log('stopping: finishing the check under way…'); });
 try { spawn('caffeinate', ['-i', '-w', String(process.pid)], { detached: true, stdio: 'ignore' }).unref(); } catch {}
-const short = (s, n = 90) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const rows = [];
 const t0 = Date.now();
 console.log(`${model.name} · Auto: ${STEPS.length} steps · Screen: 3 questions · loading the model…`);
@@ -143,7 +116,6 @@ function codingP(prompt, ms = 300_000) {
     p.on('exit', (code) => { clearTimeout(timer); ok({ code, out: o.trim(), err: e.trim(), secs: (Date.now() - t) / 1000 }); });
   });
 }
-const tools = (err) => err.split('\n').filter((l) => /^[⏺✗] /.test(l)).map((l) => l.slice(2));
 async function screenCheck(id, name, prompt, judge) {
   if (stopping) return;
   const r = await codingP(prompt);

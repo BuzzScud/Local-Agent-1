@@ -12,21 +12,19 @@
 //   --remote <address> [--remote-model <name>]: a model on another machine (an OpenAI-style service)
 //   --no-record: a look only; no line in the test record and no results page
 //   node models/evals/tools/questions-check.mjs --rebuild <a run's folder>: draws its page again
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { tmpdir, loadavg } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { MODELS, DEFAULT_MODEL, ModelServer, modelFolder, contextCheck, hasDraft, recordTest, codeLabel, connectRemote } from '../../index.mjs';
 import { questionFor, testSettings } from '../../../terminal/index.mjs';
 import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
 import { makeShop } from './ab-kit.mjs';
 import { questionsPage } from './questions-page.mjs';
+import { options, pad, previousRun, rebuildIfAsked, root, stampOf } from './check-kit.mjs';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, '..', '..', '..'); // the repo
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+const { opt } = options(args);
 const REQUESTS = ['shipping', 'make checkout better', 'add a discount', 'tax', 'clean up the code', 'make it faster', 'totals', 'coupons'];
 const MIN_PASS = 7;
 const CTX = testSettings()?.context ?? 8192; // the question is under 600 tokens
@@ -44,38 +42,17 @@ function judge(q) {
   return { ok, missing, codey, why };
 }
 
-const pad = (n) => String(n).padStart(2, '0');
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null; };
 
-// The finished run before this one on the same model, for the page's Before.
-function previous(out, summary) {
-  let best = null;
-  for (const d of readdirSync(dirname(out))) {
-    const dir = join(dirname(out), d);
-    if (!d.startsWith('questions-check-') || dir === out || !existsSync(join(dir, 'summary.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written: skipped */ }
-  }
-  return best;
-}
+const previous = (out, summary) => previousRun(out, summary, 'questions-check-');
 const writePage = (out, rows, summary, prev) => writeFileSync(docsPath(summary.page), questionsPage({ summary, rows, prev, raw: [relative(root, out)] }));
 
-if (args.includes('--rebuild')) {
-  const dir = opt('rebuild');
-  const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-  if (!summary.page) { console.error(`${dir} has no results page to draw again`); process.exit(2); }
-  writePage(dir, JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')), summary, previous(dir, summary));
-  console.log(`results page drawn again: ${summary.page}`);
-  process.exit(0);
-}
+rebuildIfAsked(options(args), (dir, rows, summary) => writePage(dir, rows, summary, previous(dir, summary)));
 let model = MODELS[opt('model', DEFAULT_MODEL)];
 const remoteAt = opt('remote', null);
 if (!model && !remoteAt) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const now = new Date();
-const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+const stamp = stampOf(now);
 
 let stopping = false;
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { if (stopping) process.exit(130); stopping = true; console.log('stopping: keeping the requests done so far…'); });

@@ -21,46 +21,24 @@ import { tmpdir, loadavg } from 'node:os';
 import { MODELS, DEFAULT_MODEL, HOME, modelFolder, contextCheck, hasDraft, recordTest, codeLabel, connectRemote, probe } from '../../index.mjs';
 import { DOCS_DIR, docsPath } from '../../../docs/tools/to-docs.mjs';
 import { buildRemotePage } from './remote-page.mjs';
+import { BUN, CLI, options, pad, previousRun, rebuildIfAsked, short, stampOf } from './check-kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
-const CLI = join(root, 'terminal', 'src', 'cli.jsx');
 const args = process.argv.slice(2);
-const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i >= 0 ? args[i + 1] : d; };
+const { opt } = options(args);
 const model = MODELS[opt('model', DEFAULT_MODEL)];
 if (!model) { console.error(`no model "${opt('model')}"; one of: ${Object.keys(MODELS).join(', ')}`); process.exit(2); }
 const CTX = 16_384;
-const pad = (n) => String(n).padStart(2, '0');
 export const CHECKS = 11;
 
-// The run before this one on the same model, for the page's Before column.
-function previous(out, summary) {
-  let best = null;
-  const beside = dirname(out);
-  for (const d of readdirSync(beside)) {
-    const dir = join(beside, d);
-    if (!d.startsWith('remote-check-') || dir === out || !existsSync(join(dir, 'summary.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || s.model !== summary.model || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written: skipped */ }
-  }
-  return best;
-}
+const previous = (out, summary) => previousRun(out, summary, 'remote-check-');
 function writePage(out, rows, summary, prev) {
   mkdirSync(dirname(docsPath(summary.page)), { recursive: true });
   writeFileSync(docsPath(summary.page), buildRemotePage({ summary, rows, prev, raw: [relative(root, out)] }));
 }
 
-if (args.includes('--rebuild')) {
-  const dir = opt('rebuild');
-  const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-  if (!summary.page) { console.error(`${dir} has no results page to draw again`); process.exit(2); }
-  writePage(dir, JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')), summary, previous(dir, summary));
-  console.log(`results page drawn again: ${summary.page}`);
-  process.exit(0);
-}
+rebuildIfAsked(options(args), (dir, rows, summary) => writePage(dir, rows, summary, previous(dir, summary)));
 
 // Refused while a big model is loaded: serve loads one more copy (one fits at a time).
 const running = spawnSync('ps', ['-axwwo', 'command'], { encoding: 'utf8' }).stdout.split('\n').filter((l) => /^\/\S*llama-server\s/.test(l));
@@ -69,14 +47,13 @@ if (big.length) { console.error(`refused: ${big.map((m) => m.name).join(', ')} i
 for (let i = 0; i < 24 && !contextCheck(model, CTX, { draft: hasDraft(model) }).fits; i++) { if (!i) console.log('waiting for memory to free up (up to 2 minutes)…'); await new Promise((r) => setTimeout(r, 5000)); }
 const fit = contextCheck(model, CTX, { draft: hasDraft(model) });
 if (!fit.fits) { console.error(`refused: ${fit.note}`); process.exit(4); }
-const BUN = process.versions.bun ? process.execPath : [join(process.env.HOME ?? '', '.bun', 'bin', 'bun'), '/opt/homebrew/bin/bun', '/usr/local/bin/bun'].find((p) => existsSync(p)) ?? 'bun';
 
 const portOpen = (port) => new Promise((ok) => { const s = createConnection({ port, host: '127.0.0.1' }); s.once('connect', () => { s.destroy(); ok(true); }); s.once('error', () => ok(false)); });
 let PORT = Number(opt('port', 18080));
 while (await portOpen(PORT)) PORT++;
 
 const now = new Date();
-const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+const stamp = stampOf(now);
 const out = opt('out') ?? join(modelFolder(model), 'results', `remote-check-${stamp}`);
 mkdirSync(out, { recursive: true });
 
@@ -105,7 +82,6 @@ function codingP(home, prompt, env = {}, ms = 240_000) {
 }
 // The model servers running on this run's model files: { pid, cmd }.
 const servers = () => spawnSync('ps', ['-axwwo', 'pid=,command='], { encoding: 'utf8' }).stdout.split('\n').map((l) => /^\s*(\d+)\s+(.*)$/.exec(l)).filter((m) => m && /llama-server\s/.test(m[2]) && m[2].includes(join(serveHome, 'models'))).map((m) => ({ pid: Number(m[1]), cmd: m[2] }));
-const short = (s, n = 90) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 
 let stopping = false;
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { if (stopping) process.exit(130); stopping = true; console.log('stopping: finishing the check under way, then serve stops…'); });

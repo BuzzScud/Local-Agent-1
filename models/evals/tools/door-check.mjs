@@ -29,10 +29,10 @@ import { tmpdir, loadavg, homedir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PassThrough } from 'node:stream';
+import { CLI, pad, previousRun, stampOf, writeResultsPage } from './check-kit.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..', '..'); // the repo
-const CLI = join(root, 'terminal', 'src', 'cli.jsx');
 const args = process.argv.slice(2);
 const BUN = (() => { const r = spawnSync('/usr/bin/which', ['bun'], { encoding: 'utf8' }); return r.status === 0 && r.stdout.trim() ? r.stdout.trim() : join(homedir(), '.bun', 'bin', 'bun'); })();
 if (!globalThis.Bun) {
@@ -51,26 +51,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await sleep(100); } return false; }
 const mb = () => process.memoryUsage().rss / 1e6;
 const rawOf = (dir) => (dir.startsWith(`${root}/`) ? relative(root, dir) : /\/(models\/evals\/results\/.+)$/.exec(dir)?.[1] ?? dir.replace(homedir(), '~'));
-const pad = (n) => String(n).padStart(2, '0');
 
-function previous(out, summary) {
-  let best = null;
-  const beside = dirname(out);
-  for (const d of readdirSync(beside)) {
-    const dir = join(beside, d);
-    if (!d.startsWith('door-check-') || dir === out || !existsSync(join(dir, 'summary.json'))) continue;
-    try {
-      const s = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
-      if (s.stopped || !(s.finished < summary.finished)) continue;
-      if (!best || s.finished > best.s.finished) best = { s, rows: JSON.parse(readFileSync(join(dir, 'rows.json'), 'utf8')) };
-    } catch { /* a folder being written: skipped */ }
-  }
-  return best;
-}
-function writePage(out, rows, summary, prev) {
-  mkdirSync(dirname(docsPath(summary.page)), { recursive: true });
-  writeFileSync(docsPath(summary.page), doorPage({ summary, rows, prev, raw: [rawOf(out)] }));
-}
+const previous = (out, summary) => previousRun(out, summary, 'door-check-', { sameModel: false });
+const writePage = (out, rows, summary, prev) => writeResultsPage(doorPage, out, rows, summary, prev);
 if (args.includes('--rebuild')) {
   const dir = args[args.indexOf('--rebuild') + 1];
   const summary = JSON.parse(readFileSync(join(dir, 'summary.json'), 'utf8'));
@@ -82,7 +65,7 @@ if (args.includes('--rebuild')) {
 
 const t0 = Date.now();
 const now = new Date();
-const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+const stamp = stampOf(now);
 const out = join(root, 'models', 'evals', 'results', `door-check-${stamp}`);
 mkdirSync(out, { recursive: true });
 
