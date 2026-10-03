@@ -24,7 +24,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -36,7 +36,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   const ranker = rank && !mem?.embedder ? embedder ?? own : null;
   const system = systemPrompt({ cwd, notes: projectNotes(cwd, notesRoom(), { memory: Boolean(mem), home: mem?.home }).text, git: gitSummary(cwd) });
   const agent = new Agent({
-    url, model, cwd, system, thinking, effort, ctx, mode: autoApprove ? 'edits' : 'ask', flows: flows !== false, slots, memory: mem, ranker,
+    // mode: the window's mode, for a loop's run (/loop); otherwise auto-approve is Accept edits, and Manual without it.
+    url, model, cwd, system, thinking, effort, ctx, mode: mode ?? (autoApprove ? 'edits' : 'ask'), flows: flows !== false, slots, memory: mem, ranker, keepProgress,
     // Its time for thinking (agent.mjs): the practice runs give their time limit; else as the app.
     ...(thinkBudgetSecs != null ? { thinkBudgetSecs } : {}),
     // What you saved with /permissions (coding -p passes it; the practice bench does not, so its runs measure the same every time).
@@ -55,7 +56,10 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     // approve(req) → false says no to one request even when auto-approving.
     // answers(question, req) → the reply to one of Agentic Coder's questions (null = no answer);
     // set answers.steers = true to also answer its plans (req.kind 'plan') and check-ins ('checkin').
+    // askUser(req) → the answer to anything that asks, from whoever watches the run (a loop's
+    // board, app/loop-run.mjs); null leaves it to the rules below.
     ask: async (req) => {
+      if (askUser) { const r = await askUser(req); if (r) return r; }
       if (req.name === 'Ask') {
         // A plan to confirm or a check-in goes to answers only when it steers
         // (answers.steers = true); otherwise the plan is approved and the
@@ -129,6 +133,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     reason = s.verdict?.kind === 'go' ? 'done' : 'stopped';
     finalText = [run.verdictLine(), ...(s.report ?? [])].join('\n');
   } else reason = await agent.send(canSee || !images.length ? prompt : `${prompt}\n\n(Pictures were named, but this model is not looking at pictures.)`, { signal, images: canSee && images.length ? images : undefined });
+  // more() → a message that arrived while it worked (a note typed to a loop's run), sent when the turn ends.
+  if (more && !agents) { for (let next = more(); next != null && !signal?.aborted; next = more()) reason = await agent.send(String(next), { signal }); }
   const secs = (Date.now() - t0) / 1000;
   // What the run taught goes into the memory before it ends.
   let saved = null;

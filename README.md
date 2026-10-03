@@ -128,6 +128,36 @@ finish (`.agentic/agents/run.json`). `coding -p --agents "…"` runs it with no 
 **Agents check** (`/test agents`) measures it against a plain request. `/morning` gave /agents its
 row in the `/` menu and is typed in full now.
 
+### /loop: a message sent again by itself
+
+`/loop` sends a message again without you: every so often, or until its job is done. Three kinds
+have a ready-made message, and any message of your own works too:
+
+- `/loop test 5m` runs the tests every 5 minutes and says which fail (it changes no file).
+- `/loop debug` fixes failing tests, run after run, until they pass, then ends.
+- `/loop web 30m read the Bun release page and tell me when there is a new version` reads pages.
+- `/loop 10m <message>` sends your message every 10 minutes; with no time, the loop paces itself.
+
+A loop belongs to the window it was made in: it works in that window's folder, in the mode the
+window was in, and ends when the window closes, when a run says its job is done, or after 24
+hours. Each run is a fresh conversation, told how the last run ended. Nothing loads for a loop:
+while the model is off, or while the window itself is answering, its loops wait and say so. On
+this Mac's model one run goes at a time; on a service, three.
+
+`/loops` opens the loop board in a Terminal window of its own (`coding loops` in any terminal).
+It draws this window on top and a box per loop under it, with the four steps of a run and the
+step it is on, then a log. A run that would ask is paused and says "needs you": the question
+sits above the board's chat box, and `y`, `a` (always, for this loop) or `n` answers it. Press
+`t` to type in the chat box: a note goes to the loop named on the box (its run reads it when its
+turn ends; between runs, the next run starts with it), and `/loop …` typed there makes a loop.
+`enter` opens one run full size, `r` runs a loop now, `p` pauses it, `e` changes how often, `s`
+stops it, `q` closes the board (the loops go on). `/loop` alone lists the window's loops, and
+`/loop stop` ends them.
+
+A debugging run that ends with fewer failing tests than it started with, and none failing
+newly, keeps its changes for the next run; any other run that ends on failing tests has its
+changes put back, as a message in the window does.
+
 ### Pictures and PDFs
 
 Drag a screenshot or a PDF into the window, name it with `@shot.png`, or copy a screenshot

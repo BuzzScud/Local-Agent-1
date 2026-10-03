@@ -201,8 +201,12 @@ test('the / menu under the live start page: the 18 of this Mac (with /jumptomac,
       { type: 'start' }, { key: 'enter' }, { wait: '● ready · effort', ms: 45_000 }, { sleep: 400 }, { snapshot: 'ready' },
       ...quit,
     ] });
-    expect(rowsOf(r.snapshots.menu)).toHaveLength(18);
+    // 18 at 155 × 43: no more fit under the page. At 173 × 55 two more do, so /loop and /loops
+    // (3 Oct 2026) are listed there too; either way the page stays live.
+    expect(rowsOf(r.snapshots.menu)).toHaveLength(rows === 43 ? 18 : 20);
     expect(r.snapshots.menu).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
+    if (rows === 43) expect(r.snapshots.menu).not.toMatch(/^\s{2}\/loops?\s/m);
+    else expect(r.snapshots.menu).toMatch(/\/jumptomac\s+[^\n]*\n\s{2}\/loop\s+[^\n]*\n\s{2}\/loops\s+Open the loop board/);
     expect(r.snapshots.menu).not.toMatch(/^\s{2}\/btw\s/m);
     expect(r.snapshots.ready.match(/This folder/g)).toHaveLength(1); // changed in place, not printed again
   }

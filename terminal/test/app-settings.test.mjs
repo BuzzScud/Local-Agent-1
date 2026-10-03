@@ -48,10 +48,14 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect([...TYPED_ONLY]).toEqual(['morning']);
   // /jumptomac (3 Oct 2026): in the whole menu where a 19th row fits (a window taller than 80 × 24),
   // and in any window once its name is typed; typed only, nobody saw it.
-  expect([...WHEN_ROOM]).toEqual(['jumptomac']);
+  // /loop and /loops (3 Oct 2026) follow it, in that order: one free row shows /jumptomac, three all of them.
+  expect([...WHEN_ROOM]).toEqual(['jumptomac', 'loop', 'loops']);
+  expect(matchCommands('/', { room: 20 }).map((c) => c.name)).toEqual(['help', 'clear', 'compact', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'test', 'settings', 'exit']);
+  expect(matchCommands('/', { room: 19 }).map((c) => c.name)).not.toContain('loops');
+  expect(matchCommands('/loop').map((c) => c.name)).toEqual(['loop', 'loops']);
   expect(menu).not.toContain('jumptomac');
   const tall = matchCommands('/', { room: 49, side: true }).map((c) => c.name);
-  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'test', 'settings', 'exit']);
+  expect(tall).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'start', 'stop', 'remote', 'jumptomac', 'loop', 'loops', 'test', 'settings', 'exit']);
   expect(matchCommands('/j').map((c) => c.name)).toEqual(['jumptomac']);
   expect(matchCommands('/jump').map((c) => c.name)).toEqual(['jumptomac']);
   expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size + WHEN_ROOM.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)

@@ -298,6 +298,40 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   that cannot run one file is never a task's own test. "Allow it this once" is once; in Verify, Review and Ship a
   command that is not plain reading (`isReadOnly`) asks first; in Plan mode /agents says so and does not start.
 
+## Loops (/loop, 3 Oct 2026)
+
+- **What a loop is** (`terminal/src/app/loops.mjs`, the owner's ask: "add a /loop command. can we make a terminal
+  window appear, so we can manage loops for agents?"). `/loop [debug|test|web] [10m] [message]` (`parseLoop`) makes a
+  message the app sends again by itself. The owner's picks, asked in two rounds: a loop **stops with its window**
+  (the `Loops` object lives in App.jsx and is closed at quit); each run is a **fresh conversation** told how the last
+  one ended (`loopNote`); a run that would ask is **paused, "needs you"**, and the others go on; runs work **right in
+  the folder**; they **wait while the model is off** or the window is answering (`status()`: nothing loads for a
+  loop); a loop **ends** when a run says `LOOP DONE`, when a debugging loop's tests pass, or after 24 hours ($5 on a
+  paid service); one run at a time on this Mac's model, three on a service. The shortest gap is a minute
+  (`AGENTIC_LOOP_MIN_SECS` for the tests).
+- **A run is a process**: `coding -p --loop-events` (`startRun`), with the message in `AGENTIC_LOOP_SPEC`. It writes
+  one JSON line per step to stdout and reads answers and notes from stdin (`terminal/src/app/loop-run.mjs`; the
+  protocol is at the top of that file). `runHeadless` took three options for it: `mode` (the window's mode),
+  `askUser` (every question goes to the window) and `more` (a note typed meanwhile is the next message of the same
+  conversation). "Always" on the board is remembered per loop as a signature (`signatureOf`: this exact command,
+  every edit, this site) and handed to its later runs. Its memory is read, never saved to.
+- **A half-fix is kept** (the owner's pick): in a loop's run only (`keepProgress`), `putBackWhy` leaves the changes
+  when the last check failed but fewer tests fail than before the message and none fails newly (`madeProgress` in
+  agent.mjs, read with `readResults`; unknown counts, or more than ten failing names, count as no progress).
+  Everywhere else a message that ends on a failing check still has its changes put back.
+- **The board** (`coding loops`, `/loops`; `loops-board.mjs`, drawn by `loops-draw.mjs`) is a program of its own in
+  a Terminal window of its own (`openBoardWindow`, like the door's window). It reads `<home>/loops/<pid>/state.json`
+  and each run's `run-<loop>-<n>.jsonl` five times a second and sends its keys back as files in `cmd/`, which the
+  window reads at its next tick (half a second): closing the board changes nothing. The look is the Tree, the owner's
+  pick after two design rounds (docs/design rounds/agentic-coder-loop-board-3-designs-2026-10-03.html and -v2): this
+  window, a box per loop with the four steps of a run (`cycleOf` reads them off the run's lines), a log, one line
+  for a question, the chat box, a status line. In the chat box every key is text; `+` types `/loop ` for you (never
+  `n`, which is only "no").
+- **Tests**: `terminal/test/loops.test.mjs` (no model: what /loop reads, when a loop runs, the files, the Tree at
+  six sizes, the keys) and `app-loops.test.mjs` (a stand-in model: one run that asks and takes a note, the half-fix
+  kept and put back, the app with its board in a second pseudo-terminal). `/loop` and `/loops` are in the / menu
+  where the window has room (`WHEN_ROOM`, after /jumptomac).
+
 ## The public repo
 
 - **The GitHub repo** (BuzzScud/Local-Agent-1) is PUBLIC since 28 Sep 2026 (the user's choice): anyone can read it. Nothing secret is committed:

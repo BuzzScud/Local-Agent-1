@@ -488,6 +488,12 @@ export function planLine(name, args, prepared) {
   return `in ${prepared.rel ?? args.path}, change "${cut(args.old_text)}" to "${cut(args.new_text)}"`;
 }
 
+// A test run's counts and the names that fail, or null when the output says neither.
+function failsOf(text, failed) {
+  const r = readResults(String(text ?? ''), failed ? 1 : 0);
+  return r.failed == null ? null : { failed: r.failed, failing: r.failing };
+}
+
 export class Agent extends EventEmitter {
   // whenFull: what happens when the conversation fills the model's memory.
   // 'notes' (the default): it writes down where it is and carries on from
@@ -497,7 +503,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = (process.env.AGENTIC_WHEN_FULL ?? process.env.BONSAI_WHEN_FULL) === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -539,6 +545,8 @@ export class Agent extends EventEmitter {
     // (deliverDesktop).
     this.home = home;
     this.openPage = openPage;
+    // A loop's run (/loop): changes that leave fewer tests failing, and none newly failing, stay (putBackWhy).
+    this.keepProgress = Boolean(keepProgress);
     // Someone is at the screen to look at a saved page (askPage): the app says so; coding -p,
     // the benches and the tests check pages by themselves, as before.
     this.pageAsk = pageAsk;
@@ -2670,10 +2678,13 @@ export class Agent extends EventEmitter {
     if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
     // One that could have written a file (not ls, git log, cat…): the "said done, nothing changed" check counts it as a change.
     if (this.turn && call.name === 'Bash' && !isReadOnly(args.command)) this.turn.wroteByCommand = true;
+    if (this.keepProgress && this.turn && call.name === 'Bash' && !this.turn.changed && !this.turn.failsBefore && /\btest\b/.test(args.command)) this.turn.failsBefore = failsOf(out.view?.lines?.join('\n') ?? out.text, out.error);
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) {
       this.turn.testedAfterChange = true;
       this.turn.checkOk = !out.error;
       this.turn.checkFailed = Boolean(out.error);
+      // What still fails after the change, for a loop's run that may keep a half-fix.
+      if (this.keepProgress) this.turn.failsAfter = failsOf(out.view?.lines?.join('\n') ?? out.text, out.error);
       if (this.happened) this.happened.check = { cmd: String(args.command).slice(0, 120), ok: !out.error };
     }
     this.emit('tool', { id, name: call.name, ...shown, view: out.view, error: out.error, secs: (Date.now() - t0) / 1000 });
@@ -2883,8 +2894,25 @@ export class Agent extends EventEmitter {
     const t = this.turn;
     if (this.isHelper || !t?.originals?.size || reason === 'interrupted' || reason === 'declined') return null;
     if (t.fence?.has('check') && !t.ranCommand) return "The skill's check never ran";
+    if (t.checkFailed && this.keepProgress && this.madeProgress()) return null;
     if (t.checkFailed) return 'The check failed';
     return null;
+  }
+
+  // A loop's run: its last check failed, but fewer tests fail than before this message and none
+  // fails that passed before (the owner's pick, 3 Oct 2026). Unknown either way counts as no progress.
+  madeProgress() {
+    const t = this.turn;
+    const before = t.failsBefore ?? (this.happened?.testRun ? failsOf(this.happened.testRun.out, this.happened.testRun.code !== 0) : null);
+    const after = t.failsAfter;
+    if (!before || !after || before.failed == null || after.failed == null) return false;
+    if (after.failed >= before.failed) return false;
+    const was = new Set(before.failing);
+    // Runners name at most ten failing tests: with more than that the names cannot show "none newly".
+    if (before.failed > before.failing.length || after.failed > after.failing.length) return false;
+    if (after.failing.some((n) => !was.has(n))) return false;
+    this.emit('note', { text: `Kept: ${after.failed} of the ${before.failed} failing tests still fail and none fails newly, so this run's changes stay for the next run.`, tone: 'dim' });
+    return true;
   }
 
   // Each changed file back to its text before this message. A file that changed after
