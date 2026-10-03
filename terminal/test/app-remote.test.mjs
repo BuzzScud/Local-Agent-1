@@ -7,7 +7,7 @@
 // that does not answer asks what to do. The keys are kept in a file in the
 // test's home, never the Keychain.
 import { test, expect } from 'bun:test';
-import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, existsSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -339,6 +339,9 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   const srv = await fullOllama();
   const r0 = { source: 'openai', address: srv.url, port: null, connect: 'http', kind: 'openai', model: 'tiny:3b', context: 0, key: false, keyEnd: '', keyId: 'openai' };
   writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { ...r0, use: true }, remotes: { openai: r0 } }));
+  // This Mac's group lists only the models whose file is here: a stand-in for Qwen's.
+  mkdirSync(join(base, 'home', 'models'), { recursive: true });
+  writeFileSync(join(base, 'home', 'models', MODELS.qwen.file), 'stand-in');
   const where = `127.0.0.1:${srv.port}`;
   let loadsAtMenu = -1;
   const r = await runInPty({ cwd, env: { ...env, ...NO_ENV_KEYS }, args: ['--no-flows'], timeoutMs: 50_000, steps: [
@@ -367,7 +370,7 @@ test('on an Ollama service: the footer names the model and where it runs; /model
   expect(s.list).toMatch(/Can run the agent/);
   expect(s.list).toMatch(/coder:30b\s+30\.5B MoE\s+Q4_K_M\s+256k\s+tools\s+18\.6 GB/);
   expect(s.list).toMatch(/▸ Chat only\s+1 on the service/);
-  expect(s.list).toMatch(/▸ This Mac/);
+  expect(s.list).toMatch(/▸ This Mac\s+1 model\b/); // the models whose file is on this Mac: Qwen's stand-in only
   expect(s.list).not.toContain('embed:latest');
   expect(s.filtered).toMatch(/Filter\s+coder/);
   expect(s.filtered).toMatch(/❯ coder:30b/);
