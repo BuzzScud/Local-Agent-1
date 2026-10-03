@@ -1,5 +1,5 @@
 // Settings, saved sessions and prompt history, all under ~/.agentic-coder.
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, appendFileSync, existsSync, statSync, openSync, readSync, fstatSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HOME, DEFAULT_MODEL } from '../../../models/index.mjs';
@@ -74,13 +74,31 @@ export function listSessions(cwd) {
 }
 
 // The folders conversations were had in, the latest first: [{ folder, title, updated, convs }],
-// for another Mac's "New session in" rows (door.mjs). Only the latest conversation of each is
-// opened, for its folder and title. A folder that is gone is left out, and so is a throwaway one
-// (a test's project under the temp folders).
+// for another Mac's "New session in" rows (door.mjs). A throwaway folder (a test's project under
+// the temp folders) is left out, and so is one that is gone.
+// It is asked for on every list a door answers, so it reads little: a throwaway run is told by
+// its folder's name where that shows, at most `look` of the latest are opened, and of each only
+// its first and last bytes (saveSession writes the title first and the folder last), never the
+// whole conversation. exists: how a folder is checked; null leaves the check to the caller (the
+// door checks with a time limit: a folder macOS guards, or on a drive that went away, can keep a
+// plain check waiting, and the door must never wait).
 const THROWAWAY = [tmpdir(), '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'];
-export function recentFolders({ dir = SESSIONS, max = 6 } = {}) {
+const THROWAWAY_NAME = /^(private-)?(var-folders|tmp)-/;
+const str = (x) => { try { return JSON.parse(`"${x}"`); } catch { return x; } };
+function ends(file, n = 4096) {
+  const fd = openSync(file, 'r');
+  try {
+    const size = fstatSync(fd).size;
+    const head = Buffer.alloc(Math.min(n, size));
+    const tail = Buffer.alloc(Math.min(n, size));
+    readSync(fd, head, 0, head.length, 0);
+    readSync(fd, tail, 0, tail.length, size - tail.length);
+    return { head: head.toString('utf8'), tail: tail.toString('utf8') };
+  } finally { closeSync(fd); }
+}
+export function recentFolders({ dir = SESSIONS, max = 6, look = 200, exists = (f) => statSync(f).isDirectory() } = {}) {
   let slugs = [];
-  try { slugs = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+  try { slugs = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !THROWAWAY_NAME.test(d.name)).map((d) => d.name); } catch { return []; }
   const latest = [];
   for (const s of slugs) {
     let best = null;
@@ -97,13 +115,18 @@ export function recentFolders({ dir = SESSIONS, max = 6 } = {}) {
   }
   latest.sort((a, b) => b.at - a.at);
   const out = [];
-  for (const l of latest) {
+  for (const l of latest.slice(0, look)) {
     if (out.length >= max) break;
     try {
-      const c = JSON.parse(readFileSync(l.file, 'utf8'));
-      if (!c.cwd || THROWAWAY.some((t) => c.cwd === t || c.cwd.startsWith(`${t}/`)) || !statSync(c.cwd).isDirectory()) continue;
-      if (out.some((o) => o.folder === c.cwd)) continue;
-      out.push({ folder: c.cwd, title: c.title ?? '', updated: c.updated ?? new Date(l.at).toISOString(), convs: l.convs });
+      const { head, tail } = ends(l.file);
+      const m = /"cwd":"((?:[^"\\]|\\.)*)","id":"(?:[^"\\]|\\.)*","updated":"([^"]*)"\}\s*$/.exec(tail);
+      if (!m) continue;
+      const cwd = str(m[1]);
+      if (!cwd || THROWAWAY.some((t) => cwd === t || cwd.startsWith(`${t}/`))) continue;
+      if (out.some((o) => o.folder === cwd)) continue;
+      if (exists && !exists(cwd)) continue;
+      const t = /^\{"title":"((?:[^"\\]|\\.)*)"/.exec(head);
+      out.push({ folder: cwd, title: t ? str(t[1]) : '', updated: m[2] || new Date(l.at).toISOString(), convs: l.convs });
     } catch {}
   }
   return out;

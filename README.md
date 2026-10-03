@@ -284,6 +284,12 @@ it for a minute, however they are sent. `~/.agentic-coder/logs/sessions.log` kee
 session did. The Arena's **Door check** measures all of this on one Mac (no model, about 90
 seconds).
 
+If the other Mac takes the connection and then says nothing, the window says so and gives the
+terminal back: look at that Mac's screen, where macOS may be asking whether Agentic Coder may
+accept incoming connections (Allow), or about a folder. The door itself never waits on a folder:
+its list of folders is read with a time limit, and a list is answered without it when it cannot
+be read in time.
+
 ## Two parts
 
 | Part | Folder | What it is |
