@@ -36,7 +36,8 @@ test('the / menu holds 18 commands and /settings the other 18; every one is stil
   expect(onService).toEqual(['help', 'clear', 'compact', 'btw', 'agents', 'effort', 'mode', 'math', 'design', 'rewind', 'resume', 'model', 'subagents', 'remote', 'test', 'settings', 'exit']);
   expect(COMMANDS.some((c) => c.name === 'subagents')).toBe(true);
   // /agents took /morning's row (2 Oct 2026): /morning is typed only, and still a command on /help
-  expect([...TYPED_ONLY]).toEqual(['morning']);
+  // /jumptomac (3 Oct 2026) is typed only too: the menu and /settings are full.
+  expect([...TYPED_ONLY]).toEqual(['morning', 'jumptomac']);
   expect(menu.length + IN_SETTINGS.size + 1 + TYPED_ONLY.size).toBe(COMMANDS.length); // nothing lost, nothing in both (+ /subagents, on a service only)
   expect(matchCommands('/doc')).toEqual([]); // half a hidden name finds nothing
   expect(matchCommands('/se').map((c) => c.name)).toEqual(['settings']);

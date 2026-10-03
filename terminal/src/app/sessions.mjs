@@ -37,7 +37,9 @@ export const DETACH_LABEL = 'ctrl+b';
 // the door's list of sessions), NAMED (JSON: the session the door opened). PING (window) and
 // PONG (its answer) are the check-in of a window on another Mac: a link that stalled says
 // nothing, so each side learns it from the silence (door.mjs).
-export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15 };
+// JUMP (/jumptomac): from the app to its own host, on a connection of its own with no hello: send the
+// window that typed last to another Mac (JSON: mac); and from the host to that window.
+export const F = { HELLO: 1, INPUT: 2, SIZE: 3, LEAVE: 4, END: 5, PING: 6, JUMP: 7, OUTPUT: 10, ENDED: 11, NOTE: 12, LIST: 13, NAMED: 14, PONG: 15 };
 // What a window and a door say they speak (v in their hello, list and named). 2: the check-in,
 // a folder for a new session, opening the same session again after a lost link. One without it
 // is an app from before 3 Oct 2026: it is served as before.
@@ -223,6 +225,7 @@ export async function runHost(spec, env = process.env) {
   let drawn = 0; // bytes the app has drawn so far
   let asks = 0; // cursor-position questions the app asked and no window answered yet
   let ended = false;
+  let typedLast = null; // the window whose keys came last: the one a /jumptomac was typed in
 
   const rec = { name, pid: process.pid, folder, started: new Date().toISOString(), socket, viewers: 0, local: 0, args: spec.args ?? [] };
   let gone = false; // the record is removed: nothing writes it again
@@ -277,7 +280,7 @@ export async function runHost(spec, env = process.env) {
   };
 
   const server = net.createServer((sock) => {
-    const v = { sock, cols: 0, rows: 0, owner: false, hello: false, left: false, via: '', from: '', mac: '' };
+    const v = { sock, cols: 0, rows: 0, owner: false, hello: false, left: false, via: '', from: '', mac: '', jumps: false };
     const drop = () => { if (viewers.delete(v)) { note(); fit(); log(`a window left${v.from ? ` (${v.from})` : ''}; ${viewers.size} open`); } };
     // The window it started in gone without a word (killed, crashed): the
     // session ends, as the app did with its window before.
@@ -291,6 +294,7 @@ export async function runHost(spec, env = process.env) {
         v.rows = Number(h.rows) || 0;
         // A window on another Mac: the door says so, with that Mac's name and this one's.
         if (h.via === 'door') { v.via = 'door'; v.from = String(h.from ?? '').slice(0, 80); v.mac = String(h.mac ?? '').slice(0, 80); }
+        v.jumps = Boolean(h.jumps); // the window can leave for another Mac and come back (/jumptomac)
         viewers.add(v);
         note();
         log(`a window joined${v.from ? ` from ${v.from}` : ''}${v.owner ? ' (the one it started in)' : ''}; ${viewers.size} open`);
@@ -300,8 +304,18 @@ export async function runHost(spec, env = process.env) {
         fit({ redraw: drawn > 0 && !h.fresh });
         return;
       }
+      // The app itself (it gives no hello): the window it was typed in goes to another Mac.
+      if (kind === F.JUMP && !v.hello) {
+        const to = typedLast && viewers.has(typedLast) ? typedLast : [...viewers].find((x) => x.owner) ?? [...viewers][0];
+        const mac = String(json(body).mac ?? '').slice(0, 80);
+        if (!to) sock.end(frame(F.NOTE, { ok: false, text: 'no window is open on this session' }));
+        else if (!to.jumps) sock.end(frame(F.NOTE, { ok: false, text: 'the window you typed in runs an older Agentic Coder; open a new one (coding) and try again' }));
+        else { to.sock.write(frame(F.JUMP, { mac })); log(`a window was sent to ${mac}`); sock.end(frame(F.NOTE, { ok: true })); }
+        return;
+      }
       if (!v.hello) return;
       if (kind === F.INPUT) {
+        typedLast = v;
         let keys = Buffer.from(body).toString('latin1');
         // Every window answers the app's cursor question; only the first answer goes in.
         keys = keys.replace(/\x1b\[\d+;\d+R/g, (m) => (asks > 0 ? (asks--, m) : ''));
@@ -401,7 +415,9 @@ export async function startHost({ folder, args = [], cols, rows, env = process.e
 // it is back; the last line of the window says so meanwhile, and ctrl+b, ctrl+c or esc stops.
 // silent: what to say when the other Mac takes the connection and then says nothing for firstMs
 // (a session can take a while to start there; a door that is held up says nothing at all).
-export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000, silent = '', firstMs = 20_000 }) {
+// jumps: this window can be sent to another Mac (/jumptomac): it then leaves the session running
+// and answers { jump: <mac>, name } instead of a code; the caller shows that Mac and comes back.
+export function viewSession({ connect, name: named, owner = false, fresh = false, where = '', input = process.stdin, output = process.stdout, hello = {}, again = null, beatMs = 10_000, retryMs = 2000, silent = '', firstMs = 20_000, jumps = false }) {
   let name = named;
   return new Promise((resolve) => {
     const modes = modeTracker();
@@ -418,7 +434,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
     // The last line of the window, over what the app drew there; the app draws everything again when the link is back.
     const status = (text) => { try { output.write(`\x1b7\x1b[999;1H\x1b[2K${text}\x1b8`); } catch {} };
     // closed: the window is gone, so nothing is written to it.
-    const finish = (code, line, { closed = false } = {}) => {
+    const finish = (code, line, { closed = false, value = undefined } = {}) => {
       if (done) return;
       done = true;
       clearInterval(beat);
@@ -435,7 +451,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
         if (line && !closed) output.write(`${started ? '\x1b[999B\r\n' : ''}${line}\n`);
       } catch {}
       // The last frame (LEAVE, END) reaches the host before this process ends.
-      const go = () => resolve(code);
+      const go = () => resolve(value ?? code);
       if (!sock || sock.destroyed) return go();
       sock.once('close', go);
       try { sock.end(); } catch {}
@@ -475,7 +491,7 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       const secs = Math.round((Date.now() - lostAt) / 1000);
       status(`\x1b[33m  Connection to ${where} lost, reconnecting…${secs >= 2 ? ` (${secs} s)` : ''}\x1b[0m\x1b[2m · ${DETACH_LABEL} to stop\x1b[0m`);
       clearTimeout(retry);
-      retry = setTimeout(() => open({ ...again(name), cols: output.columns, rows: output.rows }), retryMs);
+      retry = setTimeout(() => open({ ...again(name), cols: output.columns, rows: output.rows, ...(jumps ? { jumps: true } : {}) }), retryMs);
     };
     // One connection. Whatever an older one still says is not listened to.
     function open(first) {
@@ -521,6 +537,10 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
           beats = Boolean(n.beats);
           // Back after a lost link: the line goes, and the app draws the window again (the host's nudge).
           if (lostAt) { lostAt = 0; status(''); }
+        } else if (kind === F.JUMP && jumps) {
+          // /jumptomac, typed here: this window leaves (the session keeps running) for another Mac.
+          send(F.LEAVE);
+          finish(0, '', { value: { jump: String(json(body).mac ?? ''), name } });
         } else if (kind === F.ENDED) finish(json(body).code ?? 0);
         else if (kind === F.NOTE) {
           const n = json(body);
@@ -541,19 +561,36 @@ export function viewSession({ connect, name: named, owner = false, fresh = false
       if (beats && Date.now() - heard > beatMs * 2.5) { sock.destroy(); return; }
       send(F.PING);
     }, beatMs) : null;
-    open({ ...hello, cols: output.columns, rows: output.rows, owner, fresh });
+    open({ ...hello, cols: output.columns, rows: output.rows, owner, fresh, ...(jumps ? { jumps: true } : {}) });
   });
 }
 
 export const localConnect = (rec) => () => net.connect(rec.socket);
 
 // `coding` in a terminal: the app goes into a new session and this window shows it.
-export async function hostThisWindow({ folder, args }) {
+// view: how the window shows it (cli.jsx gives one that can jump to another Mac, door.mjs).
+export async function hostThisWindow({ folder, args, view = viewSession }) {
   let rec;
   try {
     rec = await startHost({ folder, args, cols: process.stdout.columns, rows: process.stdout.rows });
   } catch {
     return null; // the caller runs the app in the window itself, as before
   }
-  return viewSession({ connect: localConnect(rec), name: rec.name, owner: true, fresh: true });
+  return view({ connect: localConnect(rec), name: rec.name, owner: true, fresh: true });
+}
+
+// The app, asking its own host to send the window it was typed in to another Mac (/jumptomac).
+// name: the session it runs in (AGENTIC_IN_HOST). Answers { ok, text }.
+export function askJump(name, mac, { timeoutMs = 3000 } = {}) {
+  return new Promise((resolve) => {
+    const rec = readRecord(name);
+    if (!rec?.socket) { resolve({ ok: false, text: 'this session has no host' }); return; }
+    const sock = net.connect(rec.socket);
+    const done = (r) => { clearTimeout(t); try { sock.destroy(); } catch {} resolve(r); };
+    const t = setTimeout(() => done({ ok: false, text: 'the host did not answer' }), timeoutMs);
+    const read = frameReader((kind, body) => { if (kind === F.NOTE) done({ ok: Boolean(json(body).ok), text: json(body).text ?? '' }); });
+    sock.on('connect', () => sock.write(frame(F.JUMP, { mac })));
+    sock.on('data', (c) => { try { read(c); } catch { done({ ok: false, text: 'the host answered something odd' }); } });
+    sock.on('error', (e) => done({ ok: false, text: e.message }));
+  });
 }

@@ -257,6 +257,8 @@ if (process.argv[2] === 'session-host') {
   delete env.AGENTIC_HOST_SPEC;
   try { process.exit((await runHost(spec, env)) ?? 0); } catch (e) { process.stderr.write(`coding session-host: ${e.message}\n`); process.exit(1); }
 }
+// The menu of sessions (coding attach, and a window sent to another Mac with /jumptomac).
+const pickSession = async (rows, title, more = {}) => { process.stderr.write(`${title}\n`); return pickOnTerminal(rows, { hint: 'Enter to open · Esc to leave', ...more }); };
 // coding sessions [mac]: what runs in the background here, or on another Mac (through its door).
 // coding attach [name] · coding attach <mac> [name]: open one in this window; ctrl+b leaves it again.
 if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
@@ -267,7 +269,7 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
   const [first, second] = a.filter((x, i) => at < 0 || (i !== at && i !== at + 1));
   const list = listBackground();
   const say = (t) => process.stdout.write(`${t}\n`);
-  const pick = async (rows, title, more = {}) => { process.stderr.write(`${title}\n`); return pickOnTerminal(rows, { hint: 'Enter to open · Esc to leave', ...more }); };
+  const pick = pickSession;
   const remote = async (host, name, listOnly) => {
     const { attachRemote, DOOR_PORT } = await import('./app/door.mjs');
     try { return await attachRemote({ host, name, port: port || DOOR_PORT, pick, listOnly }); } catch (e) { process.stderr.write(`${e.message}\n`); return 1; }
@@ -287,7 +289,8 @@ if (process.argv[2] === 'sessions' || process.argv[2] === 'attach') {
     if (i === null) process.exit(0);
     target = list[i];
   }
-  process.exit(await viewSession({ connect: localConnect(target), name: target.name }));
+  const { viewJumping } = await import('./app/door.mjs');
+  process.exit(await viewJumping({ connect: localConnect(target), name: target.name }, { pick }));
 }
 // coding door [on|off|new-key]: let your other Macs open the sessions here, over Tailscale, with a key (app/door.mjs).
 if (process.argv[2] === 'door') {
@@ -447,7 +450,9 @@ if (opts.print) {
   if (!process.env.AGENTIC_IN_HOST && process.stdout.isTTY) {
     const { sessionsOn, hostThisWindow } = await import('./app/sessions.mjs');
     if (sessionsOn()) {
-      const code = await hostThisWindow({ folder: opts.cwd, args: process.argv.slice(2) });
+      // The window can jump to another Mac's sessions and come back (/jumptomac, door.mjs).
+      const { viewJumping } = await import('./app/door.mjs');
+      const code = await hostThisWindow({ folder: opts.cwd, args: process.argv.slice(2), view: (v) => viewJumping(v, { pick: pickSession }) });
       if (code !== null) process.exit(code);
     }
   }

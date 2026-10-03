@@ -51,7 +51,7 @@ import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_STYLES, styleWords } from '../agent/design.mjs';
 import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
-import { readRecord as sessionRecord } from './sessions.mjs';
+import { readRecord as sessionRecord, askJump, DETACH_LABEL } from './sessions.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
 import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
@@ -2525,6 +2525,19 @@ export function App({ opts, win, onRestart }) {
           break;
         }
         startAgents(arg);
+        break;
+      }
+      // /jumptomac [mac]: this window goes to your other Mac's sessions (the menu coding attach
+      // <mac> shows) and this session keeps running; ctrl+b there comes back. The window does it
+      // (door.mjs viewJumping): the app only asks its host to send the window that typed this.
+      case 'jumptomac': {
+        const here = process.env.AGENTIC_IN_HOST;
+        const mac = (arg || loadSettings().lastMac || '').trim();
+        if (!here) { push({ type: 'note', text: 'This window cannot jump: it runs the app itself, not a background session (an older Bun, or sessions switched off). Quit, then type: coding attach <mac>', tone: 'warn' }); break; }
+        if (!mac) { push({ type: 'note', text: '/jumptomac <mac>: your other Mac’s Tailscale name (that Mac needs coding door on). After the first time, /jumptomac alone goes to the Mac used last.', tone: 'warn' }); break; }
+        if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$/.test(mac)) { push({ type: 'note', text: `"${mac}" is not a Mac’s name: letters, digits, dots and hyphens (its Tailscale name, like server-1).`, tone: 'warn' }); break; }
+        const r = await askJump(here, mac);
+        push({ type: 'note', text: r.ok ? `Jumping to ${mac}. This session keeps running here; ${DETACH_LABEL} there comes back to it.` : `Could not jump: ${r.text}`, tone: r.ok ? 'dim' : 'warn' });
         break;
       }
       case 'morning': {

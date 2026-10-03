@@ -618,3 +618,111 @@ test('a Mac that takes the connection and then says nothing: the window says to 
     expect(shown).toContain('server-1 took the connection but did not answer');
   } finally { server.close(); }
 }, 15_000);
+
+// ---- /jumptomac (3 Oct 2026): the window goes to another Mac's sessions and comes back ----
+
+test.skipIf(!S.canHost())('/jumptomac: the host sends the window that typed last, and only one that can jump; that window leaves the session running and says where to go', async () => {
+  const home = process.env.AGENTIC_HOME;
+  const h = await plainHost('jump-1', ['/bin/sh', '-c', 'stty raw -echo; exec cat'], home);
+  const rec = h.record();
+  const open = (hello) => new Promise((res) => {
+    const s = net.connect(rec.socket);
+    const got = [];
+    const read = S.frameReader((kind, body) => got.push([kind, S.json(body)]));
+    s.on('data', (c) => read(c));
+    s.on('error', () => {});
+    s.on('connect', () => { s.write(S.frame(S.F.HELLO, { cols: 80, rows: 24, ...hello })); res({ s, got }); });
+  });
+  try {
+    // With no window open there is nobody to send.
+    expect(await S.askJump('jump-1', 'server-1')).toEqual({ ok: false, text: 'no window is open on this session' });
+    const a = await open({ jumps: true });
+    const old = await open({}); // an app from before /jumptomac
+    await until(() => h.record()?.viewers === 2, 5000);
+    // The older window typed last: it cannot jump, and is not sent anything.
+    old.s.write(S.frame(S.F.INPUT, 'x'));
+    await new Promise((r) => setTimeout(r, 200));
+    const no = await S.askJump('jump-1', 'server-1');
+    expect(no.ok).toBe(false);
+    expect(no.text).toContain('older Agentic Coder');
+    // The one that can: it typed last, it is told the Mac; the other hears nothing of it.
+    a.s.write(S.frame(S.F.INPUT, 'y'));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await S.askJump('jump-1', 'server-1')).toEqual({ ok: true, text: '' });
+    expect(await until(() => a.got.some(([k]) => k === S.F.JUMP), 3000)).toBe(true);
+    expect(a.got.find(([k]) => k === S.F.JUMP)[1]).toEqual({ mac: 'server-1' });
+    expect(old.got.some(([k]) => k === S.F.JUMP)).toBe(false);
+    a.s.destroy(); old.s.destroy();
+    // No session of that name: said.
+    expect((await S.askJump('nope-9', 'server-1')).ok).toBe(false);
+
+    // The app's own window: sent away, it leaves (the session it started keeps running) and answers the Mac.
+    const input = new PassThrough();
+    const output = new PassThrough();
+    output.columns = 90; output.rows = 28;
+    const view = S.viewSession({ connect: S.localConnect(rec), name: 'jump-1', owner: true, jumps: true, input, output });
+    await until(() => h.record()?.viewers === 1, 5000);
+    input.write('typed here\n');
+    await new Promise((r) => setTimeout(r, 300));
+    expect((await S.askJump('jump-1', 'server-1')).ok).toBe(true);
+    expect(await view).toEqual({ jump: 'server-1', name: 'jump-1' });
+    expect(await until(() => h.record()?.viewers === 0, 5000)).toBe(true);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(h.record()?.name).toBe('jump-1'); // still running: the window it started in left, it did not close
+  } finally { h.stop(); }
+}, 40_000);
+
+test.skipIf(!S.canHost())('/jumptomac in the app: the window shows the other Mac’s sessions, opens one, and ctrl+b there comes back to the session it left; alone, it goes to the Mac used last', async () => {
+  const { cwd, env, base } = sessionsEnv();
+  const fake = await startFakeServer([]);
+  const before = process.env.AGENTIC_HOME;
+  process.env.AGENTIC_HOME = env.AGENTIC_HOME;
+  // "server-1" is this Mac; a session already runs there, in another folder, with no window.
+  const other = join(base, 'other');
+  mkdirSync(other, { recursive: true });
+  writeFileSync(join(env.AGENTIC_HOME, 'trust.json'), JSON.stringify({ [cwd]: new Date().toISOString(), [other]: new Date().toISOString() }));
+  const windows = [];
+  const door = await D.openDoor({ host: '127.0.0.1', port: 0, key: 'acd-test-key', mac: 'server-1', peerName: () => 'mac-mini', show: (name) => windows.push(name) });
+  const jumper = { ...env, AGENTIC_REMOTE_KEY: 'acd-test-key', AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_DOOR_AT: `server-1=127.0.0.1:${door.address().port}` };
+  try {
+    expect(coding(['--bg', '--url', fake.url], { cwd: other, env }).stdout).toContain('Started in the background: other-1');
+    expect(await until(() => records(env).includes('other-1.json'))).toBe(true);
+    const r = await runInPty({ cwd, env: jumper, cols: 120, rows: 34, timeoutMs: 110_000, args: ['--url', fake.url], steps: [
+      { wait: '? for shortcuts', ms: 30_000 },
+      { type: '/jumptomac server-1' }, { key: 'enter' },
+      { wait: 'Sessions on server-1', ms: 20_000 }, { sleep: 300 }, { snapshot: 'menu' }, { key: 'enter' },
+      { wait: '⇄ on server-1', ms: 30_000 }, { type: 'typed on the other Mac' }, { sleep: 500 }, { snapshot: 'there' },
+      // ctrl+b there: that session keeps running, and the window is back in the one it left.
+      { key: CTRL_B }, { wait: 'This session keeps running here', ms: 20_000 }, { waitGone: 'typed on the other Mac', ms: 10_000 },
+      { type: 'back home' }, { sleep: 500 }, { snapshot: 'back' },
+      { key: 'ctrlC' }, { sleep: 300 },
+      // Alone: the Mac used last. Esc at its menu comes straight back.
+      { type: '/jumptomac' }, { key: 'enter' }, { wait: 'Sessions on server-1', ms: 20_000 }, { key: 'esc' },
+      { wait: '? for shortcuts', ms: 20_000 }, { sleep: 800 }, { snapshot: 'again' },
+      ...quit, { wait: 'Continue this conversation with', ms: 20_000 },
+    ] });
+    expect(r.snapshots.menu).toMatch(/1\. other-1 · /);
+    expect(r.snapshots.menu).toMatch(/2\. demo-project-1 · /);
+    // On a clear window: from the line that says where it goes, nothing of the app's last frame
+    // under or beside the menu (what came before it is the window's scrollback).
+    const cleared = r.snapshots.menu.slice(r.snapshots.menu.lastIndexOf('Jumping to server-1. demo-project-1 keeps running; ctrl+b there comes back to it.'));
+    expect(cleared.startsWith('Jumping to server-1.')).toBe(true);
+    expect(cleared).toContain('Sessions on server-1');
+    expect(cleared).not.toMatch(/[╭╰╯│]|for shortcuts|model off/);
+    expect(r.snapshots.there).toContain('typed on the other Mac');
+    expect(r.snapshots.there).toContain('/other');
+    expect(r.snapshots.back).toContain('back home');
+    expect(r.snapshots.back).not.toContain('⇄ on server-1');
+    expect(r.snapshots.back).toContain('Jumping to server-1. This session keeps running here; ctrl+b there comes back to it.');
+    expect(r.snapshots.again).toContain('demo-project');
+    expect(r.code).toBe(0);
+    // The one it jumped to still runs there; the one it came back to and quit is gone; the Mac is remembered.
+    expect(await until(() => records(env).join() === 'other-1.json')).toBe(true);
+    expect(JSON.parse(readFileSync(join(env.AGENTIC_HOME, 'settings.json'), 'utf8')).lastMac).toBe('server-1');
+    expect(windows).toEqual(['other-1']);
+  } finally {
+    door.close();
+    process.env.AGENTIC_HOME = before;
+    await fake.close();
+  }
+}, 150_000);

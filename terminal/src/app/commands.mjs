@@ -37,6 +37,7 @@ export const COMMANDS = [
   { name: 'test', desc: 'Pick a test in the Arena for this model: press Run there, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
   { name: 'tests', desc: 'Open the Arena on the test record: every test run and its result' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
+  { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone it goes to the Mac used last)', arg: '[mac]' },
   { name: 'update', desc: 'Restart on new Agentic Coder code, keeping this conversation · /update memory saves to memory now', arg: '[memory]' },
   { name: 'settings', desc: 'Everything else in one menu: status bar, helpers, rules, instructions, memory, the hub pages and the tools' },
   { name: 'exit', desc: 'Quit Agentic Coder' },
@@ -79,7 +80,8 @@ export const IN_SETTINGS = new Set(SETTINGS.flatMap((g) => g.rows.map((r) => r.n
 export const SERVICE_ONLY = new Set(['subagents']);
 // Typed only (2 Oct 2026): /agents took /morning's row in the / menu, which holds 18 at 80 × 24, and
 // /settings is as full; /morning still runs typed in full, and /help lists it.
-export const TYPED_ONLY = new Set(['morning']);
+// /jumptomac (3 Oct 2026) is typed only for the same reason.
+export const TYPED_ONLY = new Set(['morning', 'jumptomac']);
 export const MAC_ONLY = new Set(['start', 'stop']);
 
 // The / menu: every command but the ones /settings holds. service: on an Ollama service now.
