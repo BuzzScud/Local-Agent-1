@@ -247,3 +247,20 @@ test('greetings, thanks and a plan show no line', async () => {
   const b = await talk(['add a --json flag to export.mjs'], [{ text: '1. Read export.mjs. 2. Add the flag.' }], { mode: 'plan' });
   expect(b.events.some((e) => e.type === 'sorted')).toBe(false);
 });
+
+test('only the code is kept and the work is on a text file by name: the work stands; anything wider kept is still a question (3 Oct 2026)', () => {
+  // "Don't touch the code" beside work on a README or a .md file protects the code, not that file.
+  for (const t of ["Rewrite the README intro. Don't touch code.", "Update CHANGELOG.md with today's fixes. Don't touch the code.", 'Fix the typos in docs/setup.md without changing any code.', "Don't touch the code, just rewrite the README intro."])
+    expect([t, routeByRules(t)?.kind === 'question']).toEqual([t, false]);
+  // No work on a text file by name, or more than the code kept: a question, as before.
+  for (const t of [
+    "Check the tests. Update me on which fail. Don't touch the code.",
+    "Explain the README. Don't touch the code.",
+    "Read the README and tell me what is missing. Don't touch the code.",
+    "Rewrite the README intro. Don't change anything.",
+    'Update CHANGELOG.md. Do not change any files.',
+    "Rewrite the README intro. Don't touch the files.",
+    "Rewrite the README intro. Don't touch the code. No changes.",
+  ]) expect([t, routeByRules(t)?.kind]).toEqual([t, 'question']);
+});
+
