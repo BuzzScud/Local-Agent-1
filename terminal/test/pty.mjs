@@ -19,6 +19,10 @@ export const KEYS = { tab: '\t', enter: '\r', esc: '\x1b', up: '\x1b[A', down: '
 // own files, never in the real ~/.agentic; and nothing is saved on its own
 // unless the test asks for it (AGENTIC_MEMORY_SAVE). AGENTIC_TIPS=off: the line under the prompt box
 // says "? for shortcuts" from the start, not a tip picked at random.
+// A key the terminal itself acts on while the app is not yet reading keys (ctrl+t, ctrl+c, ctrl+z…):
+// not enter, tab or esc and its sequences, which wait in line like any letter.
+const isControl = (k) => typeof k === 'string' && k.length === 1 && k.charCodeAt(0) < 32 && !'\t\r\n\x1b'.includes(k);
+
 // The last lines of a screen that hold something, for a failure's message.
 const screenEnd = (text, n = 10) => text.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-n).map((l) => `  | ${l.slice(0, 150)}`).join('\n');
 
@@ -45,6 +49,30 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
     while (Date.now() - t0 < ms) { if (await screenText(read(), cols, rows).then((s) => s.includes(text))) return true; await new Promise((r) => setTimeout(r, 100)); }
     // What was on the screen instead, so a failure in a busy run explains itself.
     throw new Error(`timed out waiting for "${text}"; the screen ended with:\n${screenEnd(await screenText(read(), cols, rows))}`);
+  };
+  // A control key (ctrl+t, ctrl+c…) sent before the app reads keys itself is taken by the terminal, not
+  // the app: the app draws its first screen a moment before it switches the terminal over, and on a busy
+  // Mac a test that saw the screen pressed ctrl+t inside that moment; macOS printed its own status line
+  // ("load: 3.32 cmd: bun … running") and the key was gone (3 Oct 2026). So the first control key waits
+  // until the app's terminal is in the mode where keys go to the app (5 s at most, then it is sent anyway).
+  let reads = false;
+  let tty = null;
+  const appTty = () => {
+    try {
+      const rows = execFileSync('ps', ['-axo', 'pid=,ppid=,tty=,command='], { encoding: 'utf8' }).split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(\S+)/.exec(l)).filter(Boolean).map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), tty: m[3] }));
+      const under = new Set([child.pid]);
+      for (let grew = true; grew;) { grew = false; for (const r of rows) if (under.has(r.ppid) && !under.has(r.pid)) { under.add(r.pid); grew = true; } }
+      const t = rows.find((r) => under.has(r.pid) && r.tty !== '??')?.tty;
+      return t ? `/dev/${t}` : null;
+    } catch { return null; }
+  };
+  const readsKeys = async () => {
+    const t0 = Date.now();
+    while (!reads && Date.now() - t0 < 5000) {
+      tty ??= appTty();
+      try { if (tty && /(^|\s)-icanon\b/.test(execFileSync('stty', ['-f', tty, '-a'], { encoding: 'utf8' }))) { reads = true; break; } } catch { tty = null; }
+      await new Promise((r) => setTimeout(r, 50));
+    }
   };
   const snapshots = {};
   const terms = {};
@@ -85,7 +113,7 @@ export async function runInPty({ args = [], cwd, cols = 155, rows = 43, steps = 
         }
       }
       if (s.type) for (const ch of s.type) { stdin.write(ch); await new Promise((r) => setTimeout(r, 8)); }
-      if (s.key) stdin.write(KEYS[s.key] ?? s.key);
+      if (s.key) { const k = KEYS[s.key] ?? s.key; if (isControl(k)) await readsKeys(); stdin.write(k); }
     }
   } finally {
     // The fifo closes first: cat sees its end and lets the pipeline finish,
