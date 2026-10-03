@@ -6,7 +6,34 @@
 import { spawn } from 'node:child_process';
 import { sandboxAvailable, sandboxed, fenceHint } from './sandbox.mjs';
 
-export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {} } = {}) {
+// The lines of a test run with its passing tests folded into one line (squeeze: a model on another
+// machine, 3 Oct 2026): node --test writes TAP when its output is not a terminal, five lines a passing
+// test, so a long run filled the output with them and the failures were cut. Failing tests, what the
+// tests printed and the totals stay whole. Fewer than SQUEEZE_FROM passing lines: as it was.
+export const SQUEEZE_FROM = 8;
+const PASSED = /^\s*(?:✔|✓|√|\(pass\)\s)|^\s*ok \d+ - (?!.*#\s*(?:SKIP|TODO)\b)|\sPASSED\b/;
+export function squeezeTests(lines) {
+  if (lines.filter((l) => PASSED.test(l)).length < SQUEEZE_FROM) return lines;
+  const out = [];
+  let folded = 0;
+  let mark = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (!PASSED.test(l)) { out.push(l); continue; }
+    folded++;
+    const tap = /^(\s*)ok \d+ - (.*)$/.exec(l);
+    if (tap) {
+      // Its "# Subtest:" line before it, and its YAML block after it (---, the lines under it, ...).
+      if (out.length && out.at(-1).trim() === `# Subtest: ${tap[2].trim()}`) out.pop();
+      if (/^\s*---\s*$/.test(lines[i + 1] ?? '')) { i++; while (i + 1 < lines.length && !/^\s*\.\.\.\s*$/.test(lines[i])) i++; }
+    }
+    if (mark < 0) { mark = out.length; out.push(''); }
+  }
+  out[mark] = `(${folded} passing ${folded === 1 ? 'test' : 'tests'} not shown)`;
+  return out;
+}
+
+export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, signal, sandbox = {}, squeeze = false } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     // Its own process group, so stopping it stops everything it started
@@ -45,7 +72,8 @@ export function runCommand(command, { cwd, timeoutMs = 120_000, maxLines = 60, s
       child.stdout.destroy();
       child.stderr.destroy();
       if (fenced) out += fenceHint(out); // also when a pipe hid the error code
-      const lines = out.replace(/\n$/, '').split('\n');
+      const all = out.replace(/\n$/, '').split('\n');
+      const lines = squeeze ? squeezeTests(all) : all;
       const cut = lines.length > maxLines;
       resolve({
         code,

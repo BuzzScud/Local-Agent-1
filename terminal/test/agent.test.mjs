@@ -333,12 +333,15 @@ test('"done" with no file changed: sent back once, then a note says nothing chan
   expect(events.filter((e) => e.type === 'note').map((e) => e.text)).toContain('Nothing was changed for this request: no file was written or edited.');
 });
 
-test('"done" with no file changed: an honest second answer gets no note; a command that ran is not second-guessed', async () => {
+test('"done" with no file changed: an honest second answer gets no note; a command that could have written is not second-guessed, a look (ls) is', async () => {
   const honest = await run([{ text: 'Done.' }, { text: 'It was in export.mjs before this message; nothing changed now.' }]);
   expect(honest.events.filter((e) => e.type === 'note').some((e) => /Nothing was changed/.test(e.text))).toBe(false);
   expect(honest.events.filter((e) => e.type === 'assistant' && e.final)).toHaveLength(2);
-  const ran = await run([{ tool: { name: 'Bash', args: { command: 'ls' } } }, { text: 'Done.' }]);
+  const ran = await run([{ tool: { name: 'Bash', args: { command: 'touch flag.txt' } } }, { text: 'Done.' }]);
   expect(ran.agent.messages.some((m) => m.role === 'user' && /no file was changed in this message/.test(m.content))).toBe(false);
+  // ls cannot have written anything (3 Oct 2026: Qwen3.6 ran ls and git log, then answered with the change as code).
+  const looked = await run([{ tool: { name: 'Bash', args: { command: 'ls' } } }, { text: 'Done.' }, { text: 'It was already there; nothing changed now.' }]);
+  expect(looked.agent.messages.some((m) => m.role === 'user' && /no file was changed in this message/.test(m.content))).toBe(true);
 });
 
 test('a trim keeps the last tool error, and shortens an older output', async () => {

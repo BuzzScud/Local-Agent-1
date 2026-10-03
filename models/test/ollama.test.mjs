@@ -231,7 +231,7 @@ test('big-model mode: a model of 30B or more (by its total) that can call tools;
     const r = { source: 'openai', kind: 'openai', connect: 'http', address: s.url, model: 'gpt-oss:120b', context: 0, key: false };
     const g = await connectRemote(r);
     expect(g.model.harness).toEqual(BIG_HARNESS);
-    expect(BIG_HARNESS).toEqual({ steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 } }); // the app still decides
+    expect(BIG_HARNESS).toEqual({ steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 }, way: 'model' }); // the model decides, as in Claude Code (3 Oct 2026)
     g.stop();
     const t = await connectRemote({ ...r, model: 'tiny:3b' });
     expect(t.model.harness).toBeUndefined();

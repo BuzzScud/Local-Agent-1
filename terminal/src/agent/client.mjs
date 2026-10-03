@@ -80,11 +80,11 @@ export async function* streamChat(args) {
   }
 }
 
-async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false, use }) {
+async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking, effort, model, sampling, maxTokens, thinkCap, slot, signal, extra, parallel = false, use, conversation }) {
   const ep = endpointFor(url, use);
   // The Claude API speaks its own Messages API (claude.mjs).
   if (ep?.kind === 'claude') { yield* streamClaude({ url, ep, messages, tools, toolChoice, thinking, effort, maxTokens, signal, extra, parallel }); return; }
-  if (ep?.ollama) { yield* streamOllama({ url, ep, messages, tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
+  if (ep?.ollama) { yield* streamOllama({ url, ep, messages: ownStart(messages, conversation), tools, toolChoice, thinking, effort, model, sampling, maxTokens, signal, extra }); return; }
   let body = {
     model: 'coding',
     // Pictures beside the text go in as the server takes them (images.mjs).
@@ -159,6 +159,17 @@ async function* streamRaw({ url, messages, tools, toolChoice = 'auto', thinking,
     }
   }
   yield { type: 'done', finish, usage, timings };
+}
+
+// A conversation's own first line on an Ollama service (conversation: the agent's id for it, new with
+// /clear). Qwen3.6 35B there (qwen35moe: three layers in four are recurrent) answered from another
+// conversation that had the same instructions: mid-task, its thinking turned to "fix report.py", another
+// practice task's request (3 Oct 2026, in 5 of 9 hard tasks). With a first line of their own, two
+// conversations share no start the service could take one's saved state for. Such a model reads the
+// instructions again for each conversation anyway, so this costs nothing there.
+export function ownStart(messages, conversation) {
+  if (!conversation || messages?.[0]?.role !== 'system' || typeof messages[0].content !== 'string') return messages;
+  return [{ ...messages[0], content: `Conversation ${conversation}.\n${messages[0].content}` }, ...messages.slice(1)];
 }
 
 // An Ollama service (ep.ollama, set by connectRemote): its own /api/chat, the only

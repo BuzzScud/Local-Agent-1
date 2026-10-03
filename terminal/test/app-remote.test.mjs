@@ -422,16 +422,16 @@ test('big-model mode: switching to a 30B+ model that calls tools turns it on (mo
   expect(s.list).toMatch(/huge:120b.*\s+big/);
   expect(s.list).not.toMatch(/tiny:3b.*\bbig\b/);
   // on: said in a note, from → to
-  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines, and it reads files 400 lines at a time. /effort changes any of it.');
+  expect(flat(s.switched)).toContain('Big-model mode for coder:30b: Who decides App → Model · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines, and it reads files 400 lines at a time. /effort changes any of it.');
   // /effort shows the new defaults as the defaults
-  expect(s.panel).toMatch(/Who decides\s+◀ App\s+▶\s+default · the app sorts, reads ahead and checks, as before/);
+  expect(s.panel).toMatch(/Who decides\s+◀ Model\s+▶\s+default · it sorts, looks and saves for itself, like Claude Code/);
   expect(s.panel).toMatch(/Steps per request\s+◀ 80\s+▶\s+default/);
-  // the app still decides: no Agent tool (helpers) on either
+  // the big model decides, as Claude Code does (3 Oct 2026): it is offered the Agent tool (helpers); the small one is not
   expect(srv.chats.map((c) => c.model)).toEqual(['coder:30b', 'tiny:3b']);
-  expect(srv.named[0]).not.toContain('Agent');
+  expect(srv.named[0]).toContain('Agent');
   expect(srv.named[1]).not.toContain('Agent');
   // off again: from → to back
-  expect(flat(s.back)).toContain('Big-model mode off: Tries per fix 12 → 8 · Steps per request 80 → 40 · Command output 160 lines → 80 lines.');
+  expect(flat(s.back)).toContain('Big-model mode off: Who decides Model → App · Tries per fix 12 → 8 · Steps per request 80 → 40 · Command output 160 lines → 80 lines.');
   // defaults only: nothing written to the saved limits, nor kept for either model (the menus were left as they were)
   expect(settingsOf(base).limits ?? {}).toEqual({});
   expect(settingsOf(base).remote.tuned ?? {}).toEqual({});
@@ -571,7 +571,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   expect(s.filled).toMatch(/Reply length\s+◀ 32k tokens\s+▶ •\s+✓ suggested · up to 32k a reply, thinking and answer together/);
   // the switch: loaded at its own context, its own settings in use, and it thinks (Max: think true)
   expect(srv.loads.find((l) => l.model === 'laguna-s-2.1:latest')).toEqual({ model: 'laguna-s-2.1:latest', numCtx: 131072, ok: true });
-  expect(flat(s.switched)).toContain('Big-model mode for laguna-s-2.1:latest and its own settings: Reply length auto → 32k tokens · Keep loaded while open → 30 min · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines · Command timeout 2 min → 10 min');
+  expect(flat(s.switched)).toContain('Big-model mode for laguna-s-2.1:latest and its own settings: Who decides App → Model · Reply length auto → 32k tokens · Keep loaded while open → 30 min · Tries per fix 8 → 12 · Steps per request 40 → 80 · Command output 80 lines → 160 lines · Command timeout 2 min → 10 min');
   expect(srv.chats[0]).toEqual({ model: 'laguna-s-2.1:latest', tools: true, numCtx: 131072 });
   expect(srv.thinks[0]).toBe(true);
   // its Reply length and Keep loaded reach the service with each request
@@ -584,7 +584,7 @@ test('/model on a service: a model’s own settings come first (Thinking Off · 
   // another model: the shared ones; it cannot think
   expect(s.tinyMenu).toMatch(/Thinking\s+◀ None\s+▶/);
   expect(s.tinyMenu).toMatch(/Command timeout\s+◀ 2 min\s+▶/);
-  expect(flat(s.back)).toContain('Big-model mode off: Reply length 32k tokens → auto · Keep loaded 30 min → while open · Tries per fix 12 → 8 · Steps per request 120 → 40 · Command output 160 lines → 80 lines · Command timeout 10 min → 2 min.');
+  expect(flat(s.back)).toContain('Big-model mode off: Who decides Model → App · Reply length 32k tokens → auto · Keep loaded 30 min → while open · Tries per fix 12 → 8 · Steps per request 120 → 40 · Command output 160 lines → 80 lines · Command timeout 10 min → 2 min.');
   const tinyAt = srv.chats.findIndex((c) => c.model === 'tiny:3b');
   expect(tinyAt).toBeGreaterThan(0);
   expect(srv.thinks[tinyAt]).toBe(undefined); // tiny cannot think: nothing asked

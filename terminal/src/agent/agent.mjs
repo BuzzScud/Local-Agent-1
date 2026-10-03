@@ -2,6 +2,7 @@
 // back, run the tool it asks for (asking you first when needed), feed the
 // result back, and repeat until it answers without a tool.
 import { EventEmitter } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { endpointOf } from '../../../models/index.mjs';
 import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
@@ -49,8 +50,10 @@ import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeind
 import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
 import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
+import { openingRead, openingOn } from './opening.mjs';
 
 const MAX_STEPS = 40;
+const newConversation = () => randomUUID().slice(0, 8);
 // How many times what the layout check finds goes back to the model in one
 // message: the first look, and once more when its fix left something (30 Sep:
 // Qwen's one fix made the play button fainter, 3.9 → 3.7:1, and the turn ended).
@@ -220,6 +223,9 @@ export function missingParts(html, dir) {
 
 // A request that wants its file on the Desktop (flows/words.mjs, where the sorting uses it too).
 export { wantsDesktop };
+// An answer that holds code to put in a file (a fenced block of three lines or more) instead of a change.
+export const writesCodeInstead = (text) => /```[^\n]*\n(?:[^\n]*\n){3,}[\s\S]*?```/.test(String(text ?? ''));
+
 export function claimsDone(text) {
   const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
   if (/\b(nothing (?:was |has been |is )?(?:changed|written|edited|done)|no (?:files?|changes?|edits?) (?:was |were |have been |has been )?(?:changed|made|written|needed)|(?:did|do|have|has|could|can)(?: not|n'?t)|cannot|unable|not (?:done|changed|made|finished|written))\b/i.test(t)) return false;
@@ -296,8 +302,26 @@ export const emptyCutNote = () => `Your reply reached the reply limit before it 
 // 27B's), <ifm|tool_calls> / <ifm|tool_call> (K2 Horizon's). The text before
 // it is what the model said; the stop words keep a text-only reply from one.
 export const CALL_MARK = /<tool_call>|<ifm\|tool_calls?>/;
+// What a service says when it cannot read the tool call a model wrote (Ollama's tool parsers).
+export const CALL_UNREADABLE = /\b(?:XML syntax error|error parsing tool call|failed to parse (?:the )?tool call|unexpected end of JSON input)\b/i;
 export const CALL_STOPS = ['<tool_call>', '<ifm|tool_calls>', '<ifm|tool_call>'];
 export const beforeCall = (s) => String(s ?? '').split(CALL_MARK)[0];
+
+// Thinking that came out in the answer's text: a reply that opens with <think> (after Qwen's own
+// <|mask_start|> and the like), or holds those tokens. { thought, text } with the thinking taken out
+// (to its </think>, or to the end when it never closes), or null when there is none.
+const MASK = /<\|mask_(?:start|end)\|>/g;
+export function leakedThinking(text) {
+  const s = String(text ?? '');
+  const masked = /<\|mask_(?:start|end)\|>/.test(s);
+  const t = s.replace(MASK, '');
+  const at = t.search(/<think>/);
+  if (at < 0 || (at > 0 && t.slice(0, at).trim() && !masked)) return masked ? { thought: '', text: t.trim() } : null;
+  const end = t.indexOf('</think>', at);
+  const thought = (end < 0 ? t.slice(at + 7) : t.slice(at + 7, end)).trim();
+  const rest = `${t.slice(0, at)}${end < 0 ? '' : t.slice(end + 8)}`.trim();
+  return { thought, text: rest };
+}
 
 // Tool-call text written into a file by mistake: a line that is only a call's
 // tag. On 1 Oct Bonsai closed a Write's content with </content> instead of
@@ -381,10 +405,31 @@ export function bareCallInText(text, names = []) {
   let j;
   try { j = JSON.parse(body); } catch { return null; }
   const fn = j?.function && typeof j.function === 'object' ? j.function : j;
-  const name = fn?.name;
-  const a = fn?.arguments ?? fn?.parameters;
-  if (typeof name !== 'string' || !names.includes(name) || (a !== undefined && typeof a !== 'object' && typeof a !== 'string')) return null;
-  return { name, args: typeof a === 'string' ? a : JSON.stringify(a ?? {}), before: t.slice(0, at).trim() };
+  const a = fn?.arguments ?? fn?.parameters ?? fn?.args ?? fn?.input;
+  // A name of its own for one of the tools ("read_files", "run_command": Qwen3.6, 3 Oct 2026), or none:
+  // a reply that is only the arguments, of a tool that only looks ({"file": "convert.mjs"}).
+  const name = typeof fn?.name === 'string' ? toolNamed(fn.name, names) : at === 0 || fenced ? argsTool(fn, names) : null;
+  if (!name || (a !== undefined && typeof a !== 'object' && typeof a !== 'string')) return null;
+  const args = typeof fn?.name === 'string' ? a : fn;
+  return { name, args: typeof args === 'string' ? args : JSON.stringify(args ?? {}), before: t.slice(0, at).trim() };
+}
+
+// The tool a call written as text means: its own name, or a name models use for it.
+const TOOL_WORDS = { Read: ['read', 'readfile', 'readfiles', 'openfile', 'cat', 'view', 'viewfile'], List: ['list', 'ls', 'listfiles', 'listdir', 'listdirectory', 'glob'], Search: ['search', 'grep', 'searchfiles', 'find', 'findinfiles', 'searchcode'], Edit: ['edit', 'editfile', 'replace', 'strreplace', 'strreplacebasededittool'], Write: ['write', 'writefile', 'createfile'], Bash: ['bash', 'shell', 'run', 'runcommand', 'execute', 'exec', 'terminal'], TodoWrite: ['todowrite', 'todo', 'todos', 'plan'] };
+function toolNamed(name, names) {
+  if (names.includes(name)) return name;
+  const k = name.toLowerCase().replace(/[^a-z]/g, '');
+  const hit = Object.entries(TOOL_WORDS).find(([, ws]) => ws.includes(k))?.[0];
+  return hit && names.includes(hit) ? hit : null;
+}
+// A reply that is only a tool's arguments: only the tools that look, so text never runs a command.
+function argsTool(o, names) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const keys = Object.keys(o);
+  const is = (...ks) => keys.length && keys.every((x) => ks.includes(x));
+  const tool = is('path', 'file', 'file_path', 'filename', 'paths', 'files', 'offset', 'limit', 'find') && keys.some((x) => /^(path|file|file_path|filename|paths|files)$/.test(x)) ? 'Read'
+    : is('pattern', 'path', 'glob') && keys.includes('pattern') ? 'Search' : null;
+  return tool && names.includes(tool) ? tool : null;
 }
 
 // A parameter value is text unless it is clearly JSON (a number, true/false,
@@ -507,6 +552,7 @@ export class Agent extends EventEmitter {
     // How this project runs its tests; used to check a change before calling it done.
     this.testCmd = verify ? testCommand(cwd) : null;
     this.messages = [{ role: 'system', content: wayPrompt(system, this.way) }];
+    this.conversation = newConversation(); // its own first line on an Ollama service (client.mjs ownStart)
     this.workingInstructions = readInstructions().sections;
     // The instructions set (prompt-files.mjs): a prompt built for the other set than this
     // model's (the app and coding -p build the local one) is built again here, once. A helper
@@ -881,6 +927,7 @@ export class Agent extends EventEmitter {
   // the design examples with a request to make or restyle a page.
   withTurnNotes(messages) {
     const t = this.turn;
+    if (t?.baked) return messages;
     const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
@@ -910,7 +957,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -943,7 +990,14 @@ export class Agent extends EventEmitter {
   // again (1 Oct 2026, Bonsai at 16k: 3 minutes each time, three times in one turn). The notes
   // call takes the same, so the conversation it reads is the one already read.
   stepEffort() {
-    return this.effort === 'high' && this.turn?.changed && !this.model?.effortAtTop ? 'medium' : this.effort;
+    return this.effort === 'high' && this.turn?.changed && !this.model?.effortAtTop && !this.levelInPrompt() ? 'medium' : this.effort;
+  }
+  // gpt-oss on an Ollama service: its thinking level is written into the system message (the
+  // harmony format's "Reasoning: …"), so a new level is a new prompt from its first lines and the
+  // service reads the whole conversation again, as with effortAtTop above.
+  levelInPrompt() {
+    const ep = endpointOf(this.url);
+    return Boolean(ep?.ollama && /gpt-?oss/i.test(`${ep.family ?? ''} ${this.turn?.use?.model ?? ep.model ?? ''}`));
   }
 
   // What the conversation holds now, the two newest messages counted (they
@@ -1324,6 +1378,9 @@ export class Agent extends EventEmitter {
         } else if (forced) this.emit('note', { text: 'No design examples found (the "design examples" folder is missing or has no cards in the sets that are on).', tone: 'warn' });
       } catch {}
     }
+    // The opening read (opening.mjs): on the remote set, the memory whole and where the project
+    // stands, before the first step of a conversation, on either way; again after it was trimmed away.
+    this.giveOpening();
     // A question about code: what it is about is read now, in one go, instead
     // of letting the model find, list and read it a piece at a time.
     // The model that decides looks for itself (Map, CodeSearch, List, Search, Read).
@@ -1348,6 +1405,7 @@ export class Agent extends EventEmitter {
     let desktopSent = false; // sent back once to move a page asked for on the Desktop
     let correctedAlready = false;
     let blankRetry = false;
+    let leakBacks = 0; // a reply that was only thinking written out as text, sent back (twice at most)
     try {
       for (let step = 0; step < this.maxSteps; step++) {
         if (signal?.aborted) { reason = 'interrupted'; break; }
@@ -1384,8 +1442,10 @@ export class Agent extends EventEmitter {
         }
         // Only the first call runs, so only the first is kept in the history
         // (otherwise the model waits for results that never come). When the model
-        // decides, every call of the reply runs, in order (at most MAX_CALLS).
-        calls = calls.slice(0, decides ? MAX_CALLS : 1);
+        // decides, every call of the reply runs, in order (at most MAX_CALLS), and so
+        // they do for a model on another machine on either way (the remote set's TOOLS.md
+        // asks for the reads of a step together: one round trip to the service, not three).
+        calls = calls.slice(0, decides || this.remoteSet() ? MAX_CALLS : 1);
         // A call cut off by the reply limit (finish 'length'): running it can
         // only give "not valid JSON", and the old error told the model to send
         // the same too-big call again. Instead: build the file in parts.
@@ -1436,6 +1496,15 @@ export class Agent extends EventEmitter {
         this.turn.findings = this.turn.findings.slice(-6);
         this.emit('assistant', { text, reasoning: turn.reasoning, secs: turn.secs, thinkSecs: turn.thinkSecs, tokens: turn.tokens, final: !calls.length });
         if (!calls.length) {
+          // Thinking that came out as the reply's text (leakedThinking) and nothing else: not an
+          // answer. Qwen3.6 ended hard task 32 this way, mid-task (3 Oct 2026). A technical
+          // recovery, so on both ways.
+          if (turn.leaked && !text.trim() && leakBacks < 2) {
+            leakBacks++;
+            this.emit('note', { text: 'The reply was only thinking, written out as text; asked it to take the next step.', tone: 'dim' });
+            this.messages.push({ role: 'user', content: auto('Your last reply was only your thinking, with no tool call and no answer. Take the next step now with a tool, or give your answer.') });
+            continue;
+          }
           // A reply that asks you something ends the turn: it waits for you.
           if (asksTheUser(text)) break;
           // Small models often announce the next step mid-task ("Now I will
@@ -1464,15 +1533,19 @@ export class Agent extends EventEmitter {
             continue;
           }
           // It says the work is done, but nothing changed in this message: no
-          // Edit, no Write, and no command that could have written instead.
+          // Edit, no Write, and no command that could have written instead
+          // (an ls or a git log could not: 3 Oct 2026, that one let it through).
           // Sent back once; if it still claims it with nothing changed, a note
-          // under the answer says so.
+          // under the answer says so. So is an answer that is the change written
+          // out as code (Qwen3.6 on hard task 30, the model deciding): nothing
+          // was changed, and the user cannot apply it from there.
           const t = this.turn;
-          if (!t.changed && !t.question && !t.carried && !t.ranCommand && this.hook('said-done') && asksForWork(t.request) && claimsDone(text)) {
+          const codeInstead = writesCodeInstead(text);
+          if (!t.changed && !t.question && !t.carried && !t.wroteByCommand && this.hook('said-done') && asksForWork(t.request) && (claimsDone(text) || codeInstead)) {
             if (!doneUnchanged) {
               doneUnchanged = true;
-              this.emit('note', { text: 'It says the work is done, but no file changed; asked it to look again.', tone: 'warn' });
-              this.messages.push({ role: 'user', content: auto('You said the work is done, but no file was changed in this message. If the request needs a change, make it now with the tools. If it was really done before this message, say which file has it and that nothing changed now, in one or two sentences.') });
+              this.emit('note', { text: codeInstead ? 'It wrote the change in its answer, but no file changed; asked it to make the change.' : 'It says the work is done, but no file changed; asked it to look again.', tone: 'warn' });
+              this.messages.push({ role: 'user', content: auto(codeInstead ? 'You wrote the change in your answer, but no file was changed: the user cannot apply it from there. Make the change now with Edit or Write, then check it.' : 'You said the work is done, but no file was changed in this message. If the request needs a change, make it now with the tools. If it was really done before this message, say which file has it and that nothing changed now, in one or two sentences.') });
               continue;
             }
             this.emit('note', { text: 'Nothing was changed for this request: no file was written or edited.', tone: 'warn' });
@@ -1728,6 +1801,10 @@ export class Agent extends EventEmitter {
       this.messages.push({ role: 'user', content: '[The user interrupted you. Wait for their next message.]' });
     }
     const t = this.turn ?? {};
+    // The prompt cache of a model on another machine: the notes that went with this request stay
+    // in it, written in, so the next message starts from the same text the service has cached. Left
+    // to come and go, they changed the request and the service read everything after it again.
+    if (this.remoteSet()) this.bakeTurnNotes();
     await this.stillBroken(reason);
     await this.deliverDesktop(reason);
     this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0 });
@@ -1848,6 +1925,38 @@ export class Agent extends EventEmitter {
     this.trust(lesson.used, delta, { stopped: 'you stopped Agentic Coder', stuck: 'Agentic Coder got stuck', failed: 'the task failed its check', passed: 'the task passed its check' }[outcome]);
     this.emit('settled', lesson);
     return lesson;
+  }
+
+  // A model on another machine (prompt-files.mjs, the remote set).
+  remoteSet() { return (this.rulesSetUsed ?? this.rulesSet()) === 'remote'; }
+
+  // This turn's notes (withTurnNotes) written into its request for good, once the turn is over.
+  bakeTurnNotes() {
+    const t = this.turn;
+    if (!t?.requestMsg || t.baked) return;
+    const [m] = this.withTurnNotes([t.requestMsg]);
+    if (m !== t.requestMsg) t.requestMsg.content = m.content;
+    t.baked = true;
+  }
+
+  // The opening read (opening.mjs): once a conversation on the remote set, as a step the model did not
+  // have to take, a List of the project folder, and on the screen as "Reading all memory files". A step,
+  // because Qwen3.6 writes its first call as plain JSON text ({"file": "convert.mjs"}) when the
+  // conversation has no call in it to follow (3 Oct 2026: every hard task, with the read written into
+  // the request instead). A List, not the Bash it stands for: given a Bash, it ran git log and ls -la
+  // itself twice more and copied the Bash's "description" into its Reads. A trim, the notes or /rewind
+  // can take it away: then it comes again.
+  giveOpening() {
+    if (this.isHelper || !openingOn() || !this.remoteSet()) return;
+    if (this.messages.some((m) => m.opening && !String(m.content).startsWith('[older output removed'))) return;
+    let r = null;
+    try { r = openingRead(this.cwd, { memory: this.memory, home: this.memory?.home ?? this.home }); } catch { return; }
+    if (!r) return;
+    const id = `opening_${Date.now()}`;
+    this.messages.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: 'List', arguments: JSON.stringify({ path: '.' }) } }] });
+    this.messages.push({ role: 'tool', tool_call_id: id, content: r.body, opening: true });
+    this.ctxUsed += tokensOf(r.body) + 30;
+    this.emit('tool', { id, name: 'List', label: r.view.title, arg: r.args.command, view: r.view, given: true });
   }
 
   // In a project with several code files, the loop starts from the project
@@ -2203,7 +2312,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
+      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {
@@ -2258,6 +2367,14 @@ export class Agent extends EventEmitter {
         this.emit('note', { text: this.model?.remote ? 'The remote model stopped answering; connecting again…' : 'The model server stopped; restarting it and trying again…', tone: 'warn' });
         await this.waitForServer();
         return this.generate(signal, { retry: false, textOnly, maxTokens: cap });
+      // A tool call the service could not read (Ollama's parser: "XML syntax error on line 17:
+      // unexpected EOF", Qwen3.6, 3 Oct 2026): the reply is lost, so the model is told and writes it again,
+      // twice at most a message. Before, the message ended there as an error.
+      } else if (CALL_UNREADABLE.test(e.message) && this.turn && (this.turn.unreadable ?? 0) < 2) {
+        this.turn.unreadable = (this.turn.unreadable ?? 0) + 1;
+        this.emit('note', { text: `The service could not read the tool call it wrote (${String(e.message).replace(/^model server:\s*/, '').slice(0, 120)}); asked it to send the call again.`, tone: 'warn' });
+        this.messages.push({ role: 'user', content: auto('The service could not read the tool call in your last reply: its arguments were cut off or not valid. Send the call again, complete and valid.') });
+        return this.generate(signal, { retry, textOnly, maxTokens: cap });
       // A conversation too long for the model. Not a busy service: "Rate limit exceeded" is a 429,
       // already waited for and asked again (busy.mjs); summarizing would only lose the conversation.
       // Nor a model with no room on the service's GPU (its error ends "a smaller Context": 2 Oct 2026,
@@ -2272,6 +2389,9 @@ export class Agent extends EventEmitter {
       this.answering--;
     }
     turn.calls = turn.calls.filter(Boolean).filter((c) => c.name);
+    // Thinking written into the answer (<think>, Qwen's <|mask_start|>): it goes with the thinking.
+    const leak = leakedThinking(turn.text);
+    if (leak) { turn.reasoning = [turn.reasoning, leak.thought].filter(Boolean).join('\n'); turn.text = leak.text; turn.leaked = true; }
     turn.tokens ||= tokensOf(turn.reasoning + turn.text + turn.calls.map((c) => c.args).join(''));
     this.stats.outTokens += turn.tokens;
     this.stats.requests++;
@@ -2380,7 +2500,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', agents: this.agentsOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -2546,6 +2666,8 @@ export class Agent extends EventEmitter {
     }
     // A command may have written files the Edit and Write counts never see.
     if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
+    // One that could have written a file (not ls, git log, cat…): the "said done, nothing changed" check counts it as a change.
+    if (this.turn && call.name === 'Bash' && !isReadOnly(args.command)) this.turn.wroteByCommand = true;
     if (this.turn && call.name === 'Bash' && this.turn.changed && (this.testCmd && args.command.includes(this.testCmd.split(' ').slice(-1)[0]) || this.turn.check && args.command.includes(this.turn.check.split(' ').slice(-1)[0]) || /\btest\b/.test(args.command))) {
       this.turn.testedAfterChange = true;
       this.turn.checkOk = !out.error;
@@ -3171,7 +3293,7 @@ export class Agent extends EventEmitter {
       const sampling = this.thinking ? this.model.thinkingSampling : this.model.sampling;
       // Thinking stays on (turning it off would change the prompt and read it all
       // again) but is capped at NOTES_THINK, so the 700 tokens go to the notes.
-      for await (const ev of streamChat({ url: this.url, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.stepEffort(), model: this.model, sampling, maxTokens: NOTES_ROOM + (this.thinking ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal })) {
+      for await (const ev of streamChat({ url: this.url, conversation: this.conversation, messages: [...this.withTurnNotes(asked), { role: 'user', content: ask }], tools: this.tools(), toolChoice: 'none', extra: { stop: CALL_STOPS }, thinking: this.thinking, effort: this.stepEffort(), model: this.model, sampling, maxTokens: NOTES_ROOM + (this.thinking ? NOTES_THINK : 0), thinkCap: NOTES_THINK, slot: this.slots?.main, signal })) {
         if (ev.type === 'text') summary += ev.text;
       }
     } catch (e) {

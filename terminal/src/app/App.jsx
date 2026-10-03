@@ -792,7 +792,8 @@ export function App({ opts, win, onRestart }) {
   const relimit = (m) => {
     const was = limitsRef.current;
     const fresh = readLimits({ ...loadSettings(opts.cwd), remote: settings.remote }, m);
-    const next = { ...was, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])) };
+    // Who decides moves too: a big model on a service decides for itself (BIG_HARNESS), unless /effort saved one.
+    const next = { ...was, ...Object.fromEntries(OWN_ROWS.map((id) => [id, fresh[id]])), way: fresh.way };
     const name = m.remote?.model ?? m.name;
     const own = m.remote ? ownOf(settings, m.remote.model) : null;
     ownLevel(m, own);

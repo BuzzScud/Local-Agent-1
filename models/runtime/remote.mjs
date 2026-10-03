@@ -427,12 +427,14 @@ export function remoteLevels(o) {
 // with 30B parameters or more (by its total, so Qwen3.6 35B-A3B counts) that
 // can call tools reads files 400 lines at a time and has more steps, tries and
 // command output. These are /effort's defaults for it; what you saved there
-// still wins. Models on this Mac and smaller remote ones keep today's. The app
-// still decides (Who decides: App): with the model deciding, qwen3-coder-next
-// passed 22 of the Practice 28 against 26 and took 73% more time (Big-model
-// mode: off vs on, 1 Oct), so that part was taken back out.
+// still wins. Models on this Mac and smaller remote ones keep today's.
+// Who decides: Model, as in Claude Code (3 Oct 2026, the owner's ask: "i want it to run just like you").
+// On 1 Oct the model deciding did worse (qwen3-coder-next, 22 of the Practice 28 against 26, 73% more
+// time), so it had been taken back out; with the remote harness of 3 Oct (the opening read, a step's
+// reads in one reply, Write over a file it read, the recoveries) Qwen3.6 35B on the hard tasks passed 5
+// of 9 in 1,188 s deciding, 4 of 9 in 1,888 s with the app deciding, and 3 of 9 in 1,483 s before.
 export const BIG_PARAMS = 30;
-export const BIG_HARNESS = { steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 } };
+export const BIG_HARNESS = { steps: 80, tries: 12, outputLines: 160, read: { whole: 400, part: 400, max: 1000 }, way: 'model' };
 // "36.0B", "268.10M", "13B", "1.2T" → billions (0 when not said).
 export const paramsB = (s) => {
   const m = /^([\d.]+)\s*([KMBT])/i.exec(String(s ?? '').trim());
