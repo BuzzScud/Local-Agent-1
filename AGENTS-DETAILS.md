@@ -275,6 +275,14 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   the packages, where the code connects, the installed app, the unit tests); `--fast`
   leaves out the model files and the tests. A place the code names for the first time
   (`KNOWN_HOSTS` in `models/evals/tools/check.mjs`) is added there on purpose, never in passing.
+- **What `bun run check` says about the repo itself** (3 Oct 2026): "Who can read it" is fine while `PUBLIC_SINCE` in
+  check.mjs says the repo is public on purpose (private again, the line says so; set to null, a public repo is wrong, as
+  before). "No server addresses" (`publicAddresses`): a public internet address in a tracked file is wrong, and one in a
+  commit message is a line to look at, since only a rewrite of the history takes it out; this Mac, the home network,
+  Tailscale and the documentation ranges are not addresses a stranger can use, versions and a page's drawing numbers
+  are not addresses at all, and a test's made-up one is added to `KNOWN_ADDRESSES` on purpose. "Packages" compares a
+  package the repo holds itself (the react-devtools-core stand-in, which bun installs as a copy) with the repo's own
+  folder (`localCopyDiff`), not with npm.
 
 ## The contract: Scope, Done and failures (1 Oct 2026)
 

@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped } from '../evals/tools/check.mjs';
+import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff } from '../evals/tools/check.mjs';
 
 const real = 'Zk3vQ9xT7mB2nL5cR8wY1dF6hJ4s';
 const what = (text) => findSecrets(text).map((s) => s.what);
@@ -80,4 +80,55 @@ test('a code file nothing uses is found; one a script or a test names is not', (
 
 test('the check finds nothing in its own source or in this test', () => {
   for (const f of [join(import.meta.dir, '..', 'evals', 'tools', 'check.mjs'), import.meta.path]) expect([f, findSecrets(readFileSync(f, 'utf8'))]).toEqual([f, []]);
+});
+
+// The addresses are put together here, so this file holds none the check would find.
+const ip = (...parts) => parts.join('.');
+test("a server's public address is found, with its port; this Mac, the home network, Tailscale and made-up ranges are not", () => {
+  const real = ip(134, 199, 192, 90), other = ip(52, 14, 9, 3);
+  expect(publicAddresses(`your real one (${real}:60009) still cut every request`)).toEqual([`${real}:60009`]);
+  expect(publicAddresses(`Model: coder on http://${real}:60009, 256k context`)).toEqual([`${real}:60009`]);
+  expect(publicAddresses(`ssh root@${other}\nthen again ${other}`)).toEqual([other]); // once, however often it is written
+  for (const fine of [ip(127, 0, 0, 1), ip(10, 0, 0, 5), ip(172, 16, 4, 1), ip(172, 31, 255, 1), ip(192, 168, 1, 40), ip(169, 254, 1, 1), ip(100, 77, 240, 86), ip(0, 0, 0, 0), ip(255, 255, 255, 0), ip(192, 0, 2, 7), ip(198, 51, 100, 7), ip(203, 0, 113, 7)]) {
+    expect([fine, publicAddresses(`the door listens on ${fine}:7790, also http://${fine}/x`)]).toEqual([fine, []]);
+  }
+  // just outside the kept ranges: found (172.32, 100.128 are test samples, so they are tried under other numbers)
+  expect(publicAddresses(`${ip(172, 33, 0, 1)} and ${ip(100, 129, 0, 1)}`)).toEqual([ip(172, 33, 0, 1), ip(100, 129, 0, 1)]);
+});
+
+test('numbers that only look like an address are left alone: a version, a drawing, a longer number; a known sample is listed on purpose', () => {
+  const v = ip(120, 0, 0, 0);
+  expect(publicAddresses(`Mozilla/5.0 Chrome/${v} Safari/537.36`)).toEqual([]);
+  expect(publicAddresses(`package v${ip(11, 2, 3, 4)} and tool-${ip(11, 2, 3, 4)}`)).toEqual([]);
+  expect(publicAddresses(`<path d="M${ip(12, 5, 3, 2)} 0 ${ip(11, 5, 5, 5)}z" transform="matrix(${ip(11, 5, 5, 5)})"/>`)).toEqual([]);
+  expect(publicAddresses(`${ip(11, 2, 3, 4)}.5 and 9${ip(11, 2, 3, 4)}`)).toEqual([]); // five parts, or the tail of a longer number
+  expect(publicAddresses(ip(300, 2, 3, 4))).toEqual([]); // not an address at all
+  for (const k of KNOWN_ADDRESSES) expect([k, publicAddresses(`the server at ${k} answers`)]).toEqual([k, []]);
+  expect(publicAddresses(`the server at ${ip(11, 2, 3, 4)} answers`, [ip(11, 2, 3, 4)])).toEqual([]); // a list of one's own
+});
+
+test('a public repo is fine while the repo says it is public on purpose, and a private one is then named; with no such line, public is wrong', () => {
+  expect(visibility(200, 'me/repo', '28 Sep 2026')).toMatchObject({ mark: 'fine', text: 'me/repo is public, on purpose (since 28 Sep 2026): anyone can read it' });
+  expect(visibility(404, 'me/repo', '28 Sep 2026').mark).toBe('look');
+  expect(visibility(404, 'me/repo', '28 Sep 2026').text).toContain('private now');
+  expect(visibility(200, 'me/repo', null)).toMatchObject({ mark: 'wrong', text: 'me/repo is PUBLIC: anyone can read it' });
+  expect(visibility(404, 'me/repo', null).mark).toBe('fine');
+  expect(visibility(503, 'me/repo', '28 Sep 2026').mark).toBe('look');
+});
+
+test("a package the repo holds itself, installed as a copy, is compared with the repo's own folder: the same is fine, a change is named", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-check-own-'));
+  const put = (rel, text) => { mkdirSync(dirname(join(dir, rel)), { recursive: true }); writeFileSync(join(dir, rel), text); };
+  put('shims/stand-in/index.js', 'export default {};\n');
+  put('shims/stand-in/package.json', '{"name":"stand-in"}\n');
+  put('node_modules/stand-in/index.js', 'export default {};\n');
+  put('node_modules/stand-in/package.json', '{"name":"stand-in"}\n');
+  const links = { 'stand-in': 'shims/stand-in' };
+  expect(localCopyDiff(dir, join(dir, 'node_modules'), links)).toEqual([]);
+  put('node_modules/stand-in/index.js', 'export default { changed: true };\n');
+  put('node_modules/stand-in/extra.js', '// not in the repo\n');
+  expect(localCopyDiff(dir, join(dir, 'node_modules'), links).sort()).toEqual(["stand-in/extra.js differs from the repo's own copy (shims/stand-in)", "stand-in/index.js differs from the repo's own copy (shims/stand-in)"]);
+  put('shims/stand-in/more.js', '// only in the repo\n');
+  expect(localCopyDiff(dir, join(dir, 'node_modules'), links)).toContain("stand-in/more.js is in the repo's own copy (shims/stand-in) but not installed");
+  expect(localCopyDiff(dir, join(dir, 'node_modules'), { gone: 'shims/gone' })).toEqual([]); // not installed as a copy: npm's link is checked by npm
 });
