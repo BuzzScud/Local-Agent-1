@@ -382,6 +382,17 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **Instructions.** Both TOOLS.md files have an `## MCP tools` section that joins the Tool use lines only while a
   tool is offered, and the remote set has a guide, `MCP.md`, listed the same way (`MCP_GUIDE`, as `SUBAGENTS` is for
   the Agent tool). With no server, the instructions are the same letter for letter.
+- **The Level 1 extras** (the second part of the build). Sign-in (`terminal/src/app/mcp-auth.mjs`): the official
+  client's `auth()` with a page on this Mac taking the browser back (`127.0.0.1:17690–17699/callback`, its state
+  checked); registration and tokens are kept as one Keychain secret, `mcp-<server>-signin` (`saveSecret`, base64url:
+  longer than a key may be); a hub starting a server never opens a browser (the server is "sign in: s").
+  `AGENTIC_SIGNIN_FOLLOW=1` (tests) follows the sign-in page's answer itself. Resources: `@server:uri` is read when
+  the message is sent (`resourceMentions`, `resourceParts`), not asked about (you named it). Prompts: `/server:prompt
+  args` (`promptCommand`, `promptText`). A server's own question (elicitation; on 2026-07-28 it rides in the result
+  and the client asks again) goes to the ask box as the server's (`agent.mjs mcpAsked`); with nobody there it is
+  declined. Anthropic's connector: on the Claude API a server whose "On Claude" is the connector is left out of the
+  app's tools and sent as `mcp_servers` + an `mcp_toolset` (beta `mcp-client-2025-11-20`), with its token read at
+  each request; its `mcp_tool_use`/`mcp_tool_result` blocks show as finished steps and the reply goes back whole.
 - **Tests.** `terminal/test/fake-mcp.mjs` is the stand-in server (a program or an address, either era; it can crash,
   hang, change its tools, ask a question, return a picture). `mcp.test.mjs` (the pure parts, the files, the hub),
   `mcp-agent.test.mjs` (whole conversations on a scripted model, and the Claude path on the stand-in Claude API: the

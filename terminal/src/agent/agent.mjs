@@ -628,7 +628,7 @@ export class Agent extends EventEmitter {
     const stamp = catalogStamp(entries);
     const had = this.mcpFrozen?.stamp ?? catalogStamp([]);
     this.mcpStale = false;
-    this.mcpFrozen = { entries, stamp, notes: this.mcp.notes?.() ?? {} };
+    this.mcpFrozen = { entries, stamp, notes: this.mcp.notes?.() ?? {}, connectors: (this.mcp.connectors?.() ?? []).map(({ name, url }) => ({ name, url })) };
     this.mcpPlans = new Map();
     if (late.length) this.emit('note', { text: `MCP: ${late.join(', ')} ${late.length === 1 ? 'is' : 'are'} still starting, so ${late.length === 1 ? 'its' : 'their'} tools are not in this conversation. They join at the next one (/clear), or when you save in /mcp.`, tone: 'warn' });
     if (had !== stamp && this.messages.length > 1) this.emit('note', { text: 'The MCP tools changed (/mcp): the model reads the conversation again with the new list.', tone: 'dim' });
@@ -640,11 +640,19 @@ export class Agent extends EventEmitter {
   // helper those the user marked as reading; one of the user's helper agents those its file names.
   // off: with the ones switched off too (a call to one is told it is off, not that it does not exist).
   mcpEntries({ off = false } = {}) {
-    const all = (this.mcpFrozen?.entries ?? []).filter((e) => off || e.on);
+    // On the Claude API a server handed to Anthropic's connector is Anthropic's to call, not this app's.
+    const theirs = endpointOf(this.url)?.kind === 'claude' ? new Set((this.mcpFrozen?.connectors ?? []).map((s) => s.name)) : null;
+    const all = (this.mcpFrozen?.entries ?? []).filter((e) => (off || e.on) && !theirs?.has(e.server));
     if (!this.toolFilter) return all;
     return this.toolFilter === EXPLORE_TOOLS ? all.filter((e) => e.reads) : all.filter((e) => this.toolFilter.has(e.name));
   }
   mcpOn() { return this.mcpEntries().length > 0; }
+  // The servers Anthropic's connector calls in this conversation (the Claude API only), each with its token as it is now.
+  mcpConnectors() {
+    if (endpointOf(this.url)?.kind !== 'claude' || !this.mcpFrozen?.connectors?.length || this.isHelper) return [];
+    const now = new Map((this.mcp?.connectors?.() ?? []).map((s) => [s.name, s]));
+    return this.mcpFrozen.connectors.map((s) => now.get(s.name) ?? s);
+  }
   // What the instructions say of the MCP tools: '' (none on), or the servers' list (agent/mcp.mjs
   // mcpBrief), which also brings TOOLS.md's MCP lines.
   mcpPrompt() {
@@ -2421,7 +2429,7 @@ export class Agent extends EventEmitter {
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
-      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: textOnly ? { stop: CALL_STOPS } : undefined, thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
+      const stream = streamChat({ url: this.url, conversation: this.conversation, messages: this.withTurnNotes(this.messages), tools: this.tools(), toolChoice: textOnly ? 'none' : 'auto', extra: (() => { const conn = textOnly ? [] : this.mcpConnectors(); return textOnly || conn.length ? { ...(textOnly ? { stop: CALL_STOPS } : {}), ...(conn.length ? { mcpServers: conn } : {}) } : undefined; })(), thinking: this.thinking, effort, model: this.model, sampling, maxTokens, thinkCap, slot: this.slots?.main, signal: local.signal, parallel: this.way === 'model' && !textOnly, use: this.turn?.use });
       for await (const ev of stream) {
         if (ev.type !== 'done' && firstToken === null) firstToken = Date.now();
         if (ev.type === 'reasoning') {

@@ -397,3 +397,29 @@ test('coding -p: with --yes a tool runs; without it nothing does; a server\'s ow
   const asked = await once([call('mcp__shop__file_ticket', {}), { text: 'It was not filed.' }], true);
   expect(asked.results[0]).toContain('Not filed: you declined.');
 });
+
+test('on the Claude API a server handed to Anthropic\'s connector goes as mcp_servers and a toolset; its calls show as finished steps', async () => {
+  const { startFakeAnthropic } = await import('./fake-anthropic.mjs');
+  const fake = await startFakeAnthropic([
+    { mcp: { server: 'linear', name: 'list_issues', input: { team: 'shop' }, result: 'Issue 7: Checkout rounds down' }, text: 'Issue 7 is about rounding.' },
+  ]);
+  setEndpoint(fake.url, { remote: true, kind: 'claude', key: fake.key, model: 'claude-opus-5-5', label: 'claude' });
+  const cwd = project();
+  const hub = new McpHub({ cwd, startMs: 5000, callMs: 5000, keyOf: (s) => (s.name === 'linear' ? 'lin-key-123' : null) });
+  hubs.push(hub);
+  // The connector's server is never reached from here: Anthropic calls it. Here it is a server of the shop's tools too.
+  const linear = store.serverOf('linear', { url: 'https://mcp.example.com/linear', auth: 'key', claude: 'connector' });
+  hub.configure([program('shop'), linear]);
+  const tools = [];
+  const agent = new Agent({ url: fake.url, model: { ...model, remote: { kind: 'claude' } }, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'bypass', flows: false, verify: false, confirmPlan: false, mcp: hub, instructions: 'local' });
+  agent.on('tool', (e) => tools.push(e));
+  try { await agent.send('what is issue 7 about?'); } finally { dropEndpoint(fake.url); await fake.close(); }
+  const body = fake.seen.find((s) => s.path.startsWith('/v1/messages')).body;
+  expect(body.mcp_servers).toEqual([{ type: 'url', url: 'https://mcp.example.com/linear', name: 'linear', authorization_token: 'lin-key-123' }]);
+  expect(body.tools.at(-1)).toEqual({ type: 'mcp_toolset', mcp_server_name: 'linear' });
+  expect(body.tools.some((t) => t.name?.startsWith('mcp__linear__'))).toBe(false);
+  expect(body.tools.some((t) => t.name === 'mcp__shop__echo')).toBe(true);
+  expect(fake.seen.find((s) => s.path.startsWith('/v1/messages')).beta).toContain('mcp-client-2025-11-20');
+  expect(tools.filter((t) => t.view?.kind === 'mcp').map((t) => [t.label, t.arg, t.view.content])).toEqual([['linear · list_issues', 'team: shop', 'Issue 7: Checkout rounds down']]);
+  expect(agent.messages.at(-1).content).toBe('Issue 7 is about rounding.');
+});

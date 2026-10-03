@@ -60,7 +60,9 @@ import { rulesFor, addRule, startModeFor } from './perm-store.mjs';
 import { openMcp, reloadMcp } from './mcp-start.mjs';
 import { readProject, answerProject, saveServer, removeServer, saveMarks, saveServerKey, removeServerKey, serverKey, rememberAllowed, mcpLogFile, commandLine } from './mcp-store.mjs';
 import { openMcpList, listRows as mcpListRows, openMcpForm, formRows as mcpFormRows, moveMcpRow, startMcpEdit, commitMcpEdit, mcpWarning, formServer, savedNote as mcpSavedNote, openMcpTools, toggleTool } from './mcp-form.mjs';
-import { whereOf as mcpWhere } from '../tools/mcp.mjs';
+import { whereOf as mcpWhere, pictureFor } from '../tools/mcp.mjs';
+import { resourceMentions, resourceParts, promptCommand, promptText } from '../agent/mcp.mjs';
+import { signIn as mcpSignIn, signOut as mcpSignOut, signedIn as mcpSignedIn, openInBrowser } from './mcp-auth.mjs';
 import { changePermissions, summary as permSummary, settingsValue, modeWord } from './perms.mjs';
 import { countTries } from './live.mjs';
 import { spinStyle } from '../ui/theme.mjs';
@@ -1410,8 +1412,39 @@ export function App({ opts, win, onRestart }) {
   };
 
   // ---- /mcp: your MCP servers (mcp-form.mjs keeps the picker, mcp-store.mjs the files, tools/mcp.mjs runs them) ----
-  // The Level 1 rows (sign-in in the browser, Anthropic's connector) are offered once they are built.
-  const MCP_EXTRAS = false;
+  // The Level 1 rows: sign-in in the browser, and Anthropic's connector on the Claude API.
+  const MCP_EXTRAS = true;
+  // Where a sign-in page opens: your browser. AGENTIC_SIGNIN_FOLLOW=1 (the tests) follows the page's
+  // answer itself, as a browser where you said yes would.
+  const signinOpen = process.env.AGENTIC_SIGNIN_FOLLOW === '1' ? (url) => { fetch(url, { redirect: 'manual' }).then((r) => fetch(r.headers.get('location'))).catch(() => {}); } : openInBrowser;
+  const mcpSigning = useRef(null);
+  // The servers' resources and prompts, for the @ and / menus: loaded the first time a name is typed
+  // (@shop: or /shop:), kept until /mcp changes something. [, bump] draws the menu again once loaded.
+  const mcpLists = useRef({ resources: {}, prompts: {} });
+  const [, bumpLists] = useState(0);
+  const offerList = (kind, name) => {
+    const box = mcpLists.current[kind];
+    if (box[name] === undefined && mcpHub) {
+      box[name] = null;
+      (kind === 'resources' ? mcpHub.resources(name) : mcpHub.prompts(name)).then((list) => { box[name] = list; bumpLists((n) => n + 1); }, () => { box[name] = []; bumpLists((n) => n + 1); });
+    }
+    return box[name] ?? [];
+  };
+  // Sign in to a server (mcp-auth.mjs): the browser round trip, then the server starts with its token.
+  const runMcpSignIn = (cfg, after) => {
+    if (mcpSigning.current) return;
+    const ac = new AbortController();
+    mcpSigning.current = ac;
+    const say = (text, tone) => setPicker((p) => (p?.kind === 'mcp' ? { ...p, note: { text, tone }, signing: text.startsWith('Opened') || text.startsWith('Signed in in') ? cfg.name : null } : p));
+    say(`Signing in to ${cfg.name}…`);
+    mcpSignIn(cfg, { open: signinOpen, signal: ac.signal, onStep: (t) => say(t) }).then(async (r) => {
+      mcpSigning.current = null;
+      if (!r.ok) { say(`Not signed in to ${cfg.name}: ${r.error}.`, 'warn'); return; }
+      if (after) { await after(); return; }
+      if (mcpHub.has(cfg.name)) { await mcpHub.start(cfg.name); agent.mcpStale = true; }
+      setPicker((p) => (p?.kind === 'mcp' ? { ...mcpList({ index: p.index }), note: { text: r.already ? `${cfg.name}: already signed in.` : `Signed in to ${cfg.name}: the token is in the Keychain. Its tools join at your next message.` } } : p));
+    });
+  };
   const mcpProjectNow = () => { try { return readProject(agent.cwd); } catch { return null; } };
   const mcpList = (more = {}) => openMcpList({ status: mcpHub.status(), project: mcpProjectNow(), extras: MCP_EXTRAS, ...more });
   const openMcpPicker = () => {
@@ -1419,7 +1452,7 @@ export function App({ opts, win, onRestart }) {
     setPicker(mcpList());
   };
   // The servers as the files have them now, handed to the hub; the model gets the new list at your next message.
-  const applyMcp = () => { const r = reloadMcp(mcpHub, agent.cwd); agent.mcpStale = true; return r; };
+  const applyMcp = () => { const r = reloadMcp(mcpHub, agent.cwd); agent.mcpStale = true; mcpLists.current = { resources: {}, prompts: {} }; return r; };
   const mcpTests = useRef(0);
   const runMcpTest = (pk) => {
     if (mcpWarning(pk)) { setPicker({ ...pk, error: 'Nothing to test yet: fix the line above first.' }); return; }
@@ -1428,7 +1461,14 @@ export function App({ opts, win, onRestart }) {
     // The key as the form has it now: typed, taken away, or the kept one.
     const key = pk.key !== null ? pk.key || null : pk.server?.hasKey ? serverKey(pk.server) : null;
     setPicker({ ...pk, test: { running: true, id }, error: null });
-    mcpHub.test(server, { key }).then((res) => setPicker((p) => (p?.kind !== 'mcp' || p.view !== 'form' || p.test?.id !== id ? p : { ...p, test: { ...res, id } })));
+    const test = () => mcpHub.test(server, { key }).then((res) => setPicker((p) => (p?.kind !== 'mcp' || p.view !== 'form' || p.test?.id !== id ? p : { ...p, test: { ...res, id } })));
+    // A server you sign in to: the sign-in first (its token is kept under the server's name), then the test.
+    if (server.runs === 'address' && server.auth === 'oauth' && !mcpSignedIn(server)) {
+      mcpSignIn(server, { open: signinOpen, onStep: (t) => setPicker((p) => (p?.kind === 'mcp' && p.test?.id === id ? { ...p, test: { running: true, id, step: t } } : p)) })
+        .then((r) => (r.ok ? test() : setPicker((p) => (p?.kind !== 'mcp' || p.test?.id !== id ? p : { ...p, test: { ok: false, error: `not signed in: ${r.error}`, id } }))));
+      return;
+    }
+    test();
   };
   // Save: the key to the Keychain (its own entry), the rest to mcp.json; the server starts (again) with it.
   const saveMcp = (pk) => {
@@ -1503,6 +1543,7 @@ export function App({ opts, win, onRestart }) {
     const cfg = row.server ? cfgOf(row.server.name) : null;
     const theirs = cfg?.from === 'project';
     const say = (text, tone) => setPicker({ ...pk, confirm: null, note: { text, tone } });
+    if (mcpSigning.current && key.escape) { mcpSigning.current.abort(); return; }
     if (pk.confirm) {
       if (ch === 'd' && cfg && pk.confirm === cfg.name) {
         removeServer(cfg.name);
@@ -1520,6 +1561,7 @@ export function App({ opts, win, onRestart }) {
     else if (row.id === 'add') { if (key.return || ch === ' ') setPicker({ ...openMcpForm(pk), names: pk.status.map((s) => s.name) }); }
     else if (row.id === 'project') { if (key.return) askMcpProject(mcpProjectNow()); }
     else if (!cfg) return;
+    else if (key.return && row.server.state === 'signin') runMcpSignIn(cfg);
     else if (key.return) { if (row.server.state === 'connected') tools(); else if (theirs) say(`${cfg.name} is this project's own (.agentic/mcp.json): it is changed in that file. It is ${row.server.state === 'off' ? 'off' : `not running: ${row.server.error ?? ''}`}.`, 'warn'); else edit(); }
     else if (ch === 't') tools();
     else if (ch === 'e') { if (theirs) say(`${cfg.name} is this project's own: it is changed in .agentic/mcp.json (and asked about again after).`, 'warn'); else edit(); }
@@ -1532,6 +1574,8 @@ export function App({ opts, win, onRestart }) {
     } else if (ch === 'r') { mcpHub.start(cfg.name); agent.mcpStale = true; setPicker({ ...pk, status: mcpHub.status(), note: { text: `Starting ${cfg.name} again… Its tools join at your next message.` } }); }
     else if (ch === 'd') { if (theirs) say(`${cfg.name} is this project's own: remove it from .agentic/mcp.json.`, 'warn'); else setPicker({ ...pk, confirm: cfg.name, note: null }); }
     else if (ch === 'l') say(`${cfg.name}'s own messages: ${short(mcpLogFile(cfg.name))}`);
+    else if (ch === 's') { if (cfg.runs === 'address' && cfg.auth === 'oauth') runMcpSignIn(cfg); else say(`${cfg.name} does not sign in in a browser${cfg.runs === 'address' ? ' (its Sign in row: e to change it)' : ''}.`); }
+    else if (ch === 'o') { if (cfg.runs === 'address' && cfg.auth === 'oauth') { mcpSignOut(cfg); mcpHub.start(cfg.name); agent.mcpStale = true; say(`Signed out of ${cfg.name}: its token is gone from the Keychain. s signs in again.`); } else say(`${cfg.name} has no sign-in to take back.`); }
   };
   // A project's own servers (.agentic/mcp.json): asked before they may start, in every mode, and
   // again when the file changes. Yes starts them; never is kept; "not now" asks again next time.
@@ -1553,7 +1597,7 @@ export function App({ opts, win, onRestart }) {
     const onState = ({ name, state, error }) => {
       setPicker((p) => (p?.kind === 'mcp' ? { ...p, status: mcpHub.status() } : p));
       if (state === 'failed') push({ type: 'note', text: `MCP: ${name} is not running: ${error}. /mcp shows it; its log is ${short(mcpLogFile(name))}.`, tone: 'warn' });
-      if (state === 'signin') push({ type: 'note', text: `MCP: ${name} needs you to sign in, which this version cannot do yet.`, tone: 'warn' });
+      if (state === 'signin') push({ type: 'note', text: `MCP: ${name} needs you to sign in: /mcp, then s on it.`, tone: 'warn' });
     };
     const onChanged = ({ name, added, removed, changed }) => {
       const parts = [added.length ? `${added.length} new` : '', changed.length ? `${changed.length} changed` : '', removed.length ? `${removed.length} gone` : ''].filter(Boolean).join(', ');
@@ -2063,7 +2107,7 @@ export function App({ opts, win, onRestart }) {
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
 
-  const sendPrompt = useCallback((value, shown = value, { visionAsked = false } = {}) => {
+  const sendPrompt = useCallback((value, shown = value, { visionAsked = false, mcpRead = null } = {}) => {
     // The model is off: the message waits (the Queued line) and goes once /start has loaded it.
     if (modelOffNow()) {
       const had = queuedRef.current;
@@ -2071,7 +2115,23 @@ export function App({ opts, win, onRestart }) {
       if (!had) push({ type: 'note', text: 'The model is off. /start or ctrl+t loads it (your message waits and goes out after).', tone: 'dim' });
       return;
     }
-    const { text, attached, images } = expandMentions(value, cwd, agent.maxResultChars, pastedRef.current.files);
+    // @server:uri: a resource of one of your MCP servers, read first (you named it, so it is not
+    // asked about), then attached like a file, marked as data.
+    const mentions = mcpHub && !mcpRead ? resourceMentions(value, mcpHub.offers().resources) : [];
+    if (mentions.length) {
+      Promise.all(mentions.map((m) => mcpHub.readResource(m.server, m.uri).then((r) => ({ ...m, ...resourceParts(m.server, m.uri, r, { max: agent.maxResultChars }) }), (e) => ({ ...m, error: e.message }))))
+        .then((parts) => sendPrompt(value, shown, { visionAsked, mcpRead: parts }));
+      return;
+    }
+    const expanded = expandMentions(value, cwd, agent.maxResultChars, pastedRef.current.files);
+    const { attached, images } = expanded;
+    let { text } = expanded;
+    for (const p of mcpRead ?? []) {
+      if (p.error) { attached.push({ path: p.token, label: `not read: ${p.error}` }); continue; }
+      attached.push({ path: p.token, label: p.label });
+      text += `\n\n${p.text}`;
+      p.pictures.forEach((pic, i) => { const img = pictureFor(pic, `${p.token}${p.pictures.length > 1 ? ` (${i + 1})` : ''}`); if (img) images.push(img); });
+    }
     // A picture, and a model not looking at pictures yet: its vision is turned on first (the
     // message waits for it), or, where it cannot be, the message goes with a line saying so.
     if (images.length && !agent.canSee && !visionAsked && remoteFnRef.current.needVision?.(value, shown)) return;
@@ -3267,8 +3327,22 @@ export function App({ opts, win, onRestart }) {
       case 'quit':
         await quit();
         break;
-      default:
+      default: {
+        // /server:prompt: a prompt of one of your MCP servers, sent as your message.
+        const pc = mcpHub && /:/.test(cmd) ? promptCommand(line, Object.fromEntries(await Promise.all(mcpHub.offers().prompts.map(async (s) => [s, await mcpHub.prompts(s).catch(() => [])])))) : null;
+        if (pc?.missing) { push({ type: 'note', text: `${pc.server} has no prompt called ${pc.prompt}. Type /${pc.server}: to see its prompts.`, tone: 'warn' }); break; }
+        if (pc?.need?.length) { push({ type: 'note', text: `/${pc.server}:${pc.prompt} needs ${pc.need.join(' and ')}: /${pc.server}:${pc.prompt} ${pc.need.map((n) => `${n}=…`).join(' ')}`, tone: 'warn' }); break; }
+        if (pc) {
+          if (busy) { flash('Wait for Agentic Coder to finish, or press esc first'); break; }
+          let got;
+          try { got = promptText(await mcpHub.prompt(pc.server, pc.prompt, pc.args)); } catch (e) { push({ type: 'note', text: `${pc.server}'s prompt ${pc.prompt} could not be had: ${e.message}.`, tone: 'warn' }); break; }
+          if (!got) { push({ type: 'note', text: `${pc.server}'s prompt ${pc.prompt} came back empty.`, tone: 'warn' }); break; }
+          push({ type: 'note', text: `${pc.server}'s prompt “${pc.prompt}”${Object.keys(pc.args).length ? ` with ${Object.entries(pc.args).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''} · sent as your message`, tone: 'dim' });
+          sendPrompt(got, line);
+          break;
+        }
         push({ type: 'note', text: `Unknown command /${cmd}. /settings has the ones not in the / menu, and /help lists them all.`, tone: 'warn' });
+      }
     }
   }, [agent, askBtw, closeBtw, cwd, doctor, flash, meters, model, opts.url, push, quit, ramGb, sendPrompt, setMode, setThinking, stats, update, updateNow, win]);
 
@@ -3321,7 +3395,24 @@ export function App({ opts, win, onRestart }) {
     const room = Math.max(MENU_ROWS, Number.isFinite(fits) ? fits : 0);
     const cmds = inputMode === 'prompt' ? matchCommands(input.value, { service: Boolean(model.remote?.ollama && remoteRef.current.conn?.info?.ollama), room, side: Boolean(model.remote) || (Boolean(opts.url) && agent.slots?.side !== undefined) }) : [];
     if (cmds.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...cmds.map((c) => c.name.length + 3)), items: cmds.map((c) => ({ label: `/${c.name}`, desc: c.desc, value: c.name, takesArg: !!c.arg, picker: !!c.picker })) };
+    // /shop: lists that MCP server's prompts (typed in full they run: /shop:review-pr 57).
+    const slashServer = inputMode === 'prompt' && mcpHub ? /^\/([A-Za-z0-9][A-Za-z0-9-]{0,31}):(\S*)$/.exec(input.value) : null;
+    if (!menu && slashServer && mcpHub.offers().prompts.includes(slashServer[1])) {
+      const q = slashServer[2].toLowerCase();
+      const list = offerList('prompts', slashServer[1]).filter((p) => p.name.toLowerCase().includes(q));
+      if (list.length) menu = { kind: 'slash', rows: room, pad: Math.max(14, ...list.map((p) => slashServer[1].length + p.name.length + 4)), items: list.map((p) => ({ label: `/${slashServer[1]}:${p.name}`, desc: `${p.description ?? p.title ?? 'a prompt of this server'}${p.arguments?.length ? ` · ${p.arguments.map((a) => `${a.name}${a.required ? '' : '?'}`).join(' ')}` : ''}`, value: `${slashServer[1]}:${p.name}`, takesArg: Boolean(p.arguments?.length) })) };
+    }
     const at = mentionAt(input);
+    // @shop: lists that MCP server's resources; @sh offers the servers that have them.
+    const offers = mcpHub && at ? mcpHub.offers().resources : [];
+    const atServer = at ? /^([A-Za-z0-9][A-Za-z0-9-]{0,31}):(.*)$/.exec(at.query) : null;
+    if (!menu && atServer && offers.includes(atServer[1])) {
+      const q = atServer[2].toLowerCase();
+      const list = offerList('resources', atServer[1]).filter((r) => `${r.uri} ${r.name ?? ''}`.toLowerCase().includes(q)).slice(0, 50);
+      const lw = Math.min(60, Math.max(16, ...list.map((r) => atServer[1].length + String(r.uri).length + 4)));
+      menu = { kind: 'files', pad: lw, at, items: list.length ? list.map((r) => ({ label: `@${atServer[1]}:${r.uri}`, desc: r.name ?? r.title ?? '', value: `${atServer[1]}:${r.uri}` })) : [{ label: `@${atServer[1]}:`, desc: mcpLists.current.resources[atServer[1]] === null ? 'loading its resources…' : 'it lists no resource that matches', value: `${atServer[1]}:` }] };
+    }
+    if (!menu && at && !atServer) for (const s of offers.filter((n) => n.toLowerCase().startsWith(at.query.toLowerCase()))) (menu ??= { kind: 'files', pad: 20, at, items: [] }).items.push({ label: `@${s}:`, desc: `the resources of your MCP server ${s}`, value: `${s}:`, open: true });
     if (!menu && at) {
       if (!filesRef.current) { filesRef.current = []; let n = 0; for (const f of walk(cwd)) { if (!f.dir) filesRef.current.push(f.path); if (++n > 5000) break; } }
       const q = at.query.toLowerCase();
@@ -3337,8 +3428,8 @@ export function App({ opts, win, onRestart }) {
     if (m.kind === 'slash') { const v = `/${it.value}${it.takesArg ? ' ' : ''}`; setInput({ value: v, cursor: v.length }); return v; }
     const before = input.value.slice(0, m.at.start);
     const after = input.value.slice(input.cursor);
-    const v = `${before}@${it.value} ${after.replace(/^\s+/, '')}`;
-    setInput({ value: v, cursor: before.length + it.value.length + 2 });
+    const v = it.open ? `${before}@${it.value}${after.replace(/^\s+/, '')}` : `${before}@${it.value} ${after.replace(/^\s+/, '')}`;
+    setInput({ value: v, cursor: before.length + it.value.length + (it.open ? 1 : 2) });
     return v;
   };
 

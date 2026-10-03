@@ -418,6 +418,69 @@ export function resultText(entry, parts, { max = 12000, seen = true } = {}) {
   return `${head}\n${cut(parts.body || '(it returned nothing)', max)}${pics}`;
 }
 
+// ---- resources and prompts (the Level 1 extras) ---------------------------------------------------
+
+// "@shop:shop://notes/release" in a message: a resource of the server "shop", attached by you.
+// servers: the names that may be meant (connected, with resources). → [{ token, server, uri }]
+export function resourceMentions(text, servers = []) {
+  const names = new Set(servers);
+  const out = [];
+  for (const m of String(text ?? '').matchAll(/(^|\s)@([A-Za-z0-9][A-Za-z0-9-]{0,31}):(\S+)/g)) {
+    if (!names.has(m[2])) continue;
+    const uri = m[3].replace(/[?!.,;:)\]'"]+$/, '');
+    if (uri && !out.some((x) => x.server === m[2] && x.uri === uri)) out.push({ token: `@${m[2]}:${uri}`, server: m[2], uri });
+  }
+  return out;
+}
+// A resource as it goes with your message: its text (marked as data), a picture as a picture.
+// → { text, pictures: [{ data, mime }], lines, label }
+export function resourceParts(server, uri, result, { max = 12000 } = {}) {
+  const texts = [];
+  const pictures = [];
+  for (const c of Array.isArray(result?.contents) ? result.contents : []) {
+    if (typeof c?.text === 'string') texts.push(c.text);
+    else if (c?.blob && /^image\//.test(String(c.mimeType))) pictures.push({ data: c.blob, mime: c.mimeType });
+    else if (c?.blob) texts.push(`[${c.uri ?? uri}: ${c.mimeType ?? 'a file'}, not text]`);
+  }
+  const body = texts.join('\n').trim();
+  const lines = body ? body.split('\n').length : 0;
+  const cut = body.length > max ? `${body.slice(0, max)}\n… (cut: ${body.length - max} more characters)` : body;
+  return {
+    text: `<resource server="${server}" uri="${uri}">\n${MCP_UNTRUSTED}\n${cut || '(it is empty)'}\n</resource>`,
+    pictures, lines,
+    label: `MCP resource${lines ? `, ${lines} line${lines === 1 ? '' : 's'}` : ''}${pictures.length ? `, ${pictures.length} picture${pictures.length === 1 ? '' : 's'}` : ''}`,
+  };
+}
+
+// "/shop:review-pr 57 urgent": a prompt of the server "shop", with its arguments: name=value pairs,
+// or the words in the order the prompt names its arguments (the last one takes the rest).
+// → { server, prompt, args } · null (not such a command)
+export function promptCommand(line, prompts = {}) {
+  const m = /^\/([A-Za-z0-9][A-Za-z0-9-]{0,31}):(\S+)(?:\s+([\s\S]*))?$/.exec(String(line ?? '').trim());
+  if (!m || !prompts[m[1]]) return null;
+  const p = prompts[m[1]].find((x) => x.name === m[2]);
+  if (!p) return { server: m[1], prompt: m[2], missing: true };
+  const rest = String(m[3] ?? '').trim();
+  const named = [...rest.matchAll(/(\w+)=("[^"]*"|\S+)/g)];
+  const args = {};
+  if (named.length) for (const [, k, v] of named) args[k] = v.replace(/^"|"$/g, '');
+  else if (rest) {
+    const list = (p.arguments ?? []).map((a) => a.name);
+    const words = rest.split(/\s+/);
+    list.forEach((name, i) => { if (i < words.length) args[name] = i === list.length - 1 ? words.slice(i).join(' ') : words[i]; });
+  }
+  const missing = (p.arguments ?? []).filter((a) => a.required && !args[a.name]).map((a) => a.name);
+  return { server: m[1], prompt: p.name, args, need: missing };
+}
+// A prompt's messages as one message of yours (a prompt gives the user's words; anything else is named).
+export function promptText(result) {
+  return (Array.isArray(result?.messages) ? result.messages : []).map((m) => {
+    const c = m?.content;
+    const t = c?.type === 'text' ? c.text : c?.type === 'resource' && typeof c.resource?.text === 'string' ? c.resource.text : c?.type ? `[${c.type}]` : '';
+    return m?.role === 'assistant' ? `(The prompt's own reply, as an example:) ${t}` : t;
+  }).filter(Boolean).join('\n\n').trim();
+}
+
 // ---- the rules /permissions keeps -----------------------------------------------------------------
 
 // "Mcp(github:create_issue)": one tool. A colon, not a dot: a tool's own name may hold dots.

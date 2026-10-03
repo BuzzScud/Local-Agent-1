@@ -1368,7 +1368,7 @@ function McpPicker({ app }) {
       {!pk.status.length ? <Text color={C.dim}>  None yet. A server gives the model tools the app does not have: GitHub, a database, your own scripts.</Text> : null}
       <Text> </Text>
       {pk.confirm ? <Text color={C.warn} wrap="truncate-end">Remove {pk.confirm}? d again removes it (its key too); any other key keeps it.</Text> : pk.note ? <Text color={pk.note.tone === 'warn' ? C.warn : C.dim} wrap="truncate-end">{pk.note.text}</Text> : null}
-      <Text color={C.dim} wrap="truncate-end">↑↓ choose · enter its tools · e edit · space on/off · r start again · d remove · esc closes</Text>
+      <Text color={C.dim} wrap="truncate-end">{pk.signing ? 'esc stops the sign-in' : `↑↓ choose · enter its tools · e edit · space on/off · r start again${pk.status.some((s) => s.runs === 'address') ? ' · s sign in' : ''} · d remove · esc closes`}</Text>
     </Box>
   );
 }

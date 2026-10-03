@@ -213,11 +213,13 @@ on this Mac, or a service at an address (GitHub, a database, a docs server, a sc
 Type `/mcp`: the list of your servers, and **+ Add a server** opens one form. **Name**, **Runs**
 (a command here, or an address), then that kind's rows: the **Command** as you would type it, the
 variable its **Key** goes in (the key itself is kept in the Keychain), its **Sandbox**, **Internet**
-and **Local services**; or the **Address** and how it signs in (no key, or a key in a header).
+and **Local services**; or the **Address**, how it signs in (no key, a key in a header, or a sign-in in
+your browser) and, for the Claude API, whether Anthropic's connector calls it instead.
 **Test** starts the server once and lists its tools, with what each says about itself, before
 anything is saved; **Save** keeps it in `~/.agentic-coder/mcp.json`, for every folder. In the list,
-enter opens a server's tools, `e` its form, space switches it on or off, `r` starts it again, `d`
-twice removes it. `/doctor` has a row per server, and each server's own messages go to
+enter opens a server's tools, `e` its form, space switches it on or off, `r` starts it again, `s`
+signs in to it (a browser page opens once; the token is kept in the Keychain and refreshes itself),
+`o` signs out, `d` twice removes it. `/doctor` has a row per server, and each server's own messages go to
 `~/.agentic-coder/logs/mcp-<name>.log`.
 
 - **A program runs behind the fence.** A server started as a program runs in the project folder
@@ -253,8 +255,15 @@ twice removes it. `/doctor` has a row per server, and each server's own messages
   the whole conversation again): a line says so, and `/clear` or the next conversation takes the
   new list. What you change yourself in `/mcp` is taken at your next message.
 
-- **A server's own question.** A question of the server's own while its tool runs (which project?)
-  comes in the ask box headed with the server's name; your answer goes to that server only.
+- **What else a server offers.** Its resources: type `@shop:` and pick one (`@shop:shop://notes/release`);
+  it is read when you send and goes with your message like an attached file, marked as data. Its
+  prompts: type `/shop:` to see them, `/shop:review-pr 57` to send one as your message (arguments by
+  name, `number=57`, or in order). A question of the server's own while its tool runs (which
+  project?) comes in the ask box headed with the server's name; your answer goes to that server only.
+- **Anthropic's connector, on the Claude API.** A server at a public https address can be set to
+  "Anthropic's connector": with `/remote` on the Claude API, Claude calls it from Anthropic's side
+  (tools only, with its key or sign-in token, and no question here before a call: the form says so);
+  its calls show as finished steps. Every other model still reaches it through this Mac.
 
 Both MCP versions are spoken (2026-07-28, and 2025-11-25 for older servers) through the official
 client, `@modelcontextprotocol/client`. `coding -p` uses the same servers; with `--yes` a tool does

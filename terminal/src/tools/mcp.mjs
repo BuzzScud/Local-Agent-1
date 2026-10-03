@@ -57,7 +57,7 @@ export function plainError(e, server, { timeoutMs } = {}) {
   const code = e?.code;
   if (code === 'ENOENT' || /ENOENT|posix_spawn/.test(m)) return `its program was not found: ${server?.command ?? ''} (is it installed, and on the PATH this app was started with?)`;
   if (code === 'EACCES') return `its program could not be run: ${server?.command ?? ''} (no permission)`;
-  if (/requires authorization|HTTP 401|\b401\b|Unauthorized|needs you to sign in/i.test(m)) return server?.auth === 'oauth' ? 'it needs you to sign in' : 'it did not accept the key (401): change it in /mcp';
+  if (/requires authorization|HTTP 401|\b401\b|Unauthorized|needs you to sign in/i.test(m)) return server?.auth === 'oauth' ? 'it needs you to sign in: /mcp, then s on it' : 'it did not accept the key (401): change it in /mcp';
   if (/\b403\b/.test(m)) return 'it refused this key or sign-in (403)';
   if (code === 'REQUEST_TIMEOUT') return `it did not answer in ${secs(timeoutMs ?? START_MS)}`;
   if (code === 'CONNECTION_CLOSED') return 'it stopped (its log may say why)';
@@ -260,6 +260,17 @@ export class McpHub extends EventEmitter {
   // Every tool of every connected server, with your marks (agent/mcp.mjs catalogOf).
   catalog() { return catalogOf(this.connected().map((s) => ({ name: s.cfg.name, from: s.cfg.from, tools: s.tools, marks: s.cfg.marks }))); }
   setMarks(name, marks) { const s = this.servers.get(name); if (s) s.cfg = { ...s.cfg, marks }; }
+  // The servers handed to Anthropic's connector on the Claude API (/mcp's On Claude row): a public
+  // https address each, with its token (its key, or its sign-in's), read now.
+  connectors() {
+    return [...this.servers.values()].filter((s) => s.cfg.on !== false && s.cfg.runs === 'address' && s.cfg.claude === 'connector' && /^https:/.test(s.cfg.url)).map((s) => {
+      let token = null;
+      try { token = s.cfg.auth === 'key' ? this.keyOf(s.cfg) : s.cfg.auth === 'oauth' && this.auth ? this.auth(s.cfg).tokens()?.access_token ?? null : null; } catch { token = null; }
+      return { name: s.cfg.name, url: s.cfg.url, token };
+    });
+  }
+  // The connected servers that offer resources (@server:uri) and prompts (/server:prompt), by name.
+  offers() { const on = this.connected(); return { resources: on.filter((s) => s.caps?.resources).map((s) => s.cfg.name), prompts: on.filter((s) => s.caps?.prompts).map((s) => s.cfg.name) }; }
   // What each connected server said about itself when it connected (its instructions), by name.
   notes() { return Object.fromEntries(this.connected().map((s) => [s.cfg.name, s.instructions ?? '']).filter(([, t]) => t)); }
   // A tool's fingerprint as its server lists it now (null: the server no longer has it, or is not connected).
