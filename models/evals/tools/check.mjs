@@ -92,6 +92,30 @@ export const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
 export const LISTENS_WIDE_OK = ['models/runtime/serve.mjs', 'terminal/src/app/door.mjs'];
 export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text);
 
+// ---- a server's address ------------------------------------------------------------------------
+// A public internet address (1.2.3.4, with or without :port) written in a file or a commit message
+// names a real machine to anyone who reads the repo (3 Oct 2026: a shared model service's address
+// was in two pages and a commit message). This Mac, the home network, Tailscale and link-local
+// addresses name nothing a stranger can reach, and the ranges kept for documentation are made up.
+// Numbers that only look like one are left alone: a version (Chrome/120.0.0.0, v1.2.3.4), and the
+// drawing numbers of a page's pictures (an SVG path's d="…").
+// An address a test made up, or one that is public knowledge, is listed here on purpose.
+export const KNOWN_ADDRESSES = ['1.2.3.4', '1.1.1.1', '8.8.8.8', '8.8.4.4', '9.9.9.9', '164.92.10.7', '172.32.0.1', '100.128.0.1'];
+const DRAWN = /\b(?:d|points|transform|viewBox|values|keyTimes|keySplines|stroke-dasharray)=(?:"[^"]*"|'[^']*')/g;
+const ADDRESS = /(?<![\w.-])(?<!(?:^|[^/])\/)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?::(\d{2,5}))?(?![\w-]|\.\d)/g;
+const reachable = ([a, b, c]) => !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127)
+  || (a === 192 && b === 0 && c === 2) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113));
+export function publicAddresses(text, known = KNOWN_ADDRESSES) {
+  const out = new Set();
+  for (const m of String(text ?? '').replace(DRAWN, '').matchAll(ADDRESS)) {
+    const parts = m.slice(1, 5).map(Number);
+    if (parts.some((n) => n > 255) || !reachable(parts)) continue;
+    const ip = parts.join('.');
+    if (!known.includes(ip)) out.add(m[5] ? `${ip}:${m[5]}` : ip);
+  }
+  return [...out];
+}
+
 // ---- which files are the app ---------------------------------------------------------------
 const isCode = (f) => /\.(mjs|js|jsx)$/.test(f);
 export const isShipped = (f) => /^terminal\/(src\/|app\/|index\.mjs$)/.test(f) || (/^models\//.test(f) && !/^models\/(evals|test)\//.test(f));
@@ -166,16 +190,24 @@ async function sameAsGitHub({ offline }) {
   return notes.length ? look(`${branch} ${head}, GitHub main ${theirs.out.trim()}`, notes) : fine(`${branch} ${head} is exactly what GitHub has`);
 }
 
-async function privateOnGitHub({ offline }) {
+// The repo is public on purpose (the owner's choice, 28 Sep 2026): a stranger reading it is the
+// expected answer, so it is fine, not a red line every push is made past. Private again, the line
+// says so until PUBLIC_SINCE is set to null; with null, a public repo is wrong, as before.
+export const PUBLIC_SINCE = '28 Sep 2026';
+// What a stranger's request for the repo says about it: status is GitHub's answer without a login.
+export function visibility(status, repo, since = PUBLIC_SINCE) {
+  if (status === 404) return since ? look(`${repo} is private now, but the repo says it is public on purpose since ${since} (PUBLIC_SINCE in check.mjs): set it to null`) : fine(`a stranger asking for ${repo} gets "not found"`);
+  if (status === 200) return since ? fine(`${repo} is public, on purpose (since ${since}): anyone can read it`) : wrong(`${repo} is PUBLIC: anyone can read it`);
+  return look(`GitHub answered ${status}; could not tell`);
+}
+async function whoCanRead({ offline }) {
   if (offline) return skipped('not asked (offline)');
   const url = (await git('remote', 'get-url', 'origin')).out.trim();
   const m = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/.exec(url);
   if (!m) return look(`the repo's home is not GitHub: ${url || 'none set'}`);
   try {
     const r = await fetch(`https://api.github.com/repos/${m[1]}/${m[2]}`, { headers: { 'User-Agent': 'agentic-coder-check' }, signal: AbortSignal.timeout(10_000) });
-    if (r.status === 404) return fine(`a stranger asking for ${m[1]}/${m[2]} gets "not found"`);
-    if (r.status === 200) return wrong(`${m[1]}/${m[2]} is PUBLIC: anyone can read it`);
-    return look(`GitHub answered ${r.status}; could not tell`);
+    return visibility(r.status, `${m[1]}/${m[2]}`);
   } catch { return look('GitHub could not be reached'); }
 }
 
@@ -225,14 +257,55 @@ async function history() {
   return fine(`nothing secret in any of the ${count} commits, on any branch`);
 }
 
+// A server's address in a file is wrong (take it out); one in a commit message stays in the history
+// until the history is rewritten, so it is a line to look at, with the commit it is in.
+async function addresses({ files }) {
+  const inFiles = [];
+  for (const f of files) {
+    const p = join(root, f);
+    if (!existsSync(p) || statSync(p).size > 16 << 20) continue;
+    const buf = readFileSync(p);
+    if (!isText(buf)) continue;
+    const hits = publicAddresses(buf.toString('utf8'));
+    if (hits.length) inFiles.push(`${f}  ${few(hits, 3).join(', ')}`);
+  }
+  const inMessages = [];
+  for (const c of (await git('log', '--all', '--format=%x01%h%x02%B')).out.split('\x01').filter(Boolean)) {
+    const [id, message = ''] = c.split('\x02');
+    const hits = publicAddresses(message);
+    if (hits.length) inMessages.push(`commit ${id}'s message  ${few(hits, 3).join(', ')} (only a rewrite of the history takes it out)`);
+  }
+  if (inFiles.length) return wrong(`a server's address is written in ${inFiles.length} file${inFiles.length > 1 ? 's' : ''}: anyone reading the repo can find that machine`, few([...inFiles, ...inMessages], 8));
+  if (inMessages.length) return look(`no server's address in ${files.length} files; ${inMessages.length} commit message${inMessages.length > 1 ? 's name' : ' names'} one`, few(inMessages, 8));
+  return fine(`no server's address in ${files.length} files or in any commit message`);
+}
+
+// A package the repo holds itself (a "file:" one: the react-devtools-core stand-in) is installed as
+// a link by npm and as a copy by bun. A copy is compared with the repo's own folder, file by file, not
+// with npm (which never published it): the same is fine, a changed one is named.
+export function localCopyDiff(rootDir, mods, links) {
+  const bad = [];
+  for (const [name, from] of Object.entries(links)) {
+    const here = join(mods, name), own = join(rootDir, from);
+    if (!existsSync(here) || lstatSync(here).isSymbolicLink() || !existsSync(own)) continue;
+    const skip = (rel, e) => e.isSymbolicLink() || /(^|\/)(\.DS_Store|node_modules)$/.test(rel);
+    const mine = filesUnder(here, skip), theirs = new Set(filesUnder(own, skip));
+    for (const f of mine) if (!theirs.has(f) || !readFileSync(join(here, f)).equals(readFileSync(join(own, f)))) bad.push(`${name}/${f} differs from the repo's own copy (${from})`);
+    for (const f of theirs) if (!existsSync(join(here, f))) bad.push(`${name}/${f} is in the repo's own copy (${from}) but not installed`);
+  }
+  return bad;
+}
+
 async function packages({ offline }) {
   const lockFile = join(root, 'package-lock.json'), mods = join(root, 'node_modules');
   if (!existsSync(lockFile) || !existsSync(mods)) return look('packages are not installed here (bun install)');
   const lock = JSON.parse(readFileSync(lockFile, 'utf8')).packages ?? {};
   const bad = [], notes = [];
   const local = [];
+  const links = {}; // an installed name → the repo's own folder it comes from
   for (const [path, p] of Object.entries(lock)) {
     if (!path) continue;
+    if (p.link && p.resolved && path.startsWith('node_modules/')) links[path.slice('node_modules/'.length)] = p.resolved;
     if (p.link || !p.resolved) { if (!path.startsWith('node_modules/')) local.push(path); continue; }
     let host = ''; try { host = new URL(p.resolved).host; } catch { host = p.resolved; }
     if (host !== 'registry.npmjs.org') bad.push(`${path.replace('node_modules/', '')} comes from ${host}, not from npm`);
@@ -249,6 +322,8 @@ async function packages({ offline }) {
     for (const name of d.startsWith('@') ? readdirSync(join(mods, d)).map((s) => `${d}/${s}`) : [d]) if (!listed.has(`node_modules/${name}`)) bad.push(`${name} is installed but not in the list`);
   }
   const total = Object.keys(lock).filter((k) => k.startsWith('node_modules/')).length;
+  bad.push(...few(localCopyDiff(root, mods, links), 5));
+  const ownCopy = (f) => Object.keys(links).some((name) => f === name || f.startsWith(`${name}/`));
   if (offline) return bad.length ? wrong(`${bad.length} package problem${bad.length > 1 ? 's' : ''}`, few(bad, 8)) : fine(`${total} packages match the list, none runs a script at install (npm not asked: offline)`);
 
   // Known problems, then a fresh copy from npm (each file checked against the
@@ -265,7 +340,7 @@ async function packages({ offline }) {
     else {
       const skip = (rel, e) => e.isSymbolicLink() || /(^|\/)(\.bin|\.cache|\.package-lock\.json|\.DS_Store)$/.test(rel);
       const mine = filesUnder(mods, skip), fresh = new Set(filesUnder(join(tmp, 'node_modules'), skip));
-      const diff = mine.filter((f) => !fresh.has(f) || !readFileSync(join(mods, f)).equals(readFileSync(join(tmp, 'node_modules', f))));
+      const diff = mine.filter((f) => !ownCopy(f) && (!fresh.has(f) || !readFileSync(join(mods, f)).equals(readFileSync(join(tmp, 'node_modules', f)))));
       const missing = [...fresh].filter((f) => !existsSync(join(mods, f)));
       for (const f of few([...diff, ...missing], 5)) bad.push(`${f} differs from what npm publishes`);
       if (!diff.length && !missing.length) notes.unshift(`${mine.length.toLocaleString()} installed files are the same as a fresh copy from npm`);
@@ -413,8 +488,8 @@ export async function check({ fast = false, tests = true, offline = false, say =
   // Everything but the unit tests runs at once; the lines come in this order.
   const safe = (name, job) => [name, Promise.resolve().then(() => job(opts)).catch((e) => look('this check could not run', [String(e.message ?? e).slice(0, 200)]))];
   const list = [
-    safe('Same as GitHub', sameAsGitHub), safe('Private on GitHub', privateOnGitHub), safe('No secrets in the files', secretsInFiles), safe('Only files that belong', filesThatBelong),
-    safe('No secrets in the history', history), safe('Packages', packages), safe('Where the code connects', connections), safe('No leftover code', leftovers),
+    safe('Same as GitHub', sameAsGitHub), safe('Who can read it', whoCanRead), safe('No secrets in the files', secretsInFiles), safe('Only files that belong', filesThatBelong),
+    safe('No secrets in the history', history), safe('No server addresses', addresses), safe('Packages', packages), safe('Where the code connects', connections), safe('No leftover code', leftovers),
     safe('The model files', modelFiles), safe('The installed app', installedApp), safe('Private pages stay private', docsStayPrivate), safe('Only on this Mac', onlyOnThisMac),
   ];
   const results = [];
