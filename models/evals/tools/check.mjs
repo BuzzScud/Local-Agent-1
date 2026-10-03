@@ -373,8 +373,14 @@ function leftovers({ files }) {
   return unused.length ? look(`${unused.length} code file${unused.length > 1 ? 's' : ''} nothing uses`, few(unused, 8)) : fine('every code file of the app is used by something');
 }
 
+// Every file the registry names for a model is one the code uses (the other models in /model too):
+// its weights, its guessing helper when that is a file of its own, and its picture add-on (3 Oct
+// 2026: Qwen's add-on was called unused, and taking it away would have stopped picture reading).
+export const namedModelFiles = (models, { modelPath, draftPath, visionPath }) => Object.values(models)
+  .flatMap((x) => [modelPath(x), x.draft && !x.draft.inFile ? draftPath(x) : null, x.vision ? visionPath(x) : null]).filter(Boolean);
+
 async function modelFiles({ fast }) {
-  const { MODELS, DEFAULT_MODEL, EMBEDDERS, RERANKERS, MODELS_DIR, modelPath, draftPath, readEditedAll } = await import('../../index.mjs');
+  const { MODELS, DEFAULT_MODEL, EMBEDDERS, RERANKERS, MODELS_DIR, modelPath, draftPath, visionPath, readEditedAll } = await import('../../index.mjs');
   const m = MODELS[DEFAULT_MODEL];
   // The default model and its helper, then the small models (the memory's
   // matcher, the search's reranker, which `coding setup` downloads too).
@@ -384,8 +390,7 @@ async function modelFiles({ fast }) {
   if (!existsSync(want[0][1])) return look('the model is not on this Mac yet (coding setup)');
   // each model may have an edited copy of its own, beside its manifest
   let edited = []; try { edited = Object.values(readEditedAll?.() ?? {}).map((e) => e.file); } catch { /* no edited copy */ }
-  // Every file the registry names is one the code uses (the other models in /model too).
-  const named = Object.values(MODELS).flatMap((x) => [modelPath(x), x.draft && !x.draft.inFile ? draftPath(x) : null]);
+  const named = namedModelFiles(MODELS, { modelPath, draftPath, visionPath });
   const known = new Set([...want.map(([, file]) => file), ...named].filter(Boolean).map((file) => file.split('/').pop()).concat([...edited, 'edited.json', ...Object.keys(MODELS).map((id) => `edited-${id}.json`)]));
   const extra = existsSync(MODELS_DIR) ? readdirSync(MODELS_DIR).filter((f) => !f.startsWith('.') && !f.endsWith('.part') && !known.has(f)).map((f) => `${f} (${(statSync(join(MODELS_DIR, f)).size / 1e9).toFixed(2)} GB) is in ${tilde(MODELS_DIR)} but the code does not use it`) : [];
   if (fast) return skipped('not checked (--fast)');
