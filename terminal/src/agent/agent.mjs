@@ -27,12 +27,12 @@ import { basename, join, dirname, relative } from 'node:path';
 import { runFlows, runKind, isSmallTalk, routeByRules, isCodeProject } from '../flows/index.mjs';
 import { wayOf, hooksOn, wayPrompt } from './way.mjs';
 import { clarify } from '../flows/clarify.mjs';
-import { isFollowUp, sortLine } from '../flows/words.mjs';
+import { isFollowUp, sortLine, wantsDesktop } from '../flows/words.mjs';
 import { checkInText } from '../flows/fix.mjs';
 import { Scratch } from '../flows/scratch.mjs';
 import { lostNames } from '../flows/blocks.mjs';
 import { partsFor, wholeSmallProject } from '../flows/explain.mjs';
-import { upFrontFor } from './room.mjs';
+import { upFrontFor, SERVICE_REPLY } from './room.mjs';
 import { readResults } from '../flows/results.mjs';
 import { runCommand } from '../tools/run.mjs';
 import { complete, tallies, llmCalls, oldThinking } from '../flows/llm.mjs';
@@ -218,14 +218,8 @@ export function missingParts(html, dir) {
   return out;
 }
 
-// A request that wants its file on the Desktop: "download it to my desktop",
-// "on the Desktop", "save to desktop", "in ~/Desktop". Not the screen size
-// ("broken on desktop", "the desktop view", "on desktop and mobile") or "a
-// desktop app".
-const DESKTOP_PLACE = /\b(?:(?:to|onto|into)\s+(?:(?:my|the|your)\s+|~\/)?|(?:on|in|at)\s+(?:(?:my|the|your)\s+|~\/))desktop\b(?!\s*(?:view|version|layout|size|width|apps?|mode|screens?|browsers?|site|breakpoint)\b|\s+(?:and|or)\s+(?:on\s+)?(?:mobile|phones?|tablets?)\b)/i;
-export function wantsDesktop(text) {
-  return DESKTOP_PLACE.test(String(text ?? ''));
-}
+// A request that wants its file on the Desktop (flows/words.mjs, where the sorting uses it too).
+export { wantsDesktop };
 export function claimsDone(text) {
   const t = String(text ?? '').replace(/```[\s\S]*?```/g, ' ');
   if (/\b(nothing (?:was |has been |is )?(?:changed|written|edited|done)|no (?:files?|changes?|edits?) (?:was |were |have been |has been )?(?:changed|made|written|needed)|(?:did|do|have|has|could|can)(?: not|n'?t)|cannot|unable|not (?:done|changed|made|finished|written))\b/i.test(t)) return false;
@@ -286,13 +280,17 @@ export function keptWriteNote(path, kept) {
   return `Your Write of ${path} ran out of room before the end. Agentic Coder saved what had arrived: its first ${kept.lines} lines, which end with:\n${tail}\nThe file is unfinished on purpose. Carry on from line ${kept.lines + 1}: add the rest with Edit, old_text = those last lines exactly as above and new_text = the same lines followed by the next part. Keep each part well under 100 lines, and do not write the file again from the start.`;
 }
 
+const inParts = (file) => `Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`;
 export function cutCallNote(name, path) {
   const file = path || 'the file';
   if (name === 'Write' || name === 'Edit') {
-    return `Your ${name} call ran out of room before the end, so nothing was written: the whole content does not fit in one reply. Build ${file} in parts instead. First Write ${file} with only a short skeleton: its opening, empty sections marked with comments, and its closing. Then add one section at a time with Edit, each part well under 100 lines. Start with the skeleton now.`;
+    return `Your ${name} call ran out of room before the end, so nothing was written: the whole content does not fit in one reply. ${inParts(file)}`;
   }
   return `Your ${name} call ran out of room before the end and was not run. Do it again in smaller pieces.`;
 }
+// A reply cut at the limit with nothing of it arrived: Ollama holds a tool call back until it is
+// whole, so a call cut off never comes at all (nor its path).
+export const emptyCutNote = () => `Your reply reached the reply limit before it ended, and none of it arrived: most likely a file too long for one reply. ${inParts('the file')}`;
 
 // Where a tool call written as text starts: <tool_call> (Qwen's kind and the
 // 27B's), <ifm|tool_calls> / <ifm|tool_call> (K2 Horizon's). The text before
@@ -912,7 +910,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new Set(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -1252,6 +1250,7 @@ export class Agent extends EventEmitter {
       fixing: kind === 'fix', question: kind === 'question', findings: [], nudged: 0, looksAtNudge: 0, reads: new Map(), stuckSteps: new Set(),
       // A helper agent of yours with a model of its own (runHelper): every step on that model.
       ...(this.ownUse ? { use: this.ownUse } : {}) };
+    if (asksForWork(this.turn.request) && wantsDesktop(this.turn.request)) this.desktopAsked = true;
     // Look first (look.mjs): a minimum of looking before the answer, on every task that goes step
     // by step here; not a follow-up (it continues a turn that already looked), not in the home
     // folder (a general question there needs no files), not for a helper (it is part of the looking).
@@ -1503,15 +1502,35 @@ export class Agent extends EventEmitter {
               await this.compact(signal);
               continue;
             }
-            this.messages.push({ role: 'user', content: auto('You ran out of room while thinking. Think less and take the next step.') });
-            this.emit('note', { text: 'The model ran out of room while thinking; asked it to act.', tone: 'warn' });
+            // Counted with the cut-off calls: told the same thing three times running, it stops
+            // (it was sent back with no end: three in a row on 3 Oct, until you pressed esc).
+            cuts++;
+            const size = `${kTok(turn.tokens)} of ${kTok(this.lastRoom ?? turn.tokens)} tokens`;
+            if (cuts >= 3) {
+              reason = 'stuck';
+              this.emit('note', { text: `Three replies in a row were cut off at the reply limit (${size}), so it stopped. Raise Reply length in /effort, or ask for the file in smaller pieces.`, tone: 'warn' });
+              break;
+            }
+            // The thinking took the room: think less. Little or no thinking (a model that cannot
+            // think, like qwen3-coder-next): it was writing a call, most likely a file, and Ollama
+            // hands back nothing of a tool call cut at the limit, so "think less" was the wrong advice.
+            if (tokensOf(turn.reasoning) >= turn.tokens * 0.6) {
+              this.messages.push({ role: 'user', content: auto('You ran out of room while thinking. Think less and take the next step.') });
+              this.emit('note', { text: `The model ran out of room while thinking (${size}); asked it to act.`, tone: 'warn' });
+            } else {
+              this.messages.push({ role: 'user', content: auto(emptyCutNote()) });
+              this.emit('note', { text: `The reply was cut off at the limit (${size}) and nothing of it arrived, most likely a file too long for one reply: asked it to build the file in parts.`, tone: 'warn' });
+            }
             continue;
           }
           // It says it is done after changing files but never ran the tests:
           // run them (through the normal permission prompt); if they fail, send
           // it back to fix them. At most twice per message.
           const checkCmd = this.turn.check ?? (this.turn.bug?.kind && !this.turn.bug.kind.testsSeeIt ? null : this.testCmd);
-          if (checkCmd && this.turn.changed && !this.turn.testedAfterChange && checks < 2 && this.hook('tests')) {
+          // Only a file on the Desktop changed: the project's tests cannot see it (3 Oct: a helper's
+          // .md for the Desktop started the whole suite, more than 10 minutes on this Mac).
+          const onlyAway = this.turn.changedAway && !this.turn.changedHere && !this.turn.check;
+          if (checkCmd && this.turn.changed && !onlyAway && !this.turn.testedAfterChange && checks < 2 && this.hook('tests')) {
             checks++;
             const call = { id: `check_${Date.now()}`, name: 'Bash', args: JSON.stringify({ command: checkCmd, description: this.turn.check ? 'Run the check the request names' : 'Check the change with the project’s tests' }) };
             assistant.tool_calls = [{ id: call.id, type: 'function', function: { name: 'Bash', arguments: call.args } }];
@@ -2155,7 +2174,8 @@ export class Agent extends EventEmitter {
     // A model on a service with its own Reply length (/effort): up to that, never more than the
     // context has left under the trim line (at least the answer's 2,048).
     // One that cannot think (a single level: a remote's None) gets no room for thinking.
-    const own = this.model?.replyTokens;
+    // Auto on a service: SERVICE_REPLY, the same way (its thinking and its file both fit).
+    const own = this.model?.replyTokens || (this.model?.remote?.ollama ? SERVICE_REPLY : 0);
     const thinks = this.thinking && (this.model?.thinkingLevels?.length ?? 2) > 1;
     const maxTokens = cap ?? (own ? Math.max(2048, Math.min(own, Math.floor(this.ctx * this.trimAt) - this.estNow())) : replyRoom(thinks, this.model?.thinkingBudget));
     this.lastRoom = maxTokens;
@@ -2358,7 +2378,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', agents: this.agentsOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); } };
+    const env = { cwd: this.cwd, rulesSet: this.rulesSetUsed ?? 'local', agents: this.agentsOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -2384,7 +2404,8 @@ export class Agent extends EventEmitter {
       return { text: msg, error: true };
     }
     const at = args.path ? resolvePath(this.cwd, args.path) : null;
-    const inside = at ? at.inside : true;
+    const away = Boolean(at && !at.inside && this.desktopOpen(call.name, at.abs)); // on the Desktop (desktopOpen)
+    const inside = at ? at.inside || away : true;
     const rules = this.savedRules();
     let d = decide(call.name, args, { mode: this.mode, allowedPrefixes: this.allowedPrefixes, inside, cwd: this.cwd, rules, rel: at?.realRel ? [at.rel, at.realRel] : at?.rel });
     // Auto (/mode): the rules left this step open, so the model checks it against your
@@ -2477,6 +2498,8 @@ export class Agent extends EventEmitter {
       this.turn.testedAfterChange = false;
       this.turn.edits = (this.turn.edits ?? 0) + 1;
       this.happened?.files.add(prepared.rel);
+      // A file on the Desktop: it may be read and edited again; one in the project is what the tests check.
+      if (away) { (this.desktopMade ??= new Set()).add(prepared.abs); this.turn.changedAway = true; } else this.turn.changedHere = true;
       // Each file as it was before this message's first change to it, for the
       // nothing-lost check at the end (lostSinceStart). A new file has none.
       this.turn.startTexts ??= new Map();
@@ -2585,6 +2608,7 @@ export class Agent extends EventEmitter {
     this.stats.requests += helper.stats.requests;
     if (edited.size && this.turn) {
       this.turn.changed = true;
+      this.turn.changedHere = true;
       this.turn.testedAfterChange = false;
       for (const f of edited) this.happened?.files.add(f);
     }
@@ -2664,7 +2688,7 @@ export class Agent extends EventEmitter {
       this.emit('flow-step', null);
       if (this.turn) { this.turn.tokens = (this.turn.tokens ?? 0) + counted.tokens; this.turn.thinkTokens = (this.turn.thinkTokens ?? 0) + counted.thinkTokens; }
     }
-    if ((this.happened?.files.size ?? 0) > filesBefore && this.turn) { this.turn.changed = true; this.turn.testedAfterChange = Boolean(out?.done); }
+    if ((this.happened?.files.size ?? 0) > filesBefore && this.turn) { this.turn.changed = true; this.turn.changedHere = true; this.turn.testedAfterChange = Boolean(out?.done); }
     // A check the fix path made for the change still to come (flows/pagecheck.mjs).
     const left = this.carried ? `\n${this.carried.note}` : '';
     if (this.carried?.check && this.turn) this.turn.check = this.carried.check;
@@ -2780,6 +2804,16 @@ export class Agent extends EventEmitter {
   // can write there (started from the home folder or the Desktop itself).
   get desktopDir() { return join(this.home, 'Desktop'); }
   desktopInside() { return this.desktopDir === this.cwd || this.desktopDir.startsWith(`${this.cwd}/`); }
+  // The Desktop from a project folder, outside the fence (3 Oct 2026, the user's ask: "allow them to
+  // think and write on my desktop"; the file had gone into the project as Desktop/CodeIndex-Helper.md
+  // and every mv out was refused). Once a request in this conversation asked for a file there, a new
+  // file goes right on it with Write, and the files it made there may be read and edited again.
+  // Nothing else: not your files already there, not its folders (your other projects), no commands.
+  desktopOpen(name, abs) {
+    if (this.desktopInside() || dirname(abs) !== this.desktopDir) return false;
+    if (this.desktopMade?.has(abs)) return name === 'Read' || name === 'Edit' || name === 'Write';
+    return name === 'Write' && Boolean(this.desktopAsked) && !existsSync(abs);
+  }
   tilde(p) { return p === this.home ? '~' : p.startsWith(`${this.home}/`) ? `~${p.slice(this.home.length)}` : p; }
   // The pages this message changed that are somewhere else than the Desktop
   // (one moved there since is gone from where it was, so it is not counted).

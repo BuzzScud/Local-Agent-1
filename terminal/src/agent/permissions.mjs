@@ -488,7 +488,8 @@ export function permissionsTable({ mode = 'ask', rules = null, session = [] } = 
     ['Any other command', `${STEPS.cmd[m]}${m === 'ask' || m === 'edits' || m === 'auto' ? ', unless a rule below allows it' : ''}`],
     ['git commit', STEPS.commit[m]],
     ['WebSearch and WebFetch (when offered)', `${STEPS.web[m]}${m !== 'bypass' ? ', unless a rule allows the site' : ''}`],
-    ['Files or commands outside the project, the internet from a command', 'refused (the sandbox)'],
+    ['A new file on the Desktop the user asked for there (Write ~/Desktop/<name>)', STEPS.edit[m]],
+    ['Other files or commands outside the project, the internet from a command', 'refused (the sandbox)'],
     ['Agentic Coder\'s own settings and rules', 'refused'],
   ];
   return `## Right now (from the app, as you read this)

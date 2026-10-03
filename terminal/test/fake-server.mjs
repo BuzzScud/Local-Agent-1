@@ -1,6 +1,7 @@
 // A stand-in for llama-server that replays scripted replies over the same
 // streaming API, so the agent and the terminal app can be tested without the
 // real model. Each reply: { reasoning?, text?, tool?: { name, args }, tools?: [{ name, args }, …] }.
+// tokens: what the answer says it wrote, when not what it sent (Ollama sends nothing of a call cut off).
 // route(request) may answer a request out of turn (the memory's save, which
 // comes whenever the app finds a pause): its reply is sent and the scripted
 // ones stay in line.
@@ -47,7 +48,7 @@ export function startFakeServer(replies, { delayMs = 2, chunk = 6, route = null,
       for (const p of pieces(args)) { send({ tool_calls: [{ index: i, function: { arguments: p } }] }); n++; await wait(); }
     }
     send({}, reply.finish ?? (calls.length ? 'tool_calls' : 'stop'));
-    res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900 + requests.length * 150, completion_tokens: n }, ...(timings ? { timings: { prompt_n: 120, prompt_per_second: 233.4, predicted_n: n, predicted_per_second: 41.9 } } : {}) })}\n\n`);
+    res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900 + requests.length * 150, completion_tokens: reply.tokens ?? n }, ...(timings ? { timings: { prompt_n: 120, prompt_per_second: 233.4, predicted_n: reply.tokens ?? n, predicted_per_second: 41.9 } } : {}) })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   });

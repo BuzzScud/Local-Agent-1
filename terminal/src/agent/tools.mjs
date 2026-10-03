@@ -589,7 +589,8 @@ export function prepare(name, args, env) {
   if (name === 'Edit' || name === 'Write') {
     for (const k of ['old_text', 'new_text', 'content']) if (args[k] !== undefined) args[k] = stripLineNumbers(args[k]).text;
     const p = resolvePath(env.cwd, args.path);
-    if (!p.inside) return { error: `${args.path} is outside the project folder, which is not allowed.` };
+    // outsideOk: the agent's one opening outside the fence, a file asked for on the Desktop (desktopOpen).
+    if (!p.inside && !env.outsideOk?.(name, p.abs)) return { error: `${args.path} is outside the project folder, which is not allowed.` };
     if (p.shelf) return { error: `${p.rel} is in ${p.shelf.what}, which are read-only here. Read them; never change them.` };
     if (readSkillPath(env.cwd, args.path, [])) return { error: `${args.path} is one of the user's skills (SKILLS.md), which are read-only here. Read them; never change them.` };
     if (readGuidePath(env.cwd, args.path, readGuides(env.rulesSet, { agents: env.agents }))) return { error: `${args.path} is one of the user's guides (terminal/rules/remote), which are read-only here. Read them; never change them.` };

@@ -209,7 +209,9 @@ export function stayRule(cwd, home = homedir()) {
   const vague = 'a vague request such as "fix the bug" means this folder only.';
   if (cwd === join(home, 'Desktop')) return `- Stay inside this folder. It is the Desktop, so a file the user wants "on my desktop" goes right here. Other folders are blocked; ${vague}`;
   if (cwd === home) return `- Stay inside this folder. It is the home folder, so the Desktop is the folder Desktop here: a file the user wants "on my desktop" goes in it (Write Desktop/<name>), not here. Other places are blocked; ${vague}`;
-  return `- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; ${vague} A file the user wants "on my desktop" is made in this folder, and you say where it is.`;
+  // A file for the Desktop goes there (desktopOpen in agent.mjs): written as ~/Desktop/<name>, so no
+  // home folder's name is guessed (3 Oct 2026: Qwen wrote to another Mac's /Users/<name>/Desktop).
+  return `- Stay inside the project folder. Files and commands outside it (the home folder, the Desktop, other projects) are blocked; ${vague} One exception: a new file the user wants "on my desktop" is written straight there with Write ~/Desktop/<name> (commands cannot reach it), and you say where it is.`;
 }
 
 // This session's part: the same on both sets.

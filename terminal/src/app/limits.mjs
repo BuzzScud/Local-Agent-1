@@ -7,7 +7,7 @@
 // default reaches you.
 import { needBytes, hasDraft, thinkingLevel, loadedBytesOf, searchBytes, EMBEDDERS, DEFAULT_EMBEDDER, RERANKERS, DEFAULT_RERANKER, Embedder, embedderReady, Reranker, rerankerReady } from '../../../models/index.mjs';
 import { SEARCH } from '../agent/search.mjs';
-import { rulesRoomFor, upFrontFor, CHARS_PER_TOKEN } from '../agent/room.mjs';
+import { rulesRoomFor, upFrontFor, CHARS_PER_TOKEN, SERVICE_REPLY } from '../agent/room.mjs';
 import { LOOK_STEPS, LOOK_BACKS, lookSecs, showLook } from '../agent/look.mjs';
 
 const k = (v) => `${Math.round(v / 1024)}k`;
@@ -104,16 +104,15 @@ export const LIMITS = [
   // The model on an Ollama service (2 Oct 2026, the user's ask: "add limits to the model we load"):
   // sent with each request, kept by model (OWN_ROWS), shown only on a service (shownLimits).
   {
-    // num_predict: Ollama's only stop for a reply, thinking and answer together. auto: the app's
-    // own, 2,048 (and the Thinking cap on top while it thinks). Never more than the context has left.
+    // num_predict: Ollama's only stop for a reply, thinking and answer together. auto: up to
+    // SERVICE_REPLY (32k; it was 2,048, too little for a file). Never more than the context has left.
     id: 'replyTokens', label: 'Reply length', model: true,
     steps: (m) => [0, 4096, 8192, 16384, 32768, 65536].filter((v) => !v || v <= (m.maxCtx ?? 32768)),
     def: () => 0,
     show: (v) => (v ? `${k(v)} tokens` : 'auto'),
     note: (v, e) => {
       const ctx = e.values.context || e.ctxNow || 32768;
-      if (!v) return `${(2048 + (e.effortOn ? e.values.thinking ?? 0 : 0)).toLocaleString()} tokens a reply${e.effortOn ? `, its thinking in it: a model that thinks longer answers nothing` : ''}`;
-      return `${v > ctx / 2 ? '⚠ over half the context: raise Context first · ' : ''}up to ${k(v)} a reply, thinking and answer together, never past the context`;
+      return `${v > ctx / 2 ? '⚠ over half the context: raise Context first · ' : ''}up to ${k(v || SERVICE_REPLY)} a reply, thinking and answer together, never past the context`;
     },
   },
   {

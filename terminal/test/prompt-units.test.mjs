@@ -146,7 +146,7 @@ test('the folder rule says where the Desktop is: inside from the home folder or 
   expect(stayRule(join(home, 'Desktop'), home)).toContain('It is the Desktop, so a file the user wants "on my desktop" goes right here.');
   const fromProject = stayRule(join(home, 'code', 'shop'), home);
   expect(fromProject).toContain('Files and commands outside it (the home folder, the Desktop, other projects) are blocked');
-  expect(fromProject).toContain('A file the user wants "on my desktop" is made in this folder, and you say where it is.');
+  expect(fromProject).toContain('One exception: a new file the user wants "on my desktop" is written straight there with Write ~/Desktop/<name> (commands cannot reach it), and you say where it is.');
   // the prompt carries it; the old prompt (AGENTIC_PROMPT=old) keeps the line it had
   const cwd = mkdtempSync(join(tmpdir(), 'agentic-stay-'));
   expect(systemPrompt({ cwd, git: 'test', tests: null })).toContain(stayRule(cwd));
