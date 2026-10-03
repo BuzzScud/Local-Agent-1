@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -146,3 +146,59 @@ test('a server that quits removes its port files only while they still name it; 
   expect(out.newer).toEqual({ sig: 'SIGTERM', reg: true, users: true });   // a newer server's: kept
   expect(out.app).toEqual({ other: false, left: true, mine: true, gone: true, none: false });
 }, 40_000);
+
+// Two windows (or two tests) starting a model at the same moment: both looked, both saw 17600 free, and
+// the one whose server came second found the port taken and died while loading (3 Oct 2026: "Could not
+// start the model: llama-server exited while loading (code 1)", and a start test that failed now and then).
+// Here the stand-in server's first start has "someone else" take the port in that very moment.
+test('a port taken between the look and the start: the model starts on the next port, with no crash said and no failed start', () => {
+  const home = mkdtempSync(join(tmpdir(), 'agentic-port-'));
+  const mod = (p) => JSON.stringify(join(import.meta.dir, '..', p));
+  const mark = join(home, 'taken');
+  // The first start: another program takes the port (a holder that answers /health like a ready server,
+  // as another window's would), and this server, unable to listen, exits with code 1.
+  const standIn = join(home, 'stand-in-server.mjs');
+  writeFileSync(standIn, `#!/usr/bin/env bun
+import { existsSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+const port = Number(process.argv[process.argv.indexOf('--port') + 1]);
+const mark = ${JSON.stringify(mark)};
+if (!existsSync(mark)) {
+  const holder = spawn(process.execPath, ['-e', 'Bun.serve({ port: ' + port + ', hostname: "127.0.0.1", fetch: () => new Response("{}") }); setTimeout(() => process.exit(0), 20000);'], { detached: true, stdio: 'ignore' });
+  holder.unref();
+  writeFileSync(mark, JSON.stringify({ port, holder: holder.pid }));
+  await new Promise((r) => setTimeout(r, 60));
+  process.exit(1);
+}
+Bun.serve({ port, hostname: '127.0.0.1', fetch: () => new Response('{}') });
+`);
+  const script = `
+    import { mkdirSync, writeFileSync, readFileSync, chmodSync, copyFileSync } from 'node:fs';
+    import { dirname } from 'node:path';
+    const { HOME, SERVER_BIN, MODELS, DEFAULT_MODEL, modelPath } = await import(${mod('registry.mjs')});
+    if (HOME !== (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME)) { console.log(JSON.stringify({ error: 'wrong home ' + HOME })); process.exit(1); }
+    const model = MODELS[DEFAULT_MODEL];
+    mkdirSync(dirname(SERVER_BIN), { recursive: true });
+    copyFileSync(${JSON.stringify(standIn)}, SERVER_BIN);
+    chmodSync(SERVER_BIN, 0o755);
+    mkdirSync(dirname(modelPath(model)), { recursive: true });
+    writeFileSync(modelPath(model), '');
+    const { ModelServer } = await import(${mod('runtime/server.mjs')});
+    const s = new ModelServer(model);
+    const crashes = [];
+    s.on('crash', (c) => crashes.push(c));
+    let started = null, failed = null;
+    try { started = await s.start({ ctx: 32768, share: false }); } catch (e) { failed = e.message; }
+    await new Promise((r) => setTimeout(r, 400)); // a crash said late would still be counted
+    const taken = JSON.parse(readFileSync(${JSON.stringify(mark)}, 'utf8'));
+    const alive = Boolean(s.child && s.child.exitCode === null);
+    await s.stop();
+    try { process.kill(taken.holder, 'SIGKILL'); } catch {}
+    console.log(JSON.stringify({ failed: failed ? failed.slice(0, 40) : null, first: taken.port, port: started?.port ?? null, alive, crashes: crashes.length }));
+    process.exit(0);
+  `;
+  const r = spawnSync('bun', ['-e', script], { env: { ...process.env, AGENTIC_HOME: home }, encoding: 'utf8', timeout: 60000 });
+  const out = JSON.parse(r.stdout.trim().split('\n').pop() || JSON.stringify({ error: r.stderr.slice(-300) }));
+  expect(out).toMatchObject({ failed: null, alive: true, crashes: 0 });
+  expect(out.port).toBeGreaterThan(out.first); // the next free one (the ones after may be taken too, on a busy Mac)
+}, 90_000);

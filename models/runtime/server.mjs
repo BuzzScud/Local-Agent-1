@@ -201,18 +201,42 @@ export class ModelServer extends EventEmitter {
     this.shared = null;
     let port = listen?.port ?? DEFAULT_PORT;
     if (listen && !(await portFree(port))) throw new Error(`port ${port} is in use; pick another with --port`);
-    while (!(await portFree(port))) { port++; if (port > DEFAULT_PORT + 20) throw new Error('no free port near 17600'); }
-    this.port = port;
+    const nextFree = async (from) => { let p = from; while (!(await portFree(p))) { p++; if (p > DEFAULT_PORT + 20) throw new Error('no free port near 17600'); } return p; };
+    port = await nextFree(port);
     this.https = Boolean(listen?.https);
     this.ctx = ctx;
     this.stopping = false;
     mkdirSync(LOG_DIR, { recursive: true });
     mkdirSync(SLOT_DIR, { recursive: true });
     const logPath = join(LOG_DIR, 'server.log');
-    appendFileSync(logPath, `\n=== ${new Date().toISOString()} start ${this.model.file} ctx=${ctx} port=${port}${lingerSecs ? ` stays ${lingerSecs}s after the last window` : ''}\n`);
     const draft = helper === false ? false : hasDraft(this.model);
     this.draft = draft;
     this.vision = Boolean(this.model.visionOn && this.model.vision && existsSync(visionPath(this.model)));
+    // The port is looked at, then the server is started on it: another window (or test) starting in
+    // that same moment looked too, saw it free, and one of the two servers finds it taken and exits
+    // while loading (3 Oct 2026). Then this one moves to the next free port, a few times at most; the
+    // exit of that first try is not a crash, and nothing is said of it. coding serve's port is the one
+    // it was given, so there the start fails as before.
+    for (let tries = 0; ; tries++) {
+      try { return await this.startOn(port, { ctx, lingerSecs, draft, listen, bin, logPath }); } catch (e) {
+        const died = e.child && e.child.exitCode !== null;
+        if (died && !listen && tries < 3 && !this.stopping && !(await portFree(port))) {
+          appendFileSync(logPath, `=== port ${port} was taken while the server started; trying the next one\n`);
+          port = await nextFree(port + 1);
+          continue;
+        }
+        // Not that: the server stopped while loading, said as it always was.
+        if (died && !this.stopping) this.emit('crash', { code: e.child.exitCode, signal: e.child.signalCode });
+        throw e;
+      }
+    }
+  }
+
+  // One try on one port: the server started there, and answering. A server that exits while it
+  // loads throws with the child on the error (start decides what that exit was).
+  async startOn(port, { ctx, lingerSecs, draft, listen, bin, logPath }) {
+    this.port = port;
+    appendFileSync(logPath, `\n=== ${new Date().toISOString()} start ${this.model.file} ctx=${ctx} port=${port}${lingerSecs ? ` stays ${lingerSecs}s after the last window` : ''}\n`);
     // The log is the server's own output file (not a pipe through this
     // process), so a server that stays loaded keeps writing after we exit.
     const logFd = openSync(logPath, 'a');
@@ -220,15 +244,18 @@ export class ModelServer extends EventEmitter {
     const child = spawn(bin, args, { stdio: ['ignore', logFd, logFd], detached: lingerSecs > 0 });
     closeSync(logFd);
     this.child = child;
+    let loading = true;
     writeFileSync(regFile(port), JSON.stringify({ pid: child.pid, owner: process.pid, port, ctx, slots: this.model.slots ?? 1, draft, model: this.model.file, started: new Date().toISOString(), ...(this.vision ? { vision: true } : {}), ...(lingerSecs ? { linger: lingerSecs } : {}), ...(listen ? { serve: { host: listen.host, keyFile: listen.keyFile ?? null, https: this.https } } : {}) }));
     if (lingerSecs) { addUser(port); watch(child.pid, port, lingerSecs); }
     child.on('exit', (code, signal) => {
       appendFileSync(logPath, `=== exit code=${code} signal=${signal}\n`);
       if (this.child === child) this.child = null;
       dropRegistration(port, child.pid);
-      if (!this.stopping) this.emit('crash', { code, signal });
+      // While it loads, start() says what the exit was (a taken port is tried again, not a crash).
+      if (!this.stopping && !loading) this.emit('crash', { code, signal });
     });
-    await this.waitHealthy(child);
+    try { await this.waitHealthy(child); } catch (e) { e.child = child; throw e; }
+    loading = false;
     return { port, ctx, slots: this.model.slots ?? 1, draft };
   }
 
@@ -239,7 +266,9 @@ export class ModelServer extends EventEmitter {
       try {
         // Its own https server on this Mac: the certificate names the host others reach it by.
         const r = await fetch(`${this.url}/health`, this.https ? { tls: { rejectUnauthorized: false } } : undefined);
-        if (r.ok) return;
+        // The answer may be another program's that took the port (a server of another window): ours,
+        // unable to listen, is then on its way out. A moment, and a look that it is still there.
+        if (r.ok) { await new Promise((res) => setTimeout(res, 150)); if (child.exitCode !== null) continue; return; }
       } catch {}
       await new Promise((r) => setTimeout(r, 250));
     }
