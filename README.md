@@ -206,6 +206,37 @@ coding serve --https cert.pem key.pem   # https with your certificate (tailscale
 With a remote in use, your prompts, your code and the files Agentic Coder reads go to that
 machine. The memory's small search models still run on this Mac.
 
+## Background sessions, and opening them from another Mac
+
+Like Claude Code's `claude --bg` and `claude attach`. Each `coding` window runs its app in a
+keeper with no window, so the session can outlive the window (Bun 1.3.5 or later; with an older
+Bun the app runs in the window as before):
+
+```
+ctrl+b                    # in a coding window: it closes, the session keeps running
+coding --bg "fix the tests"   # start one with no window
+coding sessions           # what runs in the background here
+coding attach [name]      # open one in this window (ctrl+b leaves it again; quitting there ends it)
+```
+
+Closing the window a session started in ends it, as before; closing one that attached only
+leaves. Several windows can show one session at once: what any of them types reaches it, and it
+is drawn at the smallest window's size.
+
+From another Mac, over [Tailscale](https://tailscale.com): on the Mac with the sessions run
+`coding door on` once. It listens on that Mac's Tailscale address only, asks for a key it prints,
+and starts again after a restart (a login item; `coding door off` removes it). Then, on the
+other Mac:
+
+```
+coding sessions <mac>     # its sessions (the Tailscale name, e.g. coding sessions studio)
+coding attach <mac>       # pick one, or start a new one there
+coding attach <mac> <name>
+```
+
+The key is asked once and kept in the Keychain. A window from another Mac never ends a session by
+closing; quit inside it, or ctrl+b to leave it running.
+
 ## Two parts
 
 | Part | Folder | What it is |

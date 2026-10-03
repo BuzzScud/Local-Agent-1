@@ -76,10 +76,12 @@ export const TIPS = [
   '/btw asks a side question without stopping the work',
 ];
 export const INIT_TIP = '/init writes an AGENTS.md with notes about this project';
+// Only in a window that can do it: one showing a background session (app/sessions.mjs).
+export const BG_TIP = 'ctrl+b sends this window to the background; coding attach opens it again';
 // AGENTIC_TIPS=off leaves the line as "? for shortcuts" (the app's tests set it: a random tip would
 // change every screen they read).
 export const tipsOn = (env = process.env) => !/^(off|0|false|no)$/i.test(env.AGENTIC_TIPS ?? '');
-export const startTip = (start, pick = (xs) => xs[Math.floor(Math.random() * xs.length)]) => (!tipsOn() ? null : start?.notes?.includes('AGENTS.md') ? pick(TIPS) : INIT_TIP);
+export const startTip = (start, pick = (xs) => xs[Math.floor(Math.random() * xs.length)]) => (!tipsOn() ? null : start?.notes?.includes('AGENTS.md') ? pick(process.env.AGENTIC_IN_HOST ? [...TIPS, BG_TIP] : TIPS) : INIT_TIP);
 
 // The Visor bot II (1 Oct 2026, the user's pick "1 · Studio"): a white helmet with a dark glass
 // visor, its eyes in green light, an antenna whose light pulses while the model loads, ear lights,

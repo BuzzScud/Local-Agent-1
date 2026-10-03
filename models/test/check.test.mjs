@@ -51,6 +51,10 @@ test('a server open to the network, and code built from text, are noticed', () =
   expect(listensWide("['--host', '127.0.0.1', '--port', String(port)]")).toBe(false);
   expect(listensWide("Bun.serve({ hostname: '0.0.0.0', port })")).toBe(true);
   expect(listensWide("['--host', '192.168.1.4']")).toBe(true);
+  // node:net with a host named by a variable (the door's Tailscale address) counts; a unix socket or 127.0.0.1 does not.
+  expect(listensWide('server.listen(port, host, () => res(server));')).toBe(true);
+  expect(listensWide('server.listen(socket, res);')).toBe(false);
+  expect(listensWide("s.listen(0, '127.0.0.1', () => {});")).toBe(false);
   expect(buildsCode('const f = new Function("a", body);')).toBe(true);
   expect(buildsCode('const evaluate = (x) => x; evaluate(1);')).toBe(false);
 });

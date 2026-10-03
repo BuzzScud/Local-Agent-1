@@ -80,14 +80,16 @@ export const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.
 export const hostsIn = (text) => [...new Set([...text.matchAll(/\bhttps?:\/\/([A-Za-z0-9][A-Za-z0-9.-]*)/g)].map((m) => m[1].toLowerCase().replace(/\.$/, '')))];
 export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) => !known.includes(h));
 // A server open to the network instead of this Mac only.
-export const listensWide = (text) => /['"`]0\.0\.0\.0['"`]|hostname:\s*['"`](?!127\.0\.0\.1|localhost)[^'"`]+['"`]|--host['"`],\s*['"`](?!127\.0\.0\.1)[^'"`]+['"`]/.test(text);
+export const listensWide = (text) => /['"`]0\.0\.0\.0['"`]|hostname:\s*['"`](?!127\.0\.0\.1|localhost)[^'"`]+['"`]|--host['"`],\s*['"`](?!127\.0\.0\.1)[^'"`]+['"`]|\.listen\(\s*\w+\s*,\s*[A-Za-z_]\w*\s*,/.test(text);
 // Code built from text while running. The one known use reads the weights
 // page's own script, which is part of the repo (the edit writer and the weights
 // reader check both get it from there).
 export const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
 // Opens a server to the network on purpose: `coding serve`, the model for another
 // machine's /remote, only when it is run, and only behind its API key.
-export const LISTENS_WIDE_OK = ['models/runtime/serve.mjs'];
+// coding serve (the model, behind its key) and coding door (the background sessions, on the
+// Tailscale address only, behind its key) open a server to other machines on purpose.
+export const LISTENS_WIDE_OK = ['models/runtime/serve.mjs', 'terminal/src/app/door.mjs'];
 export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text);
 
 // ---- which files are the app ---------------------------------------------------------------
@@ -288,7 +290,7 @@ function connections({ files }) {
   const bad = [...strange, ...wide, ...builds];
   if (bad.length) return wrong(`${bad.length} thing${bad.length > 1 ? 's' : ''} in how the code connects or runs`, few(bad, 8));
   const out = [...places].filter((h) => !['127.0.0.1', 'localhost', 'host', 'www.w3.org'].includes(h)).sort();
-  return fine(`names only this Mac, ${out.join(', ')}; servers open to this Mac only (coding serve opens the model on purpose, behind its key)`);
+  return fine(`names only this Mac, ${out.join(', ')}; servers open to this Mac only (coding serve opens the model and coding door the sessions on purpose, each behind its key)`);
 }
 
 function leftovers({ files }) {
