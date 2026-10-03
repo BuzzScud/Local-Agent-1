@@ -467,8 +467,16 @@ async function onlyOnThisMac() {
   return notes.length ? look(`${trees.length} other working cop${trees.length > 1 ? 'ies' : 'y'} of the repo on this Mac`, notes) : fine('no other working copies of the repo on this Mac');
 }
 
+// The environment the unit tests run in from here: no colours, by NO_COLOR alone. With FORCE_COLOR
+// set as well (even to 0), node warns on stderr in every process it starts, and a test that expects
+// a command to say nothing there fails: the check's own Unit tests line could never be green.
+export function suiteEnv(env = process.env) {
+  const out = { ...env, NO_COLOR: '1' };
+  delete out.FORCE_COLOR;
+  return out;
+}
 async function unitTests() {
-  const r = await run('node', [join(root, 'models', 'evals', 'tools', 'run-suite.mjs')], { timeout: 15 * 60_000, env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } });
+  const r = await run('node', [join(root, 'models', 'evals', 'tools', 'run-suite.mjs')], { timeout: 15 * 60_000, env: suiteEnv() });
   const tail = r.out.slice(-3000);
   const pass = Number(/^\s*(\d+) pass$/m.exec(tail)?.[1] ?? NaN), fail = Number(/^\s*(\d+) fail$/m.exec(tail)?.[1] ?? NaN);
   if (Number.isNaN(pass)) return wrong('the unit tests did not run', lines(r.err || r.out).slice(-3));
