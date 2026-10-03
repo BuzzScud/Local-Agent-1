@@ -3,7 +3,7 @@
 // file it has read, thinking that leaks into the answer, the turn's notes kept in its request for the
 // service's prompt cache, gpt-oss's thinking level held, and a test run's passing tests folded.
 import { test, expect, beforeEach } from 'bun:test';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -189,6 +189,37 @@ test('on an Ollama service each conversation starts with a line of its own, new 
   expect(a.conversation).not.toBe(before);
 });
 
+test('AGENTIC_OWN_START: on for every model of an Ollama service unless set; off for none; auto only for the kinds where the mixing was seen', async () => {
+  const { ownStartOn, OWN_START_KINDS } = await import('../src/agent/client.mjs');
+  const qwen = { ollama: true, family: 'qwen35moe', model: 'qwen3.6:35b' }, coder = { ollama: true, family: 'qwen3moe', model: 'qwen3-coder-next:latest' };
+  expect(OWN_START_KINDS).toEqual(['qwen35moe']);
+  for (const ep of [qwen, coder, { ollama: true }]) expect(ownStartOn(ep, {})).toBe(true); // as before the switch
+  expect([ownStartOn(qwen, { AGENTIC_OWN_START: 'on' }), ownStartOn(coder, { AGENTIC_OWN_START: 'ON' })]).toEqual([true, true]);
+  for (const v of ['off', 'OFF', '0', 'false']) expect([v, ownStartOn(qwen, { AGENTIC_OWN_START: v })]).toEqual([v, false]);
+  expect([ownStartOn(qwen, { AGENTIC_OWN_START: 'auto' }), ownStartOn(coder, { AGENTIC_OWN_START: 'auto' }), ownStartOn({ ollama: true }, { AGENTIC_OWN_START: 'auto' })]).toEqual([true, false, false]);
+  // what a request to the service carries, each way
+  const { fakeOllama } = await import('./fake-ollama.mjs');
+  const svc = await fakeOllama();
+  const keep = process.env.AGENTIC_OWN_START;
+  try {
+    const { connectRemote } = await import('../../models/index.mjs');
+    const { streamChat } = await import('../src/agent/client.mjs');
+    const first = async (model) => {
+      const g = await connectRemote({ source: 'openai', kind: 'openai', connect: 'http', address: svc.url, model, context: 0, key: false });
+      for await (const ev of streamChat({ url: g.url, conversation: 'ab12cd34', messages: [{ role: 'system', content: 'You are Agentic Coder.' }, { role: 'user', content: 'hi' }], model: g.model })) void ev;
+      g.stop();
+      return svc.chats().at(-1).messages[0].content;
+    };
+    delete process.env.AGENTIC_OWN_START;
+    expect(await first('coder:30b')).toBe('Conversation ab12cd34.\nYou are Agentic Coder.');
+    process.env.AGENTIC_OWN_START = 'off';
+    expect(await first('coder:30b')).toBe('You are Agentic Coder.');
+    process.env.AGENTIC_OWN_START = 'auto'; // coder:30b's kind (qwen3moe) is not on the list; thinker:35b's (qwen35moe) is
+    expect(await first('coder:30b')).toBe('You are Agentic Coder.');
+    expect(await first('thinker:35b')).toBe('Conversation ab12cd34.\nYou are Agentic Coder.');
+  } finally { if (keep === undefined) delete process.env.AGENTIC_OWN_START; else process.env.AGENTIC_OWN_START = keep; await svc.close(); }
+});
+
 test('a call written out as text: under a name of its own it runs as the tool it means; only arguments, it runs only when the tool just looks', async () => {
   const { bareCallInText } = await import('../src/agent/agent.mjs');
   const names = ['Read', 'List', 'Search', 'Edit', 'Write', 'Bash', 'TodoWrite', 'Ask'];
@@ -208,3 +239,42 @@ test('a call written out as text: under a name of its own it runs as the tool it
     expect(results(a).join('\n')).toContain('beta');
   } finally { fake.close(); }
 });
+
+// A call written as text under a name of its own ("run_command", "write_file") runs as the tool it means
+// (3 Oct 2026). It must pass the same lock as a real call: asked about, allowed or refused alike, in
+// each of the five modes, for the three tools that change things.
+test('a call written as text under another name gets the decision a real call gets, in every mode', async () => {
+  const { MODES } = await import('../src/agent/permissions.mjs');
+  const cases = [
+    ['Bash', { command: 'touch made.txt' }, 'run_command'],
+    ['Write', { path: 'new.txt', content: 'hello\n' }, 'write_file'],
+    ['Edit', { path: 'a.txt', old_text: 'alpha', new_text: 'ALPHA' }, 'str_replace'],
+  ];
+  const outcome = async (mode, reply) => {
+    writeFileSync(join(proj, 'a.txt'), 'alpha\n');
+    for (const f of ['made.txt', 'new.txt']) rmSync(join(proj, f), { force: true });
+    const fake = await startFakeServer([reply, { text: 'Done.' }, { text: 'Done.' }, { text: 'Done.' }], { delayMs: 0 });
+    const asked = [];
+    try {
+      const a = agentOn(fake.url, remote, { way: 'model', hooks: [], mode, ask: async (req) => { asked.push(`${req.name}: ${req.arg ?? ''}`); return { choice: 'no' }; } });
+      await a.send('do it');
+      const steps = a.messages.filter((m) => m.role === 'assistant' && m.tool_calls?.length && !m.tool_calls.some((c) => String(c.id).startsWith('opening_'))).flatMap((m) => m.tool_calls.map((c) => c.function.name));
+      return { asked, steps, made: existsSync(join(proj, 'made.txt')), wrote: existsSync(join(proj, 'new.txt')), a: readFileSync(join(proj, 'a.txt'), 'utf8'), said: results(a).map((r) => r.replace(/\s+/g, ' ').slice(0, 80)) };
+    } finally { fake.close(); }
+  };
+  const seen = {};
+  for (const mode of MODES) for (const [tool, args, alias] of cases) {
+    const real = await outcome(mode, { tools: [{ name: tool, args }] });
+    const text = await outcome(mode, { text: JSON.stringify({ name: alias, arguments: args }) });
+    expect([mode, tool, text]).toEqual([mode, tool, real]);
+    expect(real.steps[0]).toBe(tool); // the text call ran as the tool it means (text equals real, above)
+    seen[`${mode} ${tool}`] = real;
+  }
+  // The lock is a real one, so the sameness above means something: Manual asks about the command and
+  // a "no" leaves the files alone; Bypass asks nothing, runs the command and writes the file. (The
+  // edit is turned away in both forms alike: the file was not read first.)
+  expect(seen['ask Bash'].asked).toHaveLength(1);
+  expect([seen['ask Bash'].made, seen['ask Write'].wrote, seen['ask Edit'].a]).toEqual([false, false, 'alpha\n']);
+  expect([seen['bypass Bash'], seen['bypass Write'], seen['bypass Edit']].map((r) => r.asked.length)).toEqual([0, 0, 0]);
+  expect([seen['bypass Bash'].made, seen['bypass Write'].wrote]).toEqual([true, true]);
+}, 120_000);
