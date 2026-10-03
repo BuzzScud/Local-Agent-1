@@ -76,7 +76,7 @@ export function riskyName(path) {
 // www.apple.com: the first lines every scheduler file on a Mac carries (the
 // night review's, terminal/src/app/review.mjs). A name in a header: nothing connects to it.
 // api.search.brave.com and api.tavily.com: the web search services /web offers, used only with your key (30 Sep 2026).
-export const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host', 'api.search.brave.com', 'api.tavily.com'];
+const KNOWN_HOSTS = ['127.0.0.1', 'localhost', 'github.com', 'api.github.com', 'huggingface.co', 'claude.ai', 'www.w3.org', 'www.apple.com', 'host', 'api.search.brave.com', 'api.tavily.com'];
 export const hostsIn = (text) => [...new Set([...text.matchAll(/\bhttps?:\/\/([A-Za-z0-9][A-Za-z0-9.-]*)/g)].map((m) => m[1].toLowerCase().replace(/\.$/, '')))];
 export const newHosts = (text, known = KNOWN_HOSTS) => hostsIn(text).filter((h) => !known.includes(h));
 // A server open to the network instead of this Mac only.
@@ -84,12 +84,12 @@ export const listensWide = (text) => /['"`]0\.0\.0\.0['"`]|hostname:\s*['"`](?!1
 // Code built from text while running. The one known use reads the weights
 // page's own script, which is part of the repo (the edit writer and the weights
 // reader check both get it from there).
-export const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
+const BUILDS_CODE_OK = ['terminal/src/app/weights-core.mjs'];
 // Opens a server to the network on purpose: `coding serve`, the model for another
 // machine's /remote, only when it is run, and only behind its API key.
 // coding serve (the model, behind its key) and coding door (the background sessions, on the
 // Tailscale address only, behind its key) open a server to other machines on purpose.
-export const LISTENS_WIDE_OK = ['models/runtime/serve.mjs', 'terminal/src/app/door.mjs'];
+const LISTENS_WIDE_OK = ['models/runtime/serve.mjs', 'terminal/src/app/door.mjs'];
 export const buildsCode = (text) => /\beval\s*\(|\bnew Function\s*\(/.test(text);
 
 // ---- a server's address ------------------------------------------------------------------------
@@ -143,6 +143,53 @@ export function unusedFiles(dir, files) {
     .filter((f) => { const name = f.split('/').pop(); return !texts.some(([g, t]) => g !== f && t.includes(name)); });
 }
 
+// ---- what a model can read, and code nothing uses (the clean-up plan of 30 Sep, stage 6) ----------
+// A file past either limit is more than a model reads whole: Qwen on this Mac holds 32k tokens at once,
+// and a file of ~20k tokens leaves no room for the rest (3 Oct 2026: App.jsx was ~73k, agent.mjs ~66k).
+export const READ_LINES = 1000;
+export const READ_TOKENS = 20_000;
+const tokensIn = (text) => Math.ceil(text.length / 3.6);
+export function bigFiles(dir, files) {
+  return files.filter((f) => isCode(f) && isShipped(f) && existsSync(join(dir, f)))
+    .map((f) => { const t = readFileSync(join(dir, f), 'utf8'); return { file: f, lines: t.split('\n').length, tokens: tokensIn(t) }; })
+    .filter((x) => x.lines > READ_LINES || x.tokens > READ_TOKENS).sort((a, b) => b.tokens - a.tokens);
+}
+
+// Scripts run by hand that nothing names on purpose (a measurement, a results page).
+export const HAND_RUN = ['models/evals/tools/long-task-page.mjs', 'models/evals/bench/memory/second-time.mjs'];
+// Frozen copies (practice projects, their answers) are not the app's code.
+const FROZEN = /\/(tasks|project|solution|fixtures|new28|work28)\/|^terminal\/demo-project\//;
+const DECLARED = /^(export\s+)?(?:async\s+)?(?:function\*?|const|let|class)\s+([A-Za-z_$][\w$]*)/gm;
+// What nothing uses, counted by plain whole words (a name in another file, a script's file name):
+// exports no other file names, top-level names used nowhere, and scripts nothing runs.
+export function unusedCode(dir, files) {
+  const texts = new Map();
+  for (const f of files) {
+    if (f.startsWith('docs/') || !/\.(mjs|js|jsx|cjs|json|sh|html|md)$/.test(f) || !existsSync(join(dir, f))) continue;
+    texts.set(f, readFileSync(join(dir, f), 'utf8'));
+  }
+  const words = new Map([...texts].map(([f, t]) => [f, new Set(t.match(/[A-Za-z_$][\w$]*/g) ?? [])]));
+  const elsewhere = (f, name) => [...words].some(([g, w]) => g !== f && w.has(name));
+  const code = [...texts.keys()].filter((f) => isCode(f) && /^(terminal|models)\//.test(f) && !/\/test\//.test(f) && !FROZEN.test(f));
+  const exports = [], names = [], scripts = [];
+  for (const f of code) {
+    const t = texts.get(f);
+    for (const m of t.matchAll(DECLARED)) {
+      const name = m[2];
+      if (elsewhere(f, name)) continue;
+      const own = t.match(new RegExp(`(?<![\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`, 'g'))?.length ?? 0;
+      if (m[1] && own > 1) exports.push(`${f}: ${name}`);
+      else if (own <= 1) names.push(`${f}: ${name}`);
+    }
+    if (!/^(models\/evals|terminal\/scripts)\//.test(f) || HAND_RUN.includes(f)) continue;
+    const base = f.split('/').pop();
+    const stem = base.replace(/\.[^.]+$/, '');
+    const named = new RegExp(`['"\`/ ]${stem.replace(/[.$]/g, '\\$&')}(?:\\.m?jsx?|\\.sh)?(?=['"\`\\s)\\]]|$)`, 'm');
+    if (![...texts].some(([g, u]) => g !== f && (u.includes(base) || named.test(u)))) scripts.push(f);
+  }
+  return { exports, names, scripts };
+}
+
 // ---- helpers ---------------------------------------------------------------------------------
 function run(cmd, args, { cwd = root, timeout = 120_000, env = process.env } = {}) {
   return new Promise((done) => {
@@ -193,7 +240,7 @@ async function sameAsGitHub({ offline }) {
 // The repo is public on purpose (the owner's choice, 28 Sep 2026): a stranger reading it is the
 // expected answer, so it is fine, not a red line every push is made past. Private again, the line
 // says so until PUBLIC_SINCE is set to null; with null, a public repo is wrong, as before.
-export const PUBLIC_SINCE = '28 Sep 2026';
+const PUBLIC_SINCE = '28 Sep 2026';
 // What a stranger's request for the repo says about it: status is GitHub's answer without a login.
 export function visibility(status, repo, since = PUBLIC_SINCE) {
   if (status === 404) return since ? look(`${repo} is private now, but the repo says it is public on purpose since ${since} (PUBLIC_SINCE in check.mjs): set it to null`) : fine(`a stranger asking for ${repo} gets "not found"`);
@@ -370,7 +417,20 @@ function connections({ files }) {
 
 function leftovers({ files }) {
   const unused = unusedFiles(root, files);
-  return unused.length ? look(`${unused.length} code file${unused.length > 1 ? 's' : ''} nothing uses`, few(unused, 8)) : fine('every code file of the app is used by something');
+  const { exports, names, scripts } = unusedCode(root, files);
+  const n = (k, one, many) => (k ? `${k} ${k === 1 ? one : many}` : null);
+  const said = [n(unused.length, 'code file nothing uses', 'code files nothing uses'), n(scripts.length, 'script nothing runs', 'scripts nothing runs'),
+    n(names.length, 'name used nowhere', 'names used nowhere'), n(exports.length, 'export only its own file uses', 'exports only their own file uses')].filter(Boolean);
+  if (!said.length) return fine('every code file, script, name and export of the app is used by something');
+  return look(said.join(' · '), few([...unused, ...scripts, ...names, ...exports], 8));
+}
+
+// The files of the app a model can read whole (READ_LINES, READ_TOKENS).
+function readable({ files }) {
+  const big = bigFiles(root, files);
+  if (!big.length) return fine(`every code file of the app is under ${READ_LINES.toLocaleString('en-US')} lines and about ${READ_TOKENS / 1000}k tokens`);
+  return look(`${big.length} file${big.length > 1 ? 's' : ''} too big for a model to read whole (over ${READ_LINES.toLocaleString('en-US')} lines or about ${READ_TOKENS / 1000}k tokens)`,
+    few(big.map((x) => `${x.file}  ${x.lines.toLocaleString('en-US')} lines, about ${Math.round(x.tokens / 1000)}k tokens`), 6));
 }
 
 // Every file the registry names for a model is one the code uses (the other models in /model too):
@@ -417,13 +477,14 @@ function newerThanApp(app) {
 }
 
 async function installedApp() {
-  const home = (process.env.AGENTIC_HOME ?? process.env.BONSAI_HOME) ?? join(homedir(), '.agentic-coder');
+  const home = process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
   const app = join(home, 'app', 'agentic-coder'), launcher = join(homedir(), '.local', 'bin', 'coding');
   if (!existsSync(app) || !existsSync(launcher)) return look('coding is not installed on this Mac (bun run install-cli)');
   const bad = [], notes = [];
   for (const f of [app, launcher]) if (statSync(f).mode & 0o022) bad.push(`${tilde(f)} can be changed by other accounts on this Mac (chmod 755 "${tilde(f)}")`);
   const have = readFileSync(launcher, 'utf8');
-  const repo = /^REPO="\$\{AGENTIC_REPO:-\$\{BONSAI_REPO:-(.*)\}\}"$/m.exec(have)?.[1] ?? /^REPO="\$\{BONSAI_REPO:-(.*)\}"$/m.exec(have)?.[1];
+  // An installed launcher from before 3 Oct 2026 also read the app's old name (until bun run install-cli).
+  const repo = /^REPO="\$\{AGENTIC_REPO:-\$\{BONSAI_REPO:-(.*)\}\}"$/m.exec(have)?.[1] ?? /^REPO="\$\{AGENTIC_REPO:-([^$]*)\}"$/m.exec(have)?.[1];
   const source = join(root, 'terminal', 'app', 'agentic-coder-launcher.sh');
   if (!repo) bad.push(`${tilde(launcher)} is not Agentic Coder's launcher`);
   else if (resolve(repo) !== resolve(root)) notes.push(`the installed app is built from another folder: ${tilde(repo)}`);
@@ -505,7 +566,7 @@ export async function check({ fast = false, tests = true, offline = false, say =
   const list = [
     safe('Same as GitHub', sameAsGitHub), safe('Who can read it', whoCanRead), safe('No secrets in the files', secretsInFiles), safe('Only files that belong', filesThatBelong),
     safe('No secrets in the history', history), safe('No server addresses', addresses), safe('Packages', packages), safe('Where the code connects', connections), safe('No leftover code', leftovers),
-    safe('The model files', modelFiles), safe('The installed app', installedApp), safe('Private pages stay private', docsStayPrivate), safe('Only on this Mac', onlyOnThisMac),
+    safe('Files a model can read', readable), safe('The model files', modelFiles), safe('The installed app', installedApp), safe('Private pages stay private', docsStayPrivate), safe('Only on this Mac', onlyOnThisMac),
   ];
   const results = [];
   const show = (name, r) => {
@@ -528,7 +589,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const flags = new Set(process.argv.slice(2));
   const fast = flags.has('--fast');
   const r = await check({ fast, tests: !flags.has('--no-tests'), offline: flags.has('--offline') });
-  if (!process.env.CI && !(process.env.AGENTIC_NO_RECORD ?? process.env.BONSAI_NO_RECORD)) {
+  if (!process.env.CI && !process.env.AGENTIC_NO_RECORD) {
     recordTest({ kind: 'check', name: `Repo check${fast ? ' (fast)' : ''}`, code: codeLabel(root), passed: r.done - r.wrong, total: r.done, secs: r.secs, result: r.wrong ? 'fail' : 'pass',
       note: [...r.results.filter((x) => x.mark === 'wrong').map((x) => `wrong: ${x.name}`), ...r.results.filter((x) => x.mark === 'look').map((x) => `to look at: ${x.name}`)].join(' · '), raw: '' });
   }

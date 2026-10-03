@@ -6,7 +6,7 @@ import { test, expect } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv, namedModelFiles } from '../evals/tools/check.mjs';
+import { findSecrets, looksMadeUp, riskyName, hostsIn, newHosts, listensWide, buildsCode, unusedFiles, isShipped, publicAddresses, KNOWN_ADDRESSES, visibility, localCopyDiff, suiteEnv, namedModelFiles, bigFiles, unusedCode, READ_LINES, READ_TOKENS, HAND_RUN } from '../evals/tools/check.mjs';
 
 const real = 'Zk3vQ9xT7mB2nL5cR8wY1dF6hJ4s';
 const what = (text) => findSecrets(text).map((s) => s.what);
@@ -145,4 +145,41 @@ test('a model\'s picture add-on is a file the code uses', async () => {
   const names = namedModelFiles(MODELS, { modelPath, draftPath, visionPath }).map((f) => f.split('/').pop());
   for (const m of Object.values(MODELS).filter((x) => x.vision)) expect(names).toContain(m.vision.file);
   expect(names).toContain('mmproj-qwen3.5-9b-F16.gguf');
+});
+
+test('a file too big for a model to read whole is named, with its size', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-check-'));
+  const put = (parts, text) => { const p = join(dir, ...parts); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, text); return parts.join('/'); };
+  const files = [
+    put(['terminal', 'src', 'long.mjs'], 'const a = 1;\n'.repeat(READ_LINES + 5)),
+    put(['terminal', 'src', 'wide.mjs'], `const s = '${'x'.repeat(READ_TOKENS * 4)}';\n`),
+    put(['terminal', 'src', 'small.mjs'], 'const a = 1;\n'),
+    put(['models', 'evals', 'long-bench.mjs'], 'const a = 1;\n'.repeat(READ_LINES + 5)), // not the app
+  ];
+  expect(bigFiles(dir, files).map((x) => x.file).sort()).toEqual([files[0], files[1]].sort());
+  expect(bigFiles(dir, files).find((x) => x.file === files[0]).lines).toBe(READ_LINES + 6);
+});
+
+test('code nothing uses, by whole words: an export only its file uses, a name used nowhere, a script nothing runs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-check-'));
+  const put = (parts, text) => { const p = join(dir, ...parts); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, text); return parts.join('/'); };
+  const files = [
+    put(['terminal', 'src', 'a.mjs'], 'export const shared = 1;\nexport const mine = 2;\nconst dead = 3;\nconst spread = () => ({});\nexport const total = mine + { ...spread() };\n'),
+    put(['terminal', 'src', 'b.mjs'], "import { shared, total } from './a.mjs';\nconsole.log(shared, total);\n"),
+    put(['terminal', 'test', 'a.test.mjs'], 'mine;\n'), // a test's use counts
+    put(['models', 'evals', 'tools', 'probe.mjs'], '// a probe\n'),
+    put(['models', 'evals', 'tools', 'run-me.mjs'], '// run by the next one\n'),
+    put(['models', 'evals', 'tools', 'runner.mjs'], "spawn('node', ['models/evals/tools/run-me.mjs']);\n"),
+    put(['models', 'evals', 'bench', 'tasks', '01', 'project', 'x.mjs'], 'export const frozen = 1;\n'), // a practice project: not the app
+    put(['package.json'], '{"scripts": {"go": "node models/evals/tools/runner.mjs"}}'),
+  ];
+  const r = unusedCode(dir, files);
+  expect(r.exports).toEqual([]); // mine: a test uses it; total and shared: b.mjs
+  expect(r.names).toEqual(['terminal/src/a.mjs: dead']); // spread is used, as ...spread()
+  expect(r.scripts).toEqual(['models/evals/tools/probe.mjs']);
+  // An export only its own file uses is named as one.
+  writeFileSync(join(dir, files[2]), '// no use\n');
+  expect(unusedCode(dir, files).exports).toEqual(['terminal/src/a.mjs: mine']);
+  // A script run by hand is left alone on purpose.
+  expect(HAND_RUN).toContain('models/evals/tools/long-task-page.mjs');
 });
