@@ -191,3 +191,26 @@ test('each start is timed: the page says how long it took, and the next window h
   expect((t.read ?? []).length + (t.restore ?? []).length).toBe(2);
 }, 200_000);
 
+
+test('the / menu under the live start page: its 19th row (/jumptomac) shows only where it fits under the page, so the page stays live and /start still changes it in place', async () => {
+  const { cwd, env } = withStandInModel();
+  const rowsOf = (t) => t.split('\n').filter((l) => /^\s{2}\/[a-z]+\s{2,}\S/.test(l));
+  // The tests' own window (155 × 43): 18 fit under the page, the 19th would not.
+  const mid = await runInPty({ cwd, env, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: '? for shortcuts' }, { sleep: 800 }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 300 }, { snapshot: 'menu' },
+    { type: 'start' }, { key: 'enter' }, { wait: '● ready · effort', ms: 45_000 }, { sleep: 400 }, { snapshot: 'ready' },
+    ...quit,
+  ] });
+  expect(rowsOf(mid.snapshots.menu)).toHaveLength(18);
+  expect(mid.snapshots.menu).not.toContain('/jumptomac');
+  expect(mid.snapshots.ready.match(/This folder/g)).toHaveLength(1); // changed in place, not printed again
+  // A tall window (173 × 55): room under the page for all 19.
+  const tall = await runInPty({ cwd, env, cols: 173, rows: 55, args: ['--no-flows'], timeoutMs: 90_000, steps: [
+    { wait: '? for shortcuts' }, { sleep: 800 }, { type: '/' }, { wait: 'Open the Help page in the browser' }, { sleep: 300 }, { snapshot: 'menu' },
+    { type: 'start' }, { key: 'enter' }, { wait: '● ready · effort', ms: 45_000 }, { sleep: 400 }, { snapshot: 'ready' },
+    ...quit,
+  ] });
+  expect(rowsOf(tall.snapshots.menu)).toHaveLength(19);
+  expect(tall.snapshots.menu).toMatch(/\/remote\s+[^\n]*\n\s{2}\/jumptomac\s+Jump this window to your other Mac/);
+  expect(tall.snapshots.ready.match(/This folder/g)).toHaveLength(1);
+}, 200_000);

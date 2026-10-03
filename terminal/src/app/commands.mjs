@@ -25,6 +25,7 @@ export const COMMANDS = [
   { name: 'stop', desc: 'Unload the model and give its memory back to the Mac (ctrl+t too); /start loads it again' },
   { name: 'subagents', desc: 'The helper models on your Ollama service, one per job: pictures, side jobs, code search, a second opinion, UI design; switch each on or off and pick its model' },
   { name: 'remote', desc: 'Where the model runs: this Mac, the Claude API, your other computer or another service; Connect checks it first', arg: '[claude|computer|service|here]', picker: true },
+  { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone it goes to the Mac used last)', arg: '[mac]' },
   { name: 'web', desc: 'What the model may do on the web: search with Brave Search or Tavily (your API key), read pages (each site asks first), and Claude’s own web tools on the Claude API; Test checks the key', picker: true },
   { name: 'stats', desc: 'Speed, memory and context used' },
   { name: 'meters', desc: 'Show or hide the status bar under the prompt', arg: '[on|off]', picker: true },
@@ -37,7 +38,6 @@ export const COMMANDS = [
   { name: 'test', desc: 'Pick a test in the Arena for this model: press Run there, watch it live (it keeps going if you close this)', arg: '[name|task number]' },
   { name: 'tests', desc: 'Open the Arena on the test record: every test run and its result' },
   { name: 'morning', desc: 'The morning brief on your repos: the day drawn, what needs you, what closed', arg: '[today|yesterday|date]' },
-  { name: 'jumptomac', desc: 'Jump this window to your other Mac: its sessions open here, shown on both screens, and ctrl+b there comes back here (that Mac needs coding door on; alone it goes to the Mac used last)', arg: '[mac]' },
   { name: 'update', desc: 'Restart on new Agentic Coder code, keeping this conversation · /update memory saves to memory now', arg: '[memory]' },
   { name: 'settings', desc: 'Everything else in one menu: status bar, helpers, rules, instructions, memory, the hub pages and the tools' },
   { name: 'exit', desc: 'Quit Agentic Coder' },
@@ -80,15 +80,20 @@ export const IN_SETTINGS = new Set(SETTINGS.flatMap((g) => g.rows.map((r) => r.n
 export const SERVICE_ONLY = new Set(['subagents']);
 // Typed only (2 Oct 2026): /agents took /morning's row in the / menu, which holds 18 at 80 × 24, and
 // /settings is as full; /morning still runs typed in full, and /help lists it.
-// /jumptomac (3 Oct 2026) is typed only for the same reason.
-export const TYPED_ONLY = new Set(['morning', 'jumptomac']);
+export const TYPED_ONLY = new Set(['morning']);
+// In the / menu where it fits (3 Oct 2026, the owner: "i dont see the new command?"; it had been
+// typed only, so nothing showed it, not even /jump): listed in the whole menu in a window with room
+// for one more row than the 18 an 80 × 24 window holds, and found in any window once its name is typed.
+export const WHEN_ROOM = new Set(['jumptomac']);
 export const MAC_ONLY = new Set(['start', 'stop']);
 
 // The / menu: every command but the ones /settings holds. service: on an Ollama service now.
-export function matchCommands(value, { service = false } = {}) {
+// room: the rows the menu may take in this window (18 at 80 × 24).
+export function matchCommands(value, { service = false, room = 18 } = {}) {
   const m = /^\/(\S*)$/.exec(value);
   if (!m) return [];
   const q = m[1].toLowerCase();
-  const shown = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name));
+  const all = COMMANDS.filter((c) => !IN_SETTINGS.has(c.name) && !TYPED_ONLY.has(c.name) && !(service ? MAC_ONLY : SERVICE_ONLY).has(c.name));
+  const shown = q || all.length <= room ? all : all.filter((c) => !WHEN_ROOM.has(c.name));
   return shown.filter((c) => c.name.startsWith(q)).concat(shown.filter((c) => !c.name.startsWith(q) && c.name.includes(q)));
 }
