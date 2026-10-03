@@ -327,3 +327,38 @@ test('the Test row on a server that wants max_completion_tokens (OpenAI’s reas
   expect(asked).toEqual([['max_tokens'], ['max_completion_tokens']]);
   expect(r.steps.at(-1).text).toMatch(/^answered "ready"/);
 });
+
+test('the check on an Ollama service that never loads the model: it says what the service keeps loaded instead and what to pick, and told the form what it was waiting for', async () => {
+  // A pretend Ollama: two models; the big one never answers, a smaller one is loaded and kept for ever.
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      const json = (o) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(o)); };
+      if (req.url === '/v1/models') return json({ object: 'list', data: [{ id: 'big-coder:latest' }, { id: 'small:35b' }] });
+      if (req.url === '/api/version') return json({ version: '0.32.12' });
+      if (req.url === '/api/tags') return json({ models: [{ name: 'big-coder:latest', size: 51.7e9 }, { name: 'small:35b', size: 23.9e9 }] });
+      if (req.url === '/api/show') return json({ details: { family: 'qwen', parameter_size: '80B' }, capabilities: ['completion', 'tools'], model_info: {} });
+      if (req.url === '/api/ps') return json({ models: [{ name: 'small:35b', size: 23.1e9, size_vram: 23.1e9, context_length: 32768, expires_at: '2319-01-13T09:33:45Z' }] });
+      if (req.url === '/api/chat') { if (JSON.parse(body).model === 'small:35b') return json({ message: { content: 'ready' } }); return; } // the big one: no word, ever
+      res.statusCode = 404; res.end('{}');
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const told = [];
+    const r = await probe({ url, kind: 'openai', model: 'big-coder:latest', reply: true, numCtx: 32768, replyMs: 400, onStep: (f) => told.push(f) });
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('no answer in 1 min: the service did not load big-coder:latest (52 GB). It keeps small:35b loaded (23 GB, set to stay for ever), which may leave no room: pick small:35b, which is ready, or free the service first');
+    expect(r.loaded).toEqual(['small:35b']);
+    // Before the long wait the form was told what had been found and what is waited for.
+    expect(told).toHaveLength(1);
+    expect(told[0].steps.map((s) => s.ok)).toEqual([true, true]);
+    expect(told[0].waiting).toBe('asking big-coder:latest for one word (the service may first load it: up to 1 min)');
+    // The one that is loaded answers.
+    const ok = await probe({ url, kind: 'openai', model: 'small:35b', reply: true, numCtx: 32768, replyMs: 2000 });
+    expect(ok.ok).toBe(true);
+    expect(ok.steps.at(-1).text).toMatch(/^answered "ready" in/);
+  } finally { server.closeAllConnections?.(); server.close(); }
+}, 20_000);

@@ -979,7 +979,18 @@ export function App({ opts, win, onRestart }) {
     if (busyNow()) { setPicker({ ...pk, error: 'Agentic Coder is busy (a reply, or a model starting). Nothing was saved: connect again when it is done.' }); return; }
     const id = (remoteRef.current.tests = (remoteRef.current.tests ?? 0) + 1);
     setPicker({ ...pk, tried: true, test: { running: true, id }, error: null, pick: null });
-    testForm(pk, { autoPick: false }).then((res) => {
+    // The check's line says what it waits for and counts the seconds; closing the form (or a
+    // new check) stops the request, so a model is not left loading on the service for nothing.
+    const stop = new AbortController();
+    const t0 = Date.now();
+    let found = null;
+    const mine = () => { const p = S.current.picker; return p?.kind === 'remote' && p.test?.id === id ? p : null; };
+    const tick = setInterval(() => {
+      const p = mine();
+      if (!p) { stop.abort(); clearInterval(tick); return; }
+      if (p.test.running && found) setPicker({ ...p, test: { ...p.test, ...found, secs: Math.round((Date.now() - t0) / 1000) } });
+    }, 1000);
+    testForm(pk, { autoPick: false, signal: stop.signal, onStep: (f) => { found = f; } }).finally(() => clearInterval(tick)).then((res) => {
       const p = S.current.picker;
       if (p?.kind !== 'remote' || p.test?.id !== id) return;
       const done = withTest(p, res, id);
