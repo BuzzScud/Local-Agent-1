@@ -1,0 +1,64 @@
+# models/evals/battle/work28/ — Battle evaluation workspace for model performance testing (1 of 4; the next is models--evals--battle--work28-2.md)
+
+Every folder under models/evals/battle/work28/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/battle/work28/ — Battle evaluation workspace for model performance testing
+- models/evals/battle/work28/w01-contract-roll/ — Runs contract roll tests and validates output against expected values
+  - models/evals/battle/work28/w01-contract-roll/check.sh (5) — Executes tests, verifies file integrity, and checks next contract mappings
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w01-contract-roll/project/ — Folder holding contract roll logic and its tests
+  - models/evals/battle/work28/w01-contract-roll/project/contracts.mjs (13) — Exports a function to calculate the next quarterly futures contract code from a given one
+  - models/evals/battle/work28/w01-contract-roll/project/contracts.test.mjs (14) — Tests that the contract roll function correctly advances months and handles year transitions
+  - also: package.json
+- models/evals/battle/work28/w01-contract-roll/solution/ — Folder for contract roll solution logic
+  - models/evals/battle/work28/w01-contract-roll/solution/contracts.mjs (14) — Exports next quarterly futures contract code based on root and month
+- models/evals/battle/work28/w02-tick-rounding/ — Folder for tick rounding battle task and solution
+  - models/evals/battle/work28/w02-tick-rounding/check.sh (5) — Script to run tests and verify the rounding logic implementation
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w02-tick-rounding/project/ — Tick rounding logic for futures price steps
+  - models/evals/battle/work28/w02-tick-rounding/project/ticks.mjs (10) — Exports tick sizes and a rounding function
+  - models/evals/battle/work28/w02-tick-rounding/project/ticks.test.mjs (14) — Tests the tick rounding accuracy
+  - also: package.json
+- models/evals/battle/work28/w02-tick-rounding/solution/ — Tick rounding solution for futures price steps
+  - models/evals/battle/work28/w02-tick-rounding/solution/ticks.mjs (13) — Exports tick sizes and a function to round prices to the nearest valid step
+- models/evals/battle/work28/w03-trading-day/ — Runs tests and validates session logic across timezones for CME futures trading days.
+  - models/evals/battle/work28/w03-trading-day/check.sh (8) — Executes tests and verifies session output integrity against expected values in various timezones.
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w03-trading-day/project/ — Trading day logic for CME futures sessions
+  - models/evals/battle/work28/w03-trading-day/project/session.mjs (9) — Calculates the trading date from a timestamp
+  - models/evals/battle/work28/w03-trading-day/project/session.test.mjs (15) — Tests trading date calculation before and after 6 PM
+  - also: package.json
+- models/evals/battle/work28/w03-trading-day/solution/ — Calculates the CME futures trading day from a timestamp.
+  - models/evals/battle/work28/w03-trading-day/solution/session.mjs (11) — Exports a function to determine the trading date based on New York time.
+- models/evals/battle/work28/w04-camarilla/ — Camarilla battle evaluation workspace for week four
+  - models/evals/battle/work28/w04-camarilla/check.sh (13) — Runs tests and verifies camarilla function export exists
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w04-camarilla/project/ — Camarilla project folder for battle evaluation
+  - models/evals/battle/work28/w04-camarilla/project/levels.mjs (8) — Calculates pivot points and support resistance levels from price data
+  - models/evals/battle/work28/w04-camarilla/project/levels.test.mjs (11) — Tests the pivot calculation function with sample values
+  - also: package.json
+- models/evals/battle/work28/w04-camarilla/solution/ — Folder with Camarilla price level calculations and their tests
+  - models/evals/battle/work28/w04-camarilla/solution/levels.mjs (19) — Exports functions to calculate classic pivot points and Camarilla support/resistance levels from OHLC data.
+  - models/evals/battle/work28/w04-camarilla/solution/levels.test.mjs (15) — Tests the pivot point and Camarilla level calculation functions with sample price inputs.
+- models/evals/battle/work28/w05-resample-bars/ — Resample bars into larger time intervals
+  - models/evals/battle/work28/w05-resample-bars/check.sh (25) — Runs tests and verifies the resample function is exported correctly
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w05-resample-bars/project/ — Directory for resampling bars logic and tests
+  - models/evals/battle/work28/w05-resample-bars/project/bars.mjs (8) — Exports helpers to get the last close price or filter bars by time range
+  - models/evals/battle/work28/w05-resample-bars/project/bars.test.mjs (11) — Tests retrieving the last close and filtering bars within a specific time window
+  - also: package.json
+- models/evals/battle/work28/w05-resample-bars/solution/ — Resample bars into larger time intervals
+  - models/evals/battle/work28/w05-resample-bars/solution/bars.mjs (27) — Exports helpers to find last close, filter by time, and resample bars
+  - models/evals/battle/work28/w05-resample-bars/solution/bars.test.mjs (15) — Tests last close, time filtering, and bar resampling logic
+- models/evals/battle/work28/w06-daily-break-gaps/ — Tests verifying gap detection logic ignores daily market breaks → models--evals--battle--work28--w06-daily-break-gaps.md
+- models/evals/battle/work28/w07-calendar-429/ — Runs tests and validates the calendar loading logic
+  - models/evals/battle/work28/w07-calendar-429/check.sh (19) — Executes test suite and verifies zero failures with at least two new tests
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w07-calendar-429/project/ — Holds the calendar project files for loading weekly economic data.
+  - models/evals/battle/work28/w07-calendar-429/project/calendar.mjs (8) — Fetches and returns this week's economic news events from a URL.
+  - models/evals/battle/work28/w07-calendar-429/project/calendar.test.mjs (12) — Tests the calendar loader using a fake response helper.
+  - also: package.json
+- models/evals/battle/work28/w07-calendar-429/solution/ — Holds the economic calendar loading logic and its tests
+  - models/evals/battle/work28/w07-calendar-429/solution/calendar.mjs (14) — Fetches weekly news events with retry logic for rate limits
+  - models/evals/battle/work28/w07-calendar-429/solution/calendar.test.mjs (20) — Tests fetching success and handling too-many-requests errors
+- models/evals/battle/work28/w08-reconnect-backoff/ — Folder for reconnect backoff task with check script and metadata ✓

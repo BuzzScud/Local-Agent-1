@@ -1,0 +1,68 @@
+# models/evals/battle/work28/ — Battle evaluation workspace for model performance testing (3 of 4; the next is models--evals--battle--work28-4.md)
+
+Every folder under models/evals/battle/work28/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/battle/work28/w17-why-daily-gap/ — Folder for work item analyzing why daily market gaps occur → models--evals--battle--work28--w17-why-daily-gap.md
+- models/evals/battle/work28/w18-calendar-limit/ — Folder for calendar limit evaluation project
+  - models/evals/battle/work28/w18-calendar-limit/check.sh (5) — Script verifying the answer mentions four and limits.mjs
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w18-calendar-limit/project/ — Folder for calendar limit evaluation project
+  - models/evals/battle/work28/w18-calendar-limit/project/calendar.mjs (13) — Fetches weekly news events while respecting rate limits
+  - models/evals/battle/work28/w18-calendar-limit/project/limiter.mjs (15) — Controls request frequency to prevent API throttling
+  - models/evals/battle/work28/w18-calendar-limit/project/limits.mjs (7) — Defines maximum allowed requests per minute for services
+  - models/evals/battle/work28/w18-calendar-limit/project/quotes.mjs (12) — Retrieves latest stock quote while respecting rate limits
+  - also: package.json
+- models/evals/battle/work28/w18-calendar-limit/solution/ — Folder holding the solution for the calendar limit battle scenario
+  - also: answer.txt
+- models/evals/battle/work28/w19-cron-schedule/ — Folder for the w19 cron schedule battle task
+  - models/evals/battle/work28/w19-cron-schedule/check.sh (7) — Script validating answer contains specific time, days, and timezone details
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w19-cron-schedule/project/ — Holds cron schedule configuration and banking logic for contract data.
+  - models/evals/battle/work28/w19-cron-schedule/project/bank.mjs (3) — Logs a message to save one-minute bars for all contracts.
+  - models/evals/battle/work28/w19-cron-schedule/project/scheduler.mjs (9) — Loads the schedule file and parses cron jobs with time zones.
+  - also: schedule.json
+- models/evals/battle/work28/w19-cron-schedule/solution/ — Folder holding the solution for the w19 cron schedule battle task
+  - also: answer.txt
+- models/evals/battle/work28/w20-bigproject-health/ — Folder for a big project health battle evaluation task → models--evals--battle--work28--w20-bigproject-health.md
+- models/evals/battle/work28/w21-banked-contracts/ — Script to verify the model's answer contains specific codes and a duration. → models--evals--battle--work28--w21-banked-contracts.md
+- models/evals/battle/work28/w22-position-size-page/ — Folder for position size page validation scripts
+  - models/evals/battle/work28/w22-position-size-page/check.sh (12) — Script verifying HTML page content and structure
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w22-position-size-page/solution/ — Holds the solution logic for calculating position size in trading battles
+- models/evals/battle/work28/w22-position-size-page/solution/Desktop/ — Folder holding the solution for the position size page
+  - also: position-size.html
+- models/evals/battle/work28/w23-sessions-clock-page/ — Checks the clock page for charset, time zones, updates, status, and theme support
+  - models/evals/battle/work28/w23-sessions-clock-page/check.sh (9) — Validates HTML features like encoding, time zones, animation, text, and color scheme
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w23-sessions-clock-page/solution/ — Holds the final code for the clock page in work session 23
+- models/evals/battle/work28/w23-sessions-clock-page/solution/Desktop/ — Folder holding the clock page solution for work session 23
+  - also: sessions.html
+- models/evals/battle/work28/w24-trade-journal-page/ — Folder for a trade journal page evaluation task
+  - models/evals/battle/work28/w24-trade-journal-page/check.sh (10) — Script verifying the HTML file meets specific requirements like encoding and features
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w24-trade-journal-page/solution/ — Holds the final answer for the trade journal page assignment
+- models/evals/battle/work28/w24-trade-journal-page/solution/Desktop/ — Folder holding the solution for the trade journal page project
+  - also: journal.html
+- models/evals/battle/work28/w25-pivot-levels-page/ — Script to verify pivot level HTML page structure and content
+  - models/evals/battle/work28/w25-pivot-levels-page/check.sh (10) — Validates HTML file exists, has UTF-8 charset, required levels, inputs, and formatting
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w25-pivot-levels-page/solution/ — Holds the solution for the W25 pivot levels battle work
+- models/evals/battle/work28/w25-pivot-levels-page/solution/Desktop/ — Desktop folder holding the pivot levels page solution
+  - also: pivots.html
+- models/evals/battle/work28/w26-fib-levels-page/ — Checks if a fibonacci page has correct encoding, levels, controls, and input listeners
+  - models/evals/battle/work28/w26-fib-levels-page/check.sh (9) — Script verifying the HTML file contains UTF-8 charset, specific Fibonacci ratios, toggle buttons, input fields, and event handlers
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w26-fib-levels-page/solution/ — Holds the solution for the w26 fibonacci levels page task
+- models/evals/battle/work28/w26-fib-levels-page/solution/Desktop/ — Folder holding the solution for the Fibonacci levels page task
+  - also: fib.html
+- models/evals/battle/work28/w27-resume-summary/ — Folder for evaluating the twenty-seventh week resume summary task.
+  - models/evals/battle/work28/w27-resume-summary/check.sh (9) — Script verifying the summary meets specific format and content requirements.
+  - also: meta.json, task.txt
+- models/evals/battle/work28/w27-resume-summary/project/ — Directory for evaluating work28 resume summary tasks
+  - models/evals/battle/work28/w27-resume-summary/project/resume.md (17) — Alex Rivera's resume detailing six years of full-stack development experience
+  - also: job.txt
+- models/evals/battle/work28/w27-resume-summary/solution/ — Folder holding the solution for the twenty-seventh week resume summary task.
+  - models/evals/battle/work28/w27-resume-summary/solution/SUMMARY.md (7) — Markdown file containing a full-stack developer's professional summary and key technical skills.
+- models/evals/battle/work28/w28-whats-new-notes/ — Work 28 battle task w28 (the What's new notes): its task, its check, the starting project and a solution ✓
+  - models/evals/battle/work28/w28-whats-new-notes/check.sh (12) — Script verifying the update file has three new and three fixed items
+  - also: meta.json, task.txt

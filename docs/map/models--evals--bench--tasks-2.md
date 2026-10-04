@@ -1,0 +1,71 @@
+# models/evals/bench/tasks/ — Directory holding various evaluation tasks for code benchmarks (2 of 5; the next is models--evals--bench--tasks-3.md)
+
+Every folder under models/evals/bench/tasks/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/bench/tasks/16-writing-story/project/ — Folder for a story writing benchmark task named Harbour
+  - models/evals/bench/tasks/16-writing-story/project/index.mjs (2) — Exports the title of the story project as Harbour
+  - models/evals/bench/tasks/16-writing-story/project/index.test.mjs (5) — Tests that the exported title matches the expected value
+  - also: package.json
+- models/evals/bench/tasks/16-writing-story/reference/ — Folder holding reference materials for the writing story benchmark task
+  - also: STORY.txt
+- models/evals/bench/tasks/17-writing-notes-api/ — Folder for evaluating writing notes API tasks
+  - models/evals/bench/tasks/17-writing-notes-api/check.sh (6) — Script verifying notes contain routes and bullet points
+  - also: task.txt
+- models/evals/bench/tasks/17-writing-notes-api/project/ — Holds task files for writing notes API evaluation ✓
+  - models/evals/bench/tasks/17-writing-notes-api/project/server.mjs (12) — Runs HTTP server with health check and order endpoints
+  - also: package.json
+- models/evals/bench/tasks/17-writing-notes-api/reference/ — Folder for reference notes on writing notes API tasks
+  - models/evals/bench/tasks/17-writing-notes-api/reference/NOTES.md (6) — Notes documenting health check, order listing, and order creation endpoints.
+- models/evals/bench/tasks/18-writing-noncode-folder/ — Folder for the eighteenth non-code writing benchmark task
+  - models/evals/bench/tasks/18-writing-noncode-folder/check.sh (6) — Script verifying test file existence and sentence count
+  - also: task.txt
+- models/evals/bench/tasks/18-writing-noncode-folder/project/ — Holds ideas for the non-code writing task
+  - models/evals/bench/tasks/18-writing-noncode-folder/project/ideas.md (4) — Lists creative concepts in a garden format
+  - also: shopping list.txt
+- models/evals/bench/tasks/18-writing-noncode-folder/project/old/ — Old project files for writing non-code task
+  - models/evals/bench/tasks/18-writing-noncode-folder/project/old/test.mjs (2) — Stray code file with a constant export
+  - also: notes.txt
+- models/evals/bench/tasks/18-writing-noncode-folder/reference/ — Reference materials for the 18th writing non-code benchmark task
+  - also: TEST.txt
+- models/evals/bench/tasks/19-multifile-symbol/ — Tests for multi-file symbol formatting logic and configuration defaults. → models--evals--bench--tasks--19-multifile-symbol.md
+- models/evals/bench/tasks/2-fix-bug/ — Folder for a bug-fix task evaluation
+  - models/evals/bench/tasks/2-fix-bug/check.sh (4) — Script verifying tests pass and file integrity
+  - also: task.txt
+- models/evals/bench/tasks/2-fix-bug/project/ — Directory for the bug-fix task project files
+  - models/evals/bench/tasks/2-fix-bug/project/stats.mjs (16) — Exports helper functions to calculate mean, median, and range of trade prices
+  - models/evals/bench/tasks/2-fix-bug/project/stats.test.mjs (9) — Tests the statistical helper functions with sample data inputs
+- models/evals/bench/tasks/2-fix-bug/reference/ — Folder for reference data in the bug fix task
+  - models/evals/bench/tasks/2-fix-bug/reference/stats.mjs (16) — Exports mean, median, and range functions for trade price calculations.
+- models/evals/bench/tasks/20-multifile-signature/ — Tests multifile signature logic with cart and invoice → models--evals--bench--tasks--20-multifile-signature.md
+- models/evals/bench/tasks/21-bigfile-two-places/ — Tests median and summary functions for a large file task.
+  - models/evals/bench/tasks/21-bigfile-two-places/check.sh (5) — Runs tests and verifies output integrity for the big file task.
+  - also: task.txt
+- models/evals/bench/tasks/21-bigfile-two-places/project/ — Project folder for the big file task
+  - models/evals/bench/tasks/21-bigfile-two-places/project/stats.mjs (258) — Exports math functions like sum and mean ✓
+  - models/evals/bench/tasks/21-bigfile-two-places/project/stats.test.mjs (21) — Tests statistical helper functions
+  - also: package.json
+- models/evals/bench/tasks/21-bigfile-two-places/reference/ — Holds reference statistics helpers for numerical lists.
+  - models/evals/bench/tasks/21-bigfile-two-places/reference/stats.mjs (258) — Provides small statistical functions like sum, mean, and median for number arrays.
+- models/evals/bench/tasks/22-vague-fix-the-bug/ — Task to fix a vague bug in the slug project
+  - models/evals/bench/tasks/22-vague-fix-the-bug/check.sh (6) — Script verifying agent questions and slugify function correctness
+  - also: answers.json, task.txt
+- models/evals/bench/tasks/22-vague-fix-the-bug/project/ — Folder for a task to fix a vague bug in the slug project
+  - models/evals/bench/tasks/22-vague-fix-the-bug/project/README.md (6) — Explains how to use the slugify function and run tests
+  - models/evals/bench/tasks/22-vague-fix-the-bug/project/slug.mjs (9) — Exports a function that converts text into URL-safe slugs
+  - models/evals/bench/tasks/22-vague-fix-the-bug/project/slug.test.mjs (9) — Tests the slugify function with sample inputs and expected outputs
+  - also: package.json
+- models/evals/bench/tasks/22-vague-fix-the-bug/reference/ — Reference data for fixing vague bug task 22
+  - models/evals/bench/tasks/22-vague-fix-the-bug/reference/slug.mjs (9) — Function converting text into URL-friendly slugs
+  - also: asked.txt
+- models/evals/bench/tasks/23-oneword-api/ — One-word API task setup with answers, checks, and instructions.
+  - models/evals/bench/tasks/23-oneword-api/check.sh (6) — Script verifying test results and health endpoint status.
+  - also: answers.json, task.txt
+- models/evals/bench/tasks/23-oneword-api/project/ — Holds a tiny router script and its tests for handling API requests.
+  - models/evals/bench/tasks/23-oneword-api/project/server.mjs (13) — Defines a simple router that returns status codes and bodies for specific URLs. ✓
+  - models/evals/bench/tasks/23-oneword-api/project/server.test.mjs (13) — Tests the router to ensure correct responses for known and unknown paths.
+  - also: package.json
+- models/evals/bench/tasks/23-oneword-api/reference/ — Reference data for the one-word API task
+  - models/evals/bench/tasks/23-oneword-api/reference/server.mjs (14) — Simple router handling URL paths and returning responses
+  - models/evals/bench/tasks/23-oneword-api/reference/server.test.mjs (17) — Tests for trade listing, health check, and 404 errors
+  - also: asked.txt
+- models/evals/bench/tasks/24-fix-test-passing/ — Task for fixing test passing in project

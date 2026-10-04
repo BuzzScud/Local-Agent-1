@@ -1,0 +1,60 @@
+# models/evals/battle/new28/ — Battle evaluation scenarios for model performance testing (3 of 3)
+
+Every folder under models/evals/battle/new28/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/battle/new28/n16-how-slow/project/ — The starting project of battle task n16 (why is it slow?): dups.mjs and its package.json ✓
+  - models/evals/battle/new28/n16-how-slow/project/dups.mjs (11) — Exports a function to identify values appearing more than once in a list
+  - also: package.json
+- models/evals/battle/new28/n16-how-slow/solution/ — Holds the solution for the new slow battle scenario n16
+  - also: answer.txt
+- models/evals/battle/new28/n17-bigproject-config/ — Config for a large project battle setup → models--evals--battle--new28--n17-bigproject-config.md
+- models/evals/battle/new28/n18-countdown-timer/ — Folder for the n18 countdown timer battle evaluation
+  - models/evals/battle/new28/n18-countdown-timer/check.sh (12) — Script verifying the timer page exists and has required elements
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n18-countdown-timer/solution/ — Holds the solution for the new n18 countdown timer battle
+- models/evals/battle/new28/n18-countdown-timer/solution/Desktop/ — Folder holding the countdown timer solution
+  - also: timer.html
+- models/evals/battle/new28/n19-tip-calculator/ — Folder for a tip calculator evaluation task
+  - models/evals/battle/new28/n19-tip-calculator/check.sh (10) — Script verifying the generated HTML page meets specific requirements
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n19-tip-calculator/solution/ — Directory for the new tip calculator solution
+- models/evals/battle/new28/n19-tip-calculator/solution/Desktop/ — Tip calculator project folder
+  - also: tip.html
+- models/evals/battle/new28/n20-todo-page/ — Checks if the todo page meets requirements like storage and deletion. ✓
+  - models/evals/battle/new28/n20-todo-page/check.sh (11) — Verifies the HTML file exists and contains required features.
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n20-todo-page/solution/ — Holds the solution code for the new todo page task
+- models/evals/battle/new28/n20-todo-page/solution/Desktop/ — Folder holding the solution for the new todo page task
+  - also: todo.html
+- models/evals/battle/new28/n21-palette-page/ — Folder for a palette page competition entry with solution
+  - models/evals/battle/new28/n21-palette-page/check.sh (11) — Script verifying the generated HTML page meets specific requirements
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n21-palette-page/solution/ — The reference answer of battle task n21: the palette page, written under Desktop/ ✓
+- models/evals/battle/new28/n21-palette-page/solution/Desktop/ — Folder holding the solution for the new palette page battle
+  - also: palette.html
+- models/evals/battle/new28/n22-markdown-preview/ — Check script for markdown preview solution in battle n22
+  - models/evals/battle/new28/n22-markdown-preview/check.sh (12) — Script verifying the generated HTML page meets requirements
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n22-markdown-preview/solution/ — Holds the markdown preview solution for battle n22
+- models/evals/battle/new28/n22-markdown-preview/solution/Desktop/ — Folder holding the markdown preview solution
+  - also: preview.html
+- models/evals/battle/new28/n23-readme/ — Folder for evaluating a README file's content and structure.
+  - models/evals/battle/new28/n23-readme/check.sh (9) — Script verifying the presence of required documentation sections.
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n23-readme/project/ — Project folder for word frequency analysis tools
+  - models/evals/battle/new28/n23-readme/project/wordfreq.mjs (13) — Counts most frequent words in a text file ✓
+  - also: package.json
+- models/evals/battle/new28/n23-readme/solution/ — Folder for a solution to evaluate word frequency counting.
+  - models/evals/battle/new28/n23-readme/solution/README.md (29) — Document explaining how to install and run the word frequency tool.
+- models/evals/battle/new28/n24-changelog/ — Script verifying changelog entries for version twenty-eight battle evaluation
+  - models/evals/battle/new28/n24-changelog/check.sh (11) — Shell script validating specific text in the project changelog file
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n24-changelog/project/ — Directory for project changelog files
+  - models/evals/battle/new28/n24-changelog/project/CHANGELOG.md (6) — Lists version updates like redirect handling in get method
+  - also: changes.diff
+- models/evals/battle/new28/n24-changelog/solution/ — Folder holding the solution for version twenty-eight battle evaluation
+  - models/evals/battle/new28/n24-changelog/solution/CHANGELOG.md (13) — Lists updates like timeout settings and retry logic for the get function
+- models/evals/battle/new28/n25-rename-4-files/ — Folder for renaming task evaluation with checks and metadata → models--evals--battle--new28--n25-rename-4-files.md
+- models/evals/battle/new28/n26-split-module/ — Folder for splitting module logic into separate files. → models--evals--battle--new28--n26-split-module.md
+- models/evals/battle/new28/n27-callbacks-to-async/ — Tests and metadata for converting callbacks to async promises → models--evals--battle--new28--n27-callbacks-to-async.md
+- models/evals/battle/new28/n28-python-dataclass/ — Python dataclass battle task setup → models--evals--battle--new28--n28-python-dataclass.md

@@ -1,0 +1,71 @@
+# models/evals/bench/tasks/ — Directory holding various evaluation tasks for code benchmarks (1 of 5; the next is models--evals--bench--tasks-2.md)
+
+Every folder under models/evals/bench/tasks/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/bench/tasks/ — Directory holding various evaluation tasks for code benchmarks
+- models/evals/bench/tasks/1-json-flag/ — JSON flag task setup with validation checks ✓
+  - models/evals/bench/tasks/1-json-flag/check.sh (7) — Runs tests and validates JSON output format
+  - also: task.txt
+- models/evals/bench/tasks/1-json-flag/project/ — Folder for JSON flag task project files
+  - models/evals/bench/tasks/1-json-flag/project/export.mjs (20) — Script to convert trades data into CSV format
+  - models/evals/bench/tasks/1-json-flag/project/export.test.mjs (17) — Tests for the CSV export function and main logic
+  - also: trades.json
+- models/evals/bench/tasks/1-json-flag/reference/ — Reference data for the JSON flag task
+  - models/evals/bench/tasks/1-json-flag/reference/export.mjs (20) — Script to convert trades data into CSV or JSON format
+  - models/evals/bench/tasks/1-json-flag/reference/export.test.mjs (21) — Tests verifying the conversion script works correctly
+- models/evals/bench/tasks/10-fix-off-by-one/ — Fixes off-by-one error in paging logic for product lists
+  - models/evals/bench/tasks/10-fix-off-by-one/check.sh (5) — Runs tests and verifies file integrity to confirm the fix works correctly
+  - also: task.txt
+- models/evals/bench/tasks/10-fix-off-by-one/project/ — Paging helpers for product lists
+  - models/evals/bench/tasks/10-fix-off-by-one/project/pages.mjs (88) — Functions to calculate and slice pages
+  - models/evals/bench/tasks/10-fix-off-by-one/project/pages.test.mjs (9) — Tests for paging logic
+  - also: package.json
+- models/evals/bench/tasks/10-fix-off-by-one/reference/ — Holds reference paging helpers for product list tasks.
+  - models/evals/bench/tasks/10-fix-off-by-one/reference/pages.mjs (88) — Exports functions to calculate total pages and slice item lists.
+- models/evals/bench/tasks/11-fix-sort-text/ — Task to fix sorting products by price as text strings
+  - models/evals/bench/tasks/11-fix-sort-text/check.sh (4) — Runs tests and verifies the test file has not changed
+  - also: task.txt
+- models/evals/bench/tasks/11-fix-sort-text/project/ — Fixes sorting products by price as text strings
+  - models/evals/bench/tasks/11-fix-sort-text/project/sort.mjs (5) — Sorts product list by price string value
+  - models/evals/bench/tasks/11-fix-sort-text/project/sort.test.mjs (7) — Tests sorting order and input immutability
+  - also: package.json
+- models/evals/bench/tasks/11-fix-sort-text/reference/ — Reference data for sorting products by price.
+  - models/evals/bench/tasks/11-fix-sort-text/reference/sort.mjs (5) — Exports function to sort products from cheapest to dearest.
+- models/evals/bench/tasks/12-feature-currency/ — Currency formatting task setup and validation
+  - models/evals/bench/tasks/12-feature-currency/check.sh (5) — Runs tests and verifies money formatting logic
+  - also: task.txt
+- models/evals/bench/tasks/12-feature-currency/project/ — Currency formatting utility and its tests ✓
+  - models/evals/bench/tasks/12-feature-currency/project/money.mjs (5) — Exports a function to format numbers as currency strings
+  - models/evals/bench/tasks/12-feature-currency/project/money.test.mjs (6) — Tests the currency formatting function with sample values
+  - also: package.json
+- models/evals/bench/tasks/12-feature-currency/reference/ — Reference data for currency formatting feature tests
+  - models/evals/bench/tasks/12-feature-currency/reference/money.mjs (6) — Exports a function to format monetary amounts with currency symbols
+  - models/evals/bench/tasks/12-feature-currency/reference/money.test.mjs (7) — Tests formatting logic for dollars and euros
+- models/evals/bench/tasks/13-feature-python/ — Python feature task evaluation setup
+  - models/evals/bench/tasks/13-feature-python/check.sh (5) — Runs tests and validates the clamp function logic
+  - also: task.txt
+- models/evals/bench/tasks/13-feature-python/project/ — Folder for a Python task evaluating feature implementation
+  - models/evals/bench/tasks/13-feature-python/project/mathutil.py (6) — Script providing a simple function to calculate the average of numbers
+  - models/evals/bench/tasks/13-feature-python/project/test_mathutil.py (6) — Test script verifying the average calculation works correctly
+- models/evals/bench/tasks/13-feature-python/reference/ — Folder for reference implementation of a Python feature task
+  - models/evals/bench/tasks/13-feature-python/reference/mathutil.py (10) — Contains helper functions to calculate mean and clamp values
+  - models/evals/bench/tasks/13-feature-python/reference/test_mathutil.py (10) — Tests the mean and clamp helper functions
+- models/evals/bench/tasks/14-notests-perimeter/ — Task 14 folder for perimeter benchmark without tests
+  - models/evals/bench/tasks/14-notests-perimeter/check.sh (3) — Script verifying rectangle perimeter and area calculations using Node.js
+  - also: task.txt
+- models/evals/bench/tasks/14-notests-perimeter/project/ — Holds project files for the perimeter benchmark task.
+  - models/evals/bench/tasks/14-notests-perimeter/project/shapes.mjs (5) — Exports a function to calculate rectangle area.
+  - also: package.json
+- models/evals/bench/tasks/14-notests-perimeter/reference/ — Reference data for task 14 involving rectangle geometry calculations
+  - models/evals/bench/tasks/14-notests-perimeter/reference/shapes.mjs (9) — Exports functions to calculate rectangle area and perimeter dimensions ✓
+- models/evals/bench/tasks/15-notests-fahrenheit/ — Fahrenheit conversion task without tests
+  - models/evals/bench/tasks/15-notests-fahrenheit/check.sh (3) — Script verifying Fahrenheit and Celsius conversion logic
+  - also: task.txt
+- models/evals/bench/tasks/15-notests-fahrenheit/project/ — Fahrenheit conversion utilities for temperature tasks
+  - models/evals/bench/tasks/15-notests-fahrenheit/project/convert.mjs (9) — Exports functions to convert between Celsius and Fahrenheit scales
+  - also: package.json
+- models/evals/bench/tasks/15-notests-fahrenheit/reference/ — Reference data for Fahrenheit conversion tasks
+  - models/evals/bench/tasks/15-notests-fahrenheit/reference/convert.mjs (9) — Exports functions to convert temperatures between Celsius and Fahrenheit scales
+- models/evals/bench/tasks/16-writing-story/ — Script to validate the generated story file for length and content.
+  - models/evals/bench/tasks/16-writing-story/check.sh (6) — Shell script checking if the story file exists, has enough sentences, mentions a lighthouse, and is unchanged.
+  - also: task.txt

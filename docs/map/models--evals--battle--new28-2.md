@@ -1,0 +1,71 @@
+# models/evals/battle/new28/ — Battle evaluation scenarios for model performance testing (2 of 3; the next is models--evals--battle--new28-3.md)
+
+Every folder under models/evals/battle/new28/ with a plain line, its main files with a line each (lines in brackets), the rest by name. Paths are from the project's top. A line can be out of date: the code is right. A folder with an arrow has a part of its own.
+
+- models/evals/battle/new28/n09-list-pages/ — Tests for listing paginated item pages in the new28 battle evaluation.
+  - models/evals/battle/new28/n09-list-pages/check.sh (11) — Script verifying listItems function behavior with various pagination parameters.
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n09-list-pages/project/ — Holds code to list pages for the new28 battle evaluation.
+  - models/evals/battle/new28/n09-list-pages/project/list.mjs (5) — Exports a function that returns a copy of the provided items array.
+  - also: package.json
+- models/evals/battle/new28/n09-list-pages/solution/ — Holds the solution for listing paginated item pages.
+  - models/evals/battle/new28/n09-list-pages/solution/list.mjs (6) — Exports a function to slice and return one page of items with metadata.
+- models/evals/battle/new28/n10-word-count/ — Folder for the new word count evaluation task.
+  - models/evals/battle/new28/n10-word-count/check.sh (5) — Script to run tests and verify word counting logic.
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n10-word-count/project/ — Holds stats calculation logic and its tests for text analysis
+  - models/evals/battle/new28/n10-word-count/project/stats.mjs (5) — Exports a function to count characters and lines in text
+  - models/evals/battle/new28/n10-word-count/project/stats.test.mjs (6) — Tests character and line counting with sample input
+  - also: package.json
+- models/evals/battle/new28/n10-word-count/solution/ — Folder holding solution files for the new word count evaluation task.
+  - models/evals/battle/new28/n10-word-count/solution/stats.mjs (6) — Exports a function to calculate character, line, and word counts for input text.
+  - models/evals/battle/new28/n10-word-count/solution/stats.test.mjs (7) — Tests the text statistics function with various inputs to verify accuracy.
+- models/evals/battle/new28/n11-python-dry-run/ — Directory for Python dry run project files
+  - models/evals/battle/new28/n11-python-dry-run/check.sh (8) — Script to test the dry-run and real rename logic
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n11-python-dry-run/project/ — Directory for Python dry run project files
+  - models/evals/battle/new28/n11-python-dry-run/project/rename.py (14) — Script to rename text files in a folder with a prefix
+- models/evals/battle/new28/n11-python-dry-run/solution/ — Folder for Python dry-run solution files
+  - models/evals/battle/new28/n11-python-dry-run/solution/rename.py (19) — Script to rename text files with a prefix, supporting dry run mode
+- models/evals/battle/new28/n12-form-errors/ — Tests form validation logic and application output for n12 errors
+  - models/evals/battle/new28/n12-form-errors/check.sh (11) — Runs validation tests and checks app.mjs output for correctness
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n12-form-errors/project/ — Holds files for testing new28 form error handling logic
+  - models/evals/battle/new28/n12-form-errors/project/app.mjs (5) — Runs the validation function on a sample user object and logs the result
+  - models/evals/battle/new28/n12-form-errors/project/form.mjs (5) — Exports a function to check if name, age, and email are valid
+  - also: package.json
+- models/evals/battle/new28/n12-form-errors/solution/ — Holds solution files for validating sign-up form errors
+  - models/evals/battle/new28/n12-form-errors/solution/app.mjs (6) — Runs validation on sample data and prints error messages or success status
+  - models/evals/battle/new28/n12-form-errors/solution/form.mjs (9) — Exports function checking name, age, and email fields for correctness
+- models/evals/battle/new28/n13-where-log/ — Folder for battle scenario n13 logging task evaluation
+  - models/evals/battle/new28/n13-where-log/check.sh (5) — Script verifying answer contains 'record' and 'shop-activity.log
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n13-where-log/project/ — Holds project files for a logging server application
+  - models/evals/battle/new28/n13-where-log/project/app.mjs (6) — Initializes the server and logs its startup event
+  - models/evals/battle/new28/n13-where-log/project/audit.mjs (8) — Appends timestamped event entries to an activity log file
+  - models/evals/battle/new28/n13-where-log/project/config.mjs (3) — Defines the server port number and log file name
+  - models/evals/battle/new28/n13-where-log/project/files.mjs (6) — Provides a utility to append text lines to files
+  - models/evals/battle/new28/n13-where-log/project/server.mjs (6) — Starts the server and records its listening status
+  - also: package.json
+- models/evals/battle/new28/n13-where-log/solution/ — Directory holding the solution data for battle scenario n13
+  - also: answer.txt
+- models/evals/battle/new28/n14-regex-accepts/ — Script to validate regex output format and content requirements
+  - models/evals/battle/new28/n14-regex-accepts/check.sh (7) — Shell script verifying answer contains two valid codes with specific letter and digit counts
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n14-regex-accepts/project/ — Folder for regex validation logic in battle evaluation n14
+  - models/evals/battle/new28/n14-regex-accepts/project/code.mjs (3) — Exports function checking if string matches ticket code pattern
+  - also: package.json
+- models/evals/battle/new28/n14-regex-accepts/solution/ — Folder holding the solution configuration for regex acceptance test n14
+  - also: answer.txt
+- models/evals/battle/new28/n15-why-test-fails/ — Tests why n15 battle evaluation fails
+  - models/evals/battle/new28/n15-why-test-fails/check.sh (4) — Script checking if answer mentions binary floating point precision issues
+  - also: meta.json, task.txt
+- models/evals/battle/new28/n15-why-test-fails/project/ — Folder for testing why the n15 battle evaluation fails
+  - models/evals/battle/new28/n15-why-test-fails/project/round.mjs (5) — Exports a function to round numbers to decimal places
+  - models/evals/battle/new28/n15-why-test-fails/project/round.test.mjs (6) — Tests the rounding function with specific values
+  - also: package.json
+- models/evals/battle/new28/n15-why-test-fails/solution/ — Folder holding the solution details for test failure n15
+  - also: answer.txt
+- models/evals/battle/new28/n16-how-slow/ — Folder for evaluating slow performance in a battle scenario
+  - models/evals/battle/new28/n16-how-slow/check.sh (5) — Script checking if the answer mentions quadratic growth and nested loops
+  - also: meta.json, task.txt
