@@ -620,7 +620,7 @@ export class Agent extends EventEmitter {
   // rewarm: puts the saved reading of the instructions back in the model's
   // memory (the app and `coding -p` pass it), so a conversation that starts
   // over from its notes does not read the instructions again.
-  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null }) {
+  constructor({ url, model, cwd, system, thinking = true, effort, ctx = 32768, mode = 'ask', ask, waitForServer, verify = true, flows = true, maxTries = 8, testTimeoutMs = 120_000, checkIns = CHECK_INS, confirmPlan = true, slots, trimAt = TRIM_AT, fullAt = FULL, maxSteps = MAX_STEPS, bash = null, whenFull = process.env.AGENTIC_WHEN_FULL === 'trim' ? 'trim' : 'notes', rewarm, memory = null, ranker = null, helpers = null, embedder = null, indexDir, search = null, reranker = null, permissions = null, rewind = null, design, thinkBudgetSecs = budgetFromEnv(), way = 'app', hooks = null, web = null, subagents = true, home = homedir(), openPage = null, pageAsk = false, instructions = null, keepProgress = false, mcp = null, userHooks = null, steering = null }) {
     super();
     // Who decides (way.mjs): 'app' as before, or 'model'; and the app's checks switched on as
     // hooks for when the model decides (on App they all run, as they always have).
@@ -666,6 +666,9 @@ export class Agent extends EventEmitter {
     this.openPage = openPage;
     // A loop's run (/loop): changes that leave fewer tests failing, and none newly failing, stay (putBackWhy).
     this.keepProgress = Boolean(keepProgress);
+    // steering() → the notes typed to a loop's run while it works (loop-run.mjs): each goes on the end of
+    // the next step's result, so it is read now rather than when the turn ends ('steered' says so).
+    this.steering = steering;
     // Someone is at the screen to look at a saved page (askPage): the app says so; coding -p,
     // the benches and the tests check pages by themselves, as before.
     this.pageAsk = pageAsk;
@@ -1379,6 +1382,8 @@ export class Agent extends EventEmitter {
       // The helpers on (helpers.mjs), for the paths that use one.
       helpers: this.helpers,
       url: this.url, model: this.model, slot: this.slots?.side, sideSlots: this.slots?.sides ?? (this.slots?.side !== undefined ? [this.slots.side] : []), cwd: this.cwd, testCmd: this.testCmd ?? testCommand(this.cwd), testTimeoutMs: this.testTimeoutMs, signal, maxTries: this.maxTries,
+      // A loop's run: notes typed while a path works go with its next try (flows/tries.mjs), and stay with the ones after.
+      steering: this.steering ? () => this.steering() : null, notes: [],
       // Code and tests are written at the chat's thinking level (Off by default), read at each
       // call: past half the request's time it is off (steppedDown).
       get thinking() { return agent.thinking && !agent.steppedDown(); },
@@ -1606,8 +1611,9 @@ export class Agent extends EventEmitter {
       const counted = { steps: 0, tokens: 0, thinkTokens: 0 };
       const tally = ({ tokens, thought }) => { counted.steps++; counted.tokens += tokens + thought; counted.thinkTokens += thought; this.stats.outTokens += tokens + thought; };
       tallies.add(tally);
+      const fctx = this.flowContext(signal);
       try {
-        const r = await runFlows(this.flowContext(signal), text);
+        const r = await runFlows(fctx, text);
         if (r) {
           this.emit('flow-step', null);
           this.messages.push({ role: 'assistant', content: r.summary });
@@ -1621,8 +1627,10 @@ export class Agent extends EventEmitter {
           return reason;
         }
         tallies.delete(tally);
+        this.carriedNotes = [...fctx.notes]; // notes a path read before it handed over go with the first step
       } catch (e) {
         tallies.delete(tally);
+        this.carriedNotes = [...fctx.notes]; // notes a path read before it gave up go with the first step
         this.emit('flow-step', null);
         if (signal?.aborted || e.name === 'AbortError') {
           this.busy = false;
@@ -2249,9 +2257,15 @@ export class Agent extends EventEmitter {
         const nudge = await this.driftDue(signal);
         if (signal?.aborted) { reason = 'interrupted'; break; }
         const follow = this.followDue(calls, text);
-        const extra = [plan, asked, nudge, ...follow].filter(Boolean);
+        // A loop's notes: those a focused path read before it handed over (carriedNotes), then any typed since.
+        const stepped = this.messages.at(-1)?.role === 'tool';
+        const fresh = stepped ? this.steering?.() ?? [] : [];
+        const typed = [...(stepped ? this.carriedNotes?.splice(0) ?? [] : []), ...fresh];
+        const said = typed.length ? `(A note from the user, sent while you worked: ${typed.join(' · ')})` : '';
+        const extra = [plan, asked, nudge, ...follow, said].filter(Boolean);
         if (extra.length && this.messages.at(-1)?.role === 'tool') {
           this.messages.at(-1).content += `\n\n${extra.join('\n')}`;
+          if (fresh.length) this.emit('steered', { notes: fresh });
           if (plan) this.emit('note', { text: `Reminded it of its plan: ${plan.match(/\d+ of \d+ steps done/)[0]}`, tone: 'dim' });
           if (asked) this.emit('note', { text: 'Reminded it of your request', tone: 'dim' });
         }

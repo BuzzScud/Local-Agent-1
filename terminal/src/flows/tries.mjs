@@ -24,7 +24,11 @@ export async function tryUntilPass(ctx, { label, max, want = 1, system, prompt, 
     if (ctx.signal?.aborted) break;
     show();
     // Earlier failures go into the next prompt, so tries learn a little.
-    const p = typeof prompt === 'function' ? prompt({ attempt: i, best, last }) : prompt;
+    const asked = typeof prompt === 'function' ? prompt({ attempt: i, best, last }) : prompt;
+    // A note typed to a loop's run while it works (agent.mjs steering): with this try and every one after it.
+    const fresh = ctx.steering?.() ?? [];
+    if (fresh.length) { ctx.notes?.push(...fresh); ctx.emit('steered', { notes: fresh }); }
+    const p = ctx.notes?.length ? `${asked}\n\n(A note from the user, sent while you worked: ${ctx.notes.join(' · ')})` : asked;
     // First try careful; later tries a little bolder each time, so they differ.
     const temp = i === 1 ? Math.min(temperature, 0.3) : Math.min(1, temperature + 0.05 * (i - 2));
     // ctx.thinking is read at each try: past half the request's time it is off (agent.mjs).

@@ -25,7 +25,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0 }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0, steering = null, maxSteps = null, rewind = null }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -43,6 +43,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
     userHooks: ownHooks,
     // mode: the window's mode, for a loop's run (/loop); otherwise auto-approve is Accept edits, and Manual without it.
     url, model, cwd, system, thinking, effort, ctx, mode: mode ?? (autoApprove ? 'edits' : 'ask'), flows: flows !== false, slots, memory: mem, ranker, keepProgress,
+    // A loop's run: notes typed meanwhile, read at its next step, and the copies its undo puts back (rewind.mjs).
+    steering, rewind,
     // Its time for thinking (agent.mjs): the practice runs give their time limit; else as the app.
     ...(thinkBudgetSecs != null ? { thinkBudgetSecs } : {}),
     // What you saved with /permissions (coding -p passes it; the practice bench does not, so its runs measure the same every time).
@@ -93,6 +95,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   // A run from the Tests page's control panel brings its settings (AGENTIC_TEST_SETTINGS) when none are passed.
   limits ??= testLimits(model);
   if (limits) { applyLimits(agent, limits); applySearch(agent, limits); }
+  // A loop's own steps a run (its rules) over /effort's Steps per request.
+  if (maxSteps) agent.maxSteps = maxSteps;
   // A way given to the run (bench --way, coding -p --way, AGENTIC_WAY) wins over the limits' row.
   if (way ?? wayEnv()) agent.setWay(way ?? wayEnv());
   // coding -p started the server itself: restore (or read) the instructions first (the prompt and tools of its way).
@@ -101,7 +105,7 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
   if (warm && slots) await warmUp({ sessionMark: SESSION_MARK, url, model, system: agent.messages[0].content, tools: agent.tools(), thinking, effort: agent.effort, slot: slots.main, signal }).catch(() => {});
   const log = [];
   let finalText = '';
-  for (const type of ['assistant', 'tool', 'note', 'todos', 'compacted', 'tries-done', 'route', 'sorted', 'memory', 'context', 'settled']) {
+  for (const type of ['assistant', 'tool', 'note', 'todos', 'compacted', 'tries-done', 'route', 'sorted', 'memory', 'context', 'settled', 'steered']) {
     agent.on(type, (ev) => {
       log.push({ type, ...ev, at: Date.now() });
       if (type === 'assistant' && ev.final) finalText = ev.text;

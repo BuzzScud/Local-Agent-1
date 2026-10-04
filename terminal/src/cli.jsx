@@ -5,7 +5,7 @@ import { render, renderToString } from 'ink';
 import { App } from './app/App.jsx';
 import { primeRows } from './app/screen.jsx';
 import { TerminalWindow, MIN_COLS, CLEAR } from './app/window.mjs';
-import { MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath, thinkingLevel } from '../../models/index.mjs';
+import { HOME, MODELS, DEFAULT_MODEL, macMemory, ModelServer, chooseContext, contextCheck, otherCopies, hasDraft, setup, stopIdleServers, scanServers, LINGER_SECS, modelPath, modelById, serve, SERVE_PORT, connectRemote, remoteRisk, remoteLabel, withVision, visionPath, thinkingLevel } from '../../models/index.mjs';
 import { readLimits, modelWithLimits, OWN_ROWS, ownOf } from './app/limits.mjs';
 import { runHeadless } from './headless.mjs';
 import { createInterface } from 'node:readline';
@@ -363,7 +363,16 @@ if (opts.print) {
     opts.prompt = spec.prompt;
     const { modeOf } = await import('./agent/permissions.mjs');
     const mode = modeOf(opts.mode) ?? 'ask';
-    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode };
+    loop = { io: loopIO({ mode, allow: spec.allow ?? [] }), mode, steps: Number(spec.steps) || null, rewind: null, points: [] };
+    // Its copies for undo (rewind.mjs): one session a loop, kept apart from the window's own. Each message
+    // of the run is a point; the window puts back from the first to the last (loops.mjs undo).
+    if (spec.rewind && process.env.AGENTIC_REWIND !== 'off') {
+      const { Rewind } = await import('./app/rewind.mjs');
+      const rw = new Rewind({ home: HOME, session: String(spec.rewind) });
+      const finish = rw.finish.bind(rw);
+      rw.finish = async (...a) => { const p = await finish(...a); if (p) loop.points.push(p); return p; };
+      loop.rewind = rw;
+    }
     // Plan mode only reads, as in the window.
     if (mode === 'plan' && opts.prompt) opts.prompt += '\n\n[Plan mode is on: only read and search. Do not change files or run commands that change anything. Reply with a short numbered plan, then stop.]';
     process.on('SIGTERM', () => process.exit(143));
@@ -479,7 +488,7 @@ if (opts.print) {
       answers: process.stdin.isTTY && !loop ? askOnTerminal : null,
       // A loop's run: its window's mode, its questions answered on the loop board, a note typed there sent
       // when the turn ends, and a half-fix kept when fewer tests fail (agent.mjs madeProgress).
-      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, signal: loop.io.signal, keepProgress: true } : {}),
+      ...(loop ? { mode: loop.mode, askUser: loop.io.ask, more: loop.io.more, steering: loop.io.steering, signal: loop.io.signal, keepProgress: true, maxSteps: loop.steps, rewind: loop.rewind } : {}),
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
       onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });
@@ -488,7 +497,13 @@ if (opts.print) {
     if (process.env.AGENTIC_TRANSCRIPT) {
       try { (await import('node:fs')).writeFileSync(process.env.AGENTIC_TRANSCRIPT, JSON.stringify({ reason: r.reason, secs: r.secs, steps: r.steps, outTokens: r.outTokens, asked: r.asked, finalText: r.finalText, messages: r.messages, log: r.log })); } catch (e) { process.stderr.write(`· the transcript was not written: ${e.message}\n`); }
     }
-    if (loop) loop.io.end(r); else process.stdout.write(`${r.finalText.trim()}\n`);
+    if (loop) {
+      // What it cost on a paid service, and its copies for undo with the files it changed (its own, not another's).
+      const { windowSpend } = await import('./agent/spend.mjs');
+      const files = new Map();
+      for (const p of loop.points) for (const f of p.files ?? []) if (f.by !== 'other' && !files.has(f.path)) files.set(f.path, { path: f.path, by: f.by });
+      loop.io.end(r, { usd: windowSpend().usd, point: loop.points[0]?.n ?? null, until: loop.points.at(-1)?.n ?? null, files: [...files.values()] });
+    } else process.stdout.write(`${r.finalText.trim()}\n`);
     await stop();
     process.exit(r.reason === 'done' ? 0 : 1);
   } catch (e) {

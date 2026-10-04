@@ -388,12 +388,16 @@ export class Rewind {
   // What going back to before message n would do, without doing it.
   // put: files that go back; skip: files changed since (left alone);
   // others: files that changed while it worked, not by its edits or commands.
-  plan(n) {
+  // only: message n alone, not the ones after it; until: from n to that message (a loop's run is one
+  // message or a few, loops.mjs undo). A file a later message changed is then "changed since" and left alone.
+  plan(n, { only = false, until = null } = {}) {
     const from = this.points.findIndex((p) => p.n === n);
     if (from < 0) return null;
+    const last = until != null ? this.points.findIndex((p) => p.n === until) : only ? from : -1;
+    const span = this.points.slice(from, last >= from ? last + 1 : undefined);
     const touches = new Map();
     const others = [];
-    for (const p of this.points.slice(from)) {
+    for (const p of span) {
       for (const f of p.files) {
         const abs = join(p.cwd, f.path);
         if (f.by === 'other') { if (!others.some((o) => o.abs === abs)) others.push({ abs, rel: f.path, cwd: p.cwd }); continue; }
@@ -404,7 +408,7 @@ export class Rewind {
     }
     const put = [];
     const skip = [];
-    const edits = this.points.slice(from).some((p) => p.mode !== 'full');
+    const edits = span.some((p) => p.mode !== 'full');
     for (const [abs, list] of touches) {
       const first = list[0];
       const item = { abs, rel: first.f.path, cwd: first.p.cwd, to: first.f.before, mode: first.f.bmode, before: first.p.before, list };
@@ -419,8 +423,8 @@ export class Rewind {
   }
 
   // Puts the files back. Returns the plan it followed, with what failed.
-  async restore(n) {
-    const plan = this.plan(n);
+  async restore(n, { only = false, until = null } = {}) {
+    const plan = this.plan(n, { only, until });
     if (!plan) return null;
     const failed = [];
     const done = [];
