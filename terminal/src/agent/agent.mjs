@@ -8,7 +8,7 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
-import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, planSaid } from './questions.mjs';
+import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid } from './questions.mjs';
 import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
@@ -17,7 +17,10 @@ import { rankFiles } from './rank.mjs';
 import { decide, isReadOnly, testRunOf, offerFor, protectedBy, ownBy } from './permissions.mjs';
 import { testCommand, systemPrompt, projectNotes, gitSummary, isHomeFolder, notesRoom, promptSetOf } from './prompt.mjs';
 import { sortBug, kindText } from './rules.mjs';
-import { lookSecs, LOOK_NOTE, LOOK_BACKS, lookBackNote } from './look.mjs';
+import { lookSecs, LOOK_NOTE, LOOK_NOTE_DATA, LOOK_BACKS, lookBackNote } from './look.mjs';
+import { folderKind, folderCard, namesInRequest, namesQuestion } from './folder.mjs';
+import { filesMade, madeNote } from './made.mjs';
+import { inScripts } from './scripts.mjs';
 import { pickSkill, skillNote, readSkills, skillsList, skillPath, toolUseFor, rulesSetOf, readGuides, guidesList, guidePath, harnessOf, readHelperAgents } from './prompt-files.mjs';
 import { sortMath, mathNotes, mathIndex } from './expertise.mjs';
 import { isDesignRequest, pickCards, designNotes, designSettings, mixTurn } from './design.mjs';
@@ -58,7 +61,7 @@ import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksA
 import { CodeIndex, sameAsIndexed, partKey, CUT, MARGIN } from '../tools/codeindex.mjs';
 import { choose, howChosen } from './search.mjs';
 import { IMAGE_TOKENS } from './images.mjs';
-import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage } from './helper-models.mjs';
+import { useOf, describePictures, describedNote, reviewChange, checkPagePicture, screenshotPage, canQuickLook } from './helper-models.mjs';
 import { openingRead, openingOn, memorySent, mapsRead } from './opening.mjs';
 import { isMcpCall, MCP_TOOL, mcpPlan, mcpToolDefs, mcpBrief, requestNote, requestHits, callHint, unwrapArgs, gateCall, madeUpCall, mcpCallInText, findEntry, describeEntry, describeServer, argLines, checkArgs, argsPreview, resultParts, resultText, catalogStamp, mcpRule } from './mcp.mjs';
 import { pictureFor } from '../tools/mcp.mjs';
@@ -1018,8 +1021,8 @@ export class Agent extends EventEmitter {
   // back to the model (the first look, and the second of LAYOUT_ROUNDS).
   // `quiet`: no notes (the look at the end of the turn, see stillBroken).
   async checkLayout(again = false, { quiet = false, send = !again } = {}) {
-    if (!designSettings(this.designSaved).check || !this.turn?.startTexts?.size) return null;
-    const pages = pagesToCheck(this.cwd, [...this.turn.startTexts.keys()]);
+    if (!designSettings(this.designSaved).check || !(this.turn?.startTexts?.size || this.madePages().length)) return null;
+    const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? []), ...this.madePages()]);
     if (!pages.length) return null;
     const chrome = findChrome();
     if (!chrome) {
@@ -1159,7 +1162,7 @@ export class Agent extends EventEmitter {
   withTurnNotes(messages) {
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {
@@ -1293,7 +1296,7 @@ export class Agent extends EventEmitter {
   // and `coding -p` give one), so a move to another project switches the lists;
   // read at every call, so a rule saved in another window counts at once.
   savedRules() { return (typeof this.permissions === 'function' ? this.permissions(this.cwd) : this.permissions) ?? null; }
-  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
+  reset(system) { for (const j of this.jobs.all) j.orphan = true; this.jobNews = []; this.conversation = newConversation(); this.messages = [{ role: 'system', content: system ?? this.messages[0].content }]; this.todos = null; this.readFiles = new SeenFiles(); this.mapGiven = false; this.keptWrite = null; this.desktopAsked = false; this.desktopMade = null; this.mcpFrozen = null; this.mcpPlans = null; this.cardsGiven = new Set(); this.ctxUsed = tokensOf(this.messages[0].content) + 1200; }
   // A new conversation (/clear) starts in the folder Agentic Coder was started
   // in: a yes to "Work in <project>?" lasts for its conversation only, and each
   // project can be offered again. True when it moved back.
@@ -1311,9 +1314,12 @@ export class Agent extends EventEmitter {
 
   // Past half this request's time for thinking (THINK_BUDGET_SECS): true, and the first time a
   // note says so. Never with thinking off, a budget of 0, or AGENTIC_THINK=old.
+  // Not while steps are failing in a row (4 Oct 2026, the owner's pick: it stepped down right after a
+  // script failed, and three quick fixes in a row failed too); it steps down after one that works.
   steppedDown() {
     if (!this.thinking || !(this.thinkBudgetSecs > 0) || !this.requestStarted || oldThinking()) return false;
     if (Date.now() - this.requestStarted < this.thinkBudgetSecs * 500) return false;
+    if (this.turn?.errorsInRow > 0) return false;
     if (this.steppedAt == null) {
       this.steppedAt = Date.now();
       this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking briefly from here, to finish in time`, tone: 'dim' });
@@ -1693,10 +1699,14 @@ export class Agent extends EventEmitter {
     // by step here; not a follow-up (it continues a turn that already looked), not in the home
     // folder (a general question there needs no files), not for a helper (it is part of the looking),
     // not for a request that names one of your MCP servers (its answer is there, not in the project).
+    // A folder that is not a code project (folder.mjs, 4 Oct 2026): what it says about itself (its
+    // README, its manifest) goes with the first request there, and the names the request uses are
+    // matched against it; when the folder does not settle which one is meant, you are asked.
+    const folder = !follow && !this.isHelper && request?.role === 'user' && typeof request.content === 'string' ? await this.folderNotes(text, request, signal) : null;
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     let lookBacks = 0;
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
-      this.turn.look = { request, notes: LOOK_NOTE };
+      this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };
       this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim' });
     }
     if (bug && request?.role === 'user' && typeof request.content === 'string') {
@@ -2157,8 +2167,8 @@ export class Agent extends EventEmitter {
           }
           // A page this message changed, and asking first: it is yours to look at before any check
           // (askPage), now that the model says it is done and the page is where it was asked for.
-          if (this.turn.changed && !layoutDone && !signal?.aborted && this.askFirst() && layoutSends < LAYOUT_ROUNDS) {
-            const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? [])]);
+          if ((this.turn.changed || this.madePages().length) && !layoutDone && !signal?.aborted && this.askFirst() && layoutSends < LAYOUT_ROUNDS) {
+            const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? []), ...this.madePages()]);
             if (pages.length) {
               const a = await this.askPage(pages, signal, { again: layoutSends > 0 });
               if (a.end) { reason = a.end; break; }
@@ -2297,6 +2307,7 @@ export class Agent extends EventEmitter {
         repeats = key === repeatKey && !paged ? repeats + 1 : 0;
         repeatKey = key;
         errorsInRow = landed ? 0 : errorsInRow + 1;
+        this.turn.errorsInRow = errorsInRow;
         if (repeats >= 3 || errorsInRow >= 5) {
           reason = 'stuck';
           this.emit('note', { text: repeats >= 3 ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
@@ -2535,7 +2546,7 @@ export class Agent extends EventEmitter {
     return named.filter((p) => {
       const rel = p.replace(/^\.\//, '');
       if (made.has(rel) || [...made].some((m) => m.endsWith(`/${rel}`) || m.split('/').pop() === rel)) return false;
-      if (existsSync(join(this.cwd, rel)) || existsSync(join(base, rel))) return false;
+      if (existsSync(join(this.cwd, rel)) || existsSync(join(base, rel)) || (/^SCRIPTS\//.test(rel) && existsSync(resolvePath(this.cwd, rel).abs))) return false;
       return rel.includes('/') ? !all.some((f) => f === rel || f.endsWith(`/${rel}`)) : !names.has(rel);
     }).concat(full);
   }
@@ -2953,7 +2964,8 @@ export class Agent extends EventEmitter {
     // request would go out and run to its end. It is not sent.
     if (signal?.aborted) local.abort();
     // The screen's meters: the most this reply may write, and its thinking cap.
-    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048 });
+    // whole: an Ollama service sends a tool call whole when it is written, so a long one streams nothing (screen.jsx says so).
+    this.emit('waiting', { room: maxTokens, thinkCap: !thinking ? 0 : this.steppedDown() ? STEP_DOWN_CAP : thinkCap ?? this.model?.thinkingBudget ?? 2048, whole: Boolean(endpointOf(this.url)?.ollama) });
     this.answering = (this.answering ?? 0) + 1;
     try {
       // Text only: the model may still start writing a call out as text, so the server stops there.
@@ -3485,6 +3497,18 @@ export class Agent extends EventEmitter {
     }
     // A command may have written files the Edit and Write counts never see.
     if (this.turn && call.name === 'Bash') this.turn.ranCommand = true;
+    // A long script it typed in is saved as SCRIPTS/… (scripts.mjs): it has seen it, so Edit may change it.
+    if (call.name === 'Bash' && out.saved?.abs) this.readFiles.add(out.saved.abs);
+    // The files a command wrote (made.mjs): said in its result, kept for the page checks and the second look.
+    if (this.turn && call.name === 'Bash' && out.view?.kind === 'bash' && !out.view.timedOut && !isReadOnly(args.command)) {
+      let made = [];
+      try { made = filesMade(args.command, { since: t0, cwd: this.cwd, home: this.home, dirs: [this.cwd, this.turn.workFolder, this.desktopDir] }).filter((f) => !inScripts(f.abs)); } catch {}
+      if (made.length) {
+        this.turn.madeByCommand ??= new Map();
+        for (const f of made) this.turn.madeByCommand.set(f.abs, f.bytes);
+        out.text += `\n${madeNote(made, (p) => this.tilde(p))}`;
+      }
+    }
     // One that could have written a file (not ls, git log, cat…): the "said done, nothing changed" check counts it as a change.
     if (this.turn && call.name === 'Bash' && !isReadOnly(args.command)) this.turn.wroteByCommand = true;
     // A run of the tests (the project's test command, this message's check, or a test runner): only
@@ -4054,11 +4078,12 @@ export class Agent extends EventEmitter {
   // looked at by a helper that sees. Answers the message that goes back, or null.
   async lookAtPages(signal) {
     const use = this.helperUse('designCheck');
-    if (!use || !this.turn?.startTexts?.size) return null;
-    const pages = pagesToCheck(this.cwd, [...this.turn.startTexts.keys()]);
+    if (!use || !(this.turn?.startTexts?.size || this.madePages().length)) return null;
+    const pages = pagesToCheck(this.cwd, [...(this.turn.startTexts?.keys() ?? []), ...this.madePages()]);
     if (!pages.length) return null;
+    // No Chrome: a Mac takes the picture with Quick Look (helper-models.mjs screenshotPage).
     const chrome = findChrome();
-    if (!chrome) return null;
+    if (!chrome && !canQuickLook()) return null;
     const notes = [];
     for (const rel of pages) {
       const abs = resolvePath(this.cwd, rel).abs;
@@ -4161,12 +4186,68 @@ export class Agent extends EventEmitter {
     return { asked: true, text: `[Check-in] You asked whether you are on the right track. The user answered: ${text}\nFollow that.` };
   }
 
+  // The folder a request works in, when it is not a code project (folder.mjs, 4 Oct 2026): what it
+  // says about itself the first time in a conversation, the names the request uses, and a question
+  // for a name the folder does not settle. { kind } (null for the home folder).
+  async folderNotes(text, request, signal) {
+    const dir = this.turn?.workFolder ?? (isHomeFolder(this.cwd, this.home) ? null : this.cwd);
+    if (!dir) return null;
+    this.folderKinds ??= new Map();
+    let kind = this.folderKinds.get(dir);
+    if (!kind) { try { kind = folderKind(dir); } catch { return null; } this.folderKinds.set(dir, kind); }
+    if (kind === 'code') return { kind };
+    this.cardsGiven ??= new Set();
+    this.folderLabels ??= new Map();
+    let card = null;
+    if (!this.cardsGiven.has(dir)) { try { card = folderCard(dir); } catch {} this.cardsGiven.add(dir); }
+    if (card) this.folderLabels.set(dir, card.labels);
+    // Names only in a folder of data: in any other, a request's words match its files' names too often.
+    let names = null;
+    if (kind === 'data') { try { names = namesInRequest(text, dir, { labels: this.folderLabels.get(dir) ?? new Map() }); } catch {} }
+    const said = [];
+    for (const u of (names?.unclear ?? []).slice(0, 2)) {
+      if (signal?.aborted) break;
+      const a = await this.namesAsk(u, signal);
+      if (a) said.push(`The user says "${u.word}" means ${a}.`);
+    }
+    const notes = [card ? `What this folder says about itself (${card.files.join(', ')}; Read the file for the rest):\n${card.text}` : '', names?.note ?? '', said.join(' ')].filter(Boolean).join('\n\n');
+    if (!notes) return { kind };
+    this.turn.folder = { request, notes };
+    this.ctxUsed += tokensOf(notes);
+    const words = (names?.matched ?? []).map((m) => `${m.word} → ${m.to ?? 'asked'}`).join(', ');
+    this.emit('note', { text: `${card ? `Read the folder's ${card.files.join(' and ')}` : 'This folder'}${words ? ` · names in your request: ${words}` : ''}`, tone: 'dim' });
+    return { kind };
+  }
+
+  // One question for a name of the request that the folder does not settle (folder.mjs namesQuestion).
+  // What to tell the model, or null (no answer, no one to ask).
+  async namesAsk(u, signal) {
+    const q = namesQuestion(u);
+    const { question } = q;
+    const id = `names_${Date.now()}`;
+    this.emit('tool-ask', { id, name: 'Ask', label: 'Ask', arg: question });
+    const answer = await this.ask({ id, name: 'Ask', kind: 'names', args: q, prepared: {}, label: 'Ask', arg: question });
+    if (signal?.aborted || answer?.choice === 'skip') return null;
+    const text = String(answer?.text ?? answer?.feedback ?? '').trim();
+    if (!text) return null;
+    this.turn?.asked.push(question);
+    this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text } });
+    const g = u.groups.find((x) => x.key.toLowerCase() === text.toLowerCase() || /^yes\b/i.test(text) && u.groups.length === 1);
+    if (/^all of them$/i.test(text)) return u.groups.map((x) => `${x.key} (${x.names.join(', ')})`).join(' and ');
+    return g ? `${g.key} (${g.names.join(', ')})` : `"${text}"`;
+  }
+
+  // The pages a command wrote this message (made.mjs), as paths from the project folder.
+  madePages() {
+    return [...(this.turn?.madeByCommand?.keys() ?? [])].filter((a) => /\.html?$/i.test(a) && existsSync(a)).map((a) => relative(this.cwd, a));
+  }
+
   // Stuck: the same step twice, or three tool errors in a row. One question
   // with what went wrong; a hint goes straight to the model.
   async stuckAsk(why, call, out, signal) {
     const t = this.turn;
     const step = stepSaid(call.name, parseArgs(call.name, call.args).args ?? {});
-    const err = String(out?.text ?? '').split('\n').find((l) => l.trim())?.trim().slice(0, 160) ?? '';
+    const err = errorSaid(call.name, out?.text);
     const q = stuckQuestion(why, step, err);
     const { question } = q;
     const id = `stuck_${Date.now()}`;

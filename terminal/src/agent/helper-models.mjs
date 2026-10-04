@@ -13,9 +13,9 @@
 // (client.mjs `use`); one that cannot load or answer never stops the work: the job
 // falls back to the main model or is skipped, with a note.
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { streamChat } from './client.mjs';
 import { authHeaders } from '../../../models/index.mjs';
@@ -91,8 +91,21 @@ export function findingsOf(text) {
 
 // A 1440 × 900 picture of a page in headless Chrome (layoutcheck's findChrome), as
 // the conversation carries one: { path, mime, data, w, h }; null when it cannot be made.
+// Quick Look (macOS qlmanage) draws a page's top when there is no Chrome (4 Oct 2026: the Mac the
+// owner's report page was made on has none, so no page was ever looked at there).
+export const canQuickLook = () => process.platform === 'darwin' && existsSync('/usr/bin/qlmanage');
+function quickLookPage(abs) {
+  const dir = mkdtempSync(join(tmpdir(), 'agentic-look-'));
+  try {
+    spawnSync('/usr/bin/qlmanage', ['-t', '-s', '1440', '-o', dir, abs], { timeout: 30_000, stdio: 'ignore' });
+    const png = readFileSync(join(dir, `${basename(abs)}.png`));
+    // The size from the PNG's own header (IHDR: width at byte 16, height at 20).
+    return { path: abs, mime: 'image/png', data: png.toString('base64'), w: png.readUInt32BE(16), h: png.readUInt32BE(20) };
+  } catch { return null; } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
 export function screenshotPage(abs, chrome) {
-  if (!chrome) return null;
+  if (!chrome) return canQuickLook() ? quickLookPage(abs) : null;
   const dir = mkdtempSync(join(tmpdir(), 'agentic-look-'));
   const out = join(dir, 'page.png');
   try {
