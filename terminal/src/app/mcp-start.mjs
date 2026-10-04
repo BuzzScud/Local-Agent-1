@@ -7,7 +7,7 @@ import { McpHub } from '../tools/mcp.mjs';
 import { serversFor, serverKey, knownEra, rememberEra, mcpLogFile, allowedPrint, rememberAllowed } from './mcp-store.mjs';
 import { oauthProvider } from './mcp-auth.mjs';
 
-export const mcpOff = (env = process.env) => /^(off|0|false|no)$/i.test(String(env.AGENTIC_MCP ?? ''));
+const mcpOff = (env = process.env) => /^(off|0|false|no)$/i.test(String(env.AGENTIC_MCP ?? ''));
 
 // { hub, project, broken }: the hub with its servers starting in the background; project: the
 // folder's own mcp.json as it is (asked about by the app; never started unasked); broken: why a

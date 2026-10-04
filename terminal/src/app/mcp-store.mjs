@@ -28,14 +28,14 @@ import { SERVER_NAME } from '../agent/mcp.mjs';
 // Read when used, not at import, so tests can point it at their own home.
 const home = () => process.env.AGENTIC_HOME ?? join(homedir(), '.agentic-coder');
 export const mcpFile = () => join(home(), 'mcp.json');
-export const mcpStateFile = () => join(home(), 'mcp-state.json');
+const mcpStateFile = () => join(home(), 'mcp-state.json');
 export const projectMcpFile = (cwd) => join(cwd, '.agentic', 'mcp.json');
 export const mcpLogFile = (name) => join(home(), 'logs', `mcp-${name}.log`);
 const tilde = (p) => (String(p).startsWith(homedir()) ? `~${String(p).slice(homedir().length)}` : p);
 const sha = (text, n = 16) => createHash('sha256').update(text).digest('hex').slice(0, n);
 
-export const AUTHS = ['none', 'key', 'oauth'];
-export const MAX_SERVERS = 24;
+const AUTHS = ['none', 'key', 'oauth'];
+const MAX_SERVERS = 24;
 
 // A command line as its words: spaces split, quotes keep ("--name=a b" stays one word). Unlike a
 // shell command's words (permissions.mjs), "=" and "," are part of a word here.
@@ -55,7 +55,7 @@ const quoted = (w) => (/[\s"']/.test(w) || w === '' ? `"${w.replace(/"/g, '\\"')
 export const commandLine = (s) => [s.command, ...(s.args ?? [])].filter((w) => w !== undefined && w !== null).map((w) => quoted(String(w))).join(' ');
 
 // The Keychain entry of a server's key. A project's server has its own, by the folder it is in.
-export const mcpKeyId = (name, from = 'you', cwd = null) => (from === 'project' && cwd ? `mcp-p${sha(realFolder(cwd), 8)}-${name}` : `mcp-${name}`);
+const mcpKeyId = (name, from = 'you', cwd = null) => (from === 'project' && cwd ? `mcp-p${sha(realFolder(cwd), 8)}-${name}` : `mcp-${name}`);
 
 // One server as the app uses it, from what a file holds. null: not a server (no command, no address).
 export function serverOf(name, raw, { from = 'you', cwd = null } = {}) {
@@ -77,7 +77,7 @@ export function serverOf(name, raw, { from = 'you', cwd = null } = {}) {
 }
 
 // A server as its file keeps it (the form saves this).
-export function toFile(s) {
+function toFile(s) {
   const tools = { ...(s.marks?.off?.length ? { off: s.marks.off } : {}), ...(Object.keys(s.marks?.reads ?? {}).length ? { reads: s.marks.reads } : {}) };
   const common = { ...(s.on === false ? { on: false } : {}), ...(s.timeout ? { timeout: s.timeout } : {}), ...(s.hasKey ? { key: { end: s.keyEnd ?? '' } } : {}), ...(Object.keys(tools).length ? { tools } : {}) };
   if (s.runs === 'address') return { url: s.url, auth: s.auth ?? 'none', ...(s.header && s.header !== 'Authorization' ? { header: s.header } : {}), ...(s.claude === 'connector' ? { claude: 'connector' } : {}), ...common };
