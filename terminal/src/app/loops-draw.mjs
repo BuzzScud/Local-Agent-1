@@ -150,7 +150,7 @@ const isTest = (x) => (typeof x.test === 'boolean' ? x.test : labelOf(x) === 'Ba
 
 // ---- a card: Now, Last, Next and You, in words ----
 // What the run is doing now: the step it is on, read off its lines.
-export function nowWords(l, lines, now) {
+function nowWords(l, lines, now) {
   const q = l.current?.needs;
   if (q) return [`! asks you: ${q.text}`, 'warn'];
   if (l.ready && !l.current) return [`! run ${l.ready.n} waits for your go`, 'warn'];
@@ -174,7 +174,7 @@ export function nowWords(l, lines, now) {
   return ['○ waiting for its next run', 'dim'];
 }
 // How its last run ended.
-export function lastWords(l) {
+function lastWords(l) {
   const r = l.runs.at(-1);
   if (!r) return ['no run yet', 'faint'];
   if (r.undone) return [`↶ run ${r.n} put back${r.undone.put?.length ? `: ${r.undone.put.join(', ')}` : ''}`, 'dim'];
@@ -243,11 +243,6 @@ function logPieces(state, e, w) {
   if (e.kind === 'new') return [...head, p(`${name}: `, 'dim'), p(cut(`a new loop · ${e.text}`, room - name.length - 2), 'text')];
   return [...head, p(l ? `${name}: ` : '', 'dim'), p(cut(e.text, room - name.length - 2), 'dim')];
 }
-// The first loop that waits because it stopped getting closer (loops.mjs stuckWhy).
-const stuckOf = (state) => state.loops.find((l) => l.stuck && !l.current) ?? null;
-// The loop whose next run waits longest for your go (Ask first).
-export const readyOf = (state) => state.loops.filter((l) => l.ready && !l.current).sort((a, b) => a.ready.since - b.ready.since)[0] ?? null;
-export const askingOf = (state) => state.loops.filter((l) => l.current?.needs).sort((a, b) => a.current.needs.since - b.current.needs.since)[0] ?? null;
 // What waits for you: the picked loop's question (its choices on a row of their own), its go, its
 // hint; else a line naming another loop that waits, and how to pick it.
 function needRows(state, ui, cols) {
