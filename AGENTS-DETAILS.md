@@ -339,9 +339,9 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
 - **What a loop is** (`terminal/src/app/loops.mjs`, the owner's ask: "add a /loop command. can we make a terminal
   window appear, so we can manage loops for agents?"). `/loop [debug|test|web] [10m] [message]` (`parseLoop`) makes a
   message the app sends again by itself. The owner's picks, asked in two rounds: a loop **stops with its window**
-  (the `Loops` object lives in App.jsx and is closed at quit); each run is a **fresh conversation** told how the last
-  one ended (`loopNote`); a run that would ask is **paused, "needs you"**, and the others go on; runs work **right in
-  the folder**; they **wait while the model is off** or the window is answering (`status()`: nothing loads for a
+  (the `Loops` object lives in App.jsx and is closed at quit); each run is a **fresh conversation** told what the
+  earlier runs did, a line each, the last eight (`loopNote`; before 4 Oct 2026 only the last one); a run that would
+  ask is **paused, "needs you"**, and the others go on; runs work **right in the folder**; they **wait while the model is off** or the window is answering (`status()`: nothing loads for a
   loop); a loop **ends** when a run says `LOOP DONE`, when a debugging loop's tests pass, or after 24 hours ($5 on a
   paid service); one run at a time on this Mac's model, three on a service. The shortest gap is a minute
   (`AGENTIC_LOOP_MIN_SECS` for the tests).
@@ -355,6 +355,15 @@ Agentic Coder reads only AGENTS.md. A new feature's notes go here, not into AGEN
   when the last check failed but fewer tests fail than before the message and none fails newly (`madeProgress` in
   agent.mjs, read with `readResults`; unknown counts, or more than ten failing names, count as no progress).
   Everywhere else a message that ends on a failing check still has its changes put back.
+- **A fixing loop that is not getting closer waits for you** (4 Oct 2026, the owner's pick): a test run's step says how
+  many fail (`tests.count`), each run keeps it (`failing`), and when a `debug` loop's last two runs end with as many
+  failing or more (`stuckWhy`), it pauses as "needs you · stuck" instead of a new try 15 s later. A note typed to it
+  sends it on at once with the note; r and p send it on as it is. Test, web and other loops are meant to repeat and
+  never stop this way.
+- **Its plan stays in sight** (4 Oct 2026, every message, not only loops): five steps after the model last saw its
+  TodoWrite list, a line with the step under way and the next ones goes on the end of that step's result
+  (`planDue`, `planReminder`; on the end so the conversation before it is not read again), and when memory fills the
+  whole list goes into its notes (`restartFrom`). Only a plan written in the same message counts.
 - **The board** (`coding loops`, `/loops`; `loops-board.mjs`, drawn by `loops-draw.mjs`) is a program of its own in
   a Terminal window of its own (`openBoardWindow`, like the door's window). It reads `<home>/loops/<pid>/state.json`
   and each run's `run-<loop>-<n>.jsonl` five times a second and sends its keys back as files in `cmd/`, which the

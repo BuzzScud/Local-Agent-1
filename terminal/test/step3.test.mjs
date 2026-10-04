@@ -6,7 +6,7 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { Agent, AUTO } from '../src/agent/agent.mjs';
+import { Agent, AUTO, planReminder } from '../src/agent/agent.mjs';
 import { execute, toolSchemas } from '../src/agent/tools.mjs';
 import { systemPrompt } from '../src/agent/prompt.mjs';
 import { MODELS, DEFAULT_MODEL } from '../../models/index.mjs';
@@ -263,6 +263,45 @@ test('an output the model has not read yet is held back from the notes and follo
   // The instructions come back from their saved reading, once, after the restart.
   expect(warmed).toEqual([6]);
 }, 30_000);
+
+// ————— Its plan stays in sight (4 Oct 2026) —————
+
+const PLAN = { tool: { name: 'TodoWrite', args: { todos: [
+  { text: 'Read export.mjs and its test', status: 'in_progress' },
+  { text: 'Fix the empty-list case in toCsv', status: 'pending' },
+  { text: 'Run the tests', status: 'pending' },
+] } } };
+const REMINDER = '(Your plan: 0 of 3 steps done. Now: "Read export.mjs and its test". Then: "Fix the empty-list case in toCsv"; "Run the tests". Keep to it, and send TodoWrite when a step is done or the plan changes.)';
+
+test('its plan comes back with a step\'s result five steps after it last saw it, while steps are left', async () => {
+  const looks = [
+    { tool: { name: 'Read', args: { path: 'export.mjs' } } },
+    { tool: { name: 'Read', args: { path: 'export.test.mjs' } } },
+    { tool: { name: 'Read', args: { path: 'trades.json' } } },
+    { tool: { name: 'Search', args: { pattern: 'toCsv' } } },
+    { tool: { name: 'List', args: { path: '.' } } },
+  ];
+  const { agent, events, fake } = await run(demo(), 'fix the bug: the total is wrong when the list is empty', [PLAN, ...looks, { text: 'The header is dropped for an empty list.' }], { flows: false });
+  // Steps 2–5 go as they are; the fifth step after the plan (the List) carries it, on the end of its result.
+  const results = agent.messages.filter((m) => m.role === 'tool').map((m) => m.content);
+  expect(results.filter((r) => r.includes('(Your plan:'))).toHaveLength(1);
+  expect(results[5].endsWith(`\n\n${REMINDER}`)).toBe(true);
+  expect(fake.requests.filter((r) => r.stream)[6].messages.findLast((m) => m.role === 'tool').content.endsWith(REMINDER)).toBe(true);
+  expect(events.filter((e) => e.type === 'note' && e.text.startsWith('Reminded')).map((e) => e.text)).toEqual(['Reminded it of its plan: 0 of 3 steps done']);
+  // Steps done and steps left: the next three by name, then how many more; nothing when all are done.
+  const many = Array.from({ length: 6 }, (_, i) => ({ text: `Step ${i + 1}`, status: i < 1 ? 'done' : 'pending' }));
+  expect(planReminder(many)).toStartWith('(Your plan: 1 of 6 steps done. Now: "Step 2". Then: "Step 3"; "Step 4"; "Step 5", and 1 more.');
+  expect(planReminder([{ text: 'Step 1', status: 'done' }])).toBe('');
+  expect(planReminder(null)).toBe('');
+});
+
+test('a plan written this message goes into its notes when memory fills, step by step', async () => {
+  const { agent } = await filled([PLAN, ...LOOKS, { text: NOTES }]);
+  expect(agent.messages[2].content).toContain(`\n- The cause is that toCsv drops the header row when the list is empty.\n\nMy plan, as I last wrote it with TodoWrite:\n- [doing now] Read export.mjs and its test\n- [to do] Fix the empty-list case in toCsv\n- [to do] Run the tests\n\nFrom Agentic Coder's record of this message:`);
+  // With no plan, the notes are as before.
+  const none = await filled([...LOOKS, { text: NOTES }]);
+  expect(none.agent.messages[2].content).not.toContain('My plan');
+});
 
 test('no usable notes (an empty reply): old tool output is emptied instead, as before', async () => {
   const { agent, events } = await filled([...LOOKS, { text: ' ' }]);

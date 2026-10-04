@@ -5,7 +5,7 @@
 //     { t: 'note', text }                             a line from the app
 //     { t: 'text', text, final }                      what the model said
 //     { t: 'ask', id, kind, name, text, options, always, sig }   it waits for an answer
-//     { t: 'end', reason, final, secs, steps, tests } the run is over
+//     { t: 'end', reason, final, secs, steps, tests } the run is over (tests: { ok, count? }, count = how many fail)
 //   the window writes to its stdin:
 //     { t: 'answer', id, choice: 'yes' | 'always' | 'no', text }   to an ask
 //     { t: 'note', text }   a note typed to the loop: sent to the model when its turn ends
@@ -78,7 +78,7 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
         const test = isTestRun(ev);
         // A result not known (piped into tail with the counts cut off) leaves the last one as it was.
         const known = test && ev.tests.failed !== null && ev.tests.failed !== undefined;
-        if (known) tests = { ok: !ev.tests.failed };
+        if (known) tests = { ok: !ev.tests.failed, ...(Number.isFinite(ev.tests.count) ? { count: ev.tests.count } : {}) };
         say({ t: 'tool', label: ev.label, arg: one(ev.arg, 240), error: Boolean(ev.error), given: Boolean(ev.given), test, ...(known ? { failed: Boolean(ev.tests.failed) } : {}) });
       } else if (type === 'note') { lastNote = one(ev.text, 400); say({ t: 'note', text: lastNote }); }
       else if (type === 'assistant' && String(ev.text ?? '').trim()) { if (ev.final) final = ev.text; say({ t: 'text', text: String(ev.text).trim().slice(0, 4000), final: Boolean(ev.final) }); }

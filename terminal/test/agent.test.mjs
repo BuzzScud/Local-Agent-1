@@ -416,7 +416,7 @@ test('a search of the test file after passing tests does not put a good change b
   expect(r.tools.at(-1).error).toBe(true); // grep found nothing
   expect(r.kept).toBe(true);
   expect(r.putBack).toBe(false);
-  expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: false });
+  expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: false, count: 0 }); // count: how many fail (a loop's run says it)
   expect(r.tools.at(-1).tests).toBeUndefined();
 });
 
@@ -425,14 +425,14 @@ test('a search of the test file after failing tests does not keep a broken chang
   expect(r.tools.at(-1).error).toBe(false); // grep found it
   expect(r.kept).toBe(false);
   expect(r.putBack).toBe(true);
-  expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: true });
+  expect(r.tools.find((t) => t.arg === 'node --test').tests).toEqual({ failed: true, count: 1 });
 });
 
 test('failing tests piped on into another command still fail the check', async () => {
   // The summary came through: its counts decide (grep's exit code says nothing about the tests).
   const r = await checkedBy('  return toCsv(rows).toUpperCase();', ['node --test 2>&1 | grep -E "^ℹ (pass|fail)"']);
   expect(r.tools.at(-1).error).toBe(false);
-  expect(r.tools.at(-1).tests).toEqual({ failed: true });
+  expect(r.tools.at(-1).tests).toEqual({ failed: true, count: 1 });
   expect(r.kept).toBe(false);
   expect(r.putBack).toBe(true);
   // tail cut the summary off: not known, so the earlier failing run still decides.

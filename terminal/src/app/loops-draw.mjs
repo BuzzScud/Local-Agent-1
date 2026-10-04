@@ -61,6 +61,7 @@ export function stateOf(l, now) {
   if (l.current?.needs) return ['! needs you', 'warn b'];
   if (l.current && l.pauseAfter) return [`${spin(now)} running · pauses after`, 'dim'];
   if (l.current) return [`${spin(now)} running ${dur(now - l.current.startedAt)}`, 'accent'];
+  if (l.stuck) return ['! needs you · stuck', 'warn b'];
   if (l.state === 'paused') return ['‖ paused', 'dim'];
   if (l.state === 'done') return ['✓ ended', 'ok'];
   if (l.state === 'stopped') return ['■ stopped', 'faint'];
@@ -84,7 +85,7 @@ const blank = (cols) => fit([], cols);
 
 function header(state, now, cols, title) {
   const run = state.loops.filter((l) => l.current && !l.current.needs).length;
-  const need = state.loops.filter((l) => l.current?.needs).length;
+  const need = state.loops.filter((l) => l.current?.needs || (l.stuck && !l.current)).length;
   const m = state.model;
   const right = [p(`${run} running`, run ? 'accent' : 'dim'), ...(need ? [p(' · ', 'faint'), p(`${need} needs you`, 'warn b')] : []), p('   '), p(m.on ? '● ' : '○ ', m.on ? 'accent' : 'faint'), p(cut(`${m.name} ${m.on ? (m.where === 'this Mac' ? 'loaded' : `on ${m.where}`) : 'off'}`, 34), m.on ? 'dim' : 'faint'), p(`   ${clock(now)} `, 'dim')];
   let left = [p(' ↻ ', 'accent b'), p(title, 'white b'), p(`  ·  ${state.name} · ${state.folder}`, 'dim')];
@@ -108,7 +109,7 @@ function runLines(l, run, lines, cols, now, { tail = null, full = false } = {}) 
   for (const x of lines) {
     if (x.kind === 'user') { if (full) out.push(fit([p(' > ', 'dim'), p(cut(x.text, w - 4), 'white')], w, 'user')); continue; }
     if (x.kind === 'you') { out.push(fit([p(' > ', 'accent b'), p(cut(x.text, w - 4), 'white')], w, 'user')); continue; }
-    if (x.kind === 'loopnote') { if (full) out.push(fit([p('   '), p(cut(x.text, w - 4), 'faint')], w)); continue; }
+    if (x.kind === 'loopnote') { if (full) out.push(fit([p('   '), p(cut(String(x.text).replace(/\s+/g, ' '), w - 4), 'faint')], w)); continue; }
     if (x.kind === 'tool' || x.kind === 'fail') {
       const m = /^([A-Za-z ]+)\((.*)\)$/s.exec(x.text);
       out.push(fit([p(' ⏺ ', x.kind === 'fail' ? 'bad' : 'accent'), ...(m ? [p(m[1], 'white b'), p(`(${cut(m[2].replace(/\s+/g, ' '), w - m[1].length - 6)})`, 'dim')] : [p(cut(x.text, w - 4), 'white')])], w));
@@ -148,7 +149,7 @@ function cycleOf(l, lines, now) {
   const said = lines.some((x) => x.kind === 'text');
   const waiting = !run && !over(l);
   const span = (l.every ?? (l.until ? 15 : l.gap ?? 600)) * 1000;
-  const waitNote = l.state === 'paused' ? 'paused' : l.state === 'off' ? 'model off' : l.queued ? 'next in line' : `in ${countdown(l.nextAt - now)}`;
+  const waitNote = l.stuck ? 'stuck: needs you' : l.state === 'paused' ? 'paused' : l.state === 'off' ? 'model off' : l.queued ? 'next in line' : `in ${countdown(l.nextAt - now)}`;
   const waitFrac = waiting && l.state !== 'paused' && l.state !== 'off' && !l.queued ? Math.min(1, Math.max(0, 1 - (l.nextAt - now) / span)) : 0;
   const wait = st('WAIT', waiting ? 'active' : 'todo', run ? `then ${l.every ? secsWord(l.every) : 'its own pace'}` : over(l) ? '' : waitNote, run ? 0 : waitFrac);
   const back = over(l) ? (l.state === 'done' ? `✓ ${l.doneWhy ?? 'ended'}` : 'stopped by you') : l.until ? 'pass: done · miss: a new try' : `again ${paceWord(l)}`;
@@ -227,11 +228,14 @@ function logPieces(state, e, w) {
   const room = w - rowWidth(head) - 2;
   if (e.kind === 'end') return [...head, p(`${name} · run ${e.n}  `, 'dim'), p(cut(`${e.ok ? '✓' : '✗'} ${e.text}`, room - name.length - 18), e.ok ? 'ok' : 'bad'), p(`  ${dur(e.ms)}`, 'faint')];
   if (e.kind === 'ask') return [...head, p(`${name} asks: `, 'dim'), p(cut(e.text, room - name.length - 7), 'warn')];
+  if (e.kind === 'stuck') return [...head, p(`${name} waits for you: `, 'dim'), p(cut(e.text, room - name.length - 17), 'warn')];
   if (e.kind === 'answer') return [...head, p(`${name}: `, 'dim'), p(cut(`you answered “${e.text}”`, room - name.length - 2), 'text')];
   if (e.kind === 'you') return [...head, p(`to ${name}: `, 'dim'), p(cut(`“${e.text}”`, room - name.length - 5), 'white')];
   if (e.kind === 'new') return [...head, p(`${name}: `, 'dim'), p(cut(`a new loop · ${e.text}`, room - name.length - 2), 'text')];
   return [...head, p(l ? `${name}: ` : '', 'dim'), p(cut(e.text, room - name.length - 2), 'dim')];
 }
+// The first loop that waits because it stopped getting closer (loops.mjs stuckWhy).
+const stuckOf = (state) => state.loops.find((l) => l.stuck && !l.current) ?? null;
 export const askingOf = (state) => state.loops.filter((l) => l.current?.needs).sort((a, b) => a.current.needs.since - b.current.needs.since)[0] ?? null;
 function chatBox(state, ui, cols, now) {
   const l = state.loops[ui.sel];
@@ -253,7 +257,7 @@ function chatBox(state, ui, cols, now) {
 function statusLine(state, cols) {
   const run = state.loops.filter((l) => l.current && !l.current.needs);
   const line = state.loops.filter((l) => l.queued).length;
-  const need = state.loops.filter((l) => l.current?.needs).length;
+  const need = state.loops.filter((l) => l.current?.needs || (l.stuck && !l.current)).length;
   const m = state.model;
   const b = (label, value, style = 'text') => [p(` ${label} `, 'faint'), p('[', 'faint'), p(value, style), p(']', 'faint'), p(' ')];
   const parts = [b('loops', String(state.loops.length)), b('running', run.length ? cut(run.map((l) => l.name).join(', '), 20) : '0', run.length ? 'accent' : 'dim'), b('needs you', String(need), need ? 'warn b' : 'dim'), b('in line', String(line), line ? 'text' : 'dim'), b('model', cut(m.on ? `${m.name} ${m.where === 'this Mac' ? 'loaded' : `on ${m.where}`}` : `${m.name} off`, 30), m.on ? 'accent' : 'faint'), b('end', `window closes · ${state.maxHours ?? 24} h`, 'dim')];
@@ -274,6 +278,12 @@ function bottomBlock(state, ui, cols, now, keys) {
       : [p('y', 'white b'), p(wide ? ' yes, this time · ' : ' yes · ', 'dim'), ...(q.always ? [p('a', 'white b'), p(wide ? ' yes, always · ' : ' always · ', 'dim')] : []), p('n', 'white b'), p(' no', 'dim')];
     const howW = rowWidth(how) + 4;
     out.push(fit([p(' ! ', 'warn b'), chip(a.kind), p(` ${cut(a.name, 22)} asks: `, 'white'), p(cut(q.text, Math.max(10, cols - howW - 34 - chipW(a.kind))), 'white b'), p('    '), ...how], cols, 'needs'));
+  } else if (stuckOf(state)) {
+    const s = stuckOf(state);
+    // The keys act on the picked loop, as everywhere on the board but y / a / n.
+    const how = [p('pick it: ', 'dim'), p('t', 'white b'), p(' a hint · ', 'dim'), p('r', 'white b'), p(' try again · ', 'dim'), p('s', 'white b'), p(' stop', 'dim')];
+    const head = [p(' ! ', 'warn b'), chip(s.kind), p(` ${cut(s.name, 22)} is stuck: `, 'white')];
+    out.push(fit([...head, p(cut(s.stuck.split(':')[0], Math.max(10, cols - rowWidth(head) - rowWidth(how) - 4)), 'white b'), p('    '), ...how], cols, 'needs'));
   } else out.push(blank(cols));
   out.push(...chatBox(state, ui, cols, now));
   out.push(statusLine(state, cols));

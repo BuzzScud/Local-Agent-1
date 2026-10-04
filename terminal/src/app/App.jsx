@@ -1017,7 +1017,7 @@ export function App({ opts, win, onRestart }) {
   const loopsSeen = useRef({ board: false, asked: new Set(), ended: new Set() });
   const [loopsBadge, setLoopsBadge] = useState(null);
   // The footer's count: the loops still open, and whether one waits for you.
-  const loopsBadgeOf = (m) => { const open = m.open.length, need = m.needsYou.length; return open ? `↻ ${open} loop${open === 1 ? '' : 's'}${need ? ` · ${need} needs you` : ''}` : null; };
+  const loopsBadgeOf = (m) => { const open = m.open.length, need = m.needsYou.length + m.stuck.length; return open ? `↻ ${open} loop${open === 1 ? '' : 's'}${need ? ` · ${need} needs you` : ''}` : null; };
   const loopsOf = () => {
     if (loopsRef.current) return loopsRef.current;
     loopsRef.current = new Loops({
@@ -1052,6 +1052,13 @@ export function App({ opts, win, onRestart }) {
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
         push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.current.needs.text} Answer on the loop board (/loops).`, tone: 'warn' });
+      }
+      // A debugging loop that stopped getting closer waits for a hint (loops.mjs stuckWhy).
+      for (const l of m.stuck) {
+        const key = `${l.id}-${l.runs.at(-1)?.n}-stuck`;
+        if (seen.asked.has(key)) continue;
+        seen.asked.add(key);
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.stuck}. On the loop board (/loops), type a hint to send it on with, r tries again as it is, s stops it.`, tone: 'warn' });
       }
       for (const l of m.loops) {
         if (l.state !== 'done' || seen.ended.has(l.id)) continue;
