@@ -362,3 +362,36 @@ test('a docs/map the code map did not make is never touched; of its own only the
   expect(existsSync(join(root, 'docs', 'map', 'old-part.md'))).toBe(false);
   expect(readFileSync(join(root, 'docs', 'map', 'notes.txt'), 'utf8')).toBe('mine');
 });
+
+test('bun run codemap lets go of the model on the service when it is done, and asks it to keep the model 5 minutes at most', async () => {
+  const { createServer } = await import('node:http');
+  const root = project();
+  const posts = [];
+  const server = createServer(async (req, res) => {
+    let b = ''; for await (const c of req) b += c;
+    const body = b ? JSON.parse(b) : {};
+    if (req.method === 'POST') posts.push({ path: req.url, ...body });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (req.url === '/api/ps') return res.end(JSON.stringify({ models: [] }));
+    if (req.url === '/api/chat') return res.end(JSON.stringify({ message: { content: '{"folder": "the shop\'s code", "files": {}}' }, done: true }));
+    res.end(JSON.stringify({ done: true }));
+  });
+  await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+  try {
+    const url = `http://127.0.0.1:${server.address().port}`;
+    // Not spawnSync: the pretend service runs in this process and must answer while the map is made.
+    const { spawn } = await import('node:child_process');
+    const r = await new Promise((ok) => {
+      const c = spawn(process.execPath, [join(repoRoot, 'terminal', 'scripts', 'codemap.mjs'), root, '--remote', url, '--model', 'coder:30b', '--jobs', '1'], { env: { ...process.env } });
+      let stdout = '';
+      c.stdout.on('data', (d) => { stdout += d; });
+      c.on('exit', (code) => ok({ stdout, code }));
+    });
+    expect(r.stdout).toContain('Let go of coder:30b on the service.');
+    const chats = posts.filter((p) => p.path === '/api/chat');
+    expect(chats.length).toBeGreaterThan(0);
+    expect(chats.every((p) => p.keep_alive === '5m')).toBe(true);
+    expect(posts.at(-1)).toMatchObject({ path: '/api/generate', model: 'coder:30b', keep_alive: 0 });
+    expect(readFileSync(join(root, 'docs', 'map', 'MAP.md'), 'utf8')).toContain("- src/ — the shop's code → src.md");
+  } finally { await new Promise((d) => server.close(d)); }
+}, 60_000);
