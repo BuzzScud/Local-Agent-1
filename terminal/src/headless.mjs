@@ -25,7 +25,7 @@ import { agentDriver } from './agent/agents-driver.mjs';
 // images: pictures to send with the prompt; canSee: the server can look at them (its vision add-on).
 // way: who decides ('app' or 'model', agent/way.mjs); given (or AGENTIC_WAY), it wins over the
 // limits' Who decides row. hooks: the app's checks on while the model decides (AGENTIC_HOOKS wins).
-export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false }) {
+export async function runHeadless({ images = [], canSee = false, visionOn = null, prompt, cwd, url, model, thinking, effort, ctx, autoApprove = false, approve, answers, signal, onEvent = () => {}, flows = true, slots, warm = false, memory = false, limits = null, rank = true, helpers, embedder = null, prewarm = false, permissions = null, design, thinkBudgetSecs, way, hooks, web = null, subagents = false, agents = false, mode = null, askUser = null, more = null, keepProgress = false, mcp = null, userHooks = false, workRoom = 0 }) {
   // memory.claude: true (or a folder) also brings Claude's notes that fit a request.
   const mem = memory ? { embedder: embedder ?? (embedderReady() ? new Embedder() : null), save: true, ...(memory === true ? {} : memory) } : null;
   if (mem) { try { openMemory(cwd, { home: mem.home }); } catch { /* the run goes on without it */ } }
@@ -86,6 +86,8 @@ export async function runHeadless({ images = [], canSee = false, visionOn = null
       return { choice: autoApprove && (!approve || approve(req)) ? 'yes' : 'no' };
     },
   });
+  // /remote's Clean up at (settings.json remoteCleanAt): only for a model on another machine (agent.mjs cleanCap).
+  agent.workRoom = workRoom;
   // The limits /effort saved (coding -p passes them; the practice bench does
   // not), with its Search rows: the embedder, the retriever and the reranker.
   // A run from the Tests page's control panel brings its settings (AGENTIC_TEST_SETTINGS) when none are passed.

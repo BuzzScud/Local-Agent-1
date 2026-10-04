@@ -42,8 +42,12 @@ export const HOOKS = [
   { id: 'look-first', label: 'Look before answering', what: 'remote models: an answer about the code with nothing read or searched goes back once; then a line says so' },
   { id: 'real-files', label: 'Files that exist', what: 'remote models: an answer naming files not in the project goes back once; then a line names them' },
   { id: 'desktop', label: 'On the Desktop', what: 'a page asked for "on my desktop" that was saved somewhere else is sent back once to be moved there' },
+  { id: 'drift', label: 'Stays on task', what: 'remote models: every 10 steps a helper model checks the work still serves your request, and nudges it back if not; off until you switch it on' },
 ];
 const HOOK_IDS = HOOKS.map((h) => h.id);
+// Checks that run only when switched on, on either way (4 Oct 2026, the owner's pick: "Stays on task"
+// is built off, for them to turn on and try). The others run always on App.
+export const OPT_IN_HOOKS = new Set(['drift']);
 // On for Model way unless settings.json or AGENTIC_HOOKS says otherwise. App way runs every
 // hook either way. next-step is the fourth: a reply that names a cause and stops.
 // look-first and real-files (3 Oct 2026, the owner's picks): models on another machine answered

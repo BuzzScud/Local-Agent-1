@@ -4,7 +4,7 @@
 //   coder:30b      the main model: calls Read, Edit and Bash as asked (real tool calls)
 //   jsontext:14b   writes its calls as bare JSON in the text (as Qwen 2.5 Coder can)
 //   words:7b       lists "tools" but answers in words
-//   tiny:3b        the small helper (summaries, /btw)
+//   tiny:3b        the small helper (summaries, /btw, Stays on task)
 //   thinker:35b    thinks and sees: the second opinion and the page check
 //   llava:latest   sees, no tools: the pictures helper
 //   embed:latest   embeddings
@@ -34,6 +34,7 @@ export function answerOf(body, { review = 'LGTM', look = 'LGTM', describe = 'A l
   if (/review a code change/i.test(sys)) return { content: review };
   if (/check how a web page looks/i.test(sys)) return { content: look };
   if (/summarize a coding session/i.test(sys)) return { content: `Summary by ${m}.` };
+  if (/whether a coding assistant is still working on what the user asked/i.test(sys)) return { content: JSON.stringify({ verdict: 'on', reason: `Checked by ${m}` }) };
   if (/side question from the user, asked with \/btw/i.test(sys)) return { content: `Side answer by ${m}.` };
   if (body.tools?.length && /Read the file notes\.txt|spelling mistake|echo ok/.test(said)) {
     const want = /Read the file/.test(said) ? ['Read', { path: 'notes.txt' }] : /spelling/.test(said) ? ['Edit', { path: 'notes.txt', old_text: 'Hello wrold', new_text: 'Hello world' }] : ['Bash', { command: 'echo ok' }];
