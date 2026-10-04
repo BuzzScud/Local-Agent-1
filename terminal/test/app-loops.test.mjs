@@ -19,9 +19,10 @@ const self = [process.execPath, cli];
 
 // One run started the way a window starts it; answers every question with `answer` (or what
 // onAsk returns), and gives back everything the run said.
-function runOnce(spec, { env, answer = 'yes', onAsk = null, ms = 40_000 } = {}) {
+function runOnce(spec, { env, answer = 'yes', onAsk = null, onStart = null, ms = 40_000 } = {}) {
   return new Promise((resolve) => {
     const h = L.startRun({ mode: 'ask', flows: false, allow: [], owner: process.pid, ...spec }, { self, env: { ...process.env, ...env } });
+    onStart?.(h);
     const seen = [];
     const timer = setTimeout(() => { h.kill(); resolve({ seen, timedOut: true }); }, ms);
     h.on((ev) => {
@@ -32,11 +33,10 @@ function runOnce(spec, { env, answer = 'yes', onAsk = null, ms = 40_000 } = {}) 
   });
 }
 
-test('one run: it asks before a command, a yes lets it go on, a note typed meanwhile is its next message, and "always" covers that command in the loop\'s later runs', async () => {
+test('one run: it asks before a command, a yes lets it go on, a note typed meanwhile is read with its next step, and "always" covers that command in the loop\'s later runs', async () => {
   const { cwd, env } = setup();
   const fake = await startFakeServer([
     { tool: { name: 'Bash', args: { command: 'touch made.txt', description: 'make a file' } } },
-    { text: 'Made the file.' },
     { text: 'Noted: nothing more to do.\nLOOP DONE' },
     { tool: { name: 'Bash', args: { command: 'touch made.txt', description: 'make a file' } } },
     { text: 'Made it again.' },
@@ -46,11 +46,14 @@ test('one run: it asks before a command, a yes lets it go on, a note typed meanw
     expect(r.timedOut).toBeFalsy();
     const ask = r.seen.find((e) => e.t === 'ask');
     expect(ask).toMatchObject({ kind: 'permission', name: 'Bash', text: 'May it run: touch made.txt', always: 'this command', sig: 'Bash:touch made.txt' });
-    expect(r.seen.map((e) => e.t)).toEqual(['ask', 'tool', 'text', 'text', 'end']); // nothing ran before the yes
+    expect(r.seen.map((e) => e.t)).toEqual(['ask', 'tool', 'heard', 'text', 'end']); // nothing ran before the yes
     expect(r.seen.find((e) => e.t === 'tool')).toMatchObject({ label: 'Bash', arg: 'touch made.txt', error: false, test: false });
     expect(existsSync(join(cwd, 'made.txt'))).toBe(true);
-    // The note was the next message of the same conversation, sent when the first turn ended.
-    expect(fake.requests.at(-1).messages.filter((m) => m.role === 'user').map((m) => m.content).at(-1)).toBe('also say nothing more');
+    // The note went on the end of that step's result, in the same turn, and the board was told after which step.
+    expect(r.seen.find((e) => e.t === 'heard')).toEqual({ t: 'heard', text: 'also say nothing more', after: 'Bash(touch made.txt)' });
+    const step = fake.requests.at(-1).messages.at(-1);
+    expect(step.role).toBe('tool');
+    expect(step.content).toMatch(/\(A note from the user, sent while you worked: also say nothing more\)$/);
     expect(r.end).toMatchObject({ reason: 'done', final: 'Noted: nothing more to do.\nLOOP DONE' });
     expect(L.readEnding(r.end.final)).toMatchObject({ done: true, said: 'Noted: nothing more to do.' });
     // A later run of the loop is told what "always" covers, and is not asked.
@@ -59,6 +62,41 @@ test('one run: it asks before a command, a yes lets it go on, a note typed meanw
     expect(again.end.reason).toBe('done');
   } finally { await fake.close(); }
 }, T);
+
+test('a note that comes as the run gives its answer is its next message; a run keeps its copy for undo, and its own steps', async () => {
+  const { cwd, env } = setup();
+  // The answer comes slowly, so the note arrives while it is said: no step is left, so it is the next message.
+  let h = null;
+  const fake = await startFakeServer([{ text: 'All of it is done, every single part of what was asked for here.' }, { text: 'Noted.' }], { delayMs: 40, route: (json) => { if (json.messages.at(-1).role === 'user' && !/also/.test(String(json.messages.at(-1).content))) h?.send({ t: 'note', text: 'also say nothing more' }); return null; } });
+  try {
+    const r = await runOnce({ folder: cwd, prompt: 'Say what is done.', url: fake.url }, { env, onStart: (x) => { h = x; } });
+    expect(r.seen.some((e) => e.t === 'heard')).toBe(false);
+    expect(fake.requests.at(-1).messages.at(-1)).toMatchObject({ role: 'user', content: 'also say nothing more' });
+    expect(r.end).toMatchObject({ reason: 'done', final: 'Noted.' });
+  } finally { await fake.close(); }
+  // Its copy for undo: the end says where it is and what it changed; the window's undo puts it back.
+  const { cwd: dir, env: env2 } = sumProject();
+  const fake2 = await startFakeServer(script({ old_text: 'add = (a, b) => a - b', new_text: 'add = (a, b) => a + b' }));
+  try {
+    const session = L.sessionOf(process.pid, 1);
+    const r = await runOnce({ folder: dir, prompt: 'Some tests fail. Fix sum.mjs.', url: fake2.url, mode: 'edits', rewind: session }, { env: env2 });
+    expect(r.end).toMatchObject({ reason: 'done', usd: 0, point: 1, until: 1, files: [{ path: 'sum.mjs', by: 'edit' }] });
+    expect(readFileSync(join(dir, 'sum.mjs'), 'utf8')).toContain('add = (a, b) => a + b'); // the half-fix stayed
+    const m = new L.Loops({ home: env2.AGENTIC_HOME, pid: process.pid, folder: dir, start: () => ({ on() {}, send() {}, kill() {} }) });
+    const l = m.add(L.parseLoop('debug'));
+    l.runs.push({ n: 1, point: r.end.point, until: r.end.until, files: r.end.files });
+    expect(await m.undo(l.id, 1)).toEqual({ text: 'Put back run 1: sum.mjs' });
+    expect(readFileSync(join(dir, 'sum.mjs'), 'utf8')).toBe(SUM);
+    m.close();
+  } finally { await fake2.close(); }
+  // Its own steps: a run of 2 steps stops after the second.
+  const fake3 = await startFakeServer([1, 2, 3, 4].map((i) => ({ tool: { name: 'Bash', args: { command: `echo ${i}`, description: 'say a number' } } })));
+  try {
+    const r = await runOnce({ folder: cwd, prompt: 'Say four numbers, one command each.', url: fake3.url, mode: 'auto', steps: 2, allow: ['Bash:echo 1', 'Bash:echo 2', 'Bash:echo 3', 'Bash:echo 4'] }, { env });
+    expect(r.seen.filter((e) => e.t === 'tool' && e.label === 'Bash')).toHaveLength(2);
+    expect(r.seen.some((e) => e.t === 'note' && /Stopped after 2 steps/.test(e.text))).toBe(true);
+  } finally { await fake3.close(); }
+}, T * 3);
 
 test('a no stops that step and the run says so; a run whose window is gone ends', async () => {
   const { cwd, env } = setup();
@@ -145,7 +183,7 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
   let runs = 0;
   const fake = await startFakeServer([], { route: (json) => {
     const last = json.messages.at(-1);
-    if (last.role === 'tool') return { text: 'Made the file.' };
+    if (last.role === 'tool') return { text: /also say nothing more/.test(String(last.content)) ? 'Noted.' : 'Made the file.' };
     if (/also/.test(String(last.content))) return { text: 'Noted.' };
     runs++;
     return { tool: { name: 'Bash', args: { command: 'touch made.txt', description: 'make a file' } } };
@@ -162,6 +200,7 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
       { waitGone: '1 needs you', ms: 30_000 },
       { sleep: 9000 },
       { type: '/loop' }, { key: 'enter' }, { wait: 'Loops of this window' }, { sleep: 300 }, { snapshot: 'list' },
+      { type: '/loop 1 runs 50' }, { key: 'enter' }, { wait: 'make a file called made.txt: saved' }, { sleep: 300 }, { snapshot: 'rule' },
       { fn: () => { whileOpen = readdirSync(dir); } },
       { type: '/loop stop' }, { key: 'enter' }, { wait: 'Stopped: make a file called made.txt' }, { sleep: 400 }, { snapshot: 'stopped' },
       ...quit,
@@ -170,9 +209,10 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
     for (let i = 0; i < 300 && !(L.listBoards(dir)[0]?.loops ?? []).some((l) => l.current?.needs); i++) await new Promise((r) => setTimeout(r, 100));
     const board = await runInPty({ cwd, env: E, args: ['loops'], cols: 124, rows: 38, timeoutMs: 40_000, steps: [
       { wait: 'asks: May it run: touch made.txt', ms: 10_000 }, { sleep: 300 }, { snapshot: 'asks' },
-      { key: 't' }, { type: 'also say nothing more' }, { sleep: 200 }, { snapshot: 'typing' }, { key: 'enter' }, { wait: 'it reads it when its turn ends', ms: 5000 },
+      { key: 't' }, { type: 'also say nothing more' }, { sleep: 200 }, { snapshot: 'typing' }, { key: 'enter' }, { wait: 'it reads it at its next step', ms: 5000 },
       { key: 'a' }, { wait: 'will not ask this again', ms: 5000 },
       { wait: '✓ Noted.', ms: 15_000 }, { sleep: 300 }, { snapshot: 'answered' },
+      // The first run: it stays on the screen when the second starts.
       { key: 'enter' }, { wait: 'back to the loops' }, { sleep: 300 }, { snapshot: 'watch' }, { key: 'esc' }, { sleep: 300 },
       { key: 'q' },
     ] });
@@ -185,7 +225,7 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
     expect(board.snapshots.answered).toMatch(/YOU {2}to make a file called …: “also say nothing more”/);
     expect(board.snapshots.answered).toMatch(/you answered “Yes, always \(this command\)”/);
     expect(board.snapshots.answered).toMatch(/3 REPORT\s+▮+ ● Noted\./);
-    expect(board.snapshots.watch).toMatch(/> make a file called made\.txt[\s\S]*\? May it run: touch made\.txt[\s\S]*> also say nothing more[\s\S]*⏺ Bash\(touch made\.txt\)[\s\S]*● Made the file\.[\s\S]*● Noted\./);
+    expect(board.snapshots.watch).toMatch(/> make a file called made\.txt[\s\S]*\? May it run: touch made\.txt[\s\S]*> also say nothing more[\s\S]*⏺ Bash\(touch made\.txt\)\s+⎿ it read your note with the result of Bash\(touch made\.txt\)[\s\S]*● Noted\./);
     expect(board.code).toBe(0);
     expect(board.text).toMatch(/The loop board is closed\. The loops go on in their window/);
     // The app: what /loop said, the footer's count, the list, the stop.
@@ -194,6 +234,8 @@ test('/loop in the app: the loop starts and the footer counts it; its run asks o
     expect(r.snapshots.started).toMatch(/↻ 1 loop/);
     expect(r.snapshots.needs).toMatch(/↻ 1 loop · 1 needs you/);
     expect(r.snapshots.list).toMatch(/1\. make a file called made\.txt · task · every 3s · /);
+    expect(r.snapshots.list).toMatch(/Change one: \/loop <n> every 7m · runs 5/);
+    expect(r.snapshots.rule).toMatch(/make a file called made\.txt: saved · task · every 3s · \d+ of 50 runs/);
     expect(r.snapshots.stopped).not.toMatch(/↻ 1 loop/); // a stopped loop is not counted
     expect(existsSync(join(cwd, 'made.txt'))).toBe(true);
     expect(runs).toBeGreaterThanOrEqual(2); // it ran again by itself, and "always" meant no second question

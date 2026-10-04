@@ -153,7 +153,7 @@ test('a note reaches the run under way, or the next run when none is; /loop type
   pass(1000);
   expect(runs[0].spec.prompt).toMatch(/\(A note from the user for this run: start with the quoting test\)/);
   expect(a.note).toBe(null);
-  expect(m.steer(a.id, 'and leave the tests as they are')).toBe('Sent to Fix the failing tests: it reads it when its turn ends');
+  expect(m.steer(a.id, 'and leave the tests as they are')).toBe('Sent to Fix the failing tests: it reads it at its next step');
   expect(runs[0].sent).toEqual([{ t: 'note', text: 'and leave the tests as they are' }]);
   st.mode = 'edits';
   const made = m.typed('/loop test 5m', a.id);
@@ -345,7 +345,7 @@ test('the board reads what the window wrote and its keys come back as files; the
   L.sendCommand(dir, process.pid, { op: 'typed', id: 1, text: 'only the unit tests', stamp: 's1' });
   m.tick();
   expect(runs[0].sent).toEqual([{ t: 'answer', id: 3, choice: 'yes' }, { t: 'note', text: 'only the unit tests' }]);
-  expect(L.readState(dir, process.pid).reply).toMatchObject({ stamp: 's1', text: 'Sent to Run the tests: it reads it when its turn ends' });
+  expect(L.readState(dir, process.pid).reply).toMatchObject({ stamp: 's1', text: 'Sent to Run the tests: it reads it at its next step' });
   L.sendCommand(dir, process.pid, { op: 'typed', id: 1, text: '/loop debug', stamp: 's2' });
   L.sendCommand(dir, process.pid, { op: 'every', id: 1, secs: 600 });
   L.sendCommand(dir, process.pid, { op: 'stop', id: 1 });
@@ -397,7 +397,9 @@ test('the tree at every size: each row exactly the window, the window on top, a 
     expect(t).toMatch(cols >= 110 ? /! {2}DEBUG {2}Fix the failing tests asks: May it change export\.mjs\?\s+y yes, this time · a yes, always · n no/ : /! {2}DEBUG {2}Fix the failing tests asks: May it change export\.mjs\?\s+y yes · a always · n no/);
     expect(t).toMatch(/to Fix the failing tests/); // the chat box names the picked loop
     expect(t).toMatch(/loops \[3\]\s+running \[Run the tests\]\s+needs you \[1\]\s+in line \[1\]/);
-    expect(t).toMatch(/←→ pick .* t type .* \+ new loop .* q close/);
+    // A narrow window says the keys in shorter words (x redo, + new), so q close is never cut.
+    expect(t).toMatch(/←→ pick .* t type .* x (start over|redo) .* e edit .* u undo .* \+ new( loop)? .* q close/);
+    if (cols >= 124) expect(t).toMatch(/x start over · r run now · p pause · e edit · u undo · s stop · \+ new loop · q close/);
     if (rows >= 38) expect(t).toMatch(/loop log[\s\S]*asks: May it change export\.mjs\?/);
   }
   // A window too small says so, and how big it must be.
@@ -421,7 +423,7 @@ test('more loops than fit move sideways with the picked one; no loop yet shows h
   const first = text(D.drawBoard(s, { ...B.newUi(), sel: 0 }, { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
   expect(first).toContain('│ tidy folder number 1');
   expect(first).toContain('2 more ›');
-  expect(first.match(/┌─ {2}TASK {2}─/g)).toHaveLength(4); // four boxes across at 124
+  expect(first.match(/┌─ {2}TASK {2}Manual ─/g)).toHaveLength(4); // four boxes across at 124, each with its mode
   expect(first).not.toContain('│ tidy folder number 5');
   const last = D.drawBoard(s, { ...B.newUi(), sel: 5 }, { cols: 124, rows: 38, now: m.now(), linesOf: () => [] });
   for (const r of last) expect(D.rowWidth(r)).toBe(124);
@@ -442,25 +444,24 @@ test('the board\'s keys: letters are commands, except in the chat box where they
   expect(bd.ui.sel).toBe(1);
   press('a');
   expect(sent.pop()).toEqual({ op: 'answer', id: 1, choice: 'always' });
-  // r p e s act on the picked loop; s asks first.
+  // r p e s act on the picked loop; s asks first; e opens its rules in the form (esc leaves it unchanged).
   press('p'); expect(sent.pop()).toEqual({ op: 'pause', id: 2 });
-  press('e'); expect(sent.pop()).toEqual({ op: 'every', id: 2, secs: 600 });
+  press('e'); expect(bd.ui.view).toBe('form'); expect(bd.ui.form).toMatchObject({ id: 2, fields: { message: L.PRESET.test, every: '5m', runs: 'no limit' } });
+  press('esc'); expect(bd.ui.view).toBe('main'); expect(sent).toEqual([]);
   press('s'); expect(bd.ui.view).toBe('confirm'); expect(sent).toEqual([]);
   press('n'); expect(bd.ui.view).toBe('main');
   press('s', 'y'); expect(sent.pop()).toEqual({ op: 'stop', id: 2 });
-  press('left', 'e'); expect(sent).toEqual([]); // a debugging loop has no "every"
-  expect(bd.ui.toast.text).toMatch(/has no "every"/);
   // t opens the chat box: now q, r, s and digits are text. enter sends it to the picked loop; esc leaves.
-  press('t', ...'quit rs 12');
-  expect(bd.ui.chat).toEqual({ on: true, text: 'quit rs 12' });
+  press('left', 't', ...'quit rs 12');
+  expect(bd.ui.chat).toEqual({ on: true, text: 'quit rs 12', as: 'note' });
   expect(quits).toBe(0);
   press('backspace', 'enter');
   expect(sent.pop()).toMatchObject({ op: 'typed', id: 1, text: 'quit rs 1' });
-  expect(bd.ui.chat).toEqual({ on: false, text: '' });
-  press('+', ...'test 5m');
-  expect(bd.ui.chat.text).toBe('/loop test 5m'); // + starts the line for you
+  expect(bd.ui.chat).toEqual({ on: false, text: '', as: 'note' });
+  press('/', ...'loop test 5m');
+  expect(bd.ui.chat.text).toBe('/loop test 5m'); // / starts a /loop line in the box
   press('esc');
-  expect(bd.ui.chat).toEqual({ on: false, text: '/loop test 5m' }); // kept for when you come back
+  expect(bd.ui.chat).toEqual({ on: false, text: '/loop test 5m', as: 'note' }); // kept for when you come back
   // enter opens one run with its lines; esc comes back; q closes the board.
   press('enter');
   expect(bd.ui.view).toBe('watch');
@@ -549,4 +550,328 @@ test('a run\'s last line is read even when it arrives after the run\'s process h
   const h = L.startRun({ folder: dir, prompt: 'x' }, { self: [process.execPath, join(dir, 'run.mjs')], env: { ...process.env } });
   const end = await new Promise((done) => h.on((ev) => { if (ev.t === 'end') done(ev); }));
   expect(end).toMatchObject({ reason: 'done', final: 'all good' });
+});
+
+// ---- a loop's own rules and the controls of 4 Oct 2026 (the owner's ask: "i want to be able to control it more") ----
+const at = (s) => Date.parse(`2026-10-04T${s}`);
+
+test('a loop\'s rules as typed in the form or after /loop <n>: how often, runs, a stop time, a cap, steps', () => {
+  expect(L.readEvery('7m')).toEqual({ every: 420, until: false, note: '' });
+  expect(L.readEvery('every 2 hours')).toMatchObject({ every: 7200 });
+  expect(L.readEvery('own pace')).toMatchObject({ every: null, until: false });
+  expect(L.readEvery('until done', { kind: 'debug' })).toMatchObject({ every: null, until: true });
+  expect(L.readEvery('until done', { kind: 'test' }).error).toMatch(/Only a loop that fixes tests/);
+  expect(L.readEvery('10s')).toEqual({ every: 60, until: false, note: ' (the shortest gap is 1m)' });
+  expect(L.readEvery('soon').error).toMatch(/How often/);
+  // A time of day is the next time it comes round; a while counts from now.
+  expect(L.readStopAt('18:30', at('10:00:00'))).toEqual({ stopAt: at('18:30:00') });
+  expect(L.readStopAt('6pm', at('10:00:00'))).toEqual({ stopAt: at('18:00:00') });
+  expect(L.readStopAt('9:15 am', at('10:00:00'))).toEqual({ stopAt: Date.parse('2026-10-05T09:15:00') }); // passed today: tomorrow
+  expect(L.readStopAt('2h', at('10:00:00'))).toEqual({ stopAt: at('12:00:00') });
+  expect(L.readStopAt('none')).toEqual({ stopAt: null });
+  expect(L.readStopAt('25:00').error).toMatch(/Stop at/);
+  expect(L.readStopAt('6').error).toMatch(/Stop at/); // an hour alone could be either
+  expect(L.readRuns('5')).toEqual({ maxRuns: 5 });
+  expect(L.readRuns('no limit')).toEqual({ maxRuns: null });
+  expect(L.readRuns('0').error).toMatch(/Stop after/);
+  expect(L.readCap('$1.50')).toEqual({ usdCap: 1.5 });
+  expect(L.readCap('none')).toEqual({ usdCap: null });
+  expect(L.readCap('$0').error).toMatch(/Spending cap/);
+  expect(L.readSteps('20')).toEqual({ steps: 20 });
+  expect(L.readSteps('as /effort')).toEqual({ steps: null });
+  expect(L.readSteps('3').error).toMatch(/5 to 200/);
+  // The whole form: the first wrong row is named, so the form can go to it.
+  const ok = L.rulesOf({ message: 'Run the tests and say what fails', every: '5m', runs: '5', stopAt: '18:30', cap: '$1', steps: '20', mode: 'edits', askFirst: true }, { now: at('10:00:00') });
+  expect(ok.rules).toEqual({ message: 'Run the tests and say what fails', kind: 'test', name: 'Run the tests and say what …', every: 300, until: false, maxRuns: 5, stopAt: at('18:30:00'), usdCap: 1, steps: 20, mode: 'edits', askFirst: true });
+  expect(L.rulesOf({ message: L.PRESET.debug, kind: 'debug', every: 'until done' }).rules).toMatchObject({ name: 'Fix the failing tests', until: true });
+  expect(L.rulesOf({ message: '' })).toMatchObject({ field: 'message' });
+  expect(L.rulesOf({ message: 'x', every: '5m', runs: 'lots' })).toMatchObject({ field: 'runs', error: expect.stringMatching(/Stop after/) });
+  // A loop's rules back into the form's words.
+  const { m } = window();
+  const l = m.add(ok.rules);
+  expect(L.fieldsOf(l)).toEqual({ message: 'Run the tests and say what fails', kind: 'test', every: '5m', runs: '5', stopAt: '18:30', cap: '$1.00', steps: '20', mode: 'edits', askFirst: true });
+  expect(L.limitWords(l)).toEqual(['0 of 5 runs', 'ends 18:30', '$0.00 of $1.00']);
+  expect(L.limitWords(l, { short: true })).toEqual(['0/5 runs', 'till 18:30', '$0/$1']);
+  m.close();
+});
+
+test('/loop <n> <rule>: one rule, or one thing done to a loop; a number then a time is a new loop', () => {
+  expect(L.loopCommand('2 every 7m')).toEqual({ id: 2, op: 'rule', rules: { every: 420, until: false }, note: '' });
+  expect(L.loopCommand('2 runs 5')).toMatchObject({ rules: { maxRuns: 5 } });
+  expect(L.loopCommand('2 stop 18:30', { now: at('10:00:00') })).toMatchObject({ rules: { stopAt: at('18:30:00') } });
+  expect(L.loopCommand('2 cap $2')).toMatchObject({ rules: { usdCap: 2 } });
+  expect(L.loopCommand('2 mode accept edits')).toMatchObject({ rules: { mode: 'edits' } });
+  expect(L.loopCommand('2 steps 20')).toMatchObject({ rules: { steps: 20 } });
+  expect(L.loopCommand('2 ask on')).toMatchObject({ rules: { askFirst: true } });
+  expect(L.loopCommand('2 undo run 3')).toEqual({ id: 2, op: 'undo', n: 3 });
+  expect(L.loopCommand('2 redo keep start with the quoting test')).toEqual({ id: 2, op: 'redo', keep: true, text: 'start with the quoting test' });
+  expect(L.loopCommand('2 stop')).toEqual({ id: 2, op: 'stop' });
+  expect(L.loopCommand('2 fly').error).toBe(L.LOOP_HELP);
+  for (const t of ['2 every 7m', '2 go', '2 stop', '2 stop 18:30', '2']) expect(L.isLoopCommand(t)).toBe(true);
+  for (const t of ['10 minutes run the tests', '10m check', '2 run the tests every hour']) expect(L.isLoopCommand(t)).toBe(false);
+  // The window does it, and says what changed; the board's chat box takes the same words.
+  const { m, pass } = window();
+  const a = m.add(L.parseLoop('test 5m'));
+  expect(m.command('1 runs 3')).toEqual({ text: 'Run the tests: saved · test · every 5m · 0 of 3 runs · next run in 1s' });
+  expect(a.maxRuns).toBe(3);
+  expect(m.command('1 every until done').error).toMatch(/Only a loop that fixes tests runs until done/);
+  expect(m.command('9 runs 3').error).toMatch(/No loop 9 here/);
+  expect(m.typed('/loop 1 mode auto', a.id)).toMatch(/Run the tests: saved/);
+  expect(a.mode).toBe('auto');
+  pass(1000);
+  expect(m.command('1 stop')).toEqual({ text: 'Stopped: Run the tests' });
+  expect(m.command('1 runs 4').error).toMatch(/has ended: \/loop 1 again starts it again/);
+  m.close();
+});
+
+test('a loop ends at its own limits: a number of runs, a stop time, its own spending; the window\'s $5 counts its loops\' runs', () => {
+  {
+    const { m, runs, pass } = window();
+    const l = m.add({ ...L.parseLoop('test 1m'), maxRuns: 2 });
+    pass(1000);
+    runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.' });
+    expect(l.state).toBe('waiting');
+    pass(60_000);
+    runs[1].emit({ t: 'end', reason: 'done', final: 'All pass.' });
+    expect(l).toMatchObject({ state: 'done', doneWhy: 'ran its 2 runs', counted: 2 });
+    m.close();
+  }
+  {
+    const { m, runs, pass, clock } = window();
+    const l = m.add({ ...L.parseLoop('test 1m'), stopAt: clock.t + 90_000 });
+    pass(1000);
+    runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.' });
+    pass(90_000); // past its stop time before the next run is due
+    expect(l).toMatchObject({ state: 'done', doneWhy: expect.stringMatching(/^reached its stop time, \d\d:\d\d$/) });
+    expect(runs).toHaveLength(1);
+    m.close();
+  }
+  {
+    const { m, runs, pass } = window({ status: { where: 'its service', limit: 3 } });
+    const l = m.add({ ...L.parseLoop('test 1m'), usdCap: 1 });
+    const other = m.add(L.parseLoop('2m read the Bun release page'));
+    pass(1000);
+    runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.', usd: 0.6 });
+    expect(l.state).toBe('waiting');
+    pass(60_000);
+    runs.find((r) => r.spec.prompt.startsWith('Run the tests') && r !== runs[0]).emit({ t: 'end', reason: 'done', final: 'All pass.', usd: 0.6 });
+    expect(l).toMatchObject({ state: 'done', doneWhy: 'spent $1.20 of its $1.00', spent: 1.2 });
+    expect(other.state).not.toBe('done'); // another loop goes on
+    m.close();
+  }
+  {
+    const { m, runs, pass, money } = window();
+    money.usd = 4.5; // the window's own
+    const l = m.add(L.parseLoop('test 1m'));
+    pass(1000);
+    runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.', usd: 0.6 });
+    pass(60_000);
+    expect(l).toMatchObject({ state: 'off', offWhy: expect.stringMatching(/^this window has spent \$5\.10 on its service/) });
+    m.close();
+  }
+});
+
+test('ask first: a run that is due waits for your go; go starts it, not now leaves it out (or pauses a loop with no time of its own)', () => {
+  const { m, runs, pass } = window();
+  const t = m.add({ ...L.parseLoop('test 5m'), askFirst: true });
+  const d = m.add({ ...L.parseLoop('debug'), askFirst: true });
+  pass(1000);
+  expect(runs).toHaveLength(0);
+  expect(t.ready).toMatchObject({ n: 1 });
+  expect(m.ready.map((l) => l.id)).toEqual([1, 2]);
+  expect(L.describe(t, m.now())).toMatch(/run 1 waits for your go$/);
+  expect(m.go(t.id)).toBe(true);
+  expect(runs).toHaveLength(1);
+  expect(t.ready).toBe(null);
+  runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.' });
+  pass(300_000);
+  expect(t.ready).toMatchObject({ n: 2 }); // it asks again for its next run
+  expect(m.notNow(t.id)).toBe(true);
+  expect(t).toMatchObject({ ready: null, state: 'waiting' });
+  expect(t.nextAt).toBe(m.now() + 300_000);
+  expect(m.notNow(d.id)).toBe(true);
+  expect(d.state).toBe('paused'); // runs until done: not now means pause
+  // On the board: y and n go to the run that waits, when no question does.
+  const s = (m.save(), L.readState(m.home, process.pid));
+  const sent = [];
+  const bd = { state: { ...s, loops: s.loops.map((l) => (l.id === 2 ? { ...l, ready: { n: 1, since: 1 } } : l)) }, ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  B.handleKey(bd, 'y');
+  expect(sent.pop()).toEqual({ op: 'go', id: 2 });
+  const frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: m.now(), linesOf: () => [] }));
+  expect(frame).toMatch(/! {2}DEBUG {2}Fix the failing tests · run 1 is ready and waits for your go\s+y go · n not now \(pause\) · e edit first/);
+  expect(frame).toMatch(/Manual · asks first/);
+  m.close();
+});
+
+test('changing a loop: new rules keep its name; one that ended starts again with its run count and spending from nothing', () => {
+  const { m, runs, pass } = window();
+  const l = m.add({ ...L.parseLoop('test 5m'), maxRuns: 1 });
+  pass(1000);
+  runs[0].emit({ t: 'end', reason: 'done', final: 'All pass.', usd: 0.2 });
+  expect(l).toMatchObject({ state: 'done', doneWhy: 'ran its 1 run' });
+  expect(m.edit(l.id, { maxRuns: 3 }).error).toMatch(/has ended/);
+  const r = m.edit(l.id, { ...L.rulesOf({ message: L.PRESET.test, kind: 'test', every: '2m', runs: '3' }).rules }, { again: true });
+  expect(r.text).toMatch(/^Run the tests: starts again · test · every 2m · 0 of 3 runs/);
+  expect(l).toMatchObject({ state: 'waiting', name: 'Run the tests', every: 120, maxRuns: 3, counted: 0, spent: 0, doneWhy: null });
+  pass(1000);
+  expect(runs).toHaveLength(2);
+  runs[1].emit({ t: 'end', reason: 'done', final: 'All pass.' });
+  // A new pace counts from the last run's end; a new message brings a new name.
+  m.edit(l.id, { every: 600, until: false });
+  expect(l.nextAt).toBe(l.runs.at(-1).endedAt + 600_000);
+  m.edit(l.id, L.rulesOf({ message: 'Run lint and say what it finds', every: '10m' }).rules);
+  expect(l.name).toBe('Run lint and say what it fi…');
+  m.close();
+});
+
+// A pretend rewind store: what was put back, and when.
+function fakeRewind() {
+  const calls = [];
+  return { calls, make: async (session) => ({ restore: async (n, o) => { calls.push({ session, n, ...o }); return { put: [{ rel: 'export.mjs' }], skip: [{ rel: 'notes.md', why: 'changed since, by you or another session' }], failed: [] }; } }) };
+}
+test('start over: the run stops, its changes go back once its copy is in, and a run starts with your note; keeping them, nothing goes back', async () => {
+  const rw = fakeRewind();
+  const clock = { t: 1_800_000_000_000 };
+  const runs = [];
+  const m = new L.Loops({ home: join(home, 'redo'), pid: process.pid, now: () => clock.t, status: () => ({ on: true, limit: 1 }), rewind: rw.make,
+    start: (spec) => { const fns = []; const h = { spec, kills: [], on: (f) => fns.push(f), send: () => {}, kill: (o) => h.kills.push(o ?? {}), emit: (e) => fns.forEach((f) => f(e)) }; runs.push(h); return h; } });
+  const l = m.add(L.parseLoop('debug'));
+  clock.t += 1000; m.tick();
+  expect(m.redo(l.id, 'start with the quoting test').text).toBe('Fix the failing tests: stopping run 1 to start over, its changes put back first');
+  expect(runs[0].kills).toEqual([{ wait: true }]); // given time to keep its copy
+  expect(l.state).toBe('redoing');
+  expect(l.runs[0]).toMatchObject({ n: 1, summary: 'stopped to start over', redo: { note: 'start with the quoting test', putBack: true } });
+  expect(l.counted).toBe(0); // a run stopped to start over does not count
+  m.tick();
+  expect(runs).toHaveLength(1); // nothing starts before its copy is in
+  // Its last word, with its copies: they go back, then the new run starts with the note.
+  runs[0].emit({ t: 'end', reason: 'interrupted', final: '', point: 7, until: 8, files: [{ path: 'export.mjs', by: 'edit' }] });
+  await new Promise((r) => setTimeout(r, 20));
+  expect(rw.calls).toEqual([{ session: L.sessionOf(process.pid, l.id), n: 7, until: 8 }]);
+  expect(l.runs[0].undone).toMatchObject({ put: ['export.mjs'], skip: [{ rel: 'notes.md' }] });
+  expect(runs).toHaveLength(2);
+  expect(runs[1].spec.prompt).toMatch(/\(A note from the user for this run: start with the quoting test\)/);
+  expect(runs[1].spec.rewind).toBe(L.sessionOf(process.pid, l.id));
+  // Keeping its changes: nothing goes back.
+  expect(m.redo(l.id, '', { putBack: false }).text).toBe('Fix the failing tests: stopping run 2 to start over');
+  runs[1].emit({ t: 'end', reason: 'interrupted', final: '', point: 9 });
+  await new Promise((r) => setTimeout(r, 20));
+  expect(rw.calls).toHaveLength(1);
+  expect(runs).toHaveLength(3);
+  m.close();
+});
+
+test('undo puts back what one run changed, from the app\'s own rewind store; a file a later run changed is left alone', async () => {
+  const { Rewind } = await import('../src/app/rewind.mjs');
+  const base = mkdtempSync(join(tmpdir(), 'agentic-loop-undo-'));
+  const cwd = join(base, 'project');
+  const { mkdirSync, readFileSync } = await import('node:fs');
+  mkdirSync(cwd, { recursive: true });
+  writeFileSync(join(cwd, 'a.txt'), 'one\n');
+  writeFileSync(join(cwd, 'b.txt'), 'one\n');
+  const rhome = join(base, 'home');
+  const session = L.sessionOf(process.pid, 1);
+  // Two runs, as `coding -p --loop-events` keeps them: run 1 changes a.txt and b.txt, run 2 changes b.txt again.
+  const runOne = async (changes) => {
+    const rw = new Rewind({ home: rhome, session });
+    const p = await rw.begin({ cwd, text: 'a run' });
+    for (const [f, t] of changes) { rw.edited(join(cwd, f), readFileSync(join(cwd, f))); writeFileSync(join(cwd, f), t); }
+    return rw.finish(p, { files: changes.map(([f]) => f) });
+  };
+  const p1 = await runOne([['a.txt', 'two\n'], ['b.txt', 'two\n']]);
+  const p2 = await runOne([['b.txt', 'three\n']]);
+  const clock = { t: 1_800_000_000_000 };
+  const runs = [];
+  const m = new L.Loops({ home: rhome, pid: process.pid, folder: cwd, now: () => clock.t, status: () => ({ on: true, limit: 1 }),
+    start: (spec) => { const fns = []; const h = { spec, on: (f) => fns.push(f), send: () => {}, kill: () => {}, emit: (e) => fns.forEach((f) => f(e)) }; runs.push(h); return h; } });
+  const l = m.add(L.parseLoop('2m tidy the notes'));
+  clock.t += 1000; m.tick();
+  runs[0].emit({ t: 'end', reason: 'done', final: 'Done.', point: p1.n, files: p1.files.map((f) => ({ path: f.path, by: f.by })) });
+  clock.t += 120_000; m.tick();
+  expect((await m.undo(l.id, 1)).error).toMatch(/is running: wait for run 2 to end/); // not under a run's feet
+  runs[1].emit({ t: 'end', reason: 'done', final: 'Done.', point: p2.n });
+  expect(l.runs[0].files.map((f) => f.path).sort()).toEqual(['a.txt', 'b.txt']);
+  const r = await m.undo(l.id, 1);
+  expect(r.text).toBe('Put back run 1: a.txt · left alone: b.txt (changed since)');
+  expect(readFileSync(join(cwd, 'a.txt'), 'utf8')).toBe('one\n');
+  expect(readFileSync(join(cwd, 'b.txt'), 'utf8')).toBe('three\n');
+  expect((await m.undo(l.id, 1)).error).toBe('Run 1 was already put back');
+  expect((await m.undo(l.id)).text).toBe('Put back run 2: b.txt'); // no number: the last run not put back
+  expect(readFileSync(join(cwd, 'b.txt'), 'utf8')).toBe('two\n');
+  m.close();
+});
+
+test('the board\'s new keys: + and e open the form, x starts over (tab keeps the changes), u undoes after a yes, 1–9 pick a choice', () => {
+  const b = board();
+  const sent = [];
+  const bd = { state: b.state(), ui: B.newUi(), send: (c) => sent.push(c), quit: () => {} };
+  const press = (...ks) => ks.forEach((k) => B.handleKey(bd, k));
+  // + : a new loop in the form. The kind is guessed from the message; ←→ step through a row's choices; a typed row takes keys.
+  press('+');
+  expect(bd.ui.view).toBe('form');
+  press(...'Run the tests every morning');
+  press('down', 'right'); // kind: guessed test → web
+  expect(bd.ui.form.fields.kind).toBe('web');
+  press('left');
+  press('down', ...'30m', 'down', ...'5', 'down', 'right', 'down', 'right', 'right');
+  expect(bd.ui.form.fields).toMatchObject({ message: 'Run the tests every morning', kind: 'test', every: '30m', runs: '5', cap: '$0.50' });
+  expect(bd.ui.form.fields.stopAt).toMatch(/^\d\d:\d\d$/);
+  let frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
+  expect(frame).toMatch(/New loop/);
+  expect(frame).toMatch(/Kind\s+Run the tests/);
+  expect(frame).toMatch(/How often\s+every 30m/);
+  expect(frame).toMatch(/Spending cap\s+‹ \$0\.50/);
+  expect(frame).toMatch(/enter {2}Start the loop/);
+  for (const [cols, rows] of [[96, 30], [124, 38], [200, 60]]) for (const r of D.drawBoard(bd.state, bd.ui, { cols, rows, now: b.m.now(), linesOf: () => [] })) expect(D.rowWidth(r)).toBe(cols);
+  // A wrong row: the form says why, goes to it, and sends nothing.
+  press('up', 'up', 'up', 'ctrlU', ...'soon', 'enter');
+  expect(sent).toEqual([]);
+  expect(bd.ui.form).toMatchObject({ field: 'every', error: expect.stringMatching(/How often/) });
+  press('ctrlU', ...'1h', 'enter');
+  expect(sent.pop()).toMatchObject({ op: 'add', id: null, fields: { message: 'Run the tests every morning', kind: 'test', every: '1h', runs: '5', cap: '$0.50' } });
+  expect(bd.ui.view).toBe('main');
+  // x: the chat box set to start the picked loop over; tab keeps its changes, then a plain note.
+  press('right', 'x', ...'only the quoting test');
+  expect(bd.ui.chat).toMatchObject({ on: true, as: 'redo' });
+  frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
+  expect(frame).toMatch(/start Run the tests over with this · its changes go back first/);
+  press('tab');
+  expect(bd.ui.chat.as).toBe('redoKeep');
+  press('enter');
+  expect(sent.pop()).toMatchObject({ op: 'redo', id: 2, text: 'only the quoting test', putBack: false });
+  // u: the last run with a copy, after a yes.
+  bd.state = { ...bd.state, loops: bd.state.loops.map((l) => (l.id === 2 ? { ...l, current: null, runs: [{ n: 1, ok: true, point: 4, files: [{ path: 'export.mjs', by: 'edit' }], summary: 'All pass' }] } : l)) };
+  press('u');
+  expect(bd.ui.view).toBe('confirm');
+  expect(bd.ui.confirm.text).toBe('Put back what run 1 changed? export.mjs. A file changed since stays as it is.');
+  press('y');
+  expect(sent.pop()).toMatchObject({ op: 'undo', id: 2, n: 1 });
+  // 1–9: a question's choices.
+  bd.state = { ...bd.state, loops: bd.state.loops.map((l) => (l.id === 1 ? { ...l, current: { ...l.current, needs: { id: 5, kind: 'question', text: 'Which header style?', options: ['snake_case', 'Title Case', 'Keep them'], since: 1 } } } : l)) };
+  frame = text(D.drawBoard(bd.state, bd.ui, { cols: 124, rows: 38, now: b.m.now(), linesOf: () => [] }));
+  expect(frame).toMatch(/1 snake_case {3}2 Title Case {3}3 Keep them/);
+  press('2');
+  expect(sent.pop()).toEqual({ op: 'answer', id: 1, choice: 'yes', text: 'Title Case' });
+  b.m.close();
+});
+
+test('a note typed to a run is read with its next step\'s result, and the board is told after which step', () => {
+  const out = new PassThrough();
+  const said = [];
+  out.on('data', (d) => said.push(...String(d).trim().split('\n').map((x) => JSON.parse(x))));
+  const input = new PassThrough();
+  const io = R.loopIO({ input, output: out });
+  io.event('tool', { label: 'Read', arg: 'export.mjs' });
+  input.write('{"t":"note","text":"keep the header order"}\n');
+  return new Promise((resolve) => setTimeout(() => {
+    expect(io.steering()).toEqual(['keep the header order']);
+    expect(io.more()).toBe(null); // taken once
+    io.event('steered', { notes: ['keep the header order'] });
+    io.end({ reason: 'done', finalText: 'Fixed.' }, { usd: 0.02, point: 3, until: 4, files: [{ path: 'export.mjs', by: 'edit' }] });
+    setTimeout(() => {
+      expect(said.find((x) => x.t === 'heard')).toEqual({ t: 'heard', text: 'keep the header order', after: 'Read(export.mjs)' });
+      expect(said.at(-1)).toMatchObject({ t: 'end', reason: 'done', final: 'Fixed.', usd: 0.02, point: 3, until: 4, files: [{ path: 'export.mjs', by: 'edit' }] });
+      resolve();
+    }, 10);
+  }, 20));
 });

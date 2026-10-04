@@ -57,7 +57,7 @@ import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { readRecord as sessionRecord, askJump, DETACH_LABEL } from './sessions.mjs';
 import { openJumpBox as jumpBox, jumpKey, MAC_NAME } from './jump-box.mjs';
-import { Loops, parseLoop, describe as describeLoop } from './loops.mjs';
+import { Loops, parseLoop, describe as describeLoop, LOOP_HELP, isLoopCommand } from './loops.mjs';
 import { openBoardWindow } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
 import { Rewind, pruneRewind, rowNote, rewindChoices, planLines, names } from './rewind.mjs';
@@ -1022,7 +1022,7 @@ export function App({ opts, win, onRestart }) {
   const loopsSeen = useRef({ board: false, asked: new Set(), ended: new Set() });
   const [loopsBadge, setLoopsBadge] = useState(null);
   // The footer's count: the loops still open, and whether one waits for you.
-  const loopsBadgeOf = (m) => { const open = m.open.length, need = m.needsYou.length + m.stuck.length; return open ? `↻ ${open} loop${open === 1 ? '' : 's'}${need ? ` · ${need} needs you` : ''}` : null; };
+  const loopsBadgeOf = (m) => { const open = m.open.length, need = m.needsYou.length + m.stuck.length + m.ready.length; return open ? `↻ ${open} loop${open === 1 ? '' : 's'}${need ? ` · ${need} needs you` : ''}` : null; };
   const loopsOf = () => {
     if (loopsRef.current) return loopsRef.current;
     loopsRef.current = new Loops({
@@ -1064,6 +1064,13 @@ export function App({ opts, win, onRestart }) {
         if (seen.asked.has(key)) continue;
         seen.asked.add(key);
         push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}) needs you: ${l.stuck}. On the loop board (/loops), type a hint to send it on with, r tries again as it is, s stops it.`, tone: 'warn' });
+      }
+      // Ask first: a run that waits for your go says so once.
+      for (const l of m.ready) {
+        const key = `${l.id}-${l.ready.n}-ready`;
+        if (seen.asked.has(key)) continue;
+        seen.asked.add(key);
+        push({ type: 'note', text: `↻ Loop ${l.id} (${l.name}): run ${l.ready.n} is ready and waits for your go. y on the loop board (/loops), or /loop ${l.id} go · /loop ${l.id} skip.`, tone: 'warn' });
       }
       for (const l of m.loops) {
         if (l.state !== 'done' || seen.ended.has(l.id)) continue;
@@ -3155,7 +3162,7 @@ export function App({ opts, win, onRestart }) {
           break;
         }
         if (!a || /^list$/i.test(a)) {
-          push({ type: 'note', text: m.loops.length ? ['Loops of this window (they end when it closes) · /loops opens the board:', ...m.loops.map((l) => `  ${l.id}. ${l.name} · ${describeLoop(l)}`)].join('\n') : '/loop 10m <message> sends a message again every 10 minutes. /loop test 5m runs the tests, /loop debug fixes failing tests until they pass, /loop web 30m <what to read> reads pages. /loops opens the board; /loop stop ends them.', tone: 'dim' });
+          push({ type: 'note', text: m.loops.length ? ['Loops of this window (they end when it closes) · /loops opens the board:', ...m.loops.map((l) => `  ${l.id}. ${l.name} · ${describeLoop(l)}`), `Change one: ${LOOP_HELP}`].join('\n') : '/loop 10m <message> sends a message again every 10 minutes. /loop test 5m runs the tests, /loop debug fixes failing tests until they pass, /loop web 30m <what to read> reads pages. /loops opens the board, where + makes a loop with all its rules; /loop stop ends them.', tone: 'dim' });
           break;
         }
         const sub = /^(stop|pause|run)\s*(all|\d+)?$/i.exec(a);
@@ -3165,6 +3172,13 @@ export function App({ opts, win, onRestart }) {
           const did = which.filter((l) => (what === 'stop' ? m.stop(l.id) : what === 'pause' ? m.pause(l.id) : m.runNow(l.id)));
           setLoopsBadge(loopsBadgeOf(m));
           push({ type: 'note', text: did.length ? `${{ stop: 'Stopped', pause: 'Paused, or going again', run: 'Running now' }[what]}: ${did.map((l) => l.name).join(', ')}.` : 'No such loop here. /loop lists them.', tone: did.length ? 'dim' : 'warn' });
+          break;
+        }
+        // /loop <n> <rule>: one loop's rules, or one thing done to it (loops.mjs loopCommand). Undo takes a moment.
+        if (isLoopCommand(a)) {
+          const said = (r) => { setLoopsBadge(loopsBadgeOf(m)); push({ type: 'note', text: r.error ?? r.text, tone: r.error ? 'warn' : 'dim' }); };
+          const r = m.command(a);
+          if (r?.then) r.then(said); else said(r);
           break;
         }
         const p = parseLoop(a);

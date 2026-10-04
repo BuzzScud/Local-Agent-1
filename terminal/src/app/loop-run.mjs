@@ -5,10 +5,14 @@
 //     { t: 'note', text }                             a line from the app
 //     { t: 'text', text, final }                      what the model said
 //     { t: 'ask', id, kind, name, text, options, always, sig }   it waits for an answer
-//     { t: 'end', reason, final, secs, steps, tests } the run is over (tests: { ok, count? }, count = how many fail)
+//     { t: 'heard', text, after }                     a note you typed reached the model with that step's result
+//     { t: 'end', reason, final, secs, steps, tests, usd, point, until, files }   the run is over (tests: { ok, count? },
+//                                                     count = how many fail; usd: what it cost on a paid service;
+//                                                     point…until: its copies for undo, rewind.mjs; files: what it changed)
 //   the window writes to its stdin:
 //     { t: 'answer', id, choice: 'yes' | 'always' | 'no', text }   to an ask
-//     { t: 'note', text }   a note typed to the loop: sent to the model when its turn ends
+//     { t: 'note', text }   a note typed to the loop: read with its next step's result, or as the next
+//                           message when the turn ends first
 //     { t: 'stop' }         end the run now
 // Nothing else is printed on stdout, so a line that does not parse is not from here.
 
@@ -52,6 +56,7 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
   let tests = null;
   let final = '';
   let lastNote = '';
+  let lastStep = null; // the step a note typed meanwhile goes with (heard)
   const say = (o) => { try { output.write(`${JSON.stringify(o)}\n`); } catch { /* the window is gone */ } };
   const got = (m) => {
     if (m?.t === 'answer') { const w = waiting.get(m.id); if (w) { waiting.delete(m.id); w(m); } }
@@ -80,7 +85,9 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
         const known = test && ev.tests.failed !== null && ev.tests.failed !== undefined;
         if (known) tests = { ok: !ev.tests.failed, ...(Number.isFinite(ev.tests.count) ? { count: ev.tests.count } : {}) };
         say({ t: 'tool', label: ev.label, arg: one(ev.arg, 240), error: Boolean(ev.error), given: Boolean(ev.given), test, ...(known ? { failed: Boolean(ev.tests.failed) } : {}) });
+        if (!ev.given) lastStep = `${ev.label}(${one(ev.arg, 60)})`;
       } else if (type === 'note') { lastNote = one(ev.text, 400); say({ t: 'note', text: lastNote }); }
+      else if (type === 'steered') for (const text of ev.notes ?? []) say({ t: 'heard', text: one(text, 400), after: lastStep });
       else if (type === 'assistant' && String(ev.text ?? '').trim()) { if (ev.final) final = ev.text; say({ t: 'text', text: String(ev.text).trim().slice(0, 4000), final: Boolean(ev.final) }); }
     },
     // The answer to anything the run asks. A plan to confirm and a check-in go to the window only in
@@ -99,10 +106,13 @@ export function loopIO({ input = process.stdin, output = process.stdout, mode = 
       if (a.choice === 'always' && sig) allowed.add(sig);
       return { choice: a.choice === 'yes' || a.choice === 'always' ? 'yes' : 'no' };
     },
-    // A note typed while it worked: the next message of the same conversation.
+    // Notes typed while it worked: with its next step's result (agent.mjs steering), or, when the turn
+    // ends first, the next message of the same conversation (more).
+    steering() { return notes.splice(0); },
     more() { return notes.length ? notes.shift() : null; },
     // A run that did not finish and said nothing: the app's last line says why (the model gone, out of steps).
-    end(r) { say({ t: 'end', reason: r.reason, final: String(r.finalText || final || (r.reason === 'done' ? '' : lastNote)).trim().slice(0, 6000), secs: r.secs, steps: r.steps, tests }); },
+    // more: its cost and its copies for undo (cli.jsx).
+    end(r, more = {}) { say({ t: 'end', reason: r.reason, final: String(r.finalText || final || (r.reason === 'done' ? '' : lastNote)).trim().slice(0, 6000), secs: r.secs, steps: r.steps, tests, ...more }); },
     fail(message) { say({ t: 'end', reason: 'error', final: String(message), secs: 0, steps: 0, tests }); },
   };
 }
