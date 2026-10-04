@@ -54,7 +54,7 @@ import { AutoSave, memoryOn, sinceLastTime, saveModeOf } from './autosave.mjs';
 import { mathTopics } from '../agent/expertise.mjs';
 import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_STYLES, styleWords } from '../agent/design.mjs';
 import { studioSummary } from '../agent/studio.mjs';
-import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
+import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory, firstMode, keepsLastMode } from './store.mjs';
 import { readRecord as sessionRecord, askJump, DETACH_LABEL } from './sessions.mjs';
 import { openJumpBox as jumpBox, jumpKey, MAC_NAME } from './jump-box.mjs';
 import { Loops, parseLoop, describe as describeLoop, LOOP_HELP, isLoopCommand } from './loops.mjs';
@@ -254,7 +254,8 @@ export function App({ opts, win, onRestart }) {
   const pickLevel = (pk) => thinkingLevel(pickModelOf(pk), pk.on, pk.levelId);
   const [input, setInput] = useState({ value: '', cursor: 0 });
   const [menuIndex, setMenuIndex] = useState(0);
-  const [mode, setModeState] = useState(modeOf(opts.mode ?? settings.mode) ?? 'ask');
+  const startedIn = useRef(firstMode(opts.mode, settings)).current;
+  const [mode, setModeState] = useState(startedIn.mode);
   const [thinking, setThinkingState] = useState(opts.thinking ?? settings.thinking ?? model.thinkingDefault ?? true);
   const [effort, setEffortState] = useState(opts.effort ?? settings.effort ?? model.thinkingEffort);
   const [startPhase, setStartPhase] = useState('loading');
@@ -595,6 +596,18 @@ export function App({ opts, win, onRestart }) {
   }, [input, flash]);
 
   const setMode = useCallback((m) => { agent.mode = m; setModeState(m); }, [agent]);
+  // The mode the window is left in is the next window's (store.mjs firstMode): kept in settings.json
+  // as it changes, so a quit, a closed window or /update's restart all keep it.
+  const keptMode = useRef(settings.lastMode ?? null);
+  useEffect(() => {
+    if (!keepsLastMode() || mode === keptMode.current) return;
+    keptMode.current = mode;
+    try { saveSettings({ lastMode: mode }); } catch { /* kept for this window only */ }
+  }, [mode]);
+  // Started in the mode the last window was left in: said once, so Bypass is never a surprise.
+  useEffect(() => {
+    if (startedIn.from === 'last' && startedIn.mode !== 'ask') push({ type: 'note', text: `Started in ${modeWord(startedIn.mode)}, the mode the last window was left in; shift+tab or /mode changes it.`, tone: startedIn.mode === 'bypass' ? 'warn' : 'dim' });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The menus that /mode, /meters and /mouse open when typed alone: a title, a line
   // on what it sets, the options with what each does, the one in use.
@@ -609,7 +622,7 @@ export function App({ opts, win, onRestart }) {
     if (id === 'startmode') {
       const st = startModeFor(agent.cwd);
       const now = st && !st.here ? ` Now it starts in ${modeWord(st.mode)}, saved ${st.where === 'everywhere' ? 'for every folder' : `for ${st.key.replace(homedir(), '~')}`}.` : '';
-      return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change only this conversation.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else manual' }] };
+      return { title: 'Start-up mode', blurb: `What Agentic Coder starts in for ${agent.cwd.replace(homedir(), '~')}, saved for this folder; /mode and shift+tab change this conversation, and with nothing saved a window starts in the mode the last one was left in.${now}`, what: 'startmode', current: st?.here ? st.mode : 'reset', options: [...MODE_OPTIONS, { id: 'reset', label: 'Not saved', note: 'use the one saved above it or for every folder, else the last window\'s mode' }] };
     }
     if (id === 'mode') return { title: 'Mode', blurb: 'How Agentic Coder asks before it changes things. For this conversation; shift+tab switches too.', what: 'mode', current: agent.mode, options: MODE_OPTIONS };
     if (id === 'vision-get') {
