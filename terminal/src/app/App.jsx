@@ -833,11 +833,23 @@ export function App({ opts, win, onRestart }) {
     if (!conn?.info?.ollama) return;
     setEndpoint(conn.url, { ...endpointOf(conn.url), keepAlive: typeof values.keepLoaded === 'number' ? values.keepLoaded : -1 });
   };
-  // A model's own Effort (/model's menu), when it has more than one: in use from its next reply.
+  // A model's Effort as it comes into use, from its next reply. A model on /remote: its own (/model's
+  // menu, /effort), else its default, thinking on unless it cannot think (remoteModel; the owner's pick,
+  // 3 Oct 2026); --think or --no-think at the start win over the default. Back on this Mac: the shared
+  // one again. Nothing is saved here: only a level you pick is.
   const ownLevel = (m, own) => {
     const levels = m.thinkingLevels ?? [];
-    const lv = own?.level && levels.length > 1 ? levels.find((l) => l.id === own.level) : null;
-    if (lv && lv.id !== thinkingLevel(m, agent.thinking, agent.effort).id) setThinking(Boolean(lv.effort), lv.effort ? lv.id : undefined);
+    let lv = own?.level && levels.length > 1 ? levels.find((l) => l.id === own.level) : null;
+    if (!lv && m.remote && opts.thinking === undefined) lv = thinkingLevel(m, m.thinkingDefault ?? true, m.thinkingEffort);
+    if (!lv && !m.remote && agent.model?.remote) { const s = loadSettings(opts.cwd); lv = thinkingLevel(m, opts.thinking ?? s.thinking ?? m.thinkingDefault ?? true, s.effort); }
+    // (Its id is not enough: a model that cannot think has one level, the same id with thinking on or off.)
+    if (lv && (lv.id !== thinkingLevel(m, agent.thinking, agent.effort).id || Boolean(lv.effort) !== Boolean(agent.thinking))) setThinking(Boolean(lv.effort), lv.effort ? lv.id : undefined, { target: null });
+  };
+  // Your pick of Effort for a model on /remote, kept as its own (with its own rows, if it has them).
+  const saveOwnLevel = (m, lv) => {
+    const name = m?.remote?.model;
+    if (!name || (m.thinkingLevels ?? []).length < 2) return;
+    setOwn(name, { ...(ownOf(settings, name) ?? {}), level: lv.id });
   };
   // A model's own settings on the service (null: none, it follows the shared ones), kept by model
   // in the service's set-up ("tuned"), as its Context is ("contexts", setServiceCtx).
@@ -1796,7 +1808,7 @@ export function App({ opts, win, onRestart }) {
     const m = inUse ? model : remoteModel(settings.remote, { model: entry.id, ollama: { version: catalog?.version ?? model.remote?.ollama ?? '?', ...entry }, ctx: entry.loadedCtx || entry.ctx || null });
     const levels = m.thinkingLevels ?? [];
     const own = ownOf(settings, entry.id);
-    const lvNow = (levels.length > 1 && levels.find((l) => l.id === own?.level)) || thinkingLevel(m, agent.thinking, agent.effort);
+    const lvNow = (levels.length > 1 && levels.find((l) => l.id === own?.level)) || (inUse ? thinkingLevel(m, agent.thinking, agent.effort) : thinkingLevel(m, m.thinkingDefault ?? true, m.thinkingEffort));
     const level = Math.max(0, levels.findIndex((l) => l.id === lvNow.id));
     const mine = readLimits({ ...loadSettings(opts.cwd), remote: settings.remote }, m);
     const values = { ...limitsRef.current, ...Object.fromEntries(OWN_ROWS.map((id) => [id, mine[id]])), context: serviceCtx(entry.id) };
@@ -2013,10 +2025,14 @@ export function App({ opts, win, onRestart }) {
     push({ type: 'note', text: `Saved: ${list}. Restarting ${model.name} for it (about a minute); the conversation stays.`, tone: 'dim' });
     switchModel(model, (ctx) => `${model.name} restarted: context ${Math.round(ctx / 1024)}k · thinking cap ${showLimit('thinking', next.thinking)}.`);
   };
-  const setThinking = useCallback((on, eff) => {
+  // target: the model the pick is for (the one in use unless said). A model on /remote keeps it as its
+  // own; this Mac's models share one; null: only for now (a default, or one coming back).
+  const setThinking = useCallback((on, eff, { target = agent.model } = {}) => {
     agent.thinking = on;
     setThinkingState(on);
     if (eff) { agent.effort = eff; setEffortState(eff); }
+    if (target === null) return;
+    if (target?.remote) { saveOwnLevel(target, thinkingLevel(target, on, eff ?? agent.effort)); return; }
     saveSettings(eff ? { thinking: on, effort: eff } : { thinking: on });
   }, [agent]);
   // Clock for spinners and timers, only while something is moving.
@@ -2107,7 +2123,8 @@ export function App({ opts, win, onRestart }) {
   // Keep a copy of what was shown, for /resume.
   useEffect(() => { sessionRef.current.items = items.filter((it) => it.type !== 'welcome'); }, [items]);
 
-  const sendPrompt = useCallback((value, shown = value, { visionAsked = false, mcpRead = null } = {}) => {
+  // fromServer: the message is a prompt of one of your MCP servers (/server:prompt), its own words.
+  const sendPrompt = useCallback((value, shown = value, { visionAsked = false, mcpRead = null, fromServer = null } = {}) => {
     // The model is off: the message waits (the Queued line) and goes once /start has loaded it.
     if (modelOffNow()) {
       const had = queuedRef.current;
@@ -2120,7 +2137,7 @@ export function App({ opts, win, onRestart }) {
     const mentions = mcpHub && !mcpRead ? resourceMentions(value, mcpHub.offers().resources) : [];
     if (mentions.length) {
       Promise.all(mentions.map((m) => mcpHub.readResource(m.server, m.uri).then((r) => ({ ...m, ...resourceParts(m.server, m.uri, r, { max: agent.maxResultChars }) }), (e) => ({ ...m, error: e.message }))))
-        .then((parts) => sendPrompt(value, shown, { visionAsked, mcpRead: parts }));
+        .then((parts) => sendPrompt(value, shown, { visionAsked, mcpRead: parts, fromServer }));
       return;
     }
     const expanded = expandMentions(value, cwd, agent.maxResultChars, pastedRef.current.files);
@@ -2147,7 +2164,7 @@ export function App({ opts, win, onRestart }) {
     abortRef.current = ac;
     setPlaceholder(pick(PLACEHOLDERS));
     autoRef.current.cancel(); // a save in the background steps aside
-    agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images });
+    agent.send(content, { signal: ac.signal, shown, images: blind ? undefined : images, fromServer });
   }, [agent, cwd, push]);
 
   // /rewind's first copy of this folder, and the clean-up of copies no
@@ -3338,7 +3355,7 @@ export function App({ opts, win, onRestart }) {
           try { got = promptText(await mcpHub.prompt(pc.server, pc.prompt, pc.args)); } catch (e) { push({ type: 'note', text: `${pc.server}'s prompt ${pc.prompt} could not be had: ${e.message}.`, tone: 'warn' }); break; }
           if (!got) { push({ type: 'note', text: `${pc.server}'s prompt ${pc.prompt} came back empty.`, tone: 'warn' }); break; }
           push({ type: 'note', text: `${pc.server}'s prompt “${pc.prompt}”${Object.keys(pc.args).length ? ` with ${Object.entries(pc.args).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''} · sent as your message`, tone: 'dim' });
-          sendPrompt(got, line);
+          sendPrompt(got, line, { fromServer: pc.server });
           break;
         }
         push({ type: 'note', text: `Unknown command /${cmd}. /settings has the ones not in the / menu, and /help lists them all.`, tone: 'warn' });
@@ -3744,9 +3761,11 @@ export function App({ opts, win, onRestart }) {
       else if (key.return) {
         const lv = pickLevel(pk);
         const on = !!lv?.effort;
-        setThinking(on, on ? lv.id : undefined);
-        setPicker(null);
         const picked = pk.models[pk.index];
+        // The level is the picked model's: this Mac's (shared), or the remote in use's (its own); a model
+        // of another service takes its own, or its default, when it connects.
+        setThinking(on, on ? lv.id : undefined, { target: picked.remoteRow ? (model.remote?.source === picked.source ? model : null) : picked });
+        setPicker(null);
         // A remote's row: that service, as /remote claude (computer, service) would. A model here while on a remote: back to this Mac.
         if (picked.remoteRow) {
           if (model.remote?.source === picked.source && remoteRef.current.conn) push({ type: 'note', text: `${model.name} · effort ${lv?.label.toLowerCase() ?? 'low'}.`, tone: 'dim' });

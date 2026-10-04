@@ -131,7 +131,11 @@ test('the check on an Ollama service: pictures, context and levels come from the
     expect(m.remote).toEqual({ kind: 'openai', label: url.replace('http://', ''), source: 'openai', model: 'coder:30b', ollama: '0.32.12', mine: false }); // an Ollama service, even on this Mac, is not your own computer: the facts about you stay here
     expect(m.thinkingLevels.map((l) => l.id)).toEqual(['low']);
     expect(m.thinkingEffort).toBe('low');
-    expect(remoteModel({ ...r, model: 'thinker:35b' }, thinker).thinkingLevels.map((l) => l.id)).toEqual(['low', 'high']);
+    expect(m.thinkingDefault).toBe(false); // it cannot think: off
+    const t = remoteModel({ ...r, model: 'thinker:35b' }, thinker);
+    expect(t.thinkingLevels.map((l) => l.id)).toEqual(['low', 'high']);
+    expect([t.thinkingDefault, t.thinkingEffort]).toEqual([true, 'high']); // it can: on by default
+    expect(remoteModel(r, { model: 'x' }).thinkingDefault).toBe(true); // not said: on (one that cannot answers without it)
     // a remote that is not Ollama keeps the plain levels
     expect(remoteModel(r, { model: 'x' }).thinkingLevels).toBe(GENERIC_REMOTE.thinkingLevels);
   } finally { await s.close(); }

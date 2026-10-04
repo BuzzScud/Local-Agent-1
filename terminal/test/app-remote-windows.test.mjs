@@ -36,7 +36,8 @@ function paidService() {
 test('a busy paid service: the window waits and asks again, nothing is summarized, and the cost shows on the end line and in /meters (the footer has the gauges since 2 Oct 2026)', async () => {
   const { base, cwd, env } = setup();
   const svc = await paidService();
-  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ remote: { use: true, source: 'openai', address: '127.0.0.1', port: svc.port, connect: 'http', kind: 'openai', model: MODEL, context: 0, key: false, keyEnd: '' } }));
+  // Look first off: a model on /remote thinks by default (3 Oct 2026), and Look first follows it; this test is the busy retry, one answer.
+  writeFileSync(join(base, 'home', 'settings.json'), JSON.stringify({ limits: { look: 'off' }, remote: { use: true, source: 'openai', address: '127.0.0.1', port: svc.port, connect: 'http', kind: 'openai', model: MODEL, context: 0, key: false, keyEnd: '' } }));
   const r = await runInPty({ cwd, cols: 140, env: { ...env, AGENTIC_REMOTE_KEYSTORE: 'file', AGENTIC_REMOTE_KEY: '', AGENTIC_MEMORY_SAVE: 'off', AGENTIC_BUSY_WAITS: '0.3,0.3,0.3,0.3' }, args: ['--no-flows'], steps: [
     { wait: '? for shortcuts' }, { sleep: 300 },
     { type: 'what does export.mjs do?' }, { key: 'enter' }, { wait: 'one line per trade' }, { wait: 'for this request' }, { sleep: 400 }, { snapshot: 'done' },
