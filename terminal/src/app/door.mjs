@@ -19,7 +19,8 @@ import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HOME, lanAddresses, readKey, saveKey, removeKey } from '../../../models/index.mjs';
 import { F, PROTO, BG_DIR, DETACH_LABEL, frame, frameReader, json, listBackground, readRecord, startHost, selfCommand, validName, describe, viewSession, sessionsOn, canHost, OLD_BUN } from './sessions.mjs';
-import { recentFolders, saveSettings } from './store.mjs';
+import { recentFolders, saveSettings, loadSettings } from './store.mjs';
+import { MAC_NAME } from './jump-box.mjs';
 
 const home = () => process.env.AGENTIC_HOME ?? HOME;
 export const DOOR_PORT = 7790;
@@ -83,6 +84,39 @@ function tailscalePeer(addr, { bins = TAILSCALE } = {}) {
   });
   return (async () => { for (const b of bins) { const n = await tryBin(b); if (n) return n; } return addr; })();
 }
+// Tailscale's own status (`tailscale status --json`), read without stopping anything; null when it does
+// not answer. AGENTIC_TAILSCALE_STATUS names a file that stands in for it (the tests).
+function tailscaleStatus({ bins = TAILSCALE } = {}) {
+  if (process.env.AGENTIC_TAILSCALE_STATUS) { try { return Promise.resolve(JSON.parse(readFileSync(process.env.AGENTIC_TAILSCALE_STATUS, 'utf8'))); } catch { return Promise.resolve(null); } }
+  const tryBin = (bin) => new Promise((done) => {
+    let out = '';
+    let p;
+    try { p = spawn(bin, ['status', '--json'], { stdio: ['ignore', 'pipe', 'ignore'] }); } catch { done(null); return; }
+    const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch {} }, 4000);
+    p.stdout.on('data', (c) => { out += c; });
+    p.on('error', () => { clearTimeout(t); done(null); });
+    p.on('close', () => { clearTimeout(t); try { done(JSON.parse(out)); } catch { done(null); } });
+  });
+  return (async () => { for (const b of bins) { const st = await tryBin(b); if (st) return st; } return null; })();
+}
+// The other Macs on this Tailscale network, for /jumptomac's box: { self, macs: [{ name, online, lastSeen }] },
+// each by the name coding attach takes (its Tailscale name); null when Tailscale does not answer.
+export async function tailscaleMacs(opts) {
+  const st = await tailscaleStatus(opts);
+  if (!st) return null;
+  const nameOf = (x) => x?.DNSName?.split('.')[0] || String(x?.HostName ?? '').toLowerCase().replace(/[^a-z0-9.-]+/g, '-');
+  const macs = Object.values(st.Peer ?? {}).filter((x) => /^macos$/i.test(x?.OS ?? '')).map((x) => ({ name: nameOf(x), online: Boolean(x.Online), lastSeen: x.LastSeen && !String(x.LastSeen).startsWith('0001') ? x.LastSeen : null })).filter((m) => MAC_NAME.test(m.name));
+  return { self: nameOf(st.Self), macs };
+}
+// The Macs /jumptomac's box lists as saved (settings.json "macs"), the one gone to last first. A Mac gone to
+// before the list existed (lastMac) counts as saved.
+export function savedMacs(s = loadSettings()) {
+  const list = Array.isArray(s.macs) ? s.macs.filter((m) => typeof m === 'string' && MAC_NAME.test(m)) : s.lastMac ? [s.lastMac] : [];
+  return s.lastMac && list.includes(s.lastMac) ? [s.lastMac, ...list.filter((m) => m !== s.lastMac)] : list;
+}
+const saveMac = (host) => saveSettings({ macs: [...new Set([host, ...savedMacs()])] });
+export const forgetMac = (host) => saveSettings({ macs: savedMacs().filter((m) => m !== host) });
+
 // What the other Mac is shown of a session (not its socket, process or prompt).
 const shown = (s) => ({ name: s.name, folder: s.folder, started: s.started, viewers: s.viewers });
 const tilde = (p) => (p === homedir() ? '~' : p.startsWith(`${homedir()}/`) ? `~${p.slice(homedir().length)}` : p);
@@ -545,14 +579,27 @@ export function newRows({ host, v, folders = [], last = null }) {
 }
 
 // `coding attach <host> [name]` and `coding sessions <host>`: through the door.
-export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnly = false, say = (t) => process.stdout.write(`${t}\n`), typeLine = (p) => typeKey(p, { show: true }), beatMs, retryMs }) {
+export async function attachRemote({ host, name, port = DOOR_PORT, pick, listOnly = false, askSave = false, say = (t) => process.stdout.write(`${t}\n`), typeLine = (p) => typeKey(p, { show: true }), beatMs, retryMs }) {
   const { sessions, key, v, folders, last } = await remoteList({ host, port });
   if (listOnly) {
     if (!sessions.length) say(`Nothing is running on ${host}. coding attach ${host} starts a session there.`);
     for (const s of sessions) say(`  ${describe(s, Date.now(), { mac: false })}`);
     return 0;
   }
-  // The Mac gone to last (its door took the key): /jumptomac with no name goes there.
+  // A Mac reached for the first time (its door took the key): asked once whether /jumptomac's box keeps
+  // it (the owner's pick, 3 Oct 2026; a jump only, not coding attach). The list is written out first, so
+  // the Mac gone to last no longer counts as saved by itself once you said no.
+  if (pick && askSave) {
+    try {
+      const s = loadSettings();
+      if (!Array.isArray(s.macs)) saveSettings({ macs: savedMacs(s) });
+      if (!savedMacs().includes(host)) {
+        const i = await pick([`Save ${host}: /jumptomac lists it from now on`, 'Not now'], `${host} answered. Keep it in /jumptomac's list?`);
+        if (i === 0) saveMac(host);
+      }
+    } catch {}
+  }
+  // The Mac gone to last: first in /jumptomac's box.
   try { saveSettings({ lastMac: host }); } catch {}
   let hello = { op: 'attach', name };
   if (!name) {
@@ -596,7 +643,7 @@ export async function viewJumping(view, { pick, say = (t) => process.stderr.writ
     if (!r || typeof r !== 'object') return r;
     // A clear window for the other Mac's menu (what the app drew is drawn again on the way back).
     say(`\x1b[H\x1b[2J\x1b[2m  Jumping to ${r.jump}. ${r.name} keeps running; ${DETACH_LABEL} there comes back to it.\x1b[0m\n`);
-    try { await attachRemote({ host: r.jump, pick }); } catch (e) { say(e.message); await new Promise((res) => setTimeout(res, 2500)); }
+    try { await attachRemote({ host: r.jump, pick, askSave: true }); } catch (e) { say(e.message); await new Promise((res) => setTimeout(res, 2500)); }
     // Back: the same session, which draws itself again; on another Mac, with no second window opened there.
     now = { ...now, name: r.name, fresh: false, hello: now.again ? now.again(r.name) : now.hello };
   }

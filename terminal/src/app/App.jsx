@@ -3,7 +3,7 @@
 // slash commands, layouts, sessions and keys.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp, useInput, usePaste, useStdin, useWindowSize } from 'ink';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { join, dirname } from 'node:path';
 import { existsSync, statSync, readFileSync, statfsSync, writeSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync, spawn } from 'node:child_process';
@@ -53,6 +53,7 @@ import { designSettings, designSummary, designDir, readCards, STYLES as DESIGN_S
 import { studioSummary } from '../agent/studio.mjs';
 import { loadSettings, saveSettings, saveSession, listSessions, loadSession, newSessionId, loadHistory, addHistory } from './store.mjs';
 import { readRecord as sessionRecord, askJump, DETACH_LABEL } from './sessions.mjs';
+import { openJumpBox as jumpBox, jumpKey, MAC_NAME } from './jump-box.mjs';
 import { Loops, parseLoop, describe as describeLoop } from './loops.mjs';
 import { openBoardWindow } from './loops-board.mjs';
 import { saveTrust } from './trust.mjs';
@@ -1132,6 +1133,37 @@ export function App({ opts, win, onRestart }) {
     if (!readyRemote(r) || busyNow()) { push({ type: 'note', text: `/remote ${remoteWord(pk.source)} connects it any time.`, tone: 'dim' }); return; }
     savedAskRef.current = { source: pk.source, label: label || sourceWord(pk.source), again: inUse, model: r.kind === 'claude' ? null : r.model || null };
     openChoice('remote-saved');
+  };
+  // /jumptomac: the window that typed it goes to that Mac's sessions (door.mjs viewJumping); the keeper
+  // sends it. The save question for a Mac reached for the first time is asked there, once its door answers.
+  const jumpTo = async (mac) => {
+    const r = await askJump(process.env.AGENTIC_IN_HOST, mac);
+    push({ type: 'note', text: r.ok ? `Jumping to ${mac}. This session keeps running here; ${DETACH_LABEL} there comes back to it.` : `Could not jump: ${r.text}`, tone: r.ok ? 'dim' : 'warn' });
+  };
+  // /jumptomac alone: the box opens on the saved Macs at once; what Tailscale says of them comes a moment later.
+  const openJumpBox = async () => {
+    const door = await import('./door.mjs');
+    const settingsNow = loadSettings();
+    setPicker(jumpBox({ saved: door.savedMacs(settingsNow), last: settingsNow.lastMac ?? null, here: sharedRef.current ?? hostname().split('.')[0] }));
+    const ts = await door.tailscaleMacs().catch(() => null);
+    // As an update of the box shown (it may not be drawn yet when the answer comes at once).
+    setPicker((p) => (p?.kind === 'jump' ? { ...p, ts, here: ts?.self || p.here } : p));
+  };
+  // A key in the box: jumpKey says what it means; jumping, forgetting and closing happen here.
+  const jumpBoxKey = async (pk, ch, key) => {
+    const r = jumpKey(pk, ch, key);
+    if (r.bad) { push({ type: 'note', text: r.bad, tone: 'warn' }); setPicker(r.box); return; }
+    if (r.close) { setPicker(null); push({ type: 'note', text: 'Stayed here.', tone: 'dim' }); return; }
+    if (r.offline) { setPicker(null); push({ type: 'note', text: `${r.offline} is offline on Tailscale${r.ago ? ` (it last saw it ${r.ago})` : ''}. Wake it, or check Tailscale there, then /jumptomac again.`, tone: 'warn' }); return; }
+    if (r.forget) {
+      const { forgetMac } = await import('./door.mjs');
+      forgetMac(r.forget);
+      setPicker(r.box);
+      push({ type: 'note', text: `Forgot ${r.forget}: /jumptomac no longer lists it as saved. Its key stays in the Keychain, so adding it again asks for none.`, tone: 'dim' });
+      return;
+    }
+    if (r.jump) { setPicker(null); await jumpTo(r.jump); return; }
+    setPicker(r.box);
   };
   // /remote claude, /remote computer, /remote service: straight to that saved
   // service; one not set up yet opens the form on it, typing in its first row.
@@ -2976,13 +3008,13 @@ export function App({ opts, win, onRestart }) {
         break;
       }
       case 'jumptomac': {
+        // Alone: "Jump to a Mac", the box of your saved Macs (jump-box.mjs); with a name: straight there.
         const here = process.env.AGENTIC_IN_HOST;
-        const mac = (arg || loadSettings().lastMac || '').trim();
+        const mac = arg.trim();
         if (!here) { push({ type: 'note', text: 'This window cannot jump: it runs the app itself, not a background session (an older Bun, or sessions switched off). Quit, then type: coding attach <mac>', tone: 'warn' }); break; }
-        if (!mac) { push({ type: 'note', text: '/jumptomac <mac>: your other Mac’s Tailscale name (that Mac needs coding door on). After the first time, /jumptomac alone goes to the Mac used last.', tone: 'warn' }); break; }
-        if (!/^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$/.test(mac)) { push({ type: 'note', text: `"${mac}" is not a Mac’s name: letters, digits, dots and hyphens (its Tailscale name, like server-1).`, tone: 'warn' }); break; }
-        const r = await askJump(here, mac);
-        push({ type: 'note', text: r.ok ? `Jumping to ${mac}. This session keeps running here; ${DETACH_LABEL} there comes back to it.` : `Could not jump: ${r.text}`, tone: r.ok ? 'dim' : 'warn' });
+        if (!mac) { openJumpBox(); break; }
+        if (!MAC_NAME.test(mac)) { push({ type: 'note', text: `"${mac}" is not a Mac’s name: letters, digits, dots and hyphens (its Tailscale name, like server-1).`, tone: 'warn' }); break; }
+        await jumpTo(mac);
         break;
       }
       case 'morning': {
@@ -3946,6 +3978,8 @@ export function App({ opts, win, onRestart }) {
       return;
     }
     // A choice menu (/mode, /meters, /mouse): ↑↓ or a number, enter picks, esc goes back unchanged
+    // /jumptomac alone: the box of your Macs (jump-box.mjs).
+    if (cur.picker?.kind === 'jump') { jumpBoxKey(cur.picker, ch, key); return; }
     if (cur.picker?.kind === 'choice') {
       const pk = cur.picker;
       const n = pk.options.length;

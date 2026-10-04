@@ -16,6 +16,8 @@ import { AgentsView, AgentsLine } from './agents-view.jsx';
 import { pressureWord, footerLabel } from './mac-memory.mjs';
 import { gaugesOf, gaugeLine, fitRemote, meterWords } from './remote-footer.mjs';
 import { LIMITS, showLimit, limitNote, isDefault, effortNote, defaultLevelId, shownLimits } from './limits.mjs';
+import { jumpRows, rowStatus, jumpInfo } from './jump-box.mjs';
+import { DETACH_LABEL } from './sessions.mjs';
 import { rowsOf, showValue, rowNote, rowChanged, modelChoices, formWarning, remoteRowDesc, formReady } from './remote-form.mjs';
 import { serviceRows, atRow, rowDetail, groupsOf, sizeWord, ctxWord, gbWord, canWord, isBig, isHelper as isHelperModel } from './remote-models.mjs';
 import { triedWord } from './tryouts.mjs';
@@ -1000,6 +1002,40 @@ function ChoicePicker({ app }) {
   );
 }
 
+// /jumptomac alone: "Jump to a Mac" (jump-box.mjs; Design 2 of the 3 Oct round): the saved Macs, the ones only
+// Tailscale knows, "+ Add a Mac", each with what Tailscale says, and the line under them.
+function JumpPicker({ app }) {
+  const pk = app.picker;
+  const rows = jumpRows(pk);
+  const at = Math.min(pk.index, rows.length - 1);
+  const info = jumpInfo(pk);
+  const tone = { on: C.accent, off: C.dim, dim: C.dim };
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={C.accent} paddingX={1} width={app.width}>
+      <Box justifyContent="space-between">
+        <Text bold>Jump to a Mac</Text>
+        <Text color={C.dim} wrap="truncate-start">{pk.here ? `from ${pk.here}` : ''}</Text>
+      </Box>
+      <Text color={C.dim} wrap="truncate-end">Its sessions open in this window; this one keeps running, and {DETACH_LABEL} there comes back.</Text>
+      <Text> </Text>
+      {rows.map((r, i) => {
+        const on = i === at;
+        const typing = r.add && pk.adding !== null;
+        return (
+          <Text key={r.name} wrap="truncate-end">
+            <Text color={on ? C.accent : undefined} bold={on}>{on ? '❯' : ' '} {r.name.padEnd(19)}</Text>
+            {typing ? <><Text>{pk.adding}</Text><Text inverse> </Text><Text>{'   '}</Text></> : null}
+            {rowStatus(pk, r).map((x, j) => <Text key={j} color={tone[x.tone]}>{x.text}</Text>)}
+          </Text>
+        );
+      })}
+      <Text> </Text>
+      <Box paddingX={2}><Text color={info.tone === 'warn' ? C.warn : C.dim} wrap="truncate-end">ⓘ  {info.text}</Text></Box>
+      <Text color={C.dim} wrap="truncate-end">{pk.adding !== null ? 'type the Mac’s Tailscale name · enter tries it · esc stops' : 'enter jumps · ↑↓ choose · ⌫ forgets a saved Mac · esc cancels'}</Text>
+    </Box>
+  );
+}
+
 // /rewind: your messages, newest first (a window of them when there are
 // many), then what to put back to before the one picked and what that does.
 function RewindPicker({ app }) {
@@ -1942,6 +1978,8 @@ export function Screen({ app }) {
         <ServicePicker app={app} />
       ) : app.picker?.kind === 'subagents' ? (
         <SubagentsPanel app={app} />
+      ) : app.picker?.kind === 'jump' ? (
+        <JumpPicker app={app} />
       ) : app.picker?.kind === 'choice' ? (
         <ChoicePicker app={app} />
       ) : app.picker?.kind === 'limits' ? (
