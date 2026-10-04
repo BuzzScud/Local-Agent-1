@@ -1034,3 +1034,72 @@ test('a blocked app gets its own hint, without the words that send it back to th
   expect(fenceHint('cat: /Users/x/a.txt: Operation not permitted')).toContain('Files outside the project folder cannot be read or changed');
   expect(fenceHint('all fine')).toBe('');
 });
+
+// 3 Oct 2026: Qwen3.6 read a 674-line file with no offset seven times; each repeat was told
+// "it is above" when only the outline was, until it was stopped as stuck. A repeat of an
+// outlined file now gets its next part, and does not count as the same step again.
+test('a long file read again with no offset: the outline, then its parts in turn, never "it is above"', async () => {
+  const cwd = project();
+  writeFileSync(join(cwd, 'long.mjs'), Array.from({ length: 500 }, (_, i) => `export const v${i} = ${i};`).join('\n'));
+  const read = { tool: { name: 'Read', args: { path: 'long.mjs' } } };
+  const fake = await startFakeServer([read, read, read, { text: 'v200 is 200.' }]);
+  const asked = [];
+  const agent = new Agent({ url: fake.url, model, cwd, system: systemPrompt({ cwd, git: 'test' }), thinking: false, mode: 'edits', flows: false,
+    ask: async (req) => { asked.push(req); return { choice: 'yes' }; } });
+  const reason = await agent.send('what is the value of v200?');
+  await fake.close();
+  expect(reason).toBe('done');
+  const reads = agent.messages.filter((m) => m.role === 'tool' && String(m.content).includes('long.mjs')).map((m) => String(m.content));
+  expect(reads.length).toBe(3);
+  expect(reads[0]).toContain('too long to show at once');
+  expect(reads[1]).toStartWith('(You asked for long.mjs again without an offset. The answer before had only its outline');
+  expect(reads[1]).toContain('long.mjs (lines 1-150 of 500');
+  expect(reads[2]).toContain('long.mjs (lines 151-300 of 500');
+  expect(reads.some((c) => c.startsWith('You already read'))).toBe(false);
+  expect(asked.some((r) => r.kind === 'stuck')).toBe(false);
+  expect(agent.messages.some((m) => m.role === 'user' && String(m.content).includes('You already did exactly this step'))).toBe(false);
+});
+
+// 3 Oct 2026: a turn stopped as stuck after five minutes left the user only the warning line.
+test('stopped as stuck, it still answers: one reply without tools; the app\'s own words when that reply is a call', async () => {
+  const same = { tool: { name: 'Read', args: { path: 'export.mjs' } } };
+  const said = 'I read export.mjs again and again. The flags are parsed at its top. Tell me which flag to look at.';
+  const a = await run([same, same, same, same, { text: said }]);
+  expect(a.reason).toBe('stuck');
+  const final = a.events.filter((e) => e.type === 'assistant' && e.final);
+  expect(final.at(-1).text).toBe(said);
+  expect(a.agent.messages.at(-1)).toEqual({ role: 'assistant', content: said });
+  const ask = a.agent.messages.at(-2);
+  expect([ask.role, ask.content.startsWith(AUTO), ask.content.includes('You were stopped because you kept repeating the same step. Do not call any tool.')]).toEqual(['user', true, true]);
+  // Its last word was another call: the app says what happened instead.
+  const b = await run([same, same, same, same, same, same, same]);
+  expect(b.reason).toBe('stuck');
+  const own = b.events.filter((e) => e.type === 'assistant' && e.final).at(-1).text;
+  expect(own).toStartWith('I stopped because you kept repeating the same step, before I had an answer.');
+  expect(own).toContain('- Read export.mjs');
+  expect(own).toEndWith('Tell me where to look or what to try, or rephrase the task.');
+});
+
+// Bypass lifts the folder fence and the internet block (permissions.mjs, sandbox.mjs). The
+// prompt's rules stay word for word (the service's cache), so the request says so.
+test('in Bypass the request says what is open; in the other modes it says nothing', async () => {
+  const note = (fake) => fake.requests.flatMap((r) => r.messages ?? []).some((m) => m.role === 'user' && String(m.content).includes('Bypass permissions is on: Read, List, Search, Write, Edit and commands may use any folder'));
+  const on = await run([{ text: 'Done.' }], { mode: 'bypass' });
+  expect(note(on.fake)).toBe(true);
+  const off = await run([{ text: 'Done.' }], { mode: 'edits' });
+  expect(note(off.fake)).toBe(false);
+});
+
+// 3 Oct 2026: a script turned away for "/" (a division) was told to "answer from the note"
+// that came with the request, an unrelated one, and the model gave up on the user's files.
+test('a step turned away points back at Claude\'s note only when the note names that place', () => {
+  const agent = new Agent({ url: 'http://127.0.0.1:9', model, cwd: project(), system: 'x', mode: 'edits', flows: false });
+  agent.claudeCame = true;
+  agent.claudeSaid = '[math-notes] the formulas live in ~/Desktop/MATH/notes/wilson.md';
+  expect(agent.noteNames('/')).toBe(false);
+  expect(agent.noteNames('/Users/x/Desktop/agent docs/forecast')).toBe(false);
+  expect(agent.noteNames('/Users/x/Desktop/MATH')).toBe(true);
+  expect(agent.noteNames('~/Desktop/MATH/notes/wilson.md')).toBe(true);
+  agent.claudeCame = false;
+  expect(agent.noteNames('/Users/x/Desktop/MATH')).toBe(false);
+});

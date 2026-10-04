@@ -68,7 +68,10 @@ function gitDirs(cwd) {
 // An MCP server started as a program (tools/mcp.mjs) runs behind the same fence, with what /mcp
 // opens for that one server: net (the internet), and local: the ports of services already
 // running on this Mac it may reach ([5432] for your Postgres), or 'any'.
-export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [] } = {}) {
+// open: Bypass permissions (the owner's pick, 3 Oct 2026): any folder and the internet, but
+// still no apps started, nothing that already runs here touched, Agentic Coder's own
+// folder not written, and ~/.ssh not read (permissions.mjs SECRET_FILES).
+export function sandboxProfile(root, { home = homedir(), readOnly = [], net = false, local = [], open = false } = {}) {
   const h = real(home);
   const project = real(root);
   const inHome = (rel) => join(h, rel);
@@ -84,12 +87,14 @@ export function sandboxProfile(root, { home = homedir(), readOnly = [], net = fa
     // further down still close what was already listening, and those sockets.
     // sandbox-exec takes only "localhost" or "*" as the host ("127.0.0.1:*"
     // stops every command with exit 65); localhost covers 127.0.0.1 and ::1.
-    ...(net ? [] : ['(deny network-outbound)', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (remote unix-socket))']),
-    `(deny file-read-data (subpath ${q(h)}))`,
-    `(deny file-write* (subpath ${q(h)}) (subpath "/Volumes"))`,
-    '(deny file-read-data (subpath "/Volumes"))',
-    tools.length ? `(allow file-read-data ${paths(tools)})` : '',
-    `(allow file-read-data file-write* ${paths([...writable, ...caches])})`,
+    ...(net || open ? [] : ['(deny network-outbound)', '(allow network-outbound (remote ip "localhost:*"))', '(allow network-outbound (remote unix-socket))']),
+    ...(open ? [`(deny file-write* ${paths([...new Set([inHome('.agentic-coder'), process.env.AGENTIC_HOME].filter(Boolean).map(real))])})`, `(deny file-read-data file-write* (subpath ${q(inHome('.ssh'))}))`] : [
+      `(deny file-read-data (subpath ${q(h)}))`,
+      `(deny file-write* (subpath ${q(h)}) (subpath "/Volumes"))`,
+      '(deny file-read-data (subpath "/Volumes"))',
+      tools.length ? `(allow file-read-data ${paths(tools)})` : '',
+      `(allow file-read-data file-write* ${paths([...writable, ...caches])})`,
+    ]),
     // Starting an app (open, osascript → Terminal) would run outside the fence.
     `(deny process-exec ${APP_LAUNCHERS.map((p) => `(literal ${q(p)})`).join(' ')})`,
     // What already runs here: no signals to it, no connections to it, not its data.
@@ -110,8 +115,8 @@ export function sandboxAvailable() {
 }
 
 // [file, args] that run `command` in zsh inside the fence around `root`.
-export function sandboxed(command, root, { readOnly } = {}) {
-  return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly }), '/bin/zsh', '-c', command]];
+export function sandboxed(command, root, { readOnly, open } = {}) {
+  return [SANDBOX_EXEC, ['-p', sandboxProfile(root, { readOnly, open }), '/bin/zsh', '-c', command]];
 }
 
 // What a blocked command prints, turned into a hint for the model. A blocked
@@ -120,11 +125,13 @@ export function sandboxed(command, root, { readOnly } = {}) {
 // note it came with sent it to answer at once, saying the page was on the
 // Desktop when it was not (30 Sep).
 const LAUNCHERS = APP_LAUNCHERS.map((p) => p.split('/').pop()).join('|');
-export function fenceHint(output) {
+export function fenceHint(output, { open = false } = {}) {
   if (new RegExp(`operation not permitted: (?:${LAUNCHERS})\\b`, 'i').test(output)) {
     return '\n(Apps cannot be started from here, so do not try again: say where the file is, with its full path.)';
   }
-  return /Operation not permitted|operation not permitted|EPERM|sandbox/i.test(output)
-    ? '\n(Files outside the project folder cannot be read or changed, and apps cannot be opened; stay inside the project.)'
-    : '';
+  if (!/Operation not permitted|operation not permitted|EPERM|sandbox/i.test(output)) return '';
+  // In Bypass the folders are open: what is still closed is what already runs here and the app's own folder.
+  return open
+    ? '\n(Blocked even in Bypass: apps cannot be opened, servers and services already running on this Mac cannot be reached or stopped, and Agentic Coder\'s own folder cannot be changed.)'
+    : '\n(Files outside the project folder cannot be read or changed, and apps cannot be opened; stay inside the project.)';
 }

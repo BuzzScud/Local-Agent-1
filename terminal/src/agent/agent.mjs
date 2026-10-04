@@ -172,6 +172,11 @@ const CUT_MARK = '[… cut here by Agentic Coder for this check; the rest is in 
 const auto = (text) => `${AUTO} ${text}`;
 // The same call again: after the second, and with "Keep going" to the stuck question.
 const SAME_STEP = 'You already did exactly this step. Do something different, or finish.';
+// With the request while Bypass permissions is on (see send()).
+const BYPASS_OPEN = "Bypass permissions is on: Read, List, Search, Write, Edit and commands may use any folder on this Mac (a full path is fine), and commands may reach the internet. Still refused: secrets outside the project (keys, .ssh, .env), Agentic Coder's own settings, rm -rf, sudo, git push, stopping processes and the user's never-list.";
+// The turn's last word when it was stopped as stuck: before, the user got only the app's
+// warning line after 5 minutes of work (3 Oct 2026, a math check of a folder).
+const STUCK_WORD = (why) => `You were stopped because ${why}. Do not call any tool. In at most five short lines, tell the user what you found so far (with the numbers and file names you have), what blocked you, and what they could tell you or try next.`;
 
 // A question put to the user: a sentence ending in "?" that speaks to them
 // ("Are you seeing it in TextEdit?", "Should I…?"), or a request for input.
@@ -1072,7 +1077,7 @@ export class Agent extends EventEmitter {
   withTurnNotes(messages) {
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {
@@ -1382,6 +1387,7 @@ export class Agent extends EventEmitter {
     // as it was (a note that came and went would make the model read the
     // last turn again).
     this.claudeCame = false;
+    this.claudeSaid = '';
     try { await this.remember(text, turnStart, signal); } catch (e) { if (signal?.aborted || e.name === 'AbortError') return stopNow('interrupted'); }
     // An unclear request gets one question first (src/flows/clarify.mjs); the
     // answer joins the conversation and travels with the request. (The model that
@@ -1521,6 +1527,11 @@ export class Agent extends EventEmitter {
     const urls = webAddresses(text);
     if (urls.length && this.webTools()?.fetch && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.web = { request, notes: `${urls.length === 1 ? 'The request names a web page' : 'The request names web pages'} (${urls.slice(0, 3).join(', ')}): read ${urls.length === 1 ? 'it' : 'them'} with WebFetch. ${urls.length === 1 ? 'It is' : 'They are'} not a file in the project.` };
+    }
+    // Bypass permissions: the prompt's rules say commands stay in the folder, offline. They are
+    // kept word for word (the service's cache), so the request says what is true while it is on.
+    if (this.mode === 'bypass' && request?.role === 'user' && typeof request.content === 'string') {
+      this.turn.open = { request, notes: BYPASS_OPEN };
     }
     if (math && request?.role === 'user' && typeof request.content === 'string') {
       try {
@@ -1993,7 +2004,7 @@ export class Agent extends EventEmitter {
           if (out.error) this.noteError(out.text, result);
           else if (/^(?:Rules\/)?SKILLS\//.test(String(out.text))) result.keep = 'skill';
           if (out.images?.length) this.ctxUsed += out.images.length * IMAGE_TOKENS;
-          for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime });
+          for (const r of out.readKeys ?? (out.readKey ? [out] : [])) this.turn.reads.set(r.readKey, { msg: result, mtime: r.mtime, ...(r.outline ? { outline: true, next: r.next, total: r.total } : {}) });
           if (out.stop) stopped = out.stop;
         }
         if (stopped) { reason = stopped; break; }
@@ -2020,12 +2031,16 @@ export class Agent extends EventEmitter {
           }
         }
         const key = calls.map((c) => `${c.name}:${c.args}`).join('\n');
-        repeats = key === repeatKey ? repeats + 1 : 0;
+        // A Read moved on to a long file's next part (runTool) got new lines: not a repeat.
+        const paged = this.turn.paged;
+        this.turn.paged = false;
+        repeats = key === repeatKey && !paged ? repeats + 1 : 0;
         repeatKey = key;
         errorsInRow = landed ? 0 : errorsInRow + 1;
         if (repeats >= 3 || errorsInRow >= 5) {
           reason = 'stuck';
           this.emit('note', { text: repeats >= 3 ? 'It kept repeating the same step, so it stopped. Try rephrasing the task, or give it a hint.' : 'Five tool errors in a row, so it stopped. Try rephrasing the task, or give it a hint.', tone: 'warn' });
+          await this.lastWord(repeats >= 3 ? 'you kept repeating the same step' : 'five steps in a row failed', signal);
           break;
         }
         // Stuck, sooner: the same step twice, or three errors in a row, and it
@@ -2133,9 +2148,11 @@ export class Agent extends EventEmitter {
     const sent = this.notesSent();
     try { r = await recallClaude(this.cwd, text, { embedder: this.memory.embedder ?? null, dir, store: c.store, kind: routeByRules(text)?.kind ?? null, signal, retriever: this.search.retriever, reranker: this.reranker, top: this.ctx <= 16384 ? SMALL_CTX_NOTES : undefined, sent }); } catch (e) { if (signal?.aborted || e.name === 'AbortError') throw e; return; }
     if (!r.notes.length) return;
-    goesAlong(claudeText(r.notes, { pack: Boolean(this.notesView()) }));
+    const said = claudeText(r.notes, { pack: Boolean(this.notesView()) });
+    goesAlong(said);
     if (this.happened) this.happened.claude = r.notes.map((n) => n.id);
     this.claudeCame = true; // for this message: a step that is turned away points back at the note (runTool)
+    this.claudeSaid = said; // which places the notes name (noteNames)
     this.emit('memory', { claude: r.notes.map((n) => ({ id: n.id, name: n.name, type: n.type, ...(n.project ? { project: n.project } : {}), close: n.close, chars: n.part.length })), how: r.how, ms: r.ms, of: r.of, sent });
     return r;
   }
@@ -2192,6 +2209,15 @@ export class Agent extends EventEmitter {
     this.trust(lesson.used, delta, { stopped: 'you stopped Agentic Coder', stuck: 'Agentic Coder got stuck', failed: 'the task failed its check', passed: 'the task passed its check' }[outcome]);
     this.emit('settled', lesson);
     return lesson;
+  }
+
+  // Whether Claude's notes with this request name a place (its last part, as "notes.md" or
+  // "MATH"): only then does a step turned away for being outside the folder point back at them.
+  // On 3 Oct 2026 a script refused for "/" (a division) was told to answer from an unrelated
+  // note, and the model gave up on the user's own files.
+  noteNames(where) {
+    const last = basename(String(where ?? '').trim().replace(/\/+$/, ''));
+    return Boolean(this.claudeCame && last.length > 2 && String(this.claudeSaid ?? '').includes(last));
   }
 
   // A model on another machine (prompt-files.mjs, the remote set).
@@ -2533,6 +2559,29 @@ export class Agent extends EventEmitter {
       if (signal?.aborted || e.name === 'AbortError') throw e;
       return null;
     } finally { scratch?.dispose(); }
+  }
+
+  // A turn stopped as stuck still answers the user: one short reply without tools, saying
+  // what it found, what blocked it and what to try. Without a usable reply (it wrote a call,
+  // nothing, or the service failed), the app says what the turn did. Before (3 Oct 2026) the
+  // user got only the warning line after five minutes of work.
+  async lastWord(why, signal) {
+    if (signal?.aborted) return;
+    let text = '';
+    let turn = null;
+    try {
+      this.messages.push({ role: 'user', content: auto(STUCK_WORD(why)) });
+      turn = await this.generate(signal, { textOnly: true, maxTokens: 700 });
+      if (!turn.aborted) text = beforeCall(turn.text ?? '').trim();
+      if (turn.calls?.length || toolCallInText(text)) text = '';
+    } catch (e) { if (signal?.aborted || e.name === 'AbortError') return; }
+    if (signal?.aborted) return;
+    if (!text) {
+      const did = (this.happened?.did ?? []).slice(-6).map((d) => `- ${d.replace(/\s+/g, ' ').slice(0, 120)}`);
+      text = `I stopped because ${why}, before I had an answer.${did.length ? `\nThe last steps:\n${did.join('\n')}` : ''}\nTell me where to look or what to try, or rephrase the task.`;
+    }
+    this.messages.push({ role: 'assistant', content: text });
+    this.emit('assistant', { text, reasoning: turn?.reasoning ?? '', secs: turn?.secs ?? 0, thinkSecs: turn?.thinkSecs ?? 0, tokens: turn?.tokens ?? 0, final: true });
   }
 
   // A greeting or thanks: one short reply, no tools, no focused paths.
@@ -2941,7 +2990,7 @@ export class Agent extends EventEmitter {
     if (call.name === 'Read' && !this.canSee && this.visionOn && needsSight(this.cwd, args)) { try { await this.visionOn(); } catch { /* Read says why it cannot see */ } }
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
-    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.desktopOpen(name, abs) };
+    const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -3008,7 +3057,8 @@ export class Agent extends EventEmitter {
     if (call.name === 'Screen' && d.decision === 'ask' && !screenAccess()) d = { decision: 'allow' };
     if (d.decision === 'deny') {
       this.emit('tool', { id, name: call.name, ...shown, view: { kind: 'denied', message: d.reason }, error: true });
-      return { text: `Not allowed: ${d.reason}. ${this.claudeCame ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
+      const where = args.path ?? /^(.+?) is outside the project folder/.exec(String(d.reason))?.[1];
+      return { text: `Not allowed: ${d.reason}. ${this.noteNames(where) ? "If the note that came with the request answers it, answer from the note now; do not look for the files it names." : 'Do something else.'}`, error: true };
     }
     // Edits on auto-accept: the first one of a message is shown as a plan first (not in Bypass, where nothing asks).
     if (d.decision !== 'ask' && (call.name === 'Edit' || call.name === 'Write') && this.turn && !this.turn.planOk && this.confirmPlan && this.mode !== 'bypass' && this.hook('plan')) {
@@ -3045,11 +3095,21 @@ export class Agent extends EventEmitter {
     // adding the same text twice.
     let readKey = null;
     let mtime = null;
+    let paged = null; // the line a repeated Read of an outlined file was moved on to
     if (call.name === 'Read' && this.turn?.reads) {
       const abs = resolvePath(this.cwd, args.path).abs;
       readKey = `${abs}|${args.offset ?? ''}|${args.limit ?? ''}|${args.find ?? ''}`;
       try { mtime = statSync(abs).mtimeMs; } catch {}
       const seen = this.turn.reads.get(readKey);
+      // The answer before was a long file's outline, not its lines: "it is above" was not
+      // true, and Qwen3.6 went round seven times between the outline and that line until it
+      // was stopped as stuck (3 Oct 2026). Asked again with no offset, it gets the file's next
+      // part, and the step counts as new.
+      if (seen?.outline && seen.mtime === mtime && args.offset === undefined && args.limit === undefined && !args.find && seen.next <= (seen.total ?? Infinity)) {
+        paged = seen.next;
+        args.offset = paged;
+        this.turn.paged = true;
+      } else
       // Asked a second time, it is pointed back; asked a third time, it gets
       // the text again: at Low the model once asked four times in 20 seconds,
       // was pointed back each time, and stopped as stuck.
@@ -3071,8 +3131,16 @@ export class Agent extends EventEmitter {
         : await execute(call.name, args, prepared, env);
     } catch (e) { out = { text: `${call.name} failed: ${e.code ?? e.message}`, error: true, view: { kind: 'error', message: e.code ?? e.message } }; }
     // A command the fence stopped, in a message a note of Claude's came with: back to the note.
-    if (this.claudeCame && out.error && /outside the project folder/.test(String(out.text))) out.text += ' If the note that came with the request answers it, answer from the note now.';
-    if (readKey && !out.error) Object.assign(out, { readKey, mtime });
+    if (out.error && /outside the project folder/.test(String(out.text)) && String(args.command ?? args.path ?? '').split(/[\s'"]+/).some((w) => w.includes('/') && this.noteNames(w))) out.text += ' If the note that came with the request answers it, answer from the note now.';
+    if (readKey && !out.error) {
+      Object.assign(out, { readKey, mtime });
+      // An outline, or a part given for a repeat of it: the next repeat moves on (see above).
+      if (out.view?.outline) Object.assign(out, { outline: true, next: 1, total: out.view.total });
+      else if (paged) {
+        Object.assign(out, { outline: true, next: paged + (out.view?.lines ?? 0), total: out.view?.total });
+        out.text = `(You asked for ${args.path} again without an offset. The answer before had only its outline, so here is its next part. For another part, pass offset and limit.)\n${out.text}`;
+      }
+    }
     // What this step did, for which facts the turn really used (usedFacts).
     if (this.happened && this.happened.did.length < 60) this.happened.did.push(`${call.name} ${args.path ?? args.command ?? args.pattern ?? ''}`.slice(0, 300));
     if (!out.error && call.name === 'Read') this.readFiles.add(resolvePath(this.cwd, args.path).abs);

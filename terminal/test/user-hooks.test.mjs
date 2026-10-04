@@ -211,7 +211,7 @@ test('your message: exit 2 keeps it from being sent; what a hook prints goes wit
   const w = await withHooks([
     { event: 'UserPromptSubmit', command: 'grep -q secret && { echo "that has a secret in it" >&2; exit 2; } || echo "the user is on the night shift"' },
     { event: 'SessionStart', command: 'echo "branch: main"' },
-  ], [{ text: 'Hello.' }]);
+  ], [{ text: 'Hello.' }], { mode: 'edits' }); // not Bypass: its own line goes with every request there
   expect(await w.agent.send('here is my secret key')).toBe('blocked');
   expect(w.chats().length).toBe(0);
   expect(w.notes).toContain('Your hook stopped this message, so it was not sent: that has a secret in it');
