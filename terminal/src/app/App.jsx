@@ -431,10 +431,18 @@ export function App({ opts, win, onRestart }) {
   }, []);
   const pre = useRef(null);
   const lastCheck = useRef(null);
+  // The app's small notes (fold: "Reminded it of your request", "Looking first…") are held and go out
+  // as one line before the next item, not a line each (4 Oct 2026, the owner's pick: fewer lines in a
+  // long turn). A printed line cannot change, so they are joined before they print.
+  const heldNotes = useRef([]);
   const push = useCallback((...its) => {
-    let list = its;
-    if (railOn.current && pre.current && its.some((it) => it.type !== 'machine')) {
-      list = [{ type: 'machine', ...pre.current }, ...its];
+    const fold = its.filter((it) => it.type === 'note' && it.fold);
+    let list = its.filter((it) => !(it.type === 'note' && it.fold));
+    if (fold.length) heldNotes.current.push(...fold.map((it) => it.text));
+    if (!list.length) return;
+    if (heldNotes.current.length) { list = [{ type: 'note', tone: 'dim', text: heldNotes.current.join(' · ') }, ...list]; heldNotes.current = []; }
+    if (railOn.current && pre.current && list.some((it) => it.type !== 'machine')) {
+      list = [{ type: 'machine', ...pre.current }, ...list];
       pre.current = null;
       setLive((l) => ({ ...l, pre: null }));
     }
@@ -2442,12 +2450,14 @@ export function App({ opts, win, onRestart }) {
   // Agent events → screen.
   useEffect(() => {
     const on = (name, fn) => { agent.on(name, fn); return () => agent.off(name, fn); };
-    const stream = (l, patch) => {
+    // add: the tokens this event brought (one a streamed piece; a tool call's whole size when it comes in
+    // one piece, as an Ollama service sends it: 4 Oct 2026, "↓ 4.1k tokens this session" for 52.7k written).
+    const stream = (l, patch, add = 1) => {
       const t = Date.now();
       const first = l.firstTokenAt ?? t;
-      const n = (l.streamTokens ?? 0) + 1;
+      const n = (l.streamTokens ?? 0) + add;
       const secs = (t - first) / 1000;
-      return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + 1, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
+      return { ...l, ...patch, waiting: false, tokens: (l.tokens ?? 0) + add, lastTokenAt: t, firstTokenAt: first, streamTokens: n, liveTps: secs > 0.7 ? n / secs : l.liveTps };
     };
     const addPre = (patch) => { pre.current = { ...(pre.current ?? {}), ...patch }; setLive((l) => ({ ...l, pre: pre.current })); };
     const offs = [
@@ -2462,7 +2472,7 @@ export function App({ opts, win, onRestart }) {
       on('busy', ({ task }) => setLive((l) => ({ ...l, thinking: null, text: null, writing: null, waiting: false, liveTps: null, stepStart: Date.now(), task }))),
       on('reasoning', ({ all }) => setLive((l) => stream(l, { thinking: { text: all, startedAt: l.thinking?.startedAt ?? Date.now(), tokens: (l.thinking?.tokens ?? 0) + 1 } }))),
       on('text', ({ all }) => setLive((l) => stream(l, { text: all }))),
-      on('tool-writing', ({ name, args, tokens }) => setLive((l) => stream(l, { writing: { name, args, tokens } }))),
+      on('tool-writing', ({ name, args, tokens }) => setLive((l) => stream(l, { writing: { name, args, tokens } }, Math.max(1, (tokens ?? 0) - (l.writing?.name === name ? l.writing.tokens ?? 0 : 0))))),
       on('assistant', ({ text, reasoning, thinkSecs }) => {
         const add = [];
         if (reasoning?.trim()) {
@@ -2482,10 +2492,11 @@ export function App({ opts, win, onRestart }) {
         setLive((l) => ({ ...l, running: null, writing: null }));
       }),
       // During a turn the design cards join the line of what came along; a layout check is a step.
-      on('note', ({ text, tone, design, check }) => {
+      on('note', ({ text, tone, design, check, fold: small }) => {
         if (design && railOn.current) { addPre({ design }); return; }
-        if (check) lastCheck.current = check;
-        push({ type: 'note', text, tone, ...(check ? { check } : {}) });
+        // Only the layout check's result counts for the end line's "layout problems left".
+        if (check && !check.title) lastCheck.current = check;
+        push({ type: 'note', text, tone, ...(check ? { check } : {}), ...(small ? { fold: true } : {}) });
       }),
       // What came along with the request (memory, Claude's notes): one line; ctrl+o lists it.
       on('context', (c) => { fold({ context: c }); if (railOn.current) addPre({ contexts: [...(pre.current?.contexts ?? []), c] }); else push({ type: 'context', ...c }); }),
@@ -2509,7 +2520,9 @@ export function App({ opts, win, onRestart }) {
       on('compacted', ({ summary, inPlace, n }) => { push({ type: 'note', text: inPlace ? `Picked up from its notes${n ? ` (${n})` : ''}` : `Summarized${n ? ` (${n})` : ''}, carrying on`, tone: 'dim' }); fold({ title: 'Summary', text: summary }); }),
       // A background job ended with nothing running: told to the model once a queued message had its turn.
       on('jobs-waiting', () => setTimeout(() => jobWakeRef.current?.(), 150)),
-      on('turn-end', ({ reason, secs, steps, reads, thinkTokens, tokens }) => {
+      on('turn-end', ({ reason, secs, steps, reads, thinkTokens, tokens, made }) => {
+        // What it made or changed, under the answer (rail.jsx MadeNode).
+        if (made?.length && reason !== 'interrupted') push({ type: 'made', files: made });
         const past = S.current.live?.past ?? 'Worked';
         // The service's count when it gave one, else what streamed (a greeting's turn has none).
         sessionTokens.current += tokens || S.current.live?.tokens || 0;

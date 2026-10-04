@@ -58,10 +58,12 @@ export function Result({ children }) {
   );
 }
 
+// A command of many lines (a script typed in) shows its first line and how many more (as rail.jsx cmdShown).
+const oneArg = (arg) => { const s = String(arg ?? ''); const n = s.split('\n').length - 1; return n ? `${s.split('\n')[0]} … +${n} lines` : s; };
 export function ToolHead({ tool, arg, color = C.ok, dim = false }) {
   return (
     <Row markColor={color}>
-      <Text color={dim ? C.dim : undefined}><Text bold>{tool}</Text>({arg})</Text>
+      <Text color={dim ? C.dim : undefined}><Text bold>{tool}</Text>({oneArg(arg)})</Text>
     </Row>
   );
 }

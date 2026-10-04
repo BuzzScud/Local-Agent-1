@@ -172,7 +172,9 @@ test('an Ollama service, even on the home network, gets the project\'s facts in 
   expect(r.opening).toContain(PROJECT);
   expect(r.opening).not.toContain(YOU);
   expect(r.opening).not.toContain('About the user');
-  expect(r.label).toBe("Reading the project's memory · 3 facts about you stay on this Mac");
+  // Of its 3 facts about you, the 2 rules a new memory starts with are in the instructions' Memory lines
+  // (4 Oct 2026: the label said all of them stayed); the one other stays on this Mac.
+  expect(r.label).toBe("Reading the project's memory · 1 fact about you stay on this Mac");
   // A public address is not yours either, even running coding serve; nor is the Claude API.
   expect(service({ source: 'machine', kind: 'llama', address: 'gpu.example.com' }).remote.mine).toBe(false);
   expect(service({ source: 'claude', kind: 'claude', connect: 'https', address: '' }).remote.mine).toBe(false);
