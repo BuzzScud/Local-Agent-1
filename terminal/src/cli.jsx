@@ -483,6 +483,11 @@ if (opts.print) {
       // What the app read for it before its first step (the project map, the files a question names) ends " [app]".
       onEvent: loop ? loop.io.event : (type, ev) => { if (type === 'tool') process.stderr.write(`${ev.error ? '✗' : '⏺'} ${ev.label}(${ev.arg})${ev.given ? ' [app]' : ''}\n`); if (type === 'note') process.stderr.write(`· ${ev.text}\n`); },
     });
+    // AGENTIC_TRANSCRIPT=<file>: the whole conversation and every step, for a measurement that scores a run
+    // (models/evals/tools/follow-through-replay.mjs). Nothing is written without it.
+    if (process.env.AGENTIC_TRANSCRIPT) {
+      try { (await import('node:fs')).writeFileSync(process.env.AGENTIC_TRANSCRIPT, JSON.stringify({ reason: r.reason, secs: r.secs, steps: r.steps, outTokens: r.outTokens, asked: r.asked, finalText: r.finalText, messages: r.messages, log: r.log })); } catch (e) { process.stderr.write(`· the transcript was not written: ${e.message}\n`); }
+    }
     if (loop) loop.io.end(r); else process.stdout.write(`${r.finalText.trim()}\n`);
     await stop();
     process.exit(r.reason === 'done' ? 0 : 1);
