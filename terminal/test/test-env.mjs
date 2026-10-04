@@ -54,3 +54,5 @@ process.env.AGENTIC_SESSIONS ??= 'off';
 process.env.AGENTIC_LAST_MODE ??= 'off';
 // No page is opened in WebKit to see what a reader sees (page-read.mjs), unless a test asks for it.
 process.env.AGENTIC_PAGE_READ ??= 'off';
+// New files stay where the model puts them: a test never writes to the real Desktop (agent.mjs desktopDefault).
+process.env.AGENTIC_DESKTOP_DEFAULT ??= 'off';

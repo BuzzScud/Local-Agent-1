@@ -59,6 +59,27 @@ export function fitLines(text, room) {
 }
 
 // One part by its name ("desks", "desks.md", "reference/claude-code-tools"), never outside the folder.
+// The part a model's words mean (4 Oct 2026: Qwen3.6 asked Map for "docs/map/docs/tools.md"): the name as
+// given; without docs/map/ and .md; with / as --; else the deepest part over a path of the project
+// ("terminal/src/agent/x.mjs" → terminal--src--agent). null when none fits.
+export function partFor(ladder, wanted) {
+  const names = [...new Set((ladder?.parts ?? []).map((x) => x.file.replace(/\.md$/, '')))];
+  const w = String(wanted ?? '').trim().replace(/^\.?\//, '').replace(/^docs\/map\//, '').replace(/\.md$/, '');
+  for (const t of [w, w.replace(/\//g, '--')]) if (names.includes(t)) return t;
+  const segs = w.split('/').filter(Boolean);
+  for (let n = segs.length; n > 0; n--) { const t = segs.slice(0, n).join('--'); if (names.includes(t)) return t; }
+  return null;
+}
+// The parts nearest a name that fits none, by the words they share; at most n.
+export function nearParts(ladder, wanted, n = 8) {
+  const names = [...new Set((ladder?.parts ?? []).map((x) => x.file.replace(/\.md$/, '')))];
+  const words = new Set(String(wanted ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 1 && !['docs', 'map', 'md'].includes(x)));
+  const score = (name) => name.toLowerCase().split(/[^a-z0-9]+/).filter((x) => words.has(x)).length;
+  const top = names.filter((x) => !x.includes('--')).slice(0, n);
+  const hit = names.map((x) => [x, score(x)]).filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1] || a[0].length - b[0].length).map(([x]) => x);
+  return [...new Set([...hit, ...top])].slice(0, n);
+}
+
 export function openPart(dir, name) {
   const want = String(name ?? '').trim().replace(/^\.?\//, '').replace(/\.md$/, '');
   if (!want || !PART_NAME.test(want) || want.split('/').includes('..')) return null;

@@ -8,8 +8,8 @@ import { searchKey, PROVIDER_NAMES } from '../tools/web.mjs';
 import { readInstructions, replaceInstructionBlock, focusedInstructions } from './instructions.mjs';
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
-import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid } from './questions.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead } from './tools.mjs';
+import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid, wantsQuestions, questionLines, ASK_NOTE, pageWrongQuestion } from './questions.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead, desktopDefault } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -53,9 +53,9 @@ import { isMemoryRequest } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
 import { changeTrust, alwaysRules } from './facts.mjs';
 import { recall, recallNotes, usedFacts } from './recall.mjs';
-import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
+import { recallClaude, claudeText, notesDir, topicOf, chasedQuestion } from './claude-notes.mjs';
 import { packDir, packView } from './claude-pack.mjs';
-import { openPart, readLadder, partsOf } from './ladder.mjs';
+import { openPart, readLadder, partsOf, partFor, nearParts } from './ladder.mjs';
 import { MAP_DIR, projectFiles } from '../tools/codemap.mjs';
 import { saveLessons, knownAlready, practiceWork, applySave, saveLine } from './lessons.mjs';
 import { helpersOn, CODENAMES, shareOut, chars, CEILING, SHARES, fixLike, talksAboutChanges, createdNames, testReport, gitChanges, whoUses } from './helpers.mjs';
@@ -1115,7 +1115,25 @@ export class Agent extends EventEmitter {
       if (answer.choice === 'no' && !text) return { end: 'declined' }; // "Stop here"
       this.emit('tool', { id, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: text || 'Looks good' } });
       if (!text || looksGood(text)) return end(`Saved ${pages.join(' and ')}. You looked at ${it} and said ${it} looks good, so nothing more was checked.`);
-      if (!wantsCheck(text) || !canCheck) return { send: `[Page] You stopped after saving ${names} so the user could look at ${it}. The user answered: ${text}\nFollow that.` };
+      if (!wantsCheck(text) || !canCheck) {
+        // "No, this is wrong" and little more: what is wrong, as choices; then back with that and the request.
+        let what = '';
+        const wrong = /^\W*(no|nope|wrong|not right|this is wrong|that'?s wrong|incorrect|bad)\b/i.test(text) && text.split(/\s+/).length <= 8;
+        if (wrong) {
+          const q = pageWrongQuestion(names);
+          const id2 = `pagewrong_${Date.now()}`;
+          this.emit('tool-ask', { id: id2, name: 'Ask', label: 'Ask', arg: q.question });
+          const a2 = await this.ask({ id: id2, name: 'Ask', kind: 'page', args: q, prepared: {}, label: 'Ask', arg: q.question });
+          if (signal?.aborted) return { end: 'interrupted' };
+          what = String(a2.text ?? a2.feedback ?? '').trim();
+          if (what) this.emit('tool', { id: id2, name: 'Ask', label: 'Ask', arg: q.question, view: { kind: 'answer', question: q.question, text: what } });
+        }
+        // An instruction ("make the total bold") goes back as it was; "wrong" with its detail and the request.
+        if (!wrong) return { send: `[Page] You stopped after saving ${names} so the user could look at ${it}. The user answered: ${text}\nFollow that.` };
+        const asked = String(t.task ?? t.request ?? '').split('\n\n(')[0].replace(/\s+/g, ' ').trim();
+        const hint = this.rememberHint('corrected');
+        return { send: `[Page] You stopped after saving ${names} so the user could look at ${it}. The user answered: ${text}${what ? `\nWhat is wrong, in their words: ${what}` : ''}\nTheir request, to hold the page against: "${asked.length > 900 ? `${asked.slice(0, 899)}…` : asked}"\nFollow that.${hint ? `\n${hint}` : ''}` };
+      }
       t.checkWanted = true;
     }
     const found = await this.checkLayout(again, { send: false });
@@ -1168,7 +1186,7 @@ export class Agent extends EventEmitter {
   withTurnNotes(messages) {
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.rules].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.asks, t?.fixNote, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.rules].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {
@@ -1203,6 +1221,33 @@ export class Agent extends EventEmitter {
     if (line) t.planAt = t.steps ?? 0;
     return line;
   }
+  // Remember at the moments that teach something (4 Oct 2026, the owner's picks: your answers to its
+  // questions, your corrections, a fix that worked, a wall it hit): one line, once a moment a message,
+  // when the model has the Remember tool (Model way, the memory on and saving).
+  rememberHint(kind) {
+    const t = this.turn;
+    if (!t || this.isHelper || this.way !== 'model' || !this.memory || this.memory.saveOff) return '';
+    t.remembered ??= new Set();
+    if (t.remembered.has(kind)) return '';
+    t.remembered.add(kind);
+    const what = { answers: 'If one of these answers will hold next time too', corrected: 'If what was wrong will matter again', fixed: 'That worked. If the fix will matter again', wall: 'Once you are past it, if how will matter again' }[kind];
+    return what ? `(${what}, save it with Remember: one short sentence.)` : '';
+  }
+
+  // A question from Claude's notes taken for the request (claude-notes.mjs chasedQuestion): once a message,
+  // the line that sets it right, with the request (4 Oct 2026: a quoted 30 Sep question was worked on for
+  // 20 minutes in place of the request).
+  noteChaseDue(said) {
+    const t = this.turn;
+    if (!t || t.noteChased || !this.claudeSaid) return '';
+    const q = chasedQuestion(said, this.claudeSaid, t.task ?? t.request);
+    if (!q) return '';
+    t.noteChased = true;
+    const words = String(t.task ?? t.request ?? '').split('\n\n(')[0].replace(/\s+/g, ' ').trim();
+    this.emit('note', { text: `It took a question from Claude's notes for your request ("${q.length > 80 ? `${q.slice(0, 79)}…` : q}"); set it right.`, tone: 'warn' });
+    return `(The question "${q}" is quoted in Claude's notes from an earlier conversation; it is not this request, so leave it. This message's request: "${words.length > 600 ? `${words.slice(0, 599)}…` : words}". Work on that.)`;
+  }
+
   // Your request (requestReminder) on a model with a big memory, REQUEST_EVERY steps after it was last in sight.
   requestDue() {
     const t = this.turn;
@@ -1733,6 +1778,13 @@ export class Agent extends EventEmitter {
       try { rules = alwaysRules(this.cwd, { home: this.memory.home ?? this.home }); } catch { /* no memory to read */ }
       if (rules.length) this.turn.rules = { request, notes: `Your standing rules, for this answer too:\n${rules.map((r) => `- ${r}`).join('\n')}` };
     }
+    // A request that asks to be asked: the questions as choices in the window (questions.mjs ASK_NOTE).
+    if (!this.isHelper && request?.role === 'user' && typeof request.content === 'string' && wantsQuestions(text)) this.turn.asks = { request, notes: ASK_NOTE };
+    // A message that corrects it: Remember what was wrong, when it will matter again (rememberHint).
+    if (request?.role === 'user' && typeof request.content === 'string' && CORRECTS.test(String(text).trim())) {
+      const hint = this.rememberHint('corrected');
+      if (hint) this.turn.fixNote = { request, notes: hint.replace(/^\(|\)$/g, '') };
+    }
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     let lookBacks = 0;
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
@@ -1922,7 +1974,9 @@ export class Agent extends EventEmitter {
         }
         // A reply that puts a question to you ends the turn, even with a tool
         // call in it: the call is dropped and Agentic Coder waits for your answer.
-        if (calls.length && text.trim() && asksTheUserDirectly(text)) calls = [];
+        // Not an Ask: its question is the one put to you, with its choices (4 Oct 2026: an outline that ends
+        // "which do you prefer?" with an Ask call would have lost the Ask).
+        if (calls.length && text.trim() && asksTheUserDirectly(text) && !calls.some((c) => c.name === 'Ask')) calls = [];
         const assistant = { role: 'assistant', content: text };
         const thought = beforeCall(turn.reasoning).trim();
         if (thought) assistant.reasoning_content = thought;
@@ -1972,6 +2026,16 @@ export class Agent extends EventEmitter {
             continue;
           }
           // A reply that asks you something ends the turn: it waits for you.
+          // The questions the request asked for, written as text: back once to put them in Ask, the outline kept.
+          if (this.turn.asks && !this.turn.askedUser && !this.turn.askBack && questionLines(text) >= 2) {
+            this.turn.askBack = true;
+            this.emit('note', { text: 'It wrote its questions as text; asked it to put them in the picker (Ask).', tone: 'warn' });
+            this.messages.push({ role: 'user', content: auto(`You wrote your questions as text. Put them to the user with the Ask tool now: each with 2 to 4 choices, up to 5 questions in one Ask. Keep the rest of your answer as it is; do not write it again.`) });
+            continue;
+          }
+          // An answer to a question from Claude's notes in place of the request: back once with the request.
+          const chasedNow = !this.turn.noteChased ? this.noteChaseDue(`${turn.reasoning ?? ''}\n${text}`) : '';
+          if (chasedNow) { this.messages.push({ role: 'user', content: auto(chasedNow.replace(/^\(|\)$/g, '')) }); continue; }
           if (asksTheUser(text)) break;
           // Small models often announce the next step mid-task ("Now I will
           // update main().") and stop. Tell them to go ahead, at most twice per
@@ -2314,7 +2378,8 @@ export class Agent extends EventEmitter {
         // and the line that brings it back when the check says it moved off (on the end, so the
         // conversation before it is not read again).
         const plan = this.planDue(calls);
-        const asked = this.requestDue();
+        const chased = this.noteChaseDue(`${turn.reasoning ?? ''}\n${text ?? ''}`);
+        const asked = chased ? '' : this.requestDue();
         const nudge = await this.driftDue(signal);
         if (signal?.aborted) { reason = 'interrupted'; break; }
         const follow = this.followDue(calls, text);
@@ -2323,7 +2388,7 @@ export class Agent extends EventEmitter {
         const fresh = stepped ? this.steering?.() ?? [] : [];
         const typed = [...(stepped ? this.carriedNotes?.splice(0) ?? [] : []), ...fresh];
         const said = typed.length ? `(A note from the user, sent while you worked: ${typed.join(' · ')})` : '';
-        const extra = [plan, asked, nudge, ...follow, said].filter(Boolean);
+        const extra = [plan, chased, asked, nudge, ...follow, said].filter(Boolean);
         if (extra.length && this.messages.at(-1)?.role === 'tool') {
           this.messages.at(-1).content += `\n\n${extra.join('\n')}`;
           if (fresh.length) this.emit('steered', { notes: fresh });
@@ -2429,7 +2494,9 @@ export class Agent extends EventEmitter {
   async remember(text, at, signal) {
     if (!this.memory || this.memory.recall === false) return;
     const t0 = Date.now();
-    const r = await recall(this.cwd, text, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal, retriever: this.search.retriever, reranker: this.reranker });
+    // Matched on what the request is about, not on how it asks to be answered (claude-notes.mjs topicOf).
+    const topic = topicOf(text);
+    const r = await recall(this.cwd, topic, { embedder: this.memory.embedder ?? null, home: this.memory.home, signal, retriever: this.search.retriever, reranker: this.reranker });
     if (r.note && !this.memory.told) { this.memory.told = true; this.emit('note', { text: r.note, tone: 'dim' }); }
     const request = this.messages[at];
     let added = 0;
@@ -2448,8 +2515,15 @@ export class Agent extends EventEmitter {
       for (const f of r.facts) items.push({ from: 'memory', text: one(f), close: f.close, tokens: tokensOf(recallNotes([f])) });
     }
     for (const f of r.skipped ?? []) items.push({ from: 'memory', text: one(f), close: f.close, skipped: 'an event, skipped' });
-    const c = await this.rememberClaude(text, goesAlong, signal);
+    const c = await this.rememberClaude(topic, goesAlong, signal);
     for (const n of c?.notes ?? []) items.push({ from: 'Claude', text: n.name.replace(/-/g, ' '), close: n.close, tokens: tokensOf(n.part) });
+    // With Claude's notes after it, the request again at the end, so the last thing read is the request
+    // (4 Oct 2026: 7,000 characters of notes followed a 420-character request, and a question one of them
+    // quoted was taken for it).
+    if (c?.notes?.length && request?.role === 'user' && typeof request.content === 'string') {
+      const words = String(text).replace(/\s+/g, ' ').trim();
+      request.content += `\n\n(This message's request, the one to answer; what is above it is background: "${words.length > 900 ? `${words.slice(0, 899)}…` : words}")`;
+    }
     // Said on the line when /effort's Search rows changed how they were chosen.
     const chosen = [r.chosen, c?.chosen].find((x) => x && (x.order === 'hybrid' || x.reranked));
     if (items.length) this.emit('context', { items, tokens: added, ms: Date.now() - t0, how: r.how, ...(chosen ? { chosen: howChosen(chosen, r.how) } : {}) });
@@ -3301,6 +3375,12 @@ export class Agent extends EventEmitter {
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
     if (call.name === 'Ask') { if (this.turn) this.turn.askedUser = true; return this.askUser(id, args, shown, signal); }
+    // List of a file: it is read (4 Oct 2026: "Listed docs/map/docs.md · 0 paths").
+    if (call.name === 'List' && typeof args.path === 'string' && !args.pattern) {
+      let file = false;
+      try { file = statSync(resolvePath(this.cwd, args.path).abs).isFile(); } catch {}
+      if (file) return this.runTool({ id, name: 'Read', args: JSON.stringify({ path: args.path }) }, signal);
+    }
     // A plain read in a command on a model on another machine (cat, head, tail, sed -n, grep -r, rg, ls,
     // find -name): run as Read, Search or List (tools.mjs plainRead), so a long file comes in parts with an
     // outline and a profile, and it counts as a look (4 Oct 2026: a 35 KB file came back cut, twice).
@@ -3345,6 +3425,30 @@ export class Agent extends EventEmitter {
     if (call.name === 'Screen' && !this.canSee && this.visionOn) { try { await this.visionOn(); } catch { /* the picture goes with a line saying it cannot be seen */ } }
     // checks: the lsp helper also checks JSX, TypeScript and a page's scripts before an edit lands.
     const env = { cwd: this.cwd, jobs: this.jobs, rulesSet: this.rulesSetUsed ?? 'local', notes: () => this.notesView(), rewrite: (abs) => this.readFiles.has(abs), agents: this.agentsOn(), mcp: this.mcpOn(), permissionsNow: () => ({ mode: this.mode, rules: this.savedRules(), session: this.allowedPrefixes }), signal, maxResultChars: this.maxResultChars, bash: this.bash, read: this.model?.harness?.read, canSee: Boolean(this.canSee), onScreenSetup: () => this.emit('screen-setup', {}), web: { search: this.web?.search, key: () => searchKey(this.web?.search) }, request: this.turn?.request ?? '', searches: this.turn?.searches ?? [], blocked: this.hook('blocked'), workFolder: this.turn?.workFolder ?? null, checks: this.helpers.has('lsp'), setTodos: (t) => { this.todos = t; this.emit('todos', t); }, outsideOk: (name, abs) => this.mode === 'bypass' || this.desktopOpen(name, abs) };
+    // A new file goes to the Desktop unless the request says where (tools.mjs desktopDefault); a new code
+    // file at the top of a code project is asked about once a message. AGENTIC_DESKTOP_DEFAULT=off: as before (the tests).
+    if (call.name === 'Write' && typeof args.path === 'string' && process.env.AGENTIC_DESKTOP_DEFAULT !== 'off' && !this.isHelper && this.turn) {
+      const t = this.turn;
+      let where = null;
+      try { where = desktopDefault(args.path, { cwd: this.cwd, home: this.home, request: t.task ?? t.request ?? '', code: (this.folderKinds?.get(this.cwd) ?? folderKind(this.cwd)) === 'code' }); } catch {}
+      if (where?.ask && !t.whereChoice) {
+        const question = `Where should ${where.name} go?`;
+        const qid = `where_${Date.now()}`;
+        const q = { question, options: ['Your Desktop', `This project (${basename(this.cwd)})`], about: ['A new file on the Desktop, where your pages and documents go.', 'Beside the project\'s own files.'], typeLabel: 'Somewhere else…', typeAbout: 'Name the folder.' };
+        this.emit('tool-ask', { id: qid, name: 'Ask', label: 'Ask', arg: question });
+        const a = await this.ask({ id: qid, name: 'Ask', kind: 'where', args: q, prepared: {}, label: 'Ask', arg: question });
+        const said = String(a.text ?? a.feedback ?? '').trim();
+        t.whereChoice = /desktop/i.test(said) ? 'desktop' : said ? 'project' : 'project';
+        if (said) this.emit('tool', { id: qid, name: 'Ask', label: 'Ask', arg: question, view: { kind: 'answer', question, text: said } });
+      }
+      if (where?.ask && t.whereChoice === 'desktop') where = { to: join(this.desktopDir, args.path) };
+      if (where?.to) {
+        args.path = where.to;
+        this.desktopAsked = true; // the Desktop's opening for a new file (desktopOpen)
+        t.desktopDefaulted = this.tilde(where.to);
+        this.emit('note', { text: `New file on your Desktop: ${this.tilde(where.to)} (new files go there unless you say where).`, tone: 'dim', fold: true });
+      }
+    }
     let prepared;
     try { prepared = prepare(call.name, args, env); } catch (e) { prepared = { error: `${call.name} failed: ${e.code ?? e.message}` }; }
     if (prepared.error) {
@@ -3512,6 +3616,8 @@ export class Agent extends EventEmitter {
       if (out.error) (this.turn.errors ??= []).push(call.name === 'Bash' ? `${runLine(args.command)} ended with exit code ${out.view?.code ?? '?'}` : `${call.name}: ${String(out.text).split('\n')[0].split(' What it said')[0].slice(0, 160)}`);
       if (out.wall && !this.turn.walls.some((w) => w.url === out.wall.url)) {
         this.turn.walls.push({ ...out.wall, step: this.turn.steps ?? 0 });
+        const hint = this.rememberHint('wall');
+        if (hint) out.text += `\n${hint}`;
         this.emit('note', { text: `Blocked: ${out.wall.why}. Told it to ask you rather than do something else.`, tone: 'warn' });
       }
     }
@@ -3599,7 +3705,9 @@ export class Agent extends EventEmitter {
       const counted = readResults(said, out.view.code ?? 0);
       if (run || counted.failed !== null) {
         const failed = run && tests.failed !== null ? tests.failed : counted.failed !== null ? counted.failed > 0 || (out.view.code ?? 0) !== 0 : (out.view.code ?? 0) !== 0;
+        const before = this.turn.checks.at(-1);
         this.turn.checks.push({ cmd: runLine(args.command), code: out.view.code ?? 0, failed, counts: countLine(said), step: this.turn.steps ?? 0 });
+        if (before?.failed && !failed) { const hint = this.rememberHint('fixed'); if (hint) out.text += `\n${hint}`; }
       }
     }
     if (Number.isFinite(count)) tests.count = count;
@@ -3844,8 +3952,9 @@ export class Agent extends EventEmitter {
       // A part of the project's code map (docs/map/<part>.md, tools/codemap.mjs).
       if (args.part) {
         const ladder = readLadder(join(this.cwd, MAP_DIR));
-        const p = ladder ? openPart(ladder.dir, args.part) : null;
-        if (!p) { const names = ladder ? [...new Set(ladder.parts.map((x) => x.file.replace(/\.md$/, '')))] : []; seen({ kind: 'error', message: 'No such part' }, true); return { text: ladder ? `No part "${args.part}" in docs/map. Its parts: ${names.join(', ')}; a part names the parts inside it with an arrow.` : 'This project has no code map (docs/map). Map without a part lists its code files.', error: true }; }
+        // A path for a part ("docs/map/docs/tools.md", "terminal/src/agent/x.mjs") means the part it is in (ladder.mjs partFor).
+        const p = ladder ? openPart(ladder.dir, partFor(ladder, args.part) ?? args.part) : null;
+        if (!p) { const all = ladder ? [...new Set(ladder.parts.map((x) => x.file.replace(/\.md$/, '')))] : []; const names = all.length <= 8 ? all : nearParts(ladder, args.part); seen({ kind: 'error', message: 'No such part' }, true); return { text: ladder ? `No part "${args.part}" in docs/map. ${all.length <= 8 ? 'Its parts' : 'Parts near it'}: ${names.join(', ')}${all.length <= 8 ? '' : ' (MAP.md lists the top ones)'}; a part names the parts inside it with an arrow.` : 'This project has no code map (docs/map). Map without a part lists its code files.', error: true }; }
         this.mapGiven = true;
         seen({ kind: 'list', count: partsOf(p.text).length, content: p.text });
         return { text: `docs/map/${p.file}:\n${p.text}` };
@@ -4446,8 +4555,9 @@ export class Agent extends EventEmitter {
       this.emit('tool', { id: qid, name: 'Ask', ...qShown, view: { kind: 'answer', question: q.question, text } });
       got.push({ question: q.question, text });
     }
-    if (got.length === 1) return { text: `The user answered: ${got[0].text}` };
-    return { text: `The user answered:\n${got.map((g, i) => `${i + 1}. ${g.question} → ${g.text}`).join('\n')}` };
+    const hint = this.rememberHint('answers');
+    if (got.length === 1) return { text: `The user answered: ${got[0].text}${hint ? `\n${hint}` : ''}` };
+    return { text: `The user answered:\n${got.map((g, i) => `${i + 1}. ${g.question} → ${g.text}`).join('\n')}${hint ? `\n${hint}` : ''}` };
   }
 
   // Keep the conversation inside the model's memory: first empty old tool
