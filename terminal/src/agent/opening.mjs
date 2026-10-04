@@ -115,8 +115,12 @@ export function openingRead(cwd, { memory = null, home = homedir(), you = true, 
       lines.push(`${m.you} ${m.you === 1 ? 'fact' : 'facts'} about you · ${m.project} about this project${m.left ? ` · ${m.left} left out` : ''}`);
     } else {
       parts.push(m.text ? `Memory about this project (every fact in use, in full; the facts about the user stay on their Mac; a fact can be out of date, so check a file or name it gives before you rely on it)\n${m.text}${m.left ? `\n(${m.left} more not shown, to keep this short.)` : ''}` : 'Memory about this project: nothing saved yet.');
-      lines.push(`${m.project} ${m.project === 1 ? 'fact' : 'facts'} about this project · ${m.you} about you stay on this Mac${m.left ? ` · ${m.left} left out` : ''}`);
-      title = `Reading the project's memory${m.you ? ` · ${m.you} ${m.you === 1 ? 'fact' : 'facts'} about you stay on this Mac` : ''}`;
+      // Your rules ([always]) are in the instructions' Memory lines either way (4 Oct 2026: the screen said
+      // all 13 "stay on this Mac" while the model had every one of them); the other facts about you stay.
+      const rules = m.youAlways ?? 0;
+      const kept = m.you - rules;
+      lines.push(`${m.project} ${m.project === 1 ? 'fact' : 'facts'} about this project${rules ? ` · ${rules} ${rules === 1 ? 'rule' : 'rules'} of yours in the instructions` : ''}${kept ? ` · ${kept} about you stay on this Mac` : ''}${m.left ? ` · ${m.left} left out` : ''}`);
+      title = `Reading the project's memory${kept ? ` · ${kept} ${kept === 1 ? 'fact' : 'facts'} about you stay on this Mac` : ''}`;
     }
   }
   if (!isHomeFolder(cwd, home)) {

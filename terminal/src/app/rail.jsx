@@ -113,6 +113,15 @@ export const ReplyNode = ({ text }) => <Node g="●" c="ansi256(255)"><Markdown 
 
 // A tool's step, by what it did.
 const kb = (b) => (b < 1024 ? `${b} B` : `${(b / 1024).toFixed(1)} KB`);
+// A command as its step's head shows it: a script typed in (a heredoc) by its first line, how many
+// more, and the file it was saved as (4 Oct 2026: a 196-line heredoc filled the window at every step;
+// ctrl+o still shows it whole).
+export function cmdShown(arg, saved) {
+  const s = String(arg ?? '');
+  if (!s.includes('\n')) return s;
+  const lines = s.split('\n');
+  return `${lines[0]} … +${lines.length - 1} lines${saved ? ` · ${saved}` : ''}`;
+}
 export function ToolNode({ it }) {
   const v = it.view ?? {};
   const what = v.path ?? it.arg;
@@ -156,7 +165,7 @@ export function ToolNode({ it }) {
       const shown = v.lines.slice(0, 4);
       return (
         <Box flexDirection="column">
-          <Node g="❯" c={C.edits}><Head verb="Ran" c={C.edits} what={it.arg} /></Node>
+          <Node g="❯" c={C.edits}><Head verb="Ran" c={C.edits} what={cmdShown(it.arg, v.saved)} /></Node>
           {shown.map((l, i) => <Pipe key={i}><Text wrap="truncate-end">{l || ' '}</Text></Pipe>)}
           {v.lines.length > 4 ? <Pipe><Text color={C.dim}>… +{v.lines.length - 4} lines <Text color={C.faint}>(ctrl+o to expand)</Text></Text></Pipe> : null}
           {v.timedOut ? <Pipe><Text color={C.warn}>Stopped after {v.after ?? '2 minutes'}</Text></Pipe> : v.code ? <Pipe><Text color={C.bad}>Exit code {v.code}</Text></Pipe> : null}
@@ -168,7 +177,7 @@ export function ToolNode({ it }) {
       const shown = v.lines.slice(-4);
       return (
         <Box flexDirection="column">
-          <Node g="❯" c={C.edits}><Head verb={it.label === 'Jobs' ? 'Jobs' : 'Started'} c={C.edits} what={it.arg} detail={v.what} /></Node>
+          <Node g="❯" c={C.edits}><Head verb={it.label === 'Jobs' ? 'Jobs' : 'Started'} c={C.edits} what={cmdShown(it.arg)} detail={v.what} /></Node>
           {shown.map((l, i) => <Pipe key={i}><Text wrap="truncate-end">{l || ' '}</Text></Pipe>)}
           {v.lines.length > shown.length ? <Pipe><Text color={C.dim}>… +{v.lines.length - shown.length} lines <Text color={C.faint}>(ctrl+o to expand)</Text></Text></Pipe> : null}
         </Box>
@@ -201,8 +210,8 @@ export function ToolNode({ it }) {
       );
     }
     case 'toolsearch': return <Node g="○" c={C.dim}><Head verb="Searched the tools" c="ansi256(250)" what={it.arg} detail={v.tools?.length ? `loaded ${v.tools.join(', ')}` : 'nothing found'} /></Node>;
-    case 'denied': return <Node g="⊘" c={C.warn}><Head verb="Not allowed" c={C.warn} what={`${it.label}(${it.arg})`} /><Text color={C.warn}>{v.message}</Text></Node>;
-    case 'declined': return <Node g="⊘" c={C.dim}><Head verb="You said no" c={C.dim} what={`${it.label}(${it.arg})`} detail={v.feedback || ''} /></Node>;
+    case 'denied': return <Node g="⊘" c={C.warn}><Head verb="Not allowed" c={C.warn} what={`${it.label}(${cmdShown(it.arg)})`} /><Text color={C.warn}>{v.message}</Text></Node>;
+    case 'declined': return <Node g="⊘" c={C.dim}><Head verb="You said no" c={C.dim} what={`${it.label}(${cmdShown(it.arg)})`} detail={v.feedback || ''} /></Node>;
     case 'answer': return <Node g="›" c={C.accent}><Head verb={it.label} c={C.accent} what={it.arg} /><Text><Text color={C.dim}>You: </Text>{v.text}</Text></Node>;
     case 'error': return <Node g="✗" c={C.bad}><Head verb={it.label} c={C.bad} what={it.arg} /><Text color={C.bad}>Error: {v.message}</Text></Node>;
     default: return <Node g="●" c={it.error ? C.bad : C.ok}><Head verb={it.label} c={it.error ? C.bad : C.ok} what={it.arg} /></Node>;
@@ -210,15 +219,36 @@ export function ToolNode({ it }) {
 }
 
 // The layout check as a step: each problem named under it.
+// A check of the app's own, as a step: the layout check (flows/layoutcheck.mjs), and since 4 Oct 2026 the
+// page check (page-read.mjs) and the second look (second-look.mjs), which were loose notes before.
+// title, ok (the words for nothing wrong) and where (how it looked) default to the layout check's.
 export function CheckNode({ check }) {
   const n = check.problems.length;
-  const where = `1440 px, phone, dark · ${check.secs.toFixed(1)} s`;
-  if (!n) return <Node g="◎" c={C.ok}><Text><Text color={C.ok} bold>Layout check</Text><Text color={PATH}>  {check.page}</Text><Text color={C.ok}>  ✓ nothing broken</Text><Text color={C.dim}> · {where}</Text></Text></Node>;
+  const title = check.title ?? 'Layout check';
+  const where = check.where ?? `1440 px, phone, dark · ${check.secs.toFixed(1)} s`;
+  if (!n) return <Node g="◎" c={C.ok}><Text><Text color={C.ok} bold>{title}</Text>{check.page ? <Text color={PATH}>  {check.page}</Text> : null}<Text color={C.ok}>  ✓ {check.ok ?? 'nothing broken'}</Text><Text color={C.dim}> · {where}</Text></Text></Node>;
   return (
     <Box flexDirection="column">
-      <Node g="◎" c={C.warn}><Text><Text color={C.warn} bold>Layout check</Text><Text color={PATH}>  {check.page}</Text><Text color={C.warn}>  ✗ {plural(n, 'problem')}{check.again ? ' left' : ''}</Text><Text color={C.dim}> · {where}{(check.sent ?? !check.again) ? ' · sent back to fix' : ''}</Text></Text></Node>
+      <Node g="◎" c={C.warn}><Text><Text color={C.warn} bold>{title}</Text>{check.page ? <Text color={PATH}>  {check.page}</Text> : null}<Text color={C.warn}>  ✗ {check.bad ?? `${plural(n, 'problem')}${check.again ? ' left' : ''}`}</Text><Text color={C.dim}> · {where}{(check.sent ?? !check.again) ? ' · sent back to fix' : ''}</Text></Text></Node>
       {check.problems.slice(0, 6).map((p, i) => <Pipe key={i}><Text color="ansi256(250)">{p}</Text></Pipe>)}
       {n > 6 ? <Pipe><Text color={C.dim}>… {n - 6} more</Text></Pipe> : null}
+    </Box>
+  );
+}
+
+// What the message made or changed, under its answer (4 Oct 2026: the answers named files and sizes in
+// their own words, and one called an empty page done): each file with its size, and a page's check.
+const kbOf = (b) => (b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${(b / 1e3).toFixed(1)} KB`);
+export function MadeNode({ files }) {
+  return (
+    <Box flexDirection="column">
+      {files.slice(0, 8).map((f, i) => (
+        <Box key={i} flexDirection="column">
+          <Node g={i ? ' ' : '▣'} c={C.ok}><Text>{i ? <Text>{'    '}</Text> : <Text color={C.ok} bold>Made</Text>}<Text color={PATH}>  {f.path}</Text><Text color={C.dim}> · {kbOf(f.bytes)} · {f.created ? 'new' : 'changed'}</Text></Text></Node>
+          {f.page ? <Pipe><Text color={f.empty ? C.warn : C.dim}>{'      '}{f.page}</Text></Pipe> : null}
+        </Box>
+      ))}
+      {files.length > 8 ? <Pipe><Text color={C.dim}>{'      '}… and {files.length - 8} more</Text></Pipe> : null}
     </Box>
   );
 }

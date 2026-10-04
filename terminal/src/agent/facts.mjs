@@ -582,7 +582,14 @@ export function factsInFull(cwd, { home = homedir(), maxChars = 8000, you: about
     }
     if (lines.length) text += `${text ? '\n\n' : ''}${title}\n${lines.join('\n')}`;
   }
-  return { text, you: you.length, project: here.length, left };
+  return { text, you: you.length, youAlways: you.filter((f) => f.always).length, project: here.length, left };
+}
+
+// The rules you set to hold always ([always] facts, yours and the project's), one line each, for the
+// request's own note on a model on another machine (agent.mjs). At most `max`.
+export function alwaysRules(cwd, { home = homedir(), max = 10 } = {}) {
+  const dirs = memoryDirs(cwd, home);
+  return [...readFacts(dirs.you), ...readFacts(dirs.project)].filter((f) => f.always).sort(byWorth).slice(0, max).map((f) => oneLine(f.text));
 }
 
 export function memoryNotes(cwd, { home = homedir(), maxChars = 1600 } = {}) {

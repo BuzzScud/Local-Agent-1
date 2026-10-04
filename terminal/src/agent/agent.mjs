@@ -9,7 +9,7 @@ import { readInstructions, replaceInstructionBlock, focusedInstructions } from '
 import { streamChat } from './client.mjs';
 import { isBusy } from './busy.mjs';
 import { askedQuestions, checkInQuestion, stuckQuestion, planQuestion, lookSaid, stepSaid, errorSaid, planSaid } from './questions.mjs';
-import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch } from './tools.mjs';
+import { toolSchemas, parseArgs, sentArgs, needsText, display, prepare, execute, resolvePath, didYouMean, syntaxError, WHOLE_MAX, needsSight, EXPLORE_TOOLS, toolNameOf, plainFetch, plainRead } from './tools.mjs';
 import { existsSync, statSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
 import { outlineText } from '../tools/outline.mjs';
 import { repoMap } from '../tools/repomap.mjs';
@@ -51,7 +51,7 @@ import { secondLook, ownSteps, lookFacts, lookText, lookOn } from './second-look
 import { screenAccess } from '../tools/screen.mjs';
 import { isMemoryRequest } from './memory.mjs';
 import { changedLines } from '../tools/edit.mjs';
-import { changeTrust } from './facts.mjs';
+import { changeTrust, alwaysRules } from './facts.mjs';
 import { recall, recallNotes, usedFacts } from './recall.mjs';
 import { recallClaude, claudeText, notesDir } from './claude-notes.mjs';
 import { packDir, packView } from './claude-pack.mjs';
@@ -1168,7 +1168,7 @@ export class Agent extends EventEmitter {
   withTurnNotes(messages) {
     const t = this.turn;
     if (t?.baked) return messages;
-    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open].filter(Boolean);
+    const extras = [t?.bug, t?.skill, t?.folder, t?.look, t?.math, t?.design, t?.carried, t?.web, t?.mcp, t?.open, t?.rules].filter(Boolean);
     const pin = this.pinnedNote();
     if (!extras.length && !pin) return messages;
     return messages.map((m) => {
@@ -1269,8 +1269,8 @@ export class Agent extends EventEmitter {
     const r = await secondLook({ url: this.url, model: this.model, slot: who.slot, use: who.use, request: t.request, plan: t.planAt != null ? planList(this.todos) : '', steps, facts: lookFacts(t, { home: this.home ?? homedir() }), answer, signal });
     const secs = `${(r.ms / 1000).toFixed(1)} s`;
     if (r.failed) { this.emit('note', { text: `Second look: not made (${r.reason}).`, tone: 'dim' }); return ''; }
-    if (r.ok) { this.emit('note', { text: `Second look: the answer holds (${secs}).`, tone: 'dim' }); return ''; }
-    this.emit('note', { text: `Second look: ${r.problems.join(' · ')} Sent it back (${secs}).`, tone: 'warn' });
+    if (r.ok) { this.emit('note', { text: `Second look: the answer holds (${secs}).`, tone: 'dim', check: { title: 'Second look', page: '', problems: [], ok: 'the answer holds', where: secs } }); return ''; }
+    this.emit('note', { text: `Second look: ${r.problems.join(' · ')} Sent it back (${secs}).`, tone: 'warn', check: { title: 'Second look', page: '', problems: r.problems, bad: `${r.problems.length === 1 ? 'one thing' : `${r.problems.length} things`} the answer must fix`, where: secs, sent: true } });
     return lookText(r.problems);
   }
   // Stays on task (/hooks, off until you switch it on): every DRIFT_EVERY steps, the check; off task, the
@@ -1329,7 +1329,7 @@ export class Agent extends EventEmitter {
     if (this.turn?.errorsInRow > 0) return false;
     if (this.steppedAt == null) {
       this.steppedAt = Date.now();
-      this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking briefly from here, to finish in time`, tone: 'dim' });
+      this.emit('note', { text: `Half of the ${Math.round(this.thinkBudgetSecs / 60)} minutes for this request used: thinking briefly from here, to finish in time`, tone: 'dim', fold: true });
     }
     return true;
   }
@@ -1725,11 +1725,19 @@ export class Agent extends EventEmitter {
     // README, its manifest) goes with the first request there, and the names the request uses are
     // matched against it; when the folder does not settle which one is meant, you are asked.
     const folder = !follow && !this.isHelper && request?.role === 'user' && typeof request.content === 'string' ? await this.folderNotes(text, request, signal) : null;
+    // Your standing rules ([always] facts) with the request itself, on a model on another machine: they are
+    // in the instructions' Memory lines too, far above a long conversation (4 Oct 2026: a 29-step run's
+    // answer went against "explain simply… no file names or code unless asked").
+    if (this.model?.remote && this.memory && !this.isHelper && request?.role === 'user' && typeof request.content === 'string') {
+      let rules = [];
+      try { rules = alwaysRules(this.cwd, { home: this.memory.home ?? this.home }); } catch { /* no memory to read */ }
+      if (rules.length) this.turn.rules = { request, notes: `Your standing rules, for this answer too:\n${rules.map((r) => `- ${r}`).join('\n')}` };
+    }
     const lookFloor = !follow && !this.isHelper && !isHomeFolder(this.cwd) && !this.turn.mcp?.hits.some((x) => x.named) ? this.lookSecsNow : 0;
     let lookBacks = 0;
     if (lookFloor && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.look = { request, notes: folder?.kind === 'data' ? LOOK_NOTE_DATA : LOOK_NOTE };
-      this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim' });
+      this.emit('note', { text: `Looking first: at least ${lookFloor} s of searching and reading before it answers (/effort Look first).`, tone: 'dim', fold: true });
     }
     if (bug && request?.role === 'user' && typeof request.content === 'string') {
       this.turn.bug = { request, steps: kindText(bug), kind: bug };
@@ -2320,7 +2328,7 @@ export class Agent extends EventEmitter {
           this.messages.at(-1).content += `\n\n${extra.join('\n')}`;
           if (fresh.length) this.emit('steered', { notes: fresh });
           if (plan) this.emit('note', { text: `Reminded it of its plan: ${plan.match(/\d+ of \d+ steps done/)[0]}`, tone: 'dim' });
-          if (asked) this.emit('note', { text: 'Reminded it of your request', tone: 'dim' });
+          if (asked) this.emit('note', { text: 'Reminded it of your request', tone: 'dim', fold: true });
         }
         // A page saved for this request: the turn stops here, the page opens, and you are asked
         // before anything checks it (askPage). Once a message; after that the end of it asks.
@@ -2401,7 +2409,7 @@ export class Agent extends EventEmitter {
     if (this.remoteSet()) this.bakeTurnNotes();
     await this.stillBroken(reason);
     await this.deliverDesktop(reason);
-    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0 });
+    this.emit('turn-end', { reason, secs: (Date.now() - started) / 1000, steps: t.steps ?? 0, reads: (t.readsRun ?? 0) + (t.given ?? 0), readFirst: t.ranked?.files?.length ?? 0, thinkTokens: t.thinkTokens ?? 0, tokens: t.tokens ?? 0, stuckAsks: t.stuckAsks ?? 0, made: this.madeSummary() });
     return reason;
   }
 
@@ -3293,11 +3301,20 @@ export class Agent extends EventEmitter {
     }
     if (call.name === 'Agent') return this.runHelper(id, args, shown, signal);
     if (call.name === 'Ask') { if (this.turn) this.turn.askedUser = true; return this.askUser(id, args, shown, signal); }
+    // A plain read in a command on a model on another machine (cat, head, tail, sed -n, grep -r, rg, ls,
+    // find -name): run as Read, Search or List (tools.mjs plainRead), so a long file comes in parts with an
+    // outline and a profile, and it counts as a look (4 Oct 2026: a 35 KB file came back cut, twice).
+    const reading = call.name === 'Bash' && this.model?.remote ? plainRead(args.command, this.cwd) : null;
+    if (reading) {
+      const out = await this.runTool({ id, name: reading.name, args: JSON.stringify(reading.args) }, signal);
+      if (typeof out?.text === 'string') out.text = `(Run as ${reading.name}: the app's own tool shows a long file in parts, with an outline. Use ${reading.name} yourself.)\n${out.text}`;
+      return out;
+    }
     // A plain curl or wget of a page outside Bypass, with WebFetch on: run as WebFetch, since commands reach
     // the internet only in Bypass (tools.mjs plainFetch); asked about as WebFetch is.
     const fetching = call.name === 'Bash' && this.mode !== 'bypass' && this.webTools()?.fetch ? plainFetch(args.command) : null;
     if (fetching) {
-      this.emit('note', { text: `A plain fetch of ${fetching}: run as WebFetch (commands reach the internet only in Bypass).`, tone: 'dim' });
+      this.emit('note', { text: `A plain fetch of ${fetching}: run as WebFetch (commands reach the internet only in Bypass).`, tone: 'dim', fold: true });
       const out = await this.runTool({ id, name: 'WebFetch', args: JSON.stringify({ url: fetching }) }, signal);
       if (typeof out?.text === 'string') out.text = `(Run as WebFetch: commands reach the internet only in Bypass permissions. Call WebFetch yourself for a page.)\n${out.text}`;
       return out;
@@ -4248,9 +4265,23 @@ export class Agent extends EventEmitter {
     this.folderKinds ??= new Map();
     let kind = this.folderKinds.get(dir);
     if (!kind) { try { kind = folderKind(dir); } catch { return null; } this.folderKinds.set(dir, kind); }
-    if (kind === 'code') return { kind };
     this.cardsGiven ??= new Set();
     this.folderLabels ??= new Map();
+    // A code project: its README, for a model on another machine, once a conversation, when it says
+    // something (200 characters or more); the opening read already gives git, the top and the map.
+    if (kind === 'code') {
+      if (!this.model?.remote || this.cardsGiven.has(dir)) return { kind };
+      this.cardsGiven.add(dir);
+      let readme = null;
+      try { readme = folderCard(dir, { chars: 2000 }); } catch {}
+      const files = (readme?.files ?? []).filter((f) => /^readme/i.test(f));
+      if (!files.length || readme.text.length < 200) return { kind };
+      const notes = `What this project says about itself (${files.join(', ')}; Read it for the rest):\n${readme.text}`;
+      this.turn.folder = { request, notes };
+      this.ctxUsed += tokensOf(notes);
+      this.emit('note', { text: `Read the project's ${files.join(' and ')}`, tone: 'dim', fold: true });
+      return { kind };
+    }
     let card = null;
     if (!this.cardsGiven.has(dir)) { try { card = folderCard(dir); } catch {} this.cardsGiven.add(dir); }
     if (card) this.folderLabels.set(dir, card.labels);
@@ -4268,7 +4299,7 @@ export class Agent extends EventEmitter {
     this.turn.folder = { request, notes };
     this.ctxUsed += tokensOf(notes);
     const words = (names?.matched ?? []).map((m) => `${m.word} → ${m.to ?? 'asked'}`).join(', ');
-    this.emit('note', { text: `${card ? `Read the folder's ${card.files.join(' and ')}` : 'This folder'}${words ? ` · names in your request: ${words}` : ''}`, tone: 'dim' });
+    this.emit('note', { text: `${card ? `Read the folder's ${card.files.join(' and ')}` : 'This folder'}${words ? ` · names in your request: ${words}` : ''}`, tone: 'dim', fold: true });
     return { kind };
   }
 
@@ -4299,6 +4330,7 @@ export class Agent extends EventEmitter {
     if (!rels.length) return null;
     let back = null;
     t.pageReads = [];
+    t.pageEmpty = new Set();
     for (const rel of rels) {
       const abs = resolvePath(this.cwd, rel).abs;
       this.emit('busy', { task: `opening ${basename(abs)} to see what a reader sees` });
@@ -4309,10 +4341,34 @@ export class Agent extends EventEmitter {
       const line = pageReadLine(said, read, e);
       t.pageReads.push(line);
       const sending = send && e.problem && !back;
-      this.emit('note', { text: `Page check, ${line}${sending ? '; sent back to fill it' : ''}.`, tone: e.problem ? 'warn' : 'dim' });
+      if (e.problem) t.pageEmpty.add(said);
+      const shown = e.of ? `${e.of - e.empty.length} of ${e.of} sections show text` : `${read.text.toLocaleString('en-US')} characters on screen`;
+      const problems = e.problem ? [e.of ? `${e.empty.length} of ${e.of} sections show only their heading: ${e.empty.slice(0, 6).map((x) => x.title || x.id || 'untitled').join(', ')}` : `only ${read.text} characters on screen of ${(read.bytes / 1000).toFixed(1)} KB`, ...(read.errors?.length ? ['a script stopped with an error when it opened'] : [])] : [];
+      this.emit('note', { text: `Page check, ${line}${sending ? '; sent back to fill it' : ''}.`, tone: e.problem ? 'warn' : 'dim', check: { title: 'Page check', page: said, problems, ok: shown, bad: shown, where: read.ran ? 'opened in WebKit, scripts run' : 'read as text', sent: sending } });
       if (sending) back = pageReadNote(said, read, e);
     }
     return back;
+  }
+
+  // What this message made or changed: its Writes and Edits and the files its commands wrote, each with
+  // its size now and, for a page, what the page check found (the "Made" lines under the answer).
+  madeSummary() {
+    const t = this.turn;
+    if (!t || this.isHelper) return [];
+    const files = new Map();
+    const created = new Set((t.created ?? []).map((c) => resolvePath(this.cwd, String(c)).abs));
+    for (const rel of t.startTexts?.keys() ?? []) { const abs = resolvePath(this.cwd, rel).abs; files.set(abs, created.has(abs) || t.startTexts.get(rel) == null); }
+    for (const abs of t.madeByCommand?.keys() ?? []) if (!files.has(abs)) files.set(abs, true);
+    const out = [];
+    for (const [abs, isNew] of files) {
+      let bytes;
+      try { bytes = statSync(abs).size; } catch { continue; }
+      // Inside the project: its path from there; elsewhere with ~ (the page check's lines use ~ throughout).
+      const said = this.tilde(abs);
+      const page = (t.pageReads ?? []).find((l) => l.startsWith(`${said}:`));
+      out.push({ path: abs.startsWith(`${this.cwd}/`) ? relative(this.cwd, abs) : said, bytes, created: isNew, ...(page ? { page: `page check: ${page.slice(said.length + 2)}`, empty: Boolean(t.pageEmpty?.has(said)) } : {}) });
+    }
+    return out;
   }
 
   // The pages a command wrote this message (made.mjs), as paths from the project folder.

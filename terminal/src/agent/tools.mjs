@@ -1106,6 +1106,56 @@ async function webSearch(args, env) {
   return { text: `${found.length} results for "${args.query}" (${service}). ${UNTRUSTED} WebFetch a result to read it.\n\n${body}`, view: { kind: 'websearch', count: found.length, service, content: body } };
 }
 
+// A plain read in a command: cat, head, tail or sed -n of one file, grep or rg of a pattern, ls of a
+// folder, find with -name. The app's tool it stands for, { name, args }, or null (a pipe, a redirect, a
+// flag the tool has no word for). On a model on another machine it runs as that tool (agent.mjs), so a
+// long file comes in parts with an outline and a profile (4 Oct 2026, the owner's pick).
+export function plainRead(command, cwd) {
+  const c = String(command ?? '').trim().replace(/\s+2>(?:&1|\/dev\/null)\s*$/, '');
+  if (!c || /[|;&<>`$()\n]/.test(c.replace(/"[^"]*"|'[^']*'/g, ''))) return null;
+  const words = (c.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((w) => w.replace(/^(['"])([\s\S]*)\1$/, '$2'));
+  const [cmd, ...rest] = words;
+  const kind = (p) => { try { const st = statSync(resolvePath(cwd, p).abs); return st.isFile() ? 'file' : st.isDirectory() ? 'dir' : null; } catch { return null; } };
+  const flags = rest.filter((w) => w.startsWith('-'));
+  const plain = rest.filter((w) => !w.startsWith('-'));
+  const count = (f) => { const m = /^-(?:n)?(\d+)$|^--lines=(\d+)$/.exec(f); return m ? Number(m[1] ?? m[2]) : null; };
+  if (cmd === 'cat' && plain.length === 1 && flags.every((f) => f === '-n') && kind(plain[0]) === 'file') return { name: 'Read', args: { path: plain[0] } };
+  if (cmd === 'head' || cmd === 'tail') {
+    let n = 10;
+    const file = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === '-n' && /^\d+$/.test(rest[i + 1] ?? '')) { n = Number(rest[++i]); continue; }
+      if (rest[i].startsWith('-')) { const k = count(rest[i]); if (k == null) return null; n = k; continue; }
+      file.push(rest[i]);
+    }
+    if (file.length !== 1 || kind(file[0]) !== 'file') return null;
+    if (cmd === 'head') return { name: 'Read', args: { path: file[0], offset: 1, limit: n } };
+    let total = 0;
+    try { total = readFileSync(resolvePath(cwd, file[0]).abs, 'utf8').replace(/\n$/, '').split('\n').length; } catch { return null; }
+    return { name: 'Read', args: { path: file[0], offset: Math.max(1, total - n + 1), limit: n } };
+  }
+  if (cmd === 'sed' && rest.length === 3 && rest[0] === '-n') {
+    const m = /^(\d+),(\d+)p$/.exec(rest[1]);
+    if (m && kind(rest[2]) === 'file' && Number(m[2]) >= Number(m[1])) return { name: 'Read', args: { path: rest[2], offset: Number(m[1]), limit: Number(m[2]) - Number(m[1]) + 1 } };
+    return null;
+  }
+  if ((cmd === 'grep' && flags.every((f) => /^-[rRnHE]+$/.test(f)) && flags.some((f) => /[rR]/.test(f))) || (cmd === 'rg' && flags.every((f) => /^-[nH]+$/.test(f)))) {
+    if (plain.length < 1 || plain.length > 2 || (plain[1] && kind(plain[1]) !== 'dir')) return null;
+    return { name: 'Search', args: { pattern: plain[0], ...(plain[1] ? { path: plain[1] } : {}) } };
+  }
+  if (cmd === 'ls' && flags.every((f) => /^-[laAh1]+$/.test(f)) && plain.length <= 1 && (!plain[0] || kind(plain[0]) === 'dir')) return { name: 'List', args: { path: plain[0] ?? '.' } };
+  if (cmd === 'find' && kind(rest[0] ?? '') === 'dir') {
+    let pattern = '**/*';
+    for (let i = 1; i < rest.length; i++) {
+      if (rest[i] === '-type' && rest[i + 1] === 'f') { i++; continue; }
+      if (rest[i] === '-name' && rest[i + 1]) { pattern = `**/${rest[++i]}`; continue; }
+      return null;
+    }
+    return { name: 'List', args: { path: rest[0], pattern } };
+  }
+  return null;
+}
+
 // A plain page fetch in a command: curl (or wget -qO-) of one web address with only reading flags,
 // maybe 2>&1 and | head or | tail. The address, or null (writes a file, posts, sets headers, pipes on).
 // Outside Bypass it runs as WebFetch (agent.mjs; 4 Oct 2026, the owner's pick after curl was refused

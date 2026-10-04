@@ -28,7 +28,7 @@ import { hookListRows, hookLine, projectLine as hooksProjectLine, checkOn, rowWi
 import { HOOKS as APP_CHECKS } from '../agent/way.mjs';
 import { eventOf } from '../agent/user-hooks.mjs';
 import { codenameOf } from '../agent/helpers.mjs';
-import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, doingWords } from './rail.jsx';
+import { RAIL, Node, Pipe, UserStrip, MachineLine, ThoughtNode, ThinkingLive, ReplyNode, ToolNode, CheckNode, NoteNode, EndLine, WritingNode, MadeNode, doingWords } from './rail.jsx';
 import { StartPage } from './start.jsx';
 
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -281,6 +281,7 @@ export function Item({ it, width, model, cwd, loaded, start }) {
     case 'text': return it.rail ? <ReplyNode text={it.text} /> : <Row><Markdown text={it.text} /></Row>;
     case 'tool': return it.rail ? <ToolNode it={it} /> : <ToolView it={it} width={width} />;
     case 'sorted': return <Result><Text color={C.dim}>{it.text}</Text></Result>;
+    case 'made': return <MadeNode files={it.files} />;
     case 'note': {
       if (it.rail) return it.check ? <CheckNode check={it.check} /> : <NoteNode it={it} />;
       const color = it.tone === 'error' ? C.bad : it.tone === 'warn' ? C.warn : it.tone === 'ok' ? C.ok : C.dim;
