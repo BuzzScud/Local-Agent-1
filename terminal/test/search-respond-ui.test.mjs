@@ -6,7 +6,7 @@
 import { test, expect, beforeEach } from 'bun:test';
 import React from 'react';
 import { renderToString } from 'ink';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,7 +19,7 @@ const { openingRead } = await import('../src/agent/opening.mjs');
 const { openMemory, memoryDirs, applyChanges, alwaysRules } = await import('../src/agent/facts.mjs');
 const { CheckNode, MadeNode, cmdShown } = await import('../src/app/rail.jsx');
 const { startFakeServer } = await import('./fake-server.mjs');
-const { runInPty } = await import('./pty.mjs');
+const { runInPty, emulate } = await import('./pty.mjs');
 const { T, setup, quit } = await import('./app-setup.mjs');
 const { MODELS, DEFAULT_MODEL } = await import('../../models/index.mjs');
 
@@ -139,4 +139,35 @@ test('in the window: the Made lines under the answer', async () => {
   await fake.close();
   expect(r.text).toMatch(/Made\s+made-here\.txt · 0\.0 KB · new/);
   expect(readFileSync(join(cwd, 'made-here.txt'), 'utf8')).toBe('hi there\n');
+}, T);
+
+// 4 Oct 2026, the owner's ask: "allow me to access this by clicking". A start on a remote prints the page
+// as the conversation's first lines; a click on one of its Recent activity rows opens that conversation.
+test('in the window: a click on a Recent activity row of the start page opens that conversation', async () => {
+  const { cwd, env, base } = setup();
+  // The folder as the app sees it (on a Mac the temp folders are under /private).
+  const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(-100);
+  const dir = join(base, 'home', 'sessions', slug);
+  mkdirSync(dir, { recursive: true });
+  const id = '2026-10-04T10-00-00-000Z';
+  writeFileSync(join(dir, `${id}.json`), JSON.stringify({ title: 'the cart total that rounded down', messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'why does the cart round down?' }, { role: 'assistant', content: 'It used Math.floor.' }], items: [{ type: 'user', text: 'why does the cart round down?' }, { type: 'text', text: 'It used Math.floor.' }], cwd, id, updated: new Date(Date.now() - 3_600_000).toISOString() }));
+  const fake = await startFakeServer([]);
+  const click = async ({ write, raw }, word) => {
+    const term = await emulate(raw(), 155, 43);
+    const b = term.buffer.active;
+    let at = null;
+    for (let y = 0; y < term.rows && !at; y++) { const x = (b.getLine(b.baseY + y)?.translateToString(true) ?? '').indexOf(word); if (x >= 0) at = { col: x + 3, row: y + 1 }; }
+    if (!at) throw new Error(`"${word}" is not on the screen`);
+    write(`\x1b[<0;${at.col};${at.row}M`);
+    await new Promise((res) => setTimeout(res, 50));
+    write(`\x1b[<0;${at.col};${at.row}m`);
+  };
+  const r = await runInPty({ cwd, env, args: ['--url', fake.url, '--no-flows'], steps: [
+    { wait: 'the cart total that rounded down' }, { wait: 'click one, or /resume for more' }, { sleep: 300 },
+    { fn: (t) => click(t, 'the cart total that rounded down') }, { wait: 'resumed: the cart total that rounded down' }, { sleep: 300 }, { snapshot: 'end' },
+    ...quit,
+  ] });
+  await fake.close();
+  expect(r.snapshots.end).toContain('It used Math.floor.');
+  expect(r.snapshots.end).not.toContain('[<0;'); // the reports were never typed
 }, T);

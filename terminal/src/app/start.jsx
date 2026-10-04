@@ -6,7 +6,7 @@
 // "off", then the steps after /start, then ready. Your first message prints it once. The safety
 // check (cli.jsx) uses the same columns. The tips live on the line under the prompt box (startTip).
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, renderToString } from 'ink';
 import { C } from '../ui/theme.mjs';
 import { wrap } from '../ui/parts.jsx';
 import { RAIL } from './rail.jsx';
@@ -325,7 +325,7 @@ export function StartPage({ start, width, loading = null, typing = null }) {
     <Heading>Recent activity</Heading>,
     ...(recent.length
       ? [...recent.map((r) => <Box width={RW - 1}><Box flexGrow={1}><Text wrap="truncate-end"><Text color={C.dim}>{ago(r.updated, s.now).padEnd(9)}</Text><Text color={PATH}>{cut(nameOf(r), tW)}</Text></Text></Box><Text color={C.faint}>{plural(r.turns ?? 1, 'prompt').padStart(countW)}</Text></Box>),
-        <Text color={C.dim} wrap="truncate-end"><Text color={WHITE}>/resume</Text> for more · <Text color={WHITE}>coding -c</Text> goes on with the last one</Text>]
+        <Text color={C.dim} wrap="truncate-end">click one, or <Text color={WHITE}>/resume</Text> for more · <Text color={WHITE}>coding -c</Text> goes on with the last one</Text>]
       : [<Text color={C.dim}>No conversations here yet</Text>, <Text color={C.dim} wrap="truncate-end"><Text color={WHITE}>/init</Text> writes an AGENTS.md for this project</Text>]),
     rule,
     <Heading>This folder</Heading>,
@@ -344,6 +344,28 @@ export function StartPage({ start, width, loading = null, typing = null }) {
       <Split width={width} left={keyed(left)} right={keyed(right)} />
     </Box>
   );
+}
+
+// Where each Recent activity row is on the page (4 Oct 2026, the owner's ask: "allow me to access this
+// by clicking"): [{ id, row, from, to }], row counted from the page's first line, from and to the
+// cells (from 1) its words take. Found in the page as drawn, so a change of layout cannot move them.
+const ANSI = /\x1b\[[0-9;]*m/g;
+export function recentRows(start, width) {
+  const s = start ?? {};
+  const recent = recentOf(s.recent ?? []);
+  if (!recent.length) return [];
+  const lines = renderToString(<StartPage start={s} width={width} />, { columns: width }).split('\n').map((l) => l.replace(ANSI, ''));
+  const RW = Math.max(10, width - leftWidth(width) - 3);
+  const tW = Math.max(8, RW - 9 - 10 - 1);
+  const out = [];
+  for (const r of recent) {
+    const name = cut(nameOf(r), tW);
+    const row = lines.findIndex((l, i) => l.includes(name) && !out.some((o) => o.row === i));
+    if (row < 0) continue;
+    const from = leftWidth(width) + 4;
+    out.push({ id: r.id, row, from, to: width });
+  }
+  return out;
 }
 
 // The safety check, in the start page's columns: the bot peeking, the folder not trusted yet, the
